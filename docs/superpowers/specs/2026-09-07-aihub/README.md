@@ -4,6 +4,8 @@
 > **Trả lời cho:** `AIHUB_AI_Agent_Brainstorm_Brief.md` (cấu trúc output A–P ở §16 của brief).
 > **Không thay thế:** `AIHUB_Long_Term_Architecture.md` (kiến trúc đích) và `AIHUB_Deliverable_1_API_Contract_Schema.md` (contract). Đây là **implementation strategy** để đi từ D1 sang D2.
 
+Scaffold status: [Clean Architecture and agent workflow design](12-agent-workflow-and-clean-architecture-design.md) is implemented in the initial NestJS/Fastify source scaffold.
+
 ## Mục lục
 
 | File | Nội dung | Mục brief |

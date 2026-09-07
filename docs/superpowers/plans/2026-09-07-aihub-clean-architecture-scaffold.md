@@ -63,7 +63,7 @@
 
 - Configure `tsconfig.json` with `target: ES2022`, `module: commonjs`, `moduleResolution: node`, `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`, `experimentalDecorators: true`, `emitDecoratorMetadata: true`, `esModuleInterop: true`, `skipLibCheck: true`, and `src` as the root directory.
 - Configure `jest.config.cjs` to transform TypeScript with `ts-jest`, use Node environment, match `**/*.spec.ts`, and collect only `src/**/*.ts`.
-- Configure Biome for 2-space indentation, single quotes, trailing commas, and the repository’s TypeScript files. Do not introduce ESLint and Prettier alongside Biome.
+- Configure Biome for 2-space indentation, single quotes, trailing commas, and the repository’s TypeScript files. Ignore external AI-writing JSON fixtures under `test/fixtures`; do not rewrite user-provided test data. Do not introduce ESLint and Prettier alongside Biome.
 - Implement `src/main.ts` with `NestFactory.create` using `FastifyAdapter`, a global `/v1` prefix, and a JSON body limit matching the 1 MiB public request limit from the implementation spec. Keep production hardening (proxy trust, CORS, rate limits) in later tasks where the policy is defined.
 - Implement `src/app.module.ts` with only `HealthController` registered. The health controller returns a stable `{ status: 'ok' }` response and has one unit test; it is not a business endpoint.
 - Add `.gitignore` entries for `node_modules`, `dist`, `coverage`, `.env`, `.env.*`, `.claude/settings.local.json`, and OS/editor files. Never ignore tracked specification files.

@@ -1,0 +1,38 @@
+# AIHUB Backend
+
+AIHUB is a B2B multi-tenant AI API Gateway and identity broker. The backend is a single NestJS/Fastify application. The first MVP slice is the Writing service; the gateway owns organization identity, scopes, metering, quota, idempotency, and typed dispatch while Writing owns its business data and model behavior.
+
+## Quick start
+
+```text
+pnpm install
+pnpm dev
+```
+
+The bootstrap health route is `GET http://localhost:3000/v1/health` and does not require Postgres, Redis, or a downstream AI service.
+
+## Verification
+
+```text
+pnpm test
+pnpm type-check
+pnpm arch-check
+pnpm verify
+```
+
+`pnpm verify` runs Biome, strict TypeScript, Jest, and the Clean Architecture dependency check.
+
+## Source layout
+
+```text
+src/common/       shared errors, request context, and redaction
+src/catalog/      typed operation routing metadata
+src/contracts/    TypeBox boundary contracts
+src/modules/      identity, gateway, and Writing application seams
+src/downstream/   pure AI-service request/response adapter seams
+test/             integration/e2e tests when external boundaries exist
+```
+
+Read [CONTEXT.md](CONTEXT.md) for the short glossary, then the [spec index](docs/superpowers/specs/2026-09-07-aihub/README.md) before changing behavior. Shared workflow rules live in [AGENTS.md](AGENTS.md); Claude-specific routing lives in [CLAUDE.md](CLAUDE.md) and `.claude/`.
+
+The Writing grading response remains intentionally unresolved. Do not add a parser until the real fixture and contract are confirmed.
