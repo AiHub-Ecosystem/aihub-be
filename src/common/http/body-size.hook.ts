@@ -1,5 +1,5 @@
-import { OPERATION_CATALOG } from "../../catalog/operation-catalog";
-import { isRequestId } from "../request-context/request-id";
+import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
+import { isRequestId } from '../request-context/request-id';
 
 /**
  * Path -> per-operation body limit, built once from the catalog. All current
@@ -10,11 +10,11 @@ const MAX_BODY_BYTES_BY_PATH: ReadonlyMap<string, number> = new Map(
   Object.values(OPERATION_CATALOG).map((operation) => [
     operation.path,
     operation.maxBodyBytes,
-  ])
+  ]),
 );
 
 function pathnameOf(url: string): string {
-  const queryIndex = url.indexOf("?");
+  const queryIndex = url.indexOf('?');
   return queryIndex === -1 ? url : url.slice(0, queryIndex);
 }
 
@@ -38,12 +38,12 @@ interface OnRequestReply {
  */
 export interface HookableFastifyInstance {
   addHook(
-    name: "onRequest",
+    name: 'onRequest',
     handler: (
       request: OnRequestParams,
       reply: OnRequestReply,
-      done: () => void
-    ) => void
+      done: () => void,
+    ) => void,
   ): void;
 }
 
@@ -65,7 +65,7 @@ export interface HookableFastifyInstance {
  * still-present backstop.
  */
 export function registerBodySizeGuard(instance: HookableFastifyInstance): void {
-  instance.addHook("onRequest", (request, reply, done) => {
+  instance.addHook('onRequest', (request, reply, done) => {
     const limit = MAX_BODY_BYTES_BY_PATH.get(pathnameOf(request.url));
 
     if (limit === undefined) {
@@ -73,16 +73,16 @@ export function registerBodySizeGuard(instance: HookableFastifyInstance): void {
       return;
     }
 
-    const header = request.headers["content-length"];
+    const header = request.headers['content-length'];
     const declaredBytes =
-      typeof header === "string" ? Number(header) : Number.NaN;
+      typeof header === 'string' ? Number(header) : Number.NaN;
 
     if (Number.isFinite(declaredBytes) && declaredBytes > limit) {
-      const requestId = isRequestId(request.id) ? request.id : "unknown";
+      const requestId = isRequestId(request.id) ? request.id : 'unknown';
       reply.code(413).send({
         error: {
-          code: "PAYLOAD_TOO_LARGE",
-          message: "Request body is too large",
+          code: 'PAYLOAD_TOO_LARGE',
+          message: 'Request body is too large',
           request_id: requestId,
         },
       });

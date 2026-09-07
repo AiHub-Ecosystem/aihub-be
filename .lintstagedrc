@@ -1,3 +1,4 @@
 {
-  "*": "prettier --ignore-unknown --write"
+  "*.{ts,mts,cts,js,mjs,cjs}": "biome check --write --no-errors-on-unmatched",
+  "*.{json,md,yaml,yml}": "prettier --ignore-unknown --write"
 }

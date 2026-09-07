@@ -3,22 +3,22 @@ import {
   type ExecutionContext,
   Inject,
   Injectable,
-} from "@nestjs/common";
+} from '@nestjs/common';
 
-import { AppError } from "../../../common/errors/app-error";
+import { AppError } from '../../../common/errors/app-error';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
-} from "../../identity/presentation/authenticated-request";
+} from '../../identity/presentation/authenticated-request';
 import {
   RATE_LIMITER,
   type RateLimiterPort,
-} from "../application/rate-limiter.port";
+} from '../application/rate-limiter.port';
 
 function rateLimited(retryAfterMs: number | undefined): AppError {
   return new AppError({
-    code: "RATE_LIMITED",
-    message: "Rate limit exceeded",
+    code: 'RATE_LIMITED',
+    message: 'Rate limit exceeded',
     httpStatus: 429,
     retryable: true,
     ...(retryAfterMs === undefined
@@ -37,7 +37,7 @@ function rateLimited(retryAfterMs: number | undefined): AppError {
 export class RateLimitGuard implements CanActivate {
   constructor(
     @Inject(RATE_LIMITER)
-    private readonly limiter: RateLimiterPort
+    private readonly limiter: RateLimiterPort,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
