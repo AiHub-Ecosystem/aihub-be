@@ -1,0 +1,100 @@
+{
+  "success": true,
+  "data_micro": {
+    "task_achievement": {
+      "inaccurate_data_support": {
+        "prompt": "The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.",
+        "question_type": "bar_chart",
+        "comments": [
+          {
+            "quote": "a more than twentyfold increase",
+            "explanation": "Cách diễn đạt này hơi phóng đại so với số liệu trên biểu đồ. Mobile tăng rất mạnh, nhưng khi ước lượng chính xác hơn nên viết theo hướng khoảng 2 lên 46 tỷ phút thay vì khẳng định 'hơn 20 lần' nếu không cần thiết. Nếu lỗi này lặp lại, Task Achievement sẽ không vượt Band 7 vì độ chính xác số liệu là một phần quan trọng của báo cáo."
+          }
+        ]
+      }
+    }
+  },
+  "data": {
+    "task": "IELTS_WRITING_TASK_1_GRADING",
+    "coT": {
+      "layer1_errors": "[TA] STRENGTHS: (1) \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002.\" — shows accurate paraphrase of the task and clear identification of the chart. (2) \"Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\" — shows a clear overview with the main trends. (3) \"In contrast, mobile calls grew steadily and consistently over the eight years.\" — shows a second key trend and comparison. ERRORS: (1) \"a more than twentyfold increase\" — slight inaccuracy/overstatement compared with the chart values. BALANCE: Strengths dominate. [CC] STRENGTHS: (1) \"Overall, local fixed line calls were the most popular type throughout the entire period\" — shows a clear overview placed appropriately. (2) \"In contrast, mobile calls grew steadily and consistently over the eight years.\" — shows effective linking and logical contrast. (3) \"Meanwhile, national and international calls increased gradually\" — shows smooth progression within the body. ERRORS: None specified. BALANCE: Strengths dominate. [LR] STRENGTHS: (1) \"illustrates the total duration, measured in billions of minutes\" — shows appropriate academic wording. (2) \"experienced the most dramatic growth\" — shows precise trend vocabulary. (3) \"declined after 1999\" — shows accurate descriptive vocabulary without repetition. ERRORS: None specified. BALANCE: Strengths dominate. [GRA] STRENGTHS: (1) \"local fixed line calls were the most popular type throughout the entire period\" — shows accurate complex clause use. (2) \"although their share declined after 1999\" — shows correct subordinate clause control. (3) \"rising to about 46 billion minutes by 2002\" — shows correct participle structure. ERRORS: None specified. BALANCE: Strengths dominate.",
+      "layer2_matching": "[TA] Evidence: \"Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\" → matches Band 7 descriptor: 'covers requirements. Key features highlighted but details may be irrelevantly selected. Overview present with 2–3 main trends identified.' Balance: strengths dominate. Floor check: pass. → Expected TA: 7.0. [CC] Evidence: \"Overall, local fixed line calls were the most popular type throughout the entire period\" → matches Band 7 descriptor: 'logically organised. Clear progression.' Evidence: \"In contrast, mobile calls grew steadily and consistently over the eight years.\" → supports logical contrast. Balance: strengths dominate. Floor check: pass. → Expected CC: 7.0. [LR] Evidence: \"experienced the most dramatic growth\" → matches Band 7 descriptor: 'sufficient range for flexibility/precision. Less common items with style awareness.' Balance: strengths dominate. Floor check: pass. → Expected LR: 7.0. [GRA] Evidence: \"although their share declined after 1999\" → matches Band 7 descriptor: 'variety of complex structures. Frequent error-free sentences. Good control, few errors rarely reduce communication.' Balance: strengths dominate. Floor check: pass. → Expected GRA: 7.0.",
+      "layer3_calibration": "TA=7.0 (clear overview, all main trends covered, one minor overstatement only). CC=7.0 (logical paragraphing and clear comparison between categories; reader follows easily). LR=7.0 (good range of academic trend vocabulary with natural phrasing). GRA=7.0 (variety of clause types and participle structures; mostly accurate and clear). Mean = (7.0+7.0+7.0+7.0)/4 = 7.00 → round = 7.0. Self-check: clear structure, accurate reporting overall, and only a minor numeric overstatement support Band 7 across criteria. overall_band = 7.0."
+    },
+    "overall_band": 7.0,
+    "evaluation": {
+      "1_task_achievement": {
+        "band_score": 7,
+        "feedback_detail": [
+          "'a more than twentyfold increase' -> Cách diễn đạt này hơi phóng đại so với số liệu trên biểu đồ. Mobile tăng rất mạnh, nhưng khi ước lượng chính xác hơn nên viết theo hướng khoảng 2 lên 46 tỷ phút thay vì khẳng định 'hơn 20 lần' nếu không cần thiết. Nếu lỗi này lặp lại, Task Achievement sẽ không vượt Band 7 vì độ chính xác số liệu là một phần quan trọng của báo cáo. -> Ví dụ cải thiện -> 'rising from about 2 billion minutes to approximately 46 billion minutes by 2002'"
+        ],
+        "strengths": [
+          "Overview rõ ràng, nêu đúng 2 xu hướng chính: fixed line cao nhất nhưng giảm sau 1999; mobile tăng đều.",
+          "Bao quát tốt cả ba nhóm dữ liệu và có so sánh trực tiếp giữa chúng."
+        ],
+        "areas_for_improvement": [
+          "Đề cập sai dữ liệu của các chi tiết (Tham chiếu: 'a more than twentyfold increase')"
+        ],
+        "band_reason": "'Covers requirements' — Bài viết đáp ứng yêu cầu đề, có overview rõ và chọn đúng các đặc điểm chính; chỉ có một chi tiết phóng đại nhẹ ở câu cuối nên chưa lên Band 8."
+      },
+      "2_coherence_cohesion": {
+        "band_score": 7,
+        "feedback_detail": [
+          "'Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.' -> Đây là câu overview đặt đúng vị trí và giúp định hướng toàn bài. Việc tách overview thành một đoạn riêng làm tăng độ mạch lạc, đúng với yêu cầu CC Band 7 về sự tổ chức logic của ý tưởng.",
+          "'In contrast, mobile calls grew steadily and consistently over the eight years.' -> Từ nối 'In contrast' thể hiện chính xác quan hệ đối lập giữa mobile và fixed line, nên giúp câu chuyển ý tự nhiên và rõ nghĩa hơn. Lối liên kết này hỗ trợ CC Band 7 vì quan hệ logic giữa các nhóm dữ liệu được làm nổi bật."
+        ],
+        "strengths": [
+          "Bố cục 3 đoạn rất rõ: mở bài, overview, và hai đoạn thân bài theo nhóm dữ liệu.",
+          "Dùng liên từ hợp lý như 'Overall', 'In contrast', 'Meanwhile' để dẫn dắt mạch so sánh."
+        ],
+        "areas_for_improvement": [
+          "None specified"
+        ],
+        "band_reason": "'Logically organised' — Bài viết được sắp xếp mạch lạc, mỗi đoạn có chức năng rõ ràng và người đọc theo dõi dễ dàng; các từ nối được dùng đúng quan hệ logic của dữ liệu."
+      },
+      "3_lexical_resource": {
+        "band_score": 7,
+        "feedback_detail": [
+          "'experienced the most dramatic growth' -> Cụm này tự nhiên và mạnh, giúp nhấn vào tốc độ tăng của mobile calls mà không cần diễn đạt dài dòng. Việc dùng 'dramatic growth' cho thấy khả năng chọn từ linh hoạt, phù hợp với LR Band 7.",
+          "'declined after 1999' -> Đây là cách diễn đạt ngắn gọn, chính xác và học thuật. Không lặp lại từ vựng quá đơn giản như 'went down', nên góp phần nâng chất lượng lexical resource."
+        ],
+        "strengths": [
+          "Có vốn từ mô tả xu hướng tốt như 'declined', 'grew steadily', 'experienced the most dramatic growth'.",
+          "Dùng cụm học thuật tự nhiên như 'measured in billions of minutes' và 'throughout the entire period'."
+        ],
+        "areas_for_improvement": [
+          "None specified"
+        ],
+        "band_reason": "'Sufficient range for flexibility and precision' — Bài viết dùng được nhiều từ mô tả xu hướng và diễn đạt học thuật tương đối tự nhiên, đủ để truyền đạt chính xác các thay đổi trên biểu đồ."
+      },
+      "4_grammatical_range_accuracy": {
+        "band_score": 7,
+        "feedback_detail": [
+          "'although their share declined after 1999' -> Mệnh đề nhượng bộ dùng đúng, giúp câu thể hiện hai ý tương phản trong cùng một cấu trúc. Lỗi này không có; đây là ví dụ tốt cho GRA Band 7 vì người viết kiểm soát được câu phức mà không làm giảm độ rõ nghĩa.",
+          "'rising to about 46 billion minutes by 2002' -> Cấu trúc phân từ hiện tại này được dùng đúng để rút gọn thông tin, làm câu gọn hơn mà vẫn rõ nghĩa. Việc sử dụng chính xác cấu trúc như vậy hỗ trợ GRA Band 7 vì cho thấy độ linh hoạt ngữ pháp."
+        ],
+        "strengths": [
+          "Có câu phức đúng và rõ ràng, ví dụ mệnh đề nhượng bộ trong 'although their share declined after 1999'.",
+          "Dùng participle clause đúng trong 'rising to about 46 billion minutes by 2002'."
+        ],
+        "areas_for_improvement": [
+          "None specified"
+        ],
+        "band_reason": "'Uses a variety of complex structures' — Bài viết có nhiều cấu trúc câu linh hoạt, kiểm soát thì tốt và lỗi rất ít; mức độ chính xác đủ cao để đáp ứng Band 7."
+      }
+    },
+    "Overall Assessment": {
+      "Summary": "Bài viết đạt mức tốt và rất ổn định ở cả bốn tiêu chí. Phần overview rõ ràng, có so sánh hợp lý giữa ba nhóm cuộc gọi và chọn đúng xu hướng nổi bật của biểu đồ. Từ vựng và ngữ pháp đều đủ tốt để diễn đạt chính xác, chỉ có một chi tiết phóng đại nhẹ ở phần mô tả số liệu cuối cùng. Nhìn chung đây là một bài Band 7.0 khá vững.",
+      "Specific Suggestions": [
+        "Tiếp tục giữ cách viết overview ngắn gọn nhưng bao quát 2 xu hướng chính như hiện tại.",
+        "Khi nêu số liệu tăng mạnh, hãy ước lượng cẩn thận hơn để tránh phóng đại không cần thiết.",
+        "Duy trì các từ nối so sánh như 'In contrast' và 'Meanwhile' vì chúng giúp bài rất dễ theo dõi."
+      ],
+      "Next Steps": [
+        "Luyện thêm 5–10 bài biểu đồ cột/đường có 3 nhóm dữ liệu để tiếp tục củng cố kỹ năng so sánh.",
+        "Thực hành paraphrase số liệu bằng các cụm an toàn như 'rose sharply to approximately...' để tăng độ chính xác.",
+        "Ôn lại cách dùng participle clauses và subordinate clauses để mở rộng độ linh hoạt ngữ pháp."
+      ]
+    }
+  }
+}

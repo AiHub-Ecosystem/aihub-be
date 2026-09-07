@@ -1,0 +1,21 @@
+{
+  "success": true,
+  "data": {
+    "data": {
+      "question_id": "4a7c819d-46f2-42f7-a1af-ec5e7c61d31e",
+      "topic": "Bar Chart",
+      "question": "The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.",
+      "image_url": "https://s3.wispace.app/ielts-task1/ca95bd4ab522946d",
+      "metadata": {
+        "generatedAt": "2026-09-07T10:24:25.160908",
+        "wordCount": 38,
+        "source": "database_random_query"
+      }
+    },
+    "original_type": "object",
+    "converted": false,
+    "success": true
+  },
+  "message": "Successfully generated IELTS question about Bar Chart",
+  "timestamp": "2026-09-07T10:24:25.161293"
+}

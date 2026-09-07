@@ -396,19 +396,32 @@ Dưới đây là schema thật.
 
 ```json
 {
-  "question": "The chart below shows the number of visitors to three museums...",
-  "topic": "museum visitors",
+  "question": "The chart below shows the total number of minutes of telephone calls in the UK...",
+  "chart_type": "Bar Chart",
   "essay": "The bar chart illustrates...",
-  "image_url": "https://cdn.customer.example.com/charts/abc.png"
+  "image_url": "https://s3.wispace.app/ielts-task1/ca95bd4ab522946d",
+  "language": "vi"
 }
 ```
 
 | Field | Type | Required | Constraints | Description |
 |---|---|---:|---|---|
 | `question` | string | yes | 1..2000 chars | Đề bài |
-| `topic` | string | yes | 1..200 chars | Chủ đề |
+| `chart_type` | enum | yes | 7 giá trị, xem bên dưới | Loại biểu đồ của đề |
 | `essay` | string | yes | 1..20000 chars | Bài làm của học viên |
-| `image_url` | string | yes | URI, ≤2000 chars | Ảnh biểu đồ/bảng của đề Task 1 |
+| `image_url` | string | yes | URI, ≤2000 chars | Ảnh biểu đồ/bảng của đề |
+| `language` | enum | no | `vi` (mặc định) | Ngôn ngữ của feedback |
+
+### `chart_type` — 7 giá trị, CASE-SENSITIVE
+
+```text
+Bar Chart      Line Graph      Pie Chart      Table
+Map            Process Diagram Multiple Graphs
+```
+
+Đã dò trực tiếp trên API thật ngày 2026-09-07. `"bar chart"` viết thường bị downstream trả 500; `"Process"`, `"Diagram"`, `"Bar Graph"`, `"Mixed Chart"` không tồn tại.
+
+> **Vì sao không gọi là `topic`:** downstream đặt tên field này là `topic`, nhưng giá trị thật là **loại biểu đồ** chứ không phải chủ đề — gửi `"environment"` bị trả 500. Giữ tên `topic` ở public API là truyền lại chính sự hiểu nhầm đó cho khách hàng. Adapter map ngược `chart_type` → `topic` khi gọi downstream.
 
 ## Chấm bài — Task 2
 
@@ -425,22 +438,33 @@ Dưới đây là schema thật.
 | Field | Type | Required | Constraints | Description |
 |---|---|---:|---|---|
 | `question` | string | yes | 1..2000 chars | Đề bài |
-| `topic` | string | yes | 1..200 chars | Chủ đề |
+| `topic` | string | yes | 1..200 chars | Chủ đề thật, ví dụ `education` |
 | `essay` | string | yes | 1..20000 chars | Bài làm của học viên |
+| `language` | enum | no | `vi` (mặc định) | Ngôn ngữ của feedback |
 
-> Task 2 **không nhận** `image_url`. Gửi kèm sẽ bị `400 INVALID_REQUEST`.
+> Task 2 **không nhận** `image_url` và **không nhận** `chart_type`. Gửi kèm sẽ bị `400 INVALID_REQUEST`.
+>
+> Khác Task 1: ở đây `topic` đúng nghĩa **chủ đề** (`education`, `technology`…), không phải loại biểu đồ.
+
+### Về `language`
+
+Hiện downstream chỉ sinh feedback **tiếng Việt**, nên enum tạm thời chỉ có `vi`. Contract giữ sẵn field để khi AI Writing hỗ trợ `en` thì chỉ cần nới enum — **nới lỏng là non-breaking, siết chặt thì không**, nên thứ tự này an toàn.
+
+Response luôn echo `language` để client biết feedback đang ở ngôn ngữ nào.
 
 ## Sinh đề — Task 1 và Task 2
 
 `POST /v1/writing/task1/questions`
 
 ```json
-{ "topic": "environment" }
+{ "chart_type": "Bar Chart" }
 ```
 
 | Field | Type | Required | Constraints |
 |---|---|---:|---|
-| `topic` | string | no | ≤200 chars; bỏ trống = lấy ngẫu nhiên |
+| `chart_type` | enum | no | 7 giá trị ở trên; **bỏ trống = lấy ngẫu nhiên** |
+
+Bỏ trống là đường dùng phổ biến nhất và luôn thành công. Truyền giá trị ngoài enum sẽ bị AIHUB chặn ở `400` trước khi chạm downstream — nếu không, downstream trả `500` cho một lỗi lẽ ra là `404`.
 
 `POST /v1/writing/task2/questions`
 
@@ -746,22 +770,31 @@ AIHUB map `data` service-specific thành canonical public `data`, rồi bổ sun
 ```json
 {
   "data": {
-    "overall_band": 6.5,
+    "overall_band": 7.0,
+    "language": "vi",
     "criteria": [
-      { "id": "task_achievement",           "name": "Task Achievement",
-        "band": 6.0, "feedback": "Covers the main trends but misses..." },
-      { "id": "coherence_cohesion",         "name": "Coherence and Cohesion",
-        "band": 7.0, "feedback": "Well organised with clear progression..." },
-      { "id": "lexical_resource",           "name": "Lexical Resource",
-        "band": 6.5, "feedback": "Adequate range, some repetition of..." },
-      { "id": "grammatical_range_accuracy", "name": "Grammatical Range and Accuracy",
-        "band": 6.0, "feedback": "Mix of simple and complex forms..." }
+      {
+        "id": "task_achievement",
+        "name": "Task Achievement",
+        "band": 7,
+        "band_reason": "'Covers requirements' — Bài viết đáp ứng yêu cầu đề, có overview rõ...",
+        "strengths": ["Overview rõ ràng, nêu đúng 2 xu hướng chính..."],
+        "improvements": ["Đề cập sai dữ liệu ở chi tiết 'a more than twentyfold increase'"]
+      },
+      { "id": "coherence_cohesion",         "name": "Coherence and Cohesion",         "band": 7, "...": "..." },
+      { "id": "lexical_resource",           "name": "Lexical Resource",               "band": 7, "...": "..." },
+      { "id": "grammatical_range_accuracy", "name": "Grammatical Range and Accuracy", "band": 7, "...": "..." }
     ],
-    "summary": "A solid response that reports the main features accurately.",
-    "word_count": 178,
-    "corrections": [
-      { "original": "The number of visitor were", "suggestion": "The number of visitors was",
-        "type": "grammar", "explanation": "Subject-verb agreement." }
+    "summary": "Bài viết đạt mức tốt và rất ổn định ở cả bốn tiêu chí...",
+    "suggestions": ["Tiếp tục giữ cách viết overview ngắn gọn nhưng bao quát 2 xu hướng chính..."],
+    "next_steps": ["Luyện thêm 5–10 bài biểu đồ cột/đường có 3 nhóm dữ liệu..."],
+    "annotations": [
+      {
+        "criterion": "task_achievement",
+        "issue": "inaccurate_data_support",
+        "quote": "a more than twentyfold increase",
+        "explanation": "Cách diễn đạt này hơi phóng đại so với số liệu trên biểu đồ..."
+      }
     ]
   },
   "meta": {
@@ -775,22 +808,37 @@ AIHUB map `data` service-specific thành canonical public `data`, rồi bổ sun
       "total_tokens": 1130
     },
     "timing": {
-      "downstream_ms": 810,
-      "ai_processing_ms": 790,
+      "downstream_ms": 18267,
+      "ai_processing_ms": null,
       "gateway_overhead_ms": 30,
-      "total_ms": 840
+      "total_ms": 18297
     }
   }
 }
 ```
 
-### Ba quyết định trong shape của `data`
+> Ví dụ trên dựng từ **response thật** đã gọi ngày 2026-09-07; fixture đầy đủ ở `test/fixtures/ai-writing/`.
+> `meta.usage` là phần AI Writing **chưa trả** — hiện `metering_status` sẽ là `missing_usage`.
 
-**`criteria` là mảng, không phải 4 field cố định.** Task 1 gọi tiêu chí đầu là *Task Achievement*, Task 2 gọi là *Task Response*. Nếu làm field cố định thì hai task ra hai shape khác nhau và client phải viết hai nhánh render. Mảng có `id` ổn định + `name` để hiển thị thì UI chỉ cần lặp qua 4 phần tử, dùng chung một component cho cả hai task. **Thứ tự các phần tử là cam kết cố định.**
+### Năm quyết định trong shape của `data`
 
-**`band` và `overall_band` phải là bội số của 0.5**, trong khoảng 0..9. IELTS chỉ có band nguyên và nửa — AI Service trả 6.4 là vi phạm contract và AIHUB chặn ngay, không để nó chảy ra tới khách.
+**`criteria` là mảng, không phải 4 field cố định — thực tế đã xác nhận.** Response thật dùng key `1_task_achievement` cho Task 1 và `1_task_response` cho Task 2; ba tiêu chí còn lại giống nhau. Field cố định thì hai task ra hai shape và client phải viết hai nhánh render. Mảng có `id` ổn định + `name` hiển thị cho phép dùng chung một component. **Thứ tự các phần tử là cam kết cố định**, theo tiền tố số của downstream.
 
-**AIHUB không tự tính `overall_band`.** Cách làm tròn band tổng là luật nghiệp vụ của IELTS, thuộc về AI Service. Gateway chỉ kiểm tra tính hợp lệ chứ không tính toán nghiệp vụ.
+**`band` và `overall_band` là bội số của 0.5**, trong khoảng 0..9. Ràng buộc này chấp nhận cả `7` (int) lẫn `6.5` (float) — downstream hiện trả `overall_band` kiểu float nhưng `band` kiểu int, nên **không được ép kiểu float**, sẽ reject nhầm response hợp lệ.
+
+**`improvements` là mảng rỗng khi không có gì để cải thiện.** Downstream trả sentinel `["None specified"]`; adapter lọc bỏ. Client kiểm tra `length === 0` chứ không so chuỗi tiếng Anh.
+
+**`annotations` là bình luận về đoạn trích, KHÔNG phải đề xuất sửa.** Bản D1 đầu tiên có `corrections` với `{original, suggestion}` — giả định sai. Dữ liệu thật là `{quote, explanation}`: nhận xét về một đoạn trong bài, không có bản thay thế. Đặt tên `corrections` sẽ khiến client dựng UI "nhấn để sửa" cho dữ liệu không hỗ trợ điều đó.
+
+**AIHUB không tự tính `overall_band`.** Cách làm tròn band tổng là luật nghiệp vụ IELTS, thuộc về AI Service. Gateway chỉ kiểm tra tính hợp lệ.
+
+### Ba thứ có ở downstream nhưng KHÔNG ra public
+
+| Bỏ | Vì sao |
+|---|---|
+| `data.coT` | Chain-of-thought nội bộ (`layer1_errors`, `layer2_matching`, `layer3_calibration`). Lộ prompt engineering và gợi ý cho người dò prompt |
+| `evaluation.*.feedback_detail` | Chỉ là bản làm phẳng của `data_micro` thành chuỗi. `annotations` giữ bản có cấu trúc |
+| `data_micro.*.*.question_type` | Task 1 trả `bar_chart`, Task 2 trả `education` — hai nghĩa khác nhau cùng một tên |
 
 ### `meta.models[]` đã bị bỏ khỏi public response
 
@@ -924,31 +972,41 @@ Mỗi request/response key phải có khái niệm, datatype, constraints và al
 | Field | Type | Required | Constraints | Description |
 |---|---|---:|---|---|
 | `question` | string | yes | 1..2000 chars | Đề bài |
-| `topic` | string | yes | 1..200 chars | Chủ đề |
+| `chart_type` | enum | **chỉ Task 1** | 7 giá trị, case-sensitive | Loại biểu đồ |
+| `topic` | string | **chỉ Task 2** | 1..200 chars | Chủ đề |
 | `essay` | string | yes | 1..20000 chars | Bài làm |
 | `image_url` | string | **chỉ Task 1** | URI, ≤2000 chars | Ảnh biểu đồ của đề |
+| `language` | enum | no | `vi` | Ngôn ngữ feedback |
 
 ### Request — sinh đề
 
 | Field | Type | Required | Constraints |
 |---|---|---:|---|
-| `topic` | string | Task 1: no · Task 2: yes | ≤200 chars |
-| `question_type` | enum | **chỉ Task 2** | `opinion`, `discussion`, `problem_solution`, `advantages_disadvantages`, `two_part` |
+| `chart_type` | enum | **chỉ Task 1**, optional | 7 giá trị; bỏ trống = ngẫu nhiên |
+| `topic` | string | **chỉ Task 2**, yes | 1..200 chars |
+| `question_type` | enum | **chỉ Task 2**, yes | `opinion`, `discussion`, `problem_solution`, `advantages_disadvantages`, `two_part` |
 
 ### Response — chấm bài
 
 | Field | Type | Required | Constraints | Description | Source |
 |---|---|---:|---|---|---|
 | `data.overall_band` | number | yes | 0..9, bội số 0.5 | Band tổng | AI Service |
+| `data.language` | enum | yes | `vi` | Ngôn ngữ của feedback | AIHUB |
 | `data.criteria[]` | array | yes | đúng 4 phần tử | 4 tiêu chí IELTS | AI Service → Adapter |
 | `data.criteria[].id` | enum | yes | xem bên dưới | Định danh tiêu chí | Adapter |
 | `data.criteria[].name` | string | yes | — | Tên hiển thị | Adapter |
 | `data.criteria[].band` | number | yes | 0..9, bội số 0.5 | Điểm tiêu chí | AI Service |
-| `data.criteria[].feedback` | string | yes | — | Nhận xét tiêu chí | AI Service |
+| `data.criteria[].band_reason` | string | yes | — | Trích band descriptor + giải thích | AI Service |
+| `data.criteria[].strengths[]` | array | yes | có thể rỗng | Điểm mạnh | AI Service |
+| `data.criteria[].improvements[]` | array | yes | có thể rỗng | Điểm cần cải thiện | AI Service → Adapter lọc sentinel |
 | `data.summary` | string | yes | — | Nhận xét tổng | AI Service |
-| `data.word_count` | integer | no | ≥0 | Số từ | AI Service |
-| `data.corrections[]` | array | no | — | Gợi ý sửa lỗi | AI Service |
-| `data.corrections[].type` | enum | yes | `grammar`, `vocabulary`, `coherence`, `spelling` | Loại lỗi | Adapter |
+| `data.suggestions[]` | array | yes | có thể rỗng | Gợi ý cụ thể | AI Service |
+| `data.next_steps[]` | array | yes | có thể rỗng | Việc nên luyện tiếp | AI Service |
+| `data.annotations[]` | array | yes | có thể rỗng | Bình luận theo đoạn trích | AI Service → Adapter |
+| `data.annotations[].criterion` | enum | yes | như `criteria[].id` | Thuộc tiêu chí nào | Adapter |
+| `data.annotations[].issue` | string | yes | — | Loại vấn đề, vd `inaccurate_data_support` | AI Service |
+| `data.annotations[].quote` | string | yes | — | Đoạn trích nguyên văn từ bài viết | AI Service |
+| `data.annotations[].explanation` | string | yes | — | Giải thích | AI Service |
 | `meta.request_id` | string | yes | ULID có prefix `req_` | AIHUB trace ID | AIHUB |
 | `meta.correlation_id` | string | no | — | Echo `X-Correlation-Id` | Client |
 | `meta.service` / `operation` | string | yes | — | Routing metadata | AIHUB |
@@ -970,13 +1028,17 @@ lexical_resource
 grammatical_range_accuracy
 ```
 
+> Đo thực tế 2026-09-07: chấm bài mất **16–18 giây**, response nặng **~12 KB**. Vẫn dưới ngưỡng 30s nên giữ `execution: sync`.
+
 ### Response — sinh đề
 
 | Field | Type | Required | Description |
 |---|---|---:|---|
 | `data.question` | string | yes | Đề bài sinh ra |
-| `data.topic` | string | yes | Chủ đề |
+| `data.question_id` | string | **chỉ Task 1** | UUID của đề trong ngân hàng đề |
+| `data.chart_type` | enum | **chỉ Task 1** | Loại biểu đồ |
 | `data.image_url` | string | **chỉ Task 1** | Ảnh biểu đồ đi kèm đề |
+| `data.topic` | string | **chỉ Task 2** | Chủ đề |
 | `data.question_type` | enum | **chỉ Task 2** | Dạng câu hỏi |
 
 `image_url` trả về ở đây chính là giá trị client gửi lại khi gọi chấm bài Task 1 — luồng khép kín: sinh đề → học viên viết → chấm bài.
@@ -1117,6 +1179,24 @@ Danh sách chốt cho v1 gồm **18 mã**. Sáu mã đánh dấu ★ là bổ su
 
 `*` Timeout chỉ nên retry khi operation idempotent hoặc request có `Idempotency-Key` hợp lệ.
 
+### ⚠️ Downstream đang trả 5xx cho lỗi client
+
+Đo thật 2026-09-07:
+
+```
+POST /generate-question-task1  {"topic":"environment"}
+  -> HTTP 500  {"detail":"404: Không tìm thấy dữ liệu cho topic này!"}
+```
+
+Một trạng thái nghiệp vụ ("không có dữ liệu cho loại biểu đồ này") đang trả về **500**. Hệ quả với AIHUB: theo policy circuit breaker, chỉ 5xx mới tính là failure — nên **một khách gõ sai `chart_type` nhiều lần có thể mở breaker và làm sập operation đó cho mọi khách khác**.
+
+Hai lớp phòng vệ:
+
+1. **AIHUB chặn trước.** `chart_type` là enum nên giá trị lạ bị `400` ngay ở validate, không bao giờ chạm downstream. Đây là lý do enum quan trọng hơn vẻ ngoài của nó.
+2. **AI Writing phải sửa** thành `404`/`422`. Đưa vào danh sách bàn giao.
+
+AIHUB **không** tự chữa bằng cách đọc chuỗi `detail` để đoán — heuristic đó vỡ ngay khi downstream đổi thông điệp.
+
 ### Vì sao ba mã trong số đó đáng được tách riêng
 
 **`AI_SERVICE_CONTRACT_VIOLATION` vs `AI_SERVICE_ERROR`.** Gộp chung là sai lầm tốn thời gian nhất: khi AI Service đổi shape response mà quên báo, đội trực sẽ đi tìm sự cố hạ tầng trong khi nguyên nhân thật là **ai đó vừa deploy**. Mã riêng cộng alert riêng chỉ thẳng vào đúng chỗ. Nó cũng không retryable — retry một contract sai thì lần nào cũng sai.
@@ -1172,6 +1252,7 @@ downstream_service: ai-writing
 downstream_path: /grading-feedback-task1
 request_schema: GradeTask1Request
 response_schema: GradeResponse
+observed_latency: 18.3s          # đo thật 2026-09-07
 ```
 
 ```yaml
@@ -1206,6 +1287,7 @@ downstream_service: ai-writing
 downstream_path: /generate-question-task1
 request_schema: Task1QuestionRequest
 response_schema: Task1QuestionResponse
+observed_latency: 1.4s           # đọc DB, không gọi model
 ```
 
 ```yaml
@@ -1445,13 +1527,13 @@ Ba việc, và chỉ một trong số đó là chặn:
 
 | # | Việc | Chặn gì | Trạng thái |
 |---|---|---|---|
-| 1 | **Lấy response thật của `/grading-feedback-task1` và `task2`** | Viết `parseResponse` của adapter | 🔴 **Chặn Phase 1** |
-| 2 | Lấy danh sách `question_type` mà AI Writing chấp nhận | Chốt enum ở §10 | 🟡 Có đường vòng: để string ở phase đầu, siết enum sau |
-| 3 | Xuất OpenAPI 3.1 + Postman collection | Hiện vật bàn giao D2 | 🟡 Sinh tự động từ schema, không viết tay |
+| 1 | ~~Lấy response thật của `/grading-feedback-task1|2`~~ | — | ✅ **XONG 2026-09-07**, fixture ở `test/fixtures/ai-writing/` |
+| 2 | ~~Danh sách `question_type` / `chart_type`~~ | — | ✅ **XONG** — 5 dạng Task 2, 7 chart type Task 1 |
+| 3 | Xuất OpenAPI 3.1 + Postman collection | Hiện vật bàn giao D2 | 🟡 Sinh tự động từ schema khi có skeleton |
 
-Việc 1 là ẩn số duy nhất còn lại: OpenAPI của AI Writing khai response là `{}` nên không biết shape thật. Canonical response ở §16 đã được thiết kế theo chuẩn IELTS và **AI Writing sẽ khớp theo** — nhưng vẫn cần một response mẫu thật để viết lớp map.
+**Không còn blocker nào cho việc freeze D1.** Chỉ còn hiện vật OpenAPI/Postman, và chúng sinh ra từ schema chứ không viết tay.
 
-Toàn bộ phần còn lại của D1 freeze được ngay.
+Một nghi vấn còn mở nhưng **không cản freeze**: band nửa điểm (xem §34). Đó là vấn đề chất lượng của AI Writing, không phải vấn đề contract — schema đã dùng `multipleOf: 0.5` nên đúng trong cả hai trường hợp.
 
 ---
 
@@ -1472,6 +1554,27 @@ Toàn bộ phần còn lại của D1 freeze được ngay.
 | 9 | Trả lời 17/18 câu chốt | §32 |
 | 10 | **Bỏ `meta.models[]` khỏi public response** — mâu thuẫn với LTA §32.7 | §16 |
 | 11 | `idempotency_required` boolean → `idempotency` ba trạng thái | §27 |
+
+## 2026-09-07 (lần 2) — sau khi gọi thật API AI Writing
+
+Đã gọi cả 4 endpoint bằng token do team cấp; fixture lưu ở `test/fixtures/ai-writing/`.
+
+| # | Thay đổi | Mục |
+|---|---|---|
+| 12 | `topic` → **`chart_type`** enum 7 giá trị cho Task 1. Giá trị thật là loại biểu đồ, không phải chủ đề — gửi `"environment"` bị downstream trả 500 | §10, §20, §27 |
+| 13 | Thêm **`language`** vào request/response chấm bài; enum hiện tại `['vi']` vì downstream chỉ sinh feedback tiếng Việt | §10, §16, §20 |
+| 14 | **Mở rộng `GradeResponse`** theo response thật: `band_reason`, `strengths[]`, `improvements[]`, `suggestions[]`, `next_steps[]`, `annotations[]` | §16, §20 |
+| 15 | Đổi `corrections` → **`annotations`**. Dữ liệu thật là `{quote, explanation}` chứ không phải `{original, suggestion}` | §16, §20 |
+| 16 | Ghi rõ **3 thứ không ra public**: `coT`, `feedback_detail`, `data_micro.*.question_type` | §16 |
+| 17 | `band` chấp nhận **cả int lẫn float** — downstream trả `overall_band: 7.0` nhưng `band_score: 7` | §16, §20 |
+| 18 | Cảnh báo **downstream trả 5xx cho lỗi client**, và hai lớp phòng vệ | §25 |
+| 19 | Ghi `observed_latency` đo thật vào operation catalog | §27 |
+
+### Ba vấn đề của AI Writing phát hiện qua việc gọi thật
+
+1. **Không endpoint nào trả `usage`** → metering hiện là 0%.
+2. **`data.coT` lộ chain-of-thought** ra response (`layer1_errors`, `layer2_matching`, `layer3_calibration`).
+3. **Chấm điểm đáng ngờ:** 3 mẫu đều ra band nguyên và cả 4 tiêu chí luôn bằng nhau (7-7-7-7 rồi 5-5-5-5); bài Task 2 dài 98 từ (yêu cầu 250) vẫn được band 5.0.
 
 Chi tiết lập luận cho từng thay đổi: [`docs/superpowers/specs/2026-09-07-aihub/`](docs/superpowers/specs/2026-09-07-aihub/README.md)
 

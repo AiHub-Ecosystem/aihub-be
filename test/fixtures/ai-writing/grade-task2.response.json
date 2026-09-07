@@ -1,0 +1,109 @@
+{
+  "success": true,
+  "data_micro": {
+    "task_response": {
+      "underdeveloped_reasoning": {
+        "prompt": "With the rise of online learning platforms, some argue that traditional classroom education is becoming obsolete. To what extent do you agree or disagree?",
+        "question_type": "education",
+        "comments": [
+          {
+            "quote": "While I acknowledge the considerable advantages of digital education",
+            "explanation": "Câu này rất tốt, nhưng phần phản biện có thể mạnh hơn nếu nêu trực diện hơn vì sao những lợi ích của online learning vẫn chưa đủ để thay thế hoàn toàn lớp học truyền thống. Ở Band 7, ý tưởng cần được mở rộng và hỗ trợ rõ hơn bằng lập luận hoặc ví dụ."
+          }
+        ]
+      }
+    },
+    "coherence_cohesion": {
+      "unclear_information_relationship": {
+        "prompt": "With the rise of online learning platforms, some argue that traditional classroom education is becoming obsolete. To what extent do you agree or disagree?",
+        "question_type": "education",
+        "comments": [
+          {
+            "quote": "physical classrooms deliver benefits that screens cannot replicate",
+            "explanation": "Ý này rõ, nhưng bài sẽ mạnh hơn nếu thêm một ví dụ cụ thể ngay sau đó để tăng độ gắn kết giữa luận điểm và minh chứng. Hiện tại, CC vẫn đạt Band 7 vì mạch văn logic, nhưng chưa đủ sâu để lên mức cao hơn."
+          }
+        ]
+      }
+    }
+  },
+  "data": {
+    "task": "IELTS_WRITING_TASK_2_GRADING",
+    "coT": {
+      "layer1_errors": "[TR] STRENGTHS: (1) \"While I acknowledge the considerable advantages of digital education, I disagree that it renders traditional teaching obsolete.\" — thể hiện quan điểm rõ ràng và nhất quán. (2) \"Nevertheless, physical classrooms deliver benefits that screens cannot replicate.\" — phát triển lập luận đối lập một cách trực tiếp và relevant. (3) \"In my view, the most effective model is a blended one\" — cho thấy có kết luận/stance xuyên suốt. ERRORS: (1) \"While I acknowledge the considerable advantages of digital education\" — essay thiên về bàn cả hai phía nhưng chưa thật sự đi sâu phản biện trực diện quan điểm 'obsolete' ở mức đầy đủ. BALANCE: Strengths dominate. [CC] STRENGTHS: (1) \"Those who argue for the redundancy of classrooms point to convenience and cost.\" — đoạn thân bài mở ý rõ ràng. (2) \"Nevertheless, physical classrooms deliver benefits that screens cannot replicate.\" — tạo chuyển đoạn mạch lạc. (3) \"Moreover, for younger learners, school provides socialisation\" — liên kết ý logic và dễ theo dõi. ERRORS: (1) \"physical classrooms deliver benefits that screens cannot replicate\" — ý tốt nhưng chưa có ví dụ cụ thể hơn cho từng lợi ích, nên mức độ phát triển mạch chưa lên rất sâu. BALANCE: Strengths dominate. [LR] STRENGTHS: (1) \"The proliferation of online learning platforms\" — từ vựng học thuật, đúng ngữ cảnh. (2) \"immediate correction\", \"socialisation\", \"knowledge transmission\" — cho thấy vốn từ tốt và tương đối linh hoạt. ERRORS: (1) \"world-class instructors\" — diễn đạt mạnh và tự nhiên, nhưng không thấy lỗi rõ ràng đáng kể. BALANCE: Strengths dominate. [GRA] STRENGTHS: (1) \"While I acknowledge the considerable advantages of digital education, I disagree that it renders traditional teaching obsolete.\" — câu phức chính xác. (2) \"Spontaneous discussion, immediate correction from a teacher who can read confusion on a student's face\" — kiểm soát mệnh đề quan hệ và cấu trúc danh từ tốt. (3) \"technology should be understood as an instrument that reshapes it\" — cấu trúc bị động và mệnh đề quan hệ dùng tốt. ERRORS: (1) \"For working adults in particular\" — đây là cụm mở đầu phụ trợ đúng ngữ pháp; không có lỗi rõ ràng cần flag. BALANCE: Strengths dominate.",
+      "layer2_matching": "[TR] Evidence: \"While I acknowledge the considerable advantages of digital education, I disagree that it renders traditional teaching obsolete.\" → matches Band 7 descriptor: 'a clear position throughout'. Evidence: \"Nevertheless, physical classrooms deliver benefits that screens cannot replicate.\" → matches Band 7 descriptor: 'ideas are extended and supported'. Balance: Strengths dominate. Floor check: pass. → Expected TR: 7.0. [CC] Evidence: \"Those who argue for the redundancy of classrooms point to convenience and cost.\" → matches Band 7 descriptor: 'logically organised' and 'clear progression'. Evidence: \"Moreover, for younger learners, school provides socialisation\" → matches Band 7 descriptor: 'range of cohesive devices'. Balance: Strengths dominate. Floor check: pass. → Expected CC: 7.0. [LR] Evidence: \"The proliferation of online learning platforms\" → matches Band 7 descriptor: 'sufficient range for flexibility/precision'. Evidence: \"knowledge transmission\" → matches Band 7 descriptor: 'less common items with style awareness'. Balance: Strengths dominate. Floor check: pass. → Expected LR: 7.0. [GRA] Evidence: \"While I acknowledge the considerable advantages of digital education, I disagree that it renders traditional teaching obsolete.\" → matches Band 7 descriptor: 'variety of complex structures'. Evidence: \"technology should be understood as an instrument that reshapes it\" → matches Band 7 descriptor: 'frequent error-free sentences'. Balance: Strengths dominate. Floor check: pass. → Expected GRA: 7.0.",
+      "layer3_calibration": "TR=7.0 (clear position throughout; ideas are relevant and supported with reasonable extension, though not heavily exemplified). CC=7.0 (logical paragraphing and clear progression; cohesive devices are used naturally). LR=7.0 (sufficient range with precise academic items such as 'proliferation' and 'knowledge transmission'). GRA=7.0 (good control of complex structures with no notable error pattern). Mean = (7+7+7+7)/4 = 7.00 → round = 7.0. Self-check: essay is coherent, well-organized, and clearly above Band 6.0; at least one criterion should be 7.0+, and all criteria fit Band 7. overall_band = 7.0."
+    },
+    "overall_band": 7.0,
+    "evaluation": {
+      "1_task_response": {
+        "band_score": 7,
+        "feedback_detail": [
+          "'While I acknowledge the considerable advantages of digital education' -> Câu này rất tốt, nhưng phần phản biện có thể mạnh hơn nếu nêu trực diện hơn vì sao những lợi ích của online learning vẫn chưa đủ để thay thế hoàn toàn lớp học truyền thống. Ở Band 7, ý tưởng cần được mở rộng và hỗ trợ rõ hơn bằng lập luận hoặc ví dụ. -> Ví dụ cải thiện -> 'While online learning offers major advantages, it cannot fully replace classroom education because some forms of learning depend on direct interaction, supervision, and hands-on practice.'"
+        ],
+        "strengths": [
+          "Quan điểm rõ ràng và nhất quán xuyên suốt bài.",
+          "Các ý chính đều liên quan trực tiếp đến câu hỏi và được phát triển hợp lý."
+        ],
+        "areas_for_improvement": [
+          "Lập luận thiếu thuyết phục (Không giải thích rõ mối quan hệ nhân quả hoặc nêu các vấn đề trừu tượng mà không có ví dụ) (Tham chiếu: 'While I acknowledge the considerable advantages of digital education')"
+        ],
+        "band_reason": "'A clear position throughout' — Bài viết nêu lập trường ngay từ mở bài, giữ quan điểm nhất quán đến kết luận và trả lời đúng trọng tâm câu hỏi về việc classroom education có trở nên obsolete hay không."
+      },
+      "2_coherence_cohesion": {
+        "band_score": 7,
+        "feedback_detail": [
+          "'physical classrooms deliver benefits that screens cannot replicate' -> Ý này rõ, nhưng bài sẽ mạnh hơn nếu thêm một ví dụ cụ thể ngay sau đó để tăng độ gắn kết giữa luận điểm và minh chứng. Hiện tại, CC vẫn đạt Band 7 vì mạch văn logic, nhưng chưa đủ sâu để lên mức cao hơn. -> Ví dụ cải thiện -> 'Physical classrooms deliver benefits that screens cannot replicate. For example, teachers can immediately adjust explanations when they notice students struggling.'"
+        ],
+        "strengths": [
+          "Bố cục rõ ràng: mở bài, thân bài đối lập, và kết luận đều được sắp xếp hợp lý.",
+          "Từ nối được dùng tự nhiên để dẫn dắt mạch lập luận: While, Nevertheless, Moreover, Rather than."
+        ],
+        "areas_for_improvement": [
+          "Không có mối quan hệ giữa 2 thông tin (Tham chiếu: 'physical classrooms deliver benefits that screens cannot replicate')"
+        ],
+        "band_reason": "'Logically organised' and 'clear progression' — Các đoạn đi theo trật tự hợp lý, mỗi đoạn có chức năng rõ ràng và người đọc theo dõi mạch ý dễ dàng."
+      },
+      "3_lexical_resource": {
+        "band_score": 7,
+        "feedback_detail": [
+          "'world-class instructors' -> Cụm này tự nhiên và khá mạnh về sắc thái, nhưng không có lỗi từ vựng rõ ràng cần sửa. Đây là ví dụ tốt cho việc dùng ngôn ngữ học thuật và cụ thể, góp phần vào Band 7."
+        ],
+        "strengths": [
+          "Sử dụng nhiều cụm học thuật và phù hợp chủ đề như 'proliferation', 'conventional classroom instruction', 'knowledge transmission'.",
+          "Từ vựng đủ linh hoạt để diễn đạt sắc thái đánh giá và so sánh một cách tự nhiên."
+        ],
+        "areas_for_improvement": [
+          "None specified"
+        ],
+        "band_reason": "'Sufficient range for flexibility and precision' — Bài dùng được các từ vựng học thuật khá tự nhiên, có độ chính xác và phù hợp với chủ đề giáo dục, vượt mức Band 6."
+      },
+      "4_grammatical_range_accuracy": {
+        "band_score": 7,
+        "feedback_detail": [
+          "'While I acknowledge the considerable advantages of digital education, I disagree that it renders traditional teaching obsolete.' -> Câu này là một câu phức chuẩn, thể hiện tốt khả năng kiểm soát mệnh đề nhượng bộ và mệnh đề danh ngữ. Không có lỗi cần sửa; đây là điểm cộng cho GRA Band 7."
+        ],
+        "strengths": [
+          "Sử dụng câu phức linh hoạt, đặc biệt là mệnh đề nhượng bộ và mệnh đề quan hệ.",
+          "Hầu hết câu đều chính xác, không có lỗi ngữ pháp nổi bật gây ảnh hưởng đến hiểu nghĩa."
+        ],
+        "areas_for_improvement": [
+          "None specified"
+        ],
+        "band_reason": "'A variety of complex structures' and 'frequent error-free sentences' — Bài thể hiện kiểm soát ngữ pháp tốt, với cấu trúc đa dạng và độ chính xác cao, phù hợp Band 7."
+      }
+    },
+    "Overall Assessment": {
+      "Summary": "Bài viết này đạt Band 7.0 một cách khá thuyết phục. Quan điểm rõ ràng, bố cục mạch lạc, từ vựng học thuật tốt và ngữ pháp kiểm soát chắc chắn. Điểm mạnh lớn nhất là bài không chỉ trả lời câu hỏi mà còn đề xuất một quan điểm dung hòa rất hợp lý về blended learning. Tuy nhiên, phần phát triển ý vẫn có thể sâu hơn nếu bổ sung thêm ví dụ cụ thể cho từng lợi ích của lớp học truyền thống.",
+      "Specific Suggestions": [
+        "Thêm ví dụ cụ thể để chứng minh từng lợi ích của classroom education, đặc biệt là với younger learners và hands-on subjects.",
+        "Khi phản biện quan điểm online learning, hãy nêu rõ vì sao convenience không đồng nghĩa với replacement.",
+        "Phát triển thêm một câu giải thích sau mỗi topic sentence để tăng độ sâu của lập luận."
+      ],
+      "Next Steps": [
+        "Luyện viết body paragraphs theo công thức: claim → explanation → example.",
+        "Thu thập 5–7 ví dụ thực tế về các môn học cần lớp học trực tiếp (laboratory, clinical training, performance arts).",
+        "Tập paraphrase đề và thesis sao cho vừa rõ lập trường vừa giữ giọng văn học thuật."
+      ]
+    }
+  }
+}

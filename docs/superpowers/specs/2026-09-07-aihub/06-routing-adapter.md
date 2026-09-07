@@ -77,18 +77,33 @@ Downstream đặt tên `/generate-question-task1` nhưng `/question-generated-ta
 
 ## H.2 Canonical schemas
 
+> Toàn bộ phần này dựa trên **response thật đã gọi và lưu ở `test/fixtures/ai-writing/`**, không phải suy đoán.
+
 ```ts
+// 7 giá trị đã dò được, CASE-SENSITIVE ('bar chart' -> downstream 500)
+const CHART_TYPES = ['Bar Chart', 'Line Graph', 'Pie Chart', 'Table',
+                     'Map', 'Process Diagram', 'Multiple Graphs'] as const;
+
+const QUESTION_TYPES = ['opinion', 'discussion', 'problem_solution',
+                        'advantages_disadvantages', 'two_part'] as const;
+
+// Hiện downstream chỉ sinh feedback tiếng Việt. Nới enum khi Writing hỗ trợ 'en'
+// — nới lỏng là non-breaking, nên thứ tự này an toàn.
+const LANGUAGES = ['vi'] as const;
+
 export const GradeTask1Request = Type.Object({
-  question:  Type.String({ minLength: 1, maxLength: 2_000 }),
-  topic:     Type.String({ minLength: 1, maxLength: 200 }),
-  essay:     Type.String({ minLength: 1, maxLength: 20_000 }),
-  image_url: Type.String({ format: 'uri', maxLength: 2_000 }),   // -> downstream 'url'
+  question:   Type.String({ minLength: 1, maxLength: 2_000 }),
+  chart_type: Type.Union(CHART_TYPES.map(Type.Literal)),         // -> downstream 'topic'
+  essay:      Type.String({ minLength: 1, maxLength: 20_000 }),
+  image_url:  Type.String({ format: 'uri', maxLength: 2_000 }),  // -> downstream 'url'
+  language:   Type.Optional(Type.Union(LANGUAGES.map(Type.Literal))),
 }, { additionalProperties: false });
 
 export const GradeTask2Request = Type.Object({
   question: Type.String({ minLength: 1, maxLength: 2_000 }),
-  topic:    Type.String({ minLength: 1, maxLength: 200 }),
+  topic:    Type.String({ minLength: 1, maxLength: 200 }),        // chủ đề thật, vd 'education'
   essay:    Type.String({ minLength: 1, maxLength: 20_000 }),
+  language: Type.Optional(Type.Union(LANGUAGES.map(Type.Literal))),
 }, { additionalProperties: false });
 
 // Task 1 và Task 2 khác nhau đúng một tiêu chí đầu tiên.
@@ -98,46 +113,61 @@ const CRITERION_IDS = ['task_achievement',   // chỉ task 1
                        'lexical_resource',
                        'grammatical_range_accuracy'] as const;
 
+const Band = Type.Number({ minimum: 0, maximum: 9, multipleOf: 0.5 });
+
 export const GradeResponse = Type.Object({
-  overall_band: Type.Number({ minimum: 0, maximum: 9, multipleOf: 0.5 }),
+  overall_band: Band,
+  language:     Type.Union(LANGUAGES.map(Type.Literal)),
   criteria: Type.Array(Type.Object({
-    id:       Type.Union(CRITERION_IDS.map(Type.Literal)),
-    name:     Type.String(),                    // 'Task Achievement' / 'Task Response'
-    band:     Type.Number({ minimum: 0, maximum: 9, multipleOf: 0.5 }),
-    feedback: Type.String(),
+    id:           Type.Union(CRITERION_IDS.map(Type.Literal)),
+    name:         Type.String(),               // 'Task Achievement' / 'Task Response'
+    band:         Band,
+    band_reason:  Type.String(),
+    strengths:    Type.Array(Type.String()),
+    improvements: Type.Array(Type.String()),   // rỗng thay vì sentinel 'None specified'
   }), { minItems: 4, maxItems: 4 }),
   summary:     Type.String(),
-  word_count:  Type.Optional(Type.Integer({ minimum: 0 })),
-  corrections: Type.Optional(Type.Array(Type.Object({
-    original:    Type.String(),
-    suggestion:  Type.String(),
-    type:        Type.Union([Type.Literal('grammar'), Type.Literal('vocabulary'),
-                             Type.Literal('coherence'), Type.Literal('spelling')]),
-    explanation: Type.Optional(Type.String()),
-  }))),
+  suggestions: Type.Array(Type.String()),
+  next_steps:  Type.Array(Type.String()),
+  annotations: Type.Array(Type.Object({        // trích dẫn trong bài + nhận xét
+    criterion:   Type.Union(CRITERION_IDS.map(Type.Literal)),
+    issue:       Type.String(),                // 'inaccurate_data_support', ...
+    quote:       Type.String(),
+    explanation: Type.String(),
+  })),
 }, { additionalProperties: false });
 
-const QUESTION_TYPES = ['opinion', 'discussion', 'problem_solution',
-                        'advantages_disadvantages', 'two_part'] as const;
+export const Task1QuestionRequest = Type.Object({
+  chart_type: Type.Optional(Type.Union(CHART_TYPES.map(Type.Literal))),  // bỏ trống = ngẫu nhiên
+}, { additionalProperties: false });
 
 export const Task1QuestionResponse = Type.Object({
-  question: Type.String(), topic: Type.String(),
-  image_url: Type.String({ format: 'uri' }),     // ảnh biểu đồ, bắt buộc với task 1
+  question_id: Type.String(),
+  question:    Type.String(),
+  chart_type:  Type.Union(CHART_TYPES.map(Type.Literal)),
+  image_url:   Type.String({ format: 'uri' }),
 }, { additionalProperties: false });
 
 export const Task2QuestionResponse = Type.Object({
-  question: Type.String(), topic: Type.String(),
+  question:      Type.String(),
+  topic:         Type.String(),
   question_type: Type.Union(QUESTION_TYPES.map(Type.Literal)),
 }, { additionalProperties: false });
 ```
 
-### Ba quyết định trong `GradeResponse`
+### Năm quyết định, tất cả rút ra từ dữ liệu thật
 
-**`criteria` là mảng, không phải 4 field cố định.** Task 1 gọi tiêu chí đầu là *Task Achievement*, Task 2 gọi là *Task Response*. Nếu làm field cố định thì hai task ra hai shape khác nhau và client phải viết hai nhánh render; mảng có `id` ổn định + `name` để hiển thị thì UI chỉ cần lặp qua 4 phần tử, dùng chung một component cho cả hai task. Thứ tự cam kết cố định.
+**`criteria` là mảng — đã được thực tế xác nhận.** Response thật dùng key `1_task_achievement` cho Task 1 và `1_task_response` cho Task 2, ba tiêu chí còn lại giống nhau. Nếu làm 4 field cố định thì hai task ra hai shape và client phải viết hai nhánh render. Mảng có `id` ổn định + `name` hiển thị cho phép dùng chung một component; thứ tự cam kết cố định theo tiền tố số của downstream.
 
-**`multipleOf: 0.5` được validate.** IELTS chỉ có band nguyên và nửa. Model trả 6.4 là vi phạm contract — bắt ngay ở AIHUB, đừng để nó chảy ra tới khách.
+**`chart_type` thay cho `topic` ở Task 1.** Downstream đặt tên field là `topic` nhưng giá trị thật là loại biểu đồ (`Bar Chart`), không phải chủ đề — gửi `"environment"` bị trả 500. Giữ tên `topic` ở public API là truyền lại chính sự hiểu nhầm đó cho khách. Task 2 thì `topic` đúng nghĩa chủ đề, nên giữ nguyên.
 
-**AIHUB không tự tính `overall_band`.** Cách làm tròn band tổng là luật nghiệp vụ của IELTS, thuộc về Writing. Gateway chỉ kiểm tra tính hợp lệ, không tính toán nghiệp vụ.
+**`multipleOf: 0.5` chấp nhận cả `int` lẫn `float`.** Downstream trả `overall_band: 7.0` (float) nhưng `band_score: 7` (int). `multipleOf: 0.5` thoả cả hai nên không cần ép kiểu — ép float sẽ reject nhầm response hợp lệ.
+
+**`improvements` chuẩn hoá sentinel.** Downstream trả `["None specified"]` khi không có gì để cải thiện. Adapter đổi thành mảng rỗng — client kiểm tra `length === 0` chứ không phải so chuỗi tiếng Anh.
+
+**`annotations` thay cho `corrections`.** Thiết kế ban đầu giả định downstream trả cặp sửa lỗi `{original, suggestion}`. Thực tế nó trả `{quote, explanation}` — **bình luận về một đoạn trích, không phải đề xuất thay thế**. Đặt tên `corrections` sẽ khiến client dựng UI "nhấn để sửa" cho dữ liệu không hỗ trợ việc đó.
+
+**AIHUB không tự tính `overall_band`.** Cách làm tròn band tổng là luật nghiệp vụ IELTS, thuộc về Writing. Gateway chỉ kiểm tra tính hợp lệ.
 
 ### `additionalProperties: false` xử lý đúng US05
 
@@ -182,30 +212,159 @@ type DownstreamRequest = {
 
 **3. `parseError` là tuỳ chọn.** Phần lớn lỗi là lỗi tầng vận chuyển (timeout, connection refused, 5xx) và giống hệt nhau ở mọi AI Service, nên một `DownstreamErrorMapper` dùng chung xử lý hết. Adapter chỉ cài `parseError` khi service có body lỗi riêng cần đọc (vd `{"error_code":"MODEL_NOT_READY"}`). Trong D1, `mapError` là bắt buộc → mỗi adapter mới phải chép lại cùng một đoạn code.
 
-### Adapter thật
+### Adapter thật — viết từ fixture, không phải suy đoán
 
 ```ts
+const CRITERION_NAMES: Record<CriterionId, string> = {
+  task_achievement:           'Task Achievement',
+  task_response:              'Task Response',
+  coherence_cohesion:         'Coherence and Cohesion',
+  lexical_resource:           'Lexical Resource',
+  grammatical_range_accuracy: 'Grammatical Range and Accuracy',
+};
+
+/** Downstream trả ["None specified"] thay vì mảng rỗng. */
+const clean = (xs: string[] = []) =>
+  xs.filter(s => s && s.trim().toLowerCase() !== 'none specified');
+
+/** data_micro: { criterion: { issue: { comments: [{quote, explanation}] } } } */
+function toAnnotations(micro: Record<string, any> = {}) {
+  return Object.entries(micro).flatMap(([criterion, issues]) =>
+    Object.entries(issues ?? {}).flatMap(([issue, body]: [string, any]) =>
+      (body?.comments ?? []).map((c: any) => ({
+        criterion, issue, quote: c.quote, explanation: c.explanation,
+      }))));
+}
+
+/** Dùng chung cho cả hai task — khác nhau chỉ ở tên tiêu chí đầu tiên. */
+function parseGrading(raw: any): GradeRes {
+  const d = raw?.data;
+  if (!d?.evaluation || d.overall_band == null) {
+    throw new ContractViolationError('missing data.evaluation or data.overall_band');
+  }
+
+  const criteria = Object.entries(d.evaluation)
+    .sort(([a], [b]) => a.localeCompare(b))          // '1_...' < '2_...' — thứ tự downstream
+    .map(([key, v]: [string, any]) => {
+      const id = key.replace(/^\d+_/, '') as CriterionId;
+      if (!(id in CRITERION_NAMES)) {
+        throw new ContractViolationError(`unknown criterion: ${key}`);
+      }
+      return {
+        id,
+        name:         CRITERION_NAMES[id],
+        band:         v.band_score,
+        band_reason:  v.band_reason ?? '',
+        strengths:    clean(v.strengths),
+        improvements: clean(v.areas_for_improvement),
+      };
+    });
+
+  const oa = d['Overall Assessment'] ?? {};
+  return {
+    overall_band: d.overall_band,
+    language:     'vi',
+    criteria,
+    summary:      oa.Summary ?? '',
+    suggestions:  clean(oa['Specific Suggestions']),
+    next_steps:   clean(oa['Next Steps']),
+    annotations:  toAnnotations(raw?.data_micro),
+  };
+}
+
 export const gradeTask1Adapter: DownstreamAdapter<GradeTask1Req, GradeRes> = {
   operation: 'writing.task1.grade',
   downstream: 'ai-writing',
 
-  buildRequest: (req, ctx) => ({
+  buildRequest: (req) => ({
     method: 'POST',
     path: '/grading-feedback-task1',
     body: {
       question: req.question,
-      topic:    req.topic,
+      topic:    req.chart_type,       // canonical 'chart_type' -> downstream 'topic'
       essay:    req.essay,
-      url:      req.image_url,        // đổi tên field
+      url:      req.image_url,        // canonical 'image_url'  -> downstream 'url'
       // ctx.actorId KHÔNG nhét vào body — danh tính đi trong internal JWT đã ký
     },
   }),
 
-  parseResponse: (raw) => { /* map sang GradeResponse — chờ 11 §P.1 */ },
+  parseResponse: parseGrading,
+};
+
+export const gradeTask2Adapter: DownstreamAdapter<GradeTask2Req, GradeRes> = {
+  operation: 'writing.task2.grade',
+  downstream: 'ai-writing',
+  buildRequest: (req) => ({
+    method: 'POST', path: '/grading-feedback-task2',
+    body: { question: req.question, topic: req.topic, essay: req.essay },
+  }),
+  parseResponse: parseGrading,
+};
+
+export const task1QuestionAdapter: DownstreamAdapter<Task1QuestionReq, Task1QuestionRes> = {
+  operation: 'writing.task1.question.generate',
+  downstream: 'ai-writing',
+  buildRequest: (req) => ({
+    method: 'POST', path: '/generate-question-task1',
+    body: req.chart_type ? { topic: req.chart_type } : {},
+  }),
+  // envelope lồng HAI lớp: { data: { data: {...} } }
+  parseResponse: (raw: any) => {
+    const d = raw?.data?.data ?? raw?.data;
+    if (!d?.question || !d?.image_url) {
+      throw new ContractViolationError('missing question or image_url');
+    }
+    return { question_id: d.question_id, question: d.question,
+             chart_type: d.topic, image_url: d.image_url };
+  },
+};
+
+export const task2QuestionAdapter: DownstreamAdapter<Task2QuestionReq, Task2QuestionRes> = {
+  operation: 'writing.task2.question.generate',
+  downstream: 'ai-writing',
+  buildRequest: (req) => ({
+    method: 'POST', path: '/question-generated-task2',
+    body: { topic: req.topic, question_type: req.question_type },
+  }),
+  // envelope PHẲNG, tên field khác hẳn task 1
+  parseResponse: (raw: any) => {
+    const d = raw?.data;
+    if (!d?.description) throw new ContractViolationError('missing data.description');
+    return { question: d.description,          // 'description' -> 'question'
+             topic: d.topic ?? '',
+             question_type: d.instruction };   // 'instruction'  -> 'question_type'
+  },
 };
 ```
 
+### Bốn thứ adapter cố tình vứt bỏ
+
+| Bỏ | Vì sao |
+|---|---|
+| `data.coT` | Chain-of-thought nội bộ (`layer1_errors`, `layer2_matching`, `layer3_calibration`). Lộ prompt engineering và gợi ý cho người dò prompt. **Không được ra tới client** |
+| `evaluation.*.feedback_detail` | Chỉ là bản làm phẳng của `data_micro` dạng chuỗi `'quote' -> explanation`. `annotations` giữ bản có cấu trúc, dùng được |
+| `data_micro.*.*.question_type` | Task 1 trả `'bar_chart'`, Task 2 trả `'education'` — hai nghĩa khác nhau cùng một tên. Không dùng được |
+| `success`, `original_type`, `converted`, `message`, `timestamp`, `data.task` | Nhiễu của envelope. Trạng thái đã nằm ở HTTP status |
+
 `actorId` **cố tình không có trong body**. Danh tính đi trong internal JWT đã ký; nhét thêm vào body tạo ra một đường thứ hai để giả mạo, và AI Service có thể lỡ tin nhầm đường đó.
+
+### Adapter thuần nên test là so JSON
+
+```ts
+it('map response chấm Task 1 thật', () => {
+  const raw = require('../../test/fixtures/ai-writing/grade-task1.response.json');
+  const out = gradeTask1Adapter.parseResponse(raw);
+  expect(out.overall_band).toBe(7.0);
+  expect(out.criteria.map(c => c.id)).toEqual([
+    'task_achievement', 'coherence_cohesion', 'lexical_resource', 'grammatical_range_accuracy',
+  ]);
+  expect(out.criteria[1].improvements).toEqual([]);   // sentinel đã bị lọc
+  expect(out.annotations[0].quote).toBe('a more than twentyfold increase');
+  expect(JSON.stringify(out)).not.toContain('layer1_errors');   // coT không rò ra
+});
+```
+
+Không mock, không network — đúng lợi ích của việc bắt adapter là hàm thuần ([§H.3](#h3-adapter-hàm-thuần-không-io)).
 
 ## H.4 Dispatcher — nơi duy nhất có I/O
 
@@ -269,12 +428,33 @@ Nhờ vậy **Writing không chặn đường AIHUB và AIHUB không chặn đư
 
 `InternalResponseSchema.parse` ép AI Service đúng contract. Thiếu `usage` → **không ném lỗi**, chỉ `metering_status='missing_usage'` + metric. Request của khách vẫn thành công; vấn đề là của mình, không phải của họ.
 
-### Việc cho team Writing — đúng 4 gạch đầu dòng
+### Việc cho team Writing — 7 mục, xếp theo mức ưu tiên
 
-1. Thêm `usage` / `models` / `metrics` vào response 4 endpoint ưu tiên. FastAPI + OpenAI thì `usage` có sẵn trong response của model, chỉ cần cộng dồn.
-2. Trả đúng shape mà `parseResponse` cần: 4 tiêu chí + band tổng. Nếu hiện đang trả prose tự do thì đây là việc lớn nhất — xem [11 §P.1](11-open-questions.md#p1-response-thật-của-grading-feedback-task12--chặn-phase-1).
-3. Bịt `/five-minute-grading` (đang không có auth).
-4. Chuyển service vào private network, chỉ AIHUB gọi được.
+Danh sách này rút ra từ việc **gọi thật cả 4 endpoint** ngày 2026-09-07; fixture ở `test/fixtures/ai-writing/`.
+
+| # | Việc | Mức | Vì sao |
+|---|---|---|---|
+| 1 | **Thêm `usage`/`models`/`metrics`** vào response (additive) | 🔴 Chặn | Metering hiện tại là 0%. Chấm bài chạy 16–18s, chắc chắn gọi model nhiều lần, nhưng không trả token nào |
+| 2 | **Bỏ `data.coT` khỏi response** | 🔴 Chặn | Đang lộ `layer1_errors` / `layer2_matching` / `layer3_calibration` ra ngoài. AIHUB sẽ cắt, nhưng đừng gửi ngay từ đầu |
+| 3 | **Sửa 404 bị bọc thành 500** | 🟠 Cao | `{"detail":"404: Không tìm thấy dữ liệu cho topic này!"}` trả về HTTP 500. Xem giải thích bên dưới |
+| 4 | **Kiểm tra band nửa điểm** | 🟠 Cao | 3 mẫu đều ra band nguyên, và cả 4 tiêu chí luôn bằng nhau (7-7-7-7 rồi 5-5-5-5). Nghi ngờ không bao giờ phát ra `.5` |
+| 5 | **Phạt bài dưới độ dài tối thiểu** | 🟠 Cao | Bài Task 2 dài 98 từ (yêu cầu 250) vẫn được band 5.0 |
+| 6 | **Bịt `/five-minute-grading`** | 🔴 Chặn | Endpoint duy nhất không khai báo security, trong khi service đang mở ra Internet |
+| 7 | **Chuyển service vào private network** | 🔴 Chặn | Còn public thì khách đi vòng được, mọi rate limit/quota/metering vô nghĩa |
+
+Ngoài ra: token service-to-service hiện có `exp` năm **2100** và `role: Admin`. Nên rút TTL xuống mức hợp lý và có đường xoay khoá.
+
+### Vì sao mục 3 nguy hiểm hơn vẻ ngoài
+
+```
+{"topic":"environment"} -> HTTP 500 {"detail":"404: Không tìm thấy dữ liệu cho topic này!"}
+```
+
+Một trạng thái nghiệp vụ ("không có dữ liệu cho loại biểu đồ này") đang trả về 5xx. Theo [07 §I.3](07-reliability-and-errors.md#i3-circuit-breaker--opossum-key-theo-operation), AIHUB chỉ tính 5xx vào circuit breaker — nên **một khách gõ sai `chart_type` nhiều lần có thể mở breaker và làm sập operation đó cho mọi khách khác**.
+
+Đúng phải là `404` (hoặc `422`), và AIHUB sẽ map thành lỗi client, không tính vào breaker.
+
+Tạm thời AIHUB không thể tự chữa: phân biệt "500 thật" với "404 bị bọc" đòi phải đọc chuỗi `detail` — một heuristic dễ vỡ, không nên đưa vào adapter.
 
 ## H.6 HTTP client
 
