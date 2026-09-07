@@ -36,7 +36,9 @@ module.exports = {
       severity: 'error',
       comment:
         'Concrete infrastructure is bound only by module composition roots.',
-      from: { path: '^src/modules/[^/]+/(?![^/]+[.]module[.]ts$)' },
+      from: {
+        path: '^src/modules/[^/]+/(?!infrastructure/)(?!.*[.]spec[.]ts$)(?![^/]+[.]module[.]ts$)',
+      },
       to: { path: '^src/modules/[^/]+/infrastructure/' },
     },
   ],

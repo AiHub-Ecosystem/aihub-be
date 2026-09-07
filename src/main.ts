@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { loadEnvFile } from 'node:process';
+
 import { NestFactory } from '@nestjs/core';
 import {
   FastifyAdapter,
@@ -10,7 +13,15 @@ import { generateRequestId } from './common/request-context/request-id';
 const DEFAULT_PORT = 3000;
 const MAX_BODY_BYTES = 1024 * 1024;
 
+function loadLocalEnvironment(): void {
+  if (existsSync('.env')) {
+    loadEnvFile('.env');
+  }
+}
+
 export async function bootstrap(): Promise<void> {
+  loadLocalEnvironment();
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({
