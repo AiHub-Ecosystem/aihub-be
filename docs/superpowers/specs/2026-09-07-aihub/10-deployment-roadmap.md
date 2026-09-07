@@ -104,11 +104,17 @@ Chốt canonical schema thật ([06 §H.2](06-routing-adapter.md#h2-canonical-sc
 
 Đây là đầu vào của mọi phase sau. Danh sách thay đổi cụ thể: [11 §Q](11-open-questions.md#q-những-thay-đổi-cần-đưa-ngược-vào-d1).
 
-### Phase 1 — Core proxy · *2–3 tuần*
+### Phase 1 — Core proxy · *~3 tuần*
 
-4 operation Writing; API key auth + CLI; catalog + adapter + dispatcher; error model đầy đủ; `usage_records`; Compose + Caddy + backup.
+4 operation Writing; API key auth + CLI; catalog + adapter + dispatcher; error model đầy đủ; `usage_records`; Compose + Caddy + backup; **rate limit + idempotency**.
 
-> **Cột mốc:** khách gọi được `/v1/writing/task1/grade` bằng API key thật.
+> **Cột mốc:** khách gọi được `/v1/writing/task1/grade` bằng API key thật, và một vòng lặp retry hỏng không làm bạn mất tiền hai lần.
+
+**Rate limit và idempotency được kéo từ Phase 3 lên đây.** Lý do: Phase 1 là lúc endpoint đắt tiền nhất (`writing.*.grade`) mở ra cho khách thật. Không có hai thứ này thì một vòng lặp retry sai hoặc một cú double-submit là trả tiền model hai lần.
+
+Chi phí kéo lên rất thấp — rate limit là `INCR` + `EXPIRE` (~15 dòng, [04 §F.2](04-redis.md#f2-rate-limit-fixed-window-không-lua)), idempotency là một bảng + `ON CONFLICT` (~60 dòng, [03 §E.4](03-database.md#e4-xử-lý-race-của-idempotency--không-cần-distributed-lock)). Khoảng 2 ngày cho cả hai, đổi lấy việc Phase 1 mở cho khách thật được ngay thay vì phải chờ tới Phase 3.
+
+**Chi tiết cho việc Phase 1 chạy được mà không chờ team Writing:** Writing hiện dùng `HTTPBearer` với token có sẵn. Phase 1 để dispatcher gửi token đó lấy từ env (`DOWNSTREAM_AI_WRITING_TOKEN`); Phase 2 mới thay bằng internal JWT do AIHUB tự ký. Nghĩa là Phase 1 chạy được với AI Writing **y nguyên hiện tại**, chỉ riêng `parseResponse` là phải chờ response shape thật.
 
 ### Phase 2 — Identity + đóng cửa · *2 tuần*
 
@@ -118,9 +124,11 @@ User assertion + JWKS + SSRF guard; internal JWT + JWKS endpoint + xoay khoá; *
 
 ### Phase 3 — Bảo vệ + quan sát · *1–2 tuần*
 
-Rate limit, concurrency limit, quota, idempotency, circuit breaker, retry; Prometheus/Loki/Grafana + alert; load test để chốt `rate_limit_rpm` và `max_concurrent`.
+Concurrency limit, quota, circuit breaker, retry + backoff; Prometheus/Loki/Grafana + alert; load test để chốt `rate_limit_rpm` và `max_concurrent`.
 
 > **Cột mốc:** một khách chạy loạn không làm sập khách khác.
+
+*(Rate limit và idempotency đã làm ở Phase 1.)*
 
 **Phase 1–3 ≈ 6–7 tuần**, khớp mốc 1–2 tháng cho D2.
 
