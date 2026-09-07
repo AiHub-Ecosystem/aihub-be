@@ -23,6 +23,33 @@ class FakeRedis implements RedisRateLimitClient {
   }
 }
 
+class FailingRedis implements RedisRateLimitClient {
+  incr(): Promise<number> {
+    return Promise.reject(new Error('redis down'));
+  }
+
+  expire(): Promise<number> {
+    return Promise.reject(new Error('redis down'));
+  }
+
+  quit(): Promise<'OK'> {
+    return Promise.resolve('OK');
+  }
+}
+
+class FakeLogger {
+  readonly warnings: string[] = [];
+  readonly logs: string[] = [];
+
+  warn(message: string): void {
+    this.warnings.push(message);
+  }
+
+  log(message: string): void {
+    this.logs.push(message);
+  }
+}
+
 describe('RedisRateLimiter', () => {
   it('uses a namespaced fixed-minute bucket with a two-minute TTL', async () => {
     const redis = new FakeRedis();
@@ -42,17 +69,79 @@ describe('RedisRateLimiter', () => {
   });
 
   it('allows traffic when Redis is unavailable so authorization remains independent', async () => {
-    const redis: RedisRateLimitClient = {
-      incr: () => Promise.reject(new Error('redis down')),
-      expire: () => Promise.reject(new Error('redis down')),
-      quit: () => Promise.resolve('OK'),
-    };
-
     await expect(
-      new RedisRateLimiter('', redis).consume({
+      new RedisRateLimiter('', new FailingRedis()).consume({
         keyId: 'ak_backend',
         limit: 1,
       }),
     ).resolves.toEqual({ allowed: true });
+  });
+
+  it('still applies a ceiling in-process once Redis is unavailable', async () => {
+    const limiter = new RedisRateLimiter('', new FailingRedis(), () => 61_234);
+
+    await expect(
+      limiter.consume({ keyId: 'ak_backend', limit: 2 }),
+    ).resolves.toEqual({ allowed: true });
+    await expect(
+      limiter.consume({ keyId: 'ak_backend', limit: 2 }),
+    ).resolves.toEqual({ allowed: true });
+    await expect(
+      limiter.consume({ keyId: 'ak_backend', limit: 2 }),
+    ).resolves.toEqual({ allowed: false, retryAfterMs: 58_766 });
+  });
+
+  it('keeps the process-local ceiling separate per API key', async () => {
+    const limiter = new RedisRateLimiter('', new FailingRedis(), () => 61_234);
+
+    await limiter.consume({ keyId: 'ak_one', limit: 1 });
+
+    await expect(
+      limiter.consume({ keyId: 'ak_two', limit: 1 }),
+    ).resolves.toEqual({ allowed: true });
+  });
+
+  it('warns once when Redis becomes unreachable, not on every request', async () => {
+    const logger = new FakeLogger();
+    const limiter = new RedisRateLimiter(
+      '',
+      new FailingRedis(),
+      Date.now,
+      logger,
+    );
+
+    await limiter.consume({ keyId: 'ak_backend', limit: 10 });
+    await limiter.consume({ keyId: 'ak_backend', limit: 10 });
+    await limiter.consume({ keyId: 'ak_backend', limit: 10 });
+
+    expect(logger.warnings).toHaveLength(1);
+  });
+
+  it('logs recovery once Redis answers again, and can warn again on a later outage', async () => {
+    const logger = new FakeLogger();
+    const redis = new FakeRedis();
+    const failing = new FailingRedis();
+    let current: RedisRateLimitClient = failing;
+    const limiter = new RedisRateLimiter(
+      '',
+      {
+        incr: (k) => current.incr(k),
+        expire: (k, s) => current.expire(k, s),
+        quit: () => current.quit(),
+      },
+      Date.now,
+      logger,
+    );
+
+    await limiter.consume({ keyId: 'ak_backend', limit: 10 });
+    expect(logger.warnings).toHaveLength(1);
+
+    current = redis;
+    await limiter.consume({ keyId: 'ak_backend', limit: 10 });
+    expect(logger.logs).toHaveLength(1);
+
+    current = failing;
+    await limiter.consume({ keyId: 'ak_backend', limit: 10 });
+    expect(logger.warnings).toHaveLength(2);
   });
 });

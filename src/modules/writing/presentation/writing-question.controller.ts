@@ -12,6 +12,7 @@ import { Value } from '@sinclair/typebox/value';
 
 import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import { AppError } from '../../../common/errors/app-error';
+import { createClientDisconnectSignal } from '../../../common/http/client-disconnect-signal';
 import { SuccessEnvelopeInterceptor } from '../../../common/http/success-envelope.interceptor';
 import { createRequestContext } from '../../../common/request-context/request-context.factory';
 import {
@@ -82,15 +83,26 @@ export class WritingQuestionController {
   ): Promise<DispatchResult<Task1QuestionResponse>> {
     const input = parseBody(body);
     const authenticated = getAuthenticatedApiKey(request);
-    const context = createRequestContext({
-      requestId: String(request.id),
-      receivedAt: new Date(),
-      deadlineMs: OPERATION_CATALOG[OPERATION].timeoutMs,
-      organizationId: authenticated.organizationId,
-      apiKeyId: authenticated.apiKeyId,
-      scopes: authenticated.scopes,
-    });
+    // Ties the dispatch's AbortSignal to this specific request's connection,
+    // not only to the operation timeout, so a client that disconnects early
+    // stops the downstream call instead of letting it run to completion for
+    // no one.
+    const { signal, dispose } = createClientDisconnectSignal(request.raw);
 
-    return this.dispatcher.dispatch(OPERATION, input, context);
+    try {
+      const context = createRequestContext({
+        requestId: String(request.id),
+        receivedAt: new Date(),
+        deadlineMs: OPERATION_CATALOG[OPERATION].timeoutMs,
+        organizationId: authenticated.organizationId,
+        apiKeyId: authenticated.apiKeyId,
+        scopes: authenticated.scopes,
+        signal,
+      });
+
+      return await this.dispatcher.dispatch(OPERATION, input, context);
+    } finally {
+      dispose();
+    }
   }
 }
