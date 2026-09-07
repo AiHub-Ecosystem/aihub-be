@@ -1,6 +1,12 @@
+import { Logger } from '@nestjs/common';
 import { MockAgent } from 'undici';
 
+import { AppError } from '../../../common/errors/app-error';
 import { createRequestContext } from '../../../common/request-context/request-context.factory';
+import type {
+  GradeResponse,
+  GradeTask1Request,
+} from '../../../contracts/writing/grading';
 import type {
   Task1QuestionRequest,
   Task1QuestionResponse,
@@ -61,31 +67,85 @@ function fakeTask2QuestionAdapter(
   };
 }
 
+function fakeGradeAdapter(
+  path: string,
+  error: AppError,
+): DownstreamAdapter<GradeTask1Request, GradeResponse> {
+  return {
+    operation: 'writing.task1.grade',
+    downstream: 'ai-writing',
+    buildRequest: (input): DownstreamRequest => ({
+      method: 'POST',
+      path,
+      body: {
+        question: input.question,
+        topic: input.chart_type,
+        essay: input.essay,
+        url: input.image_url,
+      },
+    }),
+    parseResponse: (): GradeResponse => {
+      throw error;
+    },
+  };
+}
+
 class FakeTokenIssuer implements InternalTokenIssuerPort {
+  constructor(private readonly token = 'token-abc') {}
+
   mint(): Promise<string> {
-    return Promise.resolve('token-abc');
+    return Promise.resolve(this.token);
   }
 }
 
-function context() {
+function context(deadlineMs = 5_000, signal?: AbortSignal) {
   return createRequestContext({
     requestId: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
     receivedAt: new Date(),
-    deadlineMs: 5_000,
+    deadlineMs,
     scopes: [],
+    ...(signal === undefined ? {} : { signal }),
   });
+}
+
+function readLogLine(loggerError: jest.SpiedFunction<Logger['error']>): string {
+  expect(loggerError).toHaveBeenCalledTimes(1);
+  const call = loggerError.mock.calls[0];
+  expect(call).toHaveLength(1);
+  const line = call?.[0];
+  expect(typeof line).toBe('string');
+  return String(line);
+}
+
+function downstreamMs(logLine: string): number {
+  const payload: unknown = JSON.parse(logLine);
+  if (
+    typeof payload !== 'object' ||
+    payload === null ||
+    !('downstream_ms' in payload) ||
+    typeof payload.downstream_ms !== 'number'
+  ) {
+    throw new Error('downstream_ms is missing from the failure log');
+  }
+
+  return payload.downstream_ms;
 }
 
 describe('HttpOperationDispatcher', () => {
   let mockAgent: MockAgent;
+  let loggerError: jest.SpiedFunction<Logger['error']>;
 
   beforeEach(() => {
     mockAgent = new MockAgent();
     mockAgent.disableNetConnect();
+    loggerError = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
   });
 
   afterEach(async () => {
     await mockAgent.close();
+    loggerError.mockRestore();
   });
 
   it('routes to the adapter registered for the requested operation, not any other one', async () => {
@@ -139,6 +199,7 @@ describe('HttpOperationDispatcher', () => {
         context(),
       ),
     ).rejects.toMatchObject({ code: 'INTERNAL_ERROR', httpStatus: 500 });
+    expect(loggerError).not.toHaveBeenCalled();
   });
 
   it('maps a downstream 5xx to a retryable unified error', async () => {
@@ -159,6 +220,22 @@ describe('HttpOperationDispatcher', () => {
     await expect(
       dispatcher.dispatch('writing.task1.question.generate', {}, context()),
     ).rejects.toMatchObject({ code: 'AI_SERVICE_ERROR', retryable: true });
+
+    const logLine = readLogLine(loggerError);
+    expect(JSON.parse(logLine)).toEqual({
+      event: 'downstream_failed',
+      request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+      operation: 'writing.task1.question.generate',
+      ai_service: 'ai-writing',
+      private_endpoint: '/task-one',
+      downstream_status: 503,
+      downstream_error_code: null,
+      downstream_message: null,
+      downstream_ms: expect.any(Number),
+      error_code: 'AI_SERVICE_ERROR',
+      message: 'downstream status 503',
+    });
+    expect(downstreamMs(logLine)).toBeGreaterThanOrEqual(0);
   });
 
   it('maps a downstream 429 to the throttled error, not the client rate-limit error', async () => {
@@ -179,5 +256,162 @@ describe('HttpOperationDispatcher', () => {
     await expect(
       dispatcher.dispatch('writing.task1.question.generate', {}, context()),
     ).rejects.toMatchObject({ code: 'AI_SERVICE_THROTTLED', httpStatus: 503 });
+
+    const logLine = readLogLine(loggerError);
+    expect(JSON.parse(logLine)).toEqual({
+      event: 'downstream_failed',
+      request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+      operation: 'writing.task1.question.generate',
+      ai_service: 'ai-writing',
+      private_endpoint: '/task-one',
+      downstream_status: 429,
+      downstream_error_code: null,
+      downstream_message: null,
+      downstream_ms: expect.any(Number),
+      error_code: 'AI_SERVICE_THROTTLED',
+      message: 'downstream status 429',
+    });
+    expect(downstreamMs(logLine)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('logs an aborted downstream request as a timeout without a response status', async () => {
+    const originalError = new AppError({
+      code: 'AI_SERVICE_TIMEOUT',
+      message: 'AI service request timed out',
+      httpStatus: 504,
+      retryable: true,
+      cause: new Error('private timeout cause'),
+    });
+    const httpClient = new DownstreamHttpClient(
+      'https://ai-writing.test',
+      mockAgent,
+    );
+    jest.spyOn(httpClient, 'request').mockRejectedValue(originalError);
+    const dispatcher = new HttpOperationDispatcher(
+      httpClient,
+      new FakeTokenIssuer(),
+      [fakeTask1QuestionAdapter('/task-one')],
+    );
+
+    await expect(
+      dispatcher.dispatch('writing.task1.question.generate', {}, context()),
+    ).rejects.toBe(originalError);
+
+    const logLine = readLogLine(loggerError);
+    expect(JSON.parse(logLine)).toEqual({
+      event: 'downstream_failed',
+      request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+      operation: 'writing.task1.question.generate',
+      ai_service: 'ai-writing',
+      private_endpoint: '/task-one',
+      downstream_status: null,
+      downstream_error_code: null,
+      downstream_message: null,
+      downstream_ms: expect.any(Number),
+      error_code: 'AI_SERVICE_TIMEOUT',
+      message: 'downstream timed out',
+    });
+    expect(downstreamMs(logLine)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('logs a transport failure as unavailable without leaking its cause', async () => {
+    const transportMarker = 'private transport failure marker';
+    mockAgent
+      .get('https://ai-writing.test')
+      .intercept({ method: 'POST', path: '/task-one' })
+      .replyWithError(new Error(transportMarker));
+    const httpClient = new DownstreamHttpClient(
+      'https://ai-writing.test',
+      mockAgent,
+    );
+    const dispatcher = new HttpOperationDispatcher(
+      httpClient,
+      new FakeTokenIssuer(),
+      [fakeTask1QuestionAdapter('/task-one')],
+    );
+
+    await expect(
+      dispatcher.dispatch('writing.task1.question.generate', {}, context()),
+    ).rejects.toMatchObject({
+      code: 'AI_SERVICE_UNAVAILABLE',
+      httpStatus: 503,
+    });
+
+    const logLine = readLogLine(loggerError);
+    expect(JSON.parse(logLine)).toEqual({
+      event: 'downstream_failed',
+      request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+      operation: 'writing.task1.question.generate',
+      ai_service: 'ai-writing',
+      private_endpoint: '/task-one',
+      downstream_status: null,
+      downstream_error_code: null,
+      downstream_message: null,
+      downstream_ms: expect.any(Number),
+      error_code: 'AI_SERVICE_UNAVAILABLE',
+      message: 'downstream unreachable',
+    });
+    expect(logLine).not.toContain(transportMarker);
+    expect(downstreamMs(logLine)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('logs an adapter contract violation once without serializing request, token, or response content', async () => {
+    const essayMarker = 'private essay marker';
+    const tokenMarker = 'private internal token marker';
+    const responseMarker = 'private raw response marker';
+    const originalError = new AppError({
+      code: 'AI_SERVICE_CONTRACT_VIOLATION',
+      message: 'AI service returned an unexpected response shape',
+      httpStatus: 502,
+      retryable: false,
+      cause: new Error(
+        `unexpected criterion contains ${responseMarker} and ${essayMarker}`,
+      ),
+    });
+    mockAgent
+      .get('https://ai-writing.test')
+      .intercept({ method: 'POST', path: '/grade' })
+      .reply(200, { unexpected: responseMarker });
+    const httpClient = new DownstreamHttpClient(
+      'https://ai-writing.test',
+      mockAgent,
+    );
+    const dispatcher = new HttpOperationDispatcher(
+      httpClient,
+      new FakeTokenIssuer(tokenMarker),
+      [fakeGradeAdapter('/grade', originalError)],
+    );
+
+    await expect(
+      dispatcher.dispatch(
+        'writing.task1.grade',
+        {
+          question: 'question marker',
+          chart_type: 'Bar Chart',
+          essay: essayMarker,
+          image_url: 'https://example.com/chart.png',
+        },
+        context(),
+      ),
+    ).rejects.toBe(originalError);
+
+    const logLine = readLogLine(loggerError);
+    expect(JSON.parse(logLine)).toEqual({
+      event: 'downstream_failed',
+      request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+      operation: 'writing.task1.grade',
+      ai_service: 'ai-writing',
+      private_endpoint: '/grade',
+      downstream_status: 200,
+      downstream_error_code: null,
+      downstream_message: null,
+      downstream_ms: expect.any(Number),
+      error_code: 'AI_SERVICE_CONTRACT_VIOLATION',
+      message: 'downstream response failed contract validation',
+    });
+    expect(logLine).not.toContain(essayMarker);
+    expect(logLine).not.toContain(tokenMarker);
+    expect(logLine).not.toContain(responseMarker);
+    expect(downstreamMs(logLine)).toBeGreaterThanOrEqual(0);
   });
 });

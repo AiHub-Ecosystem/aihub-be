@@ -1,5 +1,8 @@
+import { Logger } from '@nestjs/common';
+
 import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
+import type { ErrorCode } from '../../../common/errors/error-code';
 import type { RequestContext } from '../../../common/request-context/request-context';
 import type {
   GradeResponse,
@@ -15,6 +18,7 @@ import type {
   Task2QuestionResponse,
 } from '../../../contracts/writing/task2';
 import type { DownstreamAdapter } from '../../../downstream/downstream-adapter';
+import type { InternalAIServiceResponse } from '../../../downstream/downstream.types';
 import type { InternalTokenIssuerPort } from '../application/internal-token-issuer.port';
 import type {
   DispatchResult,
@@ -52,6 +56,51 @@ function unconfiguredOperation(operation: OperationId): AppError {
   });
 }
 
+type LoggedDownstreamErrorCode = Extract<
+  ErrorCode,
+  | 'AI_SERVICE_THROTTLED'
+  | 'AI_SERVICE_TIMEOUT'
+  | 'AI_SERVICE_UNAVAILABLE'
+  | 'AI_SERVICE_ERROR'
+  | 'AI_SERVICE_CONTRACT_VIOLATION'
+>;
+
+function loggedDownstreamErrorCode(
+  error: unknown,
+): LoggedDownstreamErrorCode | undefined {
+  if (!(error instanceof AppError)) {
+    return undefined;
+  }
+
+  switch (error.code) {
+    case 'AI_SERVICE_THROTTLED':
+    case 'AI_SERVICE_TIMEOUT':
+    case 'AI_SERVICE_UNAVAILABLE':
+    case 'AI_SERVICE_ERROR':
+    case 'AI_SERVICE_CONTRACT_VIOLATION':
+      return error.code;
+    default:
+      return undefined;
+  }
+}
+
+function downstreamFailureMessage(
+  code: LoggedDownstreamErrorCode,
+  status: number | null,
+): string {
+  switch (code) {
+    case 'AI_SERVICE_ERROR':
+    case 'AI_SERVICE_THROTTLED':
+      return `downstream status ${status}`;
+    case 'AI_SERVICE_TIMEOUT':
+      return 'downstream timed out';
+    case 'AI_SERVICE_UNAVAILABLE':
+      return 'downstream unreachable';
+    case 'AI_SERVICE_CONTRACT_VIOLATION':
+      return 'downstream response failed contract validation';
+  }
+}
+
 export class HttpOperationDispatcher implements OperationDispatcherPort {
   // `unknown` on both sides is the one place a dispatch table for a
   // heterogeneous set of adapters has to erase the per-operation types the
@@ -64,6 +113,7 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
     OperationId,
     DownstreamAdapter<unknown, unknown>
   >;
+  private readonly logger = new Logger(HttpOperationDispatcher.name);
 
   constructor(
     private readonly httpClient: DownstreamHttpClient,
@@ -119,23 +169,52 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
       AbortSignal.timeout(timeoutMs),
     ]);
     const startedAt = performance.now();
+    let response: InternalAIServiceResponse<unknown> | undefined;
 
-    const response = await this.httpClient.request(downstreamRequest, {
-      authorization: `Bearer ${token}`,
-      requestId: context.requestId,
-      deadlineMs: timeoutMs,
-      signal,
-    });
-    const downstreamMs = Math.round(performance.now() - startedAt);
+    try {
+      response = await this.httpClient.request(downstreamRequest, {
+        authorization: `Bearer ${token}`,
+        requestId: context.requestId,
+        deadlineMs: timeoutMs,
+        signal,
+      });
 
-    if (response.status < 200 || response.status >= 300) {
-      throw mapDownstreamStatus(response.status);
+      if (response.status < 200 || response.status >= 300) {
+        throw mapDownstreamStatus(response.status);
+      }
+
+      return {
+        operation,
+        data: adapter.parseResponse(response),
+        downstreamMs: Math.round(performance.now() - startedAt),
+      };
+    } catch (error) {
+      const errorCode = loggedDownstreamErrorCode(error);
+      if (errorCode !== undefined) {
+        const downstreamStatus = response?.status ?? null;
+        const downstreamMs = Math.max(
+          0,
+          Math.round(performance.now() - startedAt),
+        );
+
+        this.logger.error(
+          JSON.stringify({
+            event: 'downstream_failed',
+            request_id: context.requestId,
+            operation,
+            ai_service: adapter.downstream,
+            private_endpoint: downstreamRequest.path,
+            downstream_status: downstreamStatus,
+            downstream_error_code: null,
+            downstream_message: null,
+            downstream_ms: downstreamMs,
+            error_code: errorCode,
+            message: downstreamFailureMessage(errorCode, downstreamStatus),
+          }),
+        );
+      }
+
+      throw error;
     }
-
-    return {
-      operation,
-      data: adapter.parseResponse(response),
-      downstreamMs,
-    };
   }
 }
