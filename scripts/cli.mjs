@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { loadEnvFile } from 'node:process';
 
 import Redis from 'ioredis';
@@ -9,13 +10,28 @@ import { ulid } from 'ulid';
 const { Pool } = pg;
 const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const API_KEY_PREFIX = 'aihub_sk_';
+const IDENTITY_CONFIG_ALGORITHMS = new Set(['RS256', 'ES256']);
+const DEFAULT_ASSERTION_TTL_SECONDS = 300;
+const MAX_ASSERTION_TTL_SECONDS = 3600;
+const PRIVATE_JWK_MEMBERS = new Set([
+  'd',
+  'p',
+  'q',
+  'dp',
+  'dq',
+  'qi',
+  'oth',
+  'k',
+]);
 
 if (existsSync('.env')) {
   loadEnvFile('.env');
 }
 
+class CliUsageError extends Error {}
+
 function usageError() {
-  throw new Error('Invalid CLI arguments');
+  throw new CliUsageError('Invalid CLI arguments');
 }
 
 function parseOptions(values) {
@@ -62,6 +78,214 @@ function positiveIntegerOption(options, name, fallback) {
     usageError();
   }
   return value;
+}
+
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function validateIdentityIssuer(options) {
+  const issuer = requiredOption(options, 'issuer');
+  if (issuer.length > 2048) {
+    usageError();
+  }
+  return issuer;
+}
+
+function validateIdentityAlgorithms(options) {
+  const raw = options.get('allowed-algorithms');
+  if (raw === undefined) {
+    return undefined;
+  }
+
+  const values = raw
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  if (
+    values.length === 0 ||
+    new Set(values).size !== values.length ||
+    values.some((value) => !IDENTITY_CONFIG_ALGORITHMS.has(value))
+  ) {
+    usageError();
+  }
+  return values;
+}
+
+function validateIdentityTtl(options) {
+  const raw = options.get('max-assertion-ttl-seconds');
+  if (raw === undefined) {
+    return undefined;
+  }
+
+  const value = Number(raw);
+  if (
+    !Number.isInteger(value) ||
+    value <= 0 ||
+    value > MAX_ASSERTION_TTL_SECONDS
+  ) {
+    usageError();
+  }
+  return value;
+}
+
+function validateJwksUrl(options) {
+  if (!options.has('jwks-url')) {
+    return null;
+  }
+
+  const value = requiredOption(options, 'jwks-url');
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== 'https:' ||
+      url.username.length > 0 ||
+      url.password.length > 0
+    ) {
+      usageError();
+    }
+  } catch {
+    usageError();
+  }
+  return value;
+}
+
+function validatePublicJwks(value) {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.keys) ||
+    value.keys.length === 0
+  ) {
+    usageError();
+  }
+
+  for (const key of value.keys) {
+    if (!isRecord(key)) {
+      usageError();
+    }
+    if (
+      Object.keys(key).some((member) => PRIVATE_JWK_MEMBERS.has(member)) ||
+      (key.alg !== undefined && !IDENTITY_CONFIG_ALGORITHMS.has(key.alg))
+    ) {
+      usageError();
+    }
+
+    if (
+      (key.alg === 'RS256' && key.kty !== 'RSA') ||
+      (key.alg === 'ES256' && key.kty !== 'EC')
+    ) {
+      usageError();
+    }
+
+    if (key.kty === 'RSA') {
+      if (
+        typeof key.n !== 'string' ||
+        key.n.length === 0 ||
+        typeof key.e !== 'string' ||
+        key.e.length === 0
+      ) {
+        usageError();
+      }
+      continue;
+    }
+
+    if (
+      key.kty !== 'EC' ||
+      key.crv !== 'P-256' ||
+      typeof key.x !== 'string' ||
+      key.x.length === 0 ||
+      typeof key.y !== 'string' ||
+      key.y.length === 0
+    ) {
+      usageError();
+    }
+  }
+
+  return value;
+}
+
+async function readPublicKeysFile(options) {
+  if (!options.has('public-keys-file')) {
+    return null;
+  }
+
+  const file = requiredOption(options, 'public-keys-file');
+  let source;
+  try {
+    source = await readFile(file, 'utf8');
+  } catch {
+    usageError();
+  }
+
+  let value;
+  try {
+    value = JSON.parse(source);
+  } catch {
+    usageError();
+  }
+  return validatePublicJwks(value);
+}
+
+async function parseIdentityOptions(options) {
+  const organizationId = requiredOption(options, 'org');
+  const status = options.get('status');
+  if (status !== undefined && status !== 'active' && status !== 'disabled') {
+    usageError();
+  }
+
+  const hasIdentityFields = [
+    'issuer',
+    'jwks-url',
+    'public-keys-file',
+    'allowed-algorithms',
+    'max-assertion-ttl-seconds',
+  ].some((name) => options.has(name));
+
+  if (status === 'disabled' && !hasIdentityFields) {
+    return { organizationId, disableOnly: true };
+  }
+
+  const hasJwksUrl = options.has('jwks-url');
+  const hasPublicKeysFile = options.has('public-keys-file');
+  if (!hasJwksUrl && !hasPublicKeysFile) {
+    usageError();
+  }
+
+  return {
+    organizationId,
+    disableOnly: false,
+    issuer: validateIdentityIssuer(options),
+    jwksUrl: validateJwksUrl(options),
+    publicKeysJwks: await readPublicKeysFile(options),
+    allowedAlgorithms: validateIdentityAlgorithms(options),
+    maxAssertionTtlSeconds: validateIdentityTtl(options),
+    status,
+  };
+}
+
+function existingIdentityAlgorithms(row) {
+  if (
+    !Array.isArray(row.allowed_algorithms) ||
+    row.allowed_algorithms.length === 0 ||
+    new Set(row.allowed_algorithms).size !== row.allowed_algorithms.length ||
+    row.allowed_algorithms.some(
+      (value) => !IDENTITY_CONFIG_ALGORITHMS.has(value),
+    )
+  ) {
+    usageError();
+  }
+  return row.allowed_algorithms;
+}
+
+function existingIdentityTtl(row) {
+  if (
+    !Number.isInteger(row.max_assertion_ttl_seconds) ||
+    row.max_assertion_ttl_seconds <= 0 ||
+    row.max_assertion_ttl_seconds > MAX_ASSERTION_TTL_SECONDS
+  ) {
+    usageError();
+  }
+  return row.max_assertion_ttl_seconds;
 }
 
 function createApiKey() {
@@ -187,6 +411,91 @@ async function revokeKey(options) {
   }
 }
 
+async function setIdentity(options) {
+  const input = await parseIdentityOptions(options);
+  const pool = databasePool();
+  try {
+    const organization = await pool.query(
+      'SELECT 1 FROM organizations WHERE id = $1',
+      [input.organizationId],
+    );
+    if (organization.rowCount !== 1) {
+      usageError();
+    }
+
+    const existingResult = await pool.query(
+      `SELECT
+         issuer,
+         jwks_url,
+         public_keys_jwks,
+         allowed_algorithms,
+         max_assertion_ttl_seconds,
+         status
+       FROM organization_identity_configs
+       WHERE organization_id = $1`,
+      [input.organizationId],
+    );
+    const existing = existingResult.rows[0];
+
+    if (input.disableOnly) {
+      if (existing === undefined) {
+        usageError();
+      }
+      await pool.query(
+        `UPDATE organization_identity_configs
+         SET status = 'disabled', updated_at = now()
+         WHERE organization_id = $1`,
+        [input.organizationId],
+      );
+      console.log(input.organizationId);
+      return;
+    }
+
+    const allowedAlgorithms =
+      input.allowedAlgorithms ??
+      (existing === undefined
+        ? ['RS256', 'ES256']
+        : existingIdentityAlgorithms(existing));
+    const maxAssertionTtlSeconds =
+      input.maxAssertionTtlSeconds ??
+      (existing === undefined
+        ? DEFAULT_ASSERTION_TTL_SECONDS
+        : existingIdentityTtl(existing));
+    const effectiveStatus =
+      input.status ?? (existing === undefined ? 'active' : existing.status);
+    if (effectiveStatus !== 'active' && effectiveStatus !== 'disabled') {
+      usageError();
+    }
+
+    await pool.query(
+      `INSERT INTO organization_identity_configs
+         (organization_id, issuer, jwks_url, public_keys_jwks,
+          allowed_algorithms, max_assertion_ttl_seconds, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (organization_id) DO UPDATE
+       SET issuer = EXCLUDED.issuer,
+           jwks_url = EXCLUDED.jwks_url,
+           public_keys_jwks = EXCLUDED.public_keys_jwks,
+           allowed_algorithms = EXCLUDED.allowed_algorithms,
+           max_assertion_ttl_seconds = EXCLUDED.max_assertion_ttl_seconds,
+           status = EXCLUDED.status,
+           updated_at = now()`,
+      [
+        input.organizationId,
+        input.issuer,
+        input.jwksUrl,
+        input.publicKeysJwks,
+        allowedAlgorithms,
+        maxAssertionTtlSeconds,
+        effectiveStatus,
+      ],
+    );
+    console.log(input.organizationId);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function main() {
   const [command, ...values] = process.argv.slice(2);
   const options = parseOptions(values);
@@ -203,11 +512,15 @@ async function main() {
     await revokeKey(options);
     return;
   }
+  if (command === 'identity:set') {
+    await setIdentity(options);
+    return;
+  }
 
   usageError();
 }
 
-main().catch(() => {
+main().catch((error) => {
   console.error('Command failed');
-  process.exitCode = 1;
+  process.exitCode = error instanceof CliUsageError ? 2 : 1;
 });

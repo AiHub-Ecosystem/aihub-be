@@ -10,8 +10,13 @@ import {
   type ApiKeyRepositoryPort,
   type AuthFailureCounterPort,
 } from './application/api-key-authenticator.port';
+import {
+  ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
+  type OrganizationIdentityConfigRepositoryPort,
+} from './application/organization-identity-config-repository.port';
 import { PostgresApiKeyRepository } from './infrastructure/postgres-api-key.repository';
 import { createPostgresIdentityClient } from './infrastructure/postgres-identity.client';
+import { PostgresOrganizationIdentityConfigRepository } from './infrastructure/postgres-organization-identity-config.repository';
 import {
   RedisAuthFailureCounter,
   RedisIdentityStore,
@@ -24,6 +29,13 @@ import { ApiKeyGuard } from './presentation/api-key.guard';
       provide: API_KEY_REPOSITORY,
       useFactory: () =>
         new PostgresApiKeyRepository(
+          createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
+        ),
+    },
+    {
+      provide: ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
+      useFactory: (): OrganizationIdentityConfigRepositoryPort =>
+        new PostgresOrganizationIdentityConfigRepository(
           createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
         ),
     },
@@ -47,6 +59,10 @@ import { ApiKeyGuard } from './presentation/api-key.guard';
     },
     ApiKeyGuard,
   ],
-  exports: [API_KEY_AUTHENTICATOR, ApiKeyGuard],
+  exports: [
+    API_KEY_AUTHENTICATOR,
+    ApiKeyGuard,
+    ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
+  ],
 })
 export class IdentityModule {}
