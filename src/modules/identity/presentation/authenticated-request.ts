@@ -1,9 +1,11 @@
 import { AppError } from '../../../common/errors/app-error';
 import type { AuthenticatedApiKey } from '../application/api-key-authenticator.port';
+import type { VerifiedUserAssertion } from '../application/user-assertion-verifier.port';
 
 declare module 'fastify' {
   interface FastifyRequest {
     aihubAuth?: AuthenticatedApiKey;
+    aihubIdentity?: VerifiedUserAssertion;
   }
 }
 

@@ -32,6 +32,7 @@ import {
   getAuthenticatedApiKey,
 } from '../../identity/presentation/authenticated-request';
 import { RequireOperation } from '../../identity/presentation/require-operation.decorator';
+import { UserAssertionGuard } from '../../identity/presentation/user-assertion.guard';
 
 const OPERATION = 'writing.task2.question.generate' as const;
 
@@ -66,7 +67,7 @@ function parseBody(body: unknown): Task2QuestionRequest {
 }
 
 @Controller()
-@UseGuards(ApiKeyGuard, RateLimitGuard)
+@UseGuards(ApiKeyGuard, UserAssertionGuard, RateLimitGuard)
 @UseInterceptors(SuccessEnvelopeInterceptor)
 export class WritingTask2QuestionController {
   constructor(
@@ -92,6 +93,9 @@ export class WritingTask2QuestionController {
         deadlineMs: OPERATION_CATALOG[OPERATION].timeoutMs,
         organizationId: authenticated.organizationId,
         apiKeyId: authenticated.apiKeyId,
+        ...(request.aihubIdentity === undefined
+          ? {}
+          : { userId: request.aihubIdentity.userId }),
         scopes: authenticated.scopes,
         signal,
       });

@@ -35,18 +35,45 @@ function nonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 
+function base64UrlString(value: unknown): value is string {
+  return nonEmptyString(value) && /^[A-Za-z0-9_-]+$/.test(value);
+}
+
 function hasPublicKeyMaterial(key: Record<string, unknown>): boolean {
   if (key.kty === 'RSA') {
-    return nonEmptyString(key.n) && nonEmptyString(key.e);
+    return base64UrlString(key.n) && base64UrlString(key.e);
   }
 
   if (key.kty === 'EC') {
     return (
-      key.crv === 'P-256' && nonEmptyString(key.x) && nonEmptyString(key.y)
+      key.crv === 'P-256' && base64UrlString(key.x) && base64UrlString(key.y)
     );
   }
 
   return false;
+}
+
+function hasUsableKeyMetadata(key: Record<string, unknown>): boolean {
+  if (
+    key.kid !== undefined &&
+    (typeof key.kid !== 'string' || key.kid.length === 0)
+  ) {
+    return false;
+  }
+
+  if (key.use !== undefined && key.use !== 'sig') {
+    return false;
+  }
+
+  if (key.key_ops !== undefined) {
+    return (
+      Array.isArray(key.key_ops) &&
+      key.key_ops.every((operation) => typeof operation === 'string') &&
+      key.key_ops.includes('verify')
+    );
+  }
+
+  return true;
 }
 
 export function parsePublicJsonWebKeySet(
@@ -62,7 +89,11 @@ export function parsePublicJsonWebKeySet(
 
   const keys: PublicJsonWebKey[] = [];
   for (const candidate of value.keys) {
-    if (!isRecord(candidate) || !hasPublicKeyMaterial(candidate)) {
+    if (
+      !isRecord(candidate) ||
+      !hasPublicKeyMaterial(candidate) ||
+      !hasUsableKeyMetadata(candidate)
+    ) {
       return undefined;
     }
 

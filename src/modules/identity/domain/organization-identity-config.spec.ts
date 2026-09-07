@@ -30,7 +30,11 @@ describe('organization identity configuration invariants', () => {
     { keys: [{ kty: 'oct', k: 'secret' }] },
     { keys: [{ ...rsaKey, d: 'private-exponent' }] },
     { keys: [{ kty: 'RSA', n: 'missing-exponent' }] },
+    { keys: [{ ...rsaKey, n: 'not a base64url value' }] },
     { keys: [{ kty: 'EC', crv: 'P-256', x: 'x', y: 'y', alg: 'RS256' }] },
+    { keys: [{ ...rsaKey, use: 'enc' }] },
+    { keys: [{ ...rsaKey, key_ops: ['sign'] }] },
+    { keys: [{ ...rsaKey, kid: 42 }] },
   ])('rejects a non-public or incomplete JWKS: %p', (value) => {
     expect(parsePublicJsonWebKeySet(value)).toBeUndefined();
   });

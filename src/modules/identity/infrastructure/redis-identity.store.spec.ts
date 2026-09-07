@@ -28,7 +28,16 @@ class FakeRedis implements RedisIdentityClient {
     return Promise.resolve(this.values.get(key) ?? null);
   }
 
-  set(key: string, value: string, _mode: 'EX', seconds: number): Promise<'OK'> {
+  set(
+    key: string,
+    value: string,
+    _mode: 'EX',
+    seconds: number,
+    condition?: 'NX',
+  ): Promise<'OK' | null> {
+    if (condition === 'NX' && this.values.has(key)) {
+      return Promise.resolve(null);
+    }
     this.values.set(key, value);
     this.expirations.set(key, seconds);
     return Promise.resolve('OK');
@@ -91,6 +100,34 @@ describe('RedisIdentityStore', () => {
     await expect(store.recordFailure('203.0.113.10')).resolves.toBe(2);
     await expect(store.get('203.0.113.10')).resolves.toBe(2);
     expect(redis.expirations.get('aihub:v1:authfail:203.0.113.10')).toBe(300);
+  });
+
+  it('stores JWKS metadata for the stale-cache window and gates refreshes per organization', async () => {
+    const redis = new FakeRedis();
+    const store = new RedisIdentityStore('', redis);
+    const entry = {
+      jwks: {
+        keys: [{ kty: 'RSA', n: 'modulus', e: 'AQAB', alg: 'RS256' }],
+      },
+      freshUntil: Date.now() + 15 * 60 * 1_000,
+      staleUntil: Date.now() + 24 * 60 * 60 * 1_000,
+    };
+
+    await store.setJwks('org_acme', entry);
+
+    await expect(store.getJwks('org_acme')).resolves.toEqual(entry);
+    expect(redis.expirations.get('aihub:v1:jwks:org_acme')).toBeGreaterThan(
+      86_390,
+    );
+    await expect(store.tryAcquireRefresh('org_acme')).resolves.toEqual({
+      acquired: true,
+      available: true,
+    });
+    await expect(store.tryAcquireRefresh('org_acme')).resolves.toEqual({
+      acquired: false,
+      available: true,
+    });
+    expect(redis.expirations.get('aihub:v1:jwks-refresh:org_acme')).toBe(300);
   });
 
   it('fails open for cache and brute-force protection when Redis is unavailable', async () => {
