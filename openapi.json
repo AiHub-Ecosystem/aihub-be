@@ -1,0 +1,1439 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AIHUB Writing API",
+    "version": "0.1.0"
+  },
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "Organization credential. Identifies the organization; does not identify an individual end user."
+      }
+    },
+    "parameters": {
+      "CorrelationId": {
+        "name": "X-Correlation-Id",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`."
+      }
+    },
+    "responses": {
+      "Error400": {
+        "description": "INVALID_REQUEST",
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": ["error"],
+              "properties": {
+                "error": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["code", "message", "request_id"],
+                  "properties": {
+                    "code": {
+                      "const": "INVALID_REQUEST",
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "properties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Error401": {
+        "description": "UNAUTHORIZED",
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": ["error"],
+              "properties": {
+                "error": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["code", "message", "request_id"],
+                  "properties": {
+                    "code": {
+                      "const": "UNAUTHORIZED",
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "properties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Error403": {
+        "description": "FORBIDDEN | ENVIRONMENT_NOT_ALLOWED",
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": ["error"],
+              "properties": {
+                "error": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["code", "message", "request_id"],
+                  "properties": {
+                    "code": {
+                      "anyOf": [
+                        {
+                          "const": "FORBIDDEN",
+                          "type": "string"
+                        },
+                        {
+                          "const": "ENVIRONMENT_NOT_ALLOWED",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "properties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Error413": {
+        "description": "PAYLOAD_TOO_LARGE",
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": ["error"],
+              "properties": {
+                "error": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["code", "message", "request_id"],
+                  "properties": {
+                    "code": {
+                      "const": "PAYLOAD_TOO_LARGE",
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "properties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Error429": {
+        "description": "RATE_LIMITED",
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": ["error"],
+              "properties": {
+                "error": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["code", "message", "request_id"],
+                  "properties": {
+                    "code": {
+                      "const": "RATE_LIMITED",
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "properties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Error500": {
+        "description": "INTERNAL_ERROR",
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": ["error"],
+              "properties": {
+                "error": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["code", "message", "request_id"],
+                  "properties": {
+                    "code": {
+                      "const": "INTERNAL_ERROR",
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "properties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Error502": {
+        "description": "AI_SERVICE_ERROR | AI_SERVICE_CONTRACT_VIOLATION",
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": ["error"],
+              "properties": {
+                "error": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["code", "message", "request_id"],
+                  "properties": {
+                    "code": {
+                      "anyOf": [
+                        {
+                          "const": "AI_SERVICE_ERROR",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AI_SERVICE_CONTRACT_VIOLATION",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "properties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Error503": {
+        "description": "AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": ["error"],
+              "properties": {
+                "error": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["code", "message", "request_id"],
+                  "properties": {
+                    "code": {
+                      "anyOf": [
+                        {
+                          "const": "AI_SERVICE_THROTTLED",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AI_SERVICE_UNAVAILABLE",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "properties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Error504": {
+        "description": "AI_SERVICE_TIMEOUT",
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": ["error"],
+              "properties": {
+                "error": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["code", "message", "request_id"],
+                  "properties": {
+                    "code": {
+                      "const": "AI_SERVICE_TIMEOUT",
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "properties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/v1/writing/task1/questions": {
+      "post": {
+        "operationId": "writing.task1.question.generate",
+        "summary": "writing.task1.question.generate",
+        "x-required-scope": "writing.question.generate",
+        "x-identity-scope": "organization",
+        "x-idempotency": "none",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "properties": {
+                  "chart_type": {
+                    "anyOf": [
+                      {
+                        "const": "Bar Chart",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Line Graph",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Pie Chart",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Table",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Map",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Process Diagram",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Multiple Graphs",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "question_id",
+                        "question",
+                        "chart_type",
+                        "image_url"
+                      ],
+                      "properties": {
+                        "question_id": {
+                          "type": "string"
+                        },
+                        "question": {
+                          "type": "string"
+                        },
+                        "chart_type": {
+                          "anyOf": [
+                            {
+                              "const": "Bar Chart",
+                              "type": "string"
+                            },
+                            {
+                              "const": "Line Graph",
+                              "type": "string"
+                            },
+                            {
+                              "const": "Pie Chart",
+                              "type": "string"
+                            },
+                            {
+                              "const": "Table",
+                              "type": "string"
+                            },
+                            {
+                              "const": "Map",
+                              "type": "string"
+                            },
+                            {
+                              "const": "Process Diagram",
+                              "type": "string"
+                            },
+                            {
+                              "const": "Multiple Graphs",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "image_url": {
+                          "format": "uri",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "request_id",
+                        "service",
+                        "operation",
+                        "timing"
+                      ],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "correlation_id": {
+                          "type": "string"
+                        },
+                        "service": {
+                          "type": "string"
+                        },
+                        "operation": {
+                          "type": "string"
+                        },
+                        "timing": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "downstream_ms",
+                            "gateway_overhead_ms",
+                            "total_ms"
+                          ],
+                          "properties": {
+                            "downstream_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "gateway_overhead_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "total_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error502"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error504"
+          }
+        }
+      }
+    },
+    "/v1/writing/task2/questions": {
+      "post": {
+        "operationId": "writing.task2.question.generate",
+        "summary": "writing.task2.question.generate",
+        "x-required-scope": "writing.question.generate",
+        "x-identity-scope": "organization",
+        "x-idempotency": "optional",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional. This operation may call a model, so a client that wants replay safety should send one."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["topic", "question_type"],
+                "properties": {
+                  "topic": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "question_type": {
+                    "anyOf": [
+                      {
+                        "const": "opinion",
+                        "type": "string"
+                      },
+                      {
+                        "const": "discussion",
+                        "type": "string"
+                      },
+                      {
+                        "const": "problem_solution",
+                        "type": "string"
+                      },
+                      {
+                        "const": "advantages_disadvantages",
+                        "type": "string"
+                      },
+                      {
+                        "const": "two_part",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["question", "topic", "question_type"],
+                      "properties": {
+                        "question": {
+                          "type": "string"
+                        },
+                        "topic": {
+                          "type": "string"
+                        },
+                        "question_type": {
+                          "anyOf": [
+                            {
+                              "const": "opinion",
+                              "type": "string"
+                            },
+                            {
+                              "const": "discussion",
+                              "type": "string"
+                            },
+                            {
+                              "const": "problem_solution",
+                              "type": "string"
+                            },
+                            {
+                              "const": "advantages_disadvantages",
+                              "type": "string"
+                            },
+                            {
+                              "const": "two_part",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "request_id",
+                        "service",
+                        "operation",
+                        "timing"
+                      ],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "correlation_id": {
+                          "type": "string"
+                        },
+                        "service": {
+                          "type": "string"
+                        },
+                        "operation": {
+                          "type": "string"
+                        },
+                        "timing": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "downstream_ms",
+                            "gateway_overhead_ms",
+                            "total_ms"
+                          ],
+                          "properties": {
+                            "downstream_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "gateway_overhead_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "total_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error502"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error504"
+          }
+        }
+      }
+    },
+    "/v1/writing/task1/grade": {
+      "post": {
+        "operationId": "writing.task1.grade",
+        "summary": "writing.task1.grade",
+        "x-required-scope": "writing.grade",
+        "x-identity-scope": "user",
+        "x-idempotency": "required",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required. Scoped to (organization, operation, key); replays the stored result for a repeat call."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["question", "chart_type", "essay", "image_url"],
+                "properties": {
+                  "question": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "chart_type": {
+                    "anyOf": [
+                      {
+                        "const": "Bar Chart",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Line Graph",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Pie Chart",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Table",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Map",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Process Diagram",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Multiple Graphs",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "essay": {
+                    "minLength": 1,
+                    "maxLength": 20000,
+                    "type": "string"
+                  },
+                  "image_url": {
+                    "format": "uri",
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "language": {
+                    "const": "vi",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "overall_band",
+                        "language",
+                        "criteria",
+                        "summary",
+                        "suggestions",
+                        "next_steps",
+                        "annotations"
+                      ],
+                      "properties": {
+                        "overall_band": {
+                          "minimum": 0,
+                          "maximum": 9,
+                          "multipleOf": 0.5,
+                          "type": "number"
+                        },
+                        "language": {
+                          "const": "vi",
+                          "type": "string"
+                        },
+                        "criteria": {
+                          "minItems": 4,
+                          "maxItems": 4,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "name",
+                              "band",
+                              "band_reason",
+                              "strengths",
+                              "improvements"
+                            ],
+                            "properties": {
+                              "id": {
+                                "anyOf": [
+                                  {
+                                    "const": "task_achievement",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "task_response",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "coherence_cohesion",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "lexical_resource",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "grammatical_range_accuracy",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "band": {
+                                "minimum": 0,
+                                "maximum": 9,
+                                "multipleOf": 0.5,
+                                "type": "number"
+                              },
+                              "band_reason": {
+                                "type": "string"
+                              },
+                              "strengths": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "improvements": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "summary": {
+                          "type": "string"
+                        },
+                        "suggestions": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "next_steps": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "annotations": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "criterion",
+                              "issue",
+                              "quote",
+                              "explanation"
+                            ],
+                            "properties": {
+                              "criterion": {
+                                "anyOf": [
+                                  {
+                                    "const": "task_achievement",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "task_response",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "coherence_cohesion",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "lexical_resource",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "grammatical_range_accuracy",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "issue": {
+                                "type": "string"
+                              },
+                              "quote": {
+                                "type": "string"
+                              },
+                              "explanation": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "request_id",
+                        "service",
+                        "operation",
+                        "timing"
+                      ],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "correlation_id": {
+                          "type": "string"
+                        },
+                        "service": {
+                          "type": "string"
+                        },
+                        "operation": {
+                          "type": "string"
+                        },
+                        "timing": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "downstream_ms",
+                            "gateway_overhead_ms",
+                            "total_ms"
+                          ],
+                          "properties": {
+                            "downstream_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "gateway_overhead_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "total_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error502"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error504"
+          }
+        }
+      }
+    },
+    "/v1/writing/task2/grade": {
+      "post": {
+        "operationId": "writing.task2.grade",
+        "summary": "writing.task2.grade",
+        "x-required-scope": "writing.grade",
+        "x-identity-scope": "user",
+        "x-idempotency": "required",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required. Scoped to (organization, operation, key); replays the stored result for a repeat call."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["question", "topic", "essay"],
+                "properties": {
+                  "question": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "topic": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "essay": {
+                    "minLength": 1,
+                    "maxLength": 20000,
+                    "type": "string"
+                  },
+                  "language": {
+                    "const": "vi",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "overall_band",
+                        "language",
+                        "criteria",
+                        "summary",
+                        "suggestions",
+                        "next_steps",
+                        "annotations"
+                      ],
+                      "properties": {
+                        "overall_band": {
+                          "minimum": 0,
+                          "maximum": 9,
+                          "multipleOf": 0.5,
+                          "type": "number"
+                        },
+                        "language": {
+                          "const": "vi",
+                          "type": "string"
+                        },
+                        "criteria": {
+                          "minItems": 4,
+                          "maxItems": 4,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "name",
+                              "band",
+                              "band_reason",
+                              "strengths",
+                              "improvements"
+                            ],
+                            "properties": {
+                              "id": {
+                                "anyOf": [
+                                  {
+                                    "const": "task_achievement",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "task_response",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "coherence_cohesion",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "lexical_resource",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "grammatical_range_accuracy",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "band": {
+                                "minimum": 0,
+                                "maximum": 9,
+                                "multipleOf": 0.5,
+                                "type": "number"
+                              },
+                              "band_reason": {
+                                "type": "string"
+                              },
+                              "strengths": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "improvements": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "summary": {
+                          "type": "string"
+                        },
+                        "suggestions": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "next_steps": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "annotations": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "criterion",
+                              "issue",
+                              "quote",
+                              "explanation"
+                            ],
+                            "properties": {
+                              "criterion": {
+                                "anyOf": [
+                                  {
+                                    "const": "task_achievement",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "task_response",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "coherence_cohesion",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "lexical_resource",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "grammatical_range_accuracy",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "issue": {
+                                "type": "string"
+                              },
+                              "quote": {
+                                "type": "string"
+                              },
+                              "explanation": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "request_id",
+                        "service",
+                        "operation",
+                        "timing"
+                      ],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "correlation_id": {
+                          "type": "string"
+                        },
+                        "service": {
+                          "type": "string"
+                        },
+                        "operation": {
+                          "type": "string"
+                        },
+                        "timing": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "downstream_ms",
+                            "gateway_overhead_ms",
+                            "total_ms"
+                          ],
+                          "properties": {
+                            "downstream_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "gateway_overhead_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "total_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error502"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error504"
+          }
+        }
+      }
+    }
+  }
+}

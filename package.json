@@ -12,13 +12,15 @@
     "start": "node dist/main.js",
     "migrate": "node scripts/migrate.mjs",
     "cli": "node scripts/cli.mjs",
+    "generate:openapi": "tsx scripts/generate-openapi.ts && biome format --write openapi.json",
+    "validate:openapi": "node scripts/validate-openapi.mjs",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "type-check": "tsc --noEmit",
     "format": "biome format --write .",
     "lint": "biome check .",
     "arch-check": "node scripts/check-architecture.mjs",
-    "verify": "pnpm lint && pnpm type-check && pnpm test && pnpm arch-check",
+    "verify": "pnpm lint && pnpm type-check && pnpm test && pnpm arch-check && pnpm validate:openapi",
     "prepare": "husky"
   },
   "dependencies": {
@@ -37,6 +39,7 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@nestjs/testing": "^11.0.0",
+    "@seriousme/openapi-schema-validator": "^2.9.1",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.13.4",
     "@types/pg": "^8.23.1",
@@ -46,6 +49,7 @@
     "lint-staged": "^17.5.0",
     "prettier": "^3.9.6",
     "ts-jest": "^29.2.5",
+    "tsx": "^4.23.13",
     "typescript": "^5.7.3"
   }
 }
