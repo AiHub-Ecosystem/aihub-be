@@ -1,32 +1,75 @@
-import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import { loadEnvFile } from 'node:process';
+import { existsSync } from "node:fs";
+import { readFile, readdir } from "node:fs/promises";
+import { loadEnvFile } from "node:process";
 
-import pg from 'pg';
+import pg from "pg";
 
 const { Pool } = pg;
 
-if (existsSync('.env')) {
-  loadEnvFile('.env');
+if (existsSync(".env")) {
+  loadEnvFile(".env");
 }
 
 const databaseUrl = process.env.DATABASE_URL;
 if (databaseUrl === undefined || databaseUrl.trim().length === 0) {
-  console.error('DATABASE_URL is required');
+  console.error("DATABASE_URL is required");
   process.exit(1);
 }
 
-const sql = await readFile(
-  'database/migrations/0001_control_plane.sql',
-  'utf8',
-);
+const MIGRATIONS_DIR = "database/migrations";
+
+async function pendingMigrations(pool) {
+  const entries = await readdir(MIGRATIONS_DIR);
+  const filenames = entries.filter((name) => name.endsWith(".sql")).sort();
+
+  const applied = await pool.query("SELECT filename FROM schema_migrations");
+  const appliedNames = new Set(applied.rows.map((row) => row.filename));
+
+  return filenames.filter((filename) => !appliedNames.has(filename));
+}
+
 const pool = new Pool({ connectionString: databaseUrl });
 
 try {
-  await pool.query(sql);
-  console.log('Database migration applied');
-} catch {
-  console.error('Database migration failed');
+  // Bootstraps itself rather than living as migration 0001, so a fresh
+  // database and one that predates this tracking table both converge here.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      filename   text PRIMARY KEY,
+      applied_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+
+  const pending = await pendingMigrations(pool);
+
+  if (pending.length === 0) {
+    console.log("No pending migrations");
+  }
+
+  for (const filename of pending) {
+    const sql = await readFile(`${MIGRATIONS_DIR}/${filename}`, "utf8");
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+      await client.query(sql);
+      await client.query(
+        "INSERT INTO schema_migrations (filename) VALUES ($1)",
+        [filename]
+      );
+      await client.query("COMMIT");
+      console.log(`Applied ${filename}`);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw new Error(`Migration failed: ${filename}`, { cause: error });
+    } finally {
+      client.release();
+    }
+  }
+
+  console.log("Database migration complete");
+} catch (error) {
+  console.error(error instanceof Error ? error.message : "Migration failed");
   process.exitCode = 1;
 } finally {
   await pool.end();

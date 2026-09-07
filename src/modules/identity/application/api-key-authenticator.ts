@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto';
+import { createHash } from "node:crypto";
 
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from "../../../common/errors/app-error";
 import type {
   ApiKeyAuthenticatorPort,
   ApiKeyCachePort,
@@ -9,26 +9,26 @@ import type {
   ApiKeyRepositoryPort,
   AuthFailureCounterPort,
   AuthenticatedApiKey,
-} from './api-key-authenticator.port';
+} from "./api-key-authenticator.port";
 
-export const API_KEY_PREFIX = 'aihub_sk_';
+export const API_KEY_PREFIX = "aihub_sk_";
 const API_KEY_SECRET_LENGTH = 43;
-const AUTH_FAILURE_LIMIT = 20;
+export const AUTH_FAILURE_LIMIT = 20;
 const AUTH_FAILURE_WINDOW_MS = 5 * 60 * 1_000;
 
 export function isApiKeyFormat(value: string): boolean {
   return new RegExp(
-    `^${API_KEY_PREFIX}[A-Za-z0-9]{${API_KEY_SECRET_LENGTH}}$`,
+    `^${API_KEY_PREFIX}[A-Za-z0-9]{${API_KEY_SECRET_LENGTH}}$`
   ).test(value);
 }
 
 export function hashApiKey(value: string): string {
-  return createHash('sha256').update(value, 'utf8').digest('hex');
+  return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
 export function effectiveScopes(record: ApiKeyRecord): readonly string[] {
   return record.scopes.filter((scope) => {
-    const [entitlement] = scope.split('.');
+    const [entitlement] = scope.split(".");
     return (
       entitlement !== undefined && record.entitlements.includes(entitlement)
     );
@@ -37,8 +37,8 @@ export function effectiveScopes(record: ApiKeyRecord): readonly string[] {
 
 function unauthorized(): AppError {
   return new AppError({
-    code: 'UNAUTHORIZED',
-    message: 'Authentication is required',
+    code: "UNAUTHORIZED",
+    message: "Authentication is required",
     httpStatus: 401,
     retryable: false,
   });
@@ -46,8 +46,8 @@ function unauthorized(): AppError {
 
 function environmentNotAllowed(): AppError {
   return new AppError({
-    code: 'ENVIRONMENT_NOT_ALLOWED',
-    message: 'API key is not allowed in this environment',
+    code: "ENVIRONMENT_NOT_ALLOWED",
+    message: "API key is not allowed in this environment",
     httpStatus: 403,
     retryable: false,
   });
@@ -55,8 +55,8 @@ function environmentNotAllowed(): AppError {
 
 function organizationSuspended(): AppError {
   return new AppError({
-    code: 'FORBIDDEN',
-    message: 'Organization is not active',
+    code: "FORBIDDEN",
+    message: "Organization is not active",
     httpStatus: 403,
     retryable: false,
   });
@@ -64,8 +64,8 @@ function organizationSuspended(): AppError {
 
 function rateLimited(): AppError {
   return new AppError({
-    code: 'RATE_LIMITED',
-    message: 'Too many authentication failures',
+    code: "RATE_LIMITED",
+    message: "Too many authentication failures",
     httpStatus: 429,
     retryable: true,
     details: { retry_after_ms: AUTH_FAILURE_WINDOW_MS },
@@ -77,17 +77,12 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     private readonly repository: ApiKeyRepositoryPort,
     private readonly cache: ApiKeyCachePort,
     private readonly failureCounter: AuthFailureCounterPort,
-    private readonly now: () => Date = () => new Date(),
+    private readonly now: () => Date = () => new Date()
   ) {}
 
   async authenticate(
-    credentials: ApiKeyCredential,
+    credentials: ApiKeyCredential
   ): Promise<AuthenticatedApiKey> {
-    const currentFailures = await this.getFailureCount(credentials.clientIp);
-    if (currentFailures >= AUTH_FAILURE_LIMIT) {
-      throw rateLimited();
-    }
-
     if (!isApiKeyFormat(credentials.value)) {
       throw await this.invalidCredential(credentials.clientIp);
     }
@@ -96,6 +91,20 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     let record = await this.getCachedRecord(hashHex);
 
     if (record === undefined) {
+      // The brute-force gate sits specifically here, in front of the
+      // Postgres lookup, rather than at the top of the method: it exists to
+      // protect Postgres from an IP grinding through fresh random guesses
+      // (always a cache miss), not to block every request from that IP. A
+      // well-formed key that is already cached — the common case for a real
+      // customer, including a valid request sharing a NAT'd IP with someone
+      // else's failed attempts — never pays this round trip and is never
+      // gated by it, matching the "a legitimate request never touches this
+      // counter" contract in the auth design.
+      const currentFailures = await this.getFailureCount(credentials.clientIp);
+      if (currentFailures >= AUTH_FAILURE_LIMIT) {
+        throw rateLimited();
+      }
+
       record = await this.repository.findByHash(hashHex);
       if (record === null) {
         await this.cache.setMiss(hashHex).catch(() => undefined);
@@ -104,7 +113,7 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       }
     }
 
-    if (record === null || record.status !== 'active') {
+    if (record === null || record.status !== "active") {
       throw await this.invalidCredential(credentials.clientIp);
     }
 
@@ -116,7 +125,7 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       throw await this.invalidCredential(credentials.clientIp);
     }
 
-    if (record.organizationStatus !== 'active') {
+    if (record.organizationStatus !== "active") {
       throw organizationSuspended();
     }
 
@@ -141,7 +150,7 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
   }
 
   private async getCachedRecord(
-    hashHex: string,
+    hashHex: string
   ): Promise<ApiKeyRecord | null | undefined> {
     try {
       return await this.cache.get(hashHex);

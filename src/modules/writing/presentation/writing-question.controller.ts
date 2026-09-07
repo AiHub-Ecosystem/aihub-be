@@ -7,57 +7,46 @@ import {
   Req,
   UseGuards,
   UseInterceptors,
-} from '@nestjs/common';
-import { Value } from '@sinclair/typebox/value';
+} from "@nestjs/common";
+import { Value } from "@sinclair/typebox/value";
 
-import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
-import { AppError } from '../../../common/errors/app-error';
-import { SuccessEnvelopeInterceptor } from '../../../common/http/success-envelope.interceptor';
-import { createRequestContext } from '../../../common/request-context/request-context.factory';
+import { OPERATION_CATALOG } from "../../../catalog/operation-catalog";
+import { AppError } from "../../../common/errors/app-error";
+import { SuccessEnvelopeInterceptor } from "../../../common/http/success-envelope.interceptor";
+import { createRequestContext } from "../../../common/request-context/request-context.factory";
 import {
   type Task1QuestionRequest,
   Task1QuestionRequestSchema,
   type Task1QuestionResponse,
-} from '../../../contracts/writing/task1';
+} from "../../../contracts/writing/task1";
 import {
   type DispatchResult,
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
-} from '../../gateway/application/operation-dispatcher.port';
-import { ApiKeyGuard } from '../../identity/presentation/api-key.guard';
+} from "../../gateway/application/operation-dispatcher.port";
+import { RateLimitGuard } from "../../gateway/presentation/rate-limit.guard";
+import { ApiKeyGuard } from "../../identity/presentation/api-key.guard";
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
-} from '../../identity/presentation/authenticated-request';
-import { RequireOperation } from '../../identity/presentation/require-operation.decorator';
-import { RateLimitGuard } from './rate-limit.guard';
+} from "../../identity/presentation/authenticated-request";
+import { RequireOperation } from "../../identity/presentation/require-operation.decorator";
 
-const OPERATION = 'writing.task1.question.generate' as const;
-const MAX_BODY_BYTES = OPERATION_CATALOG[OPERATION].maxBodyBytes;
+const OPERATION = "writing.task1.question.generate" as const;
 
 function invalidRequest(): AppError {
   return new AppError({
-    code: 'INVALID_REQUEST',
-    message: 'Request failed validation',
+    code: "INVALID_REQUEST",
+    message: "Request failed validation",
     httpStatus: 400,
     retryable: false,
   });
 }
 
+// Body size is enforced earlier, before parsing, by the `onRequest` hook
+// registered in main.ts (see `registerBodySizeGuard`) — a body that reaches
+// here has already passed that check.
 function parseBody(body: unknown): Task1QuestionRequest {
-  const serialized = JSON.stringify(body ?? null);
-  if (
-    serialized === undefined ||
-    Buffer.byteLength(serialized, 'utf8') > MAX_BODY_BYTES
-  ) {
-    throw new AppError({
-      code: 'PAYLOAD_TOO_LARGE',
-      message: 'Request body is too large',
-      httpStatus: 413,
-      retryable: false,
-    });
-  }
-
   if (!Value.Check(Task1QuestionRequestSchema, body)) {
     throw invalidRequest();
   }
@@ -66,8 +55,8 @@ function parseBody(body: unknown): Task1QuestionRequest {
     return Value.Parse(Task1QuestionRequestSchema, body);
   } catch (error) {
     throw new AppError({
-      code: 'INVALID_REQUEST',
-      message: 'Request failed validation',
+      code: "INVALID_REQUEST",
+      message: "Request failed validation",
       httpStatus: 400,
       retryable: false,
       cause: error,
@@ -81,7 +70,7 @@ function parseBody(body: unknown): Task1QuestionRequest {
 export class WritingQuestionController {
   constructor(
     @Inject(OPERATION_DISPATCHER)
-    private readonly dispatcher: OperationDispatcherPort,
+    private readonly dispatcher: OperationDispatcherPort
   ) {}
 
   @Post(OPERATION_CATALOG[OPERATION].path)
@@ -89,7 +78,7 @@ export class WritingQuestionController {
   @RequireOperation(OPERATION)
   async generateTask1Question(
     @Req() request: AuthenticatedRequest,
-    @Body() body: unknown,
+    @Body() body: unknown
   ): Promise<DispatchResult<Task1QuestionResponse>> {
     const input = parseBody(body);
     const authenticated = getAuthenticatedApiKey(request);

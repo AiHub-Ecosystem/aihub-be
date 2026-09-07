@@ -1,0 +1,94 @@
+import { OPERATION_CATALOG } from "../../catalog/operation-catalog";
+import { isRequestId } from "../request-context/request-id";
+
+/**
+ * Path -> per-operation body limit, built once from the catalog. All current
+ * paths are static, so an exact match on the URL's pathname is enough; a
+ * future parameterised path would need pattern matching here.
+ */
+const MAX_BODY_BYTES_BY_PATH: ReadonlyMap<string, number> = new Map(
+  Object.values(OPERATION_CATALOG).map((operation) => [
+    operation.path,
+    operation.maxBodyBytes,
+  ])
+);
+
+function pathnameOf(url: string): string {
+  const queryIndex = url.indexOf("?");
+  return queryIndex === -1 ? url : url.slice(0, queryIndex);
+}
+
+interface OnRequestParams {
+  readonly url: string;
+  readonly id: unknown;
+  readonly headers: Readonly<Record<string, string | string[] | undefined>>;
+}
+
+interface OnRequestReply {
+  code(statusCode: number): { send(payload: unknown): void };
+}
+
+/**
+ * Structural rather than the `fastify` package's own `FastifyInstance` type.
+ * `@nestjs/platform-fastify` pins its own exact fastify version as a direct
+ * dependency, separate from this project's own `fastify` range, so the two
+ * resolve to different (structurally identical, nominally distinct) copies
+ * in the dependency tree. A structural interface sidesteps that entirely:
+ * whichever copy Nest hands back at the call site satisfies this shape.
+ */
+export interface HookableFastifyInstance {
+  addHook(
+    name: "onRequest",
+    handler: (
+      request: OnRequestParams,
+      reply: OnRequestReply,
+      done: () => void
+    ) => void
+  ): void;
+}
+
+/**
+ * Rejects an oversized body before Fastify buffers it into memory, using the
+ * operation's own `maxBodyBytes` rather than the process-wide ceiling.
+ *
+ * Registered as a raw `onRequest` hook — the earliest stage in Fastify's
+ * lifecycle, running before body parsing — rather than checked in a Nest
+ * guard or controller, both of which only run after the full body has
+ * already been read and parsed. A Nest-level check on the parsed object
+ * (e.g. re-serialising it to measure size) is too late to protect memory and
+ * measures the wrong thing besides: the re-serialised size is not the number
+ * of bytes that came in over the wire.
+ *
+ * This only catches clients that declare `Content-Length` honestly. A client
+ * that omits it and streams a large chunked body is still capped by the
+ * process-wide `bodyLimit` passed to the Fastify adapter — a coarser but
+ * still-present backstop.
+ */
+export function registerBodySizeGuard(instance: HookableFastifyInstance): void {
+  instance.addHook("onRequest", (request, reply, done) => {
+    const limit = MAX_BODY_BYTES_BY_PATH.get(pathnameOf(request.url));
+
+    if (limit === undefined) {
+      done();
+      return;
+    }
+
+    const header = request.headers["content-length"];
+    const declaredBytes =
+      typeof header === "string" ? Number(header) : Number.NaN;
+
+    if (Number.isFinite(declaredBytes) && declaredBytes > limit) {
+      const requestId = isRequestId(request.id) ? request.id : "unknown";
+      reply.code(413).send({
+        error: {
+          code: "PAYLOAD_TOO_LARGE",
+          message: "Request body is too large",
+          request_id: requestId,
+        },
+      });
+      return;
+    }
+
+    done();
+  });
+}
