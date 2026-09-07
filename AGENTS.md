@@ -39,7 +39,7 @@ If an older architecture draft conflicts with an implementation spec, record the
 - Never log API keys, signed user assertions, internal JWTs, essay text, raw request bodies, or raw downstream responses.
 - API-key hashes, identity configuration, usage, and idempotency records are durable control-plane data; Redis is only cache/counter/protection state.
 - Downstream adapters are pure. Dispatcher/HTTP infrastructure owns hosts, timeouts, cancellation, internal tokens, and error translation.
-- Do not invent the Writing grading response shape while the source contract is unresolved. Stop at the contract boundary and surface the blocker.
+- Never invent a downstream response shape. Map only from a captured fixture; if none exists, stop at the contract boundary and surface the blocker rather than guessing. The Writing grading contract is resolved and its fixtures live in `test/fixtures/ai-writing/`, so this rule now applies to the next service, not to Writing.
 
 ### Required verification
 

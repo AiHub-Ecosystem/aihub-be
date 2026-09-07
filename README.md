@@ -35,4 +35,6 @@ test/             integration/e2e tests when external boundaries exist
 
 Read [CONTEXT.md](CONTEXT.md) for the short glossary, then the [spec index](docs/superpowers/specs/2026-09-07-aihub/README.md) before changing behavior. Shared workflow rules live in [AGENTS.md](AGENTS.md); Claude-specific routing lives in [CLAUDE.md](CLAUDE.md) and `.claude/`.
 
-The Writing grading response remains intentionally unresolved. Do not add a parser until the real fixture and contract are confirmed.
+The Writing grading response contract is resolved. The live service was called on 2026-09-07, the captured responses are committed under `test/fixtures/ai-writing/`, and the shared grading parser is implemented against them.
+
+The rule that produced that fixture still stands for every other service: never write a parser from a guess. Capture a real response first, commit it as a fixture, and map from that.

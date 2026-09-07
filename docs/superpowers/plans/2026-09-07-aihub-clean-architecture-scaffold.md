@@ -2,6 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` (or `superpowers:subagent-driven-development` when explicitly selected) to implement this plan task-by-task.
 
+> **Status: executed. Kept as a record of what the scaffold set out to do.**
+>
+> One constraint below has since been lifted: the plan deliberately left the Writing grading response parser unimplemented while the downstream contract was unknown. That contract was resolved on 2026-09-07 by calling the live service, the responses are committed under `test/fixtures/ai-writing/`, and the parser now exists. Read the constraint as the reasoning of the time, not as current guidance.
+
 **Goal:** Turn the docs-only AIHUB repository into the smallest runnable NestJS/Fastify modular-monolith scaffold with a Casso-inspired Clean Architecture layout, enforceable boundaries, and Claude Code/Matt workflow guidance.
 
 **Architecture:** One deployable NestJS application. Business modules use `presentation -> application -> domain`; infrastructure implements application ports and may depend inward. `domain` has no framework or I/O imports. Cross-cutting primitives live in `src/common`; the operation catalog and boundary contracts live in `src/catalog` and `src/contracts`; downstream adapters are pure request/response mapping seams and never perform I/O.

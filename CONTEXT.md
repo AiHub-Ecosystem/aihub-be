@@ -28,8 +28,10 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 
 - Current scope: one NestJS/Fastify app and the Writing vertical slice.
 - Deferred: Speaking, Reading, object storage, async jobs, billing, dynamic routing, Kubernetes, and a dedicated proxy.
-- Blocker: the real Writing grading response contract is unresolved, so no response parser may be fabricated.
-- Blocker: the current Writing service exposure/authentication must be closed before production integration.
+- No blockers. Both earlier ones were resolved on 2026-09-07.
+- Resolved: the Writing grading response contract. All four priority endpoints were called against the live service; captured responses are committed under `test/fixtures/ai-writing/` and the shared grading parser is implemented and tested. Catalog response contracts are real schemas, not `unresolved`.
+- Resolved as a decision, not as work: AI Writing stays reachable from the internet for now, because it still serves an application that does not go through AIHUB. The boundary at this stage is the credential, not the network — AIHUB customers hold only AIHUB keys, so metering and limits still bind them. Three conditions keep that acceptable; see the security spec.
+- Open, but not blocking: the OpenAPI and Postman artifacts that close Deliverable 1, and six fixes requested from the AI Writing team (chiefly usage metadata, which is what makes token-based billing possible at all).
 
 ## Canonical documents
 
