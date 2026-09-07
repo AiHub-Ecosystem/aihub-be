@@ -14,9 +14,3 @@ export interface DownstreamAdapter<TInput, TOutput> {
   parseResponse(raw: InternalAIServiceResponse<unknown>): TOutput;
   parseError?(status: number, body: unknown): DownstreamErrorHint | undefined;
 }
-
-export interface DownstreamRequestAdapter<TInput> {
-  readonly operation: OperationId;
-  readonly downstream: DownstreamId;
-  buildRequest(input: TInput, context: RequestContext): DownstreamRequest;
-}

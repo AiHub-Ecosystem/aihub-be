@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 
+import { task1GradeAdapter } from '../../downstream/writing/task1-grade.adapter';
 import { task1QuestionAdapter } from '../../downstream/writing/task1-question.adapter';
+import { task2GradeAdapter } from '../../downstream/writing/task2-grade.adapter';
+import { task2QuestionAdapter } from '../../downstream/writing/task2-question.adapter';
 import { INTERNAL_TOKEN_ISSUER } from './application/internal-token-issuer.port';
 import { OPERATION_DISPATCHER } from './application/operation-dispatcher.port';
 import { RATE_LIMITER } from './application/rate-limiter.port';
@@ -35,11 +38,12 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
         httpClient: DownstreamHttpClient,
         tokenIssuer: ConfiguredTokenIssuer,
       ): HttpOperationDispatcher =>
-        new HttpOperationDispatcher(
-          httpClient,
-          tokenIssuer,
+        new HttpOperationDispatcher(httpClient, tokenIssuer, [
           task1QuestionAdapter,
-        ),
+          task2QuestionAdapter,
+          task1GradeAdapter,
+          task2GradeAdapter,
+        ]),
       inject: [DownstreamHttpClient, INTERNAL_TOKEN_ISSUER],
     },
     RateLimitGuard,
