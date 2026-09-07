@@ -101,11 +101,7 @@ function successEnvelopeSchema(dataSchema: TSchema): TSchema {
 
 function idempotencyKeyParameter(
   mode: IdempotencyMode,
-): Record<string, unknown> | undefined {
-  if (mode === 'none') {
-    return undefined;
-  }
-
+): Record<string, unknown> {
   return {
     name: 'Idempotency-Key',
     in: 'header',
@@ -114,7 +110,9 @@ function idempotencyKeyParameter(
     description:
       mode === 'required'
         ? 'Required. Trimmed and limited to 1–255 UTF-8 bytes. Scoped to (organization, operation, key); replays the stored result for a repeat call.'
-        : 'Optional. This operation may call a model, so a client that wants replay safety should send one.',
+        : mode === 'optional'
+          ? 'Optional. This operation may call a model, so a client that wants replay safety should send one.'
+          : 'Ignored. This operation never stores or replays an idempotency record.',
   };
 }
 
@@ -167,7 +165,7 @@ function operationToPathItem(
   const responses: Record<string, unknown> = {
     '200': {
       description: 'Success',
-      ...(operation.idempotency === 'required'
+      ...(operation.idempotency !== 'none'
         ? {
             headers: {
               'Idempotent-Replay': {
@@ -189,7 +187,7 @@ function operationToPathItem(
   };
 
   for (const status of REACHABLE_ERRORS.keys()) {
-    if (status === 409 && operation.idempotency !== 'required') {
+    if (status === 409 && operation.idempotency === 'none') {
       continue;
     }
     responses[String(status)] = {

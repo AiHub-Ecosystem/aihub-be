@@ -1,5 +1,8 @@
 import { AppError } from '../../../common/errors/app-error';
-import { requireIdempotencyKey } from './idempotency-key';
+import {
+  requireIdempotencyKey,
+  resolveIdempotencyKey,
+} from './idempotency-key';
 
 describe('requireIdempotencyKey', () => {
   it('trims an opaque key and enforces the UTF-8 byte limit', () => {
@@ -12,5 +15,23 @@ describe('requireIdempotencyKey', () => {
 
   it('rejects duplicate header values instead of guessing', () => {
     expect(() => requireIdempotencyKey(['a', 'b'])).toThrow(AppError);
+  });
+
+  it('resolves headers according to the operation catalog', () => {
+    expect(
+      resolveIdempotencyKey('writing.task1.question.generate', ['a', 'b']),
+    ).toBeUndefined();
+    expect(
+      resolveIdempotencyKey('writing.task2.question.generate', undefined),
+    ).toBeUndefined();
+    expect(
+      resolveIdempotencyKey('writing.task2.question.generate', '  question-1 '),
+    ).toBe('question-1');
+    expect(() =>
+      resolveIdempotencyKey('writing.task2.question.generate', ['a', 'b']),
+    ).toThrow(AppError);
+    expect(() =>
+      resolveIdempotencyKey('writing.task1.grade', undefined),
+    ).toThrow(AppError);
   });
 });

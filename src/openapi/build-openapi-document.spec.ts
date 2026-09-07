@@ -78,14 +78,22 @@ describe('buildOpenApiDocument', () => {
     expect(operation?.['x-idempotency']).toBe('required');
   });
 
-  it('omits the Idempotency-Key parameter for an operation catalogued as idempotency: none', () => {
+  it('documents an ignored Idempotency-Key parameter for an operation catalogued as none', () => {
     const doc = build();
     const operation = doc.paths['/v1/writing/task1/questions']?.post;
     const names = operation?.parameters.map(
       (parameter) => parameter.name ?? parameter.$ref,
     );
 
-    expect(names).not.toContain('Idempotency-Key');
+    expect(names).toContain('Idempotency-Key');
+    expect(
+      operation?.parameters.find(
+        (parameter) => parameter.name === 'Idempotency-Key',
+      ),
+    ).toMatchObject({
+      required: false,
+      description: expect.stringContaining('Ignored'),
+    });
   });
 
   it('marks Idempotency-Key required only for an operation catalogued as required', () => {
@@ -178,6 +186,16 @@ describe('buildOpenApiDocument', () => {
     expect(success.headers?.['Idempotent-Replay']).toMatchObject({
       schema: { type: 'string', enum: ['true'] },
     });
+  });
+
+  it('documents replay and conflict responses for optional idempotency', () => {
+    const operation = build().paths['/v1/writing/task2/questions']?.post;
+    const success = operation?.responses['200'] as {
+      readonly headers?: Record<string, unknown>;
+    };
+
+    expect(success.headers?.['Idempotent-Replay']).toBeDefined();
+    expect(operation?.responses['409']).toBeDefined();
   });
 
   it('does not advertise idempotency conflicts for operations catalogued as none', () => {

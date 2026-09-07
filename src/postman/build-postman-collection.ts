@@ -341,6 +341,92 @@ const D1_SCENARIOS: readonly Scenario[] = [
   },
 ];
 
+const IDEMPOTENCY_SCENARIOS: readonly Scenario[] = [
+  {
+    name: 'Task 2 grading replays a completed result',
+    description:
+      'Required idempotency: resend the same user-scoped grading request with one key and verify the stored result is replayed.',
+    path: TASK2_GRADE_PATH,
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
+    ],
+    body: TASK2_GRADE_BODY,
+    testScript: [
+      assertStatus(200),
+      ...assertEnvelope('writing.task2.grade'),
+      'pm.sendRequest({',
+      '  url: pm.request.url.toString(),',
+      '  method: pm.request.method,',
+      '  header: pm.request.headers.toJSON(),',
+      "  body: { mode: 'raw', raw: pm.request.body.raw }",
+      '}, function (error, response) {',
+      "  pm.test('same key replays Task 2 grading', function () {",
+      '    pm.expect(error).to.equal(null);',
+      '    pm.expect(response.code).to.eql(200);',
+      "    pm.expect(response.headers.get('Idempotent-Replay')).to.eql('true');",
+      '    pm.expect(response.json().data).to.eql(pm.response.json().data);',
+      '  });',
+      '});',
+    ],
+  },
+  {
+    name: 'Task 2 question optionally replays a completed result',
+    description:
+      'Optional idempotency: supplying a key enables replay safety for model-backed question generation.',
+    path: TASK2_QUESTION_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER, IDEMPOTENCY_HEADER],
+    body: { topic: 'Technology', question_type: 'opinion' },
+    testScript: [
+      assertStatus(200),
+      ...assertEnvelope('writing.task2.question.generate'),
+      'pm.sendRequest({',
+      '  url: pm.request.url.toString(),',
+      '  method: pm.request.method,',
+      '  header: pm.request.headers.toJSON(),',
+      "  body: { mode: 'raw', raw: pm.request.body.raw }",
+      '}, function (error, response) {',
+      "  pm.test('same optional key replays Task 2 question', function () {",
+      '    pm.expect(error).to.equal(null);',
+      '    pm.expect(response.code).to.eql(200);',
+      "    pm.expect(response.headers.get('Idempotent-Replay')).to.eql('true');",
+      '    pm.expect(response.json().data).to.eql(pm.response.json().data);',
+      '  });',
+      '});',
+    ],
+  },
+  {
+    name: 'Task 1 question ignores Idempotency-Key',
+    description:
+      'None idempotency: even a malformed key is ignored and the operation does not emit a replay marker.',
+    path: TASK1_QUESTION_PATH,
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      { key: 'Idempotency-Key', value: '   ' },
+    ],
+    body: { chart_type: 'Bar Chart' },
+    testScript: [
+      assertStatus(200),
+      ...assertEnvelope('writing.task1.question.generate'),
+      'pm.sendRequest({',
+      '  url: pm.request.url.toString(),',
+      '  method: pm.request.method,',
+      '  header: pm.request.headers.toJSON(),',
+      "  body: { mode: 'raw', raw: pm.request.body.raw }",
+      '}, function (error, response) {',
+      "  pm.test('none mode does not replay or validate the key', function () {",
+      '    pm.expect(error).to.equal(null);',
+      '    pm.expect(response.code).to.eql(200);',
+      "    pm.expect(response.headers.get('Idempotent-Replay')).to.be.null;",
+      '  });',
+      '});',
+    ],
+  },
+];
+
 /**
  * Deep-removes every property named `key`. Used to drop the `response`
  * arrays openapi-to-postmanv2 attaches to each auto-converted operation —
@@ -469,6 +555,10 @@ export async function buildPostmanCollection(
       {
         name: 'D1 handover test cases (docs/aihub_deliverable_1_api_contract_schema.md §G)',
         item: D1_SCENARIOS.map(scenarioToItem),
+      },
+      {
+        name: 'Idempotency mode examples',
+        item: IDEMPOTENCY_SCENARIOS.map(scenarioToItem),
       },
     ],
   };

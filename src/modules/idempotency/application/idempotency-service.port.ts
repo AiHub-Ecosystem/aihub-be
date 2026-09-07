@@ -3,11 +3,13 @@ import type { OperationId } from '../../../catalog/operation-id';
 export interface IdempotencyExecutionInput {
   readonly organizationId: string;
   readonly operation: OperationId;
-  readonly idempotencyKey: string;
+  readonly idempotencyKey?: string;
   readonly actorId: string;
   readonly requestBody: unknown;
   readonly requestId: string;
   readonly timeoutMs: number;
+  readonly signal: AbortSignal;
+  readonly deadlineAt: Date;
 }
 
 export interface IdempotencyWorkContext {

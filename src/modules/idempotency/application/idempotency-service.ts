@@ -1,3 +1,4 @@
+import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import { AppError } from '../../../common/errors/app-error';
 import {
   type IdempotencyFingerprintInput,
@@ -17,6 +18,10 @@ import type {
   IdempotencyWorkContext,
 } from './idempotency-service.port';
 
+type KeyedIdempotencyExecutionInput = IdempotencyExecutionInput & {
+  readonly idempotencyKey: string;
+};
+
 export const IDEMPOTENCY_RETENTION_MS = 24 * 60 * 60 * 1_000;
 
 class ResponseDeadlineReached extends Error {}
@@ -28,6 +33,15 @@ function conflictError(): AppError {
     message:
       'The idempotency key is already used for a different or pending request',
     httpStatus: 409,
+    retryable: false,
+  });
+}
+
+function missingKeyError(): AppError {
+  return new AppError({
+    code: 'INVALID_REQUEST',
+    message: 'Idempotency-Key is required for this operation',
+    httpStatus: 400,
     retryable: false,
   });
 }
@@ -88,18 +102,39 @@ export class IdempotencyService implements IdempotencyServicePort {
     work: IdempotencyWork<T>,
     decodeReplay: IdempotencyReplayDecoder<T>,
   ): Promise<IdempotencyExecution<T>> {
+    const mode = OPERATION_CATALOG[input.operation].idempotency;
+    if (
+      mode === 'none' ||
+      (mode === 'optional' && input.idempotencyKey === undefined)
+    ) {
+      return {
+        result: await work({
+          signal: input.signal,
+          deadlineAt: input.deadlineAt,
+        }),
+        replay: false,
+      };
+    }
+    if (input.idempotencyKey === undefined) {
+      throw missingKeyError();
+    }
+
+    const keyedInput: KeyedIdempotencyExecutionInput = {
+      ...input,
+      idempotencyKey: input.idempotencyKey,
+    };
     const fingerprintInput: IdempotencyFingerprintInput = {
-      organizationId: input.organizationId,
-      operation: input.operation,
-      actorId: input.actorId,
-      requestBody: input.requestBody,
+      organizationId: keyedInput.organizationId,
+      operation: keyedInput.operation,
+      actorId: keyedInput.actorId,
+      requestBody: keyedInput.requestBody,
     };
     const reservation = await this.reserve({
-      organizationId: input.organizationId,
-      operation: input.operation,
-      idempotencyKey: input.idempotencyKey,
+      organizationId: keyedInput.organizationId,
+      operation: keyedInput.operation,
+      idempotencyKey: keyedInput.idempotencyKey,
       fingerprintHex: createIdempotencyFingerprint(fingerprintInput),
-      requestId: input.requestId,
+      requestId: keyedInput.requestId,
       expiresAt: new Date(this.now() + IDEMPOTENCY_RETENTION_MS),
     });
 
@@ -124,7 +159,7 @@ export class IdempotencyService implements IdempotencyServicePort {
       }
     }
 
-    return this.executeClaimed(input, reservation.requestId, work);
+    return this.executeClaimed(keyedInput, reservation.requestId, work);
   }
 
   private async reserve(
@@ -138,7 +173,7 @@ export class IdempotencyService implements IdempotencyServicePort {
   }
 
   private async executeClaimed<T>(
-    input: IdempotencyExecutionInput,
+    input: KeyedIdempotencyExecutionInput,
     requestId: string,
     work: IdempotencyWork<T>,
   ): Promise<IdempotencyExecution<T>> {
@@ -207,7 +242,7 @@ export class IdempotencyService implements IdempotencyServicePort {
   }
 
   private async finishInBackground<T>(
-    input: IdempotencyExecutionInput,
+    input: KeyedIdempotencyExecutionInput,
     requestId: string,
     workPromise: Promise<T>,
     hardDeadline: Promise<never>,
@@ -226,7 +261,7 @@ export class IdempotencyService implements IdempotencyServicePort {
   }
 
   private async complete<T>(
-    input: IdempotencyExecutionInput,
+    input: KeyedIdempotencyExecutionInput,
     requestId: string,
     result: T,
   ): Promise<void> {
@@ -251,7 +286,7 @@ export class IdempotencyService implements IdempotencyServicePort {
   }
 
   private async releaseAfterFailure(
-    input: IdempotencyExecutionInput,
+    input: KeyedIdempotencyExecutionInput,
     requestId: string,
     error: unknown,
   ): Promise<void> {

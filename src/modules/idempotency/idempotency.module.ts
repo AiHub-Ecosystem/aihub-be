@@ -6,11 +6,13 @@ import {
 } from './application/idempotency-repository.port';
 import { IdempotencyService } from './application/idempotency-service';
 import { IDEMPOTENCY_SERVICE } from './application/idempotency-service.port';
+import { IdempotencyCleanupScheduler } from './infrastructure/idempotency-cleanup.scheduler';
 import { createPostgresIdempotencyClient } from './infrastructure/postgres-idempotency.client';
 import { PostgresIdempotencyRepository } from './infrastructure/postgres-idempotency.repository';
 
 @Module({
   providers: [
+    IdempotencyCleanupScheduler,
     {
       provide: IDEMPOTENCY_REPOSITORY,
       useFactory: (): IdempotencyRepositoryPort =>

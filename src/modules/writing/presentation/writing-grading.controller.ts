@@ -34,7 +34,7 @@ import {
   type IdempotencyServicePort,
   type IdempotencyWorkContext,
 } from '../../idempotency/application/idempotency-service.port';
-import { requireIdempotencyKey } from '../../idempotency/presentation/idempotency-key';
+import { resolveIdempotencyKey } from '../../idempotency/presentation/idempotency-key';
 import { ApiKeyGuard } from '../../identity/presentation/api-key.guard';
 import {
   type AuthenticatedRequest,
@@ -107,6 +107,26 @@ function decodeTask1Replay(value: unknown): DispatchResult<GradeResponse> {
   };
 }
 
+function decodeTask2Replay(value: unknown): DispatchResult<GradeResponse> {
+  if (
+    !isRecord(value) ||
+    value.operation !== TASK2_OPERATION ||
+    typeof value.downstreamMs !== 'number' ||
+    !Number.isFinite(value.downstreamMs) ||
+    value.downstreamMs < 0 ||
+    !('data' in value) ||
+    !Value.Check(GradeResponseSchema, value.data)
+  ) {
+    throw new Error('stored Task 2 grading response is malformed');
+  }
+
+  return {
+    operation: TASK2_OPERATION,
+    data: Value.Parse(GradeResponseSchema, value.data),
+    downstreamMs: value.downstreamMs,
+  };
+}
+
 function requireUserId(request: AuthenticatedRequest): string {
   const userId = request.aihubIdentity?.userId;
   if (userId === undefined || userId.trim().length === 0) {
@@ -147,7 +167,8 @@ export class WritingGradingController {
     const input = parseTask1Body(body);
     const authenticated = getAuthenticatedApiKey(request);
     const actorId = requireUserId(request);
-    const idempotencyKey = requireIdempotencyKey(
+    const idempotencyKey = resolveIdempotencyKey(
+      TASK1_OPERATION,
       request.headers['idempotency-key'],
     );
     const { signal, dispose } = createClientDisconnectSignal(request.raw);
@@ -171,11 +192,13 @@ export class WritingGradingController {
         {
           organizationId: authenticated.organizationId,
           operation: TASK1_OPERATION,
-          idempotencyKey,
+          ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
           actorId,
           requestBody: input,
           requestId,
           timeoutMs: OPERATION_CATALOG[TASK1_OPERATION].timeoutMs,
+          signal: context.signal,
+          deadlineAt: context.deadlineAt,
         },
         (workContext: IdempotencyWorkContext) =>
           this.dispatcher.dispatch(TASK1_OPERATION, input, {
@@ -203,11 +226,17 @@ export class WritingGradingController {
   ): Promise<DispatchResult<GradeResponse>> {
     const input = parseTask2Body(body);
     const authenticated = getAuthenticatedApiKey(request);
+    const actorId = requireUserId(request);
+    const idempotencyKey = resolveIdempotencyKey(
+      TASK2_OPERATION,
+      request.headers['idempotency-key'],
+    );
     const { signal, dispose } = createClientDisconnectSignal(request.raw);
 
     try {
+      const requestId = String(request.id);
       const context = createRequestContext({
-        requestId: String(request.id),
+        requestId,
         receivedAt: new Date(),
         deadlineMs: OPERATION_CATALOG[TASK2_OPERATION].timeoutMs,
         organizationId: authenticated.organizationId,
@@ -219,7 +248,30 @@ export class WritingGradingController {
         signal,
       });
 
-      return await this.dispatcher.dispatch(TASK2_OPERATION, input, context);
+      const execution = await this.idempotency.execute(
+        {
+          organizationId: authenticated.organizationId,
+          operation: TASK2_OPERATION,
+          ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
+          actorId,
+          requestBody: input,
+          requestId,
+          timeoutMs: OPERATION_CATALOG[TASK2_OPERATION].timeoutMs,
+          signal: context.signal,
+          deadlineAt: context.deadlineAt,
+        },
+        (workContext: IdempotencyWorkContext) =>
+          this.dispatcher.dispatch(TASK2_OPERATION, input, {
+            ...context,
+            signal: workContext.signal,
+            deadlineAt: workContext.deadlineAt,
+          }),
+        decodeTask2Replay,
+      );
+
+      return execution.replay
+        ? { ...execution.result, downstreamMs: 0, idempotentReplay: true }
+        : execution.result;
     } finally {
       dispose();
     }

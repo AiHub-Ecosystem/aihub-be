@@ -458,6 +458,17 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "description": "Ignored. This operation never stores or replays an idempotency record."
           }
         ],
         "requestBody": {
@@ -726,6 +737,15 @@
         "responses": {
           "200": {
             "description": "Success",
+            "headers": {
+              "Idempotent-Replay": {
+                "description": "Present with value true when the completed business result was replayed for this key.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["true"]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -831,6 +851,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Error403"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
           },
           "413": {
             "$ref": "#/components/responses/Error413"

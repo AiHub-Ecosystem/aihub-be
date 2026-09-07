@@ -89,6 +89,8 @@ function input(requestId = 'req_1') {
     requestBody: { answer: 'hello' },
     requestId,
     timeoutMs: 50,
+    signal: new AbortController().signal,
+    deadlineAt: new Date(51_000),
   };
 }
 
@@ -325,5 +327,62 @@ describe('IdempotencyService', () => {
       'req_background_client_error',
     );
     expect(repository.failed).toHaveLength(0);
+  });
+
+  it('runs optional idempotency without a key and skips storage', async () => {
+    const repository = new FakeRepository();
+    const service = new IdempotencyService(repository);
+    const { idempotencyKey: _idempotencyKey, ...withoutKey } = input();
+    const work = jest.fn(async () => ({ value: 'generated' }));
+
+    const result = await service.execute(
+      {
+        ...withoutKey,
+        operation: 'writing.task2.question.generate',
+        actorId: 'org_acme',
+      },
+      work,
+      () => ({ value: 'unused' }),
+    );
+
+    expect(result).toEqual({ result: { value: 'generated' }, replay: false });
+    expect(work).toHaveBeenCalledWith(
+      expect.objectContaining({
+        signal: withoutKey.signal,
+        deadlineAt: withoutKey.deadlineAt,
+      }),
+    );
+    expect(repository.reserved).toHaveLength(0);
+  });
+
+  it('ignores an idempotency key for operations catalogued as none', async () => {
+    const repository = new FakeRepository();
+    const service = new IdempotencyService(repository);
+
+    const result = await service.execute(
+      {
+        ...input(),
+        operation: 'writing.task1.question.generate',
+      },
+      async () => ({ value: 'generated' }),
+      () => ({ value: 'unused' }),
+    );
+
+    expect(result.replay).toBe(false);
+    expect(repository.reserved).toHaveLength(0);
+  });
+
+  it('rejects a missing key for operations catalogued as required', async () => {
+    const repository = new FakeRepository();
+    const service = new IdempotencyService(repository);
+    const { idempotencyKey: _idempotencyKey, ...withoutKey } = input();
+
+    await expect(
+      service.execute(
+        withoutKey,
+        async () => ({ value: 'unused' }),
+        () => ({ value: 'unused' }),
+      ),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST', httpStatus: 400 });
   });
 });

@@ -19,6 +19,7 @@ import {
   type Task2QuestionRequest,
   Task2QuestionRequestSchema,
   type Task2QuestionResponse,
+  Task2QuestionResponseSchema,
 } from '../../../contracts/writing/task2';
 import {
   type DispatchResult,
@@ -26,6 +27,12 @@ import {
   type OperationDispatcherPort,
 } from '../../gateway/application/operation-dispatcher.port';
 import { RateLimitGuard } from '../../gateway/presentation/rate-limit.guard';
+import {
+  IDEMPOTENCY_SERVICE,
+  type IdempotencyServicePort,
+  type IdempotencyWorkContext,
+} from '../../idempotency/application/idempotency-service.port';
+import { resolveIdempotencyKey } from '../../idempotency/presentation/idempotency-key';
 import { ApiKeyGuard } from '../../identity/presentation/api-key.guard';
 import {
   type AuthenticatedRequest,
@@ -66,6 +73,30 @@ function parseBody(body: unknown): Task2QuestionRequest {
   }
 }
 
+function decodeReplay(value: unknown): DispatchResult<Task2QuestionResponse> {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value) ||
+    !('operation' in value) ||
+    value.operation !== OPERATION ||
+    !('downstreamMs' in value) ||
+    typeof value.downstreamMs !== 'number' ||
+    !Number.isFinite(value.downstreamMs) ||
+    value.downstreamMs < 0 ||
+    !('data' in value) ||
+    !Value.Check(Task2QuestionResponseSchema, value.data)
+  ) {
+    throw new Error('stored Task 2 question response is malformed');
+  }
+
+  return {
+    operation: OPERATION,
+    data: Value.Parse(Task2QuestionResponseSchema, value.data),
+    downstreamMs: value.downstreamMs,
+  };
+}
+
 @Controller()
 @UseGuards(ApiKeyGuard, UserAssertionGuard, RateLimitGuard)
 @UseInterceptors(SuccessEnvelopeInterceptor)
@@ -73,6 +104,8 @@ export class WritingTask2QuestionController {
   constructor(
     @Inject(OPERATION_DISPATCHER)
     private readonly dispatcher: OperationDispatcherPort,
+    @Inject(IDEMPOTENCY_SERVICE)
+    private readonly idempotency: IdempotencyServicePort,
   ) {}
 
   @Post(OPERATION_CATALOG[OPERATION].path)
@@ -84,11 +117,16 @@ export class WritingTask2QuestionController {
   ): Promise<DispatchResult<Task2QuestionResponse>> {
     const input = parseBody(body);
     const authenticated = getAuthenticatedApiKey(request);
+    const idempotencyKey = resolveIdempotencyKey(
+      OPERATION,
+      request.headers['idempotency-key'],
+    );
     const { signal, dispose } = createClientDisconnectSignal(request.raw);
 
     try {
+      const requestId = String(request.id);
       const context = createRequestContext({
-        requestId: String(request.id),
+        requestId,
         receivedAt: new Date(),
         deadlineMs: OPERATION_CATALOG[OPERATION].timeoutMs,
         organizationId: authenticated.organizationId,
@@ -100,7 +138,30 @@ export class WritingTask2QuestionController {
         signal,
       });
 
-      return await this.dispatcher.dispatch(OPERATION, input, context);
+      const execution = await this.idempotency.execute(
+        {
+          organizationId: authenticated.organizationId,
+          operation: OPERATION,
+          ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
+          actorId: authenticated.organizationId,
+          requestBody: input,
+          requestId,
+          timeoutMs: OPERATION_CATALOG[OPERATION].timeoutMs,
+          signal: context.signal,
+          deadlineAt: context.deadlineAt,
+        },
+        (workContext: IdempotencyWorkContext) =>
+          this.dispatcher.dispatch(OPERATION, input, {
+            ...context,
+            signal: workContext.signal,
+            deadlineAt: workContext.deadlineAt,
+          }),
+        decodeReplay,
+      );
+
+      return execution.replay
+        ? { ...execution.result, downstreamMs: 0, idempotentReplay: true }
+        : execution.result;
     } finally {
       dispose();
     }

@@ -1,3 +1,5 @@
+import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
+import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
 
 function invalidIdempotencyKey(): AppError {
@@ -22,4 +24,15 @@ export function requireIdempotencyKey(
     throw invalidIdempotencyKey();
   }
   return normalized;
+}
+
+export function resolveIdempotencyKey(
+  operation: OperationId,
+  header: string | readonly string[] | undefined,
+): string | undefined {
+  const mode = OPERATION_CATALOG[operation].idempotency;
+  if (mode === 'none' || (mode === 'optional' && header === undefined)) {
+    return undefined;
+  }
+  return requireIdempotencyKey(header);
 }

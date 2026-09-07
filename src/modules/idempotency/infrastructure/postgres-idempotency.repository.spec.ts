@@ -98,6 +98,20 @@ describe('PostgresIdempotencyRepository', () => {
     });
   });
 
+  it('reclaims an expired pending row even when the new fingerprint differs', async () => {
+    const client = new QueueClient([[], [{ request_id: 'req_expired' }]]);
+    const repository = new PostgresIdempotencyRepository(client);
+
+    await expect(
+      repository.reserve({
+        ...baseInput,
+        fingerprintHex: 'b'.repeat(64),
+        requestId: 'req_expired',
+      }),
+    ).resolves.toEqual({ kind: 'claimed', requestId: 'req_expired' });
+    expect(client.queries[1]?.text).toContain('expires_at <= now()');
+  });
+
   it('returns a fingerprint conflict without waiting on a pending row', async () => {
     const client = new QueueClient([
       [],
@@ -177,5 +191,13 @@ describe('PostgresIdempotencyRepository', () => {
       code: 'INTERNAL_ERROR',
       httpStatus: 500,
     });
+  });
+
+  it('deletes expired records in one cleanup query', async () => {
+    const client = new QueueClient([[{ request_id: 'req_expired' }]]);
+    const repository = new PostgresIdempotencyRepository(client);
+
+    await expect(repository.cleanupExpired()).resolves.toBe(1);
+    expect(client.queries[0]?.text).toContain('expires_at <= now()');
   });
 });

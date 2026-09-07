@@ -130,6 +130,7 @@ class InMemoryIdempotencyRepository implements IdempotencyRepositoryPort {
 describe('Writing grading HTTP flow', () => {
   let app: NestFastifyApplication;
   let mockAgent: MockAgent;
+  let task2DownstreamCalls = 0;
   const originalEnv = {
     allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
     nodeEnv: process.env.NODE_ENV,
@@ -171,7 +172,10 @@ describe('Writing grading HTTP flow', () => {
         }),
         headers: { authorization: 'Bearer writing-token' },
       })
-      .reply(200, fixture('grade-task2.response.json'))
+      .reply(200, () => {
+        task2DownstreamCalls += 1;
+        return fixture('grade-task2.response.json');
+      })
       .persist();
 
     const moduleRef = await Test.createTestingModule({
@@ -318,6 +322,53 @@ describe('Writing grading HTTP flow', () => {
     expect(body.meta.operation).toBe('writing.task2.grade');
   });
 
+  it('replays a completed Task 2 result and avoids a second downstream call', async () => {
+    const headers = { 'idempotency-key': 'fixture-task2-replay' };
+    const payload = {
+      question: task2Request.question,
+      topic: task2Request.topic,
+      essay: task2Request.essay,
+    };
+
+    const before = task2DownstreamCalls;
+    const first = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task2/grade',
+      headers,
+      payload,
+    });
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task2/grade',
+      headers,
+      payload,
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(200);
+    expect(task2DownstreamCalls - before).toBe(1);
+    expect(replay.headers['idempotent-replay']).toBe('true');
+    expect(replay.json().data).toEqual(first.json().data);
+    expect(replay.json().meta.timing.downstream_ms).toBe(0);
+  });
+
+  it('rejects a Task 2 grading request without Idempotency-Key', async () => {
+    const before = task2DownstreamCalls;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task2/grade',
+      payload: {
+        question: task2Request.question,
+        topic: task2Request.topic,
+        essay: task2Request.essay,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expect(task2DownstreamCalls).toBe(before);
+  });
+
   it('rejects a Task 2 request that carries an image url, which only Task 1 accepts', async () => {
     const response = await app.inject({
       method: 'POST',
@@ -333,6 +384,31 @@ describe('Writing grading HTTP flow', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('rejects a changed Task 2 request under a completed key', async () => {
+    const headers = { 'idempotency-key': 'fixture-task2-mismatch' };
+    const payload = {
+      question: task2Request.question,
+      topic: task2Request.topic,
+      essay: task2Request.essay,
+    };
+    const first = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task2/grade',
+      headers,
+      payload,
+    });
+    const mismatch = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task2/grade',
+      headers,
+      payload: { ...payload, topic: 'technology' },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json().error.code).toBe('IDEMPOTENCY_CONFLICT');
   });
 
   it('rejects a Task 1 request missing the required image url', async () => {

@@ -11,6 +11,14 @@ import { MockAgent } from 'undici';
 import { AppModule } from '../../app.module';
 import { generateRequestId } from '../../common/request-context/request-id';
 import { DownstreamHttpClient } from '../gateway/infrastructure/downstream-http.client';
+import type {
+  CompleteIdempotencyInput,
+  IdempotencyAttemptInput,
+  IdempotencyRepositoryPort,
+  IdempotencyReservation,
+  ReserveIdempotencyInput,
+} from '../idempotency/application/idempotency-repository.port';
+import { IDEMPOTENCY_REPOSITORY } from '../idempotency/application/idempotency-repository.port';
 
 const FIXTURES = join(__dirname, '../../../test/fixtures/ai-writing');
 
@@ -21,12 +29,95 @@ function fixture(name: string): Record<string, unknown> {
   >;
 }
 
+interface StoredRecord {
+  fingerprintHex: string;
+  requestId: string;
+  state: 'pending' | 'completed' | 'failed';
+  responseBody?: unknown;
+}
+
+class InMemoryIdempotencyRepository implements IdempotencyRepositoryPort {
+  private readonly records = new Map<string, StoredRecord>();
+
+  reserve(input: ReserveIdempotencyInput): Promise<IdempotencyReservation> {
+    const key = `${input.organizationId}:${input.operation}:${input.idempotencyKey}`;
+    const existing = this.records.get(key);
+    if (existing === undefined) {
+      this.records.set(key, {
+        fingerprintHex: input.fingerprintHex,
+        requestId: input.requestId,
+        state: 'pending',
+      });
+      return Promise.resolve({ kind: 'claimed', requestId: input.requestId });
+    }
+    if (existing.fingerprintHex !== input.fingerprintHex) {
+      return Promise.resolve({ kind: 'conflict', reason: 'fingerprint' });
+    }
+    if (existing.state === 'pending') {
+      return Promise.resolve({ kind: 'conflict', reason: 'pending' });
+    }
+    if (existing.state === 'failed') {
+      existing.state = 'pending';
+      existing.requestId = input.requestId;
+      existing.responseBody = undefined;
+      return Promise.resolve({ kind: 'claimed', requestId: input.requestId });
+    }
+    return Promise.resolve({
+      kind: 'replay',
+      responseStatus: 200,
+      responseBody: existing.responseBody,
+    });
+  }
+
+  complete(input: CompleteIdempotencyInput): Promise<void> {
+    const key = `${input.organizationId}:${input.operation}:${input.idempotencyKey}`;
+    const existing = this.records.get(key);
+    if (
+      existing?.state === 'pending' &&
+      existing.requestId === input.requestId
+    ) {
+      existing.state = 'completed';
+      existing.responseBody = input.responseBody;
+    }
+    return Promise.resolve();
+  }
+
+  markFailed(input: IdempotencyAttemptInput): Promise<void> {
+    const key = `${input.organizationId}:${input.operation}:${input.idempotencyKey}`;
+    const existing = this.records.get(key);
+    if (
+      existing?.state === 'pending' &&
+      existing.requestId === input.requestId
+    ) {
+      existing.state = 'failed';
+    }
+    return Promise.resolve();
+  }
+
+  delete(input: IdempotencyAttemptInput): Promise<void> {
+    const key = `${input.organizationId}:${input.operation}:${input.idempotencyKey}`;
+    const existing = this.records.get(key);
+    if (
+      existing?.state === 'pending' &&
+      existing.requestId === input.requestId
+    ) {
+      this.records.delete(key);
+    }
+    return Promise.resolve();
+  }
+
+  cleanupExpired(): Promise<number> {
+    return Promise.resolve(0);
+  }
+}
+
 // Auth and rate limiting are the same shared guards already exercised in
 // depth by writing-question.controller.spec.ts; this file focuses on what
 // is actually new — routing to a different operation and its own schema.
 describe('Task 2 questions HTTP flow', () => {
   let app: NestFastifyApplication;
   let mockAgent: MockAgent;
+  let downstreamCalls = 0;
   const originalEnv = {
     allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
     nodeEnv: process.env.NODE_ENV,
@@ -50,7 +141,10 @@ describe('Task 2 questions HTTP flow', () => {
         body: JSON.stringify({ topic: 'education', question_type: 'opinion' }),
         headers: { authorization: 'Bearer writing-token' },
       })
-      .reply(200, fixture('question-task2.response.json'))
+      .reply(200, () => {
+        downstreamCalls += 1;
+        return fixture('question-task2.response.json');
+      })
       .persist();
 
     const moduleRef = await Test.createTestingModule({
@@ -58,6 +152,8 @@ describe('Task 2 questions HTTP flow', () => {
     })
       .overrideProvider(DownstreamHttpClient)
       .useValue(new DownstreamHttpClient('https://ai-writing.test', mockAgent))
+      .overrideProvider(IDEMPOTENCY_REPOSITORY)
+      .useValue(new InMemoryIdempotencyRepository())
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -113,5 +209,45 @@ describe('Task 2 questions HTTP flow', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('replays a keyed Task 2 question without a second downstream call', async () => {
+    const headers = { 'idempotency-key': 'task2-question-replay' };
+    const payload = { topic: 'education', question_type: 'opinion' };
+    const before = downstreamCalls;
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task2/questions',
+      headers,
+      payload,
+    });
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task2/questions',
+      headers,
+      payload,
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(200);
+    expect(downstreamCalls - before).toBe(1);
+    expect(replay.headers['idempotent-replay']).toBe('true');
+    expect(replay.json().data).toEqual(first.json().data);
+    expect(replay.json().meta.timing.downstream_ms).toBe(0);
+  });
+
+  it('rejects an invalid supplied optional key before contacting Writing', async () => {
+    const before = downstreamCalls;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task2/questions',
+      headers: { 'idempotency-key': '   ' },
+      payload: { topic: 'education', question_type: 'opinion' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expect(downstreamCalls).toBe(before);
   });
 });

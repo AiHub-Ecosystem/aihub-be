@@ -1,7 +1,7 @@
 {
   "item": [
     {
-      "id": "131c448f-94c4-492e-a03e-4d3312595dde",
+      "id": "35509e20-fe79-4e34-82ad-ed4dd9dce69b",
       "name": "writing.task1.question.generate",
       "request": {
         "name": "writing.task1.question.generate",
@@ -17,6 +17,12 @@
             "disabled": false,
             "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
             "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "disabled": false,
+            "description": "Ignored. This operation never stores or replays an idempotency record.",
+            "key": "Idempotency-Key",
             "value": "<string>"
           },
           {
@@ -62,7 +68,7 @@
       }
     },
     {
-      "id": "2990d258-3e49-475c-8fa7-e04cc3df45ec",
+      "id": "1fae7505-9528-48cf-b869-bbf5357bbbb9",
       "name": "writing.task2.question.generate",
       "request": {
         "name": "writing.task2.question.generate",
@@ -129,7 +135,7 @@
       }
     },
     {
-      "id": "3de00f10-5ad7-454f-b548-cec166cd4281",
+      "id": "c527f300-fcf9-4d73-99e9-1167b6d2c490",
       "name": "writing.task1.grade",
       "request": {
         "name": "writing.task1.grade",
@@ -202,7 +208,7 @@
       }
     },
     {
-      "id": "f626fe24-342a-4668-8a42-57d63baf6e45",
+      "id": "4d69400a-08b6-4dd6-87f0-d0d1614c1541",
       "name": "writing.task2.grade",
       "request": {
         "name": "writing.task2.grade",
@@ -1017,6 +1023,182 @@
           ]
         }
       ]
+    },
+    {
+      "name": "Idempotency mode examples",
+      "item": [
+        {
+          "name": "Task 2 grading replays a completed result",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              },
+              {
+                "key": "X-User-Assertion",
+                "value": "{{userAssertion}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"With the rise of online learning platforms, some argue that traditional classroom education is becoming obsolete. To what extent do you agree or disagree?\",\n  \"topic\": \"education\",\n  \"essay\": \"The proliferation of online learning platforms has led some observers to claim that conventional classroom instruction is no longer relevant. While I acknowledge the considerable advantages of digital education, I disagree that it renders traditional teaching obsolete.\"\n}"
+            },
+            "url": "{{baseUrl}}/v1/writing/task2/grade",
+            "description": "Required idempotency: resend the same user-scoped grading request with one key and verify the stored result is replayed."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.meta.operation).to.eql('writing.task2.grade');",
+                  "  pm.expect(body.meta.service).to.eql('ai-writing');",
+                  "  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);",
+                  "});",
+                  "pm.sendRequest({",
+                  "  url: pm.request.url.toString(),",
+                  "  method: pm.request.method,",
+                  "  header: pm.request.headers.toJSON(),",
+                  "  body: { mode: 'raw', raw: pm.request.body.raw }",
+                  "}, function (error, response) {",
+                  "  pm.test('same key replays Task 2 grading', function () {",
+                  "    pm.expect(error).to.equal(null);",
+                  "    pm.expect(response.code).to.eql(200);",
+                  "    pm.expect(response.headers.get('Idempotent-Replay')).to.eql('true');",
+                  "    pm.expect(response.json().data).to.eql(pm.response.json().data);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Task 2 question optionally replays a completed result",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topic\": \"Technology\",\n  \"question_type\": \"opinion\"\n}"
+            },
+            "url": "{{baseUrl}}/v1/writing/task2/questions",
+            "description": "Optional idempotency: supplying a key enables replay safety for model-backed question generation."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.meta.operation).to.eql('writing.task2.question.generate');",
+                  "  pm.expect(body.meta.service).to.eql('ai-writing');",
+                  "  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);",
+                  "});",
+                  "pm.sendRequest({",
+                  "  url: pm.request.url.toString(),",
+                  "  method: pm.request.method,",
+                  "  header: pm.request.headers.toJSON(),",
+                  "  body: { mode: 'raw', raw: pm.request.body.raw }",
+                  "}, function (error, response) {",
+                  "  pm.test('same optional key replays Task 2 question', function () {",
+                  "    pm.expect(error).to.equal(null);",
+                  "    pm.expect(response.code).to.eql(200);",
+                  "    pm.expect(response.headers.get('Idempotent-Replay')).to.eql('true');",
+                  "    pm.expect(response.json().data).to.eql(pm.response.json().data);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Task 1 question ignores Idempotency-Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "   "
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chart_type\": \"Bar Chart\"\n}"
+            },
+            "url": "{{baseUrl}}/v1/writing/task1/questions",
+            "description": "None idempotency: even a malformed key is ignored and the operation does not emit a replay marker."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.meta.operation).to.eql('writing.task1.question.generate');",
+                  "  pm.expect(body.meta.service).to.eql('ai-writing');",
+                  "  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);",
+                  "});",
+                  "pm.sendRequest({",
+                  "  url: pm.request.url.toString(),",
+                  "  method: pm.request.method,",
+                  "  header: pm.request.headers.toJSON(),",
+                  "  body: { mode: 'raw', raw: pm.request.body.raw }",
+                  "}, function (error, response) {",
+                  "  pm.test('none mode does not replay or validate the key', function () {",
+                  "    pm.expect(error).to.equal(null);",
+                  "    pm.expect(response.code).to.eql(200);",
+                  "    pm.expect(response.headers.get('Idempotent-Replay')).to.be.null;",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "event": [],
@@ -1061,7 +1243,7 @@
     ]
   },
   "info": {
-    "_postman_id": "e3160599-4e96-4979-9496-f200e3250e3d",
+    "_postman_id": "4e9ac436-4832-4462-b295-d3d49b80a666",
     "name": "AIHUB Writing API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Generated by `pnpm generate:postman` from openapi.json — do not hand-edit. The \"D1 handover test cases\" folder is the D2 handover artifact required by docs/aihub_deliverable_1_api_contract_schema.md §G; it is not a CI regression suite.",

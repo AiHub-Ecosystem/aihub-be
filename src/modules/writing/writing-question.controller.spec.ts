@@ -47,6 +47,7 @@ function fixture(name: string): Record<string, unknown> {
 describe('Task 1 questions HTTP flow', () => {
   let app: NestFastifyApplication;
   let mockAgent: MockAgent;
+  let downstreamCalls = 0;
   let rateLimitAllowed = true;
   let authenticatedScopes = ['writing.question.generate'];
   const originalEnv = {
@@ -72,7 +73,10 @@ describe('Task 1 questions HTTP flow', () => {
         body: JSON.stringify({ topic: 'Bar Chart' }),
         headers: { authorization: 'Bearer writing-token' },
       })
-      .reply(200, fixture('question-task1.response.json'))
+      .reply(200, () => {
+        downstreamCalls += 1;
+        return fixture('question-task1.response.json');
+      })
       .persist();
 
     const authenticator: ApiKeyAuthenticatorPort = {
@@ -190,6 +194,28 @@ describe('Task 1 questions HTTP flow', () => {
         request_id: expect.stringMatching(/^req_[0-9A-HJKMNP-TV-Z]{26}$/),
       },
     });
+  });
+
+  it('ignores malformed Idempotency-Key values for the non-idempotent operation', async () => {
+    const before = downstreamCalls;
+    const payload = { chart_type: 'Bar Chart' };
+    const first = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task1/questions',
+      headers: { 'idempotency-key': '   ' },
+      payload,
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task1/questions',
+      headers: { 'idempotency-key': '   ' },
+      payload,
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(second.headers['idempotent-replay']).toBeUndefined();
+    expect(downstreamCalls - before).toBe(2);
   });
 
   it('validates a supplied API key and uses its organization identity', async () => {
