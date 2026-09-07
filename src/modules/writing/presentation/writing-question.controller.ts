@@ -9,7 +9,6 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { Value } from '@sinclair/typebox/value';
-import type { FastifyRequest } from 'fastify';
 
 import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import { AppError } from '../../../common/errors/app-error';
@@ -25,7 +24,13 @@ import {
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
 } from '../../gateway/application/operation-dispatcher.port';
-import { DevelopmentOnlyGuard } from './development-only.guard';
+import { ApiKeyGuard } from '../../identity/presentation/api-key.guard';
+import {
+  type AuthenticatedRequest,
+  getAuthenticatedApiKey,
+} from '../../identity/presentation/authenticated-request';
+import { RequireOperation } from '../../identity/presentation/require-operation.decorator';
+import { RateLimitGuard } from './rate-limit.guard';
 
 const OPERATION = 'writing.task1.question.generate' as const;
 const MAX_BODY_BYTES = OPERATION_CATALOG[OPERATION].maxBodyBytes;
@@ -71,7 +76,7 @@ function parseBody(body: unknown): Task1QuestionRequest {
 }
 
 @Controller()
-@UseGuards(DevelopmentOnlyGuard)
+@UseGuards(ApiKeyGuard, RateLimitGuard)
 @UseInterceptors(SuccessEnvelopeInterceptor)
 export class WritingQuestionController {
   constructor(
@@ -81,18 +86,20 @@ export class WritingQuestionController {
 
   @Post(OPERATION_CATALOG[OPERATION].path)
   @HttpCode(200)
+  @RequireOperation(OPERATION)
   async generateTask1Question(
-    @Req() request: FastifyRequest,
+    @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
   ): Promise<DispatchResult<Task1QuestionResponse>> {
     const input = parseBody(body);
+    const authenticated = getAuthenticatedApiKey(request);
     const context = createRequestContext({
       requestId: String(request.id),
       receivedAt: new Date(),
       deadlineMs: OPERATION_CATALOG[OPERATION].timeoutMs,
-      organizationId: 'local-development',
-      apiKeyId: 'local-development',
-      scopes: [OPERATION_CATALOG[OPERATION].requiredScope],
+      organizationId: authenticated.organizationId,
+      apiKeyId: authenticated.apiKeyId,
+      scopes: authenticated.scopes,
     });
 
     return this.dispatcher.dispatch(OPERATION, input, context);

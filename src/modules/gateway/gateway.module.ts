@@ -3,9 +3,11 @@ import { Module } from '@nestjs/common';
 import { task1QuestionAdapter } from '../../downstream/writing/task1-question.adapter';
 import { INTERNAL_TOKEN_ISSUER } from './application/internal-token-issuer.port';
 import { OPERATION_DISPATCHER } from './application/operation-dispatcher.port';
+import { RATE_LIMITER } from './application/rate-limiter.port';
 import { ConfiguredTokenIssuer } from './infrastructure/configured-token-issuer';
 import { DownstreamHttpClient } from './infrastructure/downstream-http.client';
 import { HttpOperationDispatcher } from './infrastructure/http-operation-dispatcher';
+import { RedisRateLimiter } from './infrastructure/redis-rate-limiter';
 
 @Module({
   providers: [
@@ -22,6 +24,11 @@ import { HttpOperationDispatcher } from './infrastructure/http-operation-dispatc
         ),
     },
     {
+      provide: RATE_LIMITER,
+      useFactory: (): RedisRateLimiter =>
+        new RedisRateLimiter(process.env.REDIS_URL ?? ''),
+    },
+    {
       provide: OPERATION_DISPATCHER,
       useFactory: (
         httpClient: DownstreamHttpClient,
@@ -35,6 +42,6 @@ import { HttpOperationDispatcher } from './infrastructure/http-operation-dispatc
       inject: [DownstreamHttpClient, INTERNAL_TOKEN_ISSUER],
     },
   ],
-  exports: [OPERATION_DISPATCHER, DownstreamHttpClient],
+  exports: [OPERATION_DISPATCHER, DownstreamHttpClient, RATE_LIMITER],
 })
 export class GatewayModule {}

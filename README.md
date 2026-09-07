@@ -9,7 +9,21 @@ pnpm install
 pnpm dev
 ```
 
-The bootstrap health route is `GET http://localhost:3000/v1/health` and does not require Postgres, Redis, or a downstream AI service.
+The bootstrap health route is `GET http://localhost:3000/health`. The Writing
+question route requires a real API key when `AIHUB_ALLOW_UNAUTHENTICATED_DEV`
+is not enabled.
+
+For a local authenticated run, copy `.env.example` to `.env`, start PostgreSQL
+and Redis, then apply the control-plane migration:
+
+```text
+pnpm migrate
+pnpm cli org:create --name "Acme Edu" --entitlements writing
+pnpm cli key:create --org org_... --name "Local backend" --scopes writing.question.generate --envs development
+```
+
+The key command prints the raw API key once. Store it outside the repository
+and send it as `X-API-Key`.
 
 ## Verification
 

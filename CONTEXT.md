@@ -27,6 +27,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 ## Current scope and blockers
 
 - Current scope: one NestJS/Fastify app and the Writing vertical slice.
+- Implemented: `POST /v1/writing/task1/questions` now validates the public request, authenticates API keys against Postgres, uses Redis for credential caching and rate limiting, dispatches through the typed Writing adapter, and returns the `{ data, meta }` envelope. Local Postgres/Redis E2E verification passed on 2026-09-07.
 - Deferred: Speaking, Reading, object storage, async jobs, billing, dynamic routing, Kubernetes, and a dedicated proxy.
 - No blockers. Both earlier ones were resolved on 2026-09-07.
 - Resolved: the Writing grading response contract. All four priority endpoints were called against the live service; captured responses are committed under `test/fixtures/ai-writing/` and the shared grading parser is implemented and tested. Catalog response contracts are real schemas, not `unresolved`.

@@ -9,10 +9,33 @@ import { Test } from '@nestjs/testing';
 import { MockAgent } from 'undici';
 
 import { AppModule } from '../../app.module';
+import { AppError } from '../../common/errors/app-error';
 import { generateRequestId } from '../../common/request-context/request-id';
+import {
+  RATE_LIMITER,
+  type RateLimiterPort,
+} from '../gateway/application/rate-limiter.port';
 import { DownstreamHttpClient } from '../gateway/infrastructure/downstream-http.client';
+import {
+  API_KEY_AUTHENTICATOR,
+  type ApiKeyAuthenticatorPort,
+  type ApiKeyCredential,
+  type AuthenticatedApiKey,
+} from '../identity/application/api-key-authenticator.port';
 
 const FIXTURES = join(__dirname, '../../../test/fixtures/ai-writing');
+const VALID_API_KEY = `aihub_sk_${'B'.repeat(43)}`;
+
+const authenticatedApiKey: AuthenticatedApiKey = {
+  organizationId: 'org_acme',
+  apiKeyId: 'ak_backend',
+  environment: 'production',
+  scopes: ['writing.question.generate'],
+  rateLimitRpm: 600,
+  maxConcurrent: 20,
+  monthlyRequestQuota: null,
+  hardStopOnQuota: false,
+};
 
 function fixture(name: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(FIXTURES, name), 'utf8')) as Record<
@@ -24,6 +47,8 @@ function fixture(name: string): Record<string, unknown> {
 describe('Task 1 questions HTTP flow', () => {
   let app: NestFastifyApplication;
   let mockAgent: MockAgent;
+  let rateLimitAllowed = true;
+  let authenticatedScopes = ['writing.question.generate'];
   const originalEnv = {
     allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
     nodeEnv: process.env.NODE_ENV,
@@ -47,13 +72,42 @@ describe('Task 1 questions HTTP flow', () => {
         body: JSON.stringify({ topic: 'Bar Chart' }),
         headers: { authorization: 'Bearer writing-token' },
       })
-      .reply(200, fixture('question-task1.response.json'));
+      .reply(200, fixture('question-task1.response.json'))
+      .persist();
+
+    const authenticator: ApiKeyAuthenticatorPort = {
+      authenticate: async (credentials: ApiKeyCredential) => {
+        if (credentials.value !== VALID_API_KEY) {
+          throw new AppError({
+            code: 'UNAUTHORIZED',
+            message: 'Authentication is required',
+            httpStatus: 401,
+            retryable: false,
+          });
+        }
+        return {
+          ...authenticatedApiKey,
+          environment: credentials.environment,
+          scopes: authenticatedScopes,
+        };
+      },
+    };
+    const limiter: RateLimiterPort = {
+      consume: async () =>
+        rateLimitAllowed
+          ? { allowed: true }
+          : { allowed: false, retryAfterMs: 12_345 },
+    };
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideProvider(DownstreamHttpClient)
       .useValue(new DownstreamHttpClient('https://ai-writing.test', mockAgent))
+      .overrideProvider(API_KEY_AUTHENTICATOR)
+      .useValue(authenticator)
+      .overrideProvider(RATE_LIMITER)
+      .useValue(limiter)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -138,12 +192,100 @@ describe('Task 1 questions HTTP flow', () => {
     });
   });
 
+  it('validates a supplied API key and uses its organization identity', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task1/questions',
+      headers: {
+        host: 'api.aihub.example.com',
+        'x-api-key': VALID_API_KEY,
+      },
+      payload: { chart_type: 'Bar Chart' },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  it('does not bypass a malformed API key even in local development', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task1/questions',
+      headers: { 'x-api-key': 'not-a-key' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('enforces the authenticated key rate limit before dispatch', async () => {
+    rateLimitAllowed = false;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task1/questions',
+      headers: {
+        host: 'api.aihub.example.com',
+        'x-api-key': VALID_API_KEY,
+      },
+      payload: { chart_type: 'Bar Chart' },
+    });
+
+    expect(response.statusCode).toBe(429);
+    expect(response.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Rate limit exceeded',
+        request_id: expect.stringMatching(/^req_[0-9A-HJKMNP-TV-Z]{26}$/),
+        details: { retry_after_ms: 12_345 },
+      },
+    });
+
+    rateLimitAllowed = true;
+  });
+
+  it('rejects an authenticated key without the required operation scope', async () => {
+    authenticatedScopes = [];
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task1/questions',
+      headers: {
+        host: 'api.aihub.example.com',
+        'x-api-key': VALID_API_KEY,
+      },
+      payload: { chart_type: 'Bar Chart' },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.code).toBe('FORBIDDEN');
+
+    authenticatedScopes = ['writing.question.generate'];
+  });
+
   it('does not allow the development auth bypass in production', async () => {
     process.env.NODE_ENV = 'production';
 
     const response = await app.inject({
       method: 'POST',
       url: '/v1/writing/task1/questions',
+      headers: { host: 'api.aihub.example.com' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.code).toBe('UNAUTHORIZED');
+
+    process.env.NODE_ENV = 'test';
+  });
+
+  it('does not bypass a production hostname even when the process is in development mode', async () => {
+    process.env.NODE_ENV = 'development';
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task1/questions',
+      headers: { host: 'api.aihub.example.com' },
       payload: {},
     });
 
