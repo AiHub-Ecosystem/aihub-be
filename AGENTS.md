@@ -18,7 +18,7 @@ This is a single-context repo. See `docs/agents/domain.md`.
 
 Read the smallest relevant source before changing code:
 
-1. `AIHUB_Deliverable_1_API_Contract_Schema.md` for public API behavior.
+1. `docs/aihub_deliverable_1_api_contract_schema.md` for public API behavior.
 2. `docs/superpowers/specs/2026-09-07-aihub/01-context-and-stack.md` through `11-open-questions.md` for runtime decisions.
 3. `CONTEXT.md` for the short glossary and current blockers.
 4. `.claude/rules/` for path-scoped implementation constraints.

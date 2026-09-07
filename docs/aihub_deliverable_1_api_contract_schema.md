@@ -546,7 +546,7 @@ Client gửi URL, và **AI Writing** là bên đi fetch ảnh đó. Nghĩa là b
 
 ### Speaking (Phase 4)
 
-Theo default đã chốt ở `AIHUB_Long_Term_Architecture.md` §32.6: presigned upload + `asset_id` là đường chính, `multipart/form-data` chỉ dùng cho file nhỏ (gợi ý ≤ 10 MB). Max size và danh sách MIME cụ thể chốt khi làm Phase 4 — chưa cần cho D1 vì envelope async đã cố định (§12).
+Theo default đã chốt ở `aihub_long_term_architecture.md` §32.6: presigned upload + `asset_id` là đường chính, `multipart/form-data` chỉ dùng cho file nhỏ (gợi ý ≤ 10 MB). Max size và danh sách MIME cụ thể chốt khi làm Phase 4 — chưa cần cho D1 vì envelope async đã cố định (§12).
 
 ---
 
@@ -730,7 +730,7 @@ Omit `usage` là chưa đủ, vì có hai lý do rất khác nhau dẫn tới c�
 
 Trường này là **internal**, không expose ra public response. Nó là thứ quyết định sau này có được phép tính tiền theo token hay không: chừng nào `missing_usage` còn khác 0 thì mô hình token chưa dùng được.
 
-Xử lý runtime theo default đã chốt ở `AIHUB_Long_Term_Architecture.md` §32.8: **không fail business response** chỉ vì thiếu telemetry, nhưng phải alert và reconcile.
+Xử lý runtime theo default đã chốt ở `aihub_long_term_architecture.md` §32.8: **không fail business response** chỉ vì thiếu telemetry, nhưng phải alert và reconcile.
 
 ### [Khảo sát thực tế] Contract này là additive — không phá app hiện tại
 
@@ -842,7 +842,7 @@ AIHUB map `data` service-specific thành canonical public `data`, rồi bổ sun
 
 ### `meta.models[]` đã bị bỏ khỏi public response
 
-Bản D1 đầu tiên có `meta.models[]`. Điều này **mâu thuẫn với `AIHUB_Long_Term_Architecture.md` §32.7**, vốn chốt rằng public API chỉ expose aggregate usage còn chi tiết model giữ cho internal.
+Bản D1 đầu tiên có `meta.models[]`. Điều này **mâu thuẫn với `aihub_long_term_architecture.md` §32.7**, vốn chốt rằng public API chỉ expose aggregate usage còn chi tiết model giữ cho internal.
 
 Lý do giữ theo §32.7: mục tiêu của AIHUB là trừu tượng hoá AI Service và Model Provider. Cho khách thấy tên model cụ thể sẽ khiến public contract phụ thuộc vào implementation phía sau — đổi model hay đổi provider về sau thành breaking change, hoặc tệ hơn là khách bắt đầu viết logic dựa trên tên model.
 
@@ -1337,7 +1337,7 @@ Bản đầu dùng `idempotency_required: true/false`. Ba trạng thái mới ph
 
 ### `timeout_ms` không phải "thời gian dự kiến"
 
-`AIHUB_Long_Term_Architecture.md` §32.5 chốt ngưỡng sync/async ở **thời gian xử lý thường gặp ≤ 30 giây**. Chấm bài có `timeout_ms: 60000` nhưng đó là **trần**, không phải kỳ vọng — thực tế thường vài giây tới hơn chục giây, nên vẫn thuộc nhóm sync.
+`aihub_long_term_architecture.md` §32.5 chốt ngưỡng sync/async ở **thời gian xử lý thường gặp ≤ 30 giây**. Chấm bài có `timeout_ms: 60000` nhưng đó là **trần**, không phải kỳ vọng — thực tế thường vài giây tới hơn chục giây, nên vẫn thuộc nhóm sync.
 
 Nếu đo thực tế cho thấy p95 vượt 30 giây thì phải chuyển `writing.*.grade` sang async, và envelope ở §12 đã sẵn sàng cho việc đó.
 
@@ -1599,4 +1599,3 @@ Downstream       → gọi AI Service private, không gọi trực tiếp Model 
 ```
 
 D1 định nghĩa contract; D2/later mới chịu trách nhiệm runtime implementation.
-

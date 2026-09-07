@@ -67,7 +67,7 @@ Ba mẫu đã chấm đều ra band nguyên, và **cả 4 tiêu chí luôn bằn
 
 # Q. Những thay đổi cần đưa ngược vào D1
 
-Danh sách hành động cụ thể cho `AIHUB_Deliverable_1_API_Contract_Schema.md` trước khi freeze.
+Danh sách hành động cụ thể cho `../../../aihub_deliverable_1_api_contract_schema.md` trước khi freeze.
 
 | # | Thay đổi | Mục D1 bị ảnh hưởng |
 |---|---|---|

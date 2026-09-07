@@ -1,8 +1,8 @@
 # AIHUB — Architecture Design (nền tảng cho Deliverable 2)
 
 > **Trạng thái:** đã duyệt qua brainstorm ngày 2026-09-07.
-> **Trả lời cho:** `AIHUB_AI_Agent_Brainstorm_Brief.md` (cấu trúc output A–P ở §16 của brief).
-> **Không thay thế:** `AIHUB_Long_Term_Architecture.md` (kiến trúc đích) và `AIHUB_Deliverable_1_API_Contract_Schema.md` (contract). Đây là **implementation strategy** để đi từ D1 sang D2.
+> **Trả lời cho:** `../../../aihub_ai_agent_brainstorm_brief.md` (cấu trúc output A–P ở §16 của brief).
+> **Không thay thế:** `../../../aihub_long_term_architecture.md` (kiến trúc đích) và `../../../aihub_deliverable_1_api_contract_schema.md` (contract). Đây là **implementation strategy** để đi từ D1 sang D2.
 
 Scaffold status: [Clean Architecture and agent workflow design](12-agent-workflow-and-clean-architecture-design.md) is implemented in the initial NestJS/Fastify source scaffold.
 

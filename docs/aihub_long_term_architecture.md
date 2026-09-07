@@ -645,7 +645,7 @@ Adapter đổi tên `image_url` → `url` trước khi gọi downstream. Client 
 
 Task 2 dùng đúng schema đó **trừ `image_url`** — gửi kèm sẽ bị `400`.
 
-Schema đầy đủ và Data Dictionary: `AIHUB_Deliverable_1_API_Contract_Schema.md` §10 và §20.
+Schema đầy đủ và Data Dictionary: `aihub_deliverable_1_api_contract_schema.md` §10 và §20.
 
 ---
 
@@ -1006,7 +1006,7 @@ Không nên dùng cùng `429 RATE_LIMITED` cho hai tình huống khác nhau.
 | AI Service trả shape không parse được | 502 | `AI_SERVICE_CONTRACT_VIOLATION` |
 | JWKS của Organization không lấy được | 503 | `IDENTITY_PROVIDER_UNAVAILABLE` |
 
-Danh sách đầy đủ **18 mã cho v1**: `AIHUB_Deliverable_1_API_Contract_Schema.md` §25.
+Danh sách đầy đủ **18 mã cho v1**: `aihub_deliverable_1_api_contract_schema.md` §25.
 
 Hai mã cuối bảng đáng được tách riêng vì chúng dẫn tới hành động khác hẳn: `AI_SERVICE_CONTRACT_VIOLATION` nghĩa là **ai đó vừa deploy AI Service**, không phải sự cố hạ tầng — gộp vào `AI_SERVICE_ERROR` sẽ khiến đội trực đi tìm sai chỗ. `IDENTITY_PROVIDER_UNAVAILABLE` nghĩa là JWKS endpoint **của chính khách hàng** đang hỏng — trả `401` sẽ khiến họ đi tạo lại API key một cách vô ích.
 
@@ -1431,7 +1431,7 @@ Trusted Downstream Identity
 # 32. Open Decisions — đã chốt
 
 > **Trạng thái 2026-09-07: cả 10 quyết định đã chốt theo Recommended default.**
-> Toàn bộ đã được phản ánh vào `AIHUB_Deliverable_1_API_Contract_Schema.md` và vào architecture design ở
+> Toàn bộ đã được phản ánh vào `aihub_deliverable_1_api_contract_schema.md` và vào architecture design ở
 > [`docs/superpowers/specs/2026-09-07-aihub/`](docs/superpowers/specs/2026-09-07-aihub/README.md).
 > Giữ nguyên phần options bên dưới làm hồ sơ lý do — sau này muốn đổi thì đọc lại trade-off đã cân nhắc.
 
@@ -1809,4 +1809,3 @@ Nếu team không có ý kiến khác, áp dụng các default sau:
 | mTLS | Phase hardening sau hoặc khi có requirement cụ thể |
 
 > Khi một operation cần khác default, phải khai báo override rõ trong **Operation Catalog** thay vì để implementation tự suy đoán.
-

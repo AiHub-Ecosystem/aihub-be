@@ -33,7 +33,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 
 ## Canonical documents
 
-- [Contract](AIHUB_Deliverable_1_API_Contract_Schema.md)
+- [Contract](docs/aihub_deliverable_1_api_contract_schema.md)
 - [Spec index](docs/superpowers/specs/2026-09-07-aihub/README.md)
 - [Agent and architecture design](docs/superpowers/specs/2026-09-07-aihub/12-agent-workflow-and-clean-architecture-design.md)
 - [Matt issue workflow](docs/agents/issue-tracker.md)
