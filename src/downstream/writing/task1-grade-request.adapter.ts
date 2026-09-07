@@ -18,8 +18,9 @@ export const task1GradeRequestAdapter: DownstreamRequestAdapter<GradeTask1Reques
         path: '/grading-feedback-task1',
         body: {
           question: input.question,
+          // Downstream calls the chart type `topic` and the image `url`.
           url: input.image_url,
-          topic: input.topic,
+          topic: input.chart_type,
           essay: input.essay,
         },
         contentType: 'application/json',

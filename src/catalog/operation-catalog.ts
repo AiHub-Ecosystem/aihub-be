@@ -1,6 +1,7 @@
 import type { TSchema } from '@sinclair/typebox';
 
 import {
+  GradeResponseSchema,
   GradeTask1RequestSchema,
   GradeTask2RequestSchema,
   Task1QuestionRequestSchema,
@@ -74,7 +75,7 @@ export const OPERATION_CATALOG = {
     downstream: 'ai-writing',
     downstreamPath: '/grading-feedback-task1',
     requestSchema: GradeTask1RequestSchema,
-    responseContract: 'unresolved',
+    responseContract: GradeResponseSchema,
   },
   'writing.task2.grade': {
     method: 'POST',
@@ -89,6 +90,6 @@ export const OPERATION_CATALOG = {
     downstream: 'ai-writing',
     downstreamPath: '/grading-feedback-task2',
     requestSchema: GradeTask2RequestSchema,
-    responseContract: 'unresolved',
+    responseContract: GradeResponseSchema,
   },
 } as const satisfies Record<OperationId, OperationDef>;
