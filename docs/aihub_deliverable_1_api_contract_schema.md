@@ -5,6 +5,7 @@
 > **Nguồn requirement:** Project Scope Statement / Deliverable 1 của team.
 >
 > **Quy ước:**
+>
 > - **[Requirement]**: bám theo tài liệu Deliverable 1 của team.
 > - **[Team Design Decision]**: quyết định thiết kế bổ sung đã thống nhất qua trao đổi của team.
 > - **[Implementation Proposal]**: đề xuất kỹ thuật để hiện thực requirement; không phải wording gốc của Deliverable 1.
@@ -38,19 +39,19 @@ D1 phải tạo ra contract đủ rõ để D2 build Core API Gateway / Reverse 
 
 Đây là boundary cần rõ để tránh D1 bị scope creep.
 
-| Nội dung | D1 — Define Contract | D2+ — Implement Runtime |
-|---|---:|---:|
-| Base URL / versioning / naming | ✓ | sử dụng |
-| API key header format | ✓ | middleware + DB lookup |
-| Organization/API key schema | ✓ | persistence/runtime |
-| Request/response schemas | ✓ | validation/serialization |
-| End-user assertion contract | ✓ nếu capability cần | verification middleware |
-| Provider/Downstream mapping rules | ✓ | adapter + dispatcher |
-| Unified error catalog | ✓ | exception/error mapper |
-| Timing/usage metadata contract | ✓ | timers + metering |
-| Internal AI Service response contract | ✓ | downstream implementation |
-| Rate limit/quota algorithm | có thể reserve contract | implementation sau |
-| Internal JWT AIHUB → AI Service | kiến trúc dài hạn | implementation phase sau |
+| Nội dung                              |    D1 — Define Contract |   D2+ — Implement Runtime |
+| ------------------------------------- | ----------------------: | ------------------------: |
+| Base URL / versioning / naming        |                       ✓ |                   sử dụng |
+| API key header format                 |                       ✓ |    middleware + DB lookup |
+| Organization/API key schema           |                       ✓ |       persistence/runtime |
+| Request/response schemas              |                       ✓ |  validation/serialization |
+| End-user assertion contract           |    ✓ nếu capability cần |   verification middleware |
+| Provider/Downstream mapping rules     |                       ✓ |      adapter + dispatcher |
+| Unified error catalog                 |                       ✓ |    exception/error mapper |
+| Timing/usage metadata contract        |                       ✓ |         timers + metering |
+| Internal AI Service response contract |                       ✓ | downstream implementation |
+| Rate limit/quota algorithm            | có thể reserve contract |        implementation sau |
+| Internal JWT AIHUB → AI Service       |       kiến trúc dài hạn |  implementation phase sau |
 
 > **Team Design Decision:** API key nên được **định nghĩa ngay trong D1** để public contract ổn định, nhưng không có nghĩa D1 phải hoàn thiện toàn bộ auth/billing runtime.
 
@@ -62,12 +63,12 @@ Từ **Provider** trong Deliverable 1 dễ gây hiểu nhầm.
 
 Trong tài liệu này:
 
-| Term | Ý nghĩa |
-|---|---|
-| **AI Service** | AI Writing / AI Speaking / AI Reading phía sau AIHUB |
-| **Model Provider** | OpenAI / Anthropic / Google / ... mà AI Service có thể gọi |
+| Term                      | Ý nghĩa                                                                                              |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **AI Service**            | AI Writing / AI Speaking / AI Reading phía sau AIHUB                                                 |
+| **Model Provider**        | OpenAI / Anthropic / Google / ... mà AI Service có thể gọi                                           |
 | **Provider Mapper Rules** | Requirement name của team; về kỹ thuật nên hiểu là **Downstream AI Service Adapter / Mapping Rules** |
-| **Canonical Contract** | Public contract thống nhất của AIHUB |
+| **Canonical Contract**    | Public contract thống nhất của AIHUB                                                                 |
 
 > Không dùng `provider` để vừa chỉ AI Writing vừa chỉ OpenAI trong cùng một schema.
 
@@ -160,11 +161,11 @@ Không bắt client tự gửi ba header độc lập rồi AIHUB tin trực ti�
 
 Thay vào đó:
 
-| Requirement | AIHUB lấy từ đâu? |
-|---|---|
-| Organization | **Organization API Key** |
-| Service / Capability | **Endpoint/path** |
-| Environment | **Deployment hostname** |
+| Requirement          | AIHUB lấy từ đâu?        |
+| -------------------- | ------------------------ |
+| Organization         | **Organization API Key** |
+| Service / Capability | **Endpoint/path**        |
+| Environment          | **Deployment hostname**  |
 
 Flow:
 
@@ -311,7 +312,7 @@ AIHUB phải kiểm tra, theo đúng thứ tự này (rẻ trước, crypto sau 
 
 Ba ràng buộc dưới đây là **bổ sung so với bản D1 đầu tiên**, mỗi cái chặn một lớp tấn công cụ thể:
 
-**Bước 1 — chặn alg confusion.** Đây là lỗ JWT kinh điển: token khai `alg: HS256`, thư viện lấy public key RSA làm HMAC secret — mà public key thì ai cũng lấy được → giả token thoải mái. Chỉ chấp nhận `alg` nằm trong allowlist *của chính org đó*, và loại khoá phải khớp thuật toán.
+**Bước 1 — chặn alg confusion.** Đây là lỗ JWT kinh điển: token khai `alg: HS256`, thư viện lấy public key RSA làm HMAC secret — mà public key thì ai cũng lấy được → giả token thoải mái. Chỉ chấp nhận `alg` nằm trong allowlist _của chính org đó_, và loại khoá phải khớp thuật toán.
 
 **Bước 3 — chặn cross-tenant.** API key nói org A nhưng assertion khai `iss` của org B → `403`. Kèm theo đó, cột `issuer` trong `organization_identity_configs` phải **UNIQUE toàn hệ thống**, nếu không org B có thể đăng ký trùng `iss` của org A ngay từ đầu rồi tự ký assertion mạo danh học viên của A.
 
@@ -404,13 +405,13 @@ Dưới đây là schema thật.
 }
 ```
 
-| Field | Type | Required | Constraints | Description |
-|---|---|---:|---|---|
-| `question` | string | yes | 1..2000 chars | Đề bài |
-| `chart_type` | enum | yes | 7 giá trị, xem bên dưới | Loại biểu đồ của đề |
-| `essay` | string | yes | 1..20000 chars | Bài làm của học viên |
-| `image_url` | string | yes | URI, ≤2000 chars | Ảnh biểu đồ/bảng của đề |
-| `language` | enum | no | `vi` (mặc định) | Ngôn ngữ của feedback |
+| Field        | Type   | Required | Constraints             | Description             |
+| ------------ | ------ | -------: | ----------------------- | ----------------------- |
+| `question`   | string |      yes | 1..2000 chars           | Đề bài                  |
+| `chart_type` | enum   |      yes | 7 giá trị, xem bên dưới | Loại biểu đồ của đề     |
+| `essay`      | string |      yes | 1..20000 chars          | Bài làm của học viên    |
+| `image_url`  | string |      yes | URI, ≤2000 chars        | Ảnh biểu đồ/bảng của đề |
+| `language`   | enum   |       no | `vi` (mặc định)         | Ngôn ngữ của feedback   |
 
 ### `chart_type` — 7 giá trị, CASE-SENSITIVE
 
@@ -435,12 +436,12 @@ Map            Process Diagram Multiple Graphs
 }
 ```
 
-| Field | Type | Required | Constraints | Description |
-|---|---|---:|---|---|
-| `question` | string | yes | 1..2000 chars | Đề bài |
-| `topic` | string | yes | 1..200 chars | Chủ đề thật, ví dụ `education` |
-| `essay` | string | yes | 1..20000 chars | Bài làm của học viên |
-| `language` | enum | no | `vi` (mặc định) | Ngôn ngữ của feedback |
+| Field      | Type   | Required | Constraints     | Description                    |
+| ---------- | ------ | -------: | --------------- | ------------------------------ |
+| `question` | string |      yes | 1..2000 chars   | Đề bài                         |
+| `topic`    | string |      yes | 1..200 chars    | Chủ đề thật, ví dụ `education` |
+| `essay`    | string |      yes | 1..20000 chars  | Bài làm của học viên           |
+| `language` | enum   |       no | `vi` (mặc định) | Ngôn ngữ của feedback          |
 
 > Task 2 **không nhận** `image_url` và **không nhận** `chart_type`. Gửi kèm sẽ bị `400 INVALID_REQUEST`.
 >
@@ -460,9 +461,9 @@ Response luôn echo `language` để client biết feedback đang ở ngôn ng�
 { "chart_type": "Bar Chart" }
 ```
 
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `chart_type` | enum | no | 7 giá trị ở trên; **bỏ trống = lấy ngẫu nhiên** |
+| Field        | Type | Required | Constraints                                     |
+| ------------ | ---- | -------: | ----------------------------------------------- |
+| `chart_type` | enum |       no | 7 giá trị ở trên; **bỏ trống = lấy ngẫu nhiên** |
 
 Bỏ trống là đường dùng phổ biến nhất và luôn thành công. Truyền giá trị ngoài enum sẽ bị AIHUB chặn ở `400` trước khi chạm downstream — nếu không, downstream trả `500` cho một lỗi lẽ ra là `404`.
 
@@ -472,10 +473,10 @@ Bỏ trống là đường dùng phổ biến nhất và luôn thành công. Tru
 { "topic": "technology", "question_type": "opinion" }
 ```
 
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `topic` | string | yes | 1..200 chars |
-| `question_type` | enum | yes | `opinion`, `discussion`, `problem_solution`, `advantages_disadvantages`, `two_part` |
+| Field           | Type   | Required | Constraints                                                                         |
+| --------------- | ------ | -------: | ----------------------------------------------------------------------------------- |
+| `topic`         | string |      yes | 1..200 chars                                                                        |
+| `question_type` | enum   |      yes | `opinion`, `discussion`, `problem_solution`, `advantages_disadvantages`, `two_part` |
 
 > **Cần chốt:** downstream hiện nhận `question_type` là string tự do. Enum trên là 5 dạng chuẩn của IELTS Task 2; phải lấy danh sách giá trị AI Writing thật sự chấp nhận trước khi siết thành enum, nếu không sẽ chặn nhầm request hợp lệ. Tạm thời có thể để string ở phase đầu rồi siết sau — **nới lỏng thì không breaking, siết chặt thì có**.
 
@@ -526,13 +527,13 @@ Không khuyến nghị base64 cho file lớn.
 
 ### Operation catalog cần có
 
-| Operation | Input mode | Max body | Allowed types |
-|---|---|---:|---|
-| `writing.task1.question.generate` | JSON | 8 KB | text |
-| `writing.task2.question.generate` | JSON | 8 KB | text |
-| `writing.task1.grade` | JSON | 256 KB | text + `image_url` |
-| `writing.task2.grade` | JSON | 256 KB | text |
-| `speaking.grade` | `asset_id` + presigned upload | 10 MB (multipart fallback) | `audio/*` |
+| Operation                         | Input mode                    |                   Max body | Allowed types      |
+| --------------------------------- | ----------------------------- | -------------------------: | ------------------ |
+| `writing.task1.question.generate` | JSON                          |                       8 KB | text               |
+| `writing.task2.question.generate` | JSON                          |                       8 KB | text               |
+| `writing.task1.grade`             | JSON                          |                     256 KB | text + `image_url` |
+| `writing.task2.grade`             | JSON                          |                     256 KB | text               |
+| `speaking.grade`                  | `asset_id` + presigned upload | 10 MB (multipart fallback) | `audio/*`          |
 
 Giới hạn body đặt **theo từng operation**, không đặt một mức chung — sinh đề chỉ cần vài KB, không có lý do gì cho phép nó nhận 256 KB.
 
@@ -721,12 +722,12 @@ Ví dụ cụ thể có thật: `/generate-question-task1` của AI Writing **đ
 
 Omit `usage` là chưa đủ, vì có hai lý do rất khác nhau dẫn tới cùng một kết quả. AIHUB phải ghi lại lý do:
 
-| Giá trị | Nghĩa |
-|---|---|
-| `complete` | AI Service trả usage đầy đủ |
-| `missing_usage` | Operation **có** gọi model nhưng AI Service quên trả usage → **vi phạm contract**, cần alert |
-| `not_applicable` | Operation không gọi model (vd sinh đề Task 1) → bình thường |
-| `quota_unverified` | Không kiểm được quota vào thời điểm đó (vd Redis sập), request vẫn cho qua |
+| Giá trị            | Nghĩa                                                                                        |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| `complete`         | AI Service trả usage đầy đủ                                                                  |
+| `missing_usage`    | Operation **có** gọi model nhưng AI Service quên trả usage → **vi phạm contract**, cần alert |
+| `not_applicable`   | Operation không gọi model (vd sinh đề Task 1) → bình thường                                  |
+| `quota_unverified` | Không kiểm được quota vào thời điểm đó (vd Redis sập), request vẫn cho qua                   |
 
 Trường này là **internal**, không expose ra public response. Nó là thứ quyết định sau này có được phép tính tiền theo token hay không: chừng nào `missing_usage` còn khác 0 thì mô hình token chưa dùng được.
 
@@ -742,9 +743,9 @@ Nhưng **thêm** field ở cấp cao nhất thì không phá gì — client cũ 
 // giữ nguyên mọi field đang có, CHỈ THÊM 3 field:
 {
   "...": "...",
-  "usage":   { "input_tokens": 820, "output_tokens": 310, "total_tokens": 1130 },
-  "models":  [{ "provider": "openai", "name": "gpt-4o-mini" }],
-  "metrics": { "ai_processing_ms": 790 }
+  "usage": { "input_tokens": 820, "output_tokens": 310, "total_tokens": 1130 },
+  "models": [{ "provider": "openai", "name": "gpt-4o-mini" }],
+  "metrics": { "ai_processing_ms": 790 },
 }
 ```
 
@@ -779,15 +780,36 @@ AIHUB map `data` service-specific thành canonical public `data`, rồi bổ sun
         "band": 7,
         "band_reason": "'Covers requirements' — Bài viết đáp ứng yêu cầu đề, có overview rõ...",
         "strengths": ["Overview rõ ràng, nêu đúng 2 xu hướng chính..."],
-        "improvements": ["Đề cập sai dữ liệu ở chi tiết 'a more than twentyfold increase'"]
+        "improvements": [
+          "Đề cập sai dữ liệu ở chi tiết 'a more than twentyfold increase'"
+        ]
       },
-      { "id": "coherence_cohesion",         "name": "Coherence and Cohesion",         "band": 7, "...": "..." },
-      { "id": "lexical_resource",           "name": "Lexical Resource",               "band": 7, "...": "..." },
-      { "id": "grammatical_range_accuracy", "name": "Grammatical Range and Accuracy", "band": 7, "...": "..." }
+      {
+        "id": "coherence_cohesion",
+        "name": "Coherence and Cohesion",
+        "band": 7,
+        "...": "..."
+      },
+      {
+        "id": "lexical_resource",
+        "name": "Lexical Resource",
+        "band": 7,
+        "...": "..."
+      },
+      {
+        "id": "grammatical_range_accuracy",
+        "name": "Grammatical Range and Accuracy",
+        "band": 7,
+        "...": "..."
+      }
     ],
     "summary": "Bài viết đạt mức tốt và rất ổn định ở cả bốn tiêu chí...",
-    "suggestions": ["Tiếp tục giữ cách viết overview ngắn gọn nhưng bao quát 2 xu hướng chính..."],
-    "next_steps": ["Luyện thêm 5–10 bài biểu đồ cột/đường có 3 nhóm dữ liệu..."],
+    "suggestions": [
+      "Tiếp tục giữ cách viết overview ngắn gọn nhưng bao quát 2 xu hướng chính..."
+    ],
+    "next_steps": [
+      "Luyện thêm 5–10 bài biểu đồ cột/đường có 3 nhóm dữ liệu..."
+    ],
     "annotations": [
       {
         "criterion": "task_achievement",
@@ -834,11 +856,11 @@ AIHUB map `data` service-specific thành canonical public `data`, rồi bổ sun
 
 ### Ba thứ có ở downstream nhưng KHÔNG ra public
 
-| Bỏ | Vì sao |
-|---|---|
-| `data.coT` | Chain-of-thought nội bộ (`layer1_errors`, `layer2_matching`, `layer3_calibration`). Lộ prompt engineering và gợi ý cho người dò prompt |
-| `evaluation.*.feedback_detail` | Chỉ là bản làm phẳng của `data_micro` thành chuỗi. `annotations` giữ bản có cấu trúc |
-| `data_micro.*.*.question_type` | Task 1 trả `bar_chart`, Task 2 trả `education` — hai nghĩa khác nhau cùng một tên |
+| Bỏ                             | Vì sao                                                                                                                                 |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `data.coT`                     | Chain-of-thought nội bộ (`layer1_errors`, `layer2_matching`, `layer3_calibration`). Lộ prompt engineering và gợi ý cho người dò prompt |
+| `evaluation.*.feedback_detail` | Chỉ là bản làm phẳng của `data_micro` thành chuỗi. `annotations` giữ bản có cấu trúc                                                   |
+| `data_micro.*.*.question_type` | Task 1 trả `bar_chart`, Task 2 trả `education` — hai nghĩa khác nhau cùng một tên                                                      |
 
 ### `meta.models[]` đã bị bỏ khỏi public response
 
@@ -850,18 +872,18 @@ Lý do giữ theo §32.7: mục tiêu của AIHUB là trừu tượng hoá AI Se
 
 ## Source-of-truth matrix
 
-| Field | Source of truth |
-|---|---|
-| `meta.request_id` | AIHUB |
-| `meta.correlation_id` | Client-supplied, AIHUB preserves |
-| `meta.service` / `operation` | AIHUB |
-| `meta.timing.total_ms` | AIHUB |
-| `meta.timing.downstream_ms` | AIHUB |
-| `meta.timing.gateway_overhead_ms` | AIHUB derived |
-| `meta.timing.ai_processing_ms` | AI Service |
-| `meta.usage.*` | AI Service / underlying Model Provider |
-| `models[]` | AI Service — **internal only**, không có trong public response |
-| `metering_status` | AIHUB — internal only |
+| Field                             | Source of truth                                                |
+| --------------------------------- | -------------------------------------------------------------- |
+| `meta.request_id`                 | AIHUB                                                          |
+| `meta.correlation_id`             | Client-supplied, AIHUB preserves                               |
+| `meta.service` / `operation`      | AIHUB                                                          |
+| `meta.timing.total_ms`            | AIHUB                                                          |
+| `meta.timing.downstream_ms`       | AIHUB                                                          |
+| `meta.timing.gateway_overhead_ms` | AIHUB derived                                                  |
+| `meta.timing.ai_processing_ms`    | AI Service                                                     |
+| `meta.usage.*`                    | AI Service / underlying Model Provider                         |
+| `models[]`                        | AI Service — **internal only**, không có trong public response |
+| `metering_status`                 | AIHUB — internal only                                          |
 
 ---
 
@@ -936,14 +958,14 @@ AIHUB map dịch vụ client cần với scope hệ thống và AI Provider.
 
 ## [Implementation Proposal]
 
-| Public Endpoint | Operation | Required Scope | AI Service | Downstream path |
-|---|---|---|---|---|
-| `POST /v1/writing/task1/questions` | `writing.task1.question.generate` | `writing.question.generate` | AI Writing | `/generate-question-task1` |
-| `POST /v1/writing/task2/questions` | `writing.task2.question.generate` | `writing.question.generate` | AI Writing | `/question-generated-task2` |
-| `POST /v1/writing/task1/grade` | `writing.task1.grade` | `writing.grade` | AI Writing | `/grading-feedback-task1` |
-| `POST /v1/writing/task2/grade` | `writing.task2.grade` | `writing.grade` | AI Writing | `/grading-feedback-task2` |
-| `POST /v1/speaking/grade` | `speaking.grade` | `speaking.grade` | AI Speaking | *(Phase 4)* |
-| `POST /v1/reading/analyze` | `reading.analyze` | `reading.analyze` | AI Reading | *(chưa có)* |
+| Public Endpoint                    | Operation                         | Required Scope              | AI Service  | Downstream path             |
+| ---------------------------------- | --------------------------------- | --------------------------- | ----------- | --------------------------- |
+| `POST /v1/writing/task1/questions` | `writing.task1.question.generate` | `writing.question.generate` | AI Writing  | `/generate-question-task1`  |
+| `POST /v1/writing/task2/questions` | `writing.task2.question.generate` | `writing.question.generate` | AI Writing  | `/question-generated-task2` |
+| `POST /v1/writing/task1/grade`     | `writing.task1.grade`             | `writing.grade`             | AI Writing  | `/grading-feedback-task1`   |
+| `POST /v1/writing/task2/grade`     | `writing.task2.grade`             | `writing.grade`             | AI Writing  | `/grading-feedback-task2`   |
+| `POST /v1/speaking/grade`          | `speaking.grade`                  | `speaking.grade`            | AI Speaking | _(Phase 4)_                 |
+| `POST /v1/reading/analyze`         | `reading.analyze`                 | `reading.analyze`           | AI Reading  | _(chưa có)_                 |
 
 Hai task dùng chung scope (`writing.grade`, `writing.question.generate`) vì khách mua "chấm bài Writing" chứ không mua riêng từng task. Nếu sau này cần bán tách thì đổi thành `writing.task1.grade` / `writing.task2.grade` — operation đã tách sẵn nên việc đó không phá cấu trúc.
 
@@ -969,54 +991,54 @@ Mỗi request/response key phải có khái niệm, datatype, constraints và al
 
 ### Request — chấm bài
 
-| Field | Type | Required | Constraints | Description |
-|---|---|---:|---|---|
-| `question` | string | yes | 1..2000 chars | Đề bài |
-| `chart_type` | enum | **chỉ Task 1** | 7 giá trị, case-sensitive | Loại biểu đồ |
-| `topic` | string | **chỉ Task 2** | 1..200 chars | Chủ đề |
-| `essay` | string | yes | 1..20000 chars | Bài làm |
-| `image_url` | string | **chỉ Task 1** | URI, ≤2000 chars | Ảnh biểu đồ của đề |
-| `language` | enum | no | `vi` | Ngôn ngữ feedback |
+| Field        | Type   |       Required | Constraints               | Description        |
+| ------------ | ------ | -------------: | ------------------------- | ------------------ |
+| `question`   | string |            yes | 1..2000 chars             | Đề bài             |
+| `chart_type` | enum   | **chỉ Task 1** | 7 giá trị, case-sensitive | Loại biểu đồ       |
+| `topic`      | string | **chỉ Task 2** | 1..200 chars              | Chủ đề             |
+| `essay`      | string |            yes | 1..20000 chars            | Bài làm            |
+| `image_url`  | string | **chỉ Task 1** | URI, ≤2000 chars          | Ảnh biểu đồ của đề |
+| `language`   | enum   |             no | `vi`                      | Ngôn ngữ feedback  |
 
 ### Request — sinh đề
 
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `chart_type` | enum | **chỉ Task 1**, optional | 7 giá trị; bỏ trống = ngẫu nhiên |
-| `topic` | string | **chỉ Task 2**, yes | 1..200 chars |
-| `question_type` | enum | **chỉ Task 2**, yes | `opinion`, `discussion`, `problem_solution`, `advantages_disadvantages`, `two_part` |
+| Field           | Type   |                 Required | Constraints                                                                         |
+| --------------- | ------ | -----------------------: | ----------------------------------------------------------------------------------- |
+| `chart_type`    | enum   | **chỉ Task 1**, optional | 7 giá trị; bỏ trống = ngẫu nhiên                                                    |
+| `topic`         | string |      **chỉ Task 2**, yes | 1..200 chars                                                                        |
+| `question_type` | enum   |      **chỉ Task 2**, yes | `opinion`, `discussion`, `problem_solution`, `advantages_disadvantages`, `two_part` |
 
 ### Response — chấm bài
 
-| Field | Type | Required | Constraints | Description | Source |
-|---|---|---:|---|---|---|
-| `data.overall_band` | number | yes | 0..9, bội số 0.5 | Band tổng | AI Service |
-| `data.language` | enum | yes | `vi` | Ngôn ngữ của feedback | AIHUB |
-| `data.criteria[]` | array | yes | đúng 4 phần tử | 4 tiêu chí IELTS | AI Service → Adapter |
-| `data.criteria[].id` | enum | yes | xem bên dưới | Định danh tiêu chí | Adapter |
-| `data.criteria[].name` | string | yes | — | Tên hiển thị | Adapter |
-| `data.criteria[].band` | number | yes | 0..9, bội số 0.5 | Điểm tiêu chí | AI Service |
-| `data.criteria[].band_reason` | string | yes | — | Trích band descriptor + giải thích | AI Service |
-| `data.criteria[].strengths[]` | array | yes | có thể rỗng | Điểm mạnh | AI Service |
-| `data.criteria[].improvements[]` | array | yes | có thể rỗng | Điểm cần cải thiện | AI Service → Adapter lọc sentinel |
-| `data.summary` | string | yes | — | Nhận xét tổng | AI Service |
-| `data.suggestions[]` | array | yes | có thể rỗng | Gợi ý cụ thể | AI Service |
-| `data.next_steps[]` | array | yes | có thể rỗng | Việc nên luyện tiếp | AI Service |
-| `data.annotations[]` | array | yes | có thể rỗng | Bình luận theo đoạn trích | AI Service → Adapter |
-| `data.annotations[].criterion` | enum | yes | như `criteria[].id` | Thuộc tiêu chí nào | Adapter |
-| `data.annotations[].issue` | string | yes | — | Loại vấn đề, vd `inaccurate_data_support` | AI Service |
-| `data.annotations[].quote` | string | yes | — | Đoạn trích nguyên văn từ bài viết | AI Service |
-| `data.annotations[].explanation` | string | yes | — | Giải thích | AI Service |
-| `meta.request_id` | string | yes | ULID có prefix `req_` | AIHUB trace ID | AIHUB |
-| `meta.correlation_id` | string | no | — | Echo `X-Correlation-Id` | Client |
-| `meta.service` / `operation` | string | yes | — | Routing metadata | AIHUB |
-| `meta.timing.total_ms` | integer | yes | — | Ingress → egress | AIHUB |
-| `meta.timing.downstream_ms` | integer | yes nếu có downstream call | — | Thời lượng HTTP xuống AI Service | AIHUB |
-| `meta.timing.gateway_overhead_ms` | integer | yes | — | `total_ms - downstream_ms` | AIHUB derived |
-| `meta.timing.ai_processing_ms` | integer | no | — | AI Service tự đo | AI Service |
-| `meta.usage.input_tokens` | integer | no | — | Aggregate | AI Service |
-| `meta.usage.output_tokens` | integer | no | — | Aggregate | AI Service |
-| `meta.usage.total_tokens` | integer | no | — | Aggregate | AI Service |
+| Field                             | Type    |                   Required | Constraints           | Description                               | Source                            |
+| --------------------------------- | ------- | -------------------------: | --------------------- | ----------------------------------------- | --------------------------------- |
+| `data.overall_band`               | number  |                        yes | 0..9, bội số 0.5      | Band tổng                                 | AI Service                        |
+| `data.language`                   | enum    |                        yes | `vi`                  | Ngôn ngữ của feedback                     | AIHUB                             |
+| `data.criteria[]`                 | array   |                        yes | đúng 4 phần tử        | 4 tiêu chí IELTS                          | AI Service → Adapter              |
+| `data.criteria[].id`              | enum    |                        yes | xem bên dưới          | Định danh tiêu chí                        | Adapter                           |
+| `data.criteria[].name`            | string  |                        yes | —                     | Tên hiển thị                              | Adapter                           |
+| `data.criteria[].band`            | number  |                        yes | 0..9, bội số 0.5      | Điểm tiêu chí                             | AI Service                        |
+| `data.criteria[].band_reason`     | string  |                        yes | —                     | Trích band descriptor + giải thích        | AI Service                        |
+| `data.criteria[].strengths[]`     | array   |                        yes | có thể rỗng           | Điểm mạnh                                 | AI Service                        |
+| `data.criteria[].improvements[]`  | array   |                        yes | có thể rỗng           | Điểm cần cải thiện                        | AI Service → Adapter lọc sentinel |
+| `data.summary`                    | string  |                        yes | —                     | Nhận xét tổng                             | AI Service                        |
+| `data.suggestions[]`              | array   |                        yes | có thể rỗng           | Gợi ý cụ thể                              | AI Service                        |
+| `data.next_steps[]`               | array   |                        yes | có thể rỗng           | Việc nên luyện tiếp                       | AI Service                        |
+| `data.annotations[]`              | array   |                        yes | có thể rỗng           | Bình luận theo đoạn trích                 | AI Service → Adapter              |
+| `data.annotations[].criterion`    | enum    |                        yes | như `criteria[].id`   | Thuộc tiêu chí nào                        | Adapter                           |
+| `data.annotations[].issue`        | string  |                        yes | —                     | Loại vấn đề, vd `inaccurate_data_support` | AI Service                        |
+| `data.annotations[].quote`        | string  |                        yes | —                     | Đoạn trích nguyên văn từ bài viết         | AI Service                        |
+| `data.annotations[].explanation`  | string  |                        yes | —                     | Giải thích                                | AI Service                        |
+| `meta.request_id`                 | string  |                        yes | ULID có prefix `req_` | AIHUB trace ID                            | AIHUB                             |
+| `meta.correlation_id`             | string  |                         no | —                     | Echo `X-Correlation-Id`                   | Client                            |
+| `meta.service` / `operation`      | string  |                        yes | —                     | Routing metadata                          | AIHUB                             |
+| `meta.timing.total_ms`            | integer |                        yes | —                     | Ingress → egress                          | AIHUB                             |
+| `meta.timing.downstream_ms`       | integer | yes nếu có downstream call | —                     | Thời lượng HTTP xuống AI Service          | AIHUB                             |
+| `meta.timing.gateway_overhead_ms` | integer |                        yes | —                     | `total_ms - downstream_ms`                | AIHUB derived                     |
+| `meta.timing.ai_processing_ms`    | integer |                         no | —                     | AI Service tự đo                          | AI Service                        |
+| `meta.usage.input_tokens`         | integer |                         no | —                     | Aggregate                                 | AI Service                        |
+| `meta.usage.output_tokens`        | integer |                         no | —                     | Aggregate                                 | AI Service                        |
+| `meta.usage.total_tokens`         | integer |                         no | —                     | Aggregate                                 | AI Service                        |
 
 `criteria[].id` nhận một trong:
 
@@ -1032,14 +1054,14 @@ grammatical_range_accuracy
 
 ### Response — sinh đề
 
-| Field | Type | Required | Description |
-|---|---|---:|---|
-| `data.question` | string | yes | Đề bài sinh ra |
-| `data.question_id` | string | **chỉ Task 1** | UUID của đề trong ngân hàng đề |
-| `data.chart_type` | enum | **chỉ Task 1** | Loại biểu đồ |
-| `data.image_url` | string | **chỉ Task 1** | Ảnh biểu đồ đi kèm đề |
-| `data.topic` | string | **chỉ Task 2** | Chủ đề |
-| `data.question_type` | enum | **chỉ Task 2** | Dạng câu hỏi |
+| Field                | Type   |       Required | Description                    |
+| -------------------- | ------ | -------------: | ------------------------------ |
+| `data.question`      | string |            yes | Đề bài sinh ra                 |
+| `data.question_id`   | string | **chỉ Task 1** | UUID của đề trong ngân hàng đề |
+| `data.chart_type`    | enum   | **chỉ Task 1** | Loại biểu đồ                   |
+| `data.image_url`     | string | **chỉ Task 1** | Ảnh biểu đồ đi kèm đề          |
+| `data.topic`         | string | **chỉ Task 2** | Chủ đề                         |
+| `data.question_type` | enum   | **chỉ Task 2** | Dạng câu hỏi                   |
 
 `image_url` trả về ở đây chính là giá trị client gửi lại khi gọi chấm bài Task 1 — luồng khép kín: sinh đề → học viên viết → chấm bài.
 
@@ -1155,27 +1177,27 @@ Cần ma trận mapping lỗi giữa client/system/AI Provider, kèm nguyên nh�
 
 Danh sách chốt cho v1 gồm **18 mã**. Sáu mã đánh dấu ★ là bổ sung so với bản D1 đầu tiên.
 
-| Layer | Condition | HTTP | AIHUB Code | Retryable | Client Action | System Action |
-|---|---|---:|---|---:|---|---|
-| Client | Missing/invalid field, field lạ | 400 | `INVALID_REQUEST` | No | Fix request | None |
-| Client | Body vượt `max_body_bytes` | 413 | ★ `PAYLOAD_TOO_LARGE` | No | Giảm kích thước | Metric |
-| Client | Endpoint/resource không tồn tại | 404 | `NOT_FOUND` | No | Kiểm tra URL | None |
-| Auth | Missing/invalid API key | 401 | `UNAUTHORIZED` | No | Check credential | Audit |
-| Auth | Operation user-scoped nhưng thiếu assertion | 401 | ★ `USER_ASSERTION_REQUIRED` | No | Gửi kèm `X-User-Assertion` | Audit |
-| Auth | Assertion sai chữ ký/hết hạn/sai claim | 401 | `INVALID_USER_ASSERTION` | No | Tạo lại assertion | Audit |
-| Auth | Không lấy được JWKS của Organization | 503 | ★ `IDENTITY_PROVIDER_UNAVAILABLE` | Yes | Kiểm tra JWKS endpoint của mình | Alert |
-| AuthZ | Scope denied | 403 | `FORBIDDEN` | No | Check permission/plan | Audit |
-| AuthZ | Key không được dùng ở environment này | 403 | ★ `ENVIRONMENT_NOT_ALLOWED` | No | Dùng đúng key cho môi trường | Audit |
-| Idempotency | Same key, different payload — hoặc đang chạy | 409 | `IDEMPOTENCY_CONFLICT` | No | New key/fix request | Audit |
-| Gateway | Client exceeds AIHUB rate limit | 429 | `RATE_LIMITED` | Yes | Backoff; obey `Retry-After` | Metric |
-| Gateway | Quá nhiều request đồng thời của cùng org | 429 | ★ `CONCURRENCY_LIMIT` | Yes, sớm | Giảm song song, retry ~500ms | Metric |
-| Quota | Organization quota exhausted | 429 | `QUOTA_EXCEEDED` | Time-based | Wait/upgrade | Metering |
-| Downstream | AI Service/Model Provider throttled | 503 | `AI_SERVICE_THROTTLED` | Yes | Retry later | Backoff/circuit breaker |
-| Downstream | Timeout | 504 | `AI_SERVICE_TIMEOUT` | Yes* | Retry only idempotently | Timeout/circuit breaker |
-| Downstream | AI Service unavailable / breaker mở | 503 | `AI_SERVICE_UNAVAILABLE` | Yes | Retry later | Alert/health check |
-| Downstream | Response không parse được theo contract | 502 | ★ `AI_SERVICE_CONTRACT_VIOLATION` | No | Báo AIHUB | **Alert khẩn** |
-| Downstream | Other 5xx/invalid response | 502 | `AI_SERVICE_ERROR` | Maybe | Retry later | Alert/metrics |
-| AIHUB | Unexpected error | 500 | `INTERNAL_ERROR` | Maybe | Retry later | Alert |
+| Layer       | Condition                                    | HTTP | AIHUB Code                        |  Retryable | Client Action                   | System Action           |
+| ----------- | -------------------------------------------- | ---: | --------------------------------- | ---------: | ------------------------------- | ----------------------- |
+| Client      | Missing/invalid field, field lạ              |  400 | `INVALID_REQUEST`                 |         No | Fix request                     | None                    |
+| Client      | Body vượt `max_body_bytes`                   |  413 | ★ `PAYLOAD_TOO_LARGE`             |         No | Giảm kích thước                 | Metric                  |
+| Client      | Endpoint/resource không tồn tại              |  404 | `NOT_FOUND`                       |         No | Kiểm tra URL                    | None                    |
+| Auth        | Missing/invalid API key                      |  401 | `UNAUTHORIZED`                    |         No | Check credential                | Audit                   |
+| Auth        | Operation user-scoped nhưng thiếu assertion  |  401 | ★ `USER_ASSERTION_REQUIRED`       |         No | Gửi kèm `X-User-Assertion`      | Audit                   |
+| Auth        | Assertion sai chữ ký/hết hạn/sai claim       |  401 | `INVALID_USER_ASSERTION`          |         No | Tạo lại assertion               | Audit                   |
+| Auth        | Không lấy được JWKS của Organization         |  503 | ★ `IDENTITY_PROVIDER_UNAVAILABLE` |        Yes | Kiểm tra JWKS endpoint của mình | Alert                   |
+| AuthZ       | Scope denied                                 |  403 | `FORBIDDEN`                       |         No | Check permission/plan           | Audit                   |
+| AuthZ       | Key không được dùng ở environment này        |  403 | ★ `ENVIRONMENT_NOT_ALLOWED`       |         No | Dùng đúng key cho môi trường    | Audit                   |
+| Idempotency | Same key, different payload — hoặc đang chạy |  409 | `IDEMPOTENCY_CONFLICT`            |         No | New key/fix request             | Audit                   |
+| Gateway     | Client exceeds AIHUB rate limit              |  429 | `RATE_LIMITED`                    |        Yes | Backoff; obey `Retry-After`     | Metric                  |
+| Gateway     | Quá nhiều request đồng thời của cùng org     |  429 | ★ `CONCURRENCY_LIMIT`             |   Yes, sớm | Giảm song song, retry ~500ms    | Metric                  |
+| Quota       | Organization quota exhausted                 |  429 | `QUOTA_EXCEEDED`                  | Time-based | Wait/upgrade                    | Metering                |
+| Downstream  | AI Service/Model Provider throttled          |  503 | `AI_SERVICE_THROTTLED`            |        Yes | Retry later                     | Backoff/circuit breaker |
+| Downstream  | Timeout                                      |  504 | `AI_SERVICE_TIMEOUT`              |       Yes* | Retry only idempotently         | Timeout/circuit breaker |
+| Downstream  | AI Service unavailable / breaker mở          |  503 | `AI_SERVICE_UNAVAILABLE`          |        Yes | Retry later                     | Alert/health check      |
+| Downstream  | Response không parse được theo contract      |  502 | ★ `AI_SERVICE_CONTRACT_VIOLATION` |         No | Báo AIHUB                       | **Alert khẩn**          |
+| Downstream  | Other 5xx/invalid response                   |  502 | `AI_SERVICE_ERROR`                |      Maybe | Retry later                     | Alert/metrics           |
+| AIHUB       | Unexpected error                             |  500 | `INTERNAL_ERROR`                  |      Maybe | Retry later                     | Alert                   |
 
 `*` Timeout chỉ nên retry khi operation idempotent hoặc request có `Idempotency-Key` hợp lệ.
 
@@ -1246,13 +1268,13 @@ identity_scope: user
 execution: sync
 content_type: application/json
 idempotency: required
-max_body_bytes: 262144          # 256 KB
+max_body_bytes: 262144 # 256 KB
 timeout_ms: 60000
 downstream_service: ai-writing
 downstream_path: /grading-feedback-task1
 request_schema: GradeTask1Request
 response_schema: GradeResponse
-observed_latency: 18.3s          # đo thật 2026-09-07
+observed_latency: 18.3s # đo thật 2026-09-07
 ```
 
 ```yaml
@@ -1280,14 +1302,14 @@ scope: writing.question.generate
 identity_scope: organization
 execution: sync
 content_type: application/json
-idempotency: none               # đọc DB, không tốn tiền, lặp lại vô hại
+idempotency: none # đọc DB, không tốn tiền, lặp lại vô hại
 max_body_bytes: 8192
 timeout_ms: 10000
 downstream_service: ai-writing
 downstream_path: /generate-question-task1
 request_schema: Task1QuestionRequest
 response_schema: Task1QuestionResponse
-observed_latency: 1.4s           # đọc DB, không gọi model
+observed_latency: 1.4s # đọc DB, không gọi model
 ```
 
 ```yaml
@@ -1298,7 +1320,7 @@ scope: writing.question.generate
 identity_scope: organization
 execution: sync
 content_type: application/json
-idempotency: optional           # CÓ gọi model -> tốn tiền
+idempotency: optional # CÓ gọi model -> tốn tiền
 max_body_bytes: 8192
 timeout_ms: 30000
 downstream_service: ai-writing
@@ -1315,10 +1337,10 @@ method: POST
 path: /v1/speaking/grade
 scope: speaking.grade
 identity_scope: user
-execution: async                # đã chốt
-content_type: application/json  # + asset_id; multipart cho file nhỏ
+execution: async # đã chốt
+content_type: application/json # + asset_id; multipart cho file nhỏ
 idempotency: required
-max_body_bytes: TBD             # chốt ở Phase 4
+max_body_bytes: TBD # chốt ở Phase 4
 timeout_ms: TBD
 downstream_service: ai-speaking
 ```
@@ -1327,11 +1349,11 @@ downstream_service: ai-speaking
 
 Bản đầu dùng `idempotency_required: true/false`. Ba trạng thái mới phản ánh đúng thực tế:
 
-| Giá trị | Nghĩa | Dùng cho |
-|---|---|---|
-| `required` | Thiếu `Idempotency-Key` → `400` | Operation tốn tiền và tạo record cho học viên |
-| `optional` | Có thì dùng, không có vẫn chạy | Operation tốn tiền nhưng không tạo side effect lâu dài |
-| `none` | Bỏ qua header nếu client gửi | Operation chỉ đọc, lặp lại vô hại |
+| Giá trị    | Nghĩa                           | Dùng cho                                               |
+| ---------- | ------------------------------- | ------------------------------------------------------ |
+| `required` | Thiếu `Idempotency-Key` → `400` | Operation tốn tiền và tạo record cho học viên          |
+| `optional` | Có thì dùng, không có vẫn chạy  | Operation tốn tiền nhưng không tạo side effect lâu dài |
+| `none`     | Bỏ qua header nếu client gửi    | Operation chỉ đọc, lặp lại vô hại                      |
 
 `writing.task1.question.generate` là `none` vì nó **đọc câu hỏi từ database**, không gọi model. Bắt buộc idempotency ở đó chỉ tạo phiền phức cho client mà không bảo vệ gì cả.
 
@@ -1436,8 +1458,8 @@ Nếu đo thực tế cho thấy p95 vượt 30 giây thì phải chuyển `writ
 21. Media/File Input Policy
 22. Sync/Async Decision per Operation
 23. Example Request/Response cho từng capability chính
-24. OpenAPI/Swagger draft nếu kịp
-25. Postman examples để handoff sang D2
+24. OpenAPI/Swagger draft nếu kịp — ✅ **XONG 2026-09-07**, `openapi.json` (OpenAPI 3.1), sinh từ operation catalog qua `pnpm generate:openapi`, không viết tay (issue #2)
+25. Postman examples để handoff sang D2 — ✅ **XONG 2026-09-07**, `aihub.postman_collection.json`, sinh từ `openapi.json` qua `pnpm generate:postman`, chứa đủ 15 case §G; 4 case (7, 13, 14, 15) đang chờ Phase 2 User Assertion / #9 / #10 (issue #6)
 ```
 
 ---
@@ -1498,26 +1520,26 @@ Canonical Response
 
 **Trạng thái: 17/18 đã chốt.** Bảng dưới là đáp án; câu 14 còn mở nhưng thuộc Phase 4 nên không cản việc freeze D1.
 
-| # | Câu hỏi | Đáp án |
-|---:|---|---|
-| 1 | `X-API-Key` hay `Authorization: Bearer`? | **`X-API-Key`.** `Authorization` để dành cho internal JWT ở boundary AIHUB → AI Service, tránh hai loại credential dùng chung một header |
-| 2 | Key có cần `live/test` mode? | **Không.** Environment do hostname quyết định; key chỉ bị *bind* qua `allowed_environments`. Nhét mode vào key là tạo nguồn sự thật thứ hai |
-| 3 | `dev/staging/prod` derive từ hostname? | **Có, đã chốt** (§4) |
-| 4 | `/v1` hay header versioning? | **`/v1` trong path** |
-| 5 | Unknown field reject 400? | **Có, không ngoại lệ.** `additionalProperties: false` (§18) |
-| 6 | `usage` khi không gọi model | **Omit.** Không `null`, không `0`. Kèm `metering_status: not_applicable` (§15) |
-| 7 | Public expose `models[]`/breakdown tới đâu? | **Chỉ aggregate usage.** `models[]` và `usage.calls[]` là internal — theo LTA §32.7 (§16) |
-| 8 | JWKS URL hay upload public key? | **Cả hai.** `jwks_url` là đường chính, `public_keys_jwks` là fallback (§8) |
-| 9 | TTL tối đa của assertion | **300 giây**, cấu hình được theo org qua `max_assertion_ttl_seconds`. Clock skew ±60s |
-| 10 | Capability nào bắt buộc user identity? | Chấm bài (`writing.task1.grade`, `writing.task2.grade`) → `user`. Sinh đề → `organization`. Mặc định fail-closed: chưa chắc thì coi là `user` |
-| 11 | `writing.grade` sync hay async? | **Sync**, `timeout_ms: 60000` (trần, không phải kỳ vọng — xem §27) |
-| 12 | `speaking.grade` sync hay async? | **Async.** Envelope chốt ở §12, code ở Phase 4 |
-| 13 | Speaking multipart hay `asset_id`? | **`asset_id` + presigned upload** là đường chính; multipart cho file nhỏ ≤10 MB (LTA §32.6) |
-| 14 | Max media size / MIME | ⏳ **Còn mở** — chốt ở Phase 4. Không cản freeze D1 vì envelope async đã cố định |
-| 15 | Idempotency bắt buộc với operation nào? | `required` cho 2 operation chấm bài; `optional` cho sinh đề Task 2; `none` cho sinh đề Task 1 (§27) |
-| 16 | Scope/entitlement áp dụng từ D2? | **Có, ngay từ D2.** `Entitlement ∩ Key Scope` không cần thêm query nào — dữ liệu đã có sẵn từ bước lookup key (§9) |
-| 17 | Missing usage với metering-critical op? | **Không fail business response.** Đánh dấu `metering_status: missing_usage` + alert + reconcile (LTA §32.8). Nhưng contract/integration test phải coi `usage` là bắt buộc trước khi AI Service lên production |
-| 18 | Danh sách public error codes v1 | **18 mã** ở §25 |
+|   # | Câu hỏi                                     | Đáp án                                                                                                                                                                                                        |
+| --: | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|   1 | `X-API-Key` hay `Authorization: Bearer`?    | **`X-API-Key`.** `Authorization` để dành cho internal JWT ở boundary AIHUB → AI Service, tránh hai loại credential dùng chung một header                                                                      |
+|   2 | Key có cần `live/test` mode?                | **Không.** Environment do hostname quyết định; key chỉ bị _bind_ qua `allowed_environments`. Nhét mode vào key là tạo nguồn sự thật thứ hai                                                                   |
+|   3 | `dev/staging/prod` derive từ hostname?      | **Có, đã chốt** (§4)                                                                                                                                                                                          |
+|   4 | `/v1` hay header versioning?                | **`/v1` trong path**                                                                                                                                                                                          |
+|   5 | Unknown field reject 400?                   | **Có, không ngoại lệ.** `additionalProperties: false` (§18)                                                                                                                                                   |
+|   6 | `usage` khi không gọi model                 | **Omit.** Không `null`, không `0`. Kèm `metering_status: not_applicable` (§15)                                                                                                                                |
+|   7 | Public expose `models[]`/breakdown tới đâu? | **Chỉ aggregate usage.** `models[]` và `usage.calls[]` là internal — theo LTA §32.7 (§16)                                                                                                                     |
+|   8 | JWKS URL hay upload public key?             | **Cả hai.** `jwks_url` là đường chính, `public_keys_jwks` là fallback (§8)                                                                                                                                    |
+|   9 | TTL tối đa của assertion                    | **300 giây**, cấu hình được theo org qua `max_assertion_ttl_seconds`. Clock skew ±60s                                                                                                                         |
+|  10 | Capability nào bắt buộc user identity?      | Chấm bài (`writing.task1.grade`, `writing.task2.grade`) → `user`. Sinh đề → `organization`. Mặc định fail-closed: chưa chắc thì coi là `user`                                                                 |
+|  11 | `writing.grade` sync hay async?             | **Sync**, `timeout_ms: 60000` (trần, không phải kỳ vọng — xem §27)                                                                                                                                            |
+|  12 | `speaking.grade` sync hay async?            | **Async.** Envelope chốt ở §12, code ở Phase 4                                                                                                                                                                |
+|  13 | Speaking multipart hay `asset_id`?          | **`asset_id` + presigned upload** là đường chính; multipart cho file nhỏ ≤10 MB (LTA §32.6)                                                                                                                   |
+|  14 | Max media size / MIME                       | ⏳ **Còn mở** — chốt ở Phase 4. Không cản freeze D1 vì envelope async đã cố định                                                                                                                              |
+|  15 | Idempotency bắt buộc với operation nào?     | `required` cho 2 operation chấm bài; `optional` cho sinh đề Task 2; `none` cho sinh đề Task 1 (§27)                                                                                                           |
+|  16 | Scope/entitlement áp dụng từ D2?            | **Có, ngay từ D2.** `Entitlement ∩ Key Scope` không cần thêm query nào — dữ liệu đã có sẵn từ bước lookup key (§9)                                                                                            |
+|  17 | Missing usage với metering-critical op?     | **Không fail business response.** Đánh dấu `metering_status: missing_usage` + alert + reconcile (LTA §32.8). Nhưng contract/integration test phải coi `usage` là bắt buộc trước khi AI Service lên production |
+|  18 | Danh sách public error codes v1             | **18 mã** ở §25                                                                                                                                                                                               |
 
 ---
 
@@ -1525,13 +1547,13 @@ Canonical Response
 
 Ba việc, và chỉ một trong số đó là chặn:
 
-| # | Việc | Chặn gì | Trạng thái |
-|---|---|---|---|
-| 1 | ~~Lấy response thật của `/grading-feedback-task1|2`~~ | — | ✅ **XONG 2026-09-07**, fixture ở `test/fixtures/ai-writing/` |
-| 2 | ~~Danh sách `question_type` / `chart_type`~~ | — | ✅ **XONG** — 5 dạng Task 2, 7 chart type Task 1 |
-| 3 | Xuất OpenAPI 3.1 + Postman collection | Hiện vật bàn giao D2 | 🟡 Sinh tự động từ schema khi có skeleton |
+| #   | Việc                                             | Chặn gì | Trạng thái                                                                                                               |
+| --- | ------------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 1   | ~~Lấy response thật của `/grading-feedback-task1 | 2`~~    | —                                                                                                                        | ✅ **XONG 2026-09-07**, fixture ở `test/fixtures/ai-writing/` |
+| 2   | ~~Danh sách `question_type` / `chart_type`~~     | —       | ✅ **XONG** — 5 dạng Task 2, 7 chart type Task 1                                                                         |
+| 3   | ~~Xuất OpenAPI 3.1 + Postman collection~~        | —       | ✅ **XONG 2026-09-07** — `openapi.json` (#2) + `aihub.postman_collection.json` (#6), cả hai sinh tự động, không viết tay |
 
-**Không còn blocker nào cho việc freeze D1.** Chỉ còn hiện vật OpenAPI/Postman, và chúng sinh ra từ schema chứ không viết tay.
+**D1 đã freeze.** Cả ba việc còn lại đều xong; không còn blocker nào.
 
 Một nghi vấn còn mở nhưng **không cản freeze**: band nửa điểm (xem §34). Đó là vấn đề chất lượng của AI Writing, không phải vấn đề contract — schema đã dùng `multipleOf: 0.5` nên đúng trong cả hai trường hợp.
 
@@ -1541,34 +1563,34 @@ Một nghi vấn còn mở nhưng **không cản freeze**: band nửa điểm (x
 
 ## 2026-09-07 — đồng bộ với khảo sát AI Writing thật
 
-| # | Thay đổi | Mục |
-|---|---|---|
-| 1 | Thay canonical request/response bằng schema thật; bỏ `content`/`language`/`level` | §10, §20 |
-| 2 | Tách Task 1 / Task 2 thành 4 operation riêng | §5, §19, §27 |
-| 3 | Thêm 6 mã lỗi; tổng 18 mã cho v1 | §25 |
-| 4 | Thêm `max_assertion_ttl_seconds`, allowlist `alg`, `UNIQUE(issuer)`; `jti` thành bắt buộc | §8 |
-| 5 | `usage` phải omit khi không gọi model, kèm ví dụ có thật | §15 |
-| 6 | Thêm `metering_status` với 4 giá trị | §15, §16 |
-| 7 | Chốt Speaking ở mức envelope async; giới hạn body theo từng operation | §11, §12, §27 |
-| 8 | Ghi rõ internal contract là **additive** — AI Service chỉ thêm field, không bọc `data` | §15 |
-| 9 | Trả lời 17/18 câu chốt | §32 |
-| 10 | **Bỏ `meta.models[]` khỏi public response** — mâu thuẫn với LTA §32.7 | §16 |
-| 11 | `idempotency_required` boolean → `idempotency` ba trạng thái | §27 |
+| #   | Thay đổi                                                                                  | Mục           |
+| --- | ----------------------------------------------------------------------------------------- | ------------- |
+| 1   | Thay canonical request/response bằng schema thật; bỏ `content`/`language`/`level`         | §10, §20      |
+| 2   | Tách Task 1 / Task 2 thành 4 operation riêng                                              | §5, §19, §27  |
+| 3   | Thêm 6 mã lỗi; tổng 18 mã cho v1                                                          | §25           |
+| 4   | Thêm `max_assertion_ttl_seconds`, allowlist `alg`, `UNIQUE(issuer)`; `jti` thành bắt buộc | §8            |
+| 5   | `usage` phải omit khi không gọi model, kèm ví dụ có thật                                  | §15           |
+| 6   | Thêm `metering_status` với 4 giá trị                                                      | §15, §16      |
+| 7   | Chốt Speaking ở mức envelope async; giới hạn body theo từng operation                     | §11, §12, §27 |
+| 8   | Ghi rõ internal contract là **additive** — AI Service chỉ thêm field, không bọc `data`    | §15           |
+| 9   | Trả lời 17/18 câu chốt                                                                    | §32           |
+| 10  | **Bỏ `meta.models[]` khỏi public response** — mâu thuẫn với LTA §32.7                     | §16           |
+| 11  | `idempotency_required` boolean → `idempotency` ba trạng thái                              | §27           |
 
 ## 2026-09-07 (lần 2) — sau khi gọi thật API AI Writing
 
 Đã gọi cả 4 endpoint bằng token do team cấp; fixture lưu ở `test/fixtures/ai-writing/`.
 
-| # | Thay đổi | Mục |
-|---|---|---|
-| 12 | `topic` → **`chart_type`** enum 7 giá trị cho Task 1. Giá trị thật là loại biểu đồ, không phải chủ đề — gửi `"environment"` bị downstream trả 500 | §10, §20, §27 |
-| 13 | Thêm **`language`** vào request/response chấm bài; enum hiện tại `['vi']` vì downstream chỉ sinh feedback tiếng Việt | §10, §16, §20 |
-| 14 | **Mở rộng `GradeResponse`** theo response thật: `band_reason`, `strengths[]`, `improvements[]`, `suggestions[]`, `next_steps[]`, `annotations[]` | §16, §20 |
-| 15 | Đổi `corrections` → **`annotations`**. Dữ liệu thật là `{quote, explanation}` chứ không phải `{original, suggestion}` | §16, §20 |
-| 16 | Ghi rõ **3 thứ không ra public**: `coT`, `feedback_detail`, `data_micro.*.question_type` | §16 |
-| 17 | `band` chấp nhận **cả int lẫn float** — downstream trả `overall_band: 7.0` nhưng `band_score: 7` | §16, §20 |
-| 18 | Cảnh báo **downstream trả 5xx cho lỗi client**, và hai lớp phòng vệ | §25 |
-| 19 | Ghi `observed_latency` đo thật vào operation catalog | §27 |
+| #   | Thay đổi                                                                                                                                          | Mục           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| 12  | `topic` → **`chart_type`** enum 7 giá trị cho Task 1. Giá trị thật là loại biểu đồ, không phải chủ đề — gửi `"environment"` bị downstream trả 500 | §10, §20, §27 |
+| 13  | Thêm **`language`** vào request/response chấm bài; enum hiện tại `['vi']` vì downstream chỉ sinh feedback tiếng Việt                              | §10, §16, §20 |
+| 14  | **Mở rộng `GradeResponse`** theo response thật: `band_reason`, `strengths[]`, `improvements[]`, `suggestions[]`, `next_steps[]`, `annotations[]`  | §16, §20      |
+| 15  | Đổi `corrections` → **`annotations`**. Dữ liệu thật là `{quote, explanation}` chứ không phải `{original, suggestion}`                             | §16, §20      |
+| 16  | Ghi rõ **3 thứ không ra public**: `coT`, `feedback_detail`, `data_micro.*.question_type`                                                          | §16           |
+| 17  | `band` chấp nhận **cả int lẫn float** — downstream trả `overall_band: 7.0` nhưng `band_score: 7`                                                  | §16, §20      |
+| 18  | Cảnh báo **downstream trả 5xx cho lỗi client**, và hai lớp phòng vệ                                                                               | §25           |
+| 19  | Ghi `observed_latency` đo thật vào operation catalog                                                                                              | §27           |
 
 ### Ba vấn đề của AI Writing phát hiện qua việc gọi thật
 

@@ -27,12 +27,13 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 ## Current scope and blockers
 
 - Current scope: one NestJS/Fastify app and the Writing vertical slice.
-- Implemented: `POST /v1/writing/task1/questions` now validates the public request, authenticates API keys against Postgres, uses Redis for credential caching and rate limiting, dispatches through the typed Writing adapter, and returns the `{ data, meta }` envelope. Local Postgres/Redis E2E verification passed on 2026-09-07.
+- Implemented: all four Writing operations (`task1/questions`, `task2/questions`, `task1/grade`, `task2/grade`) validate the public request, authenticate API keys against Postgres, use Redis for credential caching and rate limiting, dispatch through the typed Writing adapters, and return the `{ data, meta }` envelope. Local Postgres/Redis E2E verification passed on 2026-09-07.
 - Deferred: Speaking, Reading, object storage, async jobs, billing, dynamic routing, Kubernetes, and a dedicated proxy.
 - No blockers. Both earlier ones were resolved on 2026-09-07.
 - Resolved: the Writing grading response contract. All four priority endpoints were called against the live service; captured responses are committed under `test/fixtures/ai-writing/` and the shared grading parser is implemented and tested. Catalog response contracts are real schemas, not `unresolved`.
 - Resolved as a decision, not as work: AI Writing stays reachable from the internet for now, because it still serves an application that does not go through AIHUB. The boundary at this stage is the credential, not the network — AIHUB customers hold only AIHUB keys, so metering and limits still bind them. Three conditions keep that acceptable; see the security spec.
-- Open, but not blocking: the OpenAPI and Postman artifacts that close Deliverable 1, and six fixes requested from the AI Writing team (chiefly usage metadata, which is what makes token-based billing possible at all).
+- Resolved: Deliverable 1 is frozen as of 2026-09-07 — the OpenAPI 3.1 spec (`openapi.json`) and the Postman handover collection (`aihub.postman_collection.json`) are both generated from source, not hand-written.
+- Open, but not blocking: metering (usage/model on the public response), idempotency replay, the ErrorCode→httpStatus registry, an API docs page, and six fixes requested from the AI Writing team (chiefly usage metadata, which is what makes token-based billing possible at all).
 
 ## Canonical documents
 

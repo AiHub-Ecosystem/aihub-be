@@ -1,0 +1,426 @@
+import { convert } from 'openapi-to-postmanv2';
+
+/**
+ * D2 handover artifact, not a regression suite (see issue #6): every request
+ * below is meant to be run by a human against a real or deliberately-broken
+ * AIHUB instance, not asserted to pass during generation. Bodies reuse the
+ * real fixtures captured from the live AI Writing API in
+ * `test/fixtures/ai-writing/` so a reader sees genuine payloads, not
+ * placeholders.
+ */
+interface Scenario {
+  readonly name: string;
+  readonly description: string;
+  readonly path: string;
+  readonly headers: readonly { readonly key: string; readonly value: string }[];
+  readonly body?: unknown;
+  readonly testScript: readonly string[];
+}
+
+const JSON_HEADER = { key: 'Content-Type', value: 'application/json' } as const;
+const VALID_KEY_HEADER = { key: 'X-API-Key', value: '{{apiKey}}' } as const;
+
+const TASK1_QUESTION_PATH = '/v1/writing/task1/questions';
+const TASK2_QUESTION_PATH = '/v1/writing/task2/questions';
+const TASK1_GRADE_PATH = '/v1/writing/task1/grade';
+const TASK2_GRADE_PATH = '/v1/writing/task2/grade';
+
+const TASK1_GRADE_BODY = {
+  question:
+    'The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.',
+  chart_type: 'Bar Chart',
+  image_url: 'https://s3.wispace.app/ielts-task1/ca95bd4ab522946d',
+  essay:
+    'The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.',
+};
+
+const TASK2_GRADE_BODY = {
+  question:
+    'With the rise of online learning platforms, some argue that traditional classroom education is becoming obsolete. To what extent do you agree or disagree?',
+  topic: 'education',
+  essay:
+    'The proliferation of online learning platforms has led some observers to claim that conventional classroom instruction is no longer relevant. While I acknowledge the considerable advantages of digital education, I disagree that it renders traditional teaching obsolete.',
+};
+
+function assertStatus(status: number): string {
+  return `pm.test('responds with HTTP ${status}', function () { pm.response.to.have.status(${status}); });`;
+}
+
+function assertErrorCode(codes: readonly string[]): readonly string[] {
+  return [
+    `pm.test('error.code is one of ${codes.join(', ')}', function () {`,
+    '  const body = pm.response.json();',
+    `  pm.expect(${JSON.stringify(codes)}).to.include(body.error.code);`,
+    '});',
+  ];
+}
+
+function assertEnvelope(operationId: string): readonly string[] {
+  return [
+    "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",
+    '  const body = pm.response.json();',
+    `  pm.expect(body.meta.operation).to.eql('${operationId}');`,
+    "  pm.expect(body.meta.service).to.eql('ai-writing');",
+    '  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);',
+    '});',
+  ];
+}
+
+/**
+ * The 15 numbered items are `docs/aihub_deliverable_1_api_contract_schema.md`
+ * §G "D2 Postman tests tối thiểu" verbatim, in order. Items 7, 13, 14, and 15
+ * cannot pass yet — each names the slice it is waiting on, per that issue's
+ * acceptance criteria, instead of silently asserting today's (wrong) result.
+ */
+const D1_SCENARIOS: readonly Scenario[] = [
+  {
+    name: '1a. Valid request routes to Task 1 question generation',
+    description:
+      'Valid API key + valid request routes to the correct AI Service operation.',
+    path: TASK1_QUESTION_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    body: { chart_type: 'Bar Chart' },
+    testScript: [
+      assertStatus(200),
+      ...assertEnvelope('writing.task1.question.generate'),
+    ],
+  },
+  {
+    name: '1b. Valid request routes to Task 2 question generation',
+    description:
+      'Valid API key + valid request routes to the correct AI Service operation.',
+    path: TASK2_QUESTION_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    body: { topic: 'Technology', question_type: 'opinion' },
+    testScript: [
+      assertStatus(200),
+      ...assertEnvelope('writing.task2.question.generate'),
+    ],
+  },
+  {
+    name: '1c. Valid request routes to Task 1 grading',
+    description:
+      'Valid API key + valid request routes to the correct AI Service operation.',
+    path: TASK1_GRADE_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    body: TASK1_GRADE_BODY,
+    testScript: [assertStatus(200), ...assertEnvelope('writing.task1.grade')],
+  },
+  {
+    name: '1d. Valid request routes to Task 2 grading',
+    description:
+      'Valid API key + valid request routes to the correct AI Service operation.',
+    path: TASK2_GRADE_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    body: TASK2_GRADE_BODY,
+    testScript: [assertStatus(200), ...assertEnvelope('writing.task2.grade')],
+  },
+  {
+    name: '2. Missing/invalid API key',
+    description: 'No X-API-Key header at all.',
+    path: TASK1_QUESTION_PATH,
+    headers: [JSON_HEADER],
+    body: {},
+    testScript: [assertStatus(401), ...assertErrorCode(['UNAUTHORIZED'])],
+  },
+  {
+    name: '3. API key not allowed in the current environment',
+    description:
+      'Fill {{otherEnvironmentApiKey}} with a real key provisioned for a different environment (e.g. a staging key called against production).',
+    path: TASK1_QUESTION_PATH,
+    headers: [
+      JSON_HEADER,
+      { key: 'X-API-Key', value: '{{otherEnvironmentApiKey}}' },
+    ],
+    body: {},
+    testScript: [
+      assertStatus(403),
+      ...assertErrorCode(['ENVIRONMENT_NOT_ALLOWED']),
+    ],
+  },
+  {
+    name: '4. Missing required parameter',
+    description:
+      "Task 2 question generation without the required 'question_type'.",
+    path: TASK2_QUESTION_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    body: { topic: 'Technology' },
+    testScript: [assertStatus(400), ...assertErrorCode(['INVALID_REQUEST'])],
+  },
+  {
+    name: '5. Unknown/unsupported field',
+    description:
+      'Every request schema is additionalProperties: false; an unknown field must be rejected, not silently dropped.',
+    path: TASK1_QUESTION_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    body: { chart_type: 'Bar Chart', unexpected_field: 'nope' },
+    testScript: [assertStatus(400), ...assertErrorCode(['INVALID_REQUEST'])],
+  },
+  {
+    name: '6. Scope/service mismatch',
+    description:
+      "Fill {{wrongScopeApiKey}} with a real key that has only the 'writing.question.generate' scope, then call a 'writing.grade' operation with it.",
+    path: TASK1_GRADE_PATH,
+    headers: [JSON_HEADER, { key: 'X-API-Key', value: '{{wrongScopeApiKey}}' }],
+    body: TASK1_GRADE_BODY,
+    testScript: [assertStatus(403), ...assertErrorCode(['FORBIDDEN'])],
+  },
+  {
+    name: '7. User-scoped operation missing/invalid User Assertion — BLOCKED',
+    description:
+      'BLOCKED: waiting on the Phase 2 User Assertion feature, which is not implemented and not yet tracked as an issue (see docs/superpowers/specs/2026-09-07-aihub). Today grade operations do not check for a user assertion at all, so this request currently succeeds instead of failing.',
+    path: TASK1_GRADE_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    body: TASK1_GRADE_BODY,
+    testScript: [
+      "pm.test('BLOCKED: waiting on Phase 2 User Assertion (not yet an issue) - replace with a 401/403 assertion once it lands', function () {",
+      '  pm.expect(true).to.be.true;',
+      '});',
+    ],
+  },
+  {
+    name: '8. Downstream timeout',
+    description:
+      "Point {{baseUrl}} at a stub/mock that delays past the operation's catalogued timeoutMs (10s for question generation, 60s for grading) to force this.",
+    path: TASK1_QUESTION_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    body: {},
+    testScript: [assertStatus(504), ...assertErrorCode(['AI_SERVICE_TIMEOUT'])],
+  },
+  {
+    name: '9. Downstream throttle surfaces as 503, not a client 429',
+    description:
+      'Point {{baseUrl}} at a stub returning a throttled response from AI Writing to confirm it is translated to a public 503, never a 429.',
+    path: TASK1_QUESTION_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    body: {},
+    testScript: [
+      assertStatus(503),
+      ...assertErrorCode(['AI_SERVICE_THROTTLED']),
+    ],
+  },
+  {
+    name: '10. Downstream 4xx/5xx maps to a unified error',
+    description:
+      'Point {{baseUrl}} at a stub returning an unexpected downstream 4xx/5xx to confirm it surfaces as AI_SERVICE_ERROR (or AI_SERVICE_CONTRACT_VIOLATION for a malformed 200 body), never passed through raw.',
+    path: TASK1_QUESTION_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    body: {},
+    testScript: [
+      assertStatus(502),
+      ...assertErrorCode(['AI_SERVICE_ERROR', 'AI_SERVICE_CONTRACT_VIOLATION']),
+    ],
+  },
+  {
+    name: '11. request_id is AIHUB-generated; correlation_id is preserved when sent',
+    description:
+      'Sends X-Correlation-Id and checks it is echoed back verbatim, alongside an independently AIHUB-generated request_id.',
+    path: TASK1_QUESTION_PATH,
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      { key: 'X-Correlation-Id', value: 'client-trace-{{$guid}}' },
+    ],
+    body: { chart_type: 'Bar Chart' },
+    testScript: [
+      assertStatus(200),
+      "pm.test('correlation_id echoes the client header; request_id is independently generated', function () {",
+      '  const body = pm.response.json();',
+      "  const sentCorrelationId = pm.request.headers.get('X-Correlation-Id');",
+      '  pm.expect(body.meta.correlation_id).to.eql(sentCorrelationId);',
+      '  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);',
+      '  pm.expect(body.meta.request_id).to.not.eql(sentCorrelationId);',
+      '});',
+    ],
+  },
+  {
+    name: '12. Timing fields carry their documented meaning',
+    description:
+      'downstream_ms + gateway_overhead_ms should equal total_ms (within rounding), and none may be negative.',
+    path: TASK1_QUESTION_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    body: { chart_type: 'Bar Chart' },
+    testScript: [
+      assertStatus(200),
+      "pm.test('timing fields are non-negative and sum to total_ms', function () {",
+      '  const { downstream_ms, gateway_overhead_ms, total_ms } = pm.response.json().meta.timing;',
+      '  pm.expect(downstream_ms).to.be.at.least(0);',
+      '  pm.expect(gateway_overhead_ms).to.be.at.least(0);',
+      '  pm.expect(total_ms).to.be.at.least(0);',
+      '  pm.expect(Math.abs(downstream_ms + gateway_overhead_ms - total_ms)).to.be.at.most(1);',
+      '});',
+    ],
+  },
+  {
+    name: '13. Usage/model metadata matches downstream — BLOCKED',
+    description:
+      'BLOCKED: waiting on #9 (metering). No usage or model field exists on the public response yet.',
+    path: TASK1_GRADE_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    body: TASK1_GRADE_BODY,
+    testScript: [
+      "pm.test('BLOCKED: waiting on #9 (metering) - add real usage/model field assertions once it lands', function () {",
+      '  pm.expect(true).to.be.true;',
+      '});',
+    ],
+  },
+  {
+    name: '14. Multi-model usage aggregates correctly — BLOCKED',
+    description:
+      'BLOCKED: waiting on #9 (metering). No usage breakdown field exists on the public response yet.',
+    path: TASK1_GRADE_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    body: TASK1_GRADE_BODY,
+    testScript: [
+      "pm.test('BLOCKED: waiting on #9 (metering) - add real multi-model aggregate assertions once it lands', function () {",
+      '  pm.expect(true).to.be.true;',
+      '});',
+    ],
+  },
+  {
+    name: '15. Idempotency behavior — BLOCKED',
+    description:
+      'BLOCKED: waiting on #10 (idempotency). Sending the same Idempotency-Key twice today runs the model twice instead of replaying.',
+    path: TASK1_GRADE_PATH,
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      { key: 'Idempotency-Key', value: '{{$guid}}' },
+    ],
+    body: TASK1_GRADE_BODY,
+    testScript: [
+      "pm.test('BLOCKED: waiting on #10 (idempotency) - assert the second call replays instead of re-running once it lands', function () {",
+      '  pm.expect(true).to.be.true;',
+      '});',
+    ],
+  },
+];
+
+/**
+ * Deep-removes every property named `key`. Used to drop the `response`
+ * arrays openapi-to-postmanv2 attaches to each auto-converted operation —
+ * schema-faked example responses for an `additionalProperties: true` object
+ * (our error `details` field) come out with a random key count and random
+ * values on every run, which would make the committed-artifact drift check
+ * (`postman-artifact.spec.ts`) flake on every regeneration for no real
+ * reason. The real, meaningful example responses live in the D1 handover
+ * scenarios below instead.
+ */
+export function stripKey<T>(value: T, key: string): T {
+  if (Array.isArray(value)) {
+    return value.map((entry) => stripKey(entry, key)) as unknown as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).filter(
+      ([k]) => k !== key,
+    );
+    return Object.fromEntries(
+      entries.map(([k, v]) => [k, stripKey(v, key)]),
+    ) as T;
+  }
+  return value;
+}
+
+function scenarioToItem(scenario: Scenario): Record<string, unknown> {
+  return {
+    name: scenario.name,
+    request: {
+      method: 'POST',
+      header: scenario.headers,
+      body:
+        scenario.body === undefined
+          ? undefined
+          : { mode: 'raw', raw: JSON.stringify(scenario.body, null, 2) },
+      url: `{{baseUrl}}${scenario.path}`,
+      description: scenario.description,
+    },
+    event: [
+      {
+        listen: 'test',
+        script: { type: 'text/javascript', exec: scenario.testScript },
+      },
+    ],
+  };
+}
+
+/** Shape of the pieces this module reads or rewrites on the converted collection; everything else passes through untouched. */
+interface PostmanCollectionShape {
+  readonly info: Record<string, unknown>;
+  readonly item: unknown[];
+  readonly [key: string]: unknown;
+}
+
+function convertOpenApiToPostman(
+  openApiDocument: unknown,
+): Promise<PostmanCollectionShape> {
+  return new Promise((resolve, reject) => {
+    convert(
+      { type: 'json', data: openApiDocument as object },
+      // schemaFaker: false keeps generated examples deterministic (fixed
+      // per-type placeholders) instead of randomly faked values — required
+      // for the committed-artifact drift check to be stable across runs.
+      { folderStrategy: 'Tags', schemaFaker: false },
+      (err, result) => {
+        if (err) {
+          reject(err instanceof Error ? err : new Error(err.message));
+          return;
+        }
+        const output =
+          result?.result === true ? result.output?.[0]?.data : undefined;
+        if (output === undefined) {
+          reject(
+            new Error(
+              result?.reason ?? 'openapi-to-postmanv2 produced no output',
+            ),
+          );
+          return;
+        }
+        resolve(output as PostmanCollectionShape);
+      },
+    );
+  });
+}
+
+export async function buildPostmanCollection(
+  openApiDocument: unknown,
+  version: string,
+): Promise<unknown> {
+  const base = stripKey(
+    await convertOpenApiToPostman(openApiDocument),
+    'response',
+  );
+
+  return {
+    ...base,
+    info: {
+      ...base.info,
+      name: 'AIHUB Writing API',
+      description:
+        'Generated by `pnpm generate:postman` from openapi.json — do not hand-edit. The "D1 handover test cases" folder is the D2 handover artifact required by docs/aihub_deliverable_1_api_contract_schema.md §G; it is not a CI regression suite.',
+      version,
+    },
+    variable: [
+      {
+        key: 'baseUrl',
+        value: 'https://api.aihubproduction.example.com',
+        description: 'AIHUB base URL for the environment under test.',
+      },
+      { key: 'apiKey', value: 'REPLACE_WITH_A_VALID_ORGANIZATION_API_KEY' },
+      {
+        key: 'otherEnvironmentApiKey',
+        value: 'REPLACE_WITH_A_KEY_FROM_A_DIFFERENT_ENVIRONMENT',
+      },
+      {
+        key: 'wrongScopeApiKey',
+        value: 'REPLACE_WITH_A_KEY_SCOPED_TO_WRITING_QUESTION_GENERATE_ONLY',
+      },
+    ],
+    item: [
+      ...base.item,
+      {
+        name: 'D1 handover test cases (docs/aihub_deliverable_1_api_contract_schema.md §G)',
+        item: D1_SCENARIOS.map(scenarioToItem),
+      },
+    ],
+  };
+}
