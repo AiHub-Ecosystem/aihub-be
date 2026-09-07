@@ -52,7 +52,9 @@ Input của 4 endpoint được team ưu tiên (tạo đề + chấm bài, task 
 ### Hai vấn đề an ninh trên service đang chạy production
 
 - **`/five-minute-grading` không khai báo security** trong khi mọi endpoint khác dùng `HTTPBearer`. Service đang mở ra Internet → bất kỳ ai cũng gọi được và team trả tiền token.
-- **Cả service đang public trên Internet.** Kiến trúc đích yêu cầu AI Service chỉ reachable trong private network. Chừng nào còn public, khách hàng có thể đi vòng qua AIHUB và **mọi rate limit / quota / metering đều vô nghĩa**. Việc đóng nó lại thuộc Phase 2, không phải "sau này".
+- **Cả service đang public trên Internet — và sẽ còn public một thời gian.** Writing đang phục vụ một ứng dụng khác (Wispace) chưa đi qua AIHUB, nên chưa đóng được. Kiến trúc đích vẫn là private network, nhưng đó là **hướng tương lai chứ không phải việc của Phase 2**.
+
+  Hệ quả: **ranh giới ở giai đoạn này là credential, không phải network.** Miễn khách hàng AIHUB không bao giờ được cấp token của Writing thì với họ AIHUB vẫn là đường vào duy nhất. Xem [09 §M.3](09-security.md#m3-ai-writing-còn-public--rủi-ro-được-chấp-nhận-có-điều-kiện) cho điều kiện đi kèm.
 
 Ngoài ra: `url` trong Task 1 là URL do client cung cấp mà Writing sẽ tự đi fetch → SSRF nằm ở phía Writing. Cần chặn private IP ở đó, hoặc chuyển sang `asset_id` khi làm object storage ở Phase 4.
 

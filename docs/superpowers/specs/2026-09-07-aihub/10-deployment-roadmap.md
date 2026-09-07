@@ -118,9 +118,11 @@ Chi phí kéo lên rất thấp — rate limit là `INCR` + `EXPIRE` (~15 dòng,
 
 ### Phase 2 — Identity + đóng cửa · *2 tuần*
 
-User assertion + JWKS + SSRF guard; internal JWT + JWKS endpoint + xoay khoá; **Writing rời khỏi Internet vào private network**; Writing trả `usage`.
+User assertion + JWKS + SSRF guard; internal JWT + JWKS endpoint + xoay khoá; Writing trả `usage`; AIHUB dùng token riêng của Writing.
 
-> **Cột mốc:** AIHUB là đường vào duy nhất, và metering có số thật.
+> **Cột mốc:** metering có số thật, và mọi khách hàng chỉ đi được qua AIHUB.
+
+**Không bao gồm việc đưa Writing vào private network.** Writing còn phục vụ ứng dụng Wispace chưa đi qua AIHUB. Việc đó chuyển sang Phase 5 và phụ thuộc lịch của bên Wispace, không phải lịch của AIHUB.
 
 ### Phase 3 — Bảo vệ + quan sát · *1–2 tuần*
 

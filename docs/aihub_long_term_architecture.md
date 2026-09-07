@@ -144,9 +144,17 @@ POST /grading-feedback-task2
 
 Path phẳng, không version, đặt tên không nhất quán giữa hai task. **Đó chính là lý do lớp Downstream Adapter tồn tại** — public API vẫn đối xứng và có version, còn sự lộn xộn phía sau không rò ra ngoài. Đổi lại, AIHUB cũng không cần bắt AI Service đi sửa cho đẹp.
 
-Endpoint chỉ được reachable từ private network / AIHUB.
+Ở trạng thái đích, endpoint chỉ reachable từ private network / AIHUB.
 
-> ⚠️ **Hiện đang vi phạm điều này.** `api-ielts-writing.aihubproduction.com` phân giải được từ Internet, và `/five-minute-grading` thậm chí không khai báo auth. Chừng nào còn như vậy thì khách hàng có thể đi vòng qua AIHUB, và **mọi rate limit / quota / metering đều vô nghĩa**. Việc đóng lại thuộc Phase 2 và là điều kiện để câu "AIHUB là public boundary duy nhất" thành sự thật thay vì mong muốn.
+> **Hiện tại chưa đạt trạng thái đích, và đó là quyết định có chủ đích.**
+> `api-ielts-writing.aihubproduction.com` vẫn public vì **đang phục vụ một ứng dụng khác (Wispace)** chưa đi qua AIHUB. Không đóng được cho tới khi ứng dụng đó cũng chuyển sang gọi AIHUB.
+>
+> **Ranh giới thật ở giai đoạn này là credential, không phải network.** Chừng nào khách hàng của AIHUB không bao giờ được cấp token của Writing, thì với họ AIHUB vẫn là đường vào duy nhất. Bên đang gọi thẳng Writing hôm nay là ứng dụng nội bộ, không phải khách của AIHUB.
+>
+> Ba điều kiện để rủi ro này ở mức chấp nhận được:
+> 1. Token Writing **không bao giờ** cấp cho khách hàng AIHUB — đây là quy trình, không phải kỹ thuật.
+> 2. AIHUB dùng **token riêng**, tách khỏi token của Wispace, để usage tách bạch và thu hồi độc lập được.
+> 3. Mọi endpoint của Writing đều có auth — hiện `/five-minute-grading` **chưa có**, và đây là mục cần sửa gấp nhất khi service còn public.
 
 ```text
 Internet

@@ -439,10 +439,12 @@ Danh sách này rút ra từ việc **gọi thật cả 4 endpoint** ngày 2026-
 | 3 | **Sửa 404 bị bọc thành 500** | 🟠 Cao | `{"detail":"404: Không tìm thấy dữ liệu cho topic này!"}` trả về HTTP 500. Xem giải thích bên dưới |
 | 4 | **Kiểm tra band nửa điểm** | 🟠 Cao | 3 mẫu đều ra band nguyên, và cả 4 tiêu chí luôn bằng nhau (7-7-7-7 rồi 5-5-5-5). Nghi ngờ không bao giờ phát ra `.5` |
 | 5 | **Phạt bài dưới độ dài tối thiểu** | 🟠 Cao | Bài Task 2 dài 98 từ (yêu cầu 250) vẫn được band 5.0 |
-| 6 | **Bịt `/five-minute-grading`** | 🔴 Chặn | Endpoint duy nhất không khai báo security, trong khi service đang mở ra Internet |
-| 7 | **Chuyển service vào private network** | 🔴 Chặn | Còn public thì khách đi vòng được, mọi rate limit/quota/metering vô nghĩa |
+| 6 | **Bịt `/five-minute-grading`** | 🔴 Chặn | Endpoint duy nhất không khai báo security. Service đang public nên đây là lỗ mở ra cả Internet |
+| 7 | **Cấp token riêng cho AIHUB**, tách khỏi token Wispace, có TTL thật | 🔴 Chặn | Token hiện tại `exp` năm **2100** và `role: Admin`. Token riêng cho phép tách usage và thu hồi độc lập |
 
-Ngoài ra: token service-to-service hiện có `exp` năm **2100** và `role: Admin`. Nên rút TTL xuống mức hợp lý và có đường xoay khoá.
+**Không có mục "chuyển service vào private network".** Writing đang phục vụ ứng dụng Wispace chưa đi qua AIHUB nên chưa đóng được; đó là hướng tương lai, không phải việc của phase này. Xem [09 §M.3](09-security.md#m3-ai-writing-còn-public--rủi-ro-được-chấp-nhận-có-điều-kiện).
+
+Vì service còn public, mục 6 quan trọng hơn hẳn: một endpoint không auth trên Internet là chỗ bất kỳ ai cũng đốt được tiền model.
 
 ### Vì sao mục 3 nguy hiểm hơn vẻ ngoài
 

@@ -16,7 +16,8 @@
 | 8 | Rò secret / PII trong log | Must | Danh sách redact + test tự động | [08 §L.1](08-metering-and-observability.md#không-bao-giờ-log) |
 | 9 | Payload lớn phá bộ nhớ | Must | `maxBodyBytes` theo từng operation | [06 §H.1](06-routing-adapter.md#h1-operation-catalog--code-có-kiểu) |
 | 10 | DoS bằng request AI đắt tiền | Must | Rate limit + concurrency limit + quota | [04 §F.2–F.4](04-redis.md#f2-rate-limit-fixed-window-không-lua) |
-| 11 | **AI Service lộ ra Internet** | Must | Private network — **hiện đang vi phạm** | [01 §0.1](01-context-and-stack.md#hai-vấn-đề-an-ninh-trên-service-đang-chạy-production), Phase 2 |
+| 11 | **AI Service reachable từ Internet** | Should | Ranh giới bằng **credential** thay vì network — xem §M.3 | [§M.3](#m3-ai-writing-còn-public--rủi-ro-được-chấp-nhận-có-điều-kiện) |
+| 11b | **Endpoint không có auth trên service public** | **Must** | Bịt `/five-minute-grading` | [01 §0.1](01-context-and-stack.md#hai-vấn-đề-an-ninh-trên-service-đang-chạy-production) |
 | 12 | IDOR giữa các học viên | Must | Danh tính chỉ đi qua internal JWT đã ký, **không qua body** | [06 §H.3](06-routing-adapter.md#adapter-thật) |
 | 13 | Internal JWT dùng chéo service | Should | `aud` riêng từng service, TTL 60s | [05 §G.7](05-auth-identity.md#g7-internal-jwt-aihub--ai-service) |
 | 14 | Replay assertion | Should | `jti` bắt buộc trong contract; bật kiểm tra khi cần | [05 §G.6](05-auth-identity.md#g6-replay-protection--không-làm-ở-d2) |
@@ -27,7 +28,7 @@
 
 ## M.2 Vì sao bốn mục in đậm nguy hiểm hơn phần còn lại
 
-Mục 3, 4, 6, 7, 11, 12 hỏng theo kiểu **im lặng**. Không có triệu chứng nào — không lỗi, không alert, không log bất thường — cho tới lúc dữ liệu của org này đã chảy sang org khác, hoặc AIHUB đã quét xong mạng nội bộ giúp người khác.
+Mục 3, 4, 6, 7, 11b, 12 hỏng theo kiểu **im lặng**. Không có triệu chứng nào — không lỗi, không alert, không log bất thường — cho tới lúc dữ liệu của org này đã chảy sang org khác, hoặc AIHUB đã quét xong mạng nội bộ giúp người khác.
 
 Đó là lý do chúng nằm **rải rác khắp thiết kế** chứ không gom vào một "module security":
 
@@ -39,22 +40,50 @@ Mục 3, 4, 6, 7, 11, 12 hỏng theo kiểu **im lặng**. Không có triệu ch
 
 Bảo mật đúng ở đây là những thứ nhỏ đặt đúng chỗ, không phải một lớp middleware to.
 
-## M.3 Việc cần làm sớm nhất, và nó không nằm trong code AIHUB
+## M.3 AI Writing còn public — rủi ro được chấp nhận, có điều kiện
 
-**Mục 11 — AI Writing đang public trên Internet.**
+`api-ielts-writing.aihubproduction.com` vẫn phân giải được từ Internet, và **sẽ còn như vậy một thời gian**: Writing đang phục vụ ứng dụng Wispace chưa đi qua AIHUB. Đóng lại phụ thuộc lịch của bên đó, không phải lịch của AIHUB.
 
-Chừng nào `api-ielts-writing.aihubproduction.com` còn phân giải được từ ngoài:
+### Ranh giới ở giai đoạn này là credential, không phải network
 
-- khách hàng có thể gọi thẳng Writing, đi vòng qua AIHUB
-- mọi rate limit, quota, metering của AIHUB **đều vô nghĩa**
-- `/five-minute-grading` không có auth → bất kỳ ai cũng đốt được token của bạn
+Đây là chỗ dễ kết luận sai. Câu "service public nên ai cũng đi vòng được" **không đúng** — Writing vẫn yêu cầu `HTTPBearer`. Muốn đi vòng phải **có token của Writing**.
 
-Không có thiết kế nào ở các file trước cứu được điều này. Nó phải được đóng lại ở **Phase 2**, và đó là điều kiện để câu tuyên bố "AIHUB là public API boundary duy nhất" trở thành sự thật thay vì một mong muốn.
+```
+Khách hàng AIHUB  --(API key AIHUB)-->  AIHUB  --(token Writing)-->  Writing
+Wispace           --(token Writing)------------------------------->  Writing
+```
+
+Khách hàng AIHUB chỉ cầm API key của AIHUB. Họ **không có** token Writing, nên không đi vòng được — dù Writing có public hay không. Bên đang gọi thẳng là ứng dụng nội bộ, không phải khách hàng.
+
+Nên rate limit, quota, metering của AIHUB **vẫn có hiệu lực** với mọi khách hàng AIHUB.
+
+### Ba điều kiện để giữ mức rủi ro này
+
+| # | Điều kiện | Loại |
+|---|---|---|
+| 1 | Token Writing **không bao giờ** cấp cho khách hàng AIHUB | Quy trình |
+| 2 | AIHUB dùng **token riêng**, tách khỏi token Wispace | Kỹ thuật, cần bên Writing cấp |
+| 3 | **Mọi** endpoint của Writing đều có auth | Kỹ thuật, hiện đang thiếu |
+
+Điều kiện 1 là thứ dễ vỡ nhất và nó không phải vấn đề kỹ thuật — chỉ cần một lần "cho khách gọi thẳng cho nhanh" là mất hết. Nên ghi vào quy trình onboarding.
+
+Điều kiện 2 mua thêm hai thứ: usage của AIHUB tách bạch khỏi Wispace, và thu hồi được độc lập khi một bên rò token.
+
+### Điều kiện 3 mới là việc gấp — `/five-minute-grading`
+
+Trong OpenAPI, mọi endpoint khai `HTTPBearer` **trừ** `/five-minute-grading`, endpoint này không khai security nào.
+
+Service private thì đó là lỗ nhỏ. Service **public** thì đó là một endpoint gọi model, mở cho cả Internet, và bạn trả tiền. Đây là mục an ninh cần sửa gấp nhất trong toàn bộ danh sách — và nó không nằm trong code AIHUB.
+
+### Khi nào chuyển sang private
+
+Khi Wispace cũng gọi qua AIHUB. Lúc đó việc đóng mạng là thao tác hạ tầng thuần tuý, và tất cả những gì thiết kế ở đây vẫn giữ nguyên — chỉ thêm một lớp phòng vệ nữa lên trên lớp credential đã có.
 
 ## M.4 Threat chưa xử lý và lý do chấp nhận
 
 | Threat | Vì sao chấp nhận ở Stage A | Xét lại khi |
 |---|---|---|
+| Ai đó cầm token Writing đi vòng qua AIHUB | Chỉ ứng dụng nội bộ có token; khách hàng AIHUB không có | Có bên thứ ba được cấp token Writing, hoặc Wispace chuyển qua AIHUB |
 | mTLS AIHUB ↔ AI Service | Private network + JWT đã trả lời cả hai câu "workload nào" và "đại diện cho ai" | Có nhiều tenant hạ tầng chung, hoặc yêu cầu compliance |
 | Replay assertion | TLS backend-to-backend; kẻ đọc được traffic đã có luôn API key | Có org yêu cầu, hoặc assertion đi qua đường kém tin cậy hơn |
 | SSRF qua `image_url` của Task 1 | Fetch xảy ra ở **Writing**, không ở AIHUB | Chuyển sang `asset_id` ở Phase 4, hoặc yêu cầu Writing chặn private IP |
