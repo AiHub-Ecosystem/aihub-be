@@ -164,6 +164,7 @@ describe('IdempotencyService', () => {
     repository.nextReservations.push(
       { kind: 'claimed', requestId: 'req_client' },
       { kind: 'claimed', requestId: 'req_retryable' },
+      { kind: 'claimed', requestId: 'req_retryable_again' },
     );
     const service = new IdempotencyService(repository);
     const clientError = new AppError({
@@ -198,10 +199,19 @@ describe('IdempotencyService', () => {
       ),
     ).rejects.toBe(downstreamError);
 
+    await expect(
+      service.execute(
+        input('req_retryable_again'),
+        async () => ({ value: 'retried' }),
+        () => ({ value: 'unused' }),
+      ),
+    ).resolves.toEqual({ result: { value: 'retried' }, replay: false });
+
     expect(repository.deleted).toHaveLength(1);
     expect(repository.deleted[0]?.requestId).toBe('req_client');
     expect(repository.failed).toHaveLength(1);
     expect(repository.failed[0]?.requestId).toBe('req_retryable');
+    expect(repository.completed[0]?.requestId).toBe('req_retryable_again');
   });
 
   it('returns timeout at the operation deadline while allowing sent work to complete in the background', async () => {

@@ -253,6 +253,9 @@ describe('Writing grading HTTP flow', () => {
     expect(replay.headers['idempotent-replay']).toBe('true');
     expect(replay.json().data).toEqual(first.json().data);
     expect(replay.json().meta.timing.downstream_ms).toBe(0);
+    expect(replay.json().meta.request_id).not.toBe(
+      first.json().meta.request_id,
+    );
   });
 
   it('rejects a valid Task 1 request without Idempotency-Key before downstream dispatch', async () => {

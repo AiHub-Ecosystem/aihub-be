@@ -68,6 +68,7 @@ const COMPLETE_SQL = `
     AND idempotency_key = $3
     AND request_id = $4
     AND state = 'pending'
+  RETURNING request_id
 `;
 
 const FAILED_SQL = `
@@ -81,6 +82,7 @@ const FAILED_SQL = `
     AND idempotency_key = $3
     AND request_id = $4
     AND state = 'pending'
+  RETURNING request_id
 `;
 
 const DELETE_SQL = `
@@ -90,6 +92,7 @@ const DELETE_SQL = `
     AND idempotency_key = $3
     AND request_id = $4
     AND state = 'pending'
+  RETURNING request_id
 `;
 
 const CLEANUP_SQL = `
@@ -121,6 +124,16 @@ function requestIdFrom(row: unknown): string {
     throw repositoryError('Idempotency record is malformed');
   }
   return row.request_id;
+}
+
+function requireMutationResult(
+  rows: readonly unknown[],
+  message: string,
+): void {
+  if (rows.length === 0) {
+    throw repositoryError(message);
+  }
+  requestIdFrom(rows[0]);
 }
 
 function reservationFromRow(row: unknown): IdempotencyReservation {
@@ -227,7 +240,7 @@ export class PostgresIdempotencyRepository
   }
 
   async complete(input: CompleteIdempotencyInput): Promise<void> {
-    await this.client.query(COMPLETE_SQL, [
+    const rows = await this.client.query(COMPLETE_SQL, [
       input.organizationId,
       input.operation,
       input.idempotencyKey,
@@ -235,24 +248,27 @@ export class PostgresIdempotencyRepository
       input.responseStatus,
       input.responseBody,
     ]);
+    requireMutationResult(rows, 'Idempotency record was not completed');
   }
 
   async markFailed(input: IdempotencyAttemptInput): Promise<void> {
-    await this.client.query(FAILED_SQL, [
+    const rows = await this.client.query(FAILED_SQL, [
       input.organizationId,
       input.operation,
       input.idempotencyKey,
       input.requestId,
     ]);
+    requireMutationResult(rows, 'Idempotency record was not marked failed');
   }
 
   async delete(input: IdempotencyAttemptInput): Promise<void> {
-    await this.client.query(DELETE_SQL, [
+    const rows = await this.client.query(DELETE_SQL, [
       input.organizationId,
       input.operation,
       input.idempotencyKey,
       input.requestId,
     ]);
+    requireMutationResult(rows, 'Idempotency record was not deleted');
   }
 
   async cleanupExpired(): Promise<number> {

@@ -28,6 +28,22 @@ const baseInput = {
   expiresAt: new Date('2026-09-08T00:00:00.000Z'),
 };
 
+const completeInput = {
+  organizationId: baseInput.organizationId,
+  operation: baseInput.operation,
+  idempotencyKey: baseInput.idempotencyKey,
+  requestId: baseInput.requestId,
+  responseStatus: 200,
+  responseBody: { operation: baseInput.operation },
+};
+
+const attemptInput = {
+  organizationId: baseInput.organizationId,
+  operation: baseInput.operation,
+  idempotencyKey: baseInput.idempotencyKey,
+  requestId: baseInput.requestId,
+};
+
 describe('PostgresIdempotencyRepository', () => {
   it('closes its database client during module shutdown', async () => {
     const client = new QueueClient([]);
@@ -113,6 +129,51 @@ describe('PostgresIdempotencyRepository', () => {
     const repository = new PostgresIdempotencyRepository(client);
 
     await expect(repository.reserve(baseInput)).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+      httpStatus: 500,
+    });
+  });
+
+  it('fails when completion does not update the claimed row', async () => {
+    const repository = new PostgresIdempotencyRepository(new QueueClient([[]]));
+
+    await expect(repository.complete(completeInput)).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+      httpStatus: 500,
+    });
+  });
+
+  it('accepts each state transition only when Postgres returns the claimed row', async () => {
+    const client = new QueueClient([
+      [{ request_id: baseInput.requestId }],
+      [{ request_id: baseInput.requestId }],
+      [{ request_id: baseInput.requestId }],
+    ]);
+    const repository = new PostgresIdempotencyRepository(client);
+
+    await expect(repository.complete(completeInput)).resolves.toBeUndefined();
+    await expect(repository.markFailed(attemptInput)).resolves.toBeUndefined();
+    await expect(repository.delete(attemptInput)).resolves.toBeUndefined();
+    expect(
+      client.queries.every((query) =>
+        query.text.includes('RETURNING request_id'),
+      ),
+    ).toBe(true);
+  });
+
+  it('fails when marking a claimed row does not update it', async () => {
+    const repository = new PostgresIdempotencyRepository(new QueueClient([[]]));
+
+    await expect(repository.markFailed(attemptInput)).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+      httpStatus: 500,
+    });
+  });
+
+  it('fails when deleting a claimed row does not delete it', async () => {
+    const repository = new PostgresIdempotencyRepository(new QueueClient([[]]));
+
+    await expect(repository.delete(attemptInput)).rejects.toMatchObject({
       code: 'INTERNAL_ERROR',
       httpStatus: 500,
     });
