@@ -208,10 +208,10 @@ Run `pnpm test -- app-error.spec.ts request-context.factory.spec.ts redact.spec.
 
 **Steps**
 
-- Define exactly four initial operation IDs: `writing.task1.generate-question`, `writing.task2.generate-question`, `writing.task1.grade`, and `writing.task2.grade`. Do not add generic “generate” or “grade” routes that erase the Task1/Task2 contract difference.
+- Define exactly four initial operation IDs from `06-routing-adapter.md`: `writing.task1.question.generate`, `writing.task2.question.generate`, `writing.task1.grade`, and `writing.task2.grade`. Do not add generic “generate” or “grade” routes that erase the Task1/Task2 contract difference.
 - Define the catalog entry shape with method, public path, required scope, identity mode, idempotency mode, body limit, timeout, downstream service, downstream path, request schema, and a response contract. The response contract is either a TypeBox schema or the explicit value `unresolved`; export one immutable catalog object keyed by the four operation IDs.
 - Use the public paths from the implementation spec: `/v1/writing/task1/questions`, `/v1/writing/task2/questions`, `/v1/writing/task1/grade`, and `/v1/writing/task2/grade`.
-- Define TypeBox request schemas with separate Task1 and Task2 shapes. Task1 grading includes `question`, `url`, `topic`, and `essay`; Task2 grading includes `question`, `topic`, and `essay`. Do not reuse the stale generic D1 schema.
+- Define TypeBox request schemas with separate Task1 and Task2 shapes. Public Task1 grading includes `question`, `image_url`, `topic`, and `essay`; the downstream adapter later maps `image_url` to `url`. Task2 grading includes `question`, `topic`, and `essay`. Do not reuse the stale generic D1 schema.
 - Define the known request/response seam for question generation and a deliberately guarded grading response contract. The grading entries use `responseContract: 'unresolved'` and the dispatcher seam must raise an explicit `ContractNotReadyError` before parsing; do not invent fields or silently accept `{}` from the OpenAPI document.
 - Add a `contracts` test that checks required keys, rejects cross-task fields where the contract forbids them, and verifies the four catalog paths/scopes are unique and stable.
 - Keep TypeBox schemas at the boundary. Domain/application code consumes inferred TypeScript types, not raw `Type.Object` values.
