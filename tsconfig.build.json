@@ -4,5 +4,12 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "exclude": ["node_modules", "dist", "coverage", "**/*.spec.ts", "test"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "coverage",
+    "**/*.spec.ts",
+    "test",
+    "scripts"
+  ]
 }

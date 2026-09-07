@@ -1,6 +1,10 @@
 node_modules/
 dist/
 coverage/
+# Stray compiled output if a watch-mode build ever emits scripts/*.ts in place
+# instead of into dist/ (tsconfig.build.json now excludes scripts/ from the
+# build, but this stays as a backstop).
+scripts/*.js
 .env
 .env.*
 !.env.example

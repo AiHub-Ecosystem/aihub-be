@@ -52,6 +52,14 @@ describe('AppModule wiring', () => {
     expect(response.json()).toEqual({ status: 'ok' });
   });
 
+  it('serves the docs page and raw spec unauthenticated through the real app wiring', async () => {
+    const spec = await app.inject({ method: 'GET', url: '/openapi.json' });
+    const docs = await app.inject({ method: 'GET', url: '/docs' });
+
+    expect(spec.statusCode).toBe(200);
+    expect(docs.statusCode).toBe(200);
+  });
+
   it('does not double the version prefix onto catalogued public paths', () => {
     for (const operation of Object.values(OPERATION_CATALOG)) {
       expect(operation.path).toMatch(/^\/v1\//);
