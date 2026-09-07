@@ -2,10 +2,48 @@ import {
   type ArgumentsHost,
   Catch,
   type ExceptionFilter,
+  HttpException,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { isRequestId } from '../request-context/request-id';
 import { AppError } from './app-error';
+import type { ErrorCode } from './error-code';
+import {
+  type ErrorEnvelope,
+  createInternalErrorEnvelope,
+} from './error-envelope';
+
+interface FrameworkError {
+  readonly code: ErrorCode;
+  readonly message: string;
+}
+
+/**
+ * Framework-raised statuses mapped onto the public catalogue. Messages are
+ * fixed here on purpose: Nest's own text can carry the route, the failing
+ * property, or a driver message, and none of that belongs in a client response.
+ */
+const FRAMEWORK_ERRORS: ReadonlyMap<number, FrameworkError> = new Map([
+  [400, { code: 'INVALID_REQUEST', message: 'Request failed validation' }],
+  [404, { code: 'NOT_FOUND', message: 'Resource not found' }],
+  [405, { code: 'NOT_FOUND', message: 'Resource not found' }],
+  [413, { code: 'PAYLOAD_TOO_LARGE', message: 'Request body is too large' }],
+  [415, { code: 'INVALID_REQUEST', message: 'Unsupported content type' }],
+]);
+
+function fromHttpException(status: number): FrameworkError {
+  const mapped = FRAMEWORK_ERRORS.get(status);
+
+  if (mapped !== undefined) {
+    return mapped;
+  }
+
+  // An unmapped 4xx is still the caller's problem; anything else is ours.
+  return status >= 400 && status < 500
+    ? { code: 'INVALID_REQUEST', message: 'Request could not be processed' }
+    : { code: 'INTERNAL_ERROR', message: 'Internal server error' };
+}
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -13,9 +51,34 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const http = host.switchToHttp();
     const request = http.getRequest<FastifyRequest>();
     const response = http.getResponse<FastifyReply>();
-    const requestId = typeof request.id === 'string' ? request.id : 'unknown';
-    const status = exception instanceof AppError ? exception.httpStatus : 500;
+    const requestId = isRequestId(request.id) ? request.id : 'unknown';
 
-    response.status(status).send(AppError.toEnvelope(exception, requestId));
+    const { status, envelope } = this.resolve(exception, requestId);
+
+    response.status(status).send(envelope);
+  }
+
+  private resolve(
+    exception: unknown,
+    requestId: string,
+  ): { status: number; envelope: ErrorEnvelope } {
+    if (exception instanceof AppError) {
+      return {
+        status: exception.httpStatus,
+        envelope: exception.toEnvelope(requestId),
+      };
+    }
+
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      const { code, message } = fromHttpException(status);
+
+      return {
+        status: code === 'INTERNAL_ERROR' ? 500 : status,
+        envelope: { error: { code, message, request_id: requestId } },
+      };
+    }
+
+    return { status: 500, envelope: createInternalErrorEnvelope(requestId) };
   }
 }

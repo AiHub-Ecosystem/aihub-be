@@ -5,6 +5,7 @@ import {
 } from '@nestjs/platform-fastify';
 
 import { AppModule } from './app.module';
+import { generateRequestId } from './common/request-context/request-id';
 
 const DEFAULT_PORT = 3000;
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -12,10 +13,20 @@ const MAX_BODY_BYTES = 1024 * 1024;
 export async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ bodyLimit: MAX_BODY_BYTES }),
+    new FastifyAdapter({
+      // Outer ceiling only. Each operation carries its own `maxBodyBytes`.
+      bodyLimit: MAX_BODY_BYTES,
+      // Makes `request.id` the canonical AIHUB request id, so the exception
+      // filter and every log line agree without extra middleware. Client-sent
+      // ids are never trusted; correlation travels in `X-Correlation-Id`.
+      genReqId: () => generateRequestId(),
+    }),
   );
 
-  app.setGlobalPrefix('v1');
+  // No global prefix: the operation catalog carries the full public path
+  // (`/v1/writing/task1/grade`) so it stays the single source of truth and
+  // matches the D1 contract verbatim. A prefix here would produce `/v1/v1/...`.
+  // `/health` stays unversioned because probes are infrastructure, not API.
   await app.listen(Number(process.env.PORT ?? DEFAULT_PORT), '0.0.0.0');
 }
 
