@@ -17,6 +17,14 @@ import { OPERATION_DISPATCHER } from '../gateway/application/operation-dispatche
 import type { RateLimiterPort } from '../gateway/application/rate-limiter.port';
 import { RATE_LIMITER } from '../gateway/application/rate-limiter.port';
 import type {
+  IdempotencyExecution,
+  IdempotencyExecutionInput,
+  IdempotencyReplayDecoder,
+  IdempotencyServicePort,
+  IdempotencyWork,
+} from '../idempotency/application/idempotency-service.port';
+import { IDEMPOTENCY_SERVICE } from '../idempotency/application/idempotency-service.port';
+import type {
   ApiKeyAuthenticatorPort,
   AuthenticatedApiKey,
 } from '../identity/application/api-key-authenticator.port';
@@ -91,6 +99,21 @@ describe('Writing user assertion HTTP flow', () => {
       };
     },
   } as unknown as OperationDispatcherPort;
+  const idempotencyService: IdempotencyServicePort = {
+    async execute<T>(
+      _input: IdempotencyExecutionInput,
+      work: IdempotencyWork<T>,
+      _decodeReplay: IdempotencyReplayDecoder<T>,
+    ): Promise<IdempotencyExecution<T>> {
+      return {
+        result: await work({
+          signal: AbortSignal.timeout(60_000),
+          deadlineAt: new Date(Date.now() + 60_000),
+        }),
+        replay: false,
+      };
+    },
+  };
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
@@ -121,6 +144,8 @@ describe('Writing user assertion HTTP flow', () => {
       .useValue(limiter)
       .overrideProvider(OPERATION_DISPATCHER)
       .useValue(dispatcher)
+      .overrideProvider(IDEMPOTENCY_SERVICE)
+      .useValue(idempotencyService)
       .overrideProvider(ORGANIZATION_IDENTITY_CONFIG_REPOSITORY)
       .useValue(configRepository)
       .overrideProvider(JWKS_KEY_PROVIDER)
@@ -172,6 +197,7 @@ describe('Writing user assertion HTTP flow', () => {
     return {
       host: 'localhost',
       'x-api-key': 'test-api-key',
+      'idempotency-key': 'user-assertion-test',
       ...(assertionValue === undefined
         ? {}
         : { 'x-user-assertion': assertionValue }),

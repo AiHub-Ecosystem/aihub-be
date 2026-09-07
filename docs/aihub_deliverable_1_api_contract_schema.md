@@ -1459,7 +1459,7 @@ Nếu đo thực tế cho thấy p95 vượt 30 giây thì phải chuyển `writ
 22. Sync/Async Decision per Operation
 23. Example Request/Response cho từng capability chính
 24. OpenAPI/Swagger draft nếu kịp — ✅ **XONG 2026-09-07**, `openapi.json` (OpenAPI 3.1), sinh từ operation catalog qua `pnpm generate:openapi`, không viết tay (issue #2)
-25. Postman examples để handoff sang D2 — ✅ **XONG 2026-09-07**, `aihub.postman_collection.json`, sinh từ `openapi.json` qua `pnpm generate:postman`, chứa đủ 15 case §G; 4 case (7, 13, 14, 15) đang chờ Phase 2 User Assertion / #9 / #10 (issue #6)
+25. Postman examples để handoff sang D2 — ✅ **XONG 2026-09-07**, `aihub.postman_collection.json`, sinh từ `openapi.json` qua `pnpm generate:postman`, chứa đủ 15 case §G; 2 case (13, 14) vẫn chờ #9 metering (issue #6)
 ```
 
 ---

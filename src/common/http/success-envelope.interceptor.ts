@@ -4,7 +4,7 @@ import {
   Injectable,
   type NestInterceptor,
 } from '@nestjs/common';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { type Observable, map } from 'rxjs';
 
 import { isRequestId } from '../request-context/request-id';
@@ -13,6 +13,7 @@ interface DispatchResultLike {
   readonly operation: string;
   readonly data: unknown;
   readonly downstreamMs: number;
+  readonly idempotentReplay?: boolean;
 }
 
 interface SuccessEnvelope<TData> {
@@ -56,6 +57,7 @@ export class SuccessEnvelopeInterceptor implements NestInterceptor {
   ): Observable<SuccessEnvelope<unknown>> {
     const startedAt = performance.now();
     const request = context.switchToHttp().getRequest<FastifyRequest>();
+    const reply = context.switchToHttp().getResponse<FastifyReply>();
 
     return next.handle().pipe(
       map((value: unknown) => {
@@ -69,6 +71,9 @@ export class SuccessEnvelopeInterceptor implements NestInterceptor {
           ? request.id
           : String(request.id);
         const correlation = correlationId(request);
+        if (value.idempotentReplay === true) {
+          reply.header('Idempotent-Replay', 'true');
+        }
         const meta = {
           request_id: requestId,
           ...(correlation === undefined ? {} : { correlation_id: correlation }),

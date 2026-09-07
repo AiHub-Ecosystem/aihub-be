@@ -12,29 +12,36 @@ import type { ErrorCode } from '../common/errors/error-code';
 /**
  * Every (status, codes) pair actually reachable today, read off the real
  * throw sites rather than the full `ERROR_CODES` union — several of that
- * union's members (`IDEMPOTENCY_CONFLICT`, `CONCURRENCY_LIMIT`,
- * `QUOTA_EXCEEDED`, the user-assertion codes) are reserved for phases not
- * built yet and no code path can produce them.
+ * union's members (`CONCURRENCY_LIMIT`, `QUOTA_EXCEEDED`) are reserved for
+ * phases not built yet and no code path can produce them.
  *
  * All four operations share this exact set because they share the same
- * middleware pipeline (auth, body-size, validation, rate limit, dispatch);
- * none currently has distinguishing error behaviour.
+ * middleware pipeline (auth, user assertion, body-size, validation, rate
+ * limit, dispatch); idempotent grading adds the conflict response to that
+ * shared map.
  *
  * This list is hand-maintained, not derived: there is no single registry in
  * the codebase mapping an `ErrorCode` to its HTTP status (each throw site
- * inlines its own `httpStatus`). Adding a new error site — most likely
- * `IDEMPOTENCY_CONFLICT` once idempotency lands — means updating this list
- * by hand; nothing else fails loudly if that step is missed.
+ * inlines its own `httpStatus`). Adding a new error site means updating this
+ * list by hand; nothing else fails loudly if that step is missed.
  */
 const REACHABLE_ERRORS: ReadonlyMap<number, readonly ErrorCode[]> = new Map([
   [400, ['INVALID_REQUEST']],
-  [401, ['UNAUTHORIZED']],
+  [401, ['UNAUTHORIZED', 'USER_ASSERTION_REQUIRED', 'INVALID_USER_ASSERTION']],
   [403, ['FORBIDDEN', 'ENVIRONMENT_NOT_ALLOWED']],
   [413, ['PAYLOAD_TOO_LARGE']],
+  [409, ['IDEMPOTENCY_CONFLICT']],
   [429, ['RATE_LIMITED']],
   [500, ['INTERNAL_ERROR']],
   [502, ['AI_SERVICE_ERROR', 'AI_SERVICE_CONTRACT_VIOLATION']],
-  [503, ['AI_SERVICE_THROTTLED', 'AI_SERVICE_UNAVAILABLE']],
+  [
+    503,
+    [
+      'AI_SERVICE_THROTTLED',
+      'AI_SERVICE_UNAVAILABLE',
+      'IDENTITY_PROVIDER_UNAVAILABLE',
+    ],
+  ],
   [504, ['AI_SERVICE_TIMEOUT']],
 ]);
 
@@ -103,10 +110,10 @@ function idempotencyKeyParameter(
     name: 'Idempotency-Key',
     in: 'header',
     required: mode === 'required',
-    schema: { type: 'string' },
+    schema: { type: 'string', minLength: 1, maxLength: 255 },
     description:
       mode === 'required'
-        ? 'Required. Scoped to (organization, operation, key); replays the stored result for a repeat call.'
+        ? 'Required. Trimmed and limited to 1–255 UTF-8 bytes. Scoped to (organization, operation, key); replays the stored result for a repeat call.'
         : 'Optional. This operation may call a model, so a client that wants replay safety should send one.',
   };
 }
@@ -118,6 +125,15 @@ const CORRELATION_ID_PARAMETER = {
   schema: { type: 'string' },
   description:
     "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+};
+
+const USER_ASSERTION_PARAMETER = {
+  name: 'X-User-Assertion',
+  in: 'header',
+  required: true,
+  schema: { type: 'string', minLength: 1 },
+  description:
+    'Signed organization assertion identifying the end user. Required for user-scoped operations.',
 };
 
 function resolvedResponseSchema(
@@ -142,12 +158,26 @@ function operationToPathItem(
 ): Record<string, unknown> {
   const parameters = [
     { $ref: '#/components/parameters/CorrelationId' },
+    operation.identityScope === 'user'
+      ? { $ref: '#/components/parameters/UserAssertion' }
+      : undefined,
     idempotencyKeyParameter(operation.idempotency),
   ].filter((parameter) => parameter !== undefined);
 
   const responses: Record<string, unknown> = {
     '200': {
       description: 'Success',
+      ...(operation.idempotency === 'required'
+        ? {
+            headers: {
+              'Idempotent-Replay': {
+                description:
+                  'Present with value true when the completed business result was replayed for this key.',
+                schema: { type: 'string', enum: ['true'] },
+              },
+            },
+          }
+        : {}),
       content: {
         'application/json': {
           schema: successEnvelopeSchema(
@@ -159,6 +189,9 @@ function operationToPathItem(
   };
 
   for (const status of REACHABLE_ERRORS.keys()) {
+    if (status === 409 && operation.idempotency !== 'required') {
+      continue;
+    }
     responses[String(status)] = {
       $ref: `#/components/responses/Error${status}`,
     };
@@ -224,6 +257,7 @@ export function buildOpenApiDocument(version: string): unknown {
       },
       parameters: {
         CorrelationId: CORRELATION_ID_PARAMETER,
+        UserAssertion: USER_ASSERTION_PARAMETER,
       },
       responses: errorResponses,
     },

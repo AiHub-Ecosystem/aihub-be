@@ -19,6 +19,14 @@ interface Scenario {
 
 const JSON_HEADER = { key: 'Content-Type', value: 'application/json' } as const;
 const VALID_KEY_HEADER = { key: 'X-API-Key', value: '{{apiKey}}' } as const;
+const IDEMPOTENCY_HEADER = {
+  key: 'Idempotency-Key',
+  value: '{{$guid}}',
+} as const;
+const USER_ASSERTION_HEADER = {
+  key: 'X-User-Assertion',
+  value: '{{userAssertion}}',
+} as const;
 
 const TASK1_QUESTION_PATH = '/v1/writing/task1/questions';
 const TASK2_QUESTION_PATH = '/v1/writing/task2/questions';
@@ -68,7 +76,7 @@ function assertEnvelope(operationId: string): readonly string[] {
 
 /**
  * The 15 numbered items are `docs/aihub_deliverable_1_api_contract_schema.md`
- * §G "D2 Postman tests tối thiểu" verbatim, in order. Items 7, 13, 14, and 15
+ * §G "D2 Postman tests tối thiểu" verbatim, in order. Items 13 and 14
  * cannot pass yet — each names the slice it is waiting on, per that issue's
  * acceptance criteria, instead of silently asserting today's (wrong) result.
  */
@@ -102,7 +110,12 @@ const D1_SCENARIOS: readonly Scenario[] = [
     description:
       'Valid API key + valid request routes to the correct AI Service operation.',
     path: TASK1_GRADE_PATH,
-    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
+    ],
     body: TASK1_GRADE_BODY,
     testScript: [assertStatus(200), ...assertEnvelope('writing.task1.grade')],
   },
@@ -111,7 +124,12 @@ const D1_SCENARIOS: readonly Scenario[] = [
     description:
       'Valid API key + valid request routes to the correct AI Service operation.',
     path: TASK2_GRADE_PATH,
-    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
+    ],
     body: TASK2_GRADE_BODY,
     testScript: [assertStatus(200), ...assertEnvelope('writing.task2.grade')],
   },
@@ -161,21 +179,25 @@ const D1_SCENARIOS: readonly Scenario[] = [
     description:
       "Fill {{wrongScopeApiKey}} with a real key that has only the 'writing.question.generate' scope, then call a 'writing.grade' operation with it.",
     path: TASK1_GRADE_PATH,
-    headers: [JSON_HEADER, { key: 'X-API-Key', value: '{{wrongScopeApiKey}}' }],
+    headers: [
+      JSON_HEADER,
+      { key: 'X-API-Key', value: '{{wrongScopeApiKey}}' },
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
+    ],
     body: TASK1_GRADE_BODY,
     testScript: [assertStatus(403), ...assertErrorCode(['FORBIDDEN'])],
   },
   {
-    name: '7. User-scoped operation missing/invalid User Assertion — BLOCKED',
+    name: '7. User-scoped operation missing User Assertion',
     description:
-      'BLOCKED: waiting on the Phase 2 User Assertion feature, which is not implemented and not yet tracked as an issue (see docs/superpowers/specs/2026-09-07-aihub). Today grade operations do not check for a user assertion at all, so this request currently succeeds instead of failing.',
+      'A user-scoped grading operation without X-User-Assertion must be rejected before dispatch.',
     path: TASK1_GRADE_PATH,
     headers: [JSON_HEADER, VALID_KEY_HEADER],
     body: TASK1_GRADE_BODY,
     testScript: [
-      "pm.test('BLOCKED: waiting on Phase 2 User Assertion (not yet an issue) - replace with a 401/403 assertion once it lands', function () {",
-      '  pm.expect(true).to.be.true;',
-      '});',
+      assertStatus(401),
+      ...assertErrorCode(['USER_ASSERTION_REQUIRED']),
     ],
   },
   {
@@ -256,7 +278,12 @@ const D1_SCENARIOS: readonly Scenario[] = [
     description:
       'BLOCKED: waiting on #9 (metering). No usage or model field exists on the public response yet.',
     path: TASK1_GRADE_PATH,
-    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
+    ],
     body: TASK1_GRADE_BODY,
     testScript: [
       "pm.test('BLOCKED: waiting on #9 (metering) - add real usage/model field assertions once it lands', function () {",
@@ -269,7 +296,12 @@ const D1_SCENARIOS: readonly Scenario[] = [
     description:
       'BLOCKED: waiting on #9 (metering). No usage breakdown field exists on the public response yet.',
     path: TASK1_GRADE_PATH,
-    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
+    ],
     body: TASK1_GRADE_BODY,
     testScript: [
       "pm.test('BLOCKED: waiting on #9 (metering) - add real multi-model aggregate assertions once it lands', function () {",
@@ -278,19 +310,32 @@ const D1_SCENARIOS: readonly Scenario[] = [
     ],
   },
   {
-    name: '15. Idempotency behavior — BLOCKED',
+    name: '15. Idempotency behavior',
     description:
-      'BLOCKED: waiting on #10 (idempotency). Sending the same Idempotency-Key twice today runs the model twice instead of replaying.',
+      'Sends the same validated Task 1 grading request twice with one key; the second response must replay the completed result without a second downstream call.',
     path: TASK1_GRADE_PATH,
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      { key: 'Idempotency-Key', value: '{{$guid}}' },
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
     ],
     body: TASK1_GRADE_BODY,
     testScript: [
-      "pm.test('BLOCKED: waiting on #10 (idempotency) - assert the second call replays instead of re-running once it lands', function () {",
-      '  pm.expect(true).to.be.true;',
+      assertStatus(200),
+      ...assertEnvelope('writing.task1.grade'),
+      'pm.sendRequest({',
+      '  url: pm.request.url.toString(),',
+      '  method: pm.request.method,',
+      '  header: pm.request.headers.toJSON(),',
+      "  body: { mode: 'raw', raw: pm.request.body.raw }",
+      '}, function (error, response) {',
+      "  pm.test('same key replays the completed result', function () {",
+      '    pm.expect(error).to.equal(null);',
+      '    pm.expect(response.code).to.eql(200);',
+      "    pm.expect(response.headers.get('Idempotent-Replay')).to.eql('true');",
+      '    pm.expect(response.json().data).to.eql(pm.response.json().data);',
+      '  });',
       '});',
     ],
   },
@@ -413,6 +458,10 @@ export async function buildPostmanCollection(
       {
         key: 'wrongScopeApiKey',
         value: 'REPLACE_WITH_A_KEY_SCOPED_TO_WRITING_QUESTION_GENERATE_ONLY',
+      },
+      {
+        key: 'userAssertion',
+        value: 'REPLACE_WITH_A_VALID_SIGNED_USER_ASSERTION',
       },
     ],
     item: [

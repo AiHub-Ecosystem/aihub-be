@@ -17,6 +17,7 @@ import { SuccessEnvelopeInterceptor } from '../../../common/http/success-envelop
 import { createRequestContext } from '../../../common/request-context/request-context.factory';
 import {
   type GradeResponse,
+  GradeResponseSchema,
   GradeTask1RequestSchema,
   GradeTask2RequestSchema,
   type GradeTask1Request as Task1Request,
@@ -28,6 +29,12 @@ import {
   type OperationDispatcherPort,
 } from '../../gateway/application/operation-dispatcher.port';
 import { RateLimitGuard } from '../../gateway/presentation/rate-limit.guard';
+import {
+  IDEMPOTENCY_SERVICE,
+  type IdempotencyServicePort,
+  type IdempotencyWorkContext,
+} from '../../idempotency/application/idempotency-service.port';
+import { requireIdempotencyKey } from '../../idempotency/presentation/idempotency-key';
 import { ApiKeyGuard } from '../../identity/presentation/api-key.guard';
 import {
   type AuthenticatedRequest,
@@ -76,6 +83,43 @@ function parseTask2Body(body: unknown): Task2Request {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function decodeTask1Replay(value: unknown): DispatchResult<GradeResponse> {
+  if (
+    !isRecord(value) ||
+    value.operation !== TASK1_OPERATION ||
+    typeof value.downstreamMs !== 'number' ||
+    !Number.isFinite(value.downstreamMs) ||
+    value.downstreamMs < 0 ||
+    !('data' in value) ||
+    !Value.Check(GradeResponseSchema, value.data)
+  ) {
+    throw new Error('stored Task 1 grading response is malformed');
+  }
+
+  return {
+    operation: TASK1_OPERATION,
+    data: Value.Parse(GradeResponseSchema, value.data),
+    downstreamMs: value.downstreamMs,
+  };
+}
+
+function requireUserId(request: AuthenticatedRequest): string {
+  const userId = request.aihubIdentity?.userId;
+  if (userId === undefined || userId.trim().length === 0) {
+    throw new AppError({
+      code: 'USER_ASSERTION_REQUIRED',
+      message: 'A valid user assertion is required',
+      httpStatus: 401,
+      retryable: false,
+    });
+  }
+  return userId;
+}
+
 /**
  * Both grading operations in one controller: they return the same
  * `GradeResponse` shape and differ only in request schema and which
@@ -89,6 +133,8 @@ export class WritingGradingController {
   constructor(
     @Inject(OPERATION_DISPATCHER)
     private readonly dispatcher: OperationDispatcherPort,
+    @Inject(IDEMPOTENCY_SERVICE)
+    private readonly idempotency: IdempotencyServicePort,
   ) {}
 
   @Post(OPERATION_CATALOG[TASK1_OPERATION].path)
@@ -100,11 +146,16 @@ export class WritingGradingController {
   ): Promise<DispatchResult<GradeResponse>> {
     const input = parseTask1Body(body);
     const authenticated = getAuthenticatedApiKey(request);
+    const actorId = requireUserId(request);
+    const idempotencyKey = requireIdempotencyKey(
+      request.headers['idempotency-key'],
+    );
     const { signal, dispose } = createClientDisconnectSignal(request.raw);
 
     try {
+      const requestId = String(request.id);
       const context = createRequestContext({
-        requestId: String(request.id),
+        requestId,
         receivedAt: new Date(),
         deadlineMs: OPERATION_CATALOG[TASK1_OPERATION].timeoutMs,
         organizationId: authenticated.organizationId,
@@ -116,7 +167,28 @@ export class WritingGradingController {
         signal,
       });
 
-      return await this.dispatcher.dispatch(TASK1_OPERATION, input, context);
+      const execution = await this.idempotency.execute(
+        {
+          organizationId: authenticated.organizationId,
+          operation: TASK1_OPERATION,
+          idempotencyKey,
+          actorId,
+          requestBody: input,
+          requestId,
+          timeoutMs: OPERATION_CATALOG[TASK1_OPERATION].timeoutMs,
+        },
+        (workContext: IdempotencyWorkContext) =>
+          this.dispatcher.dispatch(TASK1_OPERATION, input, {
+            ...context,
+            signal: workContext.signal,
+            deadlineAt: workContext.deadlineAt,
+          }),
+        decodeTask1Replay,
+      );
+
+      return execution.replay
+        ? { ...execution.result, downstreamMs: 0, idempotentReplay: true }
+        : execution.result;
     } finally {
       dispose();
     }

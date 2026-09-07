@@ -1,4 +1,3 @@
-import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
 import type { RequestContext } from '../../../common/request-context/request-context';
@@ -38,6 +37,7 @@ function mapDownstreamStatus(status: number): AppError {
     message: 'AI service returned an error',
     httpStatus: 502,
     retryable: status >= 500,
+    downstreamStatus: status,
     cause: new Error(`downstream status ${status}`),
   });
 }
@@ -112,9 +112,8 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
 
     const downstreamRequest = adapter.buildRequest(input, context);
     const token = await this.tokenIssuer.mint(context, operation);
-    const operationTimeoutMs = OPERATION_CATALOG[operation].timeoutMs;
     const remainingMs = Math.max(1, context.deadlineAt.getTime() - Date.now());
-    const timeoutMs = Math.min(operationTimeoutMs, remainingMs);
+    const timeoutMs = remainingMs;
     const signal = AbortSignal.any([
       context.signal,
       AbortSignal.timeout(timeoutMs),

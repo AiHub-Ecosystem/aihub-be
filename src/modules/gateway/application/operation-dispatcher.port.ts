@@ -18,6 +18,7 @@ export interface DispatchResult<TOutput> {
   readonly operation: OperationId;
   readonly data: TOutput;
   readonly downstreamMs: number;
+  readonly idempotentReplay?: boolean;
 }
 
 /**

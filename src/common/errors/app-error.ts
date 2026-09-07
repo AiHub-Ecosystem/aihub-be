@@ -7,6 +7,7 @@ export interface AppErrorOptions {
   readonly httpStatus: number;
   readonly retryable: boolean;
   readonly details?: Readonly<Record<string, unknown>>;
+  readonly downstreamStatus?: number;
   readonly cause?: unknown;
 }
 
@@ -15,6 +16,7 @@ export class AppError extends Error {
   readonly httpStatus: number;
   readonly retryable: boolean;
   readonly details?: Readonly<Record<string, unknown>>;
+  readonly downstreamStatus?: number;
 
   constructor(options: AppErrorOptions) {
     super(
@@ -25,6 +27,10 @@ export class AppError extends Error {
     this.code = options.code;
     this.httpStatus = options.httpStatus;
     this.retryable = options.retryable;
+
+    if (options.downstreamStatus !== undefined) {
+      this.downstreamStatus = options.downstreamStatus;
+    }
 
     if (options.details !== undefined) {
       this.details = options.details;

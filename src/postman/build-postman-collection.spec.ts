@@ -11,7 +11,13 @@ interface PostmanItemGroup {
 
 interface PostmanItem {
   readonly name: string;
-  readonly request?: { readonly url: unknown };
+  readonly request?: {
+    readonly url: unknown;
+    readonly header?: readonly {
+      readonly key: string;
+      readonly value: string;
+    }[];
+  };
   readonly event?: readonly {
     readonly script: { readonly exec: readonly string[] };
   }[];
@@ -70,11 +76,30 @@ describe('buildPostmanCollection', () => {
       item.name.includes('BLOCKED'),
     );
 
-    expect(blocked).toHaveLength(4); // items 7, 13, 14, 15
+    expect(blocked).toHaveLength(2); // items 13, 14
 
     for (const item of blocked) {
       const exec = item.event?.[0]?.script.exec.join('\n') ?? '';
-      expect(exec).toMatch(/#9|#10|Phase 2/);
+      expect(exec).toMatch(/#9|#10/);
     }
+  });
+
+  it('uses a valid assertion for user-scoped grading scenarios and checks missing assertion', async () => {
+    const collection = await build();
+    const folder = findD1Folder(collection);
+    const task1Grade = folder.item?.find(
+      (item) => item.name === '1c. Valid request routes to Task 1 grading',
+    );
+    const missingAssertion = folder.item?.find(
+      (item) => item.name === '7. User-scoped operation missing User Assertion',
+    );
+
+    expect(task1Grade?.request?.header).toContainEqual({
+      key: 'X-User-Assertion',
+      value: '{{userAssertion}}',
+    });
+    expect(missingAssertion?.event?.[0]?.script.exec.join('\n')).toContain(
+      'USER_ASSERTION_REQUIRED',
+    );
   });
 });

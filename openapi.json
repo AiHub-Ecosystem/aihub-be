@@ -27,6 +27,16 @@
           "type": "string"
         },
         "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`."
+      },
+      "UserAssertion": {
+        "name": "X-User-Assertion",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": "Signed organization assertion identifying the end user. Required for user-scoped operations."
       }
     },
     "responses": {
@@ -67,7 +77,7 @@
         }
       },
       "Error401": {
-        "description": "UNAUTHORIZED",
+        "description": "UNAUTHORIZED | USER_ASSERTION_REQUIRED | INVALID_USER_ASSERTION",
         "content": {
           "application/json": {
             "schema": {
@@ -81,8 +91,20 @@
                   "required": ["code", "message", "request_id"],
                   "properties": {
                     "code": {
-                      "const": "UNAUTHORIZED",
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "const": "UNAUTHORIZED",
+                          "type": "string"
+                        },
+                        {
+                          "const": "USER_ASSERTION_REQUIRED",
+                          "type": "string"
+                        },
+                        {
+                          "const": "INVALID_USER_ASSERTION",
+                          "type": "string"
+                        }
+                      ]
                     },
                     "message": {
                       "type": "string"
@@ -162,6 +184,42 @@
                   "properties": {
                     "code": {
                       "const": "PAYLOAD_TOO_LARGE",
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "properties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Error409": {
+        "description": "IDEMPOTENCY_CONFLICT",
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": ["error"],
+              "properties": {
+                "error": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["code", "message", "request_id"],
+                  "properties": {
+                    "code": {
+                      "const": "IDEMPOTENCY_CONFLICT",
                       "type": "string"
                     },
                     "message": {
@@ -299,7 +357,7 @@
         }
       },
       "Error503": {
-        "description": "AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
+        "description": "AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE | IDENTITY_PROVIDER_UNAVAILABLE",
         "content": {
           "application/json": {
             "schema": {
@@ -320,6 +378,10 @@
                         },
                         {
                           "const": "AI_SERVICE_UNAVAILABLE",
+                          "type": "string"
+                        },
+                        {
+                          "const": "IDENTITY_PROVIDER_UNAVAILABLE",
                           "type": "string"
                         }
                       ]
@@ -611,7 +673,9 @@
             "in": "header",
             "required": false,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             },
             "description": "Optional. This operation may call a model, so a client that wants replay safety should send one."
           }
@@ -806,13 +870,18 @@
             "$ref": "#/components/parameters/CorrelationId"
           },
           {
+            "$ref": "#/components/parameters/UserAssertion"
+          },
+          {
             "name": "Idempotency-Key",
             "in": "header",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             },
-            "description": "Required. Scoped to (organization, operation, key); replays the stored result for a repeat call."
+            "description": "Required. Trimmed and limited to 1–255 UTF-8 bytes. Scoped to (organization, operation, key); replays the stored result for a repeat call."
           }
         ],
         "requestBody": {
@@ -883,6 +952,15 @@
         "responses": {
           "200": {
             "description": "Success",
+            "headers": {
+              "Idempotent-Replay": {
+                "description": "Present with value true when the completed business result was replayed for this key.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["true"]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1106,6 +1184,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Error403"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
           },
           "413": {
             "$ref": "#/components/responses/Error413"
@@ -1145,13 +1226,18 @@
             "$ref": "#/components/parameters/CorrelationId"
           },
           {
+            "$ref": "#/components/parameters/UserAssertion"
+          },
+          {
             "name": "Idempotency-Key",
             "in": "header",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             },
-            "description": "Required. Scoped to (organization, operation, key); replays the stored result for a repeat call."
+            "description": "Required. Trimmed and limited to 1–255 UTF-8 bytes. Scoped to (organization, operation, key); replays the stored result for a repeat call."
           }
         ],
         "requestBody": {
@@ -1190,6 +1276,15 @@
         "responses": {
           "200": {
             "description": "Success",
+            "headers": {
+              "Idempotent-Replay": {
+                "description": "Present with value true when the completed business result was replayed for this key.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["true"]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1413,6 +1508,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Error403"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
           },
           "413": {
             "$ref": "#/components/responses/Error413"

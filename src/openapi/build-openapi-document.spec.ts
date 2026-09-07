@@ -116,6 +116,25 @@ describe('buildOpenApiDocument', () => {
     }
   });
 
+  it('requires a user assertion only for user-scoped operations', () => {
+    const userParameters =
+      build().paths['/v1/writing/task1/grade']?.post.parameters;
+    const organizationParameters =
+      build().paths['/v1/writing/task1/questions']?.post.parameters;
+
+    expect(userParameters).toContainEqual({
+      $ref: '#/components/parameters/UserAssertion',
+    });
+    expect(organizationParameters).not.toContainEqual({
+      $ref: '#/components/parameters/UserAssertion',
+    });
+    expect(build().components.parameters.UserAssertion).toMatchObject({
+      name: 'X-User-Assertion',
+      in: 'header',
+      required: true,
+    });
+  });
+
   it('declares the organization API key as a security scheme, not a bare header parameter', () => {
     const doc = build();
 
@@ -134,6 +153,7 @@ describe('buildOpenApiDocument', () => {
     expect(Object.keys(operation?.responses ?? {}).sort()).toEqual(
       [
         '200',
+        '409',
         '400',
         '401',
         '403',
@@ -146,6 +166,24 @@ describe('buildOpenApiDocument', () => {
       ].sort(),
     );
     expect(doc.components.responses.Error503).toBeDefined();
+    expect(doc.components.responses.Error409).toBeDefined();
+  });
+
+  it('documents the replay marker on required idempotent success responses', () => {
+    const operation = build().paths['/v1/writing/task1/grade']?.post;
+    const success = operation?.responses['200'] as {
+      readonly headers?: Record<string, unknown>;
+    };
+
+    expect(success.headers?.['Idempotent-Replay']).toMatchObject({
+      schema: { type: 'string', enum: ['true'] },
+    });
+  });
+
+  it('does not advertise idempotency conflicts for operations catalogued as none', () => {
+    const operation = build().paths['/v1/writing/task1/questions']?.post;
+
+    expect(operation?.responses['409']).toBeUndefined();
   });
 
   it('takes the document version from the caller rather than hardcoding one', () => {
