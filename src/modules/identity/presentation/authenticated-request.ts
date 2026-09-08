@@ -18,7 +18,6 @@ export function getAuthenticatedApiKey(
     throw new AppError({
       code: 'UNAUTHORIZED',
       message: 'Authentication is required',
-      httpStatus: 401,
       retryable: false,
     });
   }

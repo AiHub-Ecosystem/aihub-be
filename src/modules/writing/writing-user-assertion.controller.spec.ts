@@ -71,7 +71,6 @@ describe('Writing user assertion HTTP flow', () => {
         throw new AppError({
           code: 'IDENTITY_PROVIDER_UNAVAILABLE',
           message: 'Identity provider is unavailable',
-          httpStatus: 503,
           retryable: true,
         });
       }

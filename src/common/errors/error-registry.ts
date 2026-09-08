@@ -1,0 +1,46 @@
+import type { ErrorCode } from './error-code';
+
+export type HttpStatus =
+  | 400
+  | 401
+  | 403
+  | 404
+  | 409
+  | 413
+  | 429
+  | 500
+  | 502
+  | 503
+  | 504;
+
+export const ERROR_STATUS_BY_CODE = {
+  INVALID_REQUEST: 400,
+  PAYLOAD_TOO_LARGE: 413,
+  NOT_FOUND: 404,
+  UNAUTHORIZED: 401,
+  USER_ASSERTION_REQUIRED: 401,
+  INVALID_USER_ASSERTION: 401,
+  IDENTITY_PROVIDER_UNAVAILABLE: 503,
+  FORBIDDEN: 403,
+  ENVIRONMENT_NOT_ALLOWED: 403,
+  IDEMPOTENCY_CONFLICT: 409,
+  RATE_LIMITED: 429,
+  CONCURRENCY_LIMIT: 429,
+  QUOTA_EXCEEDED: 429,
+  AI_SERVICE_THROTTLED: 503,
+  AI_SERVICE_TIMEOUT: 504,
+  AI_SERVICE_UNAVAILABLE: 503,
+  AI_SERVICE_CONTRACT_VIOLATION: 502,
+  AI_SERVICE_ERROR: 502,
+  INTERNAL_ERROR: 500,
+} as const satisfies Record<ErrorCode, HttpStatus>;
+
+export function httpStatusForErrorCode(code: string): HttpStatus {
+  for (const [registeredCode, status] of Object.entries(ERROR_STATUS_BY_CODE)) {
+    if (registeredCode === code) {
+      return status;
+    }
+  }
+
+  throw new Error(`Unknown ErrorCode: ${code}`);
+}

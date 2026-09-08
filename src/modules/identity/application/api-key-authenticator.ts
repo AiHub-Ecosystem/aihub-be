@@ -39,7 +39,6 @@ function unauthorized(): AppError {
   return new AppError({
     code: 'UNAUTHORIZED',
     message: 'Authentication is required',
-    httpStatus: 401,
     retryable: false,
   });
 }
@@ -48,7 +47,6 @@ function environmentNotAllowed(): AppError {
   return new AppError({
     code: 'ENVIRONMENT_NOT_ALLOWED',
     message: 'API key is not allowed in this environment',
-    httpStatus: 403,
     retryable: false,
   });
 }
@@ -57,7 +55,6 @@ function organizationSuspended(): AppError {
   return new AppError({
     code: 'FORBIDDEN',
     message: 'Organization is not active',
-    httpStatus: 403,
     retryable: false,
   });
 }
@@ -66,7 +63,6 @@ function rateLimited(): AppError {
   return new AppError({
     code: 'RATE_LIMITED',
     message: 'Too many authentication failures',
-    httpStatus: 429,
     retryable: true,
     retryAfterMs: AUTH_FAILURE_WINDOW_MS,
   });

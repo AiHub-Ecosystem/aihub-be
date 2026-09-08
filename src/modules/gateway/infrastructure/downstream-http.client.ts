@@ -17,7 +17,6 @@ function configurationError(reason: string): AppError {
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Downstream HTTP client is not configured',
-    httpStatus: 500,
     retryable: false,
     cause: new Error(reason),
   });
@@ -40,7 +39,6 @@ function transportError(error: unknown): AppError {
     return new AppError({
       code: 'AI_SERVICE_TIMEOUT',
       message: 'AI service request timed out',
-      httpStatus: 504,
       retryable: true,
       cause: error,
     });
@@ -49,7 +47,6 @@ function transportError(error: unknown): AppError {
   return new AppError({
     code: 'AI_SERVICE_UNAVAILABLE',
     message: 'AI service is temporarily unavailable',
-    httpStatus: 503,
     retryable: true,
     cause: error,
   });
@@ -142,7 +139,6 @@ export class DownstreamHttpClient {
         throw new AppError({
           code: 'AI_SERVICE_CONTRACT_VIOLATION',
           message: 'AI service returned an unexpected response shape',
-          httpStatus: 502,
           retryable: false,
           cause: error,
         });

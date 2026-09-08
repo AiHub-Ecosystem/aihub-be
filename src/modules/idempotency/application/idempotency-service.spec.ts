@@ -172,13 +172,11 @@ describe('IdempotencyService', () => {
     const clientError = new AppError({
       code: 'INVALID_REQUEST',
       message: 'invalid',
-      httpStatus: 400,
       retryable: false,
     });
     const downstreamError = new AppError({
       code: 'AI_SERVICE_UNAVAILABLE',
       message: 'unavailable',
-      httpStatus: 503,
       retryable: true,
     });
 
@@ -345,7 +343,6 @@ describe('IdempotencyService', () => {
     const downstreamClientError = new AppError({
       code: 'AI_SERVICE_ERROR',
       message: 'downstream rejected the request',
-      httpStatus: 502,
       retryable: false,
       downstreamStatus: 400,
     });

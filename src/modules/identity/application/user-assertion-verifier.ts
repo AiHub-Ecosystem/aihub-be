@@ -26,7 +26,6 @@ function invalidUserAssertion(cause?: unknown): AppError {
   return new AppError({
     code: 'INVALID_USER_ASSERTION',
     message: 'User assertion is invalid',
-    httpStatus: 401,
     retryable: false,
     ...(cause === undefined ? {} : { cause }),
   });
@@ -36,7 +35,6 @@ function identityProviderUnavailable(cause?: unknown): AppError {
   return new AppError({
     code: 'IDENTITY_PROVIDER_UNAVAILABLE',
     message: 'Identity provider is unavailable',
-    httpStatus: 503,
     retryable: true,
     ...(cause === undefined ? {} : { cause }),
   });

@@ -50,7 +50,6 @@ function invalidRequest(): AppError {
   return new AppError({
     code: 'INVALID_REQUEST',
     message: 'Request failed validation',
-    httpStatus: 400,
     retryable: false,
   });
 }
@@ -69,7 +68,6 @@ function parseBody(body: unknown): Task2QuestionRequest {
     throw new AppError({
       code: 'INVALID_REQUEST',
       message: 'Request failed validation',
-      httpStatus: 400,
       retryable: false,
       cause: error,
     });

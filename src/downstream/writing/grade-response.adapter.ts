@@ -28,7 +28,6 @@ function contractViolation(reason: string): AppError {
     // Deliberately generic: the reason travels in `cause` for logs, never to
     // the client.
     message: 'AI service returned an unexpected response shape',
-    httpStatus: 502,
     retryable: false,
     cause: new Error(reason),
   });

@@ -20,7 +20,6 @@ function concurrencyLimited(retryAfterMs: number): AppError {
   return new AppError({
     code: 'CONCURRENCY_LIMIT',
     message: 'Concurrency limit exceeded',
-    httpStatus: 429,
     retryable: true,
     retryAfterMs,
   });

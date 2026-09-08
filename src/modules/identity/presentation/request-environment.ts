@@ -52,7 +52,6 @@ export function resolveAihubEnvironment(
   throw new AppError({
     code: 'ENVIRONMENT_NOT_ALLOWED',
     message: 'Request host is not bound to an AIHUB environment',
-    httpStatus: 403,
     retryable: false,
   });
 }

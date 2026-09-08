@@ -165,6 +165,7 @@ describe('buildOpenApiDocument', () => {
         '400',
         '401',
         '403',
+        '404',
         '413',
         '429',
         '500',
@@ -174,7 +175,11 @@ describe('buildOpenApiDocument', () => {
       ].sort(),
     );
     expect(doc.components.responses.Error503).toBeDefined();
+    expect(doc.components.responses.Error404).toBeDefined();
     expect(doc.components.responses.Error409).toBeDefined();
+    expect(JSON.stringify(doc.components.responses.Error404)).toContain(
+      'NOT_FOUND',
+    );
     expect(JSON.stringify(doc.components.responses.Error429)).toContain(
       'CONCURRENCY_LIMIT',
     );

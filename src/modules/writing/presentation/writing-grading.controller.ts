@@ -53,7 +53,6 @@ function invalidRequest(cause?: unknown): AppError {
   return new AppError({
     code: 'INVALID_REQUEST',
     message: 'Request failed validation',
-    httpStatus: 400,
     retryable: false,
     ...(cause === undefined ? {} : { cause }),
   });
@@ -136,7 +135,6 @@ function requireUserId(request: AuthenticatedRequest): string {
     throw new AppError({
       code: 'USER_ASSERTION_REQUIRED',
       message: 'A valid user assertion is required',
-      httpStatus: 401,
       retryable: false,
     });
   }

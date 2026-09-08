@@ -18,7 +18,6 @@ class BoomController {
     throw new AppError({
       code: 'AI_SERVICE_UNAVAILABLE',
       message: 'AI service is temporarily unavailable',
-      httpStatus: 503,
       retryable: true,
     });
   }

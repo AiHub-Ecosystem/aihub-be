@@ -6,7 +6,6 @@ function invalidIdempotencyKey(): AppError {
   return new AppError({
     code: 'INVALID_REQUEST',
     message: 'Idempotency-Key must be between 1 and 255 UTF-8 bytes',
-    httpStatus: 400,
     retryable: false,
   });
 }

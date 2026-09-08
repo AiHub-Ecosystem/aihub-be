@@ -189,8 +189,8 @@
           }
         }
       },
-      "Error413": {
-        "description": "PAYLOAD_TOO_LARGE",
+      "Error404": {
+        "description": "NOT_FOUND",
         "content": {
           "application/json": {
             "schema": {
@@ -204,7 +204,7 @@
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
                     "code": {
-                      "const": "PAYLOAD_TOO_LARGE",
+                      "const": "NOT_FOUND",
                       "type": "string"
                     },
                     "message": {
@@ -275,8 +275,51 @@
           }
         }
       },
+      "Error413": {
+        "description": "PAYLOAD_TOO_LARGE",
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": ["error"],
+              "properties": {
+                "error": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["code", "message", "request_id", "retryable"],
+                  "properties": {
+                    "code": {
+                      "const": "PAYLOAD_TOO_LARGE",
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    },
+                    "retry_after_ms": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "details": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "properties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "Error429": {
-        "description": "RATE_LIMITED | CONCURRENCY_LIMIT",
+        "description": "RATE_LIMITED | CONCURRENCY_LIMIT | QUOTA_EXCEEDED",
         "content": {
           "application/json": {
             "schema": {
@@ -297,6 +340,10 @@
                         },
                         {
                           "const": "CONCURRENCY_LIMIT",
+                          "type": "string"
+                        },
+                        {
+                          "const": "QUOTA_EXCEEDED",
                           "type": "string"
                         }
                       ]
@@ -370,7 +417,7 @@
         }
       },
       "Error502": {
-        "description": "AI_SERVICE_ERROR | AI_SERVICE_CONTRACT_VIOLATION",
+        "description": "AI_SERVICE_CONTRACT_VIOLATION | AI_SERVICE_ERROR",
         "content": {
           "application/json": {
             "schema": {
@@ -386,11 +433,11 @@
                     "code": {
                       "anyOf": [
                         {
-                          "const": "AI_SERVICE_ERROR",
+                          "const": "AI_SERVICE_CONTRACT_VIOLATION",
                           "type": "string"
                         },
                         {
-                          "const": "AI_SERVICE_CONTRACT_VIOLATION",
+                          "const": "AI_SERVICE_ERROR",
                           "type": "string"
                         }
                       ]
@@ -421,7 +468,7 @@
         }
       },
       "Error503": {
-        "description": "AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE | IDENTITY_PROVIDER_UNAVAILABLE",
+        "description": "IDENTITY_PROVIDER_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
         "content": {
           "application/json": {
             "schema": {
@@ -437,15 +484,15 @@
                     "code": {
                       "anyOf": [
                         {
+                          "const": "IDENTITY_PROVIDER_UNAVAILABLE",
+                          "type": "string"
+                        },
+                        {
                           "const": "AI_SERVICE_THROTTLED",
                           "type": "string"
                         },
                         {
                           "const": "AI_SERVICE_UNAVAILABLE",
-                          "type": "string"
-                        },
-                        {
-                          "const": "IDENTITY_PROVIDER_UNAVAILABLE",
                           "type": "string"
                         }
                       ]
@@ -720,6 +767,9 @@
           "403": {
             "$ref": "#/components/responses/Error403"
           },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
           "413": {
             "$ref": "#/components/responses/Error413"
           },
@@ -929,6 +979,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
           },
           "409": {
             "$ref": "#/components/responses/Error409"
@@ -1286,6 +1339,9 @@
           "403": {
             "$ref": "#/components/responses/Error403"
           },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
           "409": {
             "$ref": "#/components/responses/Error409"
           },
@@ -1609,6 +1665,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
           },
           "409": {
             "$ref": "#/components/responses/Error409"

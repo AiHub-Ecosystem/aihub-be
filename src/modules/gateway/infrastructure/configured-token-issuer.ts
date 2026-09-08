@@ -18,7 +18,6 @@ export class ConfiguredTokenIssuer implements InternalTokenIssuerPort {
       throw new AppError({
         code: 'INTERNAL_ERROR',
         message: 'Downstream authentication is not configured',
-        httpStatus: 500,
         retryable: false,
       });
     }

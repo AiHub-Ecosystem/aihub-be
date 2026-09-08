@@ -43,7 +43,6 @@ function contractViolation(reason: string): AppError {
   return new AppError({
     code: 'AI_SERVICE_CONTRACT_VIOLATION',
     message: 'AI service returned an unexpected response shape',
-    httpStatus: 502,
     retryable: false,
     cause: new Error(reason),
   });

@@ -31,7 +31,6 @@ function mapDownstreamStatus(status: number): AppError {
     return new AppError({
       code: 'AI_SERVICE_THROTTLED',
       message: 'AI service is temporarily throttled',
-      httpStatus: 503,
       retryable: true,
     });
   }
@@ -39,7 +38,6 @@ function mapDownstreamStatus(status: number): AppError {
   return new AppError({
     code: 'AI_SERVICE_ERROR',
     message: 'AI service returned an error',
-    httpStatus: 502,
     retryable: status >= 500,
     downstreamStatus: status,
     cause: new Error(`downstream status ${status}`),
@@ -50,7 +48,6 @@ function unconfiguredOperation(operation: OperationId): AppError {
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Operation is not configured',
-    httpStatus: 500,
     retryable: false,
     cause: new Error(`no adapter registered for ${operation}`),
   });

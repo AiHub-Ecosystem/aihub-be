@@ -85,7 +85,6 @@ describe('Task 1 questions HTTP flow', () => {
           throw new AppError({
             code: 'UNAUTHORIZED',
             message: 'Authentication is required',
-            httpStatus: 401,
             retryable: false,
           });
         }

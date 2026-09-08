@@ -7,43 +7,34 @@ import type {
 import { OPERATION_CATALOG } from '../catalog/operation-catalog';
 import { OPERATION_IDS } from '../catalog/operation-id';
 import type { OperationId } from '../catalog/operation-id';
-import type { ErrorCode } from '../common/errors/error-code';
+import { ERROR_CODES, type ErrorCode } from '../common/errors/error-code';
+import {
+  type HttpStatus,
+  httpStatusForErrorCode,
+} from '../common/errors/error-registry';
 
 /**
- * Every (status, codes) pair actually reachable today, read off the real
- * throw sites rather than the full `ERROR_CODES` union — `QUOTA_EXCEEDED`
- * remains reserved for a later metering slice, while concurrency is enforced
- * by the gateway guard and is therefore part of the public 429 contract.
- *
- * All four operations share this exact set because they share the same
- * middleware pipeline (auth, user assertion, body-size, validation, rate
- * limit, dispatch); idempotent grading adds the conflict response to that
- * shared map.
- *
- * This list is hand-maintained, not derived: there is no single registry in
- * the codebase mapping an `ErrorCode` to its HTTP status (each throw site
- * inlines its own `httpStatus`). Adding a new error site means updating this
- * list by hand; nothing else fails loudly if that step is missed.
+ * The error registry is the source of truth for status/code groupings. A
+ * 409 response remains operation-specific because only idempotent operations
+ * can reach an idempotency conflict.
  */
-const REACHABLE_ERRORS: ReadonlyMap<number, readonly ErrorCode[]> = new Map([
-  [400, ['INVALID_REQUEST']],
-  [401, ['UNAUTHORIZED', 'USER_ASSERTION_REQUIRED', 'INVALID_USER_ASSERTION']],
-  [403, ['FORBIDDEN', 'ENVIRONMENT_NOT_ALLOWED']],
-  [413, ['PAYLOAD_TOO_LARGE']],
-  [409, ['IDEMPOTENCY_CONFLICT']],
-  [429, ['RATE_LIMITED', 'CONCURRENCY_LIMIT']],
-  [500, ['INTERNAL_ERROR']],
-  [502, ['AI_SERVICE_ERROR', 'AI_SERVICE_CONTRACT_VIOLATION']],
-  [
-    503,
-    [
-      'AI_SERVICE_THROTTLED',
-      'AI_SERVICE_UNAVAILABLE',
-      'IDENTITY_PROVIDER_UNAVAILABLE',
-    ],
-  ],
-  [504, ['AI_SERVICE_TIMEOUT']],
-]);
+function errorsByStatus(): ReadonlyMap<HttpStatus, readonly ErrorCode[]> {
+  const grouped = new Map<HttpStatus, ErrorCode[]>();
+
+  for (const code of ERROR_CODES) {
+    const status = httpStatusForErrorCode(code);
+    const codes = grouped.get(status);
+    if (codes === undefined) {
+      grouped.set(status, [code]);
+    } else {
+      codes.push(code);
+    }
+  }
+
+  return new Map(
+    [...grouped.entries()].sort(([left], [right]) => left - right),
+  );
+}
 
 const OPENAPI_VERSION = '3.1.0';
 
@@ -155,6 +146,7 @@ function resolvedResponseSchema(
 function operationToPathItem(
   operationId: OperationId,
   operation: OperationDef,
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
 ): Record<string, unknown> {
   const parameters = [
     { $ref: '#/components/parameters/CorrelationId' },
@@ -188,7 +180,7 @@ function operationToPathItem(
     },
   };
 
-  for (const status of REACHABLE_ERRORS.keys()) {
+  for (const status of groupedErrors.keys()) {
     if (status === 409 && operation.idempotency === 'none') {
       continue;
     }
@@ -219,17 +211,18 @@ function operationToPathItem(
 
 export function buildOpenApiDocument(version: string): unknown {
   const paths: Record<string, unknown> = {};
+  const groupedErrors = errorsByStatus();
 
   for (const operationId of OPERATION_IDS) {
     const operation = OPERATION_CATALOG[operationId];
     paths[operation.path] = {
       ...(paths[operation.path] as Record<string, unknown> | undefined),
-      ...operationToPathItem(operationId, operation),
+      ...operationToPathItem(operationId, operation, groupedErrors),
     };
   }
 
   const errorResponses: Record<string, unknown> = {};
-  for (const [status, codes] of REACHABLE_ERRORS) {
+  for (const [status, codes] of groupedErrors) {
     errorResponses[`Error${status}`] = {
       description: codes.join(' | '),
       content: {

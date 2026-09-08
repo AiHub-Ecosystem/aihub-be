@@ -26,7 +26,6 @@ function forbidden(): AppError {
   return new AppError({
     code: 'FORBIDDEN',
     message: 'API key is not authorized for this operation',
-    httpStatus: 403,
     retryable: false,
   });
 }
@@ -35,7 +34,6 @@ function configurationError(): AppError {
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Authentication configuration is invalid',
-    httpStatus: 500,
     retryable: false,
   });
 }

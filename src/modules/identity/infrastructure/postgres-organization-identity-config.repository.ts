@@ -30,7 +30,6 @@ function identityStoreError(message: string): AppError {
   return new AppError({
     code: 'INTERNAL_ERROR',
     message,
-    httpStatus: 500,
     retryable: false,
   });
 }

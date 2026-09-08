@@ -4,11 +4,11 @@ import {
   createErrorEnvelope,
   createInternalErrorEnvelope,
 } from './error-envelope';
+import { type HttpStatus, httpStatusForErrorCode } from './error-registry';
 
 export interface AppErrorOptions {
   readonly code: ErrorCode;
   readonly message: string;
-  readonly httpStatus: number;
   readonly retryable: boolean;
   readonly retryAfterMs?: number;
   readonly details?: Readonly<Record<string, unknown>>;
@@ -18,7 +18,7 @@ export interface AppErrorOptions {
 
 export class AppError extends Error {
   readonly code: ErrorCode;
-  readonly httpStatus: number;
+  readonly httpStatus: HttpStatus;
   readonly retryable: boolean;
   readonly retryAfterMs?: number;
   readonly details?: Readonly<Record<string, unknown>>;
@@ -31,7 +31,7 @@ export class AppError extends Error {
     );
     this.name = 'AppError';
     this.code = options.code;
-    this.httpStatus = options.httpStatus;
+    this.httpStatus = httpStatusForErrorCode(options.code);
     this.retryable = options.retryable;
 
     if (options.retryAfterMs !== undefined) {

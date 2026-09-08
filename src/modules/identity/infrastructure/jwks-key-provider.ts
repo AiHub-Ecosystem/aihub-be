@@ -67,7 +67,6 @@ function unavailable(cause?: unknown): AppError {
   return new AppError({
     code: 'IDENTITY_PROVIDER_UNAVAILABLE',
     message: 'Identity provider is unavailable',
-    httpStatus: 503,
     retryable: true,
     ...(cause === undefined ? {} : { cause }),
   });

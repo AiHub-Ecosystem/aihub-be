@@ -109,7 +109,6 @@ function repositoryError(message: string, cause?: unknown): AppError {
   return new AppError({
     code: 'INTERNAL_ERROR',
     message,
-    httpStatus: 500,
     retryable: true,
     ...(cause === undefined ? {} : { cause }),
   });

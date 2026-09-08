@@ -5,7 +5,6 @@ describe('AppError', () => {
     const error = new AppError({
       code: 'AI_SERVICE_ERROR',
       message: 'The AI service failed',
-      httpStatus: 502,
       retryable: true,
       details: { operation: 'writing.task1.grade' },
       cause: new Error('private downstream body'),
@@ -20,13 +19,13 @@ describe('AppError', () => {
         details: { operation: 'writing.task1.grade' },
       },
     });
+    expect(error.httpStatus).toBe(502);
   });
 
   it('serializes a retry hint at the top level and removes its legacy details key', () => {
     const error = new AppError({
       code: 'RATE_LIMITED',
       message: 'Rate limit exceeded',
-      httpStatus: 429,
       retryable: true,
       retryAfterMs: 12_345,
       details: { operation: 'writing.task1.grade', retry_after_ms: 999 },
@@ -48,7 +47,6 @@ describe('AppError', () => {
     const timeout = new AppError({
       code: 'AI_SERVICE_TIMEOUT',
       message: 'The AI service timed out',
-      httpStatus: 504,
       retryable: true,
     });
 
@@ -57,7 +55,6 @@ describe('AppError', () => {
     const error = new AppError({
       code: 'INVALID_REQUEST',
       message: 'Request failed validation',
-      httpStatus: 400,
       retryable: false,
     });
 
@@ -75,7 +72,6 @@ describe('AppError', () => {
     const error = new AppError({
       code: 'RATE_LIMITED',
       message: 'Rate limit exceeded',
-      httpStatus: 429,
       retryable: true,
       retryAfterMs: -1,
     });

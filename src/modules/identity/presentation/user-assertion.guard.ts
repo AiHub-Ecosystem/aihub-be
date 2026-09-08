@@ -24,7 +24,6 @@ function configurationError(): AppError {
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Authentication configuration is invalid',
-    httpStatus: 500,
     retryable: false,
   });
 }
@@ -33,7 +32,6 @@ function assertionRequired(): AppError {
   return new AppError({
     code: 'USER_ASSERTION_REQUIRED',
     message: 'User assertion is required',
-    httpStatus: 401,
     retryable: false,
   });
 }
@@ -42,7 +40,6 @@ function invalidAssertion(): AppError {
   return new AppError({
     code: 'INVALID_USER_ASSERTION',
     message: 'User assertion is invalid',
-    httpStatus: 401,
     retryable: false,
   });
 }

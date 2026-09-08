@@ -32,7 +32,6 @@ function conflictError(): AppError {
     code: 'IDEMPOTENCY_CONFLICT',
     message:
       'The idempotency key is already used for a different or pending request',
-    httpStatus: 409,
     retryable: false,
   });
 }
@@ -41,7 +40,6 @@ function missingKeyError(): AppError {
   return new AppError({
     code: 'INVALID_REQUEST',
     message: 'Idempotency-Key is required for this operation',
-    httpStatus: 400,
     retryable: false,
   });
 }
@@ -50,7 +48,6 @@ function timeoutError(): AppError {
   return new AppError({
     code: 'AI_SERVICE_TIMEOUT',
     message: 'AI service request timed out',
-    httpStatus: 504,
     retryable: true,
   });
 }
@@ -59,7 +56,6 @@ function storageError(cause: unknown): AppError {
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Idempotency storage is unavailable',
-    httpStatus: 500,
     retryable: true,
     cause,
   });
@@ -69,7 +65,6 @@ function malformedReplayError(cause: unknown): AppError {
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Stored idempotency response is invalid',
-    httpStatus: 500,
     retryable: false,
     cause,
   });

@@ -278,7 +278,6 @@ describe('HttpOperationDispatcher', () => {
     const originalError = new AppError({
       code: 'AI_SERVICE_TIMEOUT',
       message: 'AI service request timed out',
-      httpStatus: 504,
       retryable: true,
       cause: new Error('private timeout cause'),
     });
@@ -362,7 +361,6 @@ describe('HttpOperationDispatcher', () => {
     const originalError = new AppError({
       code: 'AI_SERVICE_CONTRACT_VIOLATION',
       message: 'AI service returned an unexpected response shape',
-      httpStatus: 502,
       retryable: false,
       cause: new Error(
         `unexpected criterion contains ${responseMarker} and ${essayMarker}`,
