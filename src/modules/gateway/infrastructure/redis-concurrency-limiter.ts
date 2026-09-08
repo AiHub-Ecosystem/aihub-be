@@ -20,11 +20,15 @@ export const GLOBAL_MAX_INFLIGHT = 200;
 export const ACQUIRE_CONCURRENCY_SCRIPT = `
 local server_time = redis.call('TIME')
 local now_ms = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
-redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now_ms - tonumber(ARGV[3]))
+local stale_ms = tonumber(ARGV[3])
+local ttl_seconds = math.ceil(stale_ms / 1000)
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now_ms - stale_ms)
 if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[1]) then
+  redis.call('EXPIRE', KEYS[1], ttl_seconds)
   return 0
 end
 redis.call('ZADD', KEYS[1], now_ms, ARGV[2])
+redis.call('EXPIRE', KEYS[1], ttl_seconds)
 return 1
 `;
 
@@ -42,6 +46,9 @@ function denied(): ConcurrencyDecision {
 }
 
 export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
+  // ponytail: a process-local global ceiling while Redis is unavailable; it
+  // is deliberately coarse across organizations and replicas, and the Redis
+  // script restores per-organization fairness when the dependency recovers.
   private readonly fallbackLeases = new Map<string, FallbackLease>();
   private redisIsDegraded = false;
 

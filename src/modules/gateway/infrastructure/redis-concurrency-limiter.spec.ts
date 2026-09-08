@@ -76,7 +76,7 @@ describe('RedisConcurrencyLimiter', () => {
     }
     expect(redis.evaluations).toHaveLength(1);
     expect(redis.evaluations[0]).toEqual({
-      script: expect.stringContaining('ZREMRANGEBYSCORE'),
+      script: expect.stringMatching(/ZREMRANGEBYSCORE[\s\S]*EXPIRE/),
       numberOfKeys: 1,
       args: [
         'aihub:v1:inflight:org_acme',
