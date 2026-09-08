@@ -87,3 +87,41 @@ export function assertAuthBypassFlagIsSafe(): void {
     );
   }
 }
+
+/**
+ * `resolveAihubEnvironment` trusts the client-supplied `Host` header — a
+ * deployment is only as safe as the reverse proxy in front of it validating
+ * or rewriting that header to match its own bound domain (see the security
+ * spec). This guard catches the other half of the problem, the one code
+ * *can* enforce: a placeholder host left unconfigured is a public, guessable
+ * value — `curl -H "Host: staging-api.aihub.example.com" https://<real prod
+ * ip>/...` would resolve as staging on a box that never configured a real
+ * staging domain. Refusing to boot turns that silent gap into a loud,
+ * immediate failure instead of a spoofable default.
+ *
+ * All three tiers are checked, not just production and staging: the
+ * identical risk applies to `AIHUB_DEVELOPMENT_HOST` for any deployment that
+ * exposes it publicly, and the `localhost` bypass in `resolveAihubEnvironment`
+ * doesn't cover that case — it checks the literal hostname, not this env var.
+ */
+export function assertHostConfigurationIsSafe(): void {
+  if (isDevOrTestProcess()) {
+    return;
+  }
+
+  const unconfigured = (
+    Object.keys(DEFAULT_HOSTS) as AihubEnvironment[]
+  ).filter(
+    (environment) => configuredHost(environment) === DEFAULT_HOSTS[environment],
+  );
+
+  if (unconfigured.length > 0) {
+    const envVars = unconfigured
+      .map((environment) => `AIHUB_${environment.toUpperCase()}_HOST`)
+      .join(', ');
+
+    throw new Error(
+      `${envVars} must be set to a real domain outside development or test (NODE_ENV=${JSON.stringify(process.env.NODE_ENV)}). Leaving it at its placeholder default is a public, guessable value that lets a client spoof this deployment's environment via the Host header. Refusing to start rather than run with a spoofable default.`,
+    );
+  }
+}

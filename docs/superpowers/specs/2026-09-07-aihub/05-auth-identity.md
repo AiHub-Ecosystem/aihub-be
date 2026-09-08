@@ -38,7 +38,7 @@ CLI này là **code sản xuất**, không phải script vứt đi — API admin
 ## G.2 Lookup flow
 
 ```ts
-const hash = sha256(rawKey);                 // 32 byte, ~1µs
+const hash = sha256(rawKey); // 32 byte, ~1µs
 
 // 1. Redis: aihub:v1:key:<hex>  TTL 60s — cache cả HIT lẫn MISS
 // 2. miss -> SELECT ... WHERE key_hash = $1        (1 index seek)
@@ -51,7 +51,7 @@ const hash = sha256(rawKey);                 // 32 byte, ~1µs
 **TTL 60s là giá của việc hoãn admin API** — revoke một key có độ trễ tới 60 giây. Chấp nhận được, nhưng CLI `key:revoke` phải xoá luôn cache để revoke có hiệu lực tức thì:
 
 ```ts
-await redis.del(`aihub:v1:key:${hex(hash)}`);   // ~2 dòng, xoá hẳn 60s cửa sổ rủi ro
+await redis.del(`aihub:v1:key:${hex(hash)}`); // ~2 dòng, xoá hẳn 60s cửa sổ rủi ro
 ```
 
 ## G.3 Chống brute-force
@@ -77,7 +77,7 @@ Thứ tự có chủ đích: rẻ trước, crypto sau cùng.
 7. verify chữ ký bằng JWKS của org                     # crypto ở cuối
 ```
 
-**Bước 1 chặn alg confusion.** Đây là lỗ JWT kinh điển: token khai `alg: HS256`, thư viện lấy public key RSA làm HMAC secret — mà public key thì ai cũng có → giả token thoải mái. Chỉ nhận `alg` nằm trong allowlist *của org đó*, và loại key phải khớp thuật toán.
+**Bước 1 chặn alg confusion.** Đây là lỗ JWT kinh điển: token khai `alg: HS256`, thư viện lấy public key RSA làm HMAC secret — mà public key thì ai cũng có → giả token thoải mái. Chỉ nhận `alg` nằm trong allowlist _của org đó_, và loại key phải khớp thuật toán.
 
 **Bước 3 là chốt chặn cross-tenant.** API key nói org A, assertion khai `iss` của org B → `403`. Cộng với `UNIQUE(issuer)` ở [03 §E.2](03-database.md#e2-ddl), org B không thể đăng ký trùng issuer của A ngay từ đầu.
 
@@ -168,15 +168,27 @@ Trigger dựng Vault/SOPS: có từ **3 môi trường** trở lên, hoặc **c�
 ## G.10 Authorization
 
 ```ts
-effectiveScopes = apiKey.scopes.filter(s =>
-  org.entitlements.includes(s.split('.')[0])   // 'writing.grade' -> 'writing'
+effectiveScopes = apiKey.scopes.filter(
+  (s) => org.entitlements.includes(s.split(".")[0]) // 'writing.grade' -> 'writing'
 );
-if (!effectiveScopes.includes(operation.requiredScope)) throw new ForbiddenError();
+if (!effectiveScopes.includes(operation.requiredScope))
+  throw new ForbiddenError();
 ```
 
 Toàn bộ dữ liệu đã có sẵn từ bước lookup key → **không thêm query nào**. Đúng theo `Entitlement ∩ Key Scope` của kiến trúc đích §10.
 
 **Fail-closed:** entitlements rỗng → không gọi được gì. Scope rỗng → không gọi được gì. Không có nhánh nào mặc định cho phép.
+
+## G.11 Host header không phải nguồn tin cậy tuyệt đối
+
+`resolveAihubEnvironment` quyết định `production`/`staging`/`development` bằng cách so khớp `Host` header với `AIHUB_PRODUCTION_HOST`/`AIHUB_STAGING_HOST`/`AIHUB_DEVELOPMENT_HOST`. `Host` là header do **client tự gửi** — về bản chất vẫn là 1 dạng tự khai, không khác gì 1 header tự tạo như `X-Environment`.
+
+Hệ quả: nếu reverse proxy/LB đứng trước 1 deployment **không validate** Host khớp domain thật của chính nó, 1 client kết nối thẳng vào deployment đó (bỏ qua DNS, gọi thẳng IP) vẫn có thể set `Host: <domain của tier khác>` và khiến AIHUB resolve sai environment — phá vỡ đúng lý do environment không được lấy từ header client tự khai (US01).
+
+Hai lớp phòng vệ, không lớp nào tự đủ:
+
+1. **Hạ tầng (bắt buộc, ngoài phạm vi code AIHUB).** Reverse proxy/LB trước mỗi environment phải validate hoặc ghi đè `Host` khớp domain thật/TLS SNI của chính nó trước khi forward request vào AIHUB. Đây là yêu cầu vận hành — code AIHUB không thể tự kiểm chứng client có thật sự kết nối đúng domain hay không.
+2. **Code (`assertHostConfigurationIsSafe()`).** Chặn app khởi động, ngoài `development`/`test`, nếu bất kỳ host nào trong 3 tier vẫn còn là placeholder mặc định (`api.aihub.example.com` và tương tự) — vì placeholder là giá trị công khai, ai cũng đoán được, để nguyên coi như tự mở lỗ giả mạo. Guard này bắt được lỗi "quên cấu hình", **không bắt được** trường hợp hạ tầng cấu hình sai — đó vẫn là trách nhiệm của lớp 1.
 
 ---
 

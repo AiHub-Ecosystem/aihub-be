@@ -10,7 +10,10 @@ import {
 import { AppModule } from './app.module';
 import { registerBodySizeGuard } from './common/http/body-size.hook';
 import { generateRequestId } from './common/request-context/request-id';
-import { assertAuthBypassFlagIsSafe } from './modules/identity/presentation/request-environment';
+import {
+  assertAuthBypassFlagIsSafe,
+  assertHostConfigurationIsSafe,
+} from './modules/identity/presentation/request-environment';
 
 const DEFAULT_PORT = 3000;
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -24,6 +27,7 @@ function loadLocalEnvironment(): void {
 export async function bootstrap(): Promise<void> {
   loadLocalEnvironment();
   assertAuthBypassFlagIsSafe();
+  assertHostConfigurationIsSafe();
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,

@@ -3,6 +3,7 @@ import type { FastifyRequest } from 'fastify';
 import { AppError } from '../../../common/errors/app-error';
 import {
   assertAuthBypassFlagIsSafe,
+  assertHostConfigurationIsSafe,
   resolveAihubEnvironment,
 } from './request-environment';
 
@@ -109,5 +110,90 @@ describe('assertAuthBypassFlagIsSafe', () => {
     Reflect.deleteProperty(process.env, 'AIHUB_ALLOW_UNAUTHENTICATED_DEV');
 
     expect(() => assertAuthBypassFlagIsSafe()).not.toThrow();
+  });
+});
+
+describe('assertHostConfigurationIsSafe', () => {
+  const HOST_VARS = [
+    'AIHUB_PRODUCTION_HOST',
+    'AIHUB_STAGING_HOST',
+    'AIHUB_DEVELOPMENT_HOST',
+  ] as const;
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalHosts = Object.fromEntries(
+    HOST_VARS.map((name) => [name, process.env[name]]),
+  );
+
+  function setAllHostsToRealDomains(): void {
+    process.env.AIHUB_PRODUCTION_HOST = 'api.acme-real-domain.com';
+    process.env.AIHUB_STAGING_HOST = 'staging-api.acme-real-domain.com';
+    process.env.AIHUB_DEVELOPMENT_HOST = 'dev-api.acme-real-domain.com';
+  }
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
+    for (const name of HOST_VARS) {
+      const original = originalHosts[name];
+      if (original === undefined) {
+        Reflect.deleteProperty(process.env, name);
+      } else {
+        process.env[name] = original;
+      }
+    }
+  });
+
+  it('refuses to start outside development/test when production host is still the placeholder', () => {
+    process.env.NODE_ENV = 'production';
+    setAllHostsToRealDomains();
+    Reflect.deleteProperty(process.env, 'AIHUB_PRODUCTION_HOST');
+
+    expect(() => assertHostConfigurationIsSafe()).toThrow(
+      /AIHUB_PRODUCTION_HOST/,
+    );
+  });
+
+  it('refuses to start when staging host is still the placeholder', () => {
+    process.env.NODE_ENV = 'production';
+    setAllHostsToRealDomains();
+    Reflect.deleteProperty(process.env, 'AIHUB_STAGING_HOST');
+
+    expect(() => assertHostConfigurationIsSafe()).toThrow(/AIHUB_STAGING_HOST/);
+  });
+
+  it('refuses to start when development host is still the placeholder — same spoofing risk as prod/staging', () => {
+    process.env.NODE_ENV = 'production';
+    setAllHostsToRealDomains();
+    Reflect.deleteProperty(process.env, 'AIHUB_DEVELOPMENT_HOST');
+
+    expect(() => assertHostConfigurationIsSafe()).toThrow(
+      /AIHUB_DEVELOPMENT_HOST/,
+    );
+  });
+
+  it('names every unconfigured host in one failure', () => {
+    process.env.NODE_ENV = 'production';
+    for (const name of HOST_VARS) {
+      Reflect.deleteProperty(process.env, name);
+    }
+
+    expect(() => assertHostConfigurationIsSafe()).toThrow(
+      /AIHUB_PRODUCTION_HOST.*AIHUB_STAGING_HOST.*AIHUB_DEVELOPMENT_HOST/s,
+    );
+  });
+
+  it('allows boot once all three hosts are configured to real domains', () => {
+    process.env.NODE_ENV = 'production';
+    setAllHostsToRealDomains();
+
+    expect(() => assertHostConfigurationIsSafe()).not.toThrow();
+  });
+
+  it('does not check host configuration in development or test', () => {
+    process.env.NODE_ENV = 'development';
+    for (const name of HOST_VARS) {
+      Reflect.deleteProperty(process.env, name);
+    }
+
+    expect(() => assertHostConfigurationIsSafe()).not.toThrow();
   });
 });
