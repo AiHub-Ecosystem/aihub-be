@@ -44,7 +44,16 @@ describe('AppError', () => {
     });
   });
 
-  it('serializes non-retryable errors with retryable false and no retry hint', () => {
+  it('serializes retryable timeouts and non-retryable errors', () => {
+    const timeout = new AppError({
+      code: 'AI_SERVICE_TIMEOUT',
+      message: 'The AI service timed out',
+      httpStatus: 504,
+      retryable: true,
+    });
+
+    expect(timeout.toEnvelope('req-timeout').error.retryable).toBe(true);
+
     const error = new AppError({
       code: 'INVALID_REQUEST',
       message: 'Request failed validation',
@@ -58,6 +67,25 @@ describe('AppError', () => {
         message: 'Request failed validation',
         request_id: 'req-000',
         retryable: false,
+      },
+    });
+  });
+
+  it('omits invalid retry hints', () => {
+    const error = new AppError({
+      code: 'RATE_LIMITED',
+      message: 'Rate limit exceeded',
+      httpStatus: 429,
+      retryable: true,
+      retryAfterMs: -1,
+    });
+
+    expect(error.toEnvelope('req-invalid-hint')).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Rate limit exceeded',
+        request_id: 'req-invalid-hint',
+        retryable: true,
       },
     });
   });

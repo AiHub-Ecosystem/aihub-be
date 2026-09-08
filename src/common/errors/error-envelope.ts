@@ -36,10 +36,17 @@ function withoutLegacyRetryHint(
   return Object.keys(sanitized).length === 0 ? undefined : sanitized;
 }
 
+function validRetryAfterMs(value: number | undefined): number | undefined {
+  return value !== undefined && Number.isInteger(value) && value >= 0
+    ? value
+    : undefined;
+}
+
 export function createErrorEnvelope(
   options: ErrorEnvelopeOptions,
 ): ErrorEnvelope {
   const details = withoutLegacyRetryHint(options.details);
+  const retryAfterMs = validRetryAfterMs(options.retryAfterMs);
 
   return {
     error: {
@@ -47,9 +54,7 @@ export function createErrorEnvelope(
       message: options.message,
       request_id: options.requestId,
       retryable: options.retryable,
-      ...(options.retryAfterMs === undefined
-        ? {}
-        : { retry_after_ms: options.retryAfterMs }),
+      ...(retryAfterMs === undefined ? {} : { retry_after_ms: retryAfterMs }),
       ...(details === undefined ? {} : { details }),
     },
   };
