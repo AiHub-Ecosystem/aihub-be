@@ -120,14 +120,15 @@ describe('buildPostmanCollection', () => {
     const collection = await build();
     const folder = findIdempotencyFolder(collection);
 
-    expect(folder.item).toHaveLength(3);
+    expect(folder.item).toHaveLength(4);
     expect(folder.item?.map((item) => item.name)).toEqual([
       'Task 2 grading replays a completed result',
       'Task 2 question optionally replays a completed result',
+      'Task 2 question without an Idempotency-Key runs normally',
       'Task 1 question ignores Idempotency-Key',
     ]);
 
-    const none = folder.item?.[2];
+    const none = folder.item?.[3];
     expect(none?.request?.header).toContainEqual({
       key: 'Idempotency-Key',
       value: '   ',

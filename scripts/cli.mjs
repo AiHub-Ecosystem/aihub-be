@@ -496,6 +496,20 @@ async function setIdentity(options) {
   }
 }
 
+async function cleanupIdempotency() {
+  const pool = databasePool();
+  try {
+    const result = await pool.query(
+      `DELETE FROM idempotency_records
+       WHERE expires_at <= now()
+       RETURNING request_id`,
+    );
+    console.log(`Deleted ${result.rowCount} expired idempotency records`);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function main() {
   const [command, ...values] = process.argv.slice(2);
   const options = parseOptions(values);
@@ -514,6 +528,10 @@ async function main() {
   }
   if (command === 'identity:set') {
     await setIdentity(options);
+    return;
+  }
+  if (command === 'idempotency:cleanup') {
+    await cleanupIdempotency();
     return;
   }
 

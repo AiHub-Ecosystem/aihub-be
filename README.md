@@ -23,6 +23,10 @@ pnpm cli org:create --name "Acme Edu" --entitlements writing
 pnpm cli key:create --org org_... --name "Local backend" --scopes writing.question.generate --envs development
 ```
 
+Schedule `pnpm cli idempotency:cleanup` from the deployment environment once
+per night to remove expired idempotency records. The command reports the
+deleted row count and exits non-zero when PostgreSQL is unavailable.
+
 The key command prints the raw API key once. Store it outside the repository
 and send it as `X-API-Key`.
 

@@ -398,6 +398,21 @@ const IDEMPOTENCY_SCENARIOS: readonly Scenario[] = [
     ],
   },
   {
+    name: 'Task 2 question without an Idempotency-Key runs normally',
+    description:
+      'Optional idempotency: omitting the key is allowed and does not emit a replay marker.',
+    path: TASK2_QUESTION_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    body: { topic: 'Technology', question_type: 'opinion' },
+    testScript: [
+      assertStatus(200),
+      ...assertEnvelope('writing.task2.question.generate'),
+      "pm.test('omitting the optional key does not emit a replay marker', function () {",
+      "  pm.expect(pm.response.headers.get('Idempotent-Replay')).to.be.null;",
+      '});',
+    ],
+  },
+  {
     name: 'Task 1 question ignores Idempotency-Key',
     description:
       'None idempotency: even a malformed key is ignored and the operation does not emit a replay marker.',

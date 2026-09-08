@@ -200,6 +200,19 @@ describe('Task 2 questions HTTP flow', () => {
     });
   });
 
+  it('allows Task 2 question generation without a key and does not mark a replay', async () => {
+    const before = downstreamCalls;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/writing/task2/questions',
+      payload: { topic: 'education', question_type: 'opinion' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(downstreamCalls - before).toBe(1);
+    expect(response.headers['idempotent-replay']).toBeUndefined();
+  });
+
   it('rejects a missing topic before contacting Writing, unlike task 1 where it is optional', async () => {
     const response = await app.inject({
       method: 'POST',
