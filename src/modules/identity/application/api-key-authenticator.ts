@@ -68,7 +68,7 @@ function rateLimited(): AppError {
     message: 'Too many authentication failures',
     httpStatus: 429,
     retryable: true,
-    details: { retry_after_ms: AUTH_FAILURE_WINDOW_MS },
+    retryAfterMs: AUTH_FAILURE_WINDOW_MS,
   });
 }
 

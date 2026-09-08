@@ -177,6 +177,51 @@ describe('buildOpenApiDocument', () => {
     expect(doc.components.responses.Error409).toBeDefined();
   });
 
+  it('documents stable retry fields on every error response', () => {
+    const doc = build();
+    const response = doc.components.responses.Error429;
+
+    expect(response).toMatchObject({
+      content: {
+        'application/json': {
+          schema: {
+            properties: {
+              error: {
+                properties: {
+                  retryable: { type: 'boolean' },
+                  retry_after_ms: { type: 'integer', minimum: 0 },
+                },
+                required: expect.arrayContaining([
+                  'code',
+                  'message',
+                  'request_id',
+                  'retryable',
+                ]),
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const schema = response as {
+      readonly content: {
+        readonly 'application/json': {
+          readonly schema: {
+            readonly properties: {
+              readonly error: {
+                readonly required: readonly string[];
+              };
+            };
+          };
+        };
+      };
+    };
+    expect(
+      schema.content['application/json'].schema.properties.error.required,
+    ).not.toContain('retry_after_ms');
+  });
+
   it('documents the replay marker on required idempotent success responses', () => {
     const operation = build().paths['/v1/writing/task1/grade']?.post;
     const success = operation?.responses['200'] as {

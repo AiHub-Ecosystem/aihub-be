@@ -192,6 +192,7 @@ describe('Task 1 questions HTTP flow', () => {
         code: 'INVALID_REQUEST',
         message: 'Request failed validation',
         request_id: expect.stringMatching(/^req_[0-9A-HJKMNP-TV-Z]{26}$/),
+        retryable: false,
       },
     });
   });
@@ -263,7 +264,8 @@ describe('Task 1 questions HTTP flow', () => {
         code: 'RATE_LIMITED',
         message: 'Rate limit exceeded',
         request_id: expect.stringMatching(/^req_[0-9A-HJKMNP-TV-Z]{26}$/),
-        details: { retry_after_ms: 12_345 },
+        retryable: true,
+        retry_after_ms: 12_345,
       },
     });
 

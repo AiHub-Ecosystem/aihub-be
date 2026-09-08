@@ -47,6 +47,7 @@ describe('registerBodySizeGuard', () => {
         code: 'PAYLOAD_TOO_LARGE',
         message: 'Request body is too large',
         request_id: 'unknown',
+        retryable: false,
       },
     });
     expect(handlerCalls).toBe(0);

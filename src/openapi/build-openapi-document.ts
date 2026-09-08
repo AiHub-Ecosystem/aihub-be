@@ -55,6 +55,8 @@ function errorResponseSchema(codes: readonly ErrorCode[]): TSchema {
           code: Type.Union(codes.map((code) => Type.Literal(code))),
           message: Type.String(),
           request_id: Type.String(),
+          retryable: Type.Boolean(),
+          retry_after_ms: Type.Optional(Type.Integer({ minimum: 0 })),
           details: Type.Optional(
             Type.Object({}, { additionalProperties: true }),
           ),

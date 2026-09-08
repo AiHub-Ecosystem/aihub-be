@@ -21,9 +21,7 @@ function rateLimited(retryAfterMs: number | undefined): AppError {
     message: 'Rate limit exceeded',
     httpStatus: 429,
     retryable: true,
-    ...(retryAfterMs === undefined
-      ? {}
-      : { details: { retry_after_ms: retryAfterMs } }),
+    ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
   });
 }
 

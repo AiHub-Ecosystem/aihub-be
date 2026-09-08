@@ -1,4 +1,5 @@
 import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
+import { createErrorEnvelope } from '../errors/error-envelope';
 import { isRequestId } from '../request-context/request-id';
 
 /**
@@ -79,13 +80,14 @@ export function registerBodySizeGuard(instance: HookableFastifyInstance): void {
 
     if (Number.isFinite(declaredBytes) && declaredBytes > limit) {
       const requestId = isRequestId(request.id) ? request.id : 'unknown';
-      reply.code(413).send({
-        error: {
+      reply.code(413).send(
+        createErrorEnvelope({
           code: 'PAYLOAD_TOO_LARGE',
           message: 'Request body is too large',
-          request_id: requestId,
-        },
-      });
+          requestId,
+          retryable: false,
+        }),
+      );
       return;
     }
 

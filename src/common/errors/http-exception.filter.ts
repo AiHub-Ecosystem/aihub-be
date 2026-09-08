@@ -11,6 +11,7 @@ import { AppError } from './app-error';
 import type { ErrorCode } from './error-code';
 import {
   type ErrorEnvelope,
+  createErrorEnvelope,
   createInternalErrorEnvelope,
 } from './error-envelope';
 
@@ -75,7 +76,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
       return {
         status: code === 'INTERNAL_ERROR' ? 500 : status,
-        envelope: { error: { code, message, request_id: requestId } },
+        envelope: createErrorEnvelope({
+          code,
+          message,
+          requestId,
+          retryable: false,
+        }),
       };
     }
 

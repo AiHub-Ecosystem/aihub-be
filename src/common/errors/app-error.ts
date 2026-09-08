@@ -1,11 +1,16 @@
 import type { ErrorCode } from './error-code';
-import type { ErrorEnvelope, ErrorPayload } from './error-envelope';
+import {
+  type ErrorEnvelope,
+  createErrorEnvelope,
+  createInternalErrorEnvelope,
+} from './error-envelope';
 
 export interface AppErrorOptions {
   readonly code: ErrorCode;
   readonly message: string;
   readonly httpStatus: number;
   readonly retryable: boolean;
+  readonly retryAfterMs?: number;
   readonly details?: Readonly<Record<string, unknown>>;
   readonly downstreamStatus?: number;
   readonly cause?: unknown;
@@ -15,6 +20,7 @@ export class AppError extends Error {
   readonly code: ErrorCode;
   readonly httpStatus: number;
   readonly retryable: boolean;
+  readonly retryAfterMs?: number;
   readonly details?: Readonly<Record<string, unknown>>;
   readonly downstreamStatus?: number;
 
@@ -28,6 +34,10 @@ export class AppError extends Error {
     this.httpStatus = options.httpStatus;
     this.retryable = options.retryable;
 
+    if (options.retryAfterMs !== undefined) {
+      this.retryAfterMs = options.retryAfterMs;
+    }
+
     if (options.downstreamStatus !== undefined) {
       this.downstreamStatus = options.downstreamStatus;
     }
@@ -38,21 +48,16 @@ export class AppError extends Error {
   }
 
   toEnvelope(requestId: string): ErrorEnvelope {
-    const payload: ErrorPayload =
-      this.details === undefined
-        ? {
-            code: this.code,
-            message: this.message,
-            request_id: requestId,
-          }
-        : {
-            code: this.code,
-            message: this.message,
-            request_id: requestId,
-            details: this.details,
-          };
-
-    return { error: payload };
+    return createErrorEnvelope({
+      code: this.code,
+      message: this.message,
+      requestId,
+      retryable: this.retryable,
+      ...(this.retryAfterMs === undefined
+        ? {}
+        : { retryAfterMs: this.retryAfterMs }),
+      ...(this.details === undefined ? {} : { details: this.details }),
+    });
   }
 
   static toEnvelope(error: unknown, requestId: string): ErrorEnvelope {
@@ -60,12 +65,6 @@ export class AppError extends Error {
       return error.toEnvelope(requestId);
     }
 
-    return {
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error',
-        request_id: requestId,
-      },
-    };
+    return createInternalErrorEnvelope(requestId);
   }
 }

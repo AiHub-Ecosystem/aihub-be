@@ -76,6 +76,7 @@ describe('AppModule wiring', () => {
         code: 'AI_SERVICE_UNAVAILABLE',
         message: 'AI service is temporarily unavailable',
         request_id: expect.stringMatching(/^req_[0-9A-HJKMNP-TV-Z]{26}$/),
+        retryable: true,
       },
     });
   });
@@ -84,7 +85,10 @@ describe('AppModule wiring', () => {
     const response = await app.inject({ method: 'GET', url: '/nope' });
 
     expect(response.statusCode).toBe(404);
-    expect(response.json().error.code).toBe('NOT_FOUND');
+    expect(response.json().error).toMatchObject({
+      code: 'NOT_FOUND',
+      retryable: false,
+    });
     // Nest's own message would echo the route back to the caller.
     expect(response.payload).not.toContain('/nope');
   });

@@ -272,6 +272,7 @@ describe('Writing user assertion HTTP flow', () => {
         code: 'IDENTITY_PROVIDER_UNAVAILABLE',
         message: 'Identity provider is unavailable',
         request_id: expect.stringMatching(/^req_/),
+        retryable: true,
       },
     });
     expect(response.payload).not.toContain('provider down');
