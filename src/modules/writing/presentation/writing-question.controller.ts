@@ -26,6 +26,9 @@ import {
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
 } from '../../gateway/application/operation-dispatcher.port';
+import { getConcurrencyBackgroundLifecycle } from '../../gateway/presentation/concurrency-permit';
+import { ConcurrencyReleaseInterceptor } from '../../gateway/presentation/concurrency-release.interceptor';
+import { ConcurrencyGuard } from '../../gateway/presentation/concurrency.guard';
 import { RateLimitGuard } from '../../gateway/presentation/rate-limit.guard';
 import {
   IDEMPOTENCY_SERVICE,
@@ -98,8 +101,8 @@ function decodeReplay(value: unknown): DispatchResult<Task1QuestionResponse> {
 }
 
 @Controller()
-@UseGuards(ApiKeyGuard, UserAssertionGuard, RateLimitGuard)
-@UseInterceptors(SuccessEnvelopeInterceptor)
+@UseGuards(ApiKeyGuard, UserAssertionGuard, RateLimitGuard, ConcurrencyGuard)
+@UseInterceptors(ConcurrencyReleaseInterceptor, SuccessEnvelopeInterceptor)
 export class WritingQuestionController {
   constructor(
     @Inject(OPERATION_DISPATCHER)
@@ -121,6 +124,7 @@ export class WritingQuestionController {
       OPERATION,
       request.headers['idempotency-key'],
     );
+    const backgroundLifecycle = getConcurrencyBackgroundLifecycle(request);
     // Ties the dispatch's AbortSignal to this specific request's connection,
     // not only to the operation timeout, so a client that disconnects early
     // stops the downstream call instead of letting it run to completion for
@@ -152,6 +156,7 @@ export class WritingQuestionController {
           timeoutMs: OPERATION_CATALOG[OPERATION].timeoutMs,
           signal: context.signal,
           deadlineAt: context.deadlineAt,
+          ...(backgroundLifecycle === undefined ? {} : { backgroundLifecycle }),
         },
         (workContext: IdempotencyWorkContext) =>
           this.dispatcher.dispatch(OPERATION, input, {

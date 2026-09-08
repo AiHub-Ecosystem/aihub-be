@@ -175,6 +175,9 @@ describe('buildOpenApiDocument', () => {
     );
     expect(doc.components.responses.Error503).toBeDefined();
     expect(doc.components.responses.Error409).toBeDefined();
+    expect(JSON.stringify(doc.components.responses.Error429)).toContain(
+      'CONCURRENCY_LIMIT',
+    );
   });
 
   it('documents stable retry fields on every error response', () => {

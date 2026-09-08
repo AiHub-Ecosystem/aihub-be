@@ -11,9 +11,9 @@ import type { ErrorCode } from '../common/errors/error-code';
 
 /**
  * Every (status, codes) pair actually reachable today, read off the real
- * throw sites rather than the full `ERROR_CODES` union — several of that
- * union's members (`CONCURRENCY_LIMIT`, `QUOTA_EXCEEDED`) are reserved for
- * phases not built yet and no code path can produce them.
+ * throw sites rather than the full `ERROR_CODES` union — `QUOTA_EXCEEDED`
+ * remains reserved for a later metering slice, while concurrency is enforced
+ * by the gateway guard and is therefore part of the public 429 contract.
  *
  * All four operations share this exact set because they share the same
  * middleware pipeline (auth, user assertion, body-size, validation, rate
@@ -31,7 +31,7 @@ const REACHABLE_ERRORS: ReadonlyMap<number, readonly ErrorCode[]> = new Map([
   [403, ['FORBIDDEN', 'ENVIRONMENT_NOT_ALLOWED']],
   [413, ['PAYLOAD_TOO_LARGE']],
   [409, ['IDEMPOTENCY_CONFLICT']],
-  [429, ['RATE_LIMITED']],
+  [429, ['RATE_LIMITED', 'CONCURRENCY_LIMIT']],
   [500, ['INTERNAL_ERROR']],
   [502, ['AI_SERVICE_ERROR', 'AI_SERVICE_CONTRACT_VIOLATION']],
   [

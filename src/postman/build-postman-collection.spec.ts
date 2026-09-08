@@ -56,6 +56,19 @@ function findIdempotencyFolder(
   return folder;
 }
 
+function findConcurrencyFolder(
+  collection: Record<string, unknown>,
+): PostmanItemGroup {
+  const item = collection.item as readonly PostmanItemGroup[];
+  const folder = item.find(
+    (entry) => entry.name === 'Concurrency limit examples',
+  );
+  if (folder === undefined) {
+    throw new Error('concurrency examples folder missing');
+  }
+  return folder;
+}
+
 describe('buildPostmanCollection', () => {
   it('parses as a well-formed Postman Collection v2.1, the same check Postman itself runs on import', async () => {
     const collection = await build();
@@ -141,6 +154,19 @@ describe('buildPostmanCollection', () => {
     });
     expect(none?.event?.[0]?.script.exec.join('\n')).toContain(
       'does not replay or validate the key',
+    );
+  });
+
+  it('includes a reachable CONCURRENCY_LIMIT handover scenario', async () => {
+    const collection = await build();
+    const folder = findConcurrencyFolder(collection);
+
+    expect(folder.item).toHaveLength(1);
+    expect(folder.item?.[0]?.request?.url).toBe(
+      '{{baseUrl}}/v1/writing/task1/questions',
+    );
+    expect(folder.item?.[0]?.event?.[0]?.script.exec.join('\n')).toContain(
+      'CONCURRENCY_LIMIT',
     );
   });
 });

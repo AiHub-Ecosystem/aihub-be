@@ -28,6 +28,9 @@ import {
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
 } from '../../gateway/application/operation-dispatcher.port';
+import { getConcurrencyBackgroundLifecycle } from '../../gateway/presentation/concurrency-permit';
+import { ConcurrencyReleaseInterceptor } from '../../gateway/presentation/concurrency-release.interceptor';
+import { ConcurrencyGuard } from '../../gateway/presentation/concurrency.guard';
 import { RateLimitGuard } from '../../gateway/presentation/rate-limit.guard';
 import {
   IDEMPOTENCY_SERVICE,
@@ -147,8 +150,8 @@ function requireUserId(request: AuthenticatedRequest): string {
  * the class-level guard/interceptor wiring for no benefit.
  */
 @Controller()
-@UseGuards(ApiKeyGuard, UserAssertionGuard, RateLimitGuard)
-@UseInterceptors(SuccessEnvelopeInterceptor)
+@UseGuards(ApiKeyGuard, UserAssertionGuard, RateLimitGuard, ConcurrencyGuard)
+@UseInterceptors(ConcurrencyReleaseInterceptor, SuccessEnvelopeInterceptor)
 export class WritingGradingController {
   constructor(
     @Inject(OPERATION_DISPATCHER)
@@ -171,6 +174,7 @@ export class WritingGradingController {
       TASK1_OPERATION,
       request.headers['idempotency-key'],
     );
+    const backgroundLifecycle = getConcurrencyBackgroundLifecycle(request);
     const { signal, dispose } = createClientDisconnectSignal(request.raw);
 
     try {
@@ -199,6 +203,7 @@ export class WritingGradingController {
           timeoutMs: OPERATION_CATALOG[TASK1_OPERATION].timeoutMs,
           signal: context.signal,
           deadlineAt: context.deadlineAt,
+          ...(backgroundLifecycle === undefined ? {} : { backgroundLifecycle }),
         },
         (workContext: IdempotencyWorkContext) =>
           this.dispatcher.dispatch(TASK1_OPERATION, input, {
@@ -231,6 +236,7 @@ export class WritingGradingController {
       TASK2_OPERATION,
       request.headers['idempotency-key'],
     );
+    const backgroundLifecycle = getConcurrencyBackgroundLifecycle(request);
     const { signal, dispose } = createClientDisconnectSignal(request.raw);
 
     try {
@@ -259,6 +265,7 @@ export class WritingGradingController {
           timeoutMs: OPERATION_CATALOG[TASK2_OPERATION].timeoutMs,
           signal: context.signal,
           deadlineAt: context.deadlineAt,
+          ...(backgroundLifecycle === undefined ? {} : { backgroundLifecycle }),
         },
         (workContext: IdempotencyWorkContext) =>
           this.dispatcher.dispatch(TASK2_OPERATION, input, {

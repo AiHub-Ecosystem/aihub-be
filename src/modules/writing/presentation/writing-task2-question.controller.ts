@@ -26,6 +26,9 @@ import {
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
 } from '../../gateway/application/operation-dispatcher.port';
+import { getConcurrencyBackgroundLifecycle } from '../../gateway/presentation/concurrency-permit';
+import { ConcurrencyReleaseInterceptor } from '../../gateway/presentation/concurrency-release.interceptor';
+import { ConcurrencyGuard } from '../../gateway/presentation/concurrency.guard';
 import { RateLimitGuard } from '../../gateway/presentation/rate-limit.guard';
 import {
   IDEMPOTENCY_SERVICE,
@@ -98,8 +101,8 @@ function decodeReplay(value: unknown): DispatchResult<Task2QuestionResponse> {
 }
 
 @Controller()
-@UseGuards(ApiKeyGuard, UserAssertionGuard, RateLimitGuard)
-@UseInterceptors(SuccessEnvelopeInterceptor)
+@UseGuards(ApiKeyGuard, UserAssertionGuard, RateLimitGuard, ConcurrencyGuard)
+@UseInterceptors(ConcurrencyReleaseInterceptor, SuccessEnvelopeInterceptor)
 export class WritingTask2QuestionController {
   constructor(
     @Inject(OPERATION_DISPATCHER)
@@ -121,6 +124,7 @@ export class WritingTask2QuestionController {
       OPERATION,
       request.headers['idempotency-key'],
     );
+    const backgroundLifecycle = getConcurrencyBackgroundLifecycle(request);
     const { signal, dispose } = createClientDisconnectSignal(request.raw);
 
     try {
@@ -149,6 +153,7 @@ export class WritingTask2QuestionController {
           timeoutMs: OPERATION_CATALOG[OPERATION].timeoutMs,
           signal: context.signal,
           deadlineAt: context.deadlineAt,
+          ...(backgroundLifecycle === undefined ? {} : { backgroundLifecycle }),
         },
         (workContext: IdempotencyWorkContext) =>
           this.dispatcher.dispatch(OPERATION, input, {

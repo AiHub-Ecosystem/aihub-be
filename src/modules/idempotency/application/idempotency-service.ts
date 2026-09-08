@@ -213,6 +213,7 @@ export class IdempotencyService implements IdempotencyServicePort {
     } catch (error) {
       if (error instanceof ResponseDeadlineReached) {
         background = true;
+        input.backgroundLifecycle?.started();
         void this.finishInBackground(
           input,
           requestId,
@@ -255,6 +256,7 @@ export class IdempotencyService implements IdempotencyServicePort {
     } catch (error) {
       await this.releaseAfterFailure(input, requestId, error);
     } finally {
+      input.backgroundLifecycle?.settled();
       clearTimer(hardTimer);
       controller.abort();
     }

@@ -250,6 +250,43 @@ describe('IdempotencyService', () => {
     });
   });
 
+  it('signals background lifecycle around work that outlives the response deadline', async () => {
+    const repository = new FakeRepository();
+    repository.nextReservations.push({
+      kind: 'claimed',
+      requestId: 'req_background_lifecycle',
+    });
+    const service = new IdempotencyService(repository);
+    let resolveWork: ((value: { value: string }) => void) | undefined;
+    const workPromise = new Promise<{ value: string }>((resolve) => {
+      resolveWork = resolve;
+    });
+    const lifecycle = {
+      started: jest.fn(),
+      settled: jest.fn(),
+    };
+
+    await expect(
+      service.execute(
+        {
+          ...input('req_background_lifecycle'),
+          timeoutMs: 5,
+          backgroundLifecycle: lifecycle,
+        },
+        () => workPromise,
+        () => ({ value: 'unused' }),
+      ),
+    ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
+
+    expect(lifecycle.started).toHaveBeenCalledTimes(1);
+    expect(lifecycle.settled).not.toHaveBeenCalled();
+
+    resolveWork?.({ value: 'done' });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(lifecycle.settled).toHaveBeenCalledTimes(1);
+  });
+
   it('allows only one downstream execution when two requests race for one key', async () => {
     const repository = new AtomicRepository();
     const service = new IdempotencyService(repository);

@@ -473,6 +473,18 @@ const IDEMPOTENCY_SCENARIOS: readonly Scenario[] = [
   },
 ];
 
+const CONCURRENCY_SCENARIOS: readonly Scenario[] = [
+  {
+    name: 'Concurrency limit rejects excess in-flight requests',
+    description:
+      'Configure the organization with maxConcurrent=1 and point {{baseUrl}} at a deliberately slow downstream. Run two copies of this request in parallel; the second must return 429 while the first is still in flight.',
+    path: TASK1_QUESTION_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER],
+    body: { chart_type: 'Bar Chart' },
+    testScript: [assertStatus(429), ...assertErrorCode(['CONCURRENCY_LIMIT'])],
+  },
+];
+
 /**
  * Deep-removes every property named `key`. Used to drop the `response`
  * arrays openapi-to-postmanv2 attaches to each auto-converted operation —
@@ -605,6 +617,10 @@ export async function buildPostmanCollection(
       {
         name: 'Idempotency mode examples',
         item: IDEMPOTENCY_SCENARIOS.map(scenarioToItem),
+      },
+      {
+        name: 'Concurrency limit examples',
+        item: CONCURRENCY_SCENARIOS.map(scenarioToItem),
       },
     ],
   };

@@ -276,7 +276,7 @@
         }
       },
       "Error429": {
-        "description": "RATE_LIMITED",
+        "description": "RATE_LIMITED | CONCURRENCY_LIMIT",
         "content": {
           "application/json": {
             "schema": {
@@ -290,8 +290,16 @@
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
                     "code": {
-                      "const": "RATE_LIMITED",
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "const": "RATE_LIMITED",
+                          "type": "string"
+                        },
+                        {
+                          "const": "CONCURRENCY_LIMIT",
+                          "type": "string"
+                        }
+                      ]
                     },
                     "message": {
                       "type": "string"

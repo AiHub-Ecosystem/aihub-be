@@ -1,47 +1,19 @@
 import { Logger } from '@nestjs/common';
-import Redis from 'ioredis';
 
 import type {
   RateLimitDecision,
   RateLimitRequest,
   RateLimiterPort,
 } from '../application/rate-limiter.port';
+import {
+  type RedisGatewayClient,
+  createRedisGatewayClient,
+} from './redis-gateway.client';
 
-export interface RedisRateLimitClient {
-  incr(key: string): Promise<number>;
-  expire(key: string, seconds: number): Promise<number>;
-  quit(): Promise<unknown>;
-}
-
-class IoredisRateLimitClient implements RedisRateLimitClient {
-  constructor(private readonly client: Redis) {}
-
-  incr(key: string): Promise<number> {
-    return this.client.incr(key);
-  }
-
-  expire(key: string, seconds: number): Promise<number> {
-    return this.client.expire(key, seconds);
-  }
-
-  quit(): Promise<unknown> {
-    return this.client.quit();
-  }
-}
-
-function connect(url: string): RedisRateLimitClient | undefined {
-  if (url.trim().length === 0) {
-    return undefined;
-  }
-
-  const client = new Redis(url, {
-    commandTimeout: 100,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
-  });
-  client.on('error', () => undefined);
-  return new IoredisRateLimitClient(client);
-}
+export type RedisRateLimitClient = Pick<
+  RedisGatewayClient,
+  'incr' | 'expire' | 'quit'
+>;
 
 interface FallbackWindow {
   readonly windowStart: number;
@@ -67,7 +39,7 @@ export class RedisRateLimiter implements RateLimiterPort {
     now: () => number = () => Date.now(),
     logger: Pick<Logger, 'warn' | 'log'> = new Logger(RedisRateLimiter.name),
   ) {
-    this.client = client ?? connect(url);
+    this.client = client ?? createRedisGatewayClient(url);
     this.now = now;
     this.logger = logger;
   }

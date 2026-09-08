@@ -10,6 +10,12 @@ export interface IdempotencyExecutionInput {
   readonly timeoutMs: number;
   readonly signal: AbortSignal;
   readonly deadlineAt: Date;
+  readonly backgroundLifecycle?: IdempotencyBackgroundLifecycle;
+}
+
+export interface IdempotencyBackgroundLifecycle {
+  started(): void;
+  settled(): void;
 }
 
 export interface IdempotencyWorkContext {
