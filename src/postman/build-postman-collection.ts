@@ -373,6 +373,37 @@ const IDEMPOTENCY_SCENARIOS: readonly Scenario[] = [
     ],
   },
   {
+    name: 'Task 2 grading rejects a conflicting payload',
+    description:
+      'Required idempotency: reusing a completed key with a different payload returns IDEMPOTENCY_CONFLICT.',
+    path: TASK2_GRADE_PATH,
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
+    ],
+    body: TASK2_GRADE_BODY,
+    testScript: [
+      assertStatus(200),
+      ...assertEnvelope('writing.task2.grade'),
+      'const conflictingBody = JSON.parse(pm.request.body.raw);',
+      "conflictingBody.essay += ' (conflict)';",
+      'pm.sendRequest({',
+      '  url: pm.request.url.toString(),',
+      '  method: pm.request.method,',
+      '  header: pm.request.headers.toJSON(),',
+      "  body: { mode: 'raw', raw: JSON.stringify(conflictingBody) }",
+      '}, function (error, response) {',
+      "  pm.test('same key rejects a conflicting payload', function () {",
+      '    pm.expect(error).to.equal(null);',
+      '    pm.expect(response.code).to.eql(409);',
+      "    pm.expect(response.json().error.code).to.eql('IDEMPOTENCY_CONFLICT');",
+      '  });',
+      '});',
+    ],
+  },
+  {
     name: 'Task 2 question optionally replays a completed result',
     description:
       'Optional idempotency: supplying a key enables replay safety for model-backed question generation.',
