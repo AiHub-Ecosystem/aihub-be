@@ -2,6 +2,43 @@
 
 AIHUB is a B2B multi-tenant AI API Gateway and identity broker. The backend is a single NestJS/Fastify application. The first MVP slice is the Writing service; the gateway owns organization identity, scopes, metering, quota, idempotency, and typed dispatch while Writing owns its business data and model behavior.
 
+## Architecture
+
+AIHUB terminates the public API, authenticates the organization, enforces its
+limits, then dispatches one typed operation to a private AI service.
+PostgreSQL holds control-plane truth; Redis holds only cache, counters, and
+protection state. Writing is the shipped slice; the other services are
+planned and reuse the same gateway path.
+
+```mermaid
+flowchart LR
+    client["B2B client"]
+
+    subgraph aihub["AIHUB gateway"]
+        identity["Identity<br/>API key, scopes, user assertion"]
+        gateway["Policy<br/>rate limit, concurrency, idempotency"]
+        dispatch["Typed dispatch<br/>operation catalog + adapters"]
+    end
+
+    pg[("PostgreSQL<br/>orgs, keys, idempotency")]
+    redis[("Redis<br/>cache, counters")]
+    writing["AI Writing service"]
+    reading["AI Reading service<br/>(planned)"]
+    listening["AI Listening service<br/>(planned)"]
+    speaking["AI Speaking service<br/>(planned)"]
+
+    client -->|X-API-Key| identity --> gateway --> dispatch
+    dispatch -->|internal JWT| writing
+    dispatch -.-> reading
+    dispatch -.-> listening
+    dispatch -.-> speaking
+    identity --- pg
+    gateway --- redis
+
+    classDef planned stroke-dasharray: 5 5,color:#888,stroke:#888
+    class reading,listening,speaking planned
+```
+
 ## Quick start
 
 ```text
