@@ -15,7 +15,7 @@ Caddy                     120s     luôn phải LỚN HƠN app
 
 Deadline tính **một lần** lúc request vào (`ctx.deadlineMs`), rồi mọi bước sau trừ dần vào đó. Không timeout nào được đặt độc lập — nếu không, retry cộng dồn sẽ vượt qua cả timeout tổng.
 
-Tài liệu cho khách phải ghi rõ: *chấm bài có thể mất tới 60 giây, đặt timeout phía bạn ít nhất 90 giây.* Khách để timeout 30s là chuyện sẽ xảy ra nếu không nói trước.
+Tài liệu cho khách phải ghi rõ: _chấm bài có thể mất tới 60 giây, đặt timeout phía bạn ít nhất 90 giây._ Khách để timeout 30s là chuyện sẽ xảy ra nếu không nói trước.
 
 ## I.2 Retry — phân biệt "chưa gửi" và "không biết"
 
@@ -29,20 +29,20 @@ Timeout sau khi đã gửi / connection reset giữa chừng
   -> KHÔNG BIẾT model đã chạy chưa -> mặc định KHÔNG retry
 ```
 
-| Tình huống | Retry? |
-|---|---|
-| Chưa kết nối được (`ECONNREFUSED`, DNS) | Có, tối đa 2 lần |
-| `503` + có `Retry-After` | Có, 1 lần, nếu còn đủ deadline |
-| `502`, `500` | 1 lần nếu operation là `GET`; POST thì không |
-| Timeout sau khi gửi | **Không** — xem [§I.5](#i5-timeout--idempotency-key-không-mất-tiền-hai-lần) |
-| `4xx` bất kỳ | Không bao giờ — retry lỗi client là vô nghĩa |
-| Breaker đang mở | Không, trả 503 ngay |
+| Tình huống                              | Retry?                                                                      |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| Chưa kết nối được (`ECONNREFUSED`, DNS) | Có, tối đa 2 lần                                                            |
+| `503` + có `Retry-After`                | Có, 1 lần, nếu còn đủ deadline                                              |
+| `502`, `500`                            | 1 lần nếu operation là `GET`; POST thì không                                |
+| Timeout sau khi gửi                     | **Không** — xem [§I.5](#i5-timeout--idempotency-key-không-mất-tiền-hai-lần) |
+| `4xx` bất kỳ                            | Không bao giờ — retry lỗi client là vô nghĩa                                |
+| Breaker đang mở                         | Không, trả 503 ngay                                                         |
 
 ### Backoff: full jitter
 
 ```ts
 const delay = Math.random() * Math.min(2_000, 200 * 2 ** attempt);
-if (Date.now() + delay + expectedMs > ctx.deadlineMs) throw lastError;  // hết ngân sách thì thôi
+if (Date.now() + delay + expectedMs > ctx.deadlineMs) throw lastError; // hết ngân sách thì thôi
 ```
 
 Full jitter (random **từ 0**) thay vì "exponential + cộng chút nhiễu": khi AI Writing vừa sống lại sau sự cố, mọi client retry cùng lúc sẽ đạp nó chết lần nữa. Random từ 0 rải đều chúng ra.
@@ -59,9 +59,9 @@ hoặc khi thấy retry storm trong một sự cố thật.
 ```ts
 new CircuitBreaker(call, {
   errorThresholdPercentage: 50,
-  volumeThreshold: 20,        // đừng mở vì 2 request đầu lỗi
-  resetTimeout: 30_000,       // sau 30s thả 1 request thăm dò
-  timeout: false,             // undici đã lo timeout, đừng đặt hai chỗ
+  volumeThreshold: 20, // đừng mở vì 2 request đầu lỗi
+  resetTimeout: 30_000, // sau 30s thả 1 request thăm dò
+  timeout: false, // undici đã lo timeout, đừng đặt hai chỗ
 });
 ```
 
@@ -147,26 +147,26 @@ trong khi CPU chưa bão hoà — công việc ở đây là I/O-bound nên chư
 
 ## J.2 Danh sách mã lỗi v1
 
-| HTTP | Code | Khi nào | Retryable |
-|---:|---|---|---|
-| 400 | `INVALID_REQUEST` | Sai schema, field lạ | Không |
-| 401 | `UNAUTHORIZED` | Thiếu/sai API key | Không |
-| 401 | `USER_ASSERTION_REQUIRED` | Operation user-scoped nhưng thiếu assertion | Không |
-| 401 | `INVALID_USER_ASSERTION` | Sai chữ ký / hết hạn / sai claim | Không |
-| 403 | `FORBIDDEN` | Scope không đủ | Không |
-| 403 | `ENVIRONMENT_NOT_ALLOWED` | Key không được dùng ở env này | Không |
-| 404 | `NOT_FOUND` | Endpoint/resource không tồn tại | Không |
-| 409 | `IDEMPOTENCY_CONFLICT` | Cùng key khác payload, hoặc đang chạy | Không |
-| 413 | `PAYLOAD_TOO_LARGE` | Vượt `maxBodyBytes` của operation | Không |
-| 429 | `RATE_LIMITED` | Vượt limit theo phút của AIHUB | Có |
-| 429 | `CONCURRENCY_LIMIT` | Quá nhiều request đồng thời | Có, sớm |
-| 429 | `QUOTA_EXCEEDED` | Hết hạn mức tháng | Đầu tháng sau |
-| 502 | `AI_SERVICE_ERROR` | Downstream 5xx | Có thể |
-| 502 | `AI_SERVICE_CONTRACT_VIOLATION` | Downstream trả shape không parse được | Không |
-| 503 | `AI_SERVICE_UNAVAILABLE` | Không kết nối được / breaker mở | Có |
-| 503 | `AI_SERVICE_THROTTLED` | Downstream / model provider bị throttle | Có |
-| 503 | `IDENTITY_PROVIDER_UNAVAILABLE` | JWKS của khách không lấy được | Có |
-| 504 | `AI_SERVICE_TIMEOUT` | Hết deadline | Chỉ khi có Idempotency-Key |
+| HTTP | Code                            | Khi nào                                     | Retryable                  |
+| ---: | ------------------------------- | ------------------------------------------- | -------------------------- |
+|  400 | `INVALID_REQUEST`               | Sai schema, field lạ                        | Không                      |
+|  401 | `UNAUTHORIZED`                  | Thiếu/sai API key                           | Không                      |
+|  401 | `USER_ASSERTION_REQUIRED`       | Operation user-scoped nhưng thiếu assertion | Không                      |
+|  401 | `INVALID_USER_ASSERTION`        | Sai chữ ký / hết hạn / sai claim            | Không                      |
+|  403 | `FORBIDDEN`                     | Scope không đủ                              | Không                      |
+|  403 | `ENVIRONMENT_NOT_ALLOWED`       | Key không được dùng ở env này               | Không                      |
+|  404 | `NOT_FOUND`                     | Endpoint/resource không tồn tại             | Không                      |
+|  409 | `IDEMPOTENCY_CONFLICT`          | Cùng key khác payload, hoặc đang chạy       | Không                      |
+|  413 | `PAYLOAD_TOO_LARGE`             | Vượt `maxBodyBytes` của operation           | Không                      |
+|  429 | `RATE_LIMITED`                  | Vượt limit theo phút của AIHUB              | Có                         |
+|  429 | `CONCURRENCY_LIMIT`             | Quá nhiều request đồng thời                 | Có, sớm                    |
+|  429 | `QUOTA_EXCEEDED`                | Hết hạn mức tháng                           | Đầu tháng sau              |
+|  502 | `AI_SERVICE_ERROR`              | Downstream 5xx                              | Có thể                     |
+|  502 | `AI_SERVICE_CONTRACT_VIOLATION` | Downstream trả shape không parse được       | Không                      |
+|  503 | `AI_SERVICE_UNAVAILABLE`        | Không kết nối được / breaker mở             | Có                         |
+|  503 | `AI_SERVICE_THROTTLED`          | Downstream / model provider bị throttle     | Có                         |
+|  503 | `IDENTITY_PROVIDER_UNAVAILABLE` | JWKS của khách không lấy được               | Có                         |
+|  504 | `AI_SERVICE_TIMEOUT`            | Hết deadline                                | Chỉ khi có Idempotency-Key |
 
 ### Sáu mã mới so với D1
 
@@ -213,6 +213,8 @@ Log nội bộ giữ đủ chi tiết cho AIHUB developer, và **chỉ ở đây
   "private_endpoint": "/grading-feedback-task1"
 }
 ```
+
+**`downstream_error_code` và `downstream_message` là ví dụ minh hoạ, chưa điền được.** AI Writing trả `{"detail": "..."}` không kèm mã lỗi, nên `HttpOperationDispatcher` ghi `null` cho cả hai. Muốn điền thật thì AI Service phải có error contract chuẩn hoá trước, rồi AIHUB capture fixture lỗi và implement `parseError` — hook đã khai trong `DownstreamAdapter` nhưng chưa adapter nào dùng. Xem `docs/aihub_deliverable_1_api_contract_schema.md` mục US10, phần "Đề xuất — chờ AI Service xác nhận".
 
 ---
 

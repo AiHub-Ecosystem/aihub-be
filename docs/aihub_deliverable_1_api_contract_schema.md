@@ -1135,6 +1135,8 @@ Internal log:
 
 Raw details chỉ dùng nội bộ.
 
+> **Trạng thái triển khai.** `downstream_error_code` và `downstream_message` ở trên là **ví dụ minh hoạ**, không phải field AI Writing đang trả. Service thật trả `{"detail": "..."}` không kèm mã lỗi nào, nên `HttpOperationDispatcher` hiện ghi `null` cho cả hai. Mọi field còn lại — `request_id`, `ai_service`, `downstream_status`, `downstream_ms`, `private_endpoint` — đều đã có thật trong log. Điều kiện để điền hai field kia nằm ở [US10 § Đề xuất](#25-us10--master-error-mapping-matrix).
+
 ---
 
 # 24. US09 — Unified Error Payload cho Client
@@ -1175,29 +1177,32 @@ Cần ma trận mapping lỗi giữa client/system/AI Provider, kèm nguyên nh�
 
 ## [Implementation Proposal]
 
-Danh sách chốt cho v1 gồm **18 mã**. Sáu mã đánh dấu ★ là bổ sung so với bản D1 đầu tiên.
+Danh sách chốt cho v1 gồm **19 mã**. Sáu mã đánh dấu ★ là bổ sung so với bản D1 đầu tiên.
 
-| Layer       | Condition                                    | HTTP | AIHUB Code                        |  Retryable | Client Action                   | System Action           |
-| ----------- | -------------------------------------------- | ---: | --------------------------------- | ---------: | ------------------------------- | ----------------------- |
-| Client      | Missing/invalid field, field lạ              |  400 | `INVALID_REQUEST`                 |         No | Fix request                     | None                    |
-| Client      | Body vượt `max_body_bytes`                   |  413 | ★ `PAYLOAD_TOO_LARGE`             |         No | Giảm kích thước                 | Metric                  |
-| Client      | Endpoint/resource không tồn tại              |  404 | `NOT_FOUND`                       |         No | Kiểm tra URL                    | None                    |
-| Auth        | Missing/invalid API key                      |  401 | `UNAUTHORIZED`                    |         No | Check credential                | Audit                   |
-| Auth        | Operation user-scoped nhưng thiếu assertion  |  401 | ★ `USER_ASSERTION_REQUIRED`       |         No | Gửi kèm `X-User-Assertion`      | Audit                   |
-| Auth        | Assertion sai chữ ký/hết hạn/sai claim       |  401 | `INVALID_USER_ASSERTION`          |         No | Tạo lại assertion               | Audit                   |
-| Auth        | Không lấy được JWKS của Organization         |  503 | ★ `IDENTITY_PROVIDER_UNAVAILABLE` |        Yes | Kiểm tra JWKS endpoint của mình | Alert                   |
-| AuthZ       | Scope denied                                 |  403 | `FORBIDDEN`                       |         No | Check permission/plan           | Audit                   |
-| AuthZ       | Key không được dùng ở environment này        |  403 | ★ `ENVIRONMENT_NOT_ALLOWED`       |         No | Dùng đúng key cho môi trường    | Audit                   |
-| Idempotency | Same key, different payload — hoặc đang chạy |  409 | `IDEMPOTENCY_CONFLICT`            |         No | New key/fix request             | Audit                   |
-| Gateway     | Client exceeds AIHUB rate limit              |  429 | `RATE_LIMITED`                    |        Yes | Backoff; obey `Retry-After`     | Metric                  |
-| Gateway     | Quá nhiều request đồng thời của cùng org     |  429 | ★ `CONCURRENCY_LIMIT`             |   Yes, sớm | Giảm song song, retry ~500ms    | Metric                  |
-| Quota       | Organization quota exhausted                 |  429 | `QUOTA_EXCEEDED`                  | Time-based | Wait/upgrade                    | Metering                |
-| Downstream  | AI Service/Model Provider throttled          |  503 | `AI_SERVICE_THROTTLED`            |        Yes | Retry later                     | Backoff/circuit breaker |
-| Downstream  | Timeout                                      |  504 | `AI_SERVICE_TIMEOUT`              |       Yes* | Retry only idempotently         | Timeout/circuit breaker |
-| Downstream  | AI Service unavailable / breaker mở          |  503 | `AI_SERVICE_UNAVAILABLE`          |        Yes | Retry later                     | Alert/health check      |
-| Downstream  | Response không parse được theo contract      |  502 | ★ `AI_SERVICE_CONTRACT_VIOLATION` |         No | Báo AIHUB                       | **Alert khẩn**          |
-| Downstream  | Other 5xx/invalid response                   |  502 | `AI_SERVICE_ERROR`                |      Maybe | Retry later                     | Alert/metrics           |
-| AIHUB       | Unexpected error                             |  500 | `INTERNAL_ERROR`                  |      Maybe | Retry later                     | Alert                   |
+Cột **Downstream Signal** cho biết AIHUB _quan sát được gì_ từ phía sau trước khi dựng mã lỗi. Dấu `—` nghĩa là request chưa bao giờ rời gateway, nên khi debug không cần đi tìm log của AI Service.
+
+| Layer       | Condition                                    | Downstream Signal                                | HTTP | AIHUB Code                        |  Retryable | Client Action                   | System Action           |
+| ----------- | -------------------------------------------- | ------------------------------------------------ | ---: | --------------------------------- | ---------: | ------------------------------- | ----------------------- |
+| Client      | Missing/invalid field, field lạ              | —                                                |  400 | `INVALID_REQUEST`                 |         No | Fix request                     | None                    |
+| Client      | Body vượt `max_body_bytes`                   | —                                                |  413 | ★ `PAYLOAD_TOO_LARGE`             |         No | Giảm kích thước                 | Metric                  |
+| Client      | Endpoint/resource không tồn tại              | —                                                |  404 | `NOT_FOUND`                       |         No | Kiểm tra URL                    | None                    |
+| Auth        | Missing/invalid API key                      | —                                                |  401 | `UNAUTHORIZED`                    |         No | Check credential                | Audit                   |
+| Auth        | Operation user-scoped nhưng thiếu assertion  | —                                                |  401 | ★ `USER_ASSERTION_REQUIRED`       |         No | Gửi kèm `X-User-Assertion`      | Audit                   |
+| Auth        | Assertion sai chữ ký/hết hạn/sai claim       | —                                                |  401 | `INVALID_USER_ASSERTION`          |         No | Tạo lại assertion               | Audit                   |
+| Auth        | Không lấy được JWKS của Organization         | JWKS endpoint của **org**, không phải AI Service |  503 | ★ `IDENTITY_PROVIDER_UNAVAILABLE` |        Yes | Kiểm tra JWKS endpoint của mình | Alert                   |
+| AuthZ       | Scope denied                                 | —                                                |  403 | `FORBIDDEN`                       |         No | Check permission/plan           | Audit                   |
+| AuthZ       | Key không được dùng ở environment này        | —                                                |  403 | ★ `ENVIRONMENT_NOT_ALLOWED`       |         No | Dùng đúng key cho môi trường    | Audit                   |
+| Idempotency | Same key, different payload — hoặc đang chạy | —                                                |  409 | `IDEMPOTENCY_CONFLICT`            |         No | New key/fix request             | Audit                   |
+| Gateway     | Client exceeds AIHUB rate limit              | —                                                |  429 | `RATE_LIMITED`                    |        Yes | Backoff; obey `Retry-After`     | Metric                  |
+| Gateway     | Quá nhiều request đồng thời của cùng org     | —                                                |  429 | ★ `CONCURRENCY_LIMIT`             |   Yes, sớm | Giảm song song, retry ~500ms    | Metric                  |
+| Quota       | Organization quota exhausted                 | —                                                |  429 | `QUOTA_EXCEEDED`                  | Time-based | Wait/upgrade                    | Metering                |
+| Downstream  | AI Service/Model Provider throttled          | `HTTP 429`                                       |  503 | `AI_SERVICE_THROTTLED`            |        Yes | Retry later                     | Backoff/circuit breaker |
+| Downstream  | Timeout                                      | abort / `UND_ERR_*_TIMEOUT`                      |  504 | `AI_SERVICE_TIMEOUT`              |      Yes\* | Retry only idempotently         | Timeout/circuit breaker |
+| Downstream  | AI Service unavailable / breaker mở          | `ECONNREFUSED` / DNS fail                        |  503 | `AI_SERVICE_UNAVAILABLE`          |        Yes | Retry later                     | Alert/health check      |
+| Downstream  | Response không parse được theo contract      | `HTTP 2xx` + body sai shape                      |  502 | ★ `AI_SERVICE_CONTRACT_VIOLATION` |         No | Báo AIHUB                       | **Alert khẩn**          |
+| Downstream  | Other 5xx/invalid response                   | `HTTP ≥ 500`                                     |  502 | `AI_SERVICE_ERROR`                |      Maybe | Retry later                     | Alert/metrics           |
+| Downstream  | 4xx khác 429 — xem ghi chú bên dưới          | `HTTP 4xx`                                       |  502 | `AI_SERVICE_ERROR`                |         No | Báo AIHUB                       | Metric                  |
+| AIHUB       | Unexpected error                             | —                                                |  500 | `INTERNAL_ERROR`                  |      Maybe | Retry later                     | Alert                   |
 
 `*` Timeout chỉ nên retry khi operation idempotent hoặc request có `Idempotency-Key` hợp lệ.
 
@@ -1228,6 +1233,62 @@ AIHUB **không** tự chữa bằng cách đọc chuỗi `detail` để đoán �
 **`CONCURRENCY_LIMIT` vs `RATE_LIMITED`.** Hai hành động khắc phục khác nhau: `RATE_LIMITED` thì khách phải **giảm tần suất**, `CONCURRENCY_LIMIT` thì khách phải **giảm số request chạy song song** — có thể vẫn giữ nguyên tổng số request mỗi phút. Cùng dùng `RATE_LIMITED` sẽ dẫn khách đi sai hướng.
 
 > Không dùng public `429 RATE_LIMITED` cho downstream throttling, vì client có thể hiểu nhầm họ đã vượt AIHUB limit.
+
+### 4xx của downstream đang được gộp vào `AI_SERVICE_ERROR`
+
+Hành vi hiện tại trong `HttpOperationDispatcher.mapDownstreamStatus`: chỉ `429` được tách thành `AI_SERVICE_THROTTLED`, mọi status ngoài dải 2xx còn lại đều thành `AI_SERVICE_ERROR`, với `retryable` bật khi status ≥ 500.
+
+Hệ quả: một `422` do AI Service từ chối **input** vẫn trả về client thành `502` — báo sai địa chỉ. Client đọc `502` sẽ hiểu là hệ thống hỏng và thử lại, trong khi việc cần làm là sửa request.
+
+Chưa sửa vì hai lý do, và cả hai đều nằm ở phía AI Service:
+
+1. AI Writing hiện **không** trả 4xx cho lỗi nghiệp vụ — nó trả `500` (xem ghi chú ở trên). Tách mã lúc này không thay đổi hành vi thực tế nào.
+2. Chưa có error contract chuẩn hoá để phân biệt "AI Service từ chối input" với "AI Service hỏng". Đề xuất ở mục kế tiếp.
+
+### Đề xuất — chờ AI Service xác nhận
+
+> **Chưa có thật.** Mục này mô tả trạng thái đích, không phải trạng thái hiện tại. AI Writing đang trả `500` kèm `{"detail": "..."}` cho cả lỗi nghiệp vụ, và không có field mã lỗi nào. Không implement `parseError` hay thêm mã mới vào registry theo bảng dưới cho tới khi AI Service xác nhận và AIHUB capture được fixture lỗi thật.
+
+Contract lỗi tối thiểu mà AIHUB đề nghị mọi AI Service tuân theo:
+
+```json
+{
+  "error": {
+    "code": "TOPIC_NOT_FOUND",
+    "message": "No data available for this chart type"
+  }
+}
+```
+
+Ba yêu cầu, không hơn:
+
+1. **HTTP status đúng nghĩa** — lỗi nghiệp vụ trả `4xx`, không trả `500`. Đây là yêu cầu quan trọng nhất: circuit breaker chỉ đếm `5xx` là failure, nên lỗi input bị trả `500` có thể mở breaker và làm sập operation cho mọi tổ chức khác.
+2. **`code` là enum ổn định** — không đổi theo văn bản hiển thị. AIHUB map theo `code`, không bao giờ parse `message`.
+3. **`message` chỉ dành cho người đọc log** — không đi ra client, không tham gia vào bất kỳ nhánh điều kiện nào.
+
+Khi có contract đó, cột Downstream Signal điền được thêm mã lỗi, và một mã AIHUB mới trở nên cần thiết:
+
+| Downstream Signal (đề xuất) | AIHUB Code                      | HTTP | Retryable |
+| --------------------------- | ------------------------------- | ---: | --------: |
+| `429` + `RATE_LIMITED`      | `AI_SERVICE_THROTTLED`          |  503 |       Yes |
+| `503` + `MODEL_NOT_READY`   | `AI_SERVICE_UNAVAILABLE`        |  503 |       Yes |
+| `422` + `TOPIC_NOT_FOUND`   | ☆ `AI_SERVICE_REJECTED`         |  400 |        No |
+| `422` + `ESSAY_TOO_SHORT`   | ☆ `AI_SERVICE_REJECTED`         |  400 |        No |
+| `5xx` khác                  | `AI_SERVICE_ERROR`              |  502 |       Yes |
+| `2xx` + body sai shape      | `AI_SERVICE_CONTRACT_VIOLATION` |  502 |        No |
+
+☆ Mã đề xuất, chưa có trong `error-registry.ts`.
+
+**Vì sao `AI_SERVICE_REJECTED` cần là mã riêng.** Nó nằm đúng giữa hai mã đã có. Không phải `INVALID_REQUEST`, vì request đã qua validate của AIHUB — schema hợp lệ. Cũng không phải `AI_SERVICE_ERROR`, vì không có gì hỏng cả. Ý nghĩa của nó là: _đúng shape, nhưng AI Service không xử lý được nội dung này_. Client cần biết để sửa dữ liệu chứ không phải để retry.
+
+**Việc cần làm, theo đúng thứ tự:**
+
+1. AI Service triển khai error contract ở trên
+2. AIHUB gọi thật, capture response lỗi, commit vào `test/fixtures/ai-writing/`
+3. Implement `parseError` trên adapter — hook đã khai sẵn trong `DownstreamAdapter`, chưa adapter nào dùng
+4. Thêm `AI_SERVICE_REJECTED` vào registry, điền `downstream_error_code` vào log US08
+
+Đảo thứ tự là viết parser cho một contract chưa tồn tại.
 
 ---
 
