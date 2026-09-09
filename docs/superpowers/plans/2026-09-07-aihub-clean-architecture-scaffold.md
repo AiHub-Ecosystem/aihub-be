@@ -122,17 +122,17 @@ Run `pnpm install`, `pnpm type-check`, and `pnpm test -- health.controller.spec.
 - Create `CONTEXT.md` as a living index, not a copied specification. Include only: project purpose, the terms Organization/API key/User Assertion/Internal JWT/Downstream Adapter/Operation Catalog, ownership boundaries, current MVP scope (Writing only), known blockers (grading response schema and public service exposure), and links to canonical docs.
 - Add path-scoped rule files with YAML frontmatter. Each file must contain only rules for its paths:
 
-  | Rule | Scope | Required constraints |
-  | --- | --- | --- |
-  | `common.md` | `src/common/**` | framework-neutral primitives and error contracts; explicitly named boundary bindings only; no business policy |
-  | `domain.md` | `src/**/domain/**` | pure types/invariants; no Nest, TypeBox, DB, Redis, HTTP, or env imports |
-  | `application.md` | `src/**/application/**` | use cases and ports; no concrete adapters or raw transport objects |
-  | `infrastructure.md` | `src/**/infrastructure/**`, `src/downstream/**` | adapters implement ports; explicit mappers; redact secrets; no domain policy |
-  | `presentation.md` | `src/**/presentation/**`, `src/**/*.controller.ts` | validate at boundary; build `RequestContext`; map errors; no persistence/downstream calls in controllers |
-  | `module-wiring.md` | `src/**/*.module.ts`, `src/app.module.ts` | dependency injection is the only composition boundary; no cross-module infrastructure imports |
-  | `typescript.md` | `src/**/*.ts`, `test/**/*.ts` | strict types, no `any`, no unchecked assertions, named exports, explicit return types for public APIs |
-  | `testing.md` | `**/*.spec.ts`, `test/**` | test behavior and boundaries; no real Postgres/Redis/downstream calls in unit tests |
-  | `security.md` | `src/**`, `test/**` | never log or expose secrets, assertions, tokens, essay text, or raw downstream bodies |
+  | Rule                | Scope                                              | Required constraints                                                                                          |
+  | ------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+  | `common.md`         | `src/common/**`                                    | framework-neutral primitives and error contracts; explicitly named boundary bindings only; no business policy |
+  | `domain.md`         | `src/**/domain/**`                                 | pure types/invariants; no Nest, TypeBox, DB, Redis, HTTP, or env imports                                      |
+  | `application.md`    | `src/**/application/**`                            | use cases and ports; no concrete adapters or raw transport objects                                            |
+  | `infrastructure.md` | `src/**/infrastructure/**`, `src/downstream/**`    | adapters implement ports; explicit mappers; redact secrets; no domain policy                                  |
+  | `presentation.md`   | `src/**/presentation/**`, `src/**/*.controller.ts` | validate at boundary; build `RequestContext`; map errors; no persistence/downstream calls in controllers      |
+  | `module-wiring.md`  | `src/**/*.module.ts`, `src/app.module.ts`          | dependency injection is the only composition boundary; no cross-module infrastructure imports                 |
+  | `typescript.md`     | `src/**/*.ts`, `test/**/*.ts`                      | strict types, no `any`, no unchecked assertions, named exports, explicit return types for public APIs         |
+  | `testing.md`        | `**/*.spec.ts`, `test/**`                          | test behavior and boundaries; no real Postgres/Redis/downstream calls in unit tests                           |
+  | `security.md`       | `src/**`, `test/**`                                | never log or expose secrets, assertions, tokens, essay text, or raw downstream bodies                         |
 
 - Give each role agent a narrow scope, owned paths, disallowed paths, and verification commands. The `api` agent owns presentation/contracts; `identity` owns auth/context; `downstream` owns adapters/dispatcher seams; `infrastructure` owns persistence/cache/HTTP implementations; `testing` owns tests and architecture checks. None may silently edit another role’s owned infrastructure.
 - Define commands as short repeatable workflows: `scaffold-module` reads the relevant specs and creates only a module’s four layers when behavior exists; `new-endpoint` requires an operation catalog entry, TypeBox boundary schema, context/auth decision, mapper, and tests; `domain-check` runs the architecture check; `test` runs focused Jest tests; `typecheck` runs strict TypeScript; `review` checks source hierarchy, security, and test evidence.
@@ -214,7 +214,7 @@ Run `pnpm test -- app-error.spec.ts request-context.factory.spec.ts redact.spec.
 
 - Define exactly four initial operation IDs from `06-routing-adapter.md`: `writing.task1.question.generate`, `writing.task2.question.generate`, `writing.task1.grade`, and `writing.task2.grade`. Do not add generic “generate” or “grade” routes that erase the Task1/Task2 contract difference.
 - Define the catalog entry shape with method, public path, required scope, identity mode, idempotency mode, body limit, timeout, downstream service, downstream path, request schema, and a response contract. The response contract is either a TypeBox schema or the explicit value `unresolved`; export one immutable catalog object keyed by the four operation IDs.
-- Use the public paths from the implementation spec: `/v1/writing/task1/questions`, `/v1/writing/task2/questions`, `/v1/writing/task1/grade`, and `/v1/writing/task2/grade`.
+- Use the public paths from the implementation spec: `/v1/ielts/writing/task1/questions`, `/v1/ielts/writing/task2/questions`, `/v1/ielts/writing/task1/grade`, and `/v1/ielts/writing/task2/grade`.
 - Define TypeBox request schemas with separate Task1 and Task2 shapes. Public Task1 grading includes `question`, `image_url`, `topic`, and `essay`; the downstream adapter later maps `image_url` to `url`. Task2 grading includes `question`, `topic`, and `essay`. Do not reuse the stale generic D1 schema.
 - Define the known request/response seam for question generation and a deliberately guarded grading response contract. The grading entries use `responseContract: 'unresolved'` and the dispatcher seam must raise an explicit `ContractNotReadyError` before parsing; do not invent fields or silently accept `{}` from the OpenAPI document.
 - Add a `contracts` test that checks required keys, rejects cross-task fields where the contract forbids them, and verifies the four catalog paths/scopes are unique and stable.

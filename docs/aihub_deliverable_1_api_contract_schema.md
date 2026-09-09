@@ -119,10 +119,10 @@ URL phải phân biệt được chức năng AI mà client cần.
 Ví dụ — 4 operation của MVP:
 
 ```http
-POST /v1/writing/task1/questions     # sinh đề Task 1
-POST /v1/writing/task2/questions     # sinh đề Task 2
-POST /v1/writing/task1/grade         # chấm bài Task 1
-POST /v1/writing/task2/grade         # chấm bài Task 2
+POST /v1/ielts/writing/task1/questions     # sinh đề Task 1
+POST /v1/ielts/writing/task2/questions     # sinh đề Task 2
+POST /v1/ielts/writing/task1/grade         # chấm bài Task 1
+POST /v1/ielts/writing/task2/grade         # chấm bài Task 2
 ```
 
 Phase sau:
@@ -139,7 +139,7 @@ Không expose naming của AI Service/Model Provider ra public API.
 
 AI Writing có endpoint riêng cho từng task, và **input khác nhau thật sự**: chấm Task 1 bắt buộc có ảnh biểu đồ (`url` phía downstream), Task 2 thì không có.
 
-Gộp thành một `POST /v1/writing/grade` với field phân biệt sẽ buộc schema phải dùng `oneOf`, làm thông báo lỗi validate khó hiểu và SDK sinh ra kém sạch. Tách riêng cho phép mỗi endpoint có schema chính xác, và sau này tính giá/scope riêng được.
+Gộp thành một `POST /v1/ielts/writing/grade` với field phân biệt sẽ buộc schema phải dùng `oneOf`, làm thông báo lỗi validate khó hiểu và SDK sinh ra kém sạch. Tách riêng cho phép mỗi endpoint có schema chính xác, và sau này tính giá/scope riêng được.
 
 Đồng thời adapter che luôn được sự thiếu nhất quán của downstream: AI Writing đặt tên `/generate-question-task1` nhưng `/question-generated-task2` — public API vẫn đối xứng.
 
@@ -174,7 +174,7 @@ X-API-Key
    ↓
 Organization
 
-/v1/writing/task1/grade
+/v1/ielts/writing/task1/grade
    ↓
 Service    = writing
 Task       = task1
@@ -190,7 +190,7 @@ Như vậy requirement US03 vẫn được đáp ứng nhưng tránh dữ liệu
 ## 6.1 Request headers đề xuất
 
 ```http
-POST /v1/writing/task1/grade
+POST /v1/ielts/writing/task1/grade
 X-API-Key: aihub_sk_xxxxx
 X-User-Assertion: <signed-jwt>       # chỉ khi operation user-scoped
 X-Correlation-Id: customer-req-123  # optional
@@ -393,7 +393,7 @@ Dưới đây là schema thật.
 
 ## Chấm bài — Task 1
 
-`POST /v1/writing/task1/grade`
+`POST /v1/ielts/writing/task1/grade`
 
 ```json
 {
@@ -426,7 +426,7 @@ Map            Process Diagram Multiple Graphs
 
 ## Chấm bài — Task 2
 
-`POST /v1/writing/task2/grade`
+`POST /v1/ielts/writing/task2/grade`
 
 ```json
 {
@@ -455,7 +455,7 @@ Response luôn echo `language` để client biết feedback đang ở ngôn ng�
 
 ## Sinh đề — Task 1 và Task 2
 
-`POST /v1/writing/task1/questions`
+`POST /v1/ielts/writing/task1/questions`
 
 ```json
 { "chart_type": "Bar Chart" }
@@ -467,7 +467,7 @@ Response luôn echo `language` để client biết feedback đang ở ngôn ng�
 
 Bỏ trống là đường dùng phổ biến nhất và luôn thành công. Truyền giá trị ngoài enum sẽ bị AIHUB chặn ở `400` trước khi chạm downstream — nếu không, downstream trả `500` cho một lỗi lẽ ra là `404`.
 
-`POST /v1/writing/task2/questions`
+`POST /v1/ielts/writing/task2/questions`
 
 ```json
 { "topic": "technology", "question_type": "opinion" }
@@ -558,7 +558,7 @@ D1 phải ghi mỗi operation là sync hay async.
 ## Sync
 
 ```http
-POST /v1/writing/task1/grade
+POST /v1/ielts/writing/task1/grade
 → 200 OK
 ```
 
@@ -958,14 +958,14 @@ AIHUB map dịch vụ client cần với scope hệ thống và AI Provider.
 
 ## [Implementation Proposal]
 
-| Public Endpoint                    | Operation                         | Required Scope              | AI Service  | Downstream path             |
-| ---------------------------------- | --------------------------------- | --------------------------- | ----------- | --------------------------- |
-| `POST /v1/writing/task1/questions` | `writing.task1.question.generate` | `writing.question.generate` | AI Writing  | `/generate-question-task1`  |
-| `POST /v1/writing/task2/questions` | `writing.task2.question.generate` | `writing.question.generate` | AI Writing  | `/question-generated-task2` |
-| `POST /v1/writing/task1/grade`     | `writing.task1.grade`             | `writing.grade`             | AI Writing  | `/grading-feedback-task1`   |
-| `POST /v1/writing/task2/grade`     | `writing.task2.grade`             | `writing.grade`             | AI Writing  | `/grading-feedback-task2`   |
-| `POST /v1/speaking/grade`          | `speaking.grade`                  | `speaking.grade`            | AI Speaking | _(Phase 4)_                 |
-| `POST /v1/reading/analyze`         | `reading.analyze`                 | `reading.analyze`           | AI Reading  | _(chưa có)_                 |
+| Public Endpoint                          | Operation                         | Required Scope              | AI Service  | Downstream path             |
+| ---------------------------------------- | --------------------------------- | --------------------------- | ----------- | --------------------------- |
+| `POST /v1/ielts/writing/task1/questions` | `writing.task1.question.generate` | `writing.question.generate` | AI Writing  | `/generate-question-task1`  |
+| `POST /v1/ielts/writing/task2/questions` | `writing.task2.question.generate` | `writing.question.generate` | AI Writing  | `/question-generated-task2` |
+| `POST /v1/ielts/writing/task1/grade`     | `writing.task1.grade`             | `writing.grade`             | AI Writing  | `/grading-feedback-task1`   |
+| `POST /v1/ielts/writing/task2/grade`     | `writing.task2.grade`             | `writing.grade`             | AI Writing  | `/grading-feedback-task2`   |
+| `POST /v1/speaking/grade`                | `speaking.grade`                  | `speaking.grade`            | AI Speaking | _(Phase 4)_                 |
+| `POST /v1/reading/analyze`               | `reading.analyze`                 | `reading.analyze`           | AI Reading  | _(chưa có)_                 |
 
 Hai task dùng chung scope (`writing.grade`, `writing.question.generate`) vì khách mua "chấm bài Writing" chứ không mua riêng từng task. Nếu sau này cần bán tách thì đổi thành `writing.task1.grade` / `writing.task2.grade` — operation đã tách sẵn nên việc đó không phá cấu trúc.
 
@@ -1262,7 +1262,7 @@ Operation catalog phải ghi `idempotency_required: true/false`.
 ```yaml
 operation: writing.task1.grade
 method: POST
-path: /v1/writing/task1/grade
+path: /v1/ielts/writing/task1/grade
 scope: writing.grade
 identity_scope: user
 execution: sync
@@ -1280,7 +1280,7 @@ observed_latency: 18.3s # đo thật 2026-09-07
 ```yaml
 operation: writing.task2.grade
 method: POST
-path: /v1/writing/task2/grade
+path: /v1/ielts/writing/task2/grade
 scope: writing.grade
 identity_scope: user
 execution: sync
@@ -1297,7 +1297,7 @@ response_schema: GradeResponse
 ```yaml
 operation: writing.task1.question.generate
 method: POST
-path: /v1/writing/task1/questions
+path: /v1/ielts/writing/task1/questions
 scope: writing.question.generate
 identity_scope: organization
 execution: sync
@@ -1315,7 +1315,7 @@ observed_latency: 1.4s # đọc DB, không gọi model
 ```yaml
 operation: writing.task2.question.generate
 method: POST
-path: /v1/writing/task2/questions
+path: /v1/ielts/writing/task2/questions
 scope: writing.question.generate
 identity_scope: organization
 execution: sync

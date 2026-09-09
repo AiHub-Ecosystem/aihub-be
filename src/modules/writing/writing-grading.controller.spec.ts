@@ -206,7 +206,7 @@ describe('Writing grading HTTP flow', () => {
   it('grades Task 1 against the real fixture, using task_achievement first', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/grade',
+      url: '/v1/ielts/writing/task1/grade',
       headers: { 'idempotency-key': 'fixture-task1-first' },
       payload: {
         question: task1Request.question,
@@ -241,13 +241,13 @@ describe('Writing grading HTTP flow', () => {
 
     const first = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/grade',
+      url: '/v1/ielts/writing/task1/grade',
       headers,
       payload,
     });
     const replay = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/grade',
+      url: '/v1/ielts/writing/task1/grade',
       headers,
       payload,
     });
@@ -265,7 +265,7 @@ describe('Writing grading HTTP flow', () => {
   it('rejects a valid Task 1 request without Idempotency-Key before downstream dispatch', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/grade',
+      url: '/v1/ielts/writing/task1/grade',
       payload: {
         question: task1Request.question,
         chart_type: task1Request.topic,
@@ -288,13 +288,13 @@ describe('Writing grading HTTP flow', () => {
     };
     const first = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/grade',
+      url: '/v1/ielts/writing/task1/grade',
       headers,
       payload,
     });
     const mismatch = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/grade',
+      url: '/v1/ielts/writing/task1/grade',
       headers,
       payload: { ...payload, essay: `${payload.essay} changed` },
     });
@@ -307,7 +307,7 @@ describe('Writing grading HTTP flow', () => {
   it('grades Task 2 against the real fixture, using task_response first', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task2/grade',
+      url: '/v1/ielts/writing/task2/grade',
       headers: { 'idempotency-key': 'fixture-task2' },
       payload: {
         question: task2Request.question,
@@ -333,13 +333,13 @@ describe('Writing grading HTTP flow', () => {
     const before = task2DownstreamCalls;
     const first = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task2/grade',
+      url: '/v1/ielts/writing/task2/grade',
       headers,
       payload,
     });
     const replay = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task2/grade',
+      url: '/v1/ielts/writing/task2/grade',
       headers,
       payload,
     });
@@ -356,7 +356,7 @@ describe('Writing grading HTTP flow', () => {
     const before = task2DownstreamCalls;
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task2/grade',
+      url: '/v1/ielts/writing/task2/grade',
       payload: {
         question: task2Request.question,
         topic: task2Request.topic,
@@ -372,7 +372,7 @@ describe('Writing grading HTTP flow', () => {
   it('rejects a Task 2 request that carries an image url, which only Task 1 accepts', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task2/grade',
+      url: '/v1/ielts/writing/task2/grade',
       headers: { 'idempotency-key': 'fixture-task2-invalid' },
       payload: {
         question: task2Request.question,
@@ -395,13 +395,13 @@ describe('Writing grading HTTP flow', () => {
     };
     const first = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task2/grade',
+      url: '/v1/ielts/writing/task2/grade',
       headers,
       payload,
     });
     const mismatch = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task2/grade',
+      url: '/v1/ielts/writing/task2/grade',
       headers,
       payload: { ...payload, topic: 'technology' },
     });
@@ -414,7 +414,7 @@ describe('Writing grading HTTP flow', () => {
   it('rejects a Task 1 request missing the required image url', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/grade',
+      url: '/v1/ielts/writing/task1/grade',
       payload: {
         question: task1Request.question,
         chart_type: task1Request.topic,

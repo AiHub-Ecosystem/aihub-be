@@ -148,7 +148,7 @@ describe('Task 1 questions HTTP flow', () => {
   it('validates, dispatches, parses, and envelopes a real fixture response', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/questions',
+      url: '/v1/ielts/writing/task1/questions',
       headers: {
         'x-correlation-id': 'acme-req-123',
       },
@@ -181,7 +181,7 @@ describe('Task 1 questions HTTP flow', () => {
   it('rejects an unsupported chart type before contacting Writing', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/questions',
+      url: '/v1/ielts/writing/task1/questions',
       payload: { chart_type: 'environment' },
     });
 
@@ -201,13 +201,13 @@ describe('Task 1 questions HTTP flow', () => {
     const payload = { chart_type: 'Bar Chart' };
     const first = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/questions',
+      url: '/v1/ielts/writing/task1/questions',
       headers: { 'idempotency-key': '   ' },
       payload,
     });
     const second = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/questions',
+      url: '/v1/ielts/writing/task1/questions',
       headers: { 'idempotency-key': '   ' },
       payload,
     });
@@ -221,7 +221,7 @@ describe('Task 1 questions HTTP flow', () => {
   it('validates a supplied API key and uses its organization identity', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/questions',
+      url: '/v1/ielts/writing/task1/questions',
       headers: {
         host: 'api.aihub.example.com',
         'x-api-key': VALID_API_KEY,
@@ -235,7 +235,7 @@ describe('Task 1 questions HTTP flow', () => {
   it('does not bypass a malformed API key even in local development', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/questions',
+      url: '/v1/ielts/writing/task1/questions',
       headers: { 'x-api-key': 'not-a-key' },
       payload: {},
     });
@@ -249,7 +249,7 @@ describe('Task 1 questions HTTP flow', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/questions',
+      url: '/v1/ielts/writing/task1/questions',
       headers: {
         host: 'api.aihub.example.com',
         'x-api-key': VALID_API_KEY,
@@ -276,7 +276,7 @@ describe('Task 1 questions HTTP flow', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/questions',
+      url: '/v1/ielts/writing/task1/questions',
       headers: {
         host: 'api.aihub.example.com',
         'x-api-key': VALID_API_KEY,
@@ -295,7 +295,7 @@ describe('Task 1 questions HTTP flow', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/questions',
+      url: '/v1/ielts/writing/task1/questions',
       headers: { host: 'api.aihub.example.com' },
       payload: {},
     });
@@ -311,7 +311,7 @@ describe('Task 1 questions HTTP flow', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/questions',
+      url: '/v1/ielts/writing/task1/questions',
       headers: { host: 'api.aihub.example.com' },
       payload: {},
     });

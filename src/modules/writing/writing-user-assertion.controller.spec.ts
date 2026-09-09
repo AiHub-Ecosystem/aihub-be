@@ -204,7 +204,10 @@ describe('Writing user assertion HTTP flow', () => {
   }
 
   it('rejects missing Task 1 and Task 2 assertions before dispatch', async () => {
-    for (const url of ['/v1/writing/task1/grade', '/v1/writing/task2/grade']) {
+    for (const url of [
+      '/v1/ielts/writing/task1/grade',
+      '/v1/ielts/writing/task2/grade',
+    ]) {
       const response = await app.inject({
         method: 'POST',
         url,
@@ -222,7 +225,7 @@ describe('Writing user assertion HTTP flow', () => {
     const signed = await assertion();
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/grade',
+      url: '/v1/ielts/writing/task1/grade',
       headers: apiKeyHeaders(signed),
       payload: gradePayload,
     });
@@ -240,7 +243,7 @@ describe('Writing user assertion HTTP flow', () => {
   ])('rejects %s assertions without dispatching', async (_name, options) => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/grade',
+      url: '/v1/ielts/writing/task1/grade',
       headers: apiKeyHeaders(await assertion(options)),
       payload: gradePayload,
     });
@@ -260,7 +263,7 @@ describe('Writing user assertion HTTP flow', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/grade',
+      url: '/v1/ielts/writing/task1/grade',
       headers: apiKeyHeaders(await assertion()),
       payload: gradePayload,
     });
@@ -280,7 +283,7 @@ describe('Writing user assertion HTTP flow', () => {
   it('allows an organization-scoped request without an assertion', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/questions',
+      url: '/v1/ielts/writing/task1/questions',
       headers: apiKeyHeaders(),
       payload: { chart_type: 'Bar Chart' },
     });
@@ -293,7 +296,7 @@ describe('Writing user assertion HTTP flow', () => {
   it('still verifies an assertion supplied to an organization-scoped request', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task1/questions',
+      url: '/v1/ielts/writing/task1/questions',
       headers: apiKeyHeaders('not-a-jwt'),
       payload: { chart_type: 'Bar Chart' },
     });

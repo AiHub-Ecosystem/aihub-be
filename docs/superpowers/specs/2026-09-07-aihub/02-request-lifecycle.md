@@ -32,7 +32,7 @@ Nguyên tắc: **rẻ trước, đắt sau; fail closed**.
 
 **Auth (4) trước validate body (6).** Request rác không có key hợp lệ bị chặn khi mới đọc header — không tốn công parse 20KB JSON. Đây cũng là lý do `bodyLimit` đặt theo operation chứ không đặt global.
 
-**Bước 3 tồn tại vì bước 4 là chỗ bị brute-force.** Rate limit theo org không cứu được kẻ đang *đoán* key — lúc đó chưa xác định được org nào cả. Cần một guard theo IP đứng trước, và nó chỉ đếm **lần thất bại**, nên khách hàng thật không bao giờ chạm tới dù bắn 50 RPS từ một IP.
+**Bước 3 tồn tại vì bước 4 là chỗ bị brute-force.** Rate limit theo org không cứu được kẻ đang _đoán_ key — lúc đó chưa xác định được org nào cả. Cần một guard theo IP đứng trước, và nó chỉ đếm **lần thất bại**, nên khách hàng thật không bao giờ chạm tới dù bắn 50 RPS từ một IP.
 
 **Vạch sau bước 11 là "biên tốn tiền".** Mọi thứ trên vạch phải fail nhanh và rẻ; mọi thứ dưới vạch có thể gọi model và tốn tiền thật. Idempotency **phải** nằm ngay trên vạch, không phải dưới.
 
@@ -40,22 +40,22 @@ Nguyên tắc: **rẻ trước, đắt sau; fail closed**.
 
 Trùng gần như 1-1 với execution order sẵn có của Nest, nên không phải bịa framework riêng.
 
-| Bước | Nest construct |
-|---|---|
-| 1, 2 | Middleware |
-| 3, 4, 5 | `ApiKeyGuard` |
-| 7, 8, 9 | `UserAssertionGuard` → `ScopeGuard` |
-| 10 | `RateLimitGuard` |
-| 6 | Pipe (chạy sau Guard — đúng ý ta) |
-| 11, 16, 17 | Interceptor (bọc handler) |
-| 12–15 | Service: Registry → Adapter → Dispatcher → HttpClient |
-| lỗi | Một `ExceptionFilter` duy nhất |
+| Bước       | Nest construct                                        |
+| ---------- | ----------------------------------------------------- |
+| 1, 2       | Middleware                                            |
+| 3, 4, 5    | `ApiKeyGuard`                                         |
+| 7, 8, 9    | `UserAssertionGuard` → `ScopeGuard`                   |
+| 10         | `RateLimitGuard`                                      |
+| 6          | Pipe (chạy sau Guard — đúng ý ta)                     |
+| 11, 16, 17 | Interceptor (bọc handler)                             |
+| 12–15      | Service: Registry → Adapter → Dispatcher → HttpClient |
+| lỗi        | Một `ExceptionFilter` duy nhất                        |
 
 Controller chỉ khai báo operation và gọi dispatcher. **Không controller nào đọc header thô** — identity đã được chuẩn hoá thành `RequestContext` từ guard.
 
 ## D.3 Lifecycle 1 — sync thành công
 
-`POST /v1/writing/task1/grade`
+`POST /v1/ielts/writing/task1/grade`
 
 ```
 Customer BE ──X-API-Key, X-User-Assertion, Idempotency-Key──► AIHUB

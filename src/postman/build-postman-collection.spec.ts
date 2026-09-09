@@ -163,7 +163,7 @@ describe('buildPostmanCollection', () => {
 
     expect(folder.item).toHaveLength(1);
     expect(folder.item?.[0]?.request?.url).toBe(
-      '{{baseUrl}}/v1/writing/task1/questions',
+      '{{baseUrl}}/v1/ielts/writing/task1/questions',
     );
     expect(folder.item?.[0]?.event?.[0]?.script.exec.join('\n')).toContain(
       'CONCURRENCY_LIMIT',

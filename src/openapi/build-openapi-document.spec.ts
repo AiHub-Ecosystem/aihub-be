@@ -61,7 +61,7 @@ describe('buildOpenApiDocument', () => {
 
   it('embeds the exact request and response schema objects from the catalog', () => {
     const doc = build();
-    const operation = doc.paths['/v1/writing/task1/grade']?.post;
+    const operation = doc.paths['/v1/ielts/writing/task1/grade']?.post;
     const catalogued = OPERATION_CATALOG['writing.task1.grade'];
 
     expect(operation?.requestBody.content['application/json']?.schema).toBe(
@@ -71,7 +71,7 @@ describe('buildOpenApiDocument', () => {
 
   it('carries the required scope, identity scope, and idempotency mode as vendor extensions', () => {
     const doc = build();
-    const operation = doc.paths['/v1/writing/task1/grade']?.post;
+    const operation = doc.paths['/v1/ielts/writing/task1/grade']?.post;
 
     expect(operation?.['x-required-scope']).toBe('writing.grade');
     expect(operation?.['x-identity-scope']).toBe('user');
@@ -80,7 +80,7 @@ describe('buildOpenApiDocument', () => {
 
   it('documents an ignored Idempotency-Key parameter for an operation catalogued as none', () => {
     const doc = build();
-    const operation = doc.paths['/v1/writing/task1/questions']?.post;
+    const operation = doc.paths['/v1/ielts/writing/task1/questions']?.post;
     const names = operation?.parameters.map(
       (parameter) => parameter.name ?? parameter.$ref,
     );
@@ -98,11 +98,13 @@ describe('buildOpenApiDocument', () => {
 
   it('marks Idempotency-Key required only for an operation catalogued as required', () => {
     const doc = build();
-    const required = doc.paths['/v1/writing/task1/grade']?.post.parameters.find(
+    const required = doc.paths[
+      '/v1/ielts/writing/task1/grade'
+    ]?.post.parameters.find(
       (parameter) => parameter.name === 'Idempotency-Key',
     );
     const optional = doc.paths[
-      '/v1/writing/task2/questions'
+      '/v1/ielts/writing/task2/questions'
     ]?.post.parameters.find(
       (parameter) => parameter.name === 'Idempotency-Key',
     );
@@ -126,9 +128,9 @@ describe('buildOpenApiDocument', () => {
 
   it('requires a user assertion only for user-scoped operations', () => {
     const userParameters =
-      build().paths['/v1/writing/task1/grade']?.post.parameters;
+      build().paths['/v1/ielts/writing/task1/grade']?.post.parameters;
     const organizationParameters =
-      build().paths['/v1/writing/task1/questions']?.post.parameters;
+      build().paths['/v1/ielts/writing/task1/questions']?.post.parameters;
 
     expect(userParameters).toContainEqual({
       $ref: '#/components/parameters/UserAssertion',
@@ -156,7 +158,7 @@ describe('buildOpenApiDocument', () => {
 
   it('documents every error code actually reachable in the current runtime', () => {
     const doc = build();
-    const operation = doc.paths['/v1/writing/task1/grade']?.post;
+    const operation = doc.paths['/v1/ielts/writing/task1/grade']?.post;
 
     expect(Object.keys(operation?.responses ?? {}).sort()).toEqual(
       [
@@ -231,7 +233,7 @@ describe('buildOpenApiDocument', () => {
   });
 
   it('documents the replay marker on required idempotent success responses', () => {
-    const operation = build().paths['/v1/writing/task1/grade']?.post;
+    const operation = build().paths['/v1/ielts/writing/task1/grade']?.post;
     const success = operation?.responses['200'] as {
       readonly headers?: Record<string, unknown>;
     };
@@ -242,7 +244,7 @@ describe('buildOpenApiDocument', () => {
   });
 
   it('documents replay and conflict responses for optional idempotency', () => {
-    const operation = build().paths['/v1/writing/task2/questions']?.post;
+    const operation = build().paths['/v1/ielts/writing/task2/questions']?.post;
     const success = operation?.responses['200'] as {
       readonly headers?: Record<string, unknown>;
     };
@@ -252,7 +254,7 @@ describe('buildOpenApiDocument', () => {
   });
 
   it('does not advertise idempotency conflicts for operations catalogued as none', () => {
-    const operation = build().paths['/v1/writing/task1/questions']?.post;
+    const operation = build().paths['/v1/ielts/writing/task1/questions']?.post;
 
     expect(operation?.responses['409']).toBeUndefined();
   });

@@ -1,13 +1,13 @@
 {
   "item": [
     {
-      "id": "be332654-41d1-4caf-bae7-d3c7a236428c",
+      "id": "15b7be8c-210f-4526-9715-91618abb2b4e",
       "name": "writing.task1.question.generate",
       "request": {
         "name": "writing.task1.question.generate",
         "description": {},
         "url": {
-          "path": ["v1", "writing", "task1", "questions"],
+          "path": ["v1", "ielts", "writing", "task1", "questions"],
           "host": ["{{baseUrl}}"],
           "query": [],
           "variable": []
@@ -68,13 +68,13 @@
       }
     },
     {
-      "id": "ac0f6413-450d-48a9-8998-d6053a3d87d5",
+      "id": "2da39023-db49-4062-a309-20996389bdba",
       "name": "writing.task2.question.generate",
       "request": {
         "name": "writing.task2.question.generate",
         "description": {},
         "url": {
-          "path": ["v1", "writing", "task2", "questions"],
+          "path": ["v1", "ielts", "writing", "task2", "questions"],
           "host": ["{{baseUrl}}"],
           "query": [],
           "variable": []
@@ -135,13 +135,13 @@
       }
     },
     {
-      "id": "b8241958-bd62-4b9d-b5a6-d3cf17c7bca9",
+      "id": "529e2284-45fd-4b38-8a98-57db2f7c155a",
       "name": "writing.task1.grade",
       "request": {
         "name": "writing.task1.grade",
         "description": {},
         "url": {
-          "path": ["v1", "writing", "task1", "grade"],
+          "path": ["v1", "ielts", "writing", "task1", "grade"],
           "host": ["{{baseUrl}}"],
           "query": [],
           "variable": []
@@ -208,13 +208,13 @@
       }
     },
     {
-      "id": "a80b8611-16d8-49b1-b605-4e395a216c78",
+      "id": "6038a436-8b45-4446-aeb8-14601c93309b",
       "name": "writing.task2.grade",
       "request": {
         "name": "writing.task2.grade",
         "description": {},
         "url": {
-          "path": ["v1", "writing", "task2", "grade"],
+          "path": ["v1", "ielts", "writing", "task2", "grade"],
           "host": ["{{baseUrl}}"],
           "query": [],
           "variable": []
@@ -301,7 +301,7 @@
               "mode": "raw",
               "raw": "{\n  \"chart_type\": \"Bar Chart\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
             "description": "Valid API key + valid request routes to the correct AI Service operation."
           },
           "event": [
@@ -340,7 +340,7 @@
               "mode": "raw",
               "raw": "{\n  \"topic\": \"Technology\",\n  \"question_type\": \"opinion\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task2/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task2/questions",
             "description": "Valid API key + valid request routes to the correct AI Service operation."
           },
           "event": [
@@ -387,7 +387,7 @@
               "mode": "raw",
               "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/grade",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
             "description": "Valid API key + valid request routes to the correct AI Service operation."
           },
           "event": [
@@ -434,7 +434,7 @@
               "mode": "raw",
               "raw": "{\n  \"question\": \"With the rise of online learning platforms, some argue that traditional classroom education is becoming obsolete. To what extent do you agree or disagree?\",\n  \"topic\": \"education\",\n  \"essay\": \"The proliferation of online learning platforms has led some observers to claim that conventional classroom instruction is no longer relevant. While I acknowledge the considerable advantages of digital education, I disagree that it renders traditional teaching obsolete.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task2/grade",
+            "url": "{{baseUrl}}/v1/ielts/writing/task2/grade",
             "description": "Valid API key + valid request routes to the correct AI Service operation."
           },
           "event": [
@@ -469,7 +469,7 @@
               "mode": "raw",
               "raw": "{}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
             "description": "No X-API-Key header at all."
           },
           "event": [
@@ -506,7 +506,7 @@
               "mode": "raw",
               "raw": "{}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
             "description": "Fill {{otherEnvironmentApiKey}} with a real key provisioned for a different environment (e.g. a staging key called against production)."
           },
           "event": [
@@ -543,7 +543,7 @@
               "mode": "raw",
               "raw": "{\n  \"topic\": \"Technology\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task2/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task2/questions",
             "description": "Task 2 question generation without the required 'question_type'."
           },
           "event": [
@@ -580,7 +580,7 @@
               "mode": "raw",
               "raw": "{\n  \"chart_type\": \"Bar Chart\",\n  \"unexpected_field\": \"nope\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
             "description": "Every request schema is additionalProperties: false; an unknown field must be rejected, not silently dropped."
           },
           "event": [
@@ -625,7 +625,7 @@
               "mode": "raw",
               "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/grade",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
             "description": "Fill {{wrongScopeApiKey}} with a real key that has only the 'writing.question.generate' scope, then call a 'writing.grade' operation with it."
           },
           "event": [
@@ -662,7 +662,7 @@
               "mode": "raw",
               "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/grade",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
             "description": "A user-scoped grading operation without X-User-Assertion must be rejected before dispatch."
           },
           "event": [
@@ -699,7 +699,7 @@
               "mode": "raw",
               "raw": "{}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
             "description": "Point {{baseUrl}} at a stub/mock that delays past the operation's catalogued timeoutMs (10s for question generation, 60s for grading) to force this."
           },
           "event": [
@@ -736,7 +736,7 @@
               "mode": "raw",
               "raw": "{}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
             "description": "Point {{baseUrl}} at a stub returning a throttled response from AI Writing to confirm it is translated to a public 503, never a 429."
           },
           "event": [
@@ -773,7 +773,7 @@
               "mode": "raw",
               "raw": "{}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
             "description": "Point {{baseUrl}} at a stub returning an unexpected downstream 4xx/5xx to confirm it surfaces as AI_SERVICE_ERROR (or AI_SERVICE_CONTRACT_VIOLATION for a malformed 200 body), never passed through raw."
           },
           "event": [
@@ -814,7 +814,7 @@
               "mode": "raw",
               "raw": "{\n  \"chart_type\": \"Bar Chart\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
             "description": "Sends X-Correlation-Id and checks it is echoed back verbatim, alongside an independently AIHUB-generated request_id."
           },
           "event": [
@@ -854,7 +854,7 @@
               "mode": "raw",
               "raw": "{\n  \"chart_type\": \"Bar Chart\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
             "description": "downstream_ms + gateway_overhead_ms should equal total_ms (within rounding), and none may be negative."
           },
           "event": [
@@ -902,7 +902,7 @@
               "mode": "raw",
               "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/grade",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
             "description": "BLOCKED: waiting on #9 (metering). No usage or model field exists on the public response yet."
           },
           "event": [
@@ -945,7 +945,7 @@
               "mode": "raw",
               "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/grade",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
             "description": "BLOCKED: waiting on #9 (metering). No usage breakdown field exists on the public response yet."
           },
           "event": [
@@ -988,7 +988,7 @@
               "mode": "raw",
               "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/grade",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
             "description": "Sends the same validated Task 1 grading request twice with one key; the second response must replay the completed result without a second downstream call."
           },
           "event": [
@@ -1053,7 +1053,7 @@
               "mode": "raw",
               "raw": "{\n  \"question\": \"With the rise of online learning platforms, some argue that traditional classroom education is becoming obsolete. To what extent do you agree or disagree?\",\n  \"topic\": \"education\",\n  \"essay\": \"The proliferation of online learning platforms has led some observers to claim that conventional classroom instruction is no longer relevant. While I acknowledge the considerable advantages of digital education, I disagree that it renders traditional teaching obsolete.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task2/grade",
+            "url": "{{baseUrl}}/v1/ielts/writing/task2/grade",
             "description": "Required idempotency: resend the same user-scoped grading request with one key and verify the stored result is replayed."
           },
           "event": [
@@ -1113,7 +1113,7 @@
               "mode": "raw",
               "raw": "{\n  \"question\": \"With the rise of online learning platforms, some argue that traditional classroom education is becoming obsolete. To what extent do you agree or disagree?\",\n  \"topic\": \"education\",\n  \"essay\": \"The proliferation of online learning platforms has led some observers to claim that conventional classroom instruction is no longer relevant. While I acknowledge the considerable advantages of digital education, I disagree that it renders traditional teaching obsolete.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task2/grade",
+            "url": "{{baseUrl}}/v1/ielts/writing/task2/grade",
             "description": "Required idempotency: reusing a completed key with a different payload returns IDEMPOTENCY_CONFLICT."
           },
           "event": [
@@ -1170,7 +1170,7 @@
               "mode": "raw",
               "raw": "{\n  \"topic\": \"Technology\",\n  \"question_type\": \"opinion\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task2/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task2/questions",
             "description": "Optional idempotency: supplying a key enables replay safety for model-backed question generation."
           },
           "event": [
@@ -1222,7 +1222,7 @@
               "mode": "raw",
               "raw": "{\n  \"topic\": \"Technology\",\n  \"question_type\": \"opinion\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task2/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task2/questions",
             "description": "Optional idempotency: omitting the key is allowed and does not emit a replay marker."
           },
           "event": [
@@ -1268,7 +1268,7 @@
               "mode": "raw",
               "raw": "{\n  \"chart_type\": \"Bar Chart\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
             "description": "None idempotency: even a malformed key is ignored and the operation does not emit a replay marker."
           },
           "event": [
@@ -1324,7 +1324,7 @@
               "mode": "raw",
               "raw": "{\n  \"chart_type\": \"Bar Chart\"\n}"
             },
-            "url": "{{baseUrl}}/v1/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
             "description": "Configure the organization with maxConcurrent=1 and point {{baseUrl}} at a deliberately slow downstream. Run two copies of this request in parallel; the second must return 429 while the first is still in flight."
           },
           "event": [
@@ -1388,7 +1388,7 @@
     ]
   },
   "info": {
-    "_postman_id": "c635a5a8-d766-4123-8d23-5a97412d3d85",
+    "_postman_id": "80fd05a1-d11a-49c7-bf3f-fec0175c9284",
     "name": "AIHUB Writing API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Generated by `pnpm generate:postman` from openapi.json — do not hand-edit. The \"D1 handover test cases\" folder is the D2 handover artifact required by docs/aihub_deliverable_1_api_contract_schema.md §G; it is not a CI regression suite.",

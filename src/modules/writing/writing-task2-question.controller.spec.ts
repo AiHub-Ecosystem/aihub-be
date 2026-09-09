@@ -175,7 +175,7 @@ describe('Task 2 questions HTTP flow', () => {
   it('validates, dispatches, parses, and envelopes a real fixture response', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task2/questions',
+      url: '/v1/ielts/writing/task2/questions',
       payload: { topic: 'education', question_type: 'opinion' },
     });
 
@@ -204,7 +204,7 @@ describe('Task 2 questions HTTP flow', () => {
     const before = downstreamCalls;
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task2/questions',
+      url: '/v1/ielts/writing/task2/questions',
       payload: { topic: 'education', question_type: 'opinion' },
     });
 
@@ -216,7 +216,7 @@ describe('Task 2 questions HTTP flow', () => {
   it('rejects a missing topic before contacting Writing, unlike task 1 where it is optional', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task2/questions',
+      url: '/v1/ielts/writing/task2/questions',
       payload: { question_type: 'opinion' },
     });
 
@@ -231,13 +231,13 @@ describe('Task 2 questions HTTP flow', () => {
 
     const first = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task2/questions',
+      url: '/v1/ielts/writing/task2/questions',
       headers,
       payload,
     });
     const replay = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task2/questions',
+      url: '/v1/ielts/writing/task2/questions',
       headers,
       payload,
     });
@@ -254,7 +254,7 @@ describe('Task 2 questions HTTP flow', () => {
     const before = downstreamCalls;
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/writing/task2/questions',
+      url: '/v1/ielts/writing/task2/questions',
       headers: { 'idempotency-key': '   ' },
       payload: { topic: 'education', question_type: 'opinion' },
     });

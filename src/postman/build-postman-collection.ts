@@ -28,10 +28,10 @@ const USER_ASSERTION_HEADER = {
   value: '{{userAssertion}}',
 } as const;
 
-const TASK1_QUESTION_PATH = '/v1/writing/task1/questions';
-const TASK2_QUESTION_PATH = '/v1/writing/task2/questions';
-const TASK1_GRADE_PATH = '/v1/writing/task1/grade';
-const TASK2_GRADE_PATH = '/v1/writing/task2/grade';
+const TASK1_QUESTION_PATH = '/v1/ielts/writing/task1/questions';
+const TASK2_QUESTION_PATH = '/v1/ielts/writing/task2/questions';
+const TASK1_GRADE_PATH = '/v1/ielts/writing/task1/grade';
+const TASK2_GRADE_PATH = '/v1/ielts/writing/task2/grade';
 
 const TASK1_GRADE_BODY = {
   question:

@@ -568,7 +568,7 @@
     }
   },
   "paths": {
-    "/v1/writing/task1/questions": {
+    "/v1/ielts/writing/task1/questions": {
       "post": {
         "operationId": "writing.task1.question.generate",
         "summary": "writing.task1.question.generate",
@@ -791,7 +791,7 @@
         }
       }
     },
-    "/v1/writing/task2/questions": {
+    "/v1/ielts/writing/task2/questions": {
       "post": {
         "operationId": "writing.task2.question.generate",
         "summary": "writing.task2.question.generate",
@@ -1007,7 +1007,7 @@
         }
       }
     },
-    "/v1/writing/task1/grade": {
+    "/v1/ielts/writing/task1/grade": {
       "post": {
         "operationId": "writing.task1.grade",
         "summary": "writing.task1.grade",
@@ -1366,7 +1366,7 @@
         }
       }
     },
-    "/v1/writing/task2/grade": {
+    "/v1/ielts/writing/task2/grade": {
       "post": {
         "operationId": "writing.task2.grade",
         "summary": "writing.task2.grade",

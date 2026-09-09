@@ -65,17 +65,17 @@ Customer Backend
 
 Phần này rất quan trọng vì từ **Provider** dễ bị hiểu theo hai nghĩa khác nhau.
 
-| Term | Ý nghĩa trong tài liệu |
-|---|---|
-| **Organization / Tenant** | Khách hàng/doanh nghiệp sử dụng AIHUB |
-| **End User / Actor** | User/học viên cụ thể bên trong Organization |
-| **AI Service** | Downstream service của hệ thống, ví dụ AI Writing, AI Speaking, AI Reading |
-| **Model Provider** | Nền tảng/model bên dưới mà AI Service có thể gọi, ví dụ OpenAI, Anthropic, Google |
-| **Downstream Adapter** | Lớp trong AIHUB map canonical contract sang contract của AI Service |
-| **Canonical Contract** | Public request/response contract thống nhất của AIHUB |
-| **Internal Contract** | Contract private giữa AIHUB và AI Service |
-| **Organization Entitlement** | Những capability/service mà Organization được phép dùng theo plan/subscription |
-| **API Key Scope** | Những capability cụ thể mà một API key được phép gọi |
+| Term                         | Ý nghĩa trong tài liệu                                                            |
+| ---------------------------- | --------------------------------------------------------------------------------- |
+| **Organization / Tenant**    | Khách hàng/doanh nghiệp sử dụng AIHUB                                             |
+| **End User / Actor**         | User/học viên cụ thể bên trong Organization                                       |
+| **AI Service**               | Downstream service của hệ thống, ví dụ AI Writing, AI Speaking, AI Reading        |
+| **Model Provider**           | Nền tảng/model bên dưới mà AI Service có thể gọi, ví dụ OpenAI, Anthropic, Google |
+| **Downstream Adapter**       | Lớp trong AIHUB map canonical contract sang contract của AI Service               |
+| **Canonical Contract**       | Public request/response contract thống nhất của AIHUB                             |
+| **Internal Contract**        | Contract private giữa AIHUB và AI Service                                         |
+| **Organization Entitlement** | Những capability/service mà Organization được phép dùng theo plan/subscription    |
+| **API Key Scope**            | Những capability cụ thể mà một API key được phép gọi                              |
 
 > Nếu tài liệu/sprint vẫn dùng tên **Provider Mapper Rules**, nên hiểu chính xác là **AI Service / Downstream Adapter**, không phải mapper trực tiếp tới OpenAI/Anthropic.
 
@@ -121,10 +121,10 @@ Phần này rất quan trọng vì từ **Provider** dễ bị hiểu theo hai n
 Public API — 4 operation của MVP, phần còn lại là phase sau:
 
 ```http
-POST /v1/writing/task1/questions     # MVP
-POST /v1/writing/task2/questions     # MVP
-POST /v1/writing/task1/grade         # MVP
-POST /v1/writing/task2/grade         # MVP
+POST /v1/ielts/writing/task1/questions     # MVP
+POST /v1/ielts/writing/task2/questions     # MVP
+POST /v1/ielts/writing/task1/grade         # MVP
+POST /v1/ielts/writing/task2/grade         # MVP
 
 POST /v1/speaking/grade              # Phase 4, async
 GET  /v1/jobs/{job_id}               # Phase 4
@@ -152,6 +152,7 @@ Path phẳng, không version, đặt tên không nhất quán giữa hai task. *
 > **Ranh giới thật ở giai đoạn này là credential, không phải network.** Chừng nào khách hàng của AIHUB không bao giờ được cấp token của Writing, thì với họ AIHUB vẫn là đường vào duy nhất. Bên đang gọi thẳng Writing hôm nay là ứng dụng nội bộ, không phải khách của AIHUB.
 >
 > Ba điều kiện để rủi ro này ở mức chấp nhận được:
+>
 > 1. Token Writing **không bao giờ** cấp cho khách hàng AIHUB — đây là quy trình, không phải kỹ thuật.
 > 2. AIHUB dùng **token riêng**, tách khỏi token của Wispace, để usage tách bạch và thu hồi độc lập được.
 > 3. Mọi endpoint của Writing đều có auth — hiện `/five-minute-grading` **chưa có**, và đây là mục cần sửa gấp nhất khi service còn public.
@@ -284,9 +285,9 @@ api_keys
 
 Raw key chỉ hiển thị một lần khi tạo.
 
-**Hash bằng SHA-256, không phải bcrypt/argon2.** Raw key là 256 bit ngẫu nhiên từ CSPRNG nên không có từ điển nào để tấn công — slow hash không thêm chút an toàn nào, nhưng tốn ~100ms CPU *mỗi request*, tức là tự DoS chính mình. Stripe và GitHub đều dùng hash nhanh vì lý do này.
+**Hash bằng SHA-256, không phải bcrypt/argon2.** Raw key là 256 bit ngẫu nhiên từ CSPRNG nên không có từ điển nào để tấn công — slow hash không thêm chút an toàn nào, nhưng tốn ~100ms CPU _mỗi request_, tức là tự DoS chính mình. Stripe và GitHub đều dùng hash nhanh vì lý do này.
 
-Hệ quả: `key_hash` UNIQUE nên lookup là **một index seek duy nhất**, không cần "tìm theo prefix rồi so hash từng cái", và cũng không cần so sánh constant-time vì ta lookup *bằng* hash chứ không so sánh nó.
+Hệ quả: `key_hash` UNIQUE nên lookup là **một index seek duy nhất**, không cần "tìm theo prefix rồi so hash từng cái", và cũng không cần so sánh constant-time vì ta lookup _bằng_ hash chứ không so sánh nó.
 
 Prefix cố định `aihub_sk_` còn giúp secret scanner của GitHub/GitLab bắt được khi khách lỡ commit key lên repo.
 
@@ -476,13 +477,13 @@ User-scoped operation
 
 Ví dụ:
 
-| Operation | User Assertion |
-|---|---|
-| `GET /v1/account/usage` | Không nhất thiết |
-| `POST /v1/writing/task1/questions` | Không — sinh đề không gắn học viên |
-| `POST /v1/writing/task2/questions` | Không |
-| `POST /v1/writing/task1/grade` | **Có** — kết quả thuộc một học viên |
-| `POST /v1/writing/task2/grade` | **Có** |
+| Operation                                | User Assertion                      |
+| ---------------------------------------- | ----------------------------------- |
+| `GET /v1/account/usage`                  | Không nhất thiết                    |
+| `POST /v1/ielts/writing/task1/questions` | Không — sinh đề không gắn học viên  |
+| `POST /v1/ielts/writing/task2/questions` | Không                               |
+| `POST /v1/ielts/writing/task1/grade`     | **Có** — kết quả thuộc một học viên |
+| `POST /v1/ielts/writing/task2/grade`     | **Có**                              |
 
 ---
 
@@ -638,7 +639,7 @@ Internal JWT
 
 Client chỉ phụ thuộc contract của AIHUB.
 
-Ví dụ chấm bài Task 1 — `POST /v1/writing/task1/grade`:
+Ví dụ chấm bài Task 1 — `POST /v1/ielts/writing/task1/grade`:
 
 ```json
 {
@@ -683,14 +684,9 @@ Interface gợi ý:
 
 ```ts
 interface DownstreamAdapter<TCanonicalReq, TCanonicalRes> {
-  mapRequest(
-    input: TCanonicalReq,
-    context: RequestContext,
-  ): unknown;
+  mapRequest(input: TCanonicalReq, context: RequestContext): unknown;
 
-  mapResponse(
-    response: InternalAIServiceResponse<unknown>,
-  ): TCanonicalRes;
+  mapResponse(response: InternalAIServiceResponse<unknown>): TCanonicalRes;
 
   mapError(error: unknown): InternalDownstreamError;
 }
@@ -853,14 +849,30 @@ vì còn network/downstream overhead.
   "data": {
     "overall_band": 6.5,
     "criteria": [
-      { "id": "task_achievement",           "name": "Task Achievement",
-        "band": 6.0, "feedback": "..." },
-      { "id": "coherence_cohesion",         "name": "Coherence and Cohesion",
-        "band": 7.0, "feedback": "..." },
-      { "id": "lexical_resource",           "name": "Lexical Resource",
-        "band": 6.5, "feedback": "..." },
-      { "id": "grammatical_range_accuracy", "name": "Grammatical Range and Accuracy",
-        "band": 6.0, "feedback": "..." }
+      {
+        "id": "task_achievement",
+        "name": "Task Achievement",
+        "band": 6.0,
+        "feedback": "..."
+      },
+      {
+        "id": "coherence_cohesion",
+        "name": "Coherence and Cohesion",
+        "band": 7.0,
+        "feedback": "..."
+      },
+      {
+        "id": "lexical_resource",
+        "name": "Lexical Resource",
+        "band": 6.5,
+        "feedback": "..."
+      },
+      {
+        "id": "grammatical_range_accuracy",
+        "name": "Grammatical Range and Accuracy",
+        "band": 6.0,
+        "feedback": "..."
+      }
     ],
     "summary": "A solid response that reports the main features accurately.",
     "word_count": 178
@@ -888,24 +900,24 @@ vì còn network/downstream overhead.
 
 `models[]` vẫn có ở internal contract và vẫn được ghi vào `usage_records` cho metering/debug/tính giá theo model.
 
-`criteria` là **mảng chứ không phải 4 field cố định**, vì Task 1 gọi tiêu chí đầu là *Task Achievement* còn Task 2 gọi là *Task Response*. Mảng có `id` ổn định cho phép client dùng chung một component render cho cả hai task.
+`criteria` là **mảng chứ không phải 4 field cố định**, vì Task 1 gọi tiêu chí đầu là _Task Achievement_ còn Task 2 gọi là _Task Response_. Mảng có `id` ổn định cho phép client dùng chung một component render cho cả hai task.
 
 ## 17.3 Source-of-truth matrix
 
-| Field | Source of truth |
-|---|---|
-| `request_id` | AIHUB |
-| `service` / `operation` | AIHUB routing metadata |
-| `total_ms` | AIHUB |
-| `downstream_ms` | AIHUB |
-| `gateway_overhead_ms` | AIHUB derived metric |
-| `ai_processing_ms` | AI Service |
-| `input_tokens` | AI Service / underlying Model Provider |
-| `output_tokens` | AI Service / underlying Model Provider |
-| `total_tokens` | AI Service aggregate |
-| model(s) thực tế | AI Service — **internal only**, không có trong public response |
-| `metering_status` | AIHUB — internal only. `complete` / `missing_usage` / `not_applicable` / `quota_unverified` |
-| public cost | AIHUB từ normalized usage + pricing config, hoặc business rule riêng |
+| Field                   | Source of truth                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------------- |
+| `request_id`            | AIHUB                                                                                       |
+| `service` / `operation` | AIHUB routing metadata                                                                      |
+| `total_ms`              | AIHUB                                                                                       |
+| `downstream_ms`         | AIHUB                                                                                       |
+| `gateway_overhead_ms`   | AIHUB derived metric                                                                        |
+| `ai_processing_ms`      | AI Service                                                                                  |
+| `input_tokens`          | AI Service / underlying Model Provider                                                      |
+| `output_tokens`         | AI Service / underlying Model Provider                                                      |
+| `total_tokens`          | AI Service aggregate                                                                        |
+| model(s) thực tế        | AI Service — **internal only**, không có trong public response                              |
+| `metering_status`       | AIHUB — internal only. `complete` / `missing_usage` / `not_applicable` / `quota_unverified` |
+| public cost             | AIHUB từ normalized usage + pricing config, hoặc business rule riêng                        |
 
 > Endpoint không gọi model nên **omit `usage`** hoặc trả `null`; không nên giả token bằng `0`.
 
@@ -1003,16 +1015,16 @@ Public error:
 
 Không nên dùng cùng `429 RATE_LIMITED` cho hai tình huống khác nhau.
 
-| Tình huống | HTTP | Public code |
-|---|---:|---|
-| Client vượt AIHUB rate limit | 429 | `RATE_LIMITED` |
-| Client chạy quá nhiều request đồng thời | 429 | `CONCURRENCY_LIMIT` |
-| Organization hết quota | 429 | `QUOTA_EXCEEDED` |
-| AI Service / Model Provider bị throttled | 503 | `AI_SERVICE_THROTTLED` |
-| AI Service timeout | 504 | `AI_SERVICE_TIMEOUT` |
-| AI Service 5xx | 502/503 | `AI_SERVICE_ERROR` / `AI_SERVICE_UNAVAILABLE` |
-| AI Service trả shape không parse được | 502 | `AI_SERVICE_CONTRACT_VIOLATION` |
-| JWKS của Organization không lấy được | 503 | `IDENTITY_PROVIDER_UNAVAILABLE` |
+| Tình huống                               |    HTTP | Public code                                   |
+| ---------------------------------------- | ------: | --------------------------------------------- |
+| Client vượt AIHUB rate limit             |     429 | `RATE_LIMITED`                                |
+| Client chạy quá nhiều request đồng thời  |     429 | `CONCURRENCY_LIMIT`                           |
+| Organization hết quota                   |     429 | `QUOTA_EXCEEDED`                              |
+| AI Service / Model Provider bị throttled |     503 | `AI_SERVICE_THROTTLED`                        |
+| AI Service timeout                       |     504 | `AI_SERVICE_TIMEOUT`                          |
+| AI Service 5xx                           | 502/503 | `AI_SERVICE_ERROR` / `AI_SERVICE_UNAVAILABLE` |
+| AI Service trả shape không parse được    |     502 | `AI_SERVICE_CONTRACT_VIOLATION`               |
+| JWKS của Organization không lấy được     |     503 | `IDENTITY_PROVIDER_UNAVAILABLE`               |
 
 Danh sách đầy đủ **18 mã cho v1**: `aihub_deliverable_1_api_contract_schema.md` §25.
 
@@ -1041,7 +1053,7 @@ Không nên để tất cả endpoint mặc định sync nếu operation có th�
 Phù hợp với operation ngắn:
 
 ```http
-POST /v1/writing/task1/grade
+POST /v1/ielts/writing/task1/grade
 → 200 OK
 ```
 
@@ -1127,14 +1139,14 @@ Không khuyến nghị base64 cho file lớn vì tăng payload/memory/bandwidth.
 
 # 23. Routing Catalog
 
-| Public Endpoint | Operation | Required Scope | Identity | AI Service |
-|---|---|---|---|---|
-| `POST /v1/writing/task1/questions` | `writing.task1.question.generate` | `writing.question.generate` | org | AI Writing |
-| `POST /v1/writing/task2/questions` | `writing.task2.question.generate` | `writing.question.generate` | org | AI Writing |
-| `POST /v1/writing/task1/grade` | `writing.task1.grade` | `writing.grade` | **user** | AI Writing |
-| `POST /v1/writing/task2/grade` | `writing.task2.grade` | `writing.grade` | **user** | AI Writing |
-| `POST /v1/speaking/grade` | `speaking.grade` | `speaking.grade` | **user** | AI Speaking *(Phase 4)* |
-| `POST /v1/reading/analyze` | `reading.analyze` | `reading.analyze` | **user** | AI Reading *(chưa có)* |
+| Public Endpoint                          | Operation                         | Required Scope              | Identity | AI Service              |
+| ---------------------------------------- | --------------------------------- | --------------------------- | -------- | ----------------------- |
+| `POST /v1/ielts/writing/task1/questions` | `writing.task1.question.generate` | `writing.question.generate` | org      | AI Writing              |
+| `POST /v1/ielts/writing/task2/questions` | `writing.task2.question.generate` | `writing.question.generate` | org      | AI Writing              |
+| `POST /v1/ielts/writing/task1/grade`     | `writing.task1.grade`             | `writing.grade`             | **user** | AI Writing              |
+| `POST /v1/ielts/writing/task2/grade`     | `writing.task2.grade`             | `writing.grade`             | **user** | AI Writing              |
+| `POST /v1/speaking/grade`                | `speaking.grade`                  | `speaking.grade`            | **user** | AI Speaking _(Phase 4)_ |
+| `POST /v1/reading/analyze`               | `reading.analyze`                 | `reading.analyze`           | **user** | AI Reading _(chưa có)_  |
 
 Sinh đề là `organization`-scoped vì kết quả không thuộc về học viên nào; chấm bài là `user`-scoped vì kết quả gắn với một học viên cụ thể. Đúng theo nguyên tắc fail-closed ở §32.4.
 
@@ -1284,7 +1296,7 @@ src/
 
 # 28. Full Request Flow
 
-Ví dụ `POST /v1/writing/task1/grade`:
+Ví dụ `POST /v1/ielts/writing/task1/grade`:
 
 ```text
 1. Customer Backend
@@ -1351,7 +1363,7 @@ sequenceDiagram
     participant DB as Writing DB
     participant M as Model Provider
 
-    C->>H: POST /v1/writing/task1/grade\nAPI Key + User Assertion + Idempotency-Key
+    C->>H: POST /v1/ielts/writing/task1/grade\nAPI Key + User Assertion + Idempotency-Key
     H->>H: Generate request_id + validate
     H->>H: Authenticate org + verify actor
     H->>H: Entitlement ∩ API key scope
@@ -1801,19 +1813,19 @@ mTLS tăng security nhưng kéo theo certificate issuance, rotation, trust store
 
 Nếu team không có ý kiến khác, áp dụng các default sau:
 
-| Decision | Recommended default |
-|---|---|
-| Organization API Key header | `X-API-Key` |
-| End-user identity | Signed User Assertion JWT |
-| Assertion key discovery | JWKS URL; public-key upload là fallback |
-| User Assertion TTL | ≤ 5 phút |
-| Identity scope | Dữ liệu end-user → `user`; còn lại phải khai báo explicit |
-| Sync vs Async | ≤ 30s → sync; workload dài/media → async |
-| File/audio | Presigned upload + `asset_id`; multipart cho file nhỏ/MVP |
-| Public usage | Aggregate only |
-| Missing usage at runtime | Không fail business response; mark incomplete + alert/reconcile |
-| Idempotency TTL | 24 giờ mặc định |
-| Service-to-service security phase đầu | Private network + network policy + short-lived Internal JWT |
-| mTLS | Phase hardening sau hoặc khi có requirement cụ thể |
+| Decision                              | Recommended default                                             |
+| ------------------------------------- | --------------------------------------------------------------- |
+| Organization API Key header           | `X-API-Key`                                                     |
+| End-user identity                     | Signed User Assertion JWT                                       |
+| Assertion key discovery               | JWKS URL; public-key upload là fallback                         |
+| User Assertion TTL                    | ≤ 5 phút                                                        |
+| Identity scope                        | Dữ liệu end-user → `user`; còn lại phải khai báo explicit       |
+| Sync vs Async                         | ≤ 30s → sync; workload dài/media → async                        |
+| File/audio                            | Presigned upload + `asset_id`; multipart cho file nhỏ/MVP       |
+| Public usage                          | Aggregate only                                                  |
+| Missing usage at runtime              | Không fail business response; mark incomplete + alert/reconcile |
+| Idempotency TTL                       | 24 giờ mặc định                                                 |
+| Service-to-service security phase đầu | Private network + network policy + short-lived Internal JWT     |
+| mTLS                                  | Phase hardening sau hoặc khi có requirement cụ thể              |
 
 > Khi một operation cần khác default, phải khai báo override rõ trong **Operation Catalog** thay vì để implementation tự suy đoán.

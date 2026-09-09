@@ -47,7 +47,7 @@ export async function bootstrap(): Promise<void> {
   registerBodySizeGuard(app.getHttpAdapter().getInstance());
 
   // No global prefix: the operation catalog carries the full public path
-  // (`/v1/writing/task1/grade`) so it stays the single source of truth and
+  // (`/v1/ielts/writing/task1/grade`) so it stays the single source of truth and
   // matches the D1 contract verbatim. A prefix here would produce `/v1/v1/...`.
   // `/health` stays unversioned because probes are infrastructure, not API.
   await app.listen(Number(process.env.PORT ?? DEFAULT_PORT), '0.0.0.0');

@@ -116,7 +116,7 @@ class PendingDispatcher {
 function requestOptions() {
   return {
     method: 'POST' as const,
-    url: '/v1/writing/task1/questions',
+    url: '/v1/ielts/writing/task1/questions',
     headers: {
       host: 'api.aihub.example.com',
       'x-api-key': VALID_API_KEY,

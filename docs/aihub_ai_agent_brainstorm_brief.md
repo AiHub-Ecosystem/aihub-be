@@ -6,19 +6,19 @@
 >
 > **[`docs/superpowers/specs/2026-09-07-aihub/`](docs/superpowers/specs/2026-09-07-aihub/README.md)** — 12 file, theo đúng cấu trúc output A–P yêu cầu ở §16.
 >
-> | Mục brief | Trả lời ở |
-> |---|---|
-> | A, B, C — recommendation, stack matrix, diagram | [01-context-and-stack](docs/superpowers/specs/2026-09-07-aihub/01-context-and-stack.md) |
-> | D — request lifecycle | [02-request-lifecycle](docs/superpowers/specs/2026-09-07-aihub/02-request-lifecycle.md) |
-> | E — database design | [03-database](docs/superpowers/specs/2026-09-07-aihub/03-database.md) |
-> | F — redis design | [04-redis](docs/superpowers/specs/2026-09-07-aihub/04-redis.md) |
-> | G — auth & identity | [05-auth-identity](docs/superpowers/specs/2026-09-07-aihub/05-auth-identity.md) |
-> | H — routing & adapter | [06-routing-adapter](docs/superpowers/specs/2026-09-07-aihub/06-routing-adapter.md) |
-> | I, J — reliability, error model | [07-reliability-and-errors](docs/superpowers/specs/2026-09-07-aihub/07-reliability-and-errors.md) |
-> | K, L — metering, observability | [08-metering-and-observability](docs/superpowers/specs/2026-09-07-aihub/08-metering-and-observability.md) |
-> | M — threat model | [09-security](docs/superpowers/specs/2026-09-07-aihub/09-security.md) |
-> | N, O — roadmap, ADR | [10-deployment-roadmap](docs/superpowers/specs/2026-09-07-aihub/10-deployment-roadmap.md) |
-> | P — open questions | [11-open-questions](docs/superpowers/specs/2026-09-07-aihub/11-open-questions.md) |
+> | Mục brief                                       | Trả lời ở                                                                                                 |
+> | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+> | A, B, C — recommendation, stack matrix, diagram | [01-context-and-stack](docs/superpowers/specs/2026-09-07-aihub/01-context-and-stack.md)                   |
+> | D — request lifecycle                           | [02-request-lifecycle](docs/superpowers/specs/2026-09-07-aihub/02-request-lifecycle.md)                   |
+> | E — database design                             | [03-database](docs/superpowers/specs/2026-09-07-aihub/03-database.md)                                     |
+> | F — redis design                                | [04-redis](docs/superpowers/specs/2026-09-07-aihub/04-redis.md)                                           |
+> | G — auth & identity                             | [05-auth-identity](docs/superpowers/specs/2026-09-07-aihub/05-auth-identity.md)                           |
+> | H — routing & adapter                           | [06-routing-adapter](docs/superpowers/specs/2026-09-07-aihub/06-routing-adapter.md)                       |
+> | I, J — reliability, error model                 | [07-reliability-and-errors](docs/superpowers/specs/2026-09-07-aihub/07-reliability-and-errors.md)         |
+> | K, L — metering, observability                  | [08-metering-and-observability](docs/superpowers/specs/2026-09-07-aihub/08-metering-and-observability.md) |
+> | M — threat model                                | [09-security](docs/superpowers/specs/2026-09-07-aihub/09-security.md)                                     |
+> | N, O — roadmap, ADR                             | [10-deployment-roadmap](docs/superpowers/specs/2026-09-07-aihub/10-deployment-roadmap.md)                 |
+> | P — open questions                              | [11-open-questions](docs/superpowers/specs/2026-09-07-aihub/11-open-questions.md)                         |
 >
 > ### Những chỗ agent challenge lại brief
 >
@@ -216,8 +216,8 @@ Long-term có thể kết hợp mTLS, nhưng không nhất thiết bắt buộc 
 AIHUB phải expose canonical API dễ dùng, ví dụ:
 
 ```http
-POST /v1/writing/grade
-GET  /v1/writing/history
+POST /v1/ielts/writing/grade
+GET  /v1/ielts/writing/history
 POST /v1/speaking/grade
 GET  /v1/speaking/history
 ```
@@ -255,17 +255,17 @@ AIHUB chỉ là gateway nên **không tự biết chính xác model token usage*
 
 Source of truth:
 
-| Metadata | Source of truth |
-|---|---|
-| `request_id` | AIHUB |
-| `service/operation` | AIHUB |
-| `total_ms` | AIHUB |
-| `downstream_ms` | AIHUB |
-| `gateway_overhead_ms` | AIHUB-derived |
-| `input_tokens` | AI Service |
-| `output_tokens` | AI Service |
-| `total_tokens` | AI Service |
-| `ai_processing_ms` | AI Service, optional |
+| Metadata                       | Source of truth                      |
+| ------------------------------ | ------------------------------------ |
+| `request_id`                   | AIHUB                                |
+| `service/operation`            | AIHUB                                |
+| `total_ms`                     | AIHUB                                |
+| `downstream_ms`                | AIHUB                                |
+| `gateway_overhead_ms`          | AIHUB-derived                        |
+| `input_tokens`                 | AI Service                           |
+| `output_tokens`                | AI Service                           |
+| `total_tokens`                 | AI Service                           |
+| `ai_processing_ms`             | AI Service, optional                 |
 | model/model-provider breakdown | AI Service, preferably internal-only |
 
 AI Service cần trả standardized internal metadata, ví dụ:
@@ -385,7 +385,7 @@ Operation Catalog nên mô tả rõ:
 ```yaml
 operation: writing.grade
 method: POST
-path: /v1/writing/grade
+path: /v1/ielts/writing/grade
 scope: writing.grade
 identity_scope: user
 execution: sync
@@ -991,17 +991,17 @@ Một kiến trúc recommended tổng thể, tối đa khoảng 1–2 trang.
 
 ## B. Recommended Tech Stack Matrix
 
-| Layer | Recommended | Alternatives | Why |
-|---|---|---|---|
-| Runtime | | | |
-| Framework | | | |
-| DB | | | |
-| Redis | | | |
-| Queue | | | |
-| Object Storage | | | |
-| Proxy/LB | | | |
-| Observability | | | |
-| Deployment | | | |
+| Layer          | Recommended | Alternatives | Why |
+| -------------- | ----------- | ------------ | --- |
+| Runtime        |             |              |     |
+| Framework      |             |              |     |
+| DB             |             |              |     |
+| Redis          |             |              |     |
+| Queue          |             |              |     |
+| Object Storage |             |              |     |
+| Proxy/LB       |             |              |     |
+| Observability  |             |              |     |
+| Deployment     |             |              |     |
 
 ## C. Architecture Diagram
 
@@ -1021,7 +1021,7 @@ và async path nếu đề xuất.
 
 Sequence cho ít nhất:
 
-1. `POST /v1/writing/grade` sync.
+1. `POST /v1/ielts/writing/grade` sync.
 2. Một async media operation.
 3. Một failed downstream request.
 

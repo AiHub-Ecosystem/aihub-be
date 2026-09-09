@@ -28,8 +28,8 @@ stop_grace_period: 90s
 ```
 
 ```ts
-process.on('SIGTERM', async () => {
-  await fastify.close();          // ngừng nhận request mới, xong nốt request đang chạy
+process.on("SIGTERM", async () => {
+  await fastify.close(); // ngừng nhận request mới, xong nốt request đang chạy
   await Promise.all([pg.end(), redis.quit()]);
 });
 ```
@@ -83,32 +83,32 @@ hoặc khi DB lớn tới mức dump mỗi giờ trở nên nặng.
 
 Ghi rõ để sau này không ai nâng cấp vì cảm tính.
 
-| Đổi sang | Trigger |
-|---|---|
-| Tách VPS riêng cho Postgres | CPU DB > 60% kéo dài, hoặc app và DB tranh I/O |
-| Managed Postgres | Không còn ai muốn lo backup/patch, hoặc cần HA |
-| Nhiều app node + LB thật | > 300 RPS hoặc > 1000 connection đồng thời |
-| Kubernetes | ≥ 3 service cần deploy độc lập **và** có người chịu trách nhiệm vận hành nó |
-| Xét lại Go / data plane riêng | p99 gateway overhead > 50ms trong khi CPU chưa bão hoà; hoặc streaming SSE thành must-have; hoặc > 1000 RPS |
-| Kafka | Không. Cho tới khi có consumer thứ ba cần đọc lại lịch sử event |
-| Partition `usage_records` | > ~50 triệu row, hoặc job retention chạy quá vài phút |
-| Vault / SOPS | ≥ 3 môi trường, hoặc có người rời team, hoặc yêu cầu compliance |
-| Thêm Tempo/Jaeger | ≥ 3 service trong một luồng request, hoặc có worker async |
-| Sliding window / GCRA rate limit | Khách phàn nàn về công bằng, hoặc rate limit thành cam kết hợp đồng |
+| Đổi sang                         | Trigger                                                                                                     |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Tách VPS riêng cho Postgres      | CPU DB > 60% kéo dài, hoặc app và DB tranh I/O                                                              |
+| Managed Postgres                 | Không còn ai muốn lo backup/patch, hoặc cần HA                                                              |
+| Nhiều app node + LB thật         | > 300 RPS hoặc > 1000 connection đồng thời                                                                  |
+| Kubernetes                       | ≥ 3 service cần deploy độc lập **và** có người chịu trách nhiệm vận hành nó                                 |
+| Xét lại Go / data plane riêng    | p99 gateway overhead > 50ms trong khi CPU chưa bão hoà; hoặc streaming SSE thành must-have; hoặc > 1000 RPS |
+| Kafka                            | Không. Cho tới khi có consumer thứ ba cần đọc lại lịch sử event                                             |
+| Partition `usage_records`        | > ~50 triệu row, hoặc job retention chạy quá vài phút                                                       |
+| Vault / SOPS                     | ≥ 3 môi trường, hoặc có người rời team, hoặc yêu cầu compliance                                             |
+| Thêm Tempo/Jaeger                | ≥ 3 service trong một luồng request, hoặc có worker async                                                   |
+| Sliding window / GCRA rate limit | Khách phàn nàn về công bằng, hoặc rate limit thành cam kết hợp đồng                                         |
 
 ## N.6 Phases
 
-### Phase 0 — Freeze D1 · *1 tuần, chạy song song*
+### Phase 0 — Freeze D1 · _1 tuần, chạy song song_
 
 Chốt canonical schema thật ([06 §H.2](06-routing-adapter.md#h2-canonical-schemas)), 18 mã lỗi ([07 §J.2](07-reliability-and-errors.md#j2-danh-sách-mã-lỗi-v1)), operation catalog ([06 §H.1](06-routing-adapter.md#h1-operation-catalog--code-có-kiểu)), internal contract gửi team Writing ([06 §H.5](06-routing-adapter.md#h5-internal-contract--sửa-writing-mà-không-phá-app-hiện-tại)).
 
 Đây là đầu vào của mọi phase sau. Danh sách thay đổi cụ thể: [11 §Q](11-open-questions.md#q-những-thay-đổi-cần-đưa-ngược-vào-d1).
 
-### Phase 1 — Core proxy · *~3 tuần*
+### Phase 1 — Core proxy · _~3 tuần_
 
 4 operation Writing; API key auth + CLI; catalog + adapter + dispatcher; error model đầy đủ; `usage_records`; Compose + Caddy + backup; **rate limit + idempotency**.
 
-> **Cột mốc:** khách gọi được `/v1/writing/task1/grade` bằng API key thật, và một vòng lặp retry hỏng không làm bạn mất tiền hai lần.
+> **Cột mốc:** khách gọi được `/v1/ielts/writing/task1/grade` bằng API key thật, và một vòng lặp retry hỏng không làm bạn mất tiền hai lần.
 
 **Rate limit và idempotency được kéo từ Phase 3 lên đây.** Lý do: Phase 1 là lúc endpoint đắt tiền nhất (`writing.*.grade`) mở ra cho khách thật. Không có hai thứ này thì một vòng lặp retry sai hoặc một cú double-submit là trả tiền model hai lần.
 
@@ -116,7 +116,7 @@ Chi phí kéo lên rất thấp — rate limit là `INCR` + `EXPIRE` (~15 dòng,
 
 **Chi tiết cho việc Phase 1 chạy được mà không chờ team Writing:** Writing hiện dùng `HTTPBearer` với token có sẵn. Phase 1 để dispatcher gửi token đó lấy từ env (`DOWNSTREAM_AI_WRITING_TOKEN`); Phase 2 mới thay bằng internal JWT do AIHUB tự ký. Nghĩa là Phase 1 chạy được với AI Writing **y nguyên hiện tại**, chỉ riêng `parseResponse` là phải chờ response shape thật.
 
-### Phase 2 — Identity + đóng cửa · *2 tuần*
+### Phase 2 — Identity + đóng cửa · _2 tuần_
 
 User assertion + JWKS + SSRF guard; internal JWT + JWKS endpoint + xoay khoá; Writing trả `usage`; AIHUB dùng token riêng của Writing.
 
@@ -124,13 +124,13 @@ User assertion + JWKS + SSRF guard; internal JWT + JWKS endpoint + xoay khoá; W
 
 **Không bao gồm việc đưa Writing vào private network.** Writing còn phục vụ ứng dụng Wispace chưa đi qua AIHUB. Việc đó chuyển sang Phase 5 và phụ thuộc lịch của bên Wispace, không phải lịch của AIHUB.
 
-### Phase 3 — Bảo vệ + quan sát · *1–2 tuần*
+### Phase 3 — Bảo vệ + quan sát · _1–2 tuần_
 
 Concurrency limit, quota, circuit breaker, retry + backoff; Prometheus/Loki/Grafana + alert; load test để chốt `rate_limit_rpm` và `max_concurrent`.
 
 > **Cột mốc:** một khách chạy loạn không làm sập khách khác.
 
-*(Rate limit và idempotency đã làm ở Phase 1.)*
+_(Rate limit và idempotency đã làm ở Phase 1.)_
 
 **Phase 1–3 ≈ 6–7 tuần**, khớp mốc 1–2 tháng cho D2.
 
@@ -144,23 +144,23 @@ Chỉ khi chạm trigger ở [§N.5](#n5-trigger-rời-khỏi-kiến-trúc-này)
 
 ## N.7 Testing strategy
 
-| Loại | Phạm vi | Phase |
-|---|---|---|
-| Golden fixture cho adapter | `buildRequest` / `parseResponse` — JSON vào, JSON ra, **không mock** | 1 |
-| Unit: error mapper, scope resolver, `splitEnvelope` | Hàm thuần | 1 |
-| Schema test | Mọi request/response schema có ví dụ hợp lệ và không hợp lệ | 1 |
-| **Redact test** | Log không bao giờ chứa key / assertion / nội dung bài viết | 1 |
-| Integration: auth pipeline | Key sai/hết hạn/sai env; assertion sai `iss`/`alg`/`exp` | 2 |
-| **Xoay khoá JWKS** | Chạy đủ 5 bước [05 §G.8](05-auth-identity.md#g8-jwks-của-aihub--xoay-khoá), không request nào lỗi | 2 |
-| Idempotency race | 2 request song song cùng key → đúng **1 lần** gọi downstream | 3 |
-| Failure injection | Downstream 500/timeout/connection refused; Redis down | 3 |
-| Load test | Chốt `rate_limit_rpm`, `max_concurrent` theo sức chịu thật của Writing | 3 |
+| Loại                                                | Phạm vi                                                                                           | Phase |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ----- |
+| Golden fixture cho adapter                          | `buildRequest` / `parseResponse` — JSON vào, JSON ra, **không mock**                              | 1     |
+| Unit: error mapper, scope resolver, `splitEnvelope` | Hàm thuần                                                                                         | 1     |
+| Schema test                                         | Mọi request/response schema có ví dụ hợp lệ và không hợp lệ                                       | 1     |
+| **Redact test**                                     | Log không bao giờ chứa key / assertion / nội dung bài viết                                        | 1     |
+| Integration: auth pipeline                          | Key sai/hết hạn/sai env; assertion sai `iss`/`alg`/`exp`                                          | 2     |
+| **Xoay khoá JWKS**                                  | Chạy đủ 5 bước [05 §G.8](05-auth-identity.md#g8-jwks-của-aihub--xoay-khoá), không request nào lỗi | 2     |
+| Idempotency race                                    | 2 request song song cùng key → đúng **1 lần** gọi downstream                                      | 3     |
+| Failure injection                                   | Downstream 500/timeout/connection refused; Redis down                                             | 3     |
+| Load test                                           | Chốt `rate_limit_rpm`, `max_concurrent` theo sức chịu thật của Writing                            | 3     |
 
 ### Có cần Pact / consumer-driven contract testing không?
 
 **Chưa.** Với hai service do cùng team sở hữu, JSON Schema validation ở biên (`InternalResponseSchema`) + golden fixture đã bắt được đúng những lỗi mà Pact bắt, với chi phí vận hành gần bằng 0.
 
-Xét lại khi AI Service do **team khác** sở hữu — lúc đó Pact mua được thứ mà schema validation không mua được: phá build của *họ* khi họ đổi contract.
+Xét lại khi AI Service do **team khác** sở hữu — lúc đó Pact mua được thứ mà schema validation không mua được: phá build của _họ_ khi họ đổi contract.
 
 ### Postman collection cho D2
 
@@ -170,20 +170,20 @@ Theo D1 §G, tối thiểu 15 ca. Sinh từ OpenAPI (vốn sinh từ TypeBox) th
 
 # O. ADR List
 
-| ADR | Nội dung | Điểm cốt lõi phải ghi lại |
-|---|---|---|
-| 001 | NestJS + Fastify; không dùng Envoy/Kong làm data plane | Logic của AIHUB là application logic đội lốt proxy |
-| 002 | PostgreSQL cho control plane; 5 bảng thay vì 13 | Bảng nào bị cắt và điều kiện thêm lại |
-| 003 | Format API key + SHA-256 | **Vì sao không** bcrypt/argon2 |
-| 004 | Signed User Assertion + JWKS | `UNIQUE(issuer)`; giới hạn TTL; alg allowlist |
-| 005 | Internal JWT EdDSA + xoay khoá | `aud` riêng từng service; quy trình 5 bước |
-| 006 | Trách nhiệm của Redis | **Fail open khi Redis chết** — lập luận "cho qua thì hoàn tác được" |
-| 007 | Idempotency lưu ở Postgres | `ON CONFLICT` thay lock; timeout không mất tiền hai lần |
-| 008 | Operation catalog ở code, không ở DB | Lý do SSRF + type-check |
-| 009 | Adapter là hàm thuần, không I/O | Golden fixture không cần mock |
-| 010 | Ghi cả request lẫn token | Billing chưa chốt; dữ liệu quá khứ không tạo lại được |
-| 011 | Docker Compose trên VPS | Trigger rời đi ở [§N.5](#n5-trigger-rời-khỏi-kiến-trúc-này) |
-| 012 | Bỏ distributed tracing ở Stage A | Giữ `traceparent` để cắm sau |
+| ADR | Nội dung                                               | Điểm cốt lõi phải ghi lại                                           |
+| --- | ------------------------------------------------------ | ------------------------------------------------------------------- |
+| 001 | NestJS + Fastify; không dùng Envoy/Kong làm data plane | Logic của AIHUB là application logic đội lốt proxy                  |
+| 002 | PostgreSQL cho control plane; 5 bảng thay vì 13        | Bảng nào bị cắt và điều kiện thêm lại                               |
+| 003 | Format API key + SHA-256                               | **Vì sao không** bcrypt/argon2                                      |
+| 004 | Signed User Assertion + JWKS                           | `UNIQUE(issuer)`; giới hạn TTL; alg allowlist                       |
+| 005 | Internal JWT EdDSA + xoay khoá                         | `aud` riêng từng service; quy trình 5 bước                          |
+| 006 | Trách nhiệm của Redis                                  | **Fail open khi Redis chết** — lập luận "cho qua thì hoàn tác được" |
+| 007 | Idempotency lưu ở Postgres                             | `ON CONFLICT` thay lock; timeout không mất tiền hai lần             |
+| 008 | Operation catalog ở code, không ở DB                   | Lý do SSRF + type-check                                             |
+| 009 | Adapter là hàm thuần, không I/O                        | Golden fixture không cần mock                                       |
+| 010 | Ghi cả request lẫn token                               | Billing chưa chốt; dữ liệu quá khứ không tạo lại được               |
+| 011 | Docker Compose trên VPS                                | Trigger rời đi ở [§N.5](#n5-trigger-rời-khỏi-kiến-trúc-này)         |
+| 012 | Bỏ distributed tracing ở Stage A                       | Giữ `traceparent` để cắm sau                                        |
 
 ADR 003, 006, 007 là ba cái quan trọng nhất phải viết trước — chúng đều là quyết định **ngược trực giác** mà nếu không ghi lý do thì sáu tháng nữa sẽ có người "sửa" lại thành sai.
 

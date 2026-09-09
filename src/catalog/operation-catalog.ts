@@ -34,7 +34,7 @@ export interface OperationDef {
 export const OPERATION_CATALOG = {
   'writing.task1.question.generate': {
     method: 'POST',
-    path: '/v1/writing/task1/questions',
+    path: '/v1/ielts/writing/task1/questions',
     requiredScope: 'writing.question.generate',
     identityScope: 'organization',
     execution: 'sync',
@@ -49,7 +49,7 @@ export const OPERATION_CATALOG = {
   },
   'writing.task2.question.generate': {
     method: 'POST',
-    path: '/v1/writing/task2/questions',
+    path: '/v1/ielts/writing/task2/questions',
     requiredScope: 'writing.question.generate',
     identityScope: 'organization',
     execution: 'sync',
@@ -64,7 +64,7 @@ export const OPERATION_CATALOG = {
   },
   'writing.task1.grade': {
     method: 'POST',
-    path: '/v1/writing/task1/grade',
+    path: '/v1/ielts/writing/task1/grade',
     requiredScope: 'writing.grade',
     identityScope: 'user',
     execution: 'sync',
@@ -79,7 +79,7 @@ export const OPERATION_CATALOG = {
   },
   'writing.task2.grade': {
     method: 'POST',
-    path: '/v1/writing/task2/grade',
+    path: '/v1/ielts/writing/task2/grade',
     requiredScope: 'writing.grade',
     identityScope: 'user',
     execution: 'sync',
