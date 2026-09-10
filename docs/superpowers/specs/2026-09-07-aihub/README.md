@@ -1,26 +1,26 @@
 # AIHUB — Architecture Design (nền tảng cho Deliverable 2)
 
 > **Trạng thái:** đã duyệt qua brainstorm ngày 2026-09-07.
-> **Trả lời cho:** `../../../aihub_ai_agent_brainstorm_brief.md` (cấu trúc output A–P ở §16 của brief).
+> **Trả lời cho:** brief brainstorm ban đầu, đã gỡ khỏi repo — cấu trúc output A–P bắt nguồn từ §16 của brief đó, xem lịch sử git nếu cần đối chiếu.
 > **Không thay thế:** `../../../aihub_long_term_architecture.md` (kiến trúc đích) và `../../../aihub_deliverable_1_api_contract_schema.md` (contract). Đây là **implementation strategy** để đi từ D1 sang D2.
 
 Scaffold status: [Clean Architecture and agent workflow design](12-agent-workflow-and-clean-architecture-design.md) is implemented in the initial NestJS/Fastify source scaffold.
 
 ## Mục lục
 
-| File | Nội dung | Mục brief |
-|---|---|---|
-| [01-context-and-stack.md](01-context-and-stack.md) | Ràng buộc đã chốt, khảo sát AI Writing thật, executive recommendation, tech stack matrix, architecture diagram | A, B, C |
-| [02-request-lifecycle.md](02-request-lifecycle.md) | Pipeline 17 bước, map vào NestJS, 3 lifecycle mẫu | D |
-| [03-database.md](03-database.md) | DDL 5 bảng, index, idempotency race, 8 bảng bị cắt | E |
-| [04-redis.md](04-redis.md) | Key inventory, rate limit, concurrency limit, quota, hành vi khi Redis chết | F |
-| [05-auth-identity.md](05-auth-identity.md) | API key, user assertion, JWKS/SSRF, internal JWT, xoay khoá, authorization | G |
-| [06-routing-adapter.md](06-routing-adapter.md) | Operation catalog, canonical schema, adapter interface, dispatcher, internal contract | H |
-| [07-reliability-and-errors.md](07-reliability-and-errors.md) | Timeout, retry, circuit breaker, idempotency, 18 mã lỗi | I, J |
-| [08-metering-and-observability.md](08-metering-and-observability.md) | Metering, billing, reconciliation, log/metric/alert | K, L |
-| [09-security.md](09-security.md) | Threat model 18 mục theo Must/Should/Later | M |
-| [10-deployment-roadmap.md](10-deployment-roadmap.md) | Compose stack, deploy, backup, trigger scale, 6 phase, testing, ADR | N, O |
-| [11-open-questions.md](11-open-questions.md) | 5 câu hỏi còn mở, thay đổi cần đưa ngược vào D1, đối chiếu nguyên tắc | P |
+| File                                                                 | Nội dung                                                                                                       | Mục brief |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------- |
+| [01-context-and-stack.md](01-context-and-stack.md)                   | Ràng buộc đã chốt, khảo sát AI Writing thật, executive recommendation, tech stack matrix, architecture diagram | A, B, C   |
+| [02-request-lifecycle.md](02-request-lifecycle.md)                   | Pipeline 17 bước, map vào NestJS, 3 lifecycle mẫu                                                              | D         |
+| [03-database.md](03-database.md)                                     | DDL 5 bảng, index, idempotency race, 8 bảng bị cắt                                                             | E         |
+| [04-redis.md](04-redis.md)                                           | Key inventory, rate limit, concurrency limit, quota, hành vi khi Redis chết                                    | F         |
+| [05-auth-identity.md](05-auth-identity.md)                           | API key, user assertion, JWKS/SSRF, internal JWT, xoay khoá, authorization                                     | G         |
+| [06-routing-adapter.md](06-routing-adapter.md)                       | Operation catalog, canonical schema, adapter interface, dispatcher, internal contract                          | H         |
+| [07-reliability-and-errors.md](07-reliability-and-errors.md)         | Timeout, retry, circuit breaker, idempotency, 18 mã lỗi                                                        | I, J      |
+| [08-metering-and-observability.md](08-metering-and-observability.md) | Metering, billing, reconciliation, log/metric/alert                                                            | K, L      |
+| [09-security.md](09-security.md)                                     | Threat model 18 mục theo Must/Should/Later                                                                     | M         |
+| [10-deployment-roadmap.md](10-deployment-roadmap.md)                 | Compose stack, deploy, backup, trigger scale, 6 phase, testing, ADR                                            | N, O      |
+| [11-open-questions.md](11-open-questions.md)                         | 5 câu hỏi còn mở, thay đổi cần đưa ngược vào D1, đối chiếu nguyên tắc                                          | P         |
 
 ## Executive Recommendation
 
