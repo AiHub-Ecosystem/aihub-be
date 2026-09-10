@@ -154,6 +154,15 @@ disk Postgres > 80%
 
 Grafana alert đẩy thẳng vào một kênh chat. Không dựng Alertmanager riêng — nó là một container nữa để cấu hình sai.
 
+### L.4.1 Synthetic canary — AI Writing contract
+
+Ngoài metric phản ứng, còn có một synthetic canary chủ động kiểm tra
+response shape của AI Writing mỗi 6 giờ. Nếu AI Writing deploy một breaking
+change, canary bắt được trong vòng run interval, trước khi request thật của
+khách hàng chạm vào nó.
+
+→ Xem runbook: [docs/operations/canary-ai-writing.md](../../docs/operations/canary-ai-writing.md)
+
 ---
 
 → Tiếp: [09 — Security Threat Model](09-security.md)
