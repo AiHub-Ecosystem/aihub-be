@@ -17,6 +17,7 @@
     "generate:openapi": "tsx scripts/generate-openapi.ts && biome format --write openapi.json",
     "validate:openapi": "node scripts/validate-openapi.mjs",
     "generate:postman": "tsx scripts/generate-postman.ts && biome format --write aihub.postman_collection.json",
+    "canary:ai-writing": "tsx scripts/canary-ai-writing.ts",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "type-check": "tsc --noEmit",
