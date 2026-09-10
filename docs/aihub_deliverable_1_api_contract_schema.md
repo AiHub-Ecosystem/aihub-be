@@ -1,91 +1,91 @@
 # AIHUB OPEN API — Deliverable 1: API Contract & Schema Definition
 
-> **Scope:** File này chỉ tập trung vào **Deliverable 1** của team: chuẩn hoá API contract/schema, Provider Mapper Rules Engine và Unified Error Codes.
+> **Scope:** This document focuses exclusively on the team's **Deliverable 1**: standardizing the API contract/schema, Provider Mapper Rules Engine, and Unified Error Codes.
 >
-> **Nguồn requirement:** Project Scope Statement / Deliverable 1 của team.
+> **Requirement Source:** Project Scope Statement / Team Deliverable 1.
 >
-> **Quy ước:**
+> **Conventions:**
 >
-> - **[Requirement]**: bám theo tài liệu Deliverable 1 của team.
-> - **[Team Design Decision]**: quyết định thiết kế bổ sung đã thống nhất qua trao đổi của team.
-> - **[Implementation Proposal]**: đề xuất kỹ thuật để hiện thực requirement; không phải wording gốc của Deliverable 1.
-> - **[D2 Implementation]**: phần được định nghĩa ở D1 nhưng việc code/runtime implementation thuộc Deliverable 2 trở đi.
-> - **[Khảo sát thực tế]**: nội dung đã được đối chiếu với API thật của AI Writing đang chạy production.
+> - **[Requirement]**: Follows the team's original Deliverable 1 requirement document.
+> - **[Team Design Decision]**: Supplementary architectural decisions agreed upon by the engineering team.
+> - **[Implementation Proposal]**: Technical proposals to realize requirements; not original Deliverable 1 phrasing.
+> - **[D2 Implementation]**: Specifications defined in D1 whose code/runtime implementation belongs to Deliverable 2 onwards.
+> - **[Empirical Survey]**: Content cross-referenced against the actual live production AI Writing API.
 
-> **Cập nhật 2026-09-07:** file này đã được đồng bộ với khảo sát API thật của AI Writing
-> (`api-ielts-writing.aihubproduction.com`) và với architecture design ở
+> **Updated 2026-09-07:** Synchronized with the empirical survey of the live AI Writing API
+> (`api-ielts-writing.aihubproduction.com`) and architecture designs in
 > [`implementation spec index`](superpowers/specs/2026-09-07-aihub/README.md).
 >
-> **Trạng thái hiện hành:** D1 đã freeze. Runtime source of truth là code trong
-> `src/contracts/` và `src/catalog/`; `openapi.json` và Postman collection được sinh
-> từ source. Các checklist trong PHẦN E là ảnh chụp lịch sử để traceability, không phải
-> danh sách blocker hiện tại.
+> **Current Status:** D1 is frozen. The runtime source of truth is code in
+> `src/contracts/` and `src/catalog/`; `openapi.json` and Postman collections are generated
+> from source. Checklists in PART E are preserved as historical snapshots for traceability, not
+> active blocker lists.
 >
-> Các schema ví dụ trước đây (`content` / `language` / `level`) là **placeholder và đã sai so với thực tế** —
-> nay được thay bằng schema thật. Xem [§34](#34-nhật-ký-thay-đổi) để biết danh sách thay đổi.
+> Legacy placeholder schemas (`content` / `language` / `level`) were **invalid against production** —
+> replaced with empirical schemas. See [§34](#34-changelog) for the changelog.
 
 ---
 
-# 1. Mục tiêu Deliverable 1
+# 1. Deliverable 1 Objectives
 
 ## [Requirement]
 
-D1 tập trung vào ba checkpoint:
+D1 focuses on three core checkpoints:
 
-1. **Chuẩn hoá cấu trúc endpoint + request/response**.
+1. **Standardizing endpoint structure + request/response**.
 2. **Provider Mapper Rules Engine**.
 3. **Unified Error Codes**.
 
-D1 phải tạo ra contract đủ rõ để D2 build Core API Gateway / Reverse Proxy / Routing & Dispatcher mà không phải đổi public contract lớn.
+D1 must establish a clear contract allowing D2 to construct the Core API Gateway / Reverse Proxy / Routing & Dispatcher without requiring breaking changes to the public contract.
 
 ---
 
-# 2. D1 và D2 khác nhau ở đâu?
+# 2. D1 vs D2 Boundaries
 
-Đây là boundary cần rõ để tránh D1 bị scope creep.
+Defines clear boundaries to prevent scope creep in D1.
 
-| Nội dung                              |    D1 — Define Contract |   D2+ — Implement Runtime |
-| ------------------------------------- | ----------------------: | ------------------------: |
-| Base URL / versioning / naming        |                       ✓ |                   sử dụng |
-| API key header format                 |                       ✓ |    middleware + DB lookup |
-| Organization/API key schema           |                       ✓ |       persistence/runtime |
-| Request/response schemas              |                       ✓ |  validation/serialization |
-| End-user assertion contract           |    ✓ nếu capability cần |   verification middleware |
-| Provider/Downstream mapping rules     |                       ✓ |      adapter + dispatcher |
-| Unified error catalog                 |                       ✓ |    exception/error mapper |
-| Timing/usage metadata contract        |                       ✓ |         timers + metering |
-| Internal AI Service response contract |                       ✓ | downstream implementation |
-| Rate limit/quota algorithm            | có thể reserve contract |        implementation sau |
-| Internal JWT AIHUB → AI Service       |       kiến trúc dài hạn |  implementation phase sau |
+| Topic                                 |          D1 — Define Contract |     D2+ — Implement Runtime |
+| ------------------------------------- | ----------------------------: | --------------------------: |
+| Base URL / versioning / naming        |                             ✓ |                     Consume |
+| API key header format                 |                             ✓ |      Middleware + DB lookup |
+| Organization / API key schema         |                             ✓ |       Persistence / runtime |
+| Request / response schemas            |                             ✓ |  Validation / serialization |
+| End-user assertion contract           | ✓ (if required by capability) |     Verification middleware |
+| Provider / downstream mapping rules   |                             ✓ |        Adapter + dispatcher |
+| Unified error catalog                 |                             ✓ |    Exception / error mapper |
+| Timing / usage metadata contract      |                             ✓ |           Timers + metering |
+| Internal AI Service response contract |                             ✓ |   Downstream implementation |
+| Rate limit / quota algorithms         |              Reserve contract |       Future implementation |
+| Internal JWT AIHUB → AI Service       |           Target architecture | Future implementation phase |
 
-> **Team Design Decision:** API key nên được **định nghĩa ngay trong D1** để public contract ổn định, nhưng không có nghĩa D1 phải hoàn thiện toàn bộ auth/billing runtime.
+> **Team Design Decision:** API keys must be **defined upfront in D1** to stabilize the public contract, without requiring D1 to implement full authentication/billing runtimes.
 
 ---
 
 # 3. Terminology
 
-Từ **Provider** trong Deliverable 1 dễ gây hiểu nhầm.
+The term **Provider** in Deliverable 1 often causes confusion.
 
-Trong tài liệu này:
+Throughout this document:
 
-| Term                      | Ý nghĩa                                                                                              |
-| ------------------------- | ---------------------------------------------------------------------------------------------------- |
-| **AI Service**            | AI Writing / AI Speaking / AI Reading phía sau AIHUB                                                 |
-| **Model Provider**        | OpenAI / Anthropic / Google / ... mà AI Service có thể gọi                                           |
-| **Provider Mapper Rules** | Requirement name của team; về kỹ thuật nên hiểu là **Downstream AI Service Adapter / Mapping Rules** |
-| **Canonical Contract**    | Public contract thống nhất của AIHUB                                                                 |
+| Term                      | Meaning                                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------ |
+| **AI Service**            | Downstream domain service behind AIHUB (AI Writing, AI Speaking, AI Reading)                     |
+| **Model Provider**        | Upstream foundational provider (OpenAI, Anthropic, Google, etc.) invoked by an AI Service        |
+| **Provider Mapper Rules** | Team requirement name; technically represents **Downstream AI Service Adapters / Mapping Rules** |
+| **Canonical Contract**    | Unified public contract exposed by AIHUB                                                         |
 
-> Không dùng `provider` để vừa chỉ AI Writing vừa chỉ OpenAI trong cùng một schema.
+> Never overload `provider` to mean both AI Writing and OpenAI in the same schema.
 
 ---
 
-# PHẦN A — API CONTRACT & SCHEMA DEFINITION
+# PART A — API CONTRACT & SCHEMA DEFINITION
 
-# 4. US01 — Chuẩn hoá Base URL
+# 4. US01 — Base URL Standardization
 
 ## [Requirement]
 
-Client cần Base URL thống nhất, dễ gọi và dễ nhớ.
+Clients require a unified, intuitive, and easy-to-remember Base URL structure.
 
 ## [Implementation Proposal]
 
@@ -95,9 +95,9 @@ Staging:    https://staging-api.aihub.example.com/v1
 Dev:        https://dev-api.aihub.example.com/v1
 ```
 
-### Environment source of truth
+### Environment Source of Truth
 
-**Đề xuất chốt:** hostname/deployment là source of truth cho `dev/staging/prod`.
+**Settled proposal:** Hostname / deployment URL is the sole source of truth for `dev/staging/prod`.
 
 ```text
 api.aihub...          → production
@@ -105,15 +105,15 @@ staging-api.aihub...  → staging
 dev-api.aihub...      → development
 ```
 
-API key có thể được bind vào `allowed_environments`, nhưng environment không do client tự khai báo bằng header.
+API keys bind to `allowed_environments`, but environment is never self-asserted by clients via request headers.
 
 ---
 
-# 5. US02 — Chuẩn hoá API Naming Scheme
+# 5. US02 — API Naming Scheme Standardization
 
 ## [Requirement]
 
-URL phải phân biệt được chức năng AI mà client cần.
+URLs must cleanly distinguish the AI capability requested by the client.
 
 ## [Implementation Proposal]
 
@@ -121,16 +121,16 @@ URL phải phân biệt được chức năng AI mà client cần.
 /v{version}/{capability}/{task}/{resource-or-action}
 ```
 
-Ví dụ — 4 operation của MVP:
+Examples — 4 MVP operations:
 
 ```http
-POST /v1/ielts/writing/task1/questions     # sinh đề Task 1
-POST /v1/ielts/writing/task2/questions     # sinh đề Task 2
-POST /v1/ielts/writing/task1/grade         # chấm bài Task 1
-POST /v1/ielts/writing/task2/grade         # chấm bài Task 2
+POST /v1/ielts/writing/task1/questions     # Generate Task 1 prompt
+POST /v1/ielts/writing/task2/questions     # Generate Task 2 prompt
+POST /v1/ielts/writing/task1/grade         # Grade Task 1 essay
+POST /v1/ielts/writing/task2/grade         # Grade Task 2 essay
 ```
 
-Phase sau:
+Future phases:
 
 ```http
 POST /v1/speaking/grade
@@ -138,41 +138,41 @@ GET  /v1/jobs/{job_id}
 POST /v1/reading/analyze
 ```
 
-Không expose naming của AI Service/Model Provider ra public API.
+Never expose internal AI Service / Model Provider naming to the public API.
 
-## [Khảo sát thực tế] Vì sao tách `task1` / `task2`
+## [Empirical Survey] Rationale for Splitting `task1` / `task2`
 
-AI Writing có endpoint riêng cho từng task, và **input khác nhau thật sự**: chấm Task 1 bắt buộc có ảnh biểu đồ (`url` phía downstream), Task 2 thì không có.
+AI Writing hosts dedicated endpoints for each task with **divergent input requirements**: Task 1 grading mandates a chart image (`url` downstream), whereas Task 2 forbids it.
 
-Gộp thành một `POST /v1/ielts/writing/grade` với field phân biệt sẽ buộc schema phải dùng `oneOf`, làm thông báo lỗi validate khó hiểu và SDK sinh ra kém sạch. Tách riêng cho phép mỗi endpoint có schema chính xác, và sau này tính giá/scope riêng được.
+Combining both into a single `POST /v1/ielts/writing/grade` endpoint with discriminator fields forces `oneOf` unions into schemas, producing confusing validation errors and degraded SDK generation. Splitting them gives each endpoint an exact schema and allows independent pricing and permission scoping.
 
-Đồng thời adapter che luôn được sự thiếu nhất quán của downstream: AI Writing đặt tên `/generate-question-task1` nhưng `/question-generated-task2` — public API vẫn đối xứng.
+Furthermore, adapters encapsulate downstream inconsistencies: AI Writing named its endpoints `/generate-question-task1` versus `/question-generated-task2` — the public API maintains perfect symmetry.
 
 ---
 
-# 6. US03 — Request Standard
+# 6. US03 — Request Standards
 
 ## [Requirement]
 
-Request phải có đủ thông tin để định danh:
+Requests must supply sufficient context to identify:
 
 - Organization;
 - Service;
 - Environment.
 
-## [Team Design Decision] Organization API Key từ đầu
+## [Team Design Decision] Organization API Keys from Day One
 
-Không bắt client tự gửi ba header độc lập rồi AIHUB tin trực tiếp.
+Clients are never asked to send three unverified headers that AIHUB blindly trusts.
 
-Thay vào đó:
+Instead:
 
-| Requirement          | AIHUB lấy từ đâu?        |
-| -------------------- | ------------------------ |
-| Organization         | **Organization API Key** |
-| Service / Capability | **Endpoint/path**        |
-| Environment          | **Deployment hostname**  |
+| Context Requirement  | Resolution Source in AIHUB |
+| -------------------- | -------------------------- |
+| Organization         | **Organization API Key**   |
+| Service / Capability | **Endpoint URL Path**      |
+| Environment          | **Deployment Hostname**    |
 
-Flow:
+Resolution Flow:
 
 ```text
 X-API-Key
@@ -190,28 +190,28 @@ api.aihub... / staging-api.aihub...
 Environment
 ```
 
-Như vậy requirement US03 vẫn được đáp ứng nhưng tránh dữ liệu định danh bị client tự khai báo sai/giả mạo.
+This fulfills US03 while preventing spoofing of identity metadata.
 
-## 6.1 Request headers đề xuất
+## 6.1 Proposed Request Headers
 
 ```http
 POST /v1/ielts/writing/task1/grade
 X-API-Key: aihub_sk_xxxxx
-X-User-Assertion: <signed-jwt>       # chỉ khi operation user-scoped
-X-Correlation-Id: customer-req-123  # optional
-Idempotency-Key: <uuid>             # nếu operation quy định
+X-User-Assertion: <signed-jwt>       # Only on user-scoped operations
+X-Correlation-Id: customer-req-123  # Optional
+Idempotency-Key: <uuid>             # If required by operation
 Content-Type: application/json
 ```
 
-### Không dùng client-supplied `X-Request-Id` làm request ID chính
+### Never Use Client-Supplied `X-Request-Id` as Primary Tracing ID
 
-AIHUB tự generate:
+AIHUB autonomously generates:
 
 ```text
 request_id = req_01JXYZ
 ```
 
-Client muốn correlate với hệ thống của họ thì dùng:
+Clients correlating with their internal systems should supply:
 
 ```http
 X-Correlation-Id: customer-request-123
@@ -219,11 +219,11 @@ X-Correlation-Id: customer-request-123
 
 ---
 
-# 7. API Key Contract — D1 define, D2 implement
+# 7. API Key Contract — D1 Define, D2 Implement
 
 ## [Team Design Decision]
 
-D1 chốt contract tối thiểu:
+D1 settles the minimal control-plane contract:
 
 ```text
 organizations
@@ -243,36 +243,36 @@ api_keys
 - last_used_at
 ```
 
-Nguyên tắc:
+Governing rules:
 
-- Không lưu raw API key.
-- Raw key chỉ trả một lần khi tạo.
-- API key xác định Organization.
-- API key có thể được bind vào environment.
-- Sau này thêm scopes/rate-limit/quota mà không đổi public credential contract.
+- Raw API keys are never persisted in the database.
+- Raw keys are displayed exactly once upon generation.
+- The API key establishes organization identity.
+- API keys bind to allowed deployment environments.
+- Future scopes, rate limits, and quotas can be added without altering the public credential contract.
 
 ## [D2 Implementation]
 
-- middleware đọc API key;
-- hash/lookup DB;
-- validate status/expiry/environment;
-- attach organization context vào request.
+- Middleware extracts the API key header;
+- Computes SHA-256 hash and performs index seek in DB;
+- Validates key status, expiry, and environment permissions;
+- Attaches authenticated organization context to the request pipeline.
 
 ---
 
 # 8. End-user Identity Contract
 
-Deliverable 1 gốc tập trung organization/service/environment, nhưng nếu API thao tác data theo user/học viên thì cần chốt contract ngay để tránh dùng raw `X-User-Id`.
+The initial Deliverable 1 draft focused on organization, service, and environment. When APIs manipulate user-specific data, identity contracts must be locked in early to prevent reliance on raw `X-User-Id` headers.
 
 ## [Implementation Proposal] Signed User Assertion
 
-Customer Backend gửi:
+The customer backend sends:
 
 ```http
 X-User-Assertion: <SIGNED_JWT>
 ```
 
-Ví dụ payload:
+Example payload:
 
 ```json
 {
@@ -285,11 +285,11 @@ Ví dụ payload:
 }
 ```
 
-`jti` là **bắt buộc**, không phải optional.
+`jti` is **required**, not optional.
 
-Hiện tại AIHUB chỉ log `jti` chứ chưa kiểm tra replay — với TTL 5 phút và kết nối TLS backend-to-backend, kẻ đọc trộm được traffic thì đã có luôn API key, nên replay assertion là mối lo nhỏ hơn nhiều so với chi phí duy trì một Redis set cho mọi request.
+Currently, AIHUB only logs `jti` and does not yet check for replay — with a 5-minute TTL and backend-to-backend TLS connections, an adversary capable of intercepting traffic would already possess the API key, so assertion replay is a much smaller concern than the cost of maintaining a Redis set for every request.
 
-Nhưng contract phải yêu cầu `jti` **ngay từ bây giờ**: khi cần bật replay protection cho một org nhạy cảm, chỉ thêm một lần `SET NX` ở phía AIHUB — không phải đi bảo mọi khách hàng sửa code.
+However, the contract must require `jti` **from day one**: when replay protection needs to be enabled for a sensitive organization, it only requires an additional `SET NX` check on the AIHUB side — without requiring every customer to update their code.
 
 Trust model:
 
@@ -299,52 +299,52 @@ Customer Backend Private Key
 User Assertion
         ↓
 AIHUB
-        ↓ verify bằng Organization Public Key/JWKS
+        ↓ verify using Organization Public Key/JWKS
 Trusted actor = student_456
 ```
 
-AIHUB phải kiểm tra, theo đúng thứ tự này (rẻ trước, crypto sau cùng):
+AIHUB must verify in this exact order (cheapest checks first, cryptography last):
 
 ```text
-1. alg ∈ allowed_algorithms của org      # CHẶN 'none', chặn HS* khi key là RSA/EC
+1. alg ∈ allowed_algorithms of the org    # BLOCK 'none', block HS* when key is RSA/EC
 2. aud == "aihub"
-3. iss == issuer đã đăng ký cho org lấy từ API key
-4. exp > now - 60s   ∧   iat < now + 60s     # clock skew ±60s
-5. (exp - iat) <= max_assertion_ttl_seconds  # mặc định 300s
-6. jti có mặt
-7. signature hợp lệ theo JWKS của org
+3. iss == registered issuer for the org derived from the API key
+4. exp > now - 60s   ∧   iat < now + 60s   # clock skew ±60s
+5. (exp - iat) <= max_assertion_ttl_seconds # default 300s
+6. jti is present
+7. signature is valid according to org JWKS
 ```
 
-Ba ràng buộc dưới đây là **bổ sung so với bản D1 đầu tiên**, mỗi cái chặn một lớp tấn công cụ thể:
+The three constraints below are **additions compared to the initial D1 draft**, each mitigating a specific attack vector:
 
-**Bước 1 — chặn alg confusion.** Đây là lỗ JWT kinh điển: token khai `alg: HS256`, thư viện lấy public key RSA làm HMAC secret — mà public key thì ai cũng lấy được → giả token thoải mái. Chỉ chấp nhận `alg` nằm trong allowlist _của chính org đó_, và loại khoá phải khớp thuật toán.
+**Step 1 — Prevent algorithm confusion.** This is a classic JWT vulnerability: the token declares `alg: HS256`, and the library uses the RSA public key as the HMAC secret — since anyone can obtain the public key, tokens can be freely forged. Only accept `alg` within the allowlist _of that specific org_, and ensure the key type strictly matches the algorithm.
 
-**Bước 3 — chặn cross-tenant.** API key nói org A nhưng assertion khai `iss` của org B → `403`. Kèm theo đó, cột `issuer` trong `organization_identity_configs` phải **UNIQUE toàn hệ thống**, nếu không org B có thể đăng ký trùng `iss` của org A ngay từ đầu rồi tự ký assertion mạo danh học viên của A.
+**Step 3 — Prevent cross-tenant impersonation.** If the API key indicates org A but the assertion declares `iss` belonging to org B → `403`. In addition, the `issuer` column in `organization_identity_configs` must be **globally UNIQUE**, otherwise org B could register org A's `iss` from the outset and sign assertions impersonating A's students.
 
-**Bước 5 — chặn assertion sống vĩnh viễn.** Không giới hạn TTL thì khách có thể ký một assertion `exp` sau 5 năm rồi nhúng vào app mobile — assertion biến thành một API key vĩnh viễn bị rò. `max_assertion_ttl_seconds` lưu ở DB nên nới được cho từng org khi có lý do.
+**Step 5 — Prevent indefinitely lived assertions.** Without a TTL limit, a customer could sign an assertion with `exp` 5 years into the future and embed it into a mobile app — turning the assertion into a leaked permanent API key. `max_assertion_ttl_seconds` is stored in the database and can be relaxed for specific orgs when justified.
 
-Operation organization-scoped mà client vẫn gửi assertion: **vẫn phải verify**. Có mặt thì phải hợp lệ — bỏ qua một assertion hỏng là mở đường cho lỗi tích hợp âm thầm.
+If a client sends an assertion for an organization-scoped operation: **it must still be verified**. If present, it must be valid — ignoring a broken assertion paves the way for silent integration bugs.
 
-### Identity config của Organization — contract tối thiểu
+### Organization Identity Config — Minimum Contract
 
 ```text
 organization_identity_configs
 - organization_id
-- issuer                      UNIQUE toàn hệ thống
-- jwks_url                    ưu tiên
-- public_keys_jwks            fallback khi org chưa host được JWKS
-- allowed_algorithms          mặc định {RS256, ES256}
-- max_assertion_ttl_seconds   mặc định 300
+- issuer                      globally UNIQUE
+- jwks_url                    primary
+- public_keys_jwks            fallback when org cannot host a JWKS endpoint
+- allowed_algorithms          default {RS256, ES256}
+- max_assertion_ttl_seconds   default 300
 - status
 ```
 
-Ràng buộc: phải có ít nhất một trong `jwks_url` hoặc `public_keys_jwks`.
+Constraint: must have at least one of `jwks_url` or `public_keys_jwks`.
 
-### AIHUB có cần database toàn bộ user không?
+### Does AIHUB need a complete user database?
 
-Không bắt buộc. AIHUB có thể trust Organization xác nhận end-user bằng signed assertion.
+Not mandatory. AIHUB can trust the Organization to verify end-users via signed assertions.
 
-### Operation catalog phải ghi rõ
+### The Operation Catalog must explicitly specify
 
 ```text
 organization-scoped → assertion optional
@@ -355,7 +355,7 @@ user-scoped         → assertion required
 
 # 9. Authorization Contract
 
-Cần phân biệt:
+Distinguish between:
 
 ```text
 Organization Entitlement
@@ -365,17 +365,17 @@ Organization Entitlement
     Effective Scope
 ```
 
-Ví dụ:
+Example:
 
 ```text
 Organization plan: writing + speaking
 API Key A: writing.grade only
 
-Effective scope của key A:
+Effective scope of key A:
 writing.grade
 ```
 
-D1 nên định nghĩa operation → required scope; runtime enforcement có thể implement ở D2/later.
+D1 defines operation → required scope; runtime enforcement can be implemented in D2/later.
 
 ---
 
@@ -383,20 +383,20 @@ D1 nên định nghĩa operation → required scope; runtime enforcement có th�
 
 ## [Requirement]
 
-AIHUB phải định nghĩa key/value, datatype, constraints và allowed values.
+AIHUB must define key/value, datatype, constraints, and allowed values.
 
-## [Khảo sát thực tế]
+## [Empirical Findings]
 
-Bản D1 đầu tiên dùng `{ content, language, level }` làm ví dụ. Đối chiếu với AI Writing thật thì schema đó **không dùng được**:
+The initial D1 draft used `{ content, language, level }` as an example. Cross-checking against real AI Writing shows that this schema **cannot be used**:
 
-- chấm bài cần `question`, `topic`, `essay` — không phải một trường `content` chung;
-- Task 1 bắt buộc thêm ảnh biểu đồ;
-- **không có `language`** — IELTS luôn là tiếng Anh;
-- `level` chỉ dùng cho writing-assistant, không dùng khi chấm.
+- grading requires `question`, `topic`, `essay` — not a generic `content` field;
+- Task 1 strictly requires a chart image;
+- **no `language` for the essay itself** — IELTS is always in English;
+- `level` is only used for writing-assistant, not for grading.
 
-Dưới đây là schema thật.
+Below is the actual schema.
 
-## Chấm bài — Task 1
+## Grading — Task 1
 
 `POST /v1/ielts/writing/task1/grade`
 
@@ -410,26 +410,26 @@ Dưới đây là schema thật.
 }
 ```
 
-| Field        | Type   | Required | Constraints             | Description             |
-| ------------ | ------ | -------: | ----------------------- | ----------------------- |
-| `question`   | string |      yes | 1..2000 chars           | Đề bài                  |
-| `chart_type` | enum   |      yes | 7 giá trị, xem bên dưới | Loại biểu đồ của đề     |
-| `essay`      | string |      yes | 1..20000 chars          | Bài làm của học viên    |
-| `image_url`  | string |      yes | URI, ≤2000 chars        | Ảnh biểu đồ/bảng của đề |
-| `language`   | enum   |       no | `vi` (mặc định)         | Ngôn ngữ của feedback   |
+| Field        | Type   | Required | Constraints         | Description              |
+| ------------ | ------ | -------: | ------------------- | ------------------------ |
+| `question`   | string |      yes | 1..2000 chars       | Prompt / question text   |
+| `chart_type` | enum   |      yes | 7 values, see below | Chart type of prompt     |
+| `essay`      | string |      yes | 1..20000 chars      | Student essay submission |
+| `image_url`  | string |      yes | URI, ≤2000 chars    | Prompt chart/table image |
+| `language`   | enum   |       no | `vi` (default)      | Feedback language        |
 
-### `chart_type` — 7 giá trị, CASE-SENSITIVE
+### `chart_type` — 7 values, CASE-SENSITIVE
 
 ```text
 Bar Chart      Line Graph      Pie Chart      Table
 Map            Process Diagram Multiple Graphs
 ```
 
-Đã dò trực tiếp trên API thật ngày 2026-09-07. `"bar chart"` viết thường bị downstream trả 500; `"Process"`, `"Diagram"`, `"Bar Graph"`, `"Mixed Chart"` không tồn tại.
+Empirically probed directly against the live API on 2026-09-07. Lowercase `"bar chart"` causes downstream to return 500; `"Process"`, `"Diagram"`, `"Bar Graph"`, `"Mixed Chart"` do not exist.
 
-> **Vì sao không gọi là `topic`:** downstream đặt tên field này là `topic`, nhưng giá trị thật là **loại biểu đồ** chứ không phải chủ đề — gửi `"environment"` bị trả 500. Giữ tên `topic` ở public API là truyền lại chính sự hiểu nhầm đó cho khách hàng. Adapter map ngược `chart_type` → `topic` khi gọi downstream.
+> **Why it is not named `topic`:** downstream names this field `topic`, but its real value is **chart type**, not subject matter — sending `"environment"` yields a 500. Retaining `topic` in the public API would propagate this exact confusion to customers. The adapter maps `chart_type` back to downstream `topic`.
 
-## Chấm bài — Task 2
+## Grading — Task 2
 
 `POST /v1/ielts/writing/task2/grade`
 
@@ -441,24 +441,24 @@ Map            Process Diagram Multiple Graphs
 }
 ```
 
-| Field      | Type   | Required | Constraints     | Description                    |
-| ---------- | ------ | -------: | --------------- | ------------------------------ |
-| `question` | string |      yes | 1..2000 chars   | Đề bài                         |
-| `topic`    | string |      yes | 1..200 chars    | Chủ đề thật, ví dụ `education` |
-| `essay`    | string |      yes | 1..20000 chars  | Bài làm của học viên           |
-| `language` | enum   |       no | `vi` (mặc định) | Ngôn ngữ của feedback          |
+| Field      | Type   | Required | Constraints    | Description                    |
+| ---------- | ------ | -------: | -------------- | ------------------------------ |
+| `question` | string |      yes | 1..2000 chars  | Prompt / question text         |
+| `topic`    | string |      yes | 1..200 chars   | Actual topic, e.g. `education` |
+| `essay`    | string |      yes | 1..20000 chars | Student essay submission       |
+| `language` | enum   |       no | `vi` (default) | Feedback language              |
 
-> Task 2 **không nhận** `image_url` và **không nhận** `chart_type`. Gửi kèm sẽ bị `400 INVALID_REQUEST`.
+> Task 2 **does not accept** `image_url` and **does not accept** `chart_type`. Passing them results in `400 INVALID_REQUEST`.
 >
-> Khác Task 1: ở đây `topic` đúng nghĩa **chủ đề** (`education`, `technology`…), không phải loại biểu đồ.
+> Unlike Task 1: here `topic` truly means **topic / theme** (`education`, `technology`...), not a chart type.
 
-### Về `language`
+### Regarding `language`
 
-Hiện downstream chỉ sinh feedback **tiếng Việt**, nên enum tạm thời chỉ có `vi`. Contract giữ sẵn field để khi AI Writing hỗ trợ `en` thì chỉ cần nới enum — **nới lỏng là non-breaking, siết chặt thì không**, nên thứ tự này an toàn.
+Currently downstream only generates feedback in **Vietnamese**, so the enum temporarily only contains `vi`. The contract reserves this field so that when AI Writing supports `en`, only an enum relaxation is needed — **relaxing constraints is non-breaking, tightening is breaking**, so this order is safe.
 
-Response luôn echo `language` để client biết feedback đang ở ngôn ngữ nào.
+The response always echoes `language` so clients know the feedback language.
 
-## Sinh đề — Task 1 và Task 2
+## Question Generation — Task 1 and Task 2
 
 `POST /v1/ielts/writing/task1/questions`
 
@@ -466,11 +466,11 @@ Response luôn echo `language` để client biết feedback đang ở ngôn ng�
 { "chart_type": "Bar Chart" }
 ```
 
-| Field        | Type | Required | Constraints                                     |
-| ------------ | ---- | -------: | ----------------------------------------------- |
-| `chart_type` | enum |       no | 7 giá trị ở trên; **bỏ trống = lấy ngẫu nhiên** |
+| Field        | Type | Required | Constraints                                    |
+| ------------ | ---- | -------: | ---------------------------------------------- |
+| `chart_type` | enum |       no | 7 values above; **omitted = random selection** |
 
-Bỏ trống là đường dùng phổ biến nhất và luôn thành công. Truyền giá trị ngoài enum sẽ bị AIHUB chặn ở `400` trước khi chạm downstream — nếu không, downstream trả `500` cho một lỗi lẽ ra là `404`.
+Omitting it is the most common path and always succeeds. Passing a value outside the enum is rejected by AIHUB with `400` before reaching downstream — otherwise, downstream returns `500` for an error that should have been `404`.
 
 `POST /v1/ielts/writing/task2/questions`
 
@@ -483,22 +483,22 @@ Bỏ trống là đường dùng phổ biến nhất và luôn thành công. Tru
 | `topic`         | string |      yes | 1..200 chars                                                                        |
 | `question_type` | enum   |      yes | `opinion`, `discussion`, `problem_solution`, `advantages_disadvantages`, `two_part` |
 
-> **Cần chốt:** downstream hiện nhận `question_type` là string tự do. Enum trên là 5 dạng chuẩn của IELTS Task 2; phải lấy danh sách giá trị AI Writing thật sự chấp nhận trước khi siết thành enum, nếu không sẽ chặn nhầm request hợp lệ. Tạm thời có thể để string ở phase đầu rồi siết sau — **nới lỏng thì không breaking, siết chặt thì có**.
+> **To be finalized:** downstream currently accepts `question_type` as a free string. The enum above lists 5 standard IELTS Task 2 types; the exact list of values genuinely accepted by AI Writing must be confirmed before tightening into an enum, otherwise valid requests may be blocked. Temporarily, this can remain a string in the initial phase and be tightened later — **relaxing is non-breaking, tightening is breaking**.
 
-## Quy tắc chung cho mọi canonical request
+## General Rules for All Canonical Requests
 
-- `additionalProperties: false` — field ngoài contract trả `400`, không âm thầm bỏ (xem §18).
-- Không có field nào mang danh tính người dùng. `actor_id` đi trong User Assertion, không đi trong body.
+- `additionalProperties: false` — fields outside the contract return `400`, never silently stripped (see §18).
+- No field conveys user identity. `actor_id` travels in the User Assertion, not in the body.
 
 ---
 
 # 11. Media / File Input Contract
 
-Speaking/audio là chỗ dễ mơ hồ nếu chỉ có JSON example.
+Speaking/audio input is prone to ambiguity if specified only through JSON examples.
 
 ## [Implementation Proposal]
 
-D1 phải ghi rõ content type theo operation.
+D1 must explicitly specify the content type by operation.
 
 ### Text operations
 
@@ -508,17 +508,17 @@ Content-Type: application/json
 
 ### Small/medium media
 
-Có thể dùng:
+May use:
 
 ```http
 Content-Type: multipart/form-data
 ```
 
-với size/type limit rõ ràng.
+with explicit size/type limits.
 
 ### Large media
 
-Ưu tiên upload trước rồi truyền reference:
+Prefer pre-uploading and passing a reference:
 
 ```json
 {
@@ -528,9 +528,9 @@ với size/type limit rõ ràng.
 }
 ```
 
-Không khuyến nghị base64 cho file lớn.
+Base64 is strongly discouraged for large files.
 
-### Operation catalog cần có
+### Operation Catalog Requirements
 
 | Operation                         | Input mode                    |                   Max body | Allowed types      |
 | --------------------------------- | ----------------------------- | -------------------------: | ------------------ |
@@ -540,25 +540,25 @@ Không khuyến nghị base64 cho file lớn.
 | `writing.task2.grade`             | JSON                          |                     256 KB | text               |
 | `speaking.grade`                  | `asset_id` + presigned upload | 10 MB (multipart fallback) | `audio/*`          |
 
-Giới hạn body đặt **theo từng operation**, không đặt một mức chung — sinh đề chỉ cần vài KB, không có lý do gì cho phép nó nhận 256 KB.
+Body limits are configured **per operation**, not as a single global threshold — question generation requires only a few kilobytes; there is no reason to permit 256 KB.
 
-Vượt giới hạn → `413 PAYLOAD_TOO_LARGE`.
+Exceeding the limit → `413 PAYLOAD_TOO_LARGE`.
 
-### `image_url` của Task 1
+### Task 1 `image_url`
 
-Client gửi URL, và **AI Writing** là bên đi fetch ảnh đó. Nghĩa là bề mặt SSRF nằm ở phía Writing, không ở AIHUB. Writing phải chặn private IP / loopback / `169.254.169.254` khi fetch.
+The client provides a URL, and **AI Writing** is the service fetching the image. This means the SSRF attack surface resides on the Writing service side, not in AIHUB. AI Writing must block private IPs / loopback / `169.254.169.254` during image fetching.
 
-Đường dài nên chuyển sang `asset_id` cùng lúc với object storage của Speaking, để không còn URL do client tự khai nào được fetch cả.
+In the long run, this should transition to `asset_id` alongside Speaking's object storage, eliminating arbitrary client-supplied fetch URLs entirely.
 
 ### Speaking (Phase 4)
 
-Theo default đã chốt ở `aihub_long_term_architecture.md` §32.6: presigned upload + `asset_id` là đường chính, `multipart/form-data` chỉ dùng cho file nhỏ (gợi ý ≤ 10 MB). Max size và danh sách MIME cụ thể chốt khi làm Phase 4 — chưa cần cho D1 vì envelope async đã cố định (§12).
+Per the default decided in `aihub_long_term_architecture.md` §32.6: presigned upload + `asset_id` is the primary path, with `multipart/form-data` reserved for small files (suggested ≤ 10 MB). The exact max size and allowed MIME list will be locked during Phase 4 — not required for D1 because the async envelope is already fixed (§12).
 
 ---
 
 # 12. Sync vs Async Contract
 
-D1 phải ghi mỗi operation là sync hay async.
+D1 must declare whether each operation is sync or async.
 
 ## Sync
 
@@ -583,13 +583,13 @@ POST /v1/speaking/grade
 }
 ```
 
-Theo sau bởi:
+Followed by:
 
 ```http
 GET /v1/jobs/{job_id}
 ```
 
-> Không nhất thiết D1 phải implement async job engine, nhưng phải chốt contract nếu capability có khả năng chạy lâu để tránh breaking change.
+> D1 does not necessarily have to implement the async job engine immediately, but it must freeze the contract for long-running capabilities to avoid future breaking changes.
 
 ---
 
@@ -597,69 +597,69 @@ GET /v1/jobs/{job_id}
 
 ## [Requirement]
 
-Client nhận response có request metadata và thông tin định lượng như token/time.
+Clients receive responses containing request metadata and quantitative metrics such as tokens and timing.
 
-## 13.1 Metadata AIHUB tự biết
+## 13.1 Metadata AIHUB Knows Natively
 
 - `request_id`;
-- `correlation_id` nếu client gửi;
+- `correlation_id` if provided by client;
 - `service` / `operation`;
 - `total_ms`;
 - `downstream_ms`;
 - `gateway_overhead_ms`.
 
-## 13.2 Metadata phải do AI Service cung cấp
+## 13.2 Metadata Required from the AI Service
 
-Nếu AI Service là nơi gọi model thì AIHUB không tự biết chính xác:
+When the AI Service makes model calls directly, AIHUB cannot know natively:
 
 - `input_tokens`;
 - `output_tokens`;
 - `total_tokens`;
-- model(s) thực tế;
+- actual model(s);
 - `ai_processing_ms`;
-- breakdown usage khi operation gọi model nhiều lần.
+- usage breakdown when an operation makes multiple model calls.
 
-AIHUB **không tự tokenize lại request để ước lượng**.
+AIHUB **does not re-tokenize requests to estimate tokens**.
 
 ---
 
-# 14. Timing Definitions — chốt để không hiểu sai
+# 14. Timing Definitions — Locked to Avoid Misinterpretation
 
-Không dùng `provider_ms` vì có thể hiểu là AI Service hoặc Model Provider.
+Avoid using `provider_ms` because it could be interpreted as either AI Service or Model Provider duration.
 
-Khuyến nghị:
+Recommended definitions:
 
 ```text
 total_ms
 = AIHUB ingress → AIHUB egress
 
 downstream_ms
-= AIHUB bắt đầu HTTP call tới AI Service
-  → AIHUB nhận xong downstream response
+= AIHUB initiates HTTP call to AI Service
+  → AIHUB finishes receiving downstream response
 
 ai_processing_ms
-= AI Service tự đo thời gian xử lý AI nội bộ
+= AI Service internal processing time
   (optional)
 
 gateway_overhead_ms
 ≈ total_ms - downstream_ms
 ```
 
-Không giả định:
+Do not assume:
 
 ```text
 total_ms = gateway_overhead_ms + ai_processing_ms
 ```
 
-vì `downstream_ms` còn bao gồm network/service overhead.
+because `downstream_ms` also includes network and service overhead.
 
 ---
 
 # 15. Internal AI Service Response Contract
 
-D1 cần chốt contract private tối thiểu để US04 khả thi.
+D1 must freeze the minimum private contract required to make US04 feasible.
 
-## 15.1 Phân biệt standardized vs service-specific
+## 15.1 Distinguishing Standardized vs Service-Specific Fields
 
 ```text
 data
@@ -669,7 +669,7 @@ usage / models / metrics
 → standardized common metadata
 ```
 
-Ví dụ:
+Example:
 
 ```json
 {
@@ -705,7 +705,7 @@ Ví dụ:
 
 ### Usage aggregation rule
 
-Nếu operation gọi model nhiều lần:
+When an operation invokes models multiple times:
 
 ```text
 usage.input_tokens
@@ -713,39 +713,39 @@ usage.output_tokens
 usage.total_tokens
 ```
 
-phải là **aggregate của toàn operation**.
+must represent the **aggregate across the entire operation**.
 
-`usage.calls[]` là optional breakdown để debug/metering chi tiết.
+`usage.calls[]` is an optional breakdown for debugging and detailed metering.
 
-### Endpoint không gọi model
+### Endpoints Not Calling Models
 
-`usage` phải **omit**, không giả token bằng `0` và không trả `null`.
+`usage` must be **omitted**, never faked with `0` tokens or returned as `null`.
 
-Ví dụ cụ thể có thật: `/generate-question-task1` của AI Writing **đọc câu hỏi từ database**, không gọi model lần nào. Trong khi `/question-generated-task2` thì có gọi model. Hai operation nhìn giống nhau ở public API nhưng metering khác nhau hoàn toàn — đây chính là ca mà quy tắc này tồn tại để xử lý.
+A concrete real-world example: AI Writing's `/generate-question-task1` **reads questions from a database** without calling a model at all. Conversely, `/question-generated-task2` invokes a model. Two operations that look similar in the public API have fundamentally different metering characteristics — this is precisely the case this rule exists to address.
 
-### `metering_status` — phân biệt "không có usage" với "mất usage"
+### `metering_status` — Distinguishing "No Usage" from "Lost Usage"
 
-Omit `usage` là chưa đủ, vì có hai lý do rất khác nhau dẫn tới cùng một kết quả. AIHUB phải ghi lại lý do:
+Omitting `usage` is not enough, because two very different reasons can produce the same result. AIHUB must record the reason:
 
-| Giá trị            | Nghĩa                                                                                        |
-| ------------------ | -------------------------------------------------------------------------------------------- |
-| `complete`         | AI Service trả usage đầy đủ                                                                  |
-| `missing_usage`    | Operation **có** gọi model nhưng AI Service quên trả usage → **vi phạm contract**, cần alert |
-| `not_applicable`   | Operation không gọi model (vd sinh đề Task 1) → bình thường                                  |
-| `quota_unverified` | Không kiểm được quota vào thời điểm đó (vd Redis sập), request vẫn cho qua                   |
+| Value              | Meaning                                                                                                        |
+| ------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `complete`         | AI Service returned complete usage telemetry                                                                   |
+| `missing_usage`    | Operation **does** call models, but AI Service failed to return usage → **contract violation**, alert required |
+| `not_applicable`   | Operation does not call models (e.g. Task 1 question generation) → expected normal behavior                    |
+| `quota_unverified` | Quota could not be verified at that moment (e.g. Redis unavailable), request was allowed through               |
 
-Trường này là **internal**, không expose ra public response. Nó là thứ quyết định sau này có được phép tính tiền theo token hay không: chừng nào `missing_usage` còn khác 0 thì mô hình token chưa dùng được.
+This field is **internal** and never exposed in the public response. It dictates whether token-based billing can be safely activated in the future: as long as `missing_usage` remains greater than zero, token billing cannot be used reliably.
 
-Xử lý runtime theo default đã chốt ở `aihub_long_term_architecture.md` §32.8: **không fail business response** chỉ vì thiếu telemetry, nhưng phải alert và reconcile.
+Runtime handling follows the default decided in `aihub_long_term_architecture.md` §32.8: **do not fail business responses** merely due to missing telemetry, but trigger alerts and reconcile.
 
-### [Khảo sát thực tế] Contract này là additive — không phá app hiện tại
+### [Empirical Findings] This Contract is Additive — Breaking No Existing Apps
 
-AI Writing đang chạy production và có ứng dụng đang dùng. Bọc response vào `{ "data": ... }` là **breaking change** cho app đó.
+AI Writing is currently running in production with live applications consuming it. Wrapping responses in `{ "data": ... }` would be a **breaking change** for those legacy clients.
 
-Nhưng **thêm** field ở cấp cao nhất thì không phá gì — client cũ bỏ qua field lạ. Nên yêu cầu với AI Service chỉ là:
+However, **adding** top-level fields does not break existing clients — they simply ignore unrecognized keys. Therefore, the requirement on the AI Service is strictly additive:
 
 ```jsonc
-// giữ nguyên mọi field đang có, CHỈ THÊM 3 field:
+// keep all existing fields intact, ONLY ADD 3 fields:
 {
   "...": "...",
   "usage": { "input_tokens": 820, "output_tokens": 310, "total_tokens": 1130 },
@@ -754,7 +754,7 @@ Nhưng **thêm** field ở cấp cao nhất thì không phá gì — client cũ 
 }
 ```
 
-AIHUB chấp nhận **cả hai dạng** — phẳng lẫn có bọc `data` — trong giai đoạn chuyển tiếp:
+AIHUB accepts **both representations** — flat or wrapped in `data` — during the transition phase:
 
 ```ts
 function splitEnvelope(body) {
@@ -763,15 +763,15 @@ function splitEnvelope(body) {
 }
 ```
 
-Nhờ vậy AI Service và AIHUB làm song song được, không bên nào chặn đường bên nào. Khi mọi AI Service đã trả envelope chuẩn thì bỏ nhánh dự phòng.
+This allows AI Service and AIHUB teams to work in parallel without blocking each other. Once all AI Services adopt the standard envelope, the fallback branch can be retired.
 
-Nếu response không parse được theo cả hai dạng → `502 AI_SERVICE_CONTRACT_VIOLATION` (§25), **không phải** `AI_SERVICE_ERROR` — hai thứ này cần phân biệt vì cách xử lý hoàn toàn khác nhau.
+If a response cannot be parsed in either shape → `502 AI_SERVICE_CONTRACT_VIOLATION` (§25), **not** `AI_SERVICE_ERROR` — these two cases must be distinguished because their remediation paths are entirely different.
 
 ---
 
 # 16. Unified Public Response Example
 
-AIHUB map `data` service-specific thành canonical public `data`, rồi bổ sung metadata:
+AIHUB maps the service-specific `data` into canonical public `data`, then enriches it with metadata:
 
 ```json
 {
@@ -844,65 +844,69 @@ AIHUB map `data` service-specific thành canonical public `data`, rồi bổ sun
 }
 ```
 
-> Ví dụ trên dựng từ **response thật** đã gọi ngày 2026-09-07; fixture đầy đủ ở `test/fixtures/ai-writing/`.
-> `meta.usage` là phần AI Writing **chưa trả** — hiện `metering_status` sẽ là `missing_usage`.
+> The above example is constructed from a **real response** captured on 2026-09-07; full fixtures reside in `test/fixtures/ai-writing/`.
+> `meta.usage` represents telemetry that AI Writing **does not yet return** — currently `metering_status` will be `missing_usage`.
 
-### Năm quyết định trong shape của `data`
+### Five Key Decisions in the Shape of `data`
 
-**`criteria` là mảng, không phải 4 field cố định — thực tế đã xác nhận.** Response thật dùng key `1_task_achievement` cho Task 1 và `1_task_response` cho Task 2; ba tiêu chí còn lại giống nhau. Field cố định thì hai task ra hai shape và client phải viết hai nhánh render. Mảng có `id` ổn định + `name` hiển thị cho phép dùng chung một component. **Thứ tự các phần tử là cam kết cố định**, theo tiền tố số của downstream.
+**`criteria` is an array, not 4 fixed fields — empirically confirmed.** The real response uses the key `1_task_achievement` for Task 1 and `1_task_response` for Task 2; the other three criteria are identical. Using fixed fields would force two different response shapes between tasks and require clients to write two separate rendering branches. An array with stable `id` + display `name` enables reuse of a single component. **The order of array elements is a guaranteed contract**, following downstream's numerical prefix.
 
-**`band` và `overall_band` là bội số của 0.5**, trong khoảng 0..9. Ràng buộc này chấp nhận cả `7` (int) lẫn `6.5` (float) — downstream hiện trả `overall_band` kiểu float nhưng `band` kiểu int, nên **không được ép kiểu float**, sẽ reject nhầm response hợp lệ.
+**`band` and `overall_band` are multiples of 0.5**, within the range 0..9. This constraint accepts both `7` (int) and `6.5` (float) — downstream currently returns `overall_band` as a float but criterion `band` as an int, so **do not strictly enforce a float type**, which would mistakenly reject valid responses.
 
-**`improvements` là mảng rỗng khi không có gì để cải thiện.** Downstream trả sentinel `["None specified"]`; adapter lọc bỏ. Client kiểm tra `length === 0` chứ không so chuỗi tiếng Anh.
+**`improvements` is an empty array when there is nothing to improve.** Downstream returns the sentinel `["None specified"]`; the adapter strips it. Clients check `length === 0` rather than string-matching English text.
 
-**`annotations` là bình luận về đoạn trích, KHÔNG phải đề xuất sửa.** Bản D1 đầu tiên có `corrections` với `{original, suggestion}` — giả định sai. Dữ liệu thật là `{quote, explanation}`: nhận xét về một đoạn trong bài, không có bản thay thế. Đặt tên `corrections` sẽ khiến client dựng UI "nhấn để sửa" cho dữ liệu không hỗ trợ điều đó.
+**`annotations` are commentary on excerpts, NOT replacement suggestions.** The initial D1 draft had `corrections` with `{original, suggestion}` — an incorrect assumption. The actual data is `{quote, explanation}`: observations regarding an excerpt in the essay, with no replacement text provided. Naming this `corrections` would mislead clients into building "click-to-replace" UIs for data that does not support it.
 
-**AIHUB không tự tính `overall_band`.** Cách làm tròn band tổng là luật nghiệp vụ IELTS, thuộc về AI Service. Gateway chỉ kiểm tra tính hợp lệ.
+**AIHUB does not compute `overall_band`.** Overall band rounding rules are IELTS business logic belonging to the AI Service. The gateway only validates domain boundaries.
 
-### Ba thứ có ở downstream nhưng KHÔNG ra public
+### Three Items Present in Downstream but EXCLUDED from Public Responses
 
-| Bỏ                             | Vì sao                                                                                                                                 |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `data.coT`                     | Chain-of-thought nội bộ (`layer1_errors`, `layer2_matching`, `layer3_calibration`). Lộ prompt engineering và gợi ý cho người dò prompt |
-| `evaluation.*.feedback_detail` | Chỉ là bản làm phẳng của `data_micro` thành chuỗi. `annotations` giữ bản có cấu trúc                                                   |
-| `data_micro.*.*.question_type` | Task 1 trả `bar_chart`, Task 2 trả `education` — hai nghĩa khác nhau cùng một tên                                                      |
+| Excluded                       | Rationale                                                                                                                                              |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `data.coT`                     | Internal chain-of-thought (`layer1_errors`, `layer2_matching`, `layer3_calibration`). Exposes prompt engineering and invites prompt extraction attacks |
+| `evaluation.*.feedback_detail` | Merely a stringified flattening of `data_micro`. `annotations` preserves the structured representation                                                 |
+| `data_micro.*.*.question_type` | Task 1 returns `bar_chart`, Task 2 returns `education` — two contradictory semantics under the exact same property name                                |
 
-### `meta.models[]` đã bị bỏ khỏi public response
+### `meta.models[]` Removed from Public Responses
 
-Bản D1 đầu tiên có `meta.models[]`. Điều này **mâu thuẫn với `aihub_long_term_architecture.md` §32.7**, vốn chốt rằng public API chỉ expose aggregate usage còn chi tiết model giữ cho internal.
+The initial D1 draft included `meta.models[]`. This **conflicted with `aihub_long_term_architecture.md` §32.7**, which established that public APIs only expose aggregate usage while model details remain internal.
 
-Lý do giữ theo §32.7: mục tiêu của AIHUB là trừu tượng hoá AI Service và Model Provider. Cho khách thấy tên model cụ thể sẽ khiến public contract phụ thuộc vào implementation phía sau — đổi model hay đổi provider về sau thành breaking change, hoặc tệ hơn là khách bắt đầu viết logic dựa trên tên model.
+Rationale for upholding §32.7: AIHUB's objective is to abstract away AI Services and Model Providers. Exposing specific model names ties the public contract to behind-the-scenes implementation details — changing models or providers down the road would become a breaking change, or worse, clients might write brittle logic branching on specific model names.
 
-`models[]` vẫn được AI Service trả về ở internal contract và vẫn được ghi vào `usage_records` để phục vụ metering/debug/tính giá theo model. Chỉ là **không ra tới client**.
+`models[]` is still returned by AI Services under the internal contract and persists into `usage_records` for metering, debugging, and model-level cost accounting. It is simply **never exposed to clients**.
 
 ## Source-of-truth matrix
 
-| Field                             | Source of truth                                                |
-| --------------------------------- | -------------------------------------------------------------- |
-| `meta.request_id`                 | AIHUB                                                          |
-| `meta.correlation_id`             | Client-supplied, AIHUB preserves                               |
-| `meta.service` / `operation`      | AIHUB                                                          |
-| `meta.timing.total_ms`            | AIHUB                                                          |
-| `meta.timing.downstream_ms`       | AIHUB                                                          |
-| `meta.timing.gateway_overhead_ms` | AIHUB derived                                                  |
-| `meta.timing.ai_processing_ms`    | AI Service                                                     |
-| `meta.usage.*`                    | AI Service / underlying Model Provider                         |
-| `models[]`                        | AI Service — **internal only**, không có trong public response |
-| `metering_status`                 | AIHUB — internal only                                          |
+| Field                             | Source of truth                                             |
+| --------------------------------- | ----------------------------------------------------------- |
+| `meta.request_id`                 | AIHUB                                                       |
+| `meta.correlation_id`             | Client-supplied, AIHUB preserves                            |
+| `meta.service` / `operation`      | AIHUB                                                       |
+| `meta.timing.total_ms`            | AIHUB                                                       |
+| `meta.timing.downstream_ms`       | AIHUB                                                       |
+| `meta.timing.gateway_overhead_ms` | AIHUB derived                                               |
+| `meta.timing.ai_processing_ms`    | AI Service                                                  |
+| `meta.usage.*`                    | AI Service / underlying Model Provider                      |
+| `models[]`                        | AI Service — **internal only**, absent from public response |
+| `metering_status`                 | AIHUB — **internal only**                                   |
 
 ---
 
-# PHẦN B — PROVIDER MAPPER RULES ENGINE
+<a id="phần-b--provider-mapper-rules-engine"></a><a id="part-b--provider-mapper-rules-engine"></a>
 
-# 17. Tổng quan
+# PART B — PROVIDER MAPPER RULES ENGINE
+
+<a id="17-tổng-quan"></a><a id="17-overview"></a>
+
+# 17. Overview
 
 ## [Requirement]
 
-AIHUB cần mapping giữa contract thống nhất của client và contract riêng của từng AI Provider/AI Service.
+AIHUB requires mapping between the unified client contract and the proprietary contract of each AI Provider/AI Service.
 
-## Terminology đã chốt
+## Finalized Terminology
 
-Trong implementation, gọi lớp này là **Downstream Adapter** để tránh lẫn với Model Provider.
+In implementation, this layer is named **Downstream Adapter** to prevent confusion with Model Providers.
 
 ```text
 AIHUB Canonical Contract
@@ -932,34 +936,38 @@ Canonical AIHUB Response
 
 ---
 
-# 18. US05 — Param/value không hỗ trợ
+<a id="18-us05--paramvalue-không-hỗ-trợ"></a><a id="18-us05--unsupported-parameters-and-values"></a>
+
+# 18. US05 — Unsupported Parameters and Values
 
 ## [Requirement]
 
-AIHUB cần loại bỏ param/value không được hỗ trợ.
+AIHUB must reject or sanitize unsupported parameters and values.
 
 ## [Implementation Proposal]
 
-Phân biệt:
+Distinguish between:
 
 ```text
-Unknown field ngoài public contract
+Unknown field outside public contract
 → Reject 400
 
-Field hợp lệ trong canonical contract
-nhưng AI Service hiện tại không hỗ trợ
-→ Adapter transform/drop theo rule đã định nghĩa
+Valid field in canonical contract
+unsupported by current downstream AI Service
+→ Adapter transforms or drops according to explicit rules
 ```
 
-Không nên silent-drop unknown client fields vì dễ che bug integration.
+Never silently drop unknown client fields, as this conceals integration bugs.
 
 ---
 
-# 19. US06 — Map service → scope → AI Service
+<a id="19-us06--map-service--scope--ai-service"></a><a id="19-us06--mapping-service--scope--ai-service"></a>
+
+# 19. US06 — Mapping Service → Scope → AI Service
 
 ## [Requirement]
 
-AIHUB map dịch vụ client cần với scope hệ thống và AI Provider.
+AIHUB maps the requested service to system authorization scopes and downstream AI Services.
 
 ## [Implementation Proposal]
 
@@ -970,11 +978,11 @@ AIHUB map dịch vụ client cần với scope hệ thống và AI Provider.
 | `POST /v1/ielts/writing/task1/grade`     | `writing.task1.grade`             | `writing.grade`             | AI Writing  | `/grading-feedback-task1`   |
 | `POST /v1/ielts/writing/task2/grade`     | `writing.task2.grade`             | `writing.grade`             | AI Writing  | `/grading-feedback-task2`   |
 | `POST /v1/speaking/grade`                | `speaking.grade`                  | `speaking.grade`            | AI Speaking | _(Phase 4)_                 |
-| `POST /v1/reading/analyze`               | `reading.analyze`                 | `reading.analyze`           | AI Reading  | _(chưa có)_                 |
+| `POST /v1/reading/analyze`               | `reading.analyze`                 | `reading.analyze`           | AI Reading  | _(future)_                  |
 
-Hai task dùng chung scope (`writing.grade`, `writing.question.generate`) vì khách mua "chấm bài Writing" chứ không mua riêng từng task. Nếu sau này cần bán tách thì đổi thành `writing.task1.grade` / `writing.task2.grade` — operation đã tách sẵn nên việc đó không phá cấu trúc.
+Both tasks share identical scopes (`writing.grade`, `writing.question.generate`) because customers purchase "Writing grading", not individual tasks. If separate licensing is needed later, they can be split into `writing.task1.grade` / `writing.task2.grade` — operations are already decoupled, so this does not break architecture.
 
-Cột `Downstream path` là **internal**, đưa vào đây chỉ để đối chiếu khi implement. Public contract không bao giờ để lộ nó.
+The `Downstream path` column is **internal**, provided here solely for implementation reference. The public contract never leaks it.
 
 Authorization:
 
@@ -988,87 +996,89 @@ Allowed / Denied
 
 ---
 
+<a id="20-us07--data-dictionary"></a>
+
 # 20. US07 — Data Dictionary
 
 ## [Requirement]
 
-Mỗi request/response key phải có khái niệm, datatype, constraints và allowed values rõ ràng.
+Every request and response key must define clear semantics, datatypes, constraints, and allowed values.
 
-### Request — chấm bài
+### Request — Grading
 
-| Field        | Type   |       Required | Constraints               | Description        |
-| ------------ | ------ | -------------: | ------------------------- | ------------------ |
-| `question`   | string |            yes | 1..2000 chars             | Đề bài             |
-| `chart_type` | enum   | **chỉ Task 1** | 7 giá trị, case-sensitive | Loại biểu đồ       |
-| `topic`      | string | **chỉ Task 2** | 1..200 chars              | Chủ đề             |
-| `essay`      | string |            yes | 1..20000 chars            | Bài làm            |
-| `image_url`  | string | **chỉ Task 1** | URI, ≤2000 chars          | Ảnh biểu đồ của đề |
-| `language`   | enum   |             no | `vi`                      | Ngôn ngữ feedback  |
+| Field        | Type   |        Required | Constraints              | Description              |
+| ------------ | ------ | --------------: | ------------------------ | ------------------------ |
+| `question`   | string |             yes | 1..2000 chars            | Prompt / question text   |
+| `chart_type` | enum   | **Task 1 only** | 7 values, case-sensitive | Chart type               |
+| `topic`      | string | **Task 2 only** | 1..200 chars             | Topic / theme            |
+| `essay`      | string |             yes | 1..20000 chars           | Student essay submission |
+| `image_url`  | string | **Task 1 only** | URI, ≤2000 chars         | Prompt chart image       |
+| `language`   | enum   |              no | `vi`                     | Feedback language        |
 
-### Request — sinh đề
+### Request — Question Generation
 
-| Field           | Type   |                 Required | Constraints                                                                         |
-| --------------- | ------ | -----------------------: | ----------------------------------------------------------------------------------- |
-| `chart_type`    | enum   | **chỉ Task 1**, optional | 7 giá trị; bỏ trống = ngẫu nhiên                                                    |
-| `topic`         | string |      **chỉ Task 2**, yes | 1..200 chars                                                                        |
-| `question_type` | enum   |      **chỉ Task 2**, yes | `opinion`, `discussion`, `problem_solution`, `advantages_disadvantages`, `two_part` |
+| Field           | Type   |                  Required | Constraints                                                                         |
+| --------------- | ------ | ------------------------: | ----------------------------------------------------------------------------------- |
+| `chart_type`    | enum   | **Task 1 only**, optional | 7 values; omitted = random selection                                                |
+| `topic`         | string |      **Task 2 only**, yes | 1..200 chars                                                                        |
+| `question_type` | enum   |      **Task 2 only**, yes | `opinion`, `discussion`, `problem_solution`, `advantages_disadvantages`, `two_part` |
 
-### Response — chấm bài
+### Response — Grading
 
-| Field                             | Type    |                   Required | Constraints           | Description                               | Source                            |
-| --------------------------------- | ------- | -------------------------: | --------------------- | ----------------------------------------- | --------------------------------- |
-| `data.overall_band`               | number  |                        yes | 0..9, bội số 0.5      | Band tổng                                 | AI Service                        |
-| `data.language`                   | enum    |                        yes | `vi`                  | Ngôn ngữ của feedback                     | AIHUB                             |
-| `data.criteria[]`                 | array   |                        yes | đúng 4 phần tử        | 4 tiêu chí IELTS                          | AI Service → Adapter              |
-| `data.criteria[].id`              | enum    |                        yes | xem bên dưới          | Định danh tiêu chí                        | Adapter                           |
-| `data.criteria[].name`            | string  |                        yes | —                     | Tên hiển thị                              | Adapter                           |
-| `data.criteria[].band`            | number  |                        yes | 0..9, bội số 0.5      | Điểm tiêu chí                             | AI Service                        |
-| `data.criteria[].band_reason`     | string  |                        yes | —                     | Trích band descriptor + giải thích        | AI Service                        |
-| `data.criteria[].strengths[]`     | array   |                        yes | có thể rỗng           | Điểm mạnh                                 | AI Service                        |
-| `data.criteria[].improvements[]`  | array   |                        yes | có thể rỗng           | Điểm cần cải thiện                        | AI Service → Adapter lọc sentinel |
-| `data.summary`                    | string  |                        yes | —                     | Nhận xét tổng                             | AI Service                        |
-| `data.suggestions[]`              | array   |                        yes | có thể rỗng           | Gợi ý cụ thể                              | AI Service                        |
-| `data.next_steps[]`               | array   |                        yes | có thể rỗng           | Việc nên luyện tiếp                       | AI Service                        |
-| `data.annotations[]`              | array   |                        yes | có thể rỗng           | Bình luận theo đoạn trích                 | AI Service → Adapter              |
-| `data.annotations[].criterion`    | enum    |                        yes | như `criteria[].id`   | Thuộc tiêu chí nào                        | Adapter                           |
-| `data.annotations[].issue`        | string  |                        yes | —                     | Loại vấn đề, vd `inaccurate_data_support` | AI Service                        |
-| `data.annotations[].quote`        | string  |                        yes | —                     | Đoạn trích nguyên văn từ bài viết         | AI Service                        |
-| `data.annotations[].explanation`  | string  |                        yes | —                     | Giải thích                                | AI Service                        |
-| `meta.request_id`                 | string  |                        yes | ULID có prefix `req_` | AIHUB trace ID                            | AIHUB                             |
-| `meta.correlation_id`             | string  |                         no | —                     | Echo `X-Correlation-Id`                   | Client                            |
-| `meta.service` / `operation`      | string  |                        yes | —                     | Routing metadata                          | AIHUB                             |
-| `meta.timing.total_ms`            | integer |                        yes | —                     | Ingress → egress                          | AIHUB                             |
-| `meta.timing.downstream_ms`       | integer | yes nếu có downstream call | —                     | Thời lượng HTTP xuống AI Service          | AIHUB                             |
-| `meta.timing.gateway_overhead_ms` | integer |                        yes | —                     | `total_ms - downstream_ms`                | AIHUB derived                     |
-| `meta.timing.ai_processing_ms`    | integer |                         no | —                     | AI Service tự đo                          | AI Service                        |
-| `meta.usage.input_tokens`         | integer |                         no | —                     | Aggregate                                 | AI Service                        |
-| `meta.usage.output_tokens`        | integer |                         no | —                     | Aggregate                                 | AI Service                        |
-| `meta.usage.total_tokens`         | integer |                         no | —                     | Aggregate                                 | AI Service                        |
+| Field                             | Type    |                 Required | Constraints             | Description                                | Source                            |
+| --------------------------------- | ------- | -----------------------: | ----------------------- | ------------------------------------------ | --------------------------------- |
+| `data.overall_band`               | number  |                      yes | 0..9, multiple of 0.5   | Overall band score                         | AI Service                        |
+| `data.language`                   | enum    |                      yes | `vi`                    | Feedback language                          | AIHUB                             |
+| `data.criteria[]`                 | array   |                      yes | exactly 4 elements      | 4 IELTS criteria                           | AI Service → Adapter              |
+| `data.criteria[].id`              | enum    |                      yes | see below               | Criterion identifier                       | Adapter                           |
+| `data.criteria[].name`            | string  |                      yes | —                       | Display name                               | Adapter                           |
+| `data.criteria[].band`            | number  |                      yes | 0..9, multiple of 0.5   | Criterion score                            | AI Service                        |
+| `data.criteria[].band_reason`     | string  |                      yes | —                       | Band descriptor quotation + explanation    | AI Service                        |
+| `data.criteria[].strengths[]`     | array   |                      yes | may be empty            | Strengths                                  | AI Service                        |
+| `data.criteria[].improvements[]`  | array   |                      yes | may be empty            | Areas for improvement                      | AI Service → Adapter sentinel cut |
+| `data.summary`                    | string  |                      yes | —                       | Overall evaluation summary                 | AI Service                        |
+| `data.suggestions[]`              | array   |                      yes | may be empty            | Actionable suggestions                     | AI Service                        |
+| `data.next_steps[]`               | array   |                      yes | may be empty            | Recommended follow-up practice             | AI Service                        |
+| `data.annotations[]`              | array   |                      yes | may be empty            | Commentary on specific excerpts            | AI Service → Adapter              |
+| `data.annotations[].criterion`    | enum    |                      yes | same as `criteria[].id` | Criterion classification                   | Adapter                           |
+| `data.annotations[].issue`        | string  |                      yes | —                       | Issue type, e.g. `inaccurate_data_support` | AI Service                        |
+| `data.annotations[].quote`        | string  |                      yes | —                       | Exact quotation from the essay             | AI Service                        |
+| `data.annotations[].explanation`  | string  |                      yes | —                       | Explanation                                | AI Service                        |
+| `meta.request_id`                 | string  |                      yes | ULID with `req_` prefix | AIHUB trace ID                             | AIHUB                             |
+| `meta.correlation_id`             | string  |                       no | —                       | Echoes `X-Correlation-Id`                  | Client                            |
+| `meta.service` / `operation`      | string  |                      yes | —                       | Routing metadata                           | AIHUB                             |
+| `meta.timing.total_ms`            | integer |                      yes | —                       | Ingress → egress                           | AIHUB                             |
+| `meta.timing.downstream_ms`       | integer | yes if downstream called | —                       | HTTP duration to AI Service                | AIHUB                             |
+| `meta.timing.gateway_overhead_ms` | integer |                      yes | —                       | `total_ms - downstream_ms`                 | AIHUB derived                     |
+| `meta.timing.ai_processing_ms`    | integer |                       no | —                       | AI Service self-measured                   | AI Service                        |
+| `meta.usage.input_tokens`         | integer |                       no | —                       | Aggregate                                  | AI Service                        |
+| `meta.usage.output_tokens`        | integer |                       no | —                       | Aggregate                                  | AI Service                        |
+| `meta.usage.total_tokens`         | integer |                       no | —                       | Aggregate                                  | AI Service                        |
 
-`criteria[].id` nhận một trong:
+`criteria[].id` accepts one of:
 
 ```text
-task_achievement              # chỉ Task 1
-task_response                 # chỉ Task 2
+task_achievement              # Task 1 only
+task_response                 # Task 2 only
 coherence_cohesion
 lexical_resource
 grammatical_range_accuracy
 ```
 
-> Đo thực tế 2026-09-07: chấm bài mất **16–18 giây**, response nặng **~12 KB**. Vẫn dưới ngưỡng 30s nên giữ `execution: sync`.
+> Empirical benchmark on 2026-09-07: grading takes **16–18 seconds**, response size is **~12 KB**. Since it remains comfortably below the 30-second boundary, it is kept as `execution: sync`.
 
-### Response — sinh đề
+### Response — Question Generation
 
-| Field                | Type   |       Required | Description                    |
-| -------------------- | ------ | -------------: | ------------------------------ |
-| `data.question`      | string |            yes | Đề bài sinh ra                 |
-| `data.question_id`   | string | **chỉ Task 1** | UUID của đề trong ngân hàng đề |
-| `data.chart_type`    | enum   | **chỉ Task 1** | Loại biểu đồ                   |
-| `data.image_url`     | string | **chỉ Task 1** | Ảnh biểu đồ đi kèm đề          |
-| `data.topic`         | string | **chỉ Task 2** | Chủ đề                         |
-| `data.question_type` | enum   | **chỉ Task 2** | Dạng câu hỏi                   |
+| Field                | Type   |        Required | Description                        |
+| -------------------- | ------ | --------------: | ---------------------------------- |
+| `data.question`      | string |             yes | Generated question prompt          |
+| `data.question_id`   | string | **Task 1 only** | Question UUID in the question bank |
+| `data.chart_type`    | enum   | **Task 1 only** | Chart type                         |
+| `data.image_url`     | string | **Task 1 only** | Accompanying chart image           |
+| `data.topic`         | string | **Task 2 only** | Topic                              |
+| `data.question_type` | enum   | **Task 2 only** | Question type                      |
 
-`image_url` trả về ở đây chính là giá trị client gửi lại khi gọi chấm bài Task 1 — luồng khép kín: sinh đề → học viên viết → chấm bài.
+The `image_url` returned here is the exact value clients submit when requesting Task 1 grading — completing the closed-loop flow: generate prompt → student writes → grade submission.
 
 ---
 
@@ -1084,22 +1094,24 @@ interface DownstreamAdapter<TReq, TRes> {
 }
 ```
 
-Adapter có thể xử lý:
+The adapter can handle:
 
 - field rename;
 - enum/value conversion;
-- nested object;
-- default value;
-- unsupported option;
+- nested objects;
+- default values;
+- unsupported options;
 - multipart/file conversion;
 - response normalization;
 - error mapping.
 
-MVP nên adapter bằng code thay vì dynamic rule engine quá sớm.
+For the MVP, implement adapters via explicit code rather than introducing an over-engineered dynamic rule engine too early.
 
 ---
 
-# PHẦN C — UNIFIED ERROR CODES
+<a id="phần-c--unified-error-codes"></a><a id="part-c--unified-error-codes"></a>
+
+# PART C — UNIFIED ERROR CODES
 
 # 22. Error Architecture
 
@@ -1115,11 +1127,13 @@ Client
 
 ---
 
-# 23. US08 — Detailed downstream error cho AIHUB Developer
+<a id="23-us08--detailed-downstream-error-cho-aihub-developer"></a><a id="23-us08--detailed-downstream-error-for-aihub-developers"></a>
+
+# 23. US08 — Detailed Downstream Error for AIHUB Developers
 
 ## [Requirement]
 
-AIHUB developer cần đủ chi tiết để biết downstream đang gặp vấn đề gì.
+AIHUB developers need sufficient detail to diagnose what downstream services are experiencing.
 
 ## [Implementation Proposal]
 
@@ -1138,17 +1152,19 @@ Internal log:
 }
 ```
 
-Raw details chỉ dùng nội bộ.
+Raw details are strictly for internal diagnostics.
 
-> **Trạng thái triển khai.** `downstream_error_code` và `downstream_message` ở trên là **ví dụ minh hoạ**, không phải field AI Writing đang trả. Service thật trả `{"detail": "..."}` không kèm mã lỗi nào, nên `HttpOperationDispatcher` hiện ghi `null` cho cả hai. Mọi field còn lại — `request_id`, `ai_service`, `downstream_status`, `downstream_ms`, `private_endpoint` — đều đã có thật trong log. Điều kiện để điền hai field kia nằm ở [US10 § Đề xuất](#25-us10--master-error-mapping-matrix).
+> **Implementation Status.** `downstream_error_code` and `downstream_message` above are **illustrative examples**, not fields currently returned by AI Writing. The live service returns `{"detail": "..."}` without any machine error codes, so `HttpOperationDispatcher` currently records `null` for both. All remaining fields — `request_id`, `ai_service`, `downstream_status`, `downstream_ms`, `private_endpoint` — are actively captured in logs. The prerequisites for populating those two fields are detailed in [US10 § Implementation Proposal](#25-us10--master-error-mapping-matrix).
 
 ---
 
-# 24. US09 — Unified Error Payload cho Client
+<a id="24-us09--unified-error-payload-cho-client"></a><a id="24-us09--unified-error-payload-for-clients"></a>
+
+# 24. US09 — Unified Error Payload for Clients
 
 ## [Requirement]
 
-Client không phải xử lý raw error phức tạp của từng downstream.
+Clients do not have to parse complex raw error structures from disparate downstream services.
 
 ## [Implementation Proposal]
 
@@ -1164,97 +1180,99 @@ Client không phải xử lý raw error phức tạp của từng downstream.
 }
 ```
 
-Không leak:
+Never leak:
 
-- stack trace;
-- internal endpoint;
-- DB error;
-- secret;
-- raw exception không cần thiết.
+- stack traces;
+- internal endpoints;
+- DB errors;
+- secrets;
+- unneeded raw exceptions.
 
 ---
+
+<a id="25-us10--master-error-mapping-matrix"></a>
 
 # 25. US10 — Master Error Mapping Matrix
 
 ## [Requirement]
 
-Cần ma trận mapping lỗi giữa client/system/AI Provider, kèm nguyên nhân và recommended client/system action.
+Requires an error mapping matrix spanning client, system, and AI Provider errors, including root causes and recommended client/system actions.
 
 ## [Implementation Proposal]
 
-Danh sách chốt cho v1 gồm **19 mã**. Sáu mã đánh dấu ★ là bổ sung so với bản D1 đầu tiên.
+The finalized list for v1 contains **19 codes**. The six codes marked with ★ are additions relative to the initial D1 draft.
 
-Cột **Downstream Signal** cho biết AIHUB _quan sát được gì_ từ phía sau trước khi dựng mã lỗi. Dấu `—` nghĩa là request chưa bao giờ rời gateway, nên khi debug không cần đi tìm log của AI Service.
+The **Downstream Signal** column indicates what AIHUB _observes_ from the downstream tier before constructing the error code. A dash `—` signifies that the request never left the gateway, so engineers debugging this error do not need to inspect AI Service logs.
 
-| Layer       | Condition                                    | Downstream Signal                                | HTTP | AIHUB Code                        |  Retryable | Client Action                   | System Action           |
-| ----------- | -------------------------------------------- | ------------------------------------------------ | ---: | --------------------------------- | ---------: | ------------------------------- | ----------------------- |
-| Client      | Missing/invalid field, field lạ              | —                                                |  400 | `INVALID_REQUEST`                 |         No | Fix request                     | None                    |
-| Client      | Body vượt `max_body_bytes`                   | —                                                |  413 | ★ `PAYLOAD_TOO_LARGE`             |         No | Giảm kích thước                 | Metric                  |
-| Client      | Endpoint/resource không tồn tại              | —                                                |  404 | `NOT_FOUND`                       |         No | Kiểm tra URL                    | None                    |
-| Auth        | Missing/invalid API key                      | —                                                |  401 | `UNAUTHORIZED`                    |         No | Check credential                | Audit                   |
-| Auth        | Operation user-scoped nhưng thiếu assertion  | —                                                |  401 | ★ `USER_ASSERTION_REQUIRED`       |         No | Gửi kèm `X-User-Assertion`      | Audit                   |
-| Auth        | Assertion sai chữ ký/hết hạn/sai claim       | —                                                |  401 | `INVALID_USER_ASSERTION`          |         No | Tạo lại assertion               | Audit                   |
-| Auth        | Không lấy được JWKS của Organization         | JWKS endpoint của **org**, không phải AI Service |  503 | ★ `IDENTITY_PROVIDER_UNAVAILABLE` |        Yes | Kiểm tra JWKS endpoint của mình | Alert                   |
-| AuthZ       | Scope denied                                 | —                                                |  403 | `FORBIDDEN`                       |         No | Check permission/plan           | Audit                   |
-| AuthZ       | Key không được dùng ở environment này        | —                                                |  403 | ★ `ENVIRONMENT_NOT_ALLOWED`       |         No | Dùng đúng key cho môi trường    | Audit                   |
-| Idempotency | Same key, different payload — hoặc đang chạy | —                                                |  409 | `IDEMPOTENCY_CONFLICT`            |         No | New key/fix request             | Audit                   |
-| Gateway     | Client exceeds AIHUB rate limit              | —                                                |  429 | `RATE_LIMITED`                    |        Yes | Backoff; obey `Retry-After`     | Metric                  |
-| Gateway     | Quá nhiều request đồng thời của cùng org     | —                                                |  429 | ★ `CONCURRENCY_LIMIT`             |   Yes, sớm | Giảm song song, retry ~500ms    | Metric                  |
-| Quota       | Organization quota exhausted                 | —                                                |  429 | `QUOTA_EXCEEDED`                  | Time-based | Wait/upgrade                    | Metering                |
-| Downstream  | AI Service/Model Provider throttled          | `HTTP 429`                                       |  503 | `AI_SERVICE_THROTTLED`            |        Yes | Retry later                     | Backoff/circuit breaker |
-| Downstream  | Timeout                                      | abort / `UND_ERR_*_TIMEOUT`                      |  504 | `AI_SERVICE_TIMEOUT`              |      Yes\* | Retry only idempotently         | Timeout/circuit breaker |
-| Downstream  | AI Service unavailable / breaker mở          | `ECONNREFUSED` / DNS fail                        |  503 | `AI_SERVICE_UNAVAILABLE`          |        Yes | Retry later                     | Alert/health check      |
-| Downstream  | Response không parse được theo contract      | `HTTP 2xx` + body sai shape                      |  502 | ★ `AI_SERVICE_CONTRACT_VIOLATION` |         No | Báo AIHUB                       | **Alert khẩn**          |
-| Downstream  | Other 5xx/invalid response                   | `HTTP ≥ 500`                                     |  502 | `AI_SERVICE_ERROR`                |      Maybe | Retry later                     | Alert/metrics           |
-| Downstream  | 4xx khác 429 — xem ghi chú bên dưới          | `HTTP 4xx`                                       |  502 | `AI_SERVICE_ERROR`                |         No | Báo AIHUB                       | Metric                  |
-| AIHUB       | Unexpected error                             | —                                                |  500 | `INTERNAL_ERROR`                  |      Maybe | Retry later                     | Alert                   |
+| Layer       | Condition                                     | Downstream Signal                 | HTTP | AIHUB Code                        |  Retryable | Client Action                    | System Action           |
+| ----------- | --------------------------------------------- | --------------------------------- | ---: | --------------------------------- | ---------: | -------------------------------- | ----------------------- |
+| Client      | Missing/invalid field, unknown field          | —                                 |  400 | `INVALID_REQUEST`                 |         No | Fix request                      | None                    |
+| Client      | Body exceeds `max_body_bytes`                 | —                                 |  413 | ★ `PAYLOAD_TOO_LARGE`             |         No | Reduce payload size              | Metric                  |
+| Client      | Endpoint/resource does not exist              | —                                 |  404 | `NOT_FOUND`                       |         No | Check URL                        | None                    |
+| Auth        | Missing/invalid API key                       | —                                 |  401 | `UNAUTHORIZED`                    |         No | Check credentials                | Audit                   |
+| Auth        | User-scoped operation lacks assertion         | —                                 |  401 | ★ `USER_ASSERTION_REQUIRED`       |         No | Provide `X-User-Assertion`       | Audit                   |
+| Auth        | Assertion signature invalid/expired/bad claim | —                                 |  401 | `INVALID_USER_ASSERTION`          |         No | Re-issue assertion               | Audit                   |
+| Auth        | Unable to fetch Organization JWKS             | Org JWKS endpoint, not AI Service |  503 | ★ `IDENTITY_PROVIDER_UNAVAILABLE` |        Yes | Check customer JWKS endpoint     | Alert                   |
+| AuthZ       | Scope denied                                  | —                                 |  403 | `FORBIDDEN`                       |         No | Check permissions/plan           | Audit                   |
+| AuthZ       | Key not permitted in this environment         | —                                 |  403 | ★ `ENVIRONMENT_NOT_ALLOWED`       |         No | Use key matching environment     | Audit                   |
+| Idempotency | Same key, different payload — or in flight    | —                                 |  409 | `IDEMPOTENCY_CONFLICT`            |         No | New key / fix request            | Audit                   |
+| Gateway     | Client exceeds AIHUB rate limit               | —                                 |  429 | `RATE_LIMITED`                    |        Yes | Back off; obey `Retry-After`     | Metric                  |
+| Gateway     | Too many concurrent requests for the same org | —                                 |  429 | ★ `CONCURRENCY_LIMIT`             |  Yes, soon | Reduce parallelism, retry ~500ms | Metric                  |
+| Quota       | Organization quota exhausted                  | —                                 |  429 | `QUOTA_EXCEEDED`                  | Time-based | Wait / upgrade plan              | Metering                |
+| Downstream  | AI Service / Model Provider throttled         | `HTTP 429`                        |  503 | `AI_SERVICE_THROTTLED`            |        Yes | Retry later                      | Backoff/circuit breaker |
+| Downstream  | Timeout                                       | abort / `UND_ERR_*_TIMEOUT`       |  504 | `AI_SERVICE_TIMEOUT`              |      Yes\* | Retry only idempotently          | Timeout/circuit breaker |
+| Downstream  | AI Service unavailable / breaker open         | `ECONNREFUSED` / DNS fail         |  503 | `AI_SERVICE_UNAVAILABLE`          |        Yes | Retry later                      | Alert/health check      |
+| Downstream  | Response cannot be parsed to contract         | `HTTP 2xx` + malformed body       |  502 | ★ `AI_SERVICE_CONTRACT_VIOLATION` |         No | Contact AIHUB support            | **Urgent alert**        |
+| Downstream  | Other 5xx / invalid response                  | `HTTP ≥ 500`                      |  502 | `AI_SERVICE_ERROR`                |      Maybe | Retry later                      | Alert/metrics           |
+| Downstream  | 4xx other than 429 — see note below           | `HTTP 4xx`                        |  502 | `AI_SERVICE_ERROR`                |         No | Contact AIHUB support            | Metric                  |
+| AIHUB       | Unexpected error                              | —                                 |  500 | `INTERNAL_ERROR`                  |      Maybe | Retry later                      | Alert                   |
 
-`*` Timeout chỉ nên retry khi operation idempotent hoặc request có `Idempotency-Key` hợp lệ.
+`*` Timeout should only be retried when the operation is idempotent or the request carries a valid `Idempotency-Key`.
 
-### ⚠️ Downstream đang trả 5xx cho lỗi client
+### ⚠️ Downstream Currently Returning 5xx for Client Errors
 
-Đo thật 2026-09-07:
+Empirical observation on 2026-09-07:
 
 ```
 POST /generate-question-task1  {"topic":"environment"}
   -> HTTP 500  {"detail":"404: Không tìm thấy dữ liệu cho topic này!"}
 ```
 
-Một trạng thái nghiệp vụ ("không có dữ liệu cho loại biểu đồ này") đang trả về **500**. Hệ quả với AIHUB: theo policy circuit breaker, chỉ 5xx mới tính là failure — nên **một khách gõ sai `chart_type` nhiều lần có thể mở breaker và làm sập operation đó cho mọi khách khác**.
+A business domain status ("no data found for this topic/chart type") is returned as an **HTTP 500**. Consequence for AIHUB: according to the circuit breaker policy, only 5xx responses count as failures — meaning **a single client sending invalid `chart_type` values repeatedly could trip the breaker and take down the operation for all other tenants**.
 
-Hai lớp phòng vệ:
+Two lines of defense:
 
-1. **AIHUB chặn trước.** `chart_type` là enum nên giá trị lạ bị `400` ngay ở validate, không bao giờ chạm downstream. Đây là lý do enum quan trọng hơn vẻ ngoài của nó.
-2. **AI Writing phải sửa** thành `404`/`422`. Đưa vào danh sách bàn giao.
+1. **AIHUB gatekeeper.** `chart_type` is an enum so unknown values are rejected with `400` at validation time before ever touching downstream. This is why strict enums are crucial.
+2. **AI Writing remediation.** Downstream must correct this to `404` or `422`. Included in the service handoff checklist.
 
-AIHUB **không** tự chữa bằng cách đọc chuỗi `detail` để đoán — heuristic đó vỡ ngay khi downstream đổi thông điệp.
+AIHUB **does not** attempt heuristic recovery by parsing the `detail` string — that heuristic breaks the moment downstream modifies its wording.
 
-### Vì sao ba mã trong số đó đáng được tách riêng
+### Why Three Codes Specifically Warrant Separation
 
-**`AI_SERVICE_CONTRACT_VIOLATION` vs `AI_SERVICE_ERROR`.** Gộp chung là sai lầm tốn thời gian nhất: khi AI Service đổi shape response mà quên báo, đội trực sẽ đi tìm sự cố hạ tầng trong khi nguyên nhân thật là **ai đó vừa deploy**. Mã riêng cộng alert riêng chỉ thẳng vào đúng chỗ. Nó cũng không retryable — retry một contract sai thì lần nào cũng sai.
+**`AI_SERVICE_CONTRACT_VIOLATION` vs `AI_SERVICE_ERROR`.** Lumping them together is the costliest operational trap: when an AI Service alters its response shape without notice, on-call engineers chase infrastructure ghosts when the actual culprit is **a recent deployment**. A dedicated code with a high-priority alert pinpoints the regression instantly. It is also non-retryable — retrying a broken contract will fail every time.
 
-**`IDENTITY_PROVIDER_UNAVAILABLE`.** Đây không phải lỗi credential của client — trả `401` sẽ khiến khách đi tạo lại API key một cách vô ích. Cũng không phải lỗi AI Service. Nó là "JWKS endpoint **của chính bạn** đang không truy cập được", và chỉ mã riêng mới nói được điều đó.
+**`IDENTITY_PROVIDER_UNAVAILABLE`.** This is not a client credential error — returning `401` would prompt customers to rotate API keys in vain. Nor is it an AI Service failure. It communicates that "your organization's **own JWKS endpoint** is unreachable", which only a distinct code can convey.
 
-**`CONCURRENCY_LIMIT` vs `RATE_LIMITED`.** Hai hành động khắc phục khác nhau: `RATE_LIMITED` thì khách phải **giảm tần suất**, `CONCURRENCY_LIMIT` thì khách phải **giảm số request chạy song song** — có thể vẫn giữ nguyên tổng số request mỗi phút. Cùng dùng `RATE_LIMITED` sẽ dẫn khách đi sai hướng.
+**`CONCURRENCY_LIMIT` vs `RATE_LIMITED`.** These demand two entirely different corrective actions: for `RATE_LIMITED`, clients must **reduce request frequency**; for `CONCURRENCY_LIMIT`, clients must **reduce concurrent parallel calls** while potentially maintaining total throughput per minute. Using `RATE_LIMITED` for both misdirects customer remediation.
 
-> Không dùng public `429 RATE_LIMITED` cho downstream throttling, vì client có thể hiểu nhầm họ đã vượt AIHUB limit.
+> Do not use public `429 RATE_LIMITED` for downstream throttling, as clients would misinterpret it as exceeding their AIHUB quota.
 
-### 4xx của downstream đang được gộp vào `AI_SERVICE_ERROR`
+### Downstream 4xx Currently Grouped into `AI_SERVICE_ERROR`
 
-Hành vi hiện tại trong `HttpOperationDispatcher.mapDownstreamStatus`: chỉ `429` được tách thành `AI_SERVICE_THROTTLED`, mọi status ngoài dải 2xx còn lại đều thành `AI_SERVICE_ERROR`, với `retryable` bật khi status ≥ 500.
+Current behavior in `HttpOperationDispatcher.mapDownstreamStatus`: only `429` is mapped to `AI_SERVICE_THROTTLED`; all other non-2xx statuses collapse into `AI_SERVICE_ERROR`, with `retryable` enabled whenever status ≥ 500.
 
-Hệ quả: một `422` do AI Service từ chối **input** vẫn trả về client thành `502` — báo sai địa chỉ. Client đọc `502` sẽ hiểu là hệ thống hỏng và thử lại, trong khi việc cần làm là sửa request.
+Consequence: a `422` rejected by an AI Service due to invalid input is returned to the client as a `502` — attributing the fault to the wrong party. Clients seeing `502` assume an infrastructure breakdown and retry, when they actually need to fix their request.
 
-Chưa sửa vì hai lý do, và cả hai đều nằm ở phía AI Service:
+Not yet addressed for two reasons, both residing on the AI Service side:
 
-1. AI Writing hiện **không** trả 4xx cho lỗi nghiệp vụ — nó trả `500` (xem ghi chú ở trên). Tách mã lúc này không thay đổi hành vi thực tế nào.
-2. Chưa có error contract chuẩn hoá để phân biệt "AI Service từ chối input" với "AI Service hỏng". Đề xuất ở mục kế tiếp.
+1. AI Writing currently does **not** return 4xx for domain errors — it returns `500` (see note above). Splitting codes now would not alter any observable runtime behavior.
+2. No standardized downstream error contract exists to differentiate "AI Service rejected input" from "AI Service failure". Proposed in the next section.
 
-### Đề xuất — chờ AI Service xác nhận
+### Proposal — Pending AI Service Confirmation
 
-> **Chưa có thật.** Mục này mô tả trạng thái đích, không phải trạng thái hiện tại. AI Writing đang trả `500` kèm `{"detail": "..."}` cho cả lỗi nghiệp vụ, và không có field mã lỗi nào. Không implement `parseError` hay thêm mã mới vào registry theo bảng dưới cho tới khi AI Service xác nhận và AIHUB capture được fixture lỗi thật.
+> **Not yet active.** This section describes the target architecture, not current reality. AI Writing currently returns `500` with `{"detail": "..."}` even for business errors, without any machine error code field. Do not implement `parseError` or register new codes from the table below until the AI Service confirms the contract and AIHUB captures genuine error fixtures.
 
-Contract lỗi tối thiểu mà AIHUB đề nghị mọi AI Service tuân theo:
+Minimum error contract AIHUB proposes across all AI Services:
 
 ```json
 {
@@ -1265,47 +1283,47 @@ Contract lỗi tối thiểu mà AIHUB đề nghị mọi AI Service tuân theo:
 }
 ```
 
-Ba yêu cầu, không hơn:
+Three strict requirements, nothing more:
 
-1. **HTTP status đúng nghĩa** — lỗi nghiệp vụ trả `4xx`, không trả `500`. Đây là yêu cầu quan trọng nhất: circuit breaker chỉ đếm `5xx` là failure, nên lỗi input bị trả `500` có thể mở breaker và làm sập operation cho mọi tổ chức khác.
-2. **`code` là enum ổn định** — không đổi theo văn bản hiển thị. AIHUB map theo `code`, không bao giờ parse `message`.
-3. **`message` chỉ dành cho người đọc log** — không đi ra client, không tham gia vào bất kỳ nhánh điều kiện nào.
+1. **Accurate HTTP status codes** — business/validation errors must return `4xx`, never `500`. This is the most crucial requirement: circuit breakers count only `5xx` as failures, so invalid inputs returning `500` can trip the breaker and take down the operation for all other tenants.
+2. **Stable enum `code`** — independent of display strings. AIHUB maps via `code` and never parses `message`.
+3. **`message` is exclusively for log readers** — never leaked to clients, never used in control-flow branching.
 
-Khi có contract đó, cột Downstream Signal điền được thêm mã lỗi, và một mã AIHUB mới trở nên cần thiết:
+Once that contract is established, Downstream Signal can include specific machine codes, and a new AIHUB code becomes necessary:
 
-| Downstream Signal (đề xuất) | AIHUB Code                      | HTTP | Retryable |
-| --------------------------- | ------------------------------- | ---: | --------: |
-| `429` + `RATE_LIMITED`      | `AI_SERVICE_THROTTLED`          |  503 |       Yes |
-| `503` + `MODEL_NOT_READY`   | `AI_SERVICE_UNAVAILABLE`        |  503 |       Yes |
-| `422` + `TOPIC_NOT_FOUND`   | ☆ `AI_SERVICE_REJECTED`         |  400 |        No |
-| `422` + `ESSAY_TOO_SHORT`   | ☆ `AI_SERVICE_REJECTED`         |  400 |        No |
-| `5xx` khác                  | `AI_SERVICE_ERROR`              |  502 |       Yes |
-| `2xx` + body sai shape      | `AI_SERVICE_CONTRACT_VIOLATION` |  502 |        No |
+| Downstream Signal (proposed) | AIHUB Code                      | HTTP | Retryable |
+| ---------------------------- | ------------------------------- | ---: | --------: |
+| `429` + `RATE_LIMITED`       | `AI_SERVICE_THROTTLED`          |  503 |       Yes |
+| `503` + `MODEL_NOT_READY`    | `AI_SERVICE_UNAVAILABLE`        |  503 |       Yes |
+| `422` + `TOPIC_NOT_FOUND`    | ☆ `AI_SERVICE_REJECTED`         |  400 |        No |
+| `422` + `ESSAY_TOO_SHORT`    | ☆ `AI_SERVICE_REJECTED`         |  400 |        No |
+| other `5xx`                  | `AI_SERVICE_ERROR`              |  502 |       Yes |
+| `2xx` + malformed body       | `AI_SERVICE_CONTRACT_VIOLATION` |  502 |        No |
 
-☆ Mã đề xuất, chưa có trong `error-registry.ts`.
+☆ Proposed code, not yet present in `error-registry.ts`.
 
-**Vì sao `AI_SERVICE_REJECTED` cần là mã riêng.** Nó nằm đúng giữa hai mã đã có. Không phải `INVALID_REQUEST`, vì request đã qua validate của AIHUB — schema hợp lệ. Cũng không phải `AI_SERVICE_ERROR`, vì không có gì hỏng cả. Ý nghĩa của nó là: _đúng shape, nhưng AI Service không xử lý được nội dung này_. Client cần biết để sửa dữ liệu chứ không phải để retry.
+**Why `AI_SERVICE_REJECTED` warrants a dedicated code.** It sits precisely between two existing concepts. It is not `INVALID_REQUEST`, because the request passed AIHUB gateway validation — the schema was valid. Nor is it `AI_SERVICE_ERROR`, because nothing crashed or degraded. Its precise semantic is: _the shape is correct, but downstream AI logic rejected the content_. Clients must know this to fix their payload rather than retrying blindly.
 
-**Việc cần làm, theo đúng thứ tự:**
+**Prerequisites in strict sequential order:**
 
-1. AI Service triển khai error contract ở trên
-2. AIHUB gọi thật, capture response lỗi, commit vào `test/fixtures/ai-writing/`
-3. Implement `parseError` trên adapter — hook đã khai sẵn trong `DownstreamAdapter`, chưa adapter nào dùng
-4. Thêm `AI_SERVICE_REJECTED` vào registry, điền `downstream_error_code` vào log US08
+1. AI Service implements the error contract above
+2. AIHUB invokes real endpoints, captures error fixtures, commits to `test/fixtures/ai-writing/`
+3. Implement `parseError` on the adapter — hook is declared on `DownstreamAdapter`, but not yet implemented by adapters
+4. Register `AI_SERVICE_REJECTED` in the registry, populate `downstream_error_code` in US08 logs
 
-Đảo thứ tự là viết parser cho một contract chưa tồn tại.
+Reversing the order means writing a parser for a non-existent contract.
 
 ---
 
 # 26. Idempotency Contract
 
-D1 nên **reserve contract** cho POST có side effect/cost cao dù runtime implementation có thể ở D2/later.
+D1 **reserves the contract** for high-cost / side-effecting POST operations, even though runtime enforcement can be implemented in D2/later.
 
 ```http
 Idempotency-Key: <uuid-or-opaque-string>
 ```
 
-Semantics đề xuất:
+Proposed semantics:
 
 ```text
 same org + same operation + same key + same request
@@ -1315,15 +1333,19 @@ same org + same operation + same key + different request
 → 409 IDEMPOTENCY_CONFLICT
 ```
 
-Operation catalog phải ghi `idempotency_required: true/false`.
+The Operation Catalog must declare `idempotency` requirements.
 
 ---
 
-# PHẦN D — OPERATION CATALOG
+<a id="phần-d--operation-catalog"></a><a id="part-d--operation-catalog"></a>
 
-# 27. Mỗi operation cần một record đầy đủ
+# PART D — OPERATION CATALOG
 
-Để không còn mơ hồ, mỗi public operation nên có catalog dạng:
+<a id="27-mỗi-operation-cần-một-record-đầy-đủ"></a><a id="27-complete-record-for-every-operation"></a>
+
+# 27. Complete Record for Every Operation
+
+To eliminate ambiguity, every public operation must have a catalog entry of the form:
 
 ```yaml
 operation: writing.task1.grade
@@ -1340,7 +1362,7 @@ downstream_service: ai-writing
 downstream_path: /grading-feedback-task1
 request_schema: GradeTask1Request
 response_schema: GradeResponse
-observed_latency: 18.3s # đo thật 2026-09-07
+observed_latency: 18.3s # empirically measured 2026-09-07
 ```
 
 ```yaml
@@ -1368,14 +1390,14 @@ scope: writing.question.generate
 identity_scope: organization
 execution: sync
 content_type: application/json
-idempotency: none # đọc DB, không tốn tiền, lặp lại vô hại
+idempotency: none # reads DB, zero model cost, safely repeatable
 max_body_bytes: 8192
 timeout_ms: 10000
 downstream_service: ai-writing
 downstream_path: /generate-question-task1
 request_schema: Task1QuestionRequest
 response_schema: Task1QuestionResponse
-observed_latency: 1.4s # đọc DB, không gọi model
+observed_latency: 1.4s # reads DB, does not call model
 ```
 
 ```yaml
@@ -1386,7 +1408,7 @@ scope: writing.question.generate
 identity_scope: organization
 execution: sync
 content_type: application/json
-idempotency: optional # CÓ gọi model -> tốn tiền
+idempotency: optional # DOES call model -> incurs cost
 max_body_bytes: 8192
 timeout_ms: 30000
 downstream_service: ai-writing
@@ -1395,7 +1417,7 @@ request_schema: Task2QuestionRequest
 response_schema: Task2QuestionResponse
 ```
 
-Speaking (Phase 4, envelope async đã chốt ở §12):
+Speaking (Phase 4, async envelope frozen in §12):
 
 ```yaml
 operation: speaking.grade
@@ -1403,112 +1425,116 @@ method: POST
 path: /v1/speaking/grade
 scope: speaking.grade
 identity_scope: user
-execution: async # đã chốt
-content_type: application/json # + asset_id; multipart cho file nhỏ
+execution: async # frozen
+content_type: application/json # + asset_id; multipart for small files
 idempotency: required
-max_body_bytes: TBD # chốt ở Phase 4
+max_body_bytes: TBD # finalized in Phase 4
 timeout_ms: TBD
 downstream_service: ai-speaking
 ```
 
-### `idempotency` có ba giá trị, không phải boolean
+### `idempotency` Takes Three Values, Not a Boolean
 
-Bản đầu dùng `idempotency_required: true/false`. Ba trạng thái mới phản ánh đúng thực tế:
+The initial draft used boolean `idempotency_required: true/false`. Three distinct states accurately reflect reality:
 
-| Giá trị    | Nghĩa                           | Dùng cho                                               |
-| ---------- | ------------------------------- | ------------------------------------------------------ |
-| `required` | Thiếu `Idempotency-Key` → `400` | Operation tốn tiền và tạo record cho học viên          |
-| `optional` | Có thì dùng, không có vẫn chạy  | Operation tốn tiền nhưng không tạo side effect lâu dài |
-| `none`     | Bỏ qua header nếu client gửi    | Operation chỉ đọc, lặp lại vô hại                      |
+| Value      | Meaning                              | Used for                                              |
+| ---------- | ------------------------------------ | ----------------------------------------------------- |
+| `required` | Missing `Idempotency-Key` → `400`    | Costly operations and those creating student records  |
+| `optional` | Honored if provided, allowed without | Costly operations that do not produce permanent state |
+| `none`     | Header ignored if provided           | Read-only operations, safely repeatable               |
 
-`writing.task1.question.generate` là `none` vì nó **đọc câu hỏi từ database**, không gọi model. Bắt buộc idempotency ở đó chỉ tạo phiền phức cho client mà không bảo vệ gì cả.
+`writing.task1.question.generate` is `none` because it **reads prompts from the database** without invoking a model. Enforcing idempotency there creates needless client friction without providing any protection.
 
-### `timeout_ms` không phải "thời gian dự kiến"
+### `timeout_ms` Is a Ceiling, Not Expected Duration
 
-`aihub_long_term_architecture.md` §32.5 chốt ngưỡng sync/async ở **thời gian xử lý thường gặp ≤ 30 giây**. Chấm bài có `timeout_ms: 60000` nhưng đó là **trần**, không phải kỳ vọng — thực tế thường vài giây tới hơn chục giây, nên vẫn thuộc nhóm sync.
+`aihub_long_term_architecture.md` §32.5 sets the sync/async boundary at **typical execution time ≤ 30 seconds**. Grading specifies `timeout_ms: 60000`, but that is a **timeout ceiling**, not an expected duration — empirical latency is 16–18 seconds, well within the sync boundary.
 
-Nếu đo thực tế cho thấy p95 vượt 30 giây thì phải chuyển `writing.*.grade` sang async, và envelope ở §12 đã sẵn sàng cho việc đó.
+If real-world monitoring indicates p95 latency exceeds 30 seconds, `writing.*.grade` must transition to async, for which the envelope in §12 is already prepared.
 
 ---
 
-# PHẦN E — D1 ACCEPTANCE CHECKLIST
+<a id="phần-e--d1-acceptance-checklist"></a><a id="part-e--d1-acceptance-checklist"></a>
 
-> **Ảnh chụp lịch sử:** các ô chưa đánh dấu bên dưới phản ánh checklist trước khi D1
-> freeze. Xem phần trạng thái ở đầu tài liệu và `CONTEXT.md` để biết công việc hiện hành.
+# PART E — D1 ACCEPTANCE CHECKLIST
+
+> **Historical Snapshot:** unchecked boxes below reflect the checklist status prior to the D1
+> freeze. Refer to the status section at the top of this document and `CONTEXT.md` for current sprint tasks.
 
 # 28. API Contract & Schema
 
-- [ ] Chốt Base URL.
-- [ ] Chốt API versioning.
-- [ ] Chốt endpoint naming convention.
-- [ ] Chốt API key header convention.
-- [ ] Chốt environment source of truth = hostname/deployment.
-- [ ] Chốt API key environment binding rule.
-- [ ] Chốt Organization derive từ API key.
-- [ ] Chốt Service/Operation derive từ path.
-- [ ] Chốt canonical request schema cho từng capability.
-- [ ] Chốt canonical response envelope.
-- [ ] Chốt AIHUB-generated `request_id` + optional `X-Correlation-Id`.
-- [ ] Chốt timing definitions: `total_ms`, `downstream_ms`, `ai_processing_ms`, `gateway_overhead_ms`.
-- [ ] Chốt source of truth cho từng metadata field.
-- [ ] Chốt internal AI Service response contract.
-- [ ] Chốt usage aggregation rule khi operation gọi model nhiều lần.
-- [ ] Chốt behavior khi endpoint không có usage (`omit` hay `null`).
-- [ ] Chốt operation nào user-scoped / organization-scoped.
-- [ ] Chốt User Assertion contract nếu capability cần end-user identity.
-- [ ] Chốt sync/async cho từng operation.
-- [ ] Chốt media/file input mode và limits cho Speaking/media operation.
-- [ ] Chốt datatype/constraints/default/required cho từng field.
+- [ ] Freeze Base URL.
+- [ ] Freeze API versioning.
+- [ ] Freeze endpoint naming conventions.
+- [ ] Freeze API key header convention.
+- [ ] Freeze environment source of truth = hostname/deployment.
+- [ ] Freeze API key environment binding rules.
+- [ ] Freeze Organization derived from API key.
+- [ ] Freeze Service/Operation derived from path.
+- [ ] Freeze canonical request schemas per capability.
+- [ ] Freeze canonical response envelope.
+- [ ] Freeze AIHUB-generated `request_id` + optional `X-Correlation-Id`.
+- [ ] Freeze timing definitions: `total_ms`, `downstream_ms`, `ai_processing_ms`, `gateway_overhead_ms`.
+- [ ] Freeze source of truth for each metadata field.
+- [ ] Freeze internal AI Service response contract.
+- [ ] Freeze usage aggregation rule when operation invokes models multiple times.
+- [ ] Freeze behavior when an endpoint produces no usage (`omit` vs `null`).
+- [ ] Freeze which operations are user-scoped vs organization-scoped.
+- [ ] Freeze User Assertion contract when capabilities require end-user identity.
+- [ ] Freeze sync/async classification per operation.
+- [ ] Freeze media/file input mode and limits for Speaking/media operations.
+- [ ] Freeze datatype/constraints/default/required specifications for every field.
 
 # 29. API Key Foundation
 
 ### D1
 
-- [ ] Chốt schema `organizations` / `api_keys`.
-- [ ] Chốt raw key/hash rule.
-- [ ] Chốt status/expiry/environment binding semantics.
-- [ ] Chốt API key scope model ở mức contract.
+- [ ] Freeze schema for `organizations` / `api_keys`.
+- [ ] Freeze raw key vs hash rules.
+- [ ] Freeze status/expiry/environment binding semantics.
+- [ ] Freeze API key scope model at contract level.
 
 ### D2 Implementation
 
 - [ ] Implement DB/middleware lookup.
-- [ ] Invalid/missing key trả unified error.
+- [ ] Invalid/missing keys return unified error.
 - [ ] Attach authenticated org context.
 
 # 30. Provider / Downstream Mapping
 
-- [ ] Chốt terminology: AI Service vs Model Provider.
-- [ ] Có operation → required scope mapping.
-- [ ] Có operation → AI Service mapping.
-- [ ] Có request adapter rule.
-- [ ] Có response adapter rule.
-- [ ] Có rule cho unsupported field/value.
-- [ ] Có internal response metadata contract.
-- [ ] Có unit-test examples/spec cho mapping rules.
+- [ ] Freeze terminology: AI Service vs Model Provider.
+- [ ] Establish operation → required scope mapping.
+- [ ] Establish operation → AI Service mapping.
+- [ ] Establish request adapter rules.
+- [ ] Establish response adapter rules.
+- [ ] Establish rules for unsupported fields/values.
+- [ ] Establish internal response metadata contract.
+- [ ] Provide unit-test examples/spec for mapping rules.
 
 # 31. Unified Errors
 
-- [ ] Có public error payload.
-- [ ] Có internal downstream error structure.
-- [ ] Có master error mapping matrix.
-- [ ] Phân biệt AIHUB 429 với downstream throttling 503.
-- [ ] Có `Retry-After` / `retry_after_ms` semantics khi phù hợp.
-- [ ] Không leak raw downstream errors.
-- [ ] Error có AIHUB `request_id`.
-- [ ] Chốt idempotency conflict error.
+- [ ] Provide public error payload.
+- [ ] Provide internal downstream error structure.
+- [ ] Provide master error mapping matrix.
+- [ ] Distinguish AIHUB 429 from downstream throttling 503.
+- [ ] Provide `Retry-After` / `retry_after_ms` semantics where applicable.
+- [ ] Never leak raw downstream errors.
+- [ ] Errors carry AIHUB `request_id`.
+- [ ] Freeze idempotency conflict errors.
 
 ---
 
-# PHẦN F — OUTPUT EXPECTED CỦA DELIVERABLE 1
+<a id="phần-f--output-expected-của-deliverable-1"></a><a id="part-f--expected-output-of-deliverable-1"></a>
 
-Đến cuối D1 nên có ít nhất:
+# PART F — EXPECTED OUTPUT OF DELIVERABLE 1
+
+By the conclusion of D1, the following artifacts must exist:
 
 ```text
 1. API Naming / Versioning Convention
 2. Environment / Base URL Convention
 3. Standard Request Header Contract
 4. API Key Contract
-5. End-user Assertion Contract cho user-scoped operations
+5. End-user Assertion Contract for user-scoped operations
 6. Canonical Request Schemas
 7. Canonical Response Schemas
 8. Field Data Dictionary
@@ -1526,16 +1552,18 @@ Nếu đo thực tế cho thấy p95 vượt 30 giây thì phải chuyển `writ
 20. Idempotency Header/Semantics
 21. Media/File Input Policy
 22. Sync/Async Decision per Operation
-23. Example Request/Response cho từng capability chính
-24. OpenAPI/Swagger draft nếu kịp — ✅ **XONG 2026-09-07**, `openapi.json` (OpenAPI 3.1), sinh từ operation catalog qua `pnpm generate:openapi`, không viết tay (issue #2)
-25. Postman examples để handoff sang D2 — ✅ **XONG 2026-09-07**, `aihub.postman_collection.json`, sinh từ `openapi.json` qua `pnpm generate:postman`, chứa đủ 15 case §G; 2 case (13, 14) vẫn chờ #9 metering (issue #6)
+23. Example Request/Response for each primary capability
+24. OpenAPI/Swagger draft — ✅ COMPLETED 2026-09-07, openapi.json (OpenAPI 3.1), generated from operation catalog via pnpm generate:openapi, not hand-crafted (issue #2)
+25. Postman examples for handoff to D2 — ✅ COMPLETED 2026-09-07, aihub.postman_collection.json, generated from openapi.json via pnpm generate:postman, containing all 15 cases in §G; 2 cases (13, 14) awaiting #9 metering (issue #6)
 ```
 
 ---
 
-# PHẦN G — HANDOFF SANG DELIVERABLE 2
+<a id="phần-g--handoff-sang-deliverable-2"></a><a id="part-g--handoff-to-deliverable-2"></a>
 
-D1 chốt contract; D2 hiện thực runtime pipeline:
+# PART G — HANDOFF TO DELIVERABLE 2
+
+D1 freezes contracts; D2 implements runtime execution:
 
 ```text
 HTTP Request
@@ -1546,11 +1574,11 @@ API Key Authentication
     ↓
 Canonical Validation
     ↓
-User Assertion Verification (nếu operation cần)
+User Assertion Verification (if operation requires)
     ↓
 Authorization
     ↓
-Idempotency / Rate Limit / Quota (theo scope phase)
+Idempotency / Rate Limit / Quota (per phase scope)
     ↓
 Downstream Resolver
     ↓
@@ -1565,128 +1593,136 @@ Response / Error Adapter
 Canonical Response
 ```
 
-## D2 Postman tests tối thiểu
+## D2 Minimum Postman Test Suite
 
-1. Valid API key + valid request → route đúng AI Service.
+1. Valid API key + valid request → correctly routes to downstream AI Service.
 2. Missing/invalid API key.
-3. API key không allowed trong environment hiện tại.
-4. Missing required params.
-5. Unknown/unsupported field.
-6. Scope/service mismatch.
-7. User-scoped operation thiếu/invalid User Assertion.
+3. API key not allowed in the current environment.
+4. Missing required parameters.
+5. Unknown/unsupported field rejected.
+6. Scope/service mismatch rejected.
+7. User-scoped operation missing or invalid User Assertion.
 8. Downstream timeout.
-9. Downstream throttle → public 503 `AI_SERVICE_THROTTLED`, không phải client 429.
-10. Downstream 4xx/5xx → unified error đúng.
-11. `request_id` do AIHUB generate; `correlation_id` được preserve nếu có.
-12. Timing fields đúng semantics.
-13. Usage/model public response khớp metadata downstream cung cấp.
-14. Multi-model usage aggregate đúng nếu downstream trả breakdown.
-15. Idempotency behavior nếu phase này implement.
+9. Downstream throttled → public 503 `AI_SERVICE_THROTTLED`, not client 429.
+10. Downstream 4xx/5xx → correctly mapped unified error.
+11. `request_id` generated by AIHUB; client `correlation_id` preserved when present.
+12. Timing fields adhere to defined semantics.
+13. Public usage/model metadata matches downstream payload.
+14. Multi-model usage aggregates properly when downstream returns breakdown.
+15. Idempotency behavior when implemented in scope.
 
 ---
 
-# 32. Những điểm team phải chốt trước khi freeze D1
+<a id="32-những-điểm-team-phải-chốt-trước-khi-freeze-d1"></a>
 
-**Trạng thái: 17/18 đã chốt.** Bảng dưới là đáp án; câu 14 còn mở nhưng thuộc Phase 4 nên không cản việc freeze D1.
+# 32. Decisions Required Before Freezing D1
 
-|   # | Câu hỏi                                     | Đáp án                                                                                                                                                                                                        |
-| --: | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-|   1 | `X-API-Key` hay `Authorization: Bearer`?    | **`X-API-Key`.** `Authorization` để dành cho internal JWT ở boundary AIHUB → AI Service, tránh hai loại credential dùng chung một header                                                                      |
-|   2 | Key có cần `live/test` mode?                | **Không.** Environment do hostname quyết định; key chỉ bị _bind_ qua `allowed_environments`. Nhét mode vào key là tạo nguồn sự thật thứ hai                                                                   |
-|   3 | `dev/staging/prod` derive từ hostname?      | **Có, đã chốt** (§4)                                                                                                                                                                                          |
-|   4 | `/v1` hay header versioning?                | **`/v1` trong path**                                                                                                                                                                                          |
-|   5 | Unknown field reject 400?                   | **Có, không ngoại lệ.** `additionalProperties: false` (§18)                                                                                                                                                   |
-|   6 | `usage` khi không gọi model                 | **Omit.** Không `null`, không `0`. Kèm `metering_status: not_applicable` (§15)                                                                                                                                |
-|   7 | Public expose `models[]`/breakdown tới đâu? | **Chỉ aggregate usage.** `models[]` và `usage.calls[]` là internal — theo LTA §32.7 (§16)                                                                                                                     |
-|   8 | JWKS URL hay upload public key?             | **Cả hai.** `jwks_url` là đường chính, `public_keys_jwks` là fallback (§8)                                                                                                                                    |
-|   9 | TTL tối đa của assertion                    | **300 giây**, cấu hình được theo org qua `max_assertion_ttl_seconds`. Clock skew ±60s                                                                                                                         |
-|  10 | Capability nào bắt buộc user identity?      | Chấm bài (`writing.task1.grade`, `writing.task2.grade`) → `user`. Sinh đề → `organization`. Mặc định fail-closed: chưa chắc thì coi là `user`                                                                 |
-|  11 | `writing.grade` sync hay async?             | **Sync**, `timeout_ms: 60000` (trần, không phải kỳ vọng — xem §27)                                                                                                                                            |
-|  12 | `speaking.grade` sync hay async?            | **Async.** Envelope chốt ở §12, code ở Phase 4                                                                                                                                                                |
-|  13 | Speaking multipart hay `asset_id`?          | **`asset_id` + presigned upload** là đường chính; multipart cho file nhỏ ≤10 MB (LTA §32.6)                                                                                                                   |
-|  14 | Max media size / MIME                       | ⏳ **Còn mở** — chốt ở Phase 4. Không cản freeze D1 vì envelope async đã cố định                                                                                                                              |
-|  15 | Idempotency bắt buộc với operation nào?     | `required` cho 2 operation chấm bài; `optional` cho sinh đề Task 2; `none` cho sinh đề Task 1 (§27)                                                                                                           |
-|  16 | Scope/entitlement áp dụng từ D2?            | **Có, ngay từ D2.** `Entitlement ∩ Key Scope` không cần thêm query nào — dữ liệu đã có sẵn từ bước lookup key (§9)                                                                                            |
-|  17 | Missing usage với metering-critical op?     | **Không fail business response.** Đánh dấu `metering_status: missing_usage` + alert + reconcile (LTA §32.8). Nhưng contract/integration test phải coi `usage` là bắt buộc trước khi AI Service lên production |
-|  18 | Danh sách public error codes v1             | **18 mã** ở §25                                                                                                                                                                                               |
+**Status: 17/18 finalized.** Table below provides finalized decisions; question 14 remains open but belongs to Phase 4, thus not blocking the D1 freeze.
 
----
-
-# 33. Điều kiện còn lại để freeze D1
-
-Ba việc, và chỉ một trong số đó là chặn:
-
-| #   | Việc                                             | Chặn gì | Trạng thái                                                                                                               |
-| --- | ------------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------ |
-| 1   | ~~Lấy response thật của `/grading-feedback-task1 | 2`~~    | —                                                                                                                        | ✅ **XONG 2026-09-07**, fixture ở `test/fixtures/ai-writing/` |
-| 2   | ~~Danh sách `question_type` / `chart_type`~~     | —       | ✅ **XONG** — 5 dạng Task 2, 7 chart type Task 1                                                                         |
-| 3   | ~~Xuất OpenAPI 3.1 + Postman collection~~        | —       | ✅ **XONG 2026-09-07** — `openapi.json` (#2) + `aihub.postman_collection.json` (#6), cả hai sinh tự động, không viết tay |
-
-**D1 đã freeze.** Cả ba việc còn lại đều xong; không còn blocker nào.
-
-Một nghi vấn còn mở nhưng **không cản freeze**: band nửa điểm (xem §34). Đó là vấn đề chất lượng của AI Writing, không phải vấn đề contract — schema đã dùng `multipleOf: 0.5` nên đúng trong cả hai trường hợp.
+|   # | Question                                    | Decision                                                                                                                                                                                                     |
+| --: | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+|   1 | `X-API-Key` or `Authorization: Bearer`?     | **`X-API-Key`.** `Authorization` is reserved for internal JWTs across the AIHUB → AI Service boundary, preventing two credential classes from colliding on one header                                        |
+|   2 | Does key require `live/test` mode?          | **No.** Environment is determined by hostname; keys are strictly _bound_ via `allowed_environments`. Embedding mode into the key creates a dual source of truth                                              |
+|   3 | `dev/staging/prod` derived from hostname?   | **Yes, finalized** (§4)                                                                                                                                                                                      |
+|   4 | `/v1` or header versioning?                 | **`/v1` in path**                                                                                                                                                                                            |
+|   5 | Unknown fields reject 400?                  | **Yes, zero exceptions.** `additionalProperties: false` (§18)                                                                                                                                                |
+|   6 | `usage` when not calling models             | **Omit.** Neither `null` nor `0`. Accompanied by `metering_status: not_applicable` (§15)                                                                                                                     |
+|   7 | How much to expose `models[]`/breakdown?    | **Aggregate usage only.** `models[]` and `usage.calls[]` remain internal — per LTA §32.7 (§16)                                                                                                               |
+|   8 | JWKS URL or upload public key?              | **Both.** `jwks_url` is primary, `public_keys_jwks` is fallback (§8)                                                                                                                                         |
+|   9 | Maximum assertion TTL                       | **300 seconds**, configurable per org via `max_assertion_ttl_seconds`. Clock skew ±60s                                                                                                                       |
+|  10 | Which capabilities mandate user identity?   | Grading (`writing.task1.grade`, `writing.task2.grade`) → `user`. Question generation → `organization`. Default fail-closed: if unsure, classify as `user`                                                    |
+|  11 | `writing.grade` sync or async?              | **Sync**, `timeout_ms: 60000` (ceiling, not expectation — see §27)                                                                                                                                           |
+|  12 | `speaking.grade` sync or async?             | **Async.** Envelope frozen in §12, implementation in Phase 4                                                                                                                                                 |
+|  13 | Speaking multipart or `asset_id`?           | **`asset_id` + presigned upload** is primary; multipart for small files ≤10 MB (LTA §32.6)                                                                                                                   |
+|  14 | Max media size / MIME                       | ⏳ **Open** — finalized in Phase 4. Does not block D1 freeze because async envelope is locked                                                                                                                |
+|  15 | Idempotency mandatory for which operations? | `required` for both grading operations; `optional` for Task 2 question generation; `none` for Task 1 question generation (§27)                                                                               |
+|  16 | Scope/entitlement enforcement starting D2?  | **Yes, starting in D2.** `Entitlement ∩ Key Scope` requires no extra query — data is retrieved during key lookup (§9)                                                                                        |
+|  17 | Missing usage for metering-critical op?     | **Do not fail business responses.** Record `metering_status: missing_usage` + alert + reconcile (LTA §32.8). However, contract/integration tests must treat `usage` as required before deploying AI Services |
+|  18 | Finalized public error codes list v1        | **19 codes** in §25                                                                                                                                                                                          |
 
 ---
 
-# 34. Nhật ký thay đổi
+<a id="33-điều-kiện-còn-lại-để-freeze-d1"></a>
 
-## 2026-09-07 — đồng bộ với khảo sát AI Writing thật
+# 33. Remaining Prerequisites to Freeze D1
 
-| #   | Thay đổi                                                                                  | Mục           |
-| --- | ----------------------------------------------------------------------------------------- | ------------- |
-| 1   | Thay canonical request/response bằng schema thật; bỏ `content`/`language`/`level`         | §10, §20      |
-| 2   | Tách Task 1 / Task 2 thành 4 operation riêng                                              | §5, §19, §27  |
-| 3   | Thêm 6 mã lỗi; tổng 18 mã cho v1                                                          | §25           |
-| 4   | Thêm `max_assertion_ttl_seconds`, allowlist `alg`, `UNIQUE(issuer)`; `jti` thành bắt buộc | §8            |
-| 5   | `usage` phải omit khi không gọi model, kèm ví dụ có thật                                  | §15           |
-| 6   | Thêm `metering_status` với 4 giá trị                                                      | §15, §16      |
-| 7   | Chốt Speaking ở mức envelope async; giới hạn body theo từng operation                     | §11, §12, §27 |
-| 8   | Ghi rõ internal contract là **additive** — AI Service chỉ thêm field, không bọc `data`    | §15           |
-| 9   | Trả lời 17/18 câu chốt                                                                    | §32           |
-| 10  | **Bỏ `meta.models[]` khỏi public response** — mâu thuẫn với LTA §32.7                     | §16           |
-| 11  | `idempotency_required` boolean → `idempotency` ba trạng thái                              | §27           |
+Three tasks, only one of which was a blocker:
 
-## 2026-09-07 (lần 2) — sau khi gọi thật API AI Writing
+| #   | Task                                                          | Blocks | Status                                                                                                            |
+| --- | ------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------- |
+| 1   | ~~Capture real responses for `/grading-feedback-task1 \| 2`~~ | —      | ✅ **DONE 2026-09-07**, fixtures in `test/fixtures/ai-writing/`                                                   |
+| 2   | ~~List of `question_type` / `chart_type`~~                    | —      | ✅ **DONE** — 5 Task 2 types, 7 Task 1 chart types                                                                |
+| 3   | ~~Export OpenAPI 3.1 + Postman collection~~                   | —      | ✅ **DONE 2026-09-07** — `openapi.json` (#2) + `aihub.postman_collection.json` (#6), both generated automatically |
 
-Đã gọi cả 4 endpoint bằng token do team cấp; fixture lưu ở `test/fixtures/ai-writing/`.
+**D1 is frozen.** All three tasks are complete; zero blockers remain.
 
-| #   | Thay đổi                                                                                                                                          | Mục           |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| 12  | `topic` → **`chart_type`** enum 7 giá trị cho Task 1. Giá trị thật là loại biểu đồ, không phải chủ đề — gửi `"environment"` bị downstream trả 500 | §10, §20, §27 |
-| 13  | Thêm **`language`** vào request/response chấm bài; enum hiện tại `['vi']` vì downstream chỉ sinh feedback tiếng Việt                              | §10, §16, §20 |
-| 14  | **Mở rộng `GradeResponse`** theo response thật: `band_reason`, `strengths[]`, `improvements[]`, `suggestions[]`, `next_steps[]`, `annotations[]`  | §16, §20      |
-| 15  | Đổi `corrections` → **`annotations`**. Dữ liệu thật là `{quote, explanation}` chứ không phải `{original, suggestion}`                             | §16, §20      |
-| 16  | Ghi rõ **3 thứ không ra public**: `coT`, `feedback_detail`, `data_micro.*.question_type`                                                          | §16           |
-| 17  | `band` chấp nhận **cả int lẫn float** — downstream trả `overall_band: 7.0` nhưng `band_score: 7`                                                  | §16, §20      |
-| 18  | Cảnh báo **downstream trả 5xx cho lỗi client**, và hai lớp phòng vệ                                                                               | §25           |
-| 19  | Ghi `observed_latency` đo thật vào operation catalog                                                                                              | §27           |
-
-### Ba vấn đề của AI Writing phát hiện qua việc gọi thật
-
-1. **Không endpoint nào trả `usage`** → metering hiện là 0%.
-2. **`data.coT` lộ chain-of-thought** ra response (`layer1_errors`, `layer2_matching`, `layer3_calibration`).
-3. **Chấm điểm đáng ngờ:** 3 mẫu đều ra band nguyên và cả 4 tiêu chí luôn bằng nhau (7-7-7-7 rồi 5-5-5-5); bài Task 2 dài 98 từ (yêu cầu 250) vẫn được band 5.0.
-
-Chi tiết lập luận cho từng thay đổi: [`implementation spec index`](superpowers/specs/2026-09-07-aihub/README.md)
+One open question remains but **does not block freeze**: half-band score granularity (see §34). That is an AI Writing model quality issue, not a contract defect — the schema specifies `multipleOf: 0.5`, making it correct in both scenarios.
 
 ---
 
-# 35. Kết luận D1
+<a id="34-nhật-ký-thay-đổi"></a>
 
-Deliverable 1 nên tạo ra một **public contract ổn định và không mơ hồ** để D2 chỉ việc hiện thực gateway/proxy/routing theo contract đã freeze.
+# 34. Changelog
 
-Các nguyên tắc quan trọng đã làm rõ:
+## 2026-09-07 — Synchronized with Empirical AI Writing Exploration
+
+| #   | Change                                                                                        | Section       |
+| --- | --------------------------------------------------------------------------------------------- | ------------- |
+| 1   | Replaced canonical request/response with actual schema; removed `content`/`language`/`level`  | §10, §20      |
+| 2   | Split Task 1 / Task 2 into 4 distinct operations                                              | §5, §19, §27  |
+| 3   | Added 6 error codes; total 19 codes for v1                                                    | §25           |
+| 4   | Added `max_assertion_ttl_seconds`, allowlisted `alg`, `UNIQUE(issuer)`; made `jti` mandatory  | §8            |
+| 5   | `usage` must be omitted when no models are called, with real-world example                    | §15           |
+| 6   | Added `metering_status` with 4 states                                                         | §15, §16      |
+| 7   | Locked Speaking to async envelope; scoped body limits per operation                           | §11, §12, §27 |
+| 8   | Clarified internal contract is **additive** — AI Services add top-level fields without `data` | §15           |
+| 9   | Resolved 17/18 freeze questions                                                               | §32           |
+| 10  | **Removed `meta.models[]` from public response** — aligned with LTA §32.7                     | §16           |
+| 11  | Converted `idempotency_required` boolean → three-state `idempotency`                          | §27           |
+
+## 2026-09-07 (Round 2) — Post Live AI Writing API Invocations
+
+Invoked all 4 endpoints using credentials supplied by the team; fixtures stored in `test/fixtures/ai-writing/`.
+
+| #   | Change                                                                                                                                           | Section       |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------- |
+| 12  | `topic` → **`chart_type`** 7-value enum for Task 1. Real value is chart type, not subject topic — sending `"environment"` yields downstream 500  | §10, §20, §27 |
+| 13  | Added **`language`** to grading request/response; enum temporarily `['vi']` as downstream only generates Vietnamese feedback                     | §10, §16, §20 |
+| 14  | **Expanded `GradeResponse`** per live response: `band_reason`, `strengths[]`, `improvements[]`, `suggestions[]`, `next_steps[]`, `annotations[]` | §16, §20      |
+| 15  | Renamed `corrections` → **`annotations`**. Real payload is `{quote, explanation}` rather than `{original, suggestion}`                           | §16, §20      |
+| 16  | Explicitly documented **3 excluded downstream fields**: `coT`, `feedback_detail`, `data_micro.*.question_type`                                   | §16           |
+| 17  | `band` accepts **both int and float** — downstream returns `overall_band: 7.0` but criterion `band: 7`                                           | §16, §20      |
+| 18  | Documented warning: **downstream returns 5xx for client input errors**, established two-tier defense                                             | §25           |
+| 19  | Recorded real `observed_latency` in operation catalog                                                                                            | §27           |
+
+### Three AI Writing Issues Discovered During Live Testing
+
+1. **No endpoint returns `usage` telemetry** → current metering coverage is 0%.
+2. **`data.coT` leaks chain-of-thought** in responses (`layer1_errors`, `layer2_matching`, `layer3_calibration`).
+3. **Suspicious grading anomalies:** all 3 test samples produced identical integer bands across all 4 criteria (7-7-7-7 then 5-5-5-5); a Task 2 submission of 98 words (250 required) was still awarded band 5.0.
+
+Detailed rationale for each architectural change: [`implementation spec index`](superpowers/specs/2026-09-07-aihub/README.md)
+
+---
+
+<a id="35-kết-luận-d1"></a>
+
+# 35. Conclusion D1
+
+Deliverable 1 establishes a **stable and unambiguous public contract** so that Deliverable 2 can implement gateway, proxy, and routing mechanics against frozen interfaces.
+
+Key principles established:
 
 ```text
-Organization     → derive từ API Key
-Service/Operation→ derive từ endpoint
-Environment      → derive từ deployment hostname
-End User         → Signed User Assertion cho user-scoped operations
-Request ID       → AIHUB tự generate
-Model usage      → AI Service là source of truth
-Timing           → tách total/downstream/AI-processing rõ ràng
+Organization     → derived from API Key
+Service/Operation→ derived from endpoint path
+Environment      → derived from deployment hostname
+End User         → Signed User Assertion for user-scoped operations
+Request ID       → generated by AIHUB
+Model usage      → AI Service is source of truth
+Timing           → clearly separates total, downstream, and AI processing
 Authorization    → Organization Entitlement ∩ API Key Scope
-Downstream       → gọi AI Service private, không gọi trực tiếp Model Provider từ public contract
+Downstream       → invokes private AI Services; never exposes Model Providers directly
 ```
 
-D1 định nghĩa contract; D2/later mới chịu trách nhiệm runtime implementation.
+D1 defines contracts; D2 and later sprints assume responsibility for runtime implementation.

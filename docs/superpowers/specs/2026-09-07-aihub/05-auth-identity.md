@@ -1,23 +1,26 @@
 # 05 — Auth & Identity Design
 
-← [Mục lục](README.md) · [04 — Redis](04-redis.md)
+← [Table of Contents](README.md) · [04 — Redis](04-redis.md)
 
-> Đây là file duy nhất trong bộ tài liệu **không** áp dụng nguyên tắc "làm ít nhất có thể". Auth sai thì không có đường sửa rẻ.
+> This is the only file across this specification suite that deliberately **does not** apply the "do as little as possible" heuristic. Auth mistakes have no cheap recovery path.
 
-## G.1 Format và sinh API key
+<a id="g1-format-và-sinh-api-key"></a>
+<a id="g1-api-key-format-and-generation"></a>
+
+## G.1 API Key Format and Generation
 
 ```
 aihub_sk_ + base62(32 bytes CSPRNG)
         -> aihub_sk_7Kq2mXvR9wLpN4tYbZ3sHgD8fJc1AeQ6
 ```
 
-- **32 byte = 256 bit entropy.** Brute-force bất khả thi — đây là cơ sở cho quyết định hash nhanh ở [03 §E.3](03-database.md#1-api-key-hash-bằng-sha-256-không-dùng-bcryptargon2).
-- **Prefix cố định `aihub_sk_`** để secret scanner của GitHub/GitLab bắt được khi khách lỡ commit key lên repo.
-- **Không** nhét `live`/`test` vào key. Environment đã do hostname quyết định (kiến trúc đích §7); nhét vào key là tạo ra nguồn sự thật thứ hai.
+- **32 bytes = 256 bits of entropy.** Brute-force is computationally impossible — this forms the bedrock for our fast hash decision in [03 §E.3](03-database.md#1-api-key-hashed-with-sha-256-not-bcryptargon2).
+- **Fixed `aihub_sk_` prefix** enables automated secret scanners (GitHub, GitLab, Trufflehog) to flag keys accidentally committed by customers.
+- **Do not** embed `live`/`test` in the key token. Environment is determined strictly by hostname (target architecture §7); embedding environment in keys creates dual sources of truth.
 
-### CLI onboarding
+### CLI Onboarding
 
-Admin API hoãn sang sau (quyết định của team), nên onboard bằng CLI:
+The Admin API is deferred (team design decision), so onboarding is performed via CLI:
 
 ```bash
 pnpm cli org:create --name "Acme Edu" --entitlements writing
@@ -25,7 +28,7 @@ pnpm cli org:create --name "Acme Edu" --entitlements writing
 pnpm cli key:create --org org_01J8... --name "Prod backend" \
                     --scopes writing.grade,writing.question.generate \
                     --envs production
-# -> in raw key ĐÚNG MỘT LẦN ra stdout; không ghi log, không ghi file
+# -> prints raw key EXACTLY ONCE to stdout; never logged, never written to disk
 
 pnpm cli key:revoke   --key ak_01J8...
 
@@ -33,94 +36,111 @@ pnpm cli identity:set --org org_01J8... --issuer https://acme.edu \
                       --jwks-url https://acme.edu/.well-known/jwks.json
 ```
 
-CLI này là **code sản xuất**, không phải script vứt đi — API admin sau này gọi lại đúng service bên dưới.
+This CLI is **production code**, not disposable throwaway scripts — the future admin API will invoke the exact same underlying application services.
 
-## G.2 Lookup flow
+<a id="g2-lookup-flow"></a>
+
+## G.2 Lookup Flow
 
 ```ts
-const hash = sha256(rawKey); // 32 byte, ~1µs
+const hash = sha256(rawKey); // 32 bytes, ~1µs
 
-// 1. Redis: aihub:v1:key:<hex>  TTL 60s — cache cả HIT lẫn MISS
+// 1. Redis: aihub:v1:key:<hex>  TTL 60s — caches both HIT and MISS
 // 2. miss -> SELECT ... WHERE key_hash = $1        (1 index seek)
 // 3. validate: status='active' ∧ (expires_at IS NULL ∨ > now())
 //              ∧ env ∈ allowed_environments ∧ org.status='active'
 ```
 
-**Negative cache là bắt buộc.** Không có nó, kẻ tấn công spam key bịa sẽ biến mỗi request thành một query Postgres. Có nó, họ chỉ chạm Redis.
+**Negative caching is mandatory.** Without it, an attacker spamming fictitious keys turns every incoming request into a Postgres index seek. With negative caching, invalid keys hit only Redis.
 
-**TTL 60s là giá của việc hoãn admin API** — revoke một key có độ trễ tới 60 giây. Chấp nhận được, nhưng CLI `key:revoke` phải xoá luôn cache để revoke có hiệu lực tức thì:
+**60s TTL is the acceptable cost of deferring the Admin API** — revoking a key can take up to 60 seconds to propagate. This is acceptable, but the CLI `key:revoke` command must proactively purge the cache key to make revocation instantaneous:
 
 ```ts
-await redis.del(`aihub:v1:key:${hex(hash)}`); // ~2 dòng, xoá hẳn 60s cửa sổ rủi ro
+await redis.del(`aihub:v1:key:${hex(hash)}`); // ~2 lines, completely eliminates the 60s exposure window
 ```
 
-## G.3 Chống brute-force
+<a id="g3-chống-brute-force"></a>
+<a id="g3-brute-force-protection"></a>
+
+## G.3 Brute-Force Protection
 
 ```
 Redis: aihub:v1:authfail:<ip>   INCR, TTL 300s
->= 20 lần THẤT BẠI / 5 phút  -> 429
+>= 20 FAILURES / 5 minutes      -> 429
 ```
 
-**Chỉ đếm thất bại.** Request hợp lệ không bao giờ chạm counter này, nên khách hàng thật không bị ảnh hưởng dù bắn 50 RPS từ một IP.
+**Only failures are counted.** Valid requests never touch this counter, ensuring legitimate customers firing 50 RPS from a single NAT gateway are never penalized.
 
-## G.4 User Assertion — verify cái gì
+<a id="g4-user-assertion--verify-cái-gì"></a>
+<a id="g4-user-assertion-verification-rules"></a>
+
+## G.4 User Assertion — Verification Rules
 
 ```
-Thứ tự có chủ đích: rẻ trước, crypto sau cùng.
+Deliberate order: cheap checks first, cryptography last.
 
-1. decode header  -> alg ∈ config.allowed_algorithms   # CHẶN 'none', chặn HS*
+1. decode header  -> alg ∈ config.allowed_algorithms   # REJECT 'none', REJECT HS*
 2. payload.aud === 'aihub'
-3. payload.iss === identityConfig.issuer               # khớp org lấy từ API key
+3. payload.iss === identityConfig.issuer               # matches org identified from API key
 4. exp > now - skew(60s)  ∧  iat < now + skew(60s)
 5. (exp - iat) <= max_assertion_ttl_seconds
-6. jti có mặt                                          # hiện chỉ log, xem G.6
-7. verify chữ ký bằng JWKS của org                     # crypto ở cuối
+6. jti is present                                      # logged for now, see G.6
+7. verify cryptographic signature via org's JWKS       # expensive crypto at the end
 ```
 
-**Bước 1 chặn alg confusion.** Đây là lỗ JWT kinh điển: token khai `alg: HS256`, thư viện lấy public key RSA làm HMAC secret — mà public key thì ai cũng có → giả token thoải mái. Chỉ nhận `alg` nằm trong allowlist _của org đó_, và loại key phải khớp thuật toán.
+**Step 1 blocks algorithm confusion.** This is the classic JWT vulnerability: token declares `alg: HS256`, the library uses the RSA public key as an HMAC secret — and since public keys are public, anyone can forge tokens trivially. Only accept algorithms explicitly allowlisted for _that specific organization_, and enforce key-type / algorithm matching.
 
-**Bước 3 là chốt chặn cross-tenant.** API key nói org A, assertion khai `iss` của org B → `403`. Cộng với `UNIQUE(issuer)` ở [03 §E.2](03-database.md#e2-ddl), org B không thể đăng ký trùng issuer của A ngay từ đầu.
+**Step 3 is the cross-tenant firewall.** If the API key belongs to Org A, but the assertion asserts `iss` of Org B → `403`. Combined with `UNIQUE(issuer)` in [03 §E.2](03-database.md#e2-ddl), Org B cannot register Org A's issuer in the first place.
 
-**Bước 5 là bổ sung so với D1.** Nếu không giới hạn TTL, khách có thể ký một assertion `exp` sau 5 năm rồi nhúng vào app mobile — assertion biến thành một API key vĩnh viễn bị rò. `max_assertion_ttl_seconds` mặc định 300, nằm ở DB nên nới được cho từng org.
+**Step 5 is an addition relative to D1.** Without TTL caps, a customer could sign an assertion with a 5-year `exp` and hardcode it into a mobile app — effectively leaking a permanent API key. `max_assertion_ttl_seconds` defaults to 300, configured in the DB so it can be tuned per tenant.
 
-**Operation org-scoped mà client vẫn gửi assertion: vẫn verify.** Có mặt thì phải hợp lệ. Bỏ qua một assertion hỏng là mở đường cho lỗi tích hợp âm thầm.
+**Org-scoped operations where client sends assertion anyway: still verify.** If present, it must be valid. Silently ignoring an invalid assertion masks integration bugs.
 
-## G.5 JWKS fetch — chặn SSRF
+<a id="g5-jwks-fetch--chặn-ssrf"></a>
+<a id="g5-jwks-fetch-blocking-ssrf"></a>
 
-`jwks_url` do khách hàng cung cấp và AIHUB sẽ tự đi gọi nó. Không kiểm soát là AIHUB thành công cụ quét mạng nội bộ.
+## G.5 JWKS Fetch — Blocking SSRF
+
+`jwks_url` is supplied by the customer, and AIHUB fetches it autonomously. Without rigorous controls, AIHUB becomes an internal network port scanner.
 
 ```
-Bắt buộc, trước mọi lần fetch:
+Mandatory pre-flight checks before every fetch:
 - scheme === 'https'
-- resolve DNS trước, chặn nếu IP ∈ {private, loopback, link-local, CGNAT}
-  đặc biệt 169.254.169.254 (metadata endpoint của cloud)
-- CHẶN REDIRECT (maxRedirections: 0)
-- timeout 3s, response tối đa 64KB
-- không gửi kèm bất kỳ credential nào
+- DNS resolved first; reject if IP ∈ {private, loopback, link-local, CGNAT}
+  strictly block 169.254.169.254 (cloud metadata endpoint)
+- BLOCK REDIRECTS (maxRedirections: 0)
+- timeout 3s, response size capped at 64KB
+- never attach any credentials or headers
 ```
 
-**Chặn redirect là chỗ hay quên:** kiểm IP xong rồi cho redirect thì server của khách chỉ cần trả `302 -> 169.254.169.254` là xuyên qua hết.
+**Blocking redirects is frequently omitted:** if you validate the IP and then follow redirects, the customer's server simply responds with `302 -> 169.254.169.254`, bypassing IP validation entirely.
 
-### Cache
+### Caching Strategy
 
 ```
-aihub:v1:jwks:<org_id>  TTL 15 phút
-kid lạ  -> refetch 1 lần, tối đa 1 lần / 5 phút / org   (chống DoS bằng kid bịa)
-fetch fail nhưng còn cache cũ -> DÙNG cache cũ tới 24h
-fetch fail và không có cache   -> 503 IDENTITY_PROVIDER_UNAVAILABLE
+aihub:v1:jwks:<org_id>  TTL 15 minutes
+unknown kid  -> refetch once, at most 1 refetch / 5 minutes / org (prevents DoS via fake kids)
+fetch fails but stale cache exists -> SERVE stale cache for up to 24 hours
+fetch fails and no cache exists    -> 503 IDENTITY_PROVIDER_UNAVAILABLE
 ```
 
-Dùng cache quá hạn khi không refresh được là **an toàn** — public key không tự nhiên thành độc hại — và nó giữ AIHUB sống khi JWKS của khách sập.
+Serving stale keys during upstream outages is **secure** — public keys do not spontaneously turn malicious — and keeps AIHUB available when customer identity providers suffer transient failures.
 
-> `IDENTITY_PROVIDER_UNAVAILABLE` chưa có trong error matrix của D1. Cần bổ sung: đây không phải lỗi credential của client (401 sẽ khiến họ đi tạo lại key vô ích), cũng không phải lỗi AI Service.
+> `IDENTITY_PROVIDER_UNAVAILABLE` was absent from D1's initial error matrix. It must be added: this is neither a client credential fault (a 401 would prompt futile key rotation) nor an AI Service failure.
 
-## G.6 Replay protection — KHÔNG làm ở D2
+<a id="g6-replay-protection--không-làm-ở-d2"></a>
+<a id="g6-replay-protection-deferred-from-d2"></a>
 
-**Lý lẽ:** assertion sống 5 phút và đi cùng API key trên một kết nối TLS backend-to-backend. Muốn replay được thì phải đã đọc trộm được traffic — mà lúc đó kẻ tấn công có luôn API key, và replay assertion là mối lo nhỏ nhất.
+## G.6 Replay Protection — NOT in D2
 
-**Chi phí nếu làm:** một Redis set `jti` cho mọi request, cộng một round-trip vào đường nóng, cộng câu hỏi "Redis sập thì fail open hay closed".
+**Rationale:** Assertions have a 5-minute lifespan and travel alongside the API key over TLS in a backend-to-backend connection. Replaying requires having intercepted the transport traffic — at which point the attacker already holds the raw API key, rendering assertion replay the least of our worries.
 
-**Nhưng contract phải yêu cầu `jti` bắt buộc ngay từ D1**, và AIHUB log nó. Như vậy khi cần bật replay protection cho một org nhạy cảm, chỉ thêm một `SET NX` — **không phải đi bảo mọi khách hàng sửa code**.
+**Cost if built:** Redis `jti` sets for every request, adding an extra round-trip to the hot path, plus the dilemma of "fail open or closed when Redis is down".
+
+**However, the contract MUST mandate `jti` in D1**, and AIHUB logs it. That way, when replay protection is needed for high-compliance tenants, it can be enabled via a single `SET NX` — **without forcing every existing customer to update their client code**.
+
+<a id="g7-internal-jwt-aihub--ai-service"></a>
+<a id="g7-internal-jwt-aihub-to-ai-service"></a>
 
 ## G.7 Internal JWT: AIHUB → AI Service
 
@@ -135,35 +155,43 @@ Dùng cache quá hạn khi không refresh được là **an toàn** — public k
 }
 ```
 
-- **EdDSA (Ed25519)** thay vì RS256: ký ~50µs so với ~1ms, token ngắn hơn nhiều. Node/Python/Go đều verify được sẵn; team sở hữu cả hai đầu nên không có rào tương thích. Có `kid` + `alg` trong header nên rơi về RS256 được nếu một service nào đó không hỗ trợ.
-- **`jti` = `request_id`** — miễn phí, và nó nối trace giữa AIHUB với AI Service.
-- **`aud` riêng từng service:** token mint cho `ai-writing` không dùng được ở `ai-speaking`. Nếu `ai-writing` bị chiếm quyền, nó không tự đi gọi `ai-speaking` được.
-- **TTL 60s**, mint just-in-time, không lưu DB, không refresh.
+- **EdDSA (Ed25519)** instead of RS256: signs in ~50µs vs ~1ms, produces much smaller tokens. Native verification available across Node/Python/Go; the team controls both ends of the wire, eliminating compatibility barriers. Header includes `kid` + `alg` for graceful fallback to RS256 if needed by third-party services.
+- **`jti` = `request_id`** — zero cost, establishes unified distributed tracing between AIHUB and the AI Service.
+- **Per-service `aud` targeting:** tokens minted for `ai-writing` cannot be accepted by `ai-speaking`. If `ai-writing` is compromised, it cannot pivot and call `ai-speaking`.
+- **TTL 60s**, minted just-in-time, never stored in DB, no refresh tokens.
 
-## G.8 JWKS của AIHUB + xoay khoá
+<a id="g8-jwks-của-aihub--xoay-khoá"></a>
+<a id="g8-aihub-jwks-and-key-rotation"></a>
 
-```
-GET https://api.aihub.example.com/.well-known/jwks.json     # public, chỉ chứa public key
-AI Service cache 1 giờ; gặp kid lạ -> refetch (rate-limit như G.5)
-```
-
-Quy trình xoay khoá — không downtime và không cần deploy đồng bộ:
+## G.8 AIHUB JWKS & Key Rotation
 
 ```
-1. Sinh keypair mới -> đưa PUBLIC key mới vào JWKS, vẫn KÝ bằng key cũ
-2. Chờ > 1 giờ (đủ để mọi AI Service cache lại)
-3. Chuyển sang KÝ bằng key mới
-4. Chờ > 2 phút (token cũ TTL 60s đã chết hết)
-5. Gỡ public key cũ khỏi JWKS
+GET https://api.aihub.example.com/.well-known/jwks.json     # public, contains public keys only
+AI Services cache for 1 hour; unknown kid triggers refetch (rate-limited as in G.5)
 ```
 
-Chu kỳ 3 tháng, hoặc lập tức khi nghi ngờ rò rỉ. Kịch bản này **phải có test** — xem [10 §N.7](10-deployment-roadmap.md#n7-testing-strategy).
+Zero-downtime key rotation procedure without synchronized deployments:
 
-## G.9 Secret
+```
+1. Generate new keypair -> publish new PUBLIC key to JWKS, continue SIGNING with old key
+2. Wait > 1 hour (ensuring all downstream AI services refresh cache)
+3. Switch gateway to SIGN with new key
+4. Wait > 2 minutes (all 60s TTL tokens signed by old key have expired)
+5. Remove old public key from JWKS
+```
 
-Stage A, không có DevOps → **không dựng Vault**. Private key và DB password nằm trong file `.env` mount vào container, `chmod 600`, không bao giờ vào git, backup riêng bằng tay và lưu ngoài server.
+Executed every 3 months, or immediately upon suspected compromise. This rotation workflow **must have automated test coverage** — see [10 §N.7](10-deployment-roadmap.md#n7-testing-strategy).
 
-Trigger dựng Vault/SOPS: có từ **3 môi trường** trở lên, hoặc **có người rời team** cần thu hồi quyền, hoặc **yêu cầu compliance**. Chưa tới thì Vault chỉ là thêm một thứ để sập lúc 3 giờ sáng.
+<a id="g9-secret"></a>
+<a id="g9-secrets"></a>
+
+## G.9 Secrets Management
+
+Stage A, no DevOps team → **do not deploy Vault**. Private keys and DB credentials reside in `.env` mounted into containers, with permissions `chmod 600`, never checked into git, backed up manually out-of-band off the server.
+
+Trigger to deploy Vault/SOPS: **≥ 3 environments**, or **team member departure** requiring credential rotation, or **formal compliance requirements**. Until then, Vault is merely another moving part that can fail at 3 AM.
+
+<a id="g10-authorization"></a>
 
 ## G.10 Authorization
 
@@ -175,21 +203,24 @@ if (!effectiveScopes.includes(operation.requiredScope))
   throw new ForbiddenError();
 ```
 
-Toàn bộ dữ liệu đã có sẵn từ bước lookup key → **không thêm query nào**. Đúng theo `Entitlement ∩ Key Scope` của kiến trúc đích §10.
+All necessary metadata is already in memory from the initial key lookup → **zero extra database queries**. Conforms strictly to the `Entitlement ∩ Key Scope` principle from target architecture §10.
 
-**Fail-closed:** entitlements rỗng → không gọi được gì. Scope rỗng → không gọi được gì. Không có nhánh nào mặc định cho phép.
+**Fail-closed:** Empty entitlements → zero permissions. Empty key scopes → zero permissions. No branch ever defaults to open.
 
-## G.11 Host header không phải nguồn tin cậy tuyệt đối
+<a id="g11-host-header-không-phải-nguồn-tin-cậy-tuyệt-đối"></a>
+<a id="g11-host-header-is-not-an-absolute-source-of-truth"></a>
 
-`resolveAihubEnvironment` quyết định `production`/`staging`/`development` bằng cách so khớp `Host` header với `AIHUB_PRODUCTION_HOST`/`AIHUB_STAGING_HOST`/`AIHUB_DEVELOPMENT_HOST`. `Host` là header do **client tự gửi** — về bản chất vẫn là 1 dạng tự khai, không khác gì 1 header tự tạo như `X-Environment`.
+## G.11 Host Header Is Not an Absolute Source of Truth
 
-Hệ quả: nếu reverse proxy/LB đứng trước 1 deployment **không validate** Host khớp domain thật của chính nó, 1 client kết nối thẳng vào deployment đó (bỏ qua DNS, gọi thẳng IP) vẫn có thể set `Host: <domain của tier khác>` và khiến AIHUB resolve sai environment — phá vỡ đúng lý do environment không được lấy từ header client tự khai (US01).
+`resolveAihubEnvironment` determines `production`/`staging`/`development` by matching the incoming `Host` header against `AIHUB_PRODUCTION_HOST`/`AIHUB_STAGING_HOST`/`AIHUB_DEVELOPMENT_HOST`. However, `Host` is a client-supplied header — inherently self-asserted, just like a custom `X-Environment` header.
 
-Hai lớp phòng vệ, không lớp nào tự đủ:
+Consequence: If the reverse proxy/LB in front of a deployment **fails to validate** that the `Host` matches its own actual domain, a client connecting directly to that deployment (bypassing DNS via IP) could send `Host: <domain of another tier>`, causing AIHUB to resolve the incorrect environment — undermining the premise that clients cannot dictate environments (US01).
 
-1. **Hạ tầng (bắt buộc, ngoài phạm vi code AIHUB).** Reverse proxy/LB trước mỗi environment phải validate hoặc ghi đè `Host` khớp domain thật/TLS SNI của chính nó trước khi forward request vào AIHUB. Đây là yêu cầu vận hành — code AIHUB không thể tự kiểm chứng client có thật sự kết nối đúng domain hay không.
-2. **Code (`assertHostConfigurationIsSafe()`).** Chặn app khởi động, ngoài `development`/`test`, nếu bất kỳ host nào trong 3 tier vẫn còn là placeholder mặc định (`api.aihub.example.com` và tương tự) — vì placeholder là giá trị công khai, ai cũng đoán được, để nguyên coi như tự mở lỗ giả mạo. Guard này bắt được lỗi "quên cấu hình", **không bắt được** trường hợp hạ tầng cấu hình sai — đó vẫn là trách nhiệm của lớp 1.
+Two defensive layers, neither sufficient alone:
+
+1. **Infrastructure (Mandatory, outside AIHUB codebase).** The reverse proxy/LB in front of each environment must validate or overwrite `Host` to match its authentic domain / TLS SNI before forwarding requests to AIHUB. This is an operational requirement — AIHUB code cannot verify whether the TCP connection arrived at the intended domain.
+2. **Code (`assertHostConfigurationIsSafe()`).** Halts application bootstrap in non-development environments if any of the three environment host settings remains set to default placeholders (`api.aihub.example.com`, etc.) — since placeholders are public knowledge and leaving them open invites spoofing. This guard catches "forgotten configuration", but **cannot catch** upstream reverse-proxy misconfiguration — which remains the responsibility of layer 1.
 
 ---
 
-→ Tiếp: [06 — Routing & Adapter](06-routing-adapter.md)
+→ Next: [06 — Routing & Adapter](06-routing-adapter.md)

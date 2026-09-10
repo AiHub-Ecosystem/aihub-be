@@ -1,27 +1,27 @@
 # 10 — Deployment, Roadmap, Testing, ADR
 
-← [Mục lục](README.md) · [09 — Security](09-security.md)
+← [Table of Contents](README.md) · [09 — Security](09-security.md)
 
 # N. Deployment
 
-## N.1 Compose stack
+## N.1 Compose Stack
 
 ```
-caddy       :80 :443, TLS tự động, load balance app-1/app-2
-app-1       aihub, replica 1
-app-2       aihub, replica 2
-postgres    16, volume riêng, KHÔNG map port ra ngoài
-redis       noeviction, RDB 15 phút, KHÔNG map port ra ngoài
-prometheus  scrape app-1, app-2
-loki        nhận log qua docker log driver
-grafana     dashboard + alert
+caddy       :80 :443, automatic TLS termination, load balances app-1/app-2
+app-1       aihub application, replica 1
+app-2       aihub application, replica 2
+postgres    16, dedicated persistent volume, NOT exposed to host ports
+redis       noeviction, 15-minute RDB snapshot, NOT exposed to host ports
+prometheus  scrapes app-1, app-2 /metrics
+loki        ingests JSON logs via docker log driver
+grafana     dashboards + alert routing
 ```
 
-8 container, một VPS **4 vCPU / 8GB** (Hetzner CPX31 ~€15/tháng).
+8 containers running on a single **4 vCPU / 8GB RAM** VPS (e.g. Hetzner CPX31 ~€15/month).
 
-Hai replica app **không phải vì tải**, mà vì deploy không đứt và vì một process chết thì còn cái kia.
+Two application replicas are configured **not for peak throughput**, but for zero-downtime rolling deployments and single-process crash isolation.
 
-## N.2 Graceful shutdown — quan trọng hơn bình thường
+## N.2 Graceful Shutdown — Critical for Long-Running AI Inference
 
 ```yaml
 stop_grace_period: 90s
@@ -29,164 +29,166 @@ stop_grace_period: 90s
 
 ```ts
 process.on("SIGTERM", async () => {
-  await fastify.close(); // ngừng nhận request mới, xong nốt request đang chạy
+  await fastify.close(); // stop accepting new traffic, finish in-flight requests
   await Promise.all([pg.end(), redis.quit()]);
 });
 ```
 
-Request chấm bài chạy tới 60 giây. Mặc định của Docker là `SIGKILL` sau **10 giây** — nghĩa là mỗi lần deploy bạn cắt ngang bài chấm của học viên **sau khi đã trả tiền token cho nó**. Hai dòng cấu hình này là khác biệt giữa deploy êm với deploy làm khách khó chịu.
+Grading requests can take up to 60 seconds. Docker's default shutdown behavior sends `SIGKILL` after **10 seconds** — meaning naive deployments sever student grading evaluations mid-stream **after token fees have already been billed**. These two lines of configuration prevent deployments from causing customer-visible errors.
 
-## N.3 Deploy: rolling bằng bash
+## N.3 Rolling Deployment Script
 
 ```bash
 docker compose pull app-1 app-2
 for c in app-1 app-2; do
   docker compose up -d --no-deps "$c"
-  until curl -sf "http://$c:3000/health"; do sleep 2; done   # chờ khoẻ mới sang cái kế
+  until curl -sf "http://$c:3000/health"; do sleep 2; done   # wait until healthy before rolling next
 done
 ```
 
-Caddy tự bỏ upstream không healthy ra khỏi vòng quay. **Không cần K8s để có rolling deploy.**
+Caddy automatically evicts unhealthy backends from upstream rotation. **Kubernetes is not required to achieve zero-downtime rolling deployments.**
 
-CI: GitHub Actions build image → đẩy lên GHCR → ssh chạy script trên.
+CI: GitHub Actions compiles image → pushes to GHCR → executes deployment script via SSH.
 
-Migration chạy **trước** khi deploy app, và chỉ được phép **expand**:
+Database migrations execute **prior** to app deployment, following the strict **expand-only** pattern:
 
 ```
-ĐƯỢC:    thêm bảng, thêm cột nullable, CREATE INDEX CONCURRENTLY
-KHÔNG:   xoá cột, đổi tên cột, thêm NOT NULL không default
+PERMITTED:  CREATE TABLE, ADD nullable column, CREATE INDEX CONCURRENTLY
+FORBIDDEN:  DROP COLUMN, RENAME column, ADD NOT NULL without DEFAULT
 ```
 
-Xoá cột là một deploy riêng, sau đó vài ngày.
+Dropping columns requires a separate, dedicated cleanup deployment scheduled days later.
 
-## N.4 Backup — phần dễ bị coi nhẹ nhất
+## N.4 Backup Strategy — The Most Common Point of Failure
 
-Tự host Postgres cho một sản phẩm thương mại → **đây là rủi ro lớn nhất của cả kiến trúc**.
+Self-hosting Postgres for a commercial application → **this is the single largest operational risk in the entire architecture**.
 
 ```bash
-# mỗi giờ
+# Hourly cron execution
 pg_dump -Fc aihub | age -r "$BACKUP_PUBKEY" > /tmp/aihub-$(date +%FT%H).dump.age
 rclone copy /tmp/aihub-*.age r2:aihub-backups/
-# giữ: 48 bản theo giờ, 30 bản theo ngày, 12 bản theo tháng
+# Retention: retain 48 hourly, 30 daily, and 12 monthly snapshots
 ```
 
-**Mỗi giờ chứ không phải mỗi ngày**, vì mất một ngày `usage_records` là mất một ngày dữ liệu doanh thu. Control plane rất nhỏ (vài trăm MB) nên dump mỗi giờ gần như miễn phí.
+**Hourly rather than daily**, because losing 24 hours of `usage_records` wipes out 24 hours of verifiable billing ledger. Control plane database volume is minimal (hundreds of megabytes), making hourly dumps virtually free.
 
-```
-ponytail: bỏ WAL archiving / PITR. Thêm khi mất 1 giờ dữ liệu là không chấp nhận được,
-hoặc khi DB lớn tới mức dump mỗi giờ trở nên nặng.
-```
+**Quarterly restoration rehearsals, tracked by calendar.** An unverified backup that has never undergone successful restoration is not a backup — it is merely blind hope. This is the only recommendation across this specification suite proposed for a **calendar schedule** rather than codebase automation.
 
-**Diễn tập phục hồi mỗi quý, ghi ngày vào file.** Một bản backup chưa từng restore thì chưa phải backup — nó là một niềm tin. Đây là dòng duy nhất trong toàn bộ thiết kế đề nghị đưa vào **lịch**, không phải vào code.
+<a id="n5-trigger-rời-khỏi-kiến-trúc-này"></a>
+<a id="n5-triggers-to-exit-this-architecture"></a>
 
-## N.5 Trigger rời khỏi kiến trúc này
+## N.5 Triggers to Exit This Architecture
 
-Ghi rõ để sau này không ai nâng cấp vì cảm tính.
+Documented explicitly to prevent premature, speculative refactoring:
 
-| Đổi sang                         | Trigger                                                                                                     |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Tách VPS riêng cho Postgres      | CPU DB > 60% kéo dài, hoặc app và DB tranh I/O                                                              |
-| Managed Postgres                 | Không còn ai muốn lo backup/patch, hoặc cần HA                                                              |
-| Nhiều app node + LB thật         | > 300 RPS hoặc > 1000 connection đồng thời                                                                  |
-| Kubernetes                       | ≥ 3 service cần deploy độc lập **và** có người chịu trách nhiệm vận hành nó                                 |
-| Xét lại Go / data plane riêng    | p99 gateway overhead > 50ms trong khi CPU chưa bão hoà; hoặc streaming SSE thành must-have; hoặc > 1000 RPS |
-| Kafka                            | Không. Cho tới khi có consumer thứ ba cần đọc lại lịch sử event                                             |
-| Partition `usage_records`        | > ~50 triệu row, hoặc job retention chạy quá vài phút                                                       |
-| Vault / SOPS                     | ≥ 3 môi trường, hoặc có người rời team, hoặc yêu cầu compliance                                             |
-| Thêm Tempo/Jaeger                | ≥ 3 service trong một luồng request, hoặc có worker async                                                   |
-| Sliding window / GCRA rate limit | Khách phàn nàn về công bằng, hoặc rate limit thành cam kết hợp đồng                                         |
+| Migration Path                        | Trigger Threshold                                                                                          |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Dedicated VPS for Postgres            | Database CPU > 60% sustained, or application/DB disk I/O contention                                        |
+| Managed PostgreSQL                    | Operating overhead becomes unmanageable, or high-availability failover is required                         |
+| Multi-node cluster with dedicated LB  | Sustained traffic > 300 RPS or > 1,000 concurrent connections                                              |
+| Kubernetes                            | ≥ 3 independent microservices requiring decoupled deploy pipelines **and** dedicated DevOps staffing       |
+| Re-evaluate Go / dedicated data plane | p99 gateway overhead > 50ms while CPU is underutilized; or streaming SSE becomes mandatory; or > 1,000 RPS |
+| Apache Kafka                          | Deferred indefinitely until a third event consumer requires event log replay                               |
+| Partitioning `usage_records`          | > ~50 million rows, or retention cleanup queries take more than several minutes                            |
+| HashiCorp Vault / SOPS                | ≥ 3 deployment environments, or team member departures, or formal compliance audits                        |
+| Tempo / Jaeger tracing                | ≥ 3 chained downstream services in a single request flow, or async workers in Phase 4                      |
+| Sliding window / GCRA rate limiting   | Customer disputes regarding minute-boundary burst fairness, or contractual SLA mandates                    |
 
-## N.6 Phases
+<a id="n6-phases"></a>
 
-### Phase 0 — Freeze D1 · _1 tuần, chạy song song_
+## N.6 Implementation Phases
 
-Chốt canonical schema thật ([06 §H.2](06-routing-adapter.md#h2-canonical-schemas)), 18 mã lỗi ([07 §J.2](07-reliability-and-errors.md#j2-danh-sách-mã-lỗi-v1)), operation catalog ([06 §H.1](06-routing-adapter.md#h1-operation-catalog--code-có-kiểu)), internal contract gửi team Writing ([06 §H.5](06-routing-adapter.md#h5-internal-contract--sửa-writing-mà-không-phá-app-hiện-tại)).
+### Phase 0 — Freeze D1 · _1 week, concurrent_
 
-Đây là đầu vào của mọi phase sau. Danh sách thay đổi cụ thể: [11 §Q](11-open-questions.md#q-những-thay-đổi-cần-đưa-ngược-vào-d1).
+Lock in canonical schemas ([06 §H.2](06-routing-adapter.md#h2-canonical-schemas)), 18 unified error codes ([07 §J.2](07-reliability-and-errors.md#j2-error-code-inventory-v1)), operation catalog ([06 §H.1](06-routing-adapter.md#h1-operation-catalog-typed-code)), internal contract for Writing team ([06 §H.5](06-routing-adapter.md#h5-internal-contract-modify-writing-without-breaking-existing-app)).
 
-### Phase 1 — Core proxy · _~3 tuần_
+Prerequisite for all subsequent work. Detailed change list: [11 §Q](11-open-questions.md#q-changes-to-feed-back-to-d1).
 
-4 operation Writing; API key auth + CLI; catalog + adapter + dispatcher; error model đầy đủ; `usage_records`; Compose + Caddy + backup; **rate limit + idempotency**.
+### Phase 1 — Core Gateway Proxy · _~3 weeks_
 
-> **Cột mốc:** khách gọi được `/v1/ielts/writing/task1/grade` bằng API key thật, và một vòng lặp retry hỏng không làm bạn mất tiền hai lần.
+4 Writing operations; API key authentication + CLI; catalog + adapter + dispatcher; complete error handling; `usage_records` persistence; Docker Compose + Caddy + backups; **rate limiting + idempotency**.
 
-**Rate limit và idempotency được kéo từ Phase 3 lên đây.** Lý do: Phase 1 là lúc endpoint đắt tiền nhất (`writing.*.grade`) mở ra cho khách thật. Không có hai thứ này thì một vòng lặp retry sai hoặc một cú double-submit là trả tiền model hai lần.
+> **Milestone:** Customers invoke `/v1/ielts/writing/task1/grade` with real API keys, and retry storms never trigger double token billing.
 
-Chi phí kéo lên rất thấp — rate limit là `INCR` + `EXPIRE` (~15 dòng, [04 §F.2](04-redis.md#f2-rate-limit-fixed-window-không-lua)), idempotency là một bảng + `ON CONFLICT` (~60 dòng, [03 §E.4](03-database.md#e4-xử-lý-race-của-idempotency--không-cần-distributed-lock)). Khoảng 2 ngày cho cả hai, đổi lấy việc Phase 1 mở cho khách thật được ngay thay vì phải chờ tới Phase 3.
+**Rate limiting and idempotency are pulled forward from Phase 3.** Rationale: Phase 1 exposes our most expensive endpoint (`writing.*.grade`) to paying traffic. Without these guards, client-side retry bugs double-bill inference costs.
 
-**Chi tiết cho việc Phase 1 chạy được mà không chờ team Writing:** Writing hiện dùng `HTTPBearer` với token có sẵn. Phase 1 để dispatcher gửi token đó lấy từ env (`DOWNSTREAM_AI_WRITING_TOKEN`); Phase 2 mới thay bằng internal JWT do AIHUB tự ký. Nghĩa là Phase 1 chạy được với AI Writing **y nguyên hiện tại**, chỉ riêng `parseResponse` là phải chờ response shape thật.
+Implementation overhead is negligible — rate limiting is `INCR` + `EXPIRE` (~15 lines, [04 §F.2](04-redis.md#f2-rate-limit-fixed-window-without-lua)), idempotency is one table with `ON CONFLICT` (~60 lines, [03 §E.4](03-database.md#e4-handling-idempotency-race-conditions-without-distributed-locks)). ~2 days of effort allowing Phase 1 to onboard production traffic safely.
 
-### Phase 2 — Identity + đóng cửa · _2 tuần_
+**Decoupling from Writing deployment schedules:** AI Writing currently uses `HTTPBearer` with static tokens. In Phase 1, the dispatcher forwards a token supplied via environment variable (`DOWNSTREAM_AI_WRITING_TOKEN`); Phase 2 swaps this for self-signed internal JWTs. Phase 1 runs against AI Writing **exactly as it operates today**, needing only real response fixtures for `parseResponse`.
 
-User assertion + JWKS + SSRF guard; internal JWT + JWKS endpoint + xoay khoá; Writing trả `usage`; AIHUB dùng token riêng của Writing.
+### Phase 2 — Identity & Security Perimeter · _2 weeks_
 
-> **Cột mốc:** metering có số thật, và mọi khách hàng chỉ đi được qua AIHUB.
+User assertions + JWKS fetching + SSRF protection; internal JWT minting + JWKS endpoint + key rotation; Writing returns `usage` payloads; AIHUB adopts dedicated Writing token.
 
-**Không bao gồm việc đưa Writing vào private network.** Writing còn phục vụ ứng dụng Wispace chưa đi qua AIHUB. Việc đó chuyển sang Phase 5 và phụ thuộc lịch của bên Wispace, không phải lịch của AIHUB.
+> **Milestone:** Metering reflects real token metrics, and customers can only route traffic through AIHUB.
 
-### Phase 3 — Bảo vệ + quan sát · _1–2 tuần_
+**Excludes migrating Writing into private networking.** Writing continues to serve Wispace directly. That migration moves to Phase 5 based on Wispace's product timeline.
 
-Concurrency limit, quota, circuit breaker, retry + backoff; Prometheus/Loki/Grafana + alert; load test để chốt `rate_limit_rpm` và `max_concurrent`.
+### Phase 3 — Hardening & Observability · _1–2 weeks_
 
-> **Cột mốc:** một khách chạy loạn không làm sập khách khác.
+Concurrency limits, monthly quotas, circuit breakers, backoff retries; Prometheus/Loki/Grafana + alerts; load testing to baseline `rate_limit_rpm` and `max_concurrent`.
 
-_(Rate limit và idempotency đã làm ở Phase 1.)_
+> **Milestone:** A single runaway tenant cannot degrade service for others.
 
-**Phase 1–3 ≈ 6–7 tuần**, khớp mốc 1–2 tháng cho D2.
+_(Rate limiting and idempotency were completed in Phase 1.)_
 
-### Phase 4 — Async + Speaking
+**Total duration for Phases 1–3 ≈ 6–7 weeks**, aligning with the 1–2 month D2 delivery window.
 
-Bảng `jobs` (Postgres = SoT), BullMQ trên Redis sẵn có, `assets` + Cloudflare R2 + presigned upload, `GET /v1/jobs/{id}`, webhook delivery + retry.
+### Phase 4 — Async Pipeline & Speaking
 
-### Phase 5 — Scale-out
+`jobs` table in Postgres (source of truth), BullMQ backed by existing Redis, `assets` table + Cloudflare R2 presigned uploads, `GET /v1/jobs/{id}`, webhook notifications with exponential backoff retries.
 
-Chỉ khi chạm trigger ở [§N.5](#n5-trigger-rời-khỏi-kiến-trúc-này).
+### Phase 5 — Horizontal Scale-Out
 
-## N.7 Testing strategy
+Triggered exclusively upon hitting the thresholds documented in [§N.5](#n5-triggers-to-exit-this-architecture).
 
-| Loại                                                | Phạm vi                                                                                           | Phase |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ----- |
-| Golden fixture cho adapter                          | `buildRequest` / `parseResponse` — JSON vào, JSON ra, **không mock**                              | 1     |
-| Unit: error mapper, scope resolver, `splitEnvelope` | Hàm thuần                                                                                         | 1     |
-| Schema test                                         | Mọi request/response schema có ví dụ hợp lệ và không hợp lệ                                       | 1     |
-| **Redact test**                                     | Log không bao giờ chứa key / assertion / nội dung bài viết                                        | 1     |
-| Integration: auth pipeline                          | Key sai/hết hạn/sai env; assertion sai `iss`/`alg`/`exp`                                          | 2     |
-| **Xoay khoá JWKS**                                  | Chạy đủ 5 bước [05 §G.8](05-auth-identity.md#g8-jwks-của-aihub--xoay-khoá), không request nào lỗi | 2     |
-| Idempotency race                                    | 2 request song song cùng key → đúng **1 lần** gọi downstream                                      | 3     |
-| Failure injection                                   | Downstream 500/timeout/connection refused; Redis down                                             | 3     |
-| Load test                                           | Chốt `rate_limit_rpm`, `max_concurrent` theo sức chịu thật của Writing                            | 3     |
+<a id="n7-testing-strategy"></a>
 
-### Có cần Pact / consumer-driven contract testing không?
+## N.7 Testing Strategy
 
-**Chưa.** Với hai service do cùng team sở hữu, JSON Schema validation ở biên (`InternalResponseSchema`) + golden fixture đã bắt được đúng những lỗi mà Pact bắt, với chi phí vận hành gần bằng 0.
+| Test Type                                                 | Scope                                                                                                          | Target Phase |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------ |
+| Golden adapter fixtures                                   | `buildRequest` / `parseResponse` — JSON in, JSON out, **zero mocks**                                           | Phase 1      |
+| Unit tests: error mapper, scope resolver, `splitEnvelope` | Pure functional logic                                                                                          | Phase 1      |
+| Schema conformance                                        | All request/response schemas tested against valid and invalid payloads                                         | Phase 1      |
+| **Redaction tests**                                       | Assert logs never leak API keys, assertions, or student essay text                                             | Phase 1      |
+| Integration: auth pipeline                                | Invalid/expired/unauthorized keys; malformed assertion `iss`/`alg`/`exp` claims                                | Phase 2      |
+| **JWKS key rotation**                                     | Validate all 5 steps in [05 §G.8](05-auth-identity.md#g8-aihub-jwks-and-key-rotation) with zero request errors | Phase 2      |
+| Idempotency concurrency                                   | Concurrent duplicate requests with matching key → exactly **1** downstream execution                           | Phase 3      |
+| Fault injection                                           | Downstream 500 / timeout / connection drop; simulated Redis crash                                              | Phase 3      |
+| Load testing                                              | Calibrate `rate_limit_rpm` and `max_concurrent` against actual Writing capacity                                | Phase 3      |
 
-Xét lại khi AI Service do **team khác** sở hữu — lúc đó Pact mua được thứ mà schema validation không mua được: phá build của _họ_ khi họ đổi contract.
+### Do We Need Consumer-Driven Contract Testing (Pact)?
 
-### Postman collection cho D2
+**Not yet.** With both services maintained internally, edge JSON Schema validation (`InternalResponseSchema`) combined with golden fixtures catches the exact class of bugs Pact targets, with zero added infrastructure.
 
-Theo D1 §G, tối thiểu 15 ca. Sinh từ OpenAPI (vốn sinh từ TypeBox) thay vì viết tay.
+Revisit if AI services are maintained by **external organizations** — where Pact provides value by breaking _their_ CI build when breaking changes are introduced.
+
+### Postman Collection for D2
+
+Per D1 §G, minimum 15 automated test cases. Generated directly from OpenAPI specs (which are generated from TypeBox) rather than maintained by hand.
 
 ---
 
-# O. ADR List
+# O. Architectural Decision Records (ADR)
 
-| ADR | Nội dung                                               | Điểm cốt lõi phải ghi lại                                           |
-| --- | ------------------------------------------------------ | ------------------------------------------------------------------- |
-| 001 | NestJS + Fastify; không dùng Envoy/Kong làm data plane | Logic của AIHUB là application logic đội lốt proxy                  |
-| 002 | PostgreSQL cho control plane; 5 bảng thay vì 13        | Bảng nào bị cắt và điều kiện thêm lại                               |
-| 003 | Format API key + SHA-256                               | **Vì sao không** bcrypt/argon2                                      |
-| 004 | Signed User Assertion + JWKS                           | `UNIQUE(issuer)`; giới hạn TTL; alg allowlist                       |
-| 005 | Internal JWT EdDSA + xoay khoá                         | `aud` riêng từng service; quy trình 5 bước                          |
-| 006 | Trách nhiệm của Redis                                  | **Fail open khi Redis chết** — lập luận "cho qua thì hoàn tác được" |
-| 007 | Idempotency lưu ở Postgres                             | `ON CONFLICT` thay lock; timeout không mất tiền hai lần             |
-| 008 | Operation catalog ở code, không ở DB                   | Lý do SSRF + type-check                                             |
-| 009 | Adapter là hàm thuần, không I/O                        | Golden fixture không cần mock                                       |
-| 010 | Ghi cả request lẫn token                               | Billing chưa chốt; dữ liệu quá khứ không tạo lại được               |
-| 011 | Docker Compose trên VPS                                | Trigger rời đi ở [§N.5](#n5-trigger-rời-khỏi-kiến-trúc-này)         |
-| 012 | Bỏ distributed tracing ở Stage A                       | Giữ `traceparent` để cắm sau                                        |
+| ADR | Title                                                | Core Rationale to Preserve                                                                   |
+| --- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 001 | NestJS + Fastify; avoid Envoy/Kong as data plane     | AIHUB logic is application business logic masquerading as proxy routing                      |
+| 002 | PostgreSQL for control plane; 5 tables instead of 13 | Specific pruned tables and exact triggers for reintroduction                                 |
+| 003 | API key format + SHA-256 hashing                     | **Why we avoid** bcrypt/argon2 slow hashes                                                   |
+| 004 | Signed User Assertions + JWKS verification           | `UNIQUE(issuer)`; strict TTL caps; algorithm allowlisting                                    |
+| 005 | Internal EdDSA JWT + key rotation                    | Per-service `aud` targeting; zero-downtime 5-step rotation                                   |
+| 006 | Scoped role of Redis                                 | **Fail open during Redis outages** — passing a request can be reconciled, blocking cannot    |
+| 007 | Postgres-backed idempotency                          | `ON CONFLICT` replaces distributed locks; background execution prevents double token charges |
+| 008 | Operation catalog in code, not DB                    | SSRF defense-in-depth + static compiler type-checking                                        |
+| 009 | Pure functional adapters without I/O                 | Enables golden fixture testing without mocks                                                 |
+| 010 | Meter both request counts and token metrics          | Unfinalized pricing models; historical telemetry cannot be retroactively generated           |
+| 011 | Docker Compose on single VPS                         | Explicit exit triggers in [§N.5](#n5-triggers-to-exit-this-architecture)                     |
+| 012 | Omission of distributed tracing in Stage A           | Retain W3C `traceparent` headers for future collector integration                            |
 
-ADR 003, 006, 007 là ba cái quan trọng nhất phải viết trước — chúng đều là quyết định **ngược trực giác** mà nếu không ghi lý do thì sáu tháng nữa sẽ có người "sửa" lại thành sai.
+ADRs 003, 006, and 007 are the most vital to document first — each represents a **counter-intuitive** engineering decision that future contributors might casually "fix" back into a flawed state if the underlying reasoning is lost.
 
 ---
 
-→ Tiếp: [11 — Open Questions](11-open-questions.md)
+→ Next: [11 — Open Questions](11-open-questions.md)

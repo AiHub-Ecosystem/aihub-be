@@ -1,44 +1,44 @@
-# AIHUB — Architecture Design (nền tảng cho Deliverable 2)
+# AIHUB — Architecture Design (Foundation for Deliverable 2)
 
-> **Trạng thái:** đã duyệt qua brainstorm ngày 2026-09-07.
-> **Trả lời cho:** brief brainstorm ban đầu, đã gỡ khỏi repo — cấu trúc output A–P bắt nguồn từ §16 của brief đó, xem lịch sử git nếu cần đối chiếu.
-> **Không thay thế:** `../../../aihub_long_term_architecture.md` (kiến trúc đích) và `../../../aihub_deliverable_1_api_contract_schema.md` (contract). Đây là **implementation strategy** để đi từ D1 sang D2.
+> **Status:** Approved following the brainstorm on 2026-09-07.
+> **Context:** Answers the original brainstorm brief (removed from repo) — the A–P output structure originates from §16 of that brief; refer to git history if needed.
+> **Does not replace:** `../../../aihub_long_term_architecture.md` (target architecture) and `../../../aihub_deliverable_1_api_contract_schema.md` (contract). This document serves as the **implementation strategy** to transition from D1 to D2.
 
 Scaffold status: [Clean Architecture and agent workflow design](12-agent-workflow-and-clean-architecture-design.md) is implemented in the initial NestJS/Fastify source scaffold.
 
-## Mục lục
+## Table of Contents
 
-| File                                                                                                     | Nội dung                                                                                                       | Mục brief |
-| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------- |
-| [01-context-and-stack.md](01-context-and-stack.md)                                                       | Ràng buộc đã chốt, khảo sát AI Writing thật, executive recommendation, tech stack matrix, architecture diagram | A, B, C   |
-| [02-request-lifecycle.md](02-request-lifecycle.md)                                                       | Pipeline 17 bước, map vào NestJS, 3 lifecycle mẫu                                                              | D         |
-| [03-database.md](03-database.md)                                                                         | DDL 5 bảng, index, idempotency race, 8 bảng bị cắt                                                             | E         |
-| [04-redis.md](04-redis.md)                                                                               | Key inventory, rate limit, concurrency limit, quota, hành vi khi Redis chết                                    | F         |
-| [05-auth-identity.md](05-auth-identity.md)                                                               | API key, user assertion, JWKS/SSRF, internal JWT, xoay khoá, authorization                                     | G         |
-| [06-routing-adapter.md](06-routing-adapter.md)                                                           | Operation catalog, canonical schema, adapter interface, dispatcher, internal contract                          | H         |
-| [07-reliability-and-errors.md](07-reliability-and-errors.md)                                             | Timeout, retry, circuit breaker, idempotency, 18 mã lỗi                                                        | I, J      |
-| [08-metering-and-observability.md](08-metering-and-observability.md)                                     | Metering, billing, reconciliation, log/metric/alert                                                            | K, L      |
-| [09-security.md](09-security.md)                                                                         | Threat model 18 mục theo Must/Should/Later                                                                     | M         |
-| [10-deployment-roadmap.md](10-deployment-roadmap.md)                                                     | Compose stack, deploy, backup, trigger scale, 6 phase, testing, ADR                                            | N, O      |
-| [11-open-questions.md](11-open-questions.md)                                                             | 5 câu hỏi còn mở, thay đổi cần đưa ngược vào D1, đối chiếu nguyên tắc                                          | P         |
-| [12-agent-workflow-and-clean-architecture-design.md](12-agent-workflow-and-clean-architecture-design.md) | Agent workflow, source-of-truth hierarchy, clean architecture scaffold                                         | —         |
+| File                                                                                                     | Content                                                                                                        | Brief Section |
+| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------- |
+| [01-context-and-stack.md](01-context-and-stack.md)                                                       | Settled constraints, real AI Writing survey, executive recommendation, tech stack matrix, architecture diagram | A, B, C       |
+| [02-request-lifecycle.md](02-request-lifecycle.md)                                                       | 17-step pipeline, NestJS mapping, 3 sample lifecycles                                                          | D             |
+| [03-database.md](03-database.md)                                                                         | 5-table DDL, indexes, idempotency race conditions, 8 pruned tables                                             | E             |
+| [04-redis.md](04-redis.md)                                                                               | Key inventory, rate limits, concurrency limits, quotas, behavior on Redis failure                              | F             |
+| [05-auth-identity.md](05-auth-identity.md)                                                               | API keys, user assertions, JWKS/SSRF, internal JWTs, key rotation, authorization                               | G             |
+| [06-routing-adapter.md](06-routing-adapter.md)                                                           | Operation catalog, canonical schemas, adapter interface, dispatcher, internal contract                         | H             |
+| [07-reliability-and-errors.md](07-reliability-and-errors.md)                                             | Timeouts, retries, circuit breakers, idempotency, 18 error codes                                               | I, J          |
+| [08-metering-and-observability.md](08-metering-and-observability.md)                                     | Metering, billing, reconciliation, logs/metrics/alerts                                                         | K, L          |
+| [09-security.md](09-security.md)                                                                         | 19-item threat model prioritized by Must/Should/Later                                                          | M             |
+| [10-deployment-roadmap.md](10-deployment-roadmap.md)                                                     | Docker Compose stack, deployment, backups, scaling triggers, 6 phases, testing, ADRs                           | N, O          |
+| [11-open-questions.md](11-open-questions.md)                                                             | 5 open questions, changes to feed back to D1, alignment with principles                                        | P             |
+| [12-agent-workflow-and-clean-architecture-design.md](12-agent-workflow-and-clean-architecture-design.md) | Agent workflow, source-of-truth hierarchy, clean architecture scaffold                                         | —             |
 
 ## Executive Recommendation
 
-**AIHUB là một modular monolith viết bằng NestJS + Fastify, tự làm toàn bộ data plane, không có Envoy/Kong đứng trước.**
+**AIHUB is a modular monolith built with NestJS + Fastify, executing the entire data plane without an Envoy or Kong proxy in front.**
 
-Lý do cốt lõi: mọi thứ AIHUB làm đều là **application logic đội lốt proxy**. Verify JWT bằng JWKS riêng của từng organization, tính `entitlement ∩ api_key_scope`, map canonical request sang contract riêng của từng AI Service, mint internal JWT theo scope — không có việc nào là "proxy thuần". Đặt Kong/Envoy vào trước chỉ tạo ra một hệ thống config thứ hai phải nuôi, và cuối cùng vẫn phải viết lại chính logic đó bằng Lua/WASM.
+Core rationale: Everything AIHUB performs is **application business logic masquerading as proxy routing**. Verifying JWTs against per-tenant JWKS endpoints, evaluating `entitlement ∩ api_key_scope`, mapping canonical requests to distinct proprietary downstream contracts, minting scoped internal JWTs — none of this is "pure proxying". Placing Kong or Envoy in front merely introduces a second configuration plane to maintain, ultimately requiring the same business logic to be rewritten in Lua or WASM.
 
-Postgres là nguồn sự thật duy nhất cho control plane. Redis chỉ là cache và bộ đếm — **Redis chết thì AIHUB chậm đi và mất một phần lớp bảo vệ, nhưng không bao giờ trả sai kết quả và không bao giờ cho qua một request đáng lẽ bị chặn vì lý do authorization**. Không có queue, không có object storage ở MVP; cả hai vào cùng lúc với Speaking.
+Postgres is the single source of truth for the control plane. Redis acts purely as a cache and transient counter — **if Redis fails, AIHUB experiences degraded latency and loses partial rate-limiting defenses, but never returns corrupted results and never permits an unauthorized request**. No queues and no object storage in the MVP; both enter alongside the Speaking service.
 
-Bốn thứ được đầu tư kỹ hơn mức "MVP" vì chúng không sửa rẻ được về sau: **tenant isolation**, **API contract**, **metering**, **auth**. Mọi thứ khác cắt tới mức tối thiểu chạy được, kèm trigger rõ ràng để nâng cấp.
+Four areas received disproportionate architectural investment beyond conventional "MVP" standards because they are prohibitively expensive to retrofit later: **tenant isolation**, **API contracts**, **metering**, and **authentication**. Everything else is stripped to the minimum viable execution surface, paired with clear quantitative triggers for future upgrades.
 
-Toàn bộ chạy trên **một VPS với Docker Compose**, 8 container, khoảng €15/tháng. Không phải vì tiết kiệm mà vì một team 2–3 người không có DevOps thì mỗi thành phần hạ tầng thêm vào là một thứ sẽ hỏng lúc 3 giờ sáng.
+The entire system runs on a **single VPS via Docker Compose**, comprising 8 containers, costing ~€15/month. This is chosen not out of frugality, but because for a 2–3 person engineering team without dedicated DevOps, every added infrastructure dependency is an operational liability at 3 AM.
 
-## Đọc theo vai trò
+## Reading by Role
 
-- **Muốn bắt đầu code ngay:** [01](01-context-and-stack.md) → [03](03-database.md) → [06](06-routing-adapter.md) → [10](10-deployment-roadmap.md#n6-phases)
-- **Review bảo mật:** [05](05-auth-identity.md) → [09](09-security.md)
-- **Theo dõi open questions và thay đổi cần đưa ngược vào D1:** [11](11-open-questions.md#q-những-thay-đổi-cần-đưa-ngược-vào-d1)
-- **Thay đổi workflow hoặc source layout:** [12](12-agent-workflow-and-clean-architecture-design.md)
-- **Bàn giao cho team AI Writing:** [06 §H.5](06-routing-adapter.md#h5-internal-contract--sửa-writing-mà-không-phá-app-hiện-tại) + [01 §0.1](01-context-and-stack.md#01-hiện-trạng-ai-writing-khảo-sát-thật)
+- **Ready to write code immediately:** [01](01-context-and-stack.md) → [03](03-database.md) → [06](06-routing-adapter.md) → [10](10-deployment-roadmap.md#n6-phases)
+- **Security review:** [05](05-auth-identity.md) → [09](09-security.md)
+- **Track open questions & D1 feedback loop:** [11](11-open-questions.md#q-changes-to-feed-back-to-d1)
+- **Modify workflow or source layout:** [12](12-agent-workflow-and-clean-architecture-design.md)
+- **Hand-off to AI Writing team:** [06 §H.5](06-routing-adapter.md#h5-internal-contract-modify-writing-without-breaking-existing-app) + [01 §0.1](01-context-and-stack.md#01-current-state-of-ai-writing-live-survey)

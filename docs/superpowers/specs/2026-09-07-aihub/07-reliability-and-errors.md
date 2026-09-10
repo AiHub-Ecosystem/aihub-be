@@ -1,135 +1,134 @@
 # 07 — Reliability & Unified Error Model
 
-← [Mục lục](README.md) · [06 — Routing & Adapter](06-routing-adapter.md)
+← [Table of Contents](README.md) · [06 — Routing & Adapter](06-routing-adapter.md)
 
 # I. Reliability
 
-## I.1 Ngân sách timeout, xếp tầng
+## I.1 Cascading Timeout Budgets
 
 ```
-Caddy                     120s     luôn phải LỚN HƠN app
- └─ AIHUB op.timeoutMs     60s     chấm bài   (sinh đề: 10s / 30s)
-     └─ undici headers/bodyTimeout = phần còn lại của ngân sách
-         └─ header x-request-deadline -> AI Writing tự biết còn bao lâu
+Caddy                     120s     must always EXCEED upstream application limits
+ └─ AIHUB op.timeoutMs     60s     grading    (generation: 10s / 30s)
+     └─ undici headers/bodyTimeout = remainder of the allocated budget
+         └─ x-request-deadline header -> informs AI Writing how much time remains
 ```
 
-Deadline tính **một lần** lúc request vào (`ctx.deadlineMs`), rồi mọi bước sau trừ dần vào đó. Không timeout nào được đặt độc lập — nếu không, retry cộng dồn sẽ vượt qua cả timeout tổng.
+The overall deadline is computed **exactly once** upon request arrival (`ctx.deadlineMs`); all subsequent pipeline steps deduct elapsed time from this single budget. Timeouts are never configured independently — otherwise, cumulative retries would easily breach the global client timeout.
 
-Tài liệu cho khách phải ghi rõ: _chấm bài có thể mất tới 60 giây, đặt timeout phía bạn ít nhất 90 giây._ Khách để timeout 30s là chuyện sẽ xảy ra nếu không nói trước.
+Customer-facing integration docs must state explicitly: _Grading requests may take up to 60 seconds; client-side timeouts must be configured to at least 90 seconds._ If not documented in advance, clients will set default 30s timeouts and experience artificial client-side drops.
 
-## I.2 Retry — phân biệt "chưa gửi" và "không biết"
+<a id="i2-retry--phân-biệt-chưa-gửi-và-không-biết"></a>
+<a id="i2-retries-distinguishing-untransmitted-from-unknown-state"></a>
 
-Đây là quyết định cốt lõi của toàn bộ retry policy, và **nó không nằm ở HTTP status**:
+## I.2 Retries — Distinguishing "Untransmitted" from "Unknown State"
+
+This principle governs our entire retry strategy, and **it does not depend purely on HTTP status codes**:
 
 ```
-ECONNREFUSED / DNS fail / lỗi khi đang bắt tay TCP
-  -> request CHƯA HỀ tới AI Service -> retry an toàn, kể cả POST tốn tiền
+ECONNREFUSED / DNS resolution failure / TCP handshake reset
+  -> Request NEVER reached the downstream AI Service -> Safe to retry, even expensive generative POSTs
 
-Timeout sau khi đã gửi / connection reset giữa chừng
-  -> KHÔNG BIẾT model đã chạy chưa -> mặc định KHÔNG retry
+Timeout after request dispatch / connection reset mid-flight
+  -> UNKNOWN whether the model began inference -> Default: DO NOT retry
 ```
 
-| Tình huống                              | Retry?                                                                      |
-| --------------------------------------- | --------------------------------------------------------------------------- |
-| Chưa kết nối được (`ECONNREFUSED`, DNS) | Có, tối đa 2 lần                                                            |
-| `503` + có `Retry-After`                | Có, 1 lần, nếu còn đủ deadline                                              |
-| `502`, `500`                            | 1 lần nếu operation là `GET`; POST thì không                                |
-| Timeout sau khi gửi                     | **Không** — xem [§I.5](#i5-timeout--idempotency-key-không-mất-tiền-hai-lần) |
-| `4xx` bất kỳ                            | Không bao giờ — retry lỗi client là vô nghĩa                                |
-| Breaker đang mở                         | Không, trả 503 ngay                                                         |
+| Failure Scenario                         | Retry?                                                                         |
+| ---------------------------------------- | ------------------------------------------------------------------------------ |
+| Connection failure (`ECONNREFUSED`, DNS) | Yes, maximum 2 attempts                                                        |
+| `503` with valid `Retry-After`           | Yes, 1 attempt, if remaining deadline allows                                   |
+| `502`, `500`                             | 1 attempt for `GET` operations only; POST never retried blindly                |
+| Timeout after dispatch                   | **No** — see [§I.5](#i5-timeouts-and-idempotency-keys-avoiding-double-charges) |
+| Any `4xx` client error                   | Never — retrying client errors is useless                                      |
+| Circuit breaker open                     | No, fail immediately with 503                                                  |
 
-### Backoff: full jitter
+### Backoff Strategy: Full Jitter
 
 ```ts
 const delay = Math.random() * Math.min(2_000, 200 * 2 ** attempt);
-if (Date.now() + delay + expectedMs > ctx.deadlineMs) throw lastError; // hết ngân sách thì thôi
+if (Date.now() + delay + expectedMs > ctx.deadlineMs) throw lastError; // abandon if budget exhausted
 ```
 
-Full jitter (random **từ 0**) thay vì "exponential + cộng chút nhiễu": khi AI Writing vừa sống lại sau sự cố, mọi client retry cùng lúc sẽ đạp nó chết lần nữa. Random từ 0 rải đều chúng ra.
+Full jitter (randomized uniformly **from 0**) instead of fixed exponential plus jitter: when AI Writing recovers from an outage, synchronous retries would hammer it back down. Randomizing from zero disperses retry spikes evenly.
 
-Tối đa 1–2 retry + circuit breaker ⇒ khuếch đại tải tối đa 2x.
+Max 1–2 retries + circuit breakers limits downstream load amplification to at most 2x.
 
-```
-ponytail: bỏ retry budget/throttling kiểu gRPC. Thêm khi có > 3 downstream
-hoặc khi thấy retry storm trong một sự cố thật.
-```
+<a id="i3-circuit-breaker--opossum-key-theo-operation"></a>
+<a id="i3-circuit-breaker-opossum-keyed-by-operation"></a>
 
-## I.3 Circuit breaker — `opossum`, key theo operation
+## I.3 Circuit Breaker — `opossum`, Keyed by Operation
 
 ```ts
 new CircuitBreaker(call, {
   errorThresholdPercentage: 50,
-  volumeThreshold: 20, // đừng mở vì 2 request đầu lỗi
-  resetTimeout: 30_000, // sau 30s thả 1 request thăm dò
-  timeout: false, // undici đã lo timeout, đừng đặt hai chỗ
+  volumeThreshold: 20, // do not trip on initial low-sample blips
+  resetTimeout: 30_000, // wait 30s before sending a probe canary request
+  timeout: false, // undici handles network timeouts; avoid duplicate timers
 });
 ```
 
-**Không tự viết.** Breaker đúng cần rolling window + trạng thái half-open chỉ cho **một** request đi qua. Tự viết rất dễ để cả trăm request tràn vào lúc half-open và đạp service chết ngay khi nó vừa hồi.
+**Never roll custom circuit breakers.** Correct breakers require rolling statistical windows and a half-open state that permits strictly **one** trial request through. Custom implementations frequently leak hundreds of concurrent requests in half-open state, crashing recovering services immediately.
 
-**Key là `operation`, không phải `downstream`.** Nếu `/grading-feedback-task1` hỏng mà `/generate-question-task1` vẫn tốt, breaker theo service sẽ giết luôn cả hai. Cùng lượng code, chỉ khác cái key.
+**Keyed by `operation`, not by `downstream`.** If `/grading-feedback-task1` is failing while `/generate-question-task1` is healthy, a service-wide breaker would needlessly take down question generation. Same amount of code, vastly superior fault isolation.
 
-**Chỉ 5xx / timeout / lỗi kết nối tính là failure.** `4xx` từ downstream **không** được tính — service vẫn khoẻ, chỉ là client gửi sai. Đếm nhầm 400 vào đây thì một khách gửi payload sai sẽ mở breaker và làm sập dịch vụ của **mọi khách khác**.
+**Only 5xx / timeouts / transport connection faults count as failures.** `4xx` responses from downstream **never** count — the service is healthy; the client simply submitted invalid parameters. Counting 4xx errors would allow a single client sending invalid payloads to trip the circuit breaker and knock out service for **all other customers**.
 
-Breaker mở → `503 AI_SERVICE_UNAVAILABLE`, `retry_after_ms` = thời gian còn lại tới lần thăm dò kế tiếp.
+Open breaker → `503 AI_SERVICE_UNAVAILABLE`, with `retry_after_ms` indicating time until the next exploratory probe.
 
-## I.4 Idempotency, vòng đời đầy đủ
+## I.4 Idempotency — Full Lifecycle
 
 ```
-fingerprint = sha256( canonicalJSON(body đã validate) + actorId )
+fingerprint = sha256( canonicalJSON(validatedBody) + actorId )
 ```
 
-Băm **sau khi validate và chuẩn hoá** (sắp key theo thứ tự), không băm bytes thô — nếu không thì khác mỗi dấu cách cũng thành `409` oan. Có `actorId` vì cùng một key dùng cho hai học viên khác nhau là hai request khác nhau thật.
+Hashing occurs **after validation and canonical normalization** (keys sorted alphabetically), never on raw request bytes — otherwise whitespace discrepancies cause false `409` conflicts. `actorId` is incorporated because identical keys used across two different students represent distinct business operations.
 
-Trạng thái và xử lý race: xem [03 §E.4](03-database.md#e4-xử-lý-race-của-idempotency--không-cần-distributed-lock).
+State machine and race handling: see [03 §E.4](03-database.md#e4-handling-idempotency-race-conditions-without-distributed-locks).
 
-### Lỗi 4xx thì XOÁ record, không lưu
+### 4xx Errors PURGE the Idempotency Record
 
 ```ts
 if (status >= 400 && status < 500) await idem.delete(key);
 ```
 
-Khách gửi sai payload, sửa lại, rồi dùng lại key cũ → nếu lưu 4xx thì họ ăn `409` vĩnh viễn và phải đổi key, rất khó hiểu. **Không có tiền nào bị tiêu cho một request 4xx**, nên chẳng có gì để bảo vệ.
+If a client sends an invalid payload, fixes their typo, and retries with the same idempotency key: persisting the 4xx failure would permanently lock them into `409 IDEMPOTENCY_CONFLICT`. **No model costs were incurred for 4xx requests**, so there is nothing financial to protect. Purging allows immediate re-submission.
 
-Retention 24h theo D1 §26; cron đêm `DELETE WHERE expires_at < now()`.
+24-hour retention per D1 §26; nightly cron cleans `DELETE WHERE expires_at < now()`.
 
-## I.5 Timeout + Idempotency-Key: không mất tiền hai lần
+<a id="i5-timeout--idempotency-key-không-mất-tiền-hai-lần"></a>
+<a id="i5-timeouts-and-idempotency-keys-avoiding-double-charges"></a>
 
-Hệ quả trực tiếp của [06 §H.7](06-routing-adapter.md#h7-client-ngắt-kết-nối-giữa-chừng--xử-lý-theo-tiền), và nó giải quyết ca khó nhất.
+## I.5 Timeouts & Idempotency Keys: Avoiding Double Charges
 
-Khi timeout mà request **có** `Idempotency-Key`:
+Direct consequence of [06 §H.7](06-routing-adapter.md#h7-client-aborts-mid-request-financial-handling), resolving our thorniest edge case.
 
-```
-1. Trả 504 AI_SERVICE_TIMEOUT cho client ngay
-2. NHƯNG không huỷ lời gọi xuống AI Writing — để nó chạy nốt ở nền
-3. Khi nó xong -> ghi kết quả vào idempotency record, state = completed
-4. Client retry cùng key -> nhận kết quả đã có, KHÔNG gọi model lần hai
-```
-
-Tiền đã tiêu rồi ở lần một. Huỷ đi thì vừa mất tiền vừa không có kết quả, rồi lần retry lại tiêu tiếp. **Chạy nốt thì tiêu đúng một lần.**
-
-Chặn an toàn: tác vụ nền bị cắt cứng ở `2 × timeoutMs`, và nó chết theo process khi deploy. Nếu chết thật thì record hết hạn và client retry được — mất tiền một lần, không kẹt.
-
-Không có key thì huỷ ngay để đỡ tốn.
-
-## I.6 Bulkhead & load shedding
-
-Đã có sẵn từ [04](04-redis.md), không cần thêm gì:
-
-- concurrency limit theo org (zset Redis) — chống một khách chiếm hết
-- backstop cục bộ `GLOBAL_MAX_INFLIGHT` — chống lúc Redis chết
-- pool undici `connections: 64`/downstream — chặn trên tự nhiên cho tải xuống AI Writing
+When an operation times out and the request **carried an `Idempotency-Key`**:
 
 ```
-ponytail: bỏ load shedding theo event-loop lag. Thêm khi thấy lag p99 > 200ms
-trong khi CPU chưa bão hoà — công việc ở đây là I/O-bound nên chưa cần.
+1. Return 504 AI_SERVICE_TIMEOUT immediately to the client
+2. BUT do not abort the downstream AI Writing call — allow it to finish in background
+3. Upon downstream completion -> write result to idempotency_records, state = completed
+4. When the client retries with the same key -> return the cached result WITHOUT calling the model again
 ```
+
+The monetary charge was already incurred on the initial dispatch. Aborting mid-stream loses both the money and the output, forcing the client's retry to spend tokens all over again. **Allowing it to complete charges the customer exactly once.**
+
+Safety boundary: background execution is strictly aborted if it exceeds `2 × timeoutMs`, and terminates on process recycling during deployments. If aborted, the record expires and allows clean retry — worst-case single charge, never stuck.
+
+Requests without an idempotency key are aborted immediately to conserve tokens.
+
+## I.6 Bulkheads & Load Shedding
+
+Handled naturally via architecture documented in [04 — Redis](04-redis.md):
+
+- Per-organization concurrency limits (Redis sorted set) — prevents single-tenant monopolization.
+- Local in-memory backstop `GLOBAL_MAX_INFLIGHT` — protects gateway processes during Redis outages.
+- Undici pool `connections: 64` per downstream — establishes hard ceilings on concurrent load to AI Writing.
 
 ---
 
 # J. Unified Error Model
 
-## J.1 Vỏ response lỗi
+## J.1 Error Response Envelope
 
 ```json
 {
@@ -143,64 +142,69 @@ trong khi CPU chưa bão hoà — công việc ở đây là I/O-bound nên chư
 }
 ```
 
-**Không bao giờ lộ:** stack trace, URL nội bộ, lỗi DB, tên model/provider, exception thô của downstream.
+**Never leaked externally:** stack traces, internal URLs, database error messages, upstream model/provider identities, raw downstream vendor exceptions.
 
-## J.2 Danh sách mã lỗi v1
+<a id="j2-danh-sách-mã-lỗi-v1"></a>
+<a id="j2-error-code-inventory-v1"></a>
 
-| HTTP | Code                            | Khi nào                                     | Retryable                  |
-| ---: | ------------------------------- | ------------------------------------------- | -------------------------- |
-|  400 | `INVALID_REQUEST`               | Sai schema, field lạ                        | Không                      |
-|  401 | `UNAUTHORIZED`                  | Thiếu/sai API key                           | Không                      |
-|  401 | `USER_ASSERTION_REQUIRED`       | Operation user-scoped nhưng thiếu assertion | Không                      |
-|  401 | `INVALID_USER_ASSERTION`        | Sai chữ ký / hết hạn / sai claim            | Không                      |
-|  403 | `FORBIDDEN`                     | Scope không đủ                              | Không                      |
-|  403 | `ENVIRONMENT_NOT_ALLOWED`       | Key không được dùng ở env này               | Không                      |
-|  404 | `NOT_FOUND`                     | Endpoint/resource không tồn tại             | Không                      |
-|  409 | `IDEMPOTENCY_CONFLICT`          | Cùng key khác payload, hoặc đang chạy       | Không                      |
-|  413 | `PAYLOAD_TOO_LARGE`             | Vượt `maxBodyBytes` của operation           | Không                      |
-|  429 | `RATE_LIMITED`                  | Vượt limit theo phút của AIHUB              | Có                         |
-|  429 | `CONCURRENCY_LIMIT`             | Quá nhiều request đồng thời                 | Có, sớm                    |
-|  429 | `QUOTA_EXCEEDED`                | Hết hạn mức tháng                           | Đầu tháng sau              |
-|  502 | `AI_SERVICE_ERROR`              | Downstream 5xx                              | Có thể                     |
-|  502 | `AI_SERVICE_CONTRACT_VIOLATION` | Downstream trả shape không parse được       | Không                      |
-|  503 | `AI_SERVICE_UNAVAILABLE`        | Không kết nối được / breaker mở             | Có                         |
-|  503 | `AI_SERVICE_THROTTLED`          | Downstream / model provider bị throttle     | Có                         |
-|  503 | `IDENTITY_PROVIDER_UNAVAILABLE` | JWKS của khách không lấy được               | Có                         |
-|  504 | `AI_SERVICE_TIMEOUT`            | Hết deadline                                | Chỉ khi có Idempotency-Key |
+## J.2 Error Code Inventory v1
 
-### Sáu mã mới so với D1
+| HTTP Status | Error Code                      | Condition                                       | Retryable                 |
+| ----------: | ------------------------------- | ----------------------------------------------- | ------------------------- |
+|         400 | `INVALID_REQUEST`               | Schema violation, unknown properties            | No                        |
+|         401 | `UNAUTHORIZED`                  | Missing or invalid API key                      | No                        |
+|         401 | `USER_ASSERTION_REQUIRED`       | User-scoped operation lacks user assertion      | No                        |
+|         401 | `INVALID_USER_ASSERTION`        | Bad signature, expired, or invalid claims       | No                        |
+|         403 | `FORBIDDEN`                     | Insufficient scopes / entitlements              | No                        |
+|         403 | `ENVIRONMENT_NOT_ALLOWED`       | API key not authorized for this environment     | No                        |
+|         404 | `NOT_FOUND`                     | Endpoint or resource does not exist             | No                        |
+|         409 | `IDEMPOTENCY_CONFLICT`          | Reused key with divergent payload or in-flight  | No                        |
+|         413 | `PAYLOAD_TOO_LARGE`             | Exceeds operation `maxBodyBytes`                | No                        |
+|         429 | `RATE_LIMITED`                  | Breached AIHUB per-minute rate limit            | Yes                       |
+|         429 | `CONCURRENCY_LIMIT`             | Too many simultaneous in-flight requests        | Yes (immediate)           |
+|         429 | `QUOTA_EXCEEDED`                | Monthly allocated quota depleted                | Next month                |
+|         502 | `AI_SERVICE_ERROR`              | Downstream returned 5xx                         | Potentially               |
+|         502 | `AI_SERVICE_CONTRACT_VIOLATION` | Downstream returned unparseable shape           | No                        |
+|         503 | `AI_SERVICE_UNAVAILABLE`        | Downstream unreachable or circuit breaker open  | Yes                       |
+|         503 | `AI_SERVICE_THROTTLED`          | Downstream or underlying LLM provider throttled | Yes                       |
+|         503 | `IDENTITY_PROVIDER_UNAVAILABLE` | Unable to fetch customer's JWKS keys            | Yes                       |
+|         504 | `AI_SERVICE_TIMEOUT`            | Operation exceeded deadline budget              | Only with Idempotency-Key |
 
-Cần bổ sung vào D1 §25 trước khi freeze: `USER_ASSERTION_REQUIRED`, `ENVIRONMENT_NOT_ALLOWED`, `PAYLOAD_TOO_LARGE`, `CONCURRENCY_LIMIT`, `AI_SERVICE_CONTRACT_VIOLATION`, `IDENTITY_PROVIDER_UNAVAILABLE`.
+### Six Error Codes Added Beyond Initial D1 Specs
 
-Đáng chú ý nhất là **`AI_SERVICE_CONTRACT_VIOLATION`**: khi Writing đổi response mà quên báo, phải phân biệt được với "Writing bị lỗi". Gộp chung vào `AI_SERVICE_ERROR` thì sẽ đi tìm sự cố hạ tầng trong khi vấn đề thật là ai đó vừa deploy.
+Added to D1 §25 prior to freezing: `USER_ASSERTION_REQUIRED`, `ENVIRONMENT_NOT_ALLOWED`, `PAYLOAD_TOO_LARGE`, `CONCURRENCY_LIMIT`, `AI_SERVICE_CONTRACT_VIOLATION`, `IDENTITY_PROVIDER_UNAVAILABLE`.
 
-**`IDENTITY_PROVIDER_UNAVAILABLE`** cũng quan trọng: đây không phải lỗi credential của client (401 sẽ khiến họ đi tạo lại key vô ích) và cũng không phải lỗi AI Service.
+Most critical addition: **`AI_SERVICE_CONTRACT_VIOLATION`**. When AI Writing silently alters its response schema without notifying us, this must be distinguished from transient infrastructure failure. Grouping it under `AI_SERVICE_ERROR` prompts operators to chase phantom network bugs when the real cause was an unannounced downstream deploy.
 
-### Giữ nguyên nguyên tắc phân biệt của D1
+**`IDENTITY_PROVIDER_UNAVAILABLE`** is also distinct: this is neither a client authentication error (returning 401 would prompt useless client key rotation) nor a failure of the AI service itself.
 
-```
-Client vượt AIHUB rate limit    -> 429 RATE_LIMITED
-Organization hết quota           -> 429 QUOTA_EXCEEDED
-AI Service / model bị throttle   -> 503 AI_SERVICE_THROTTLED   ← KHÔNG dùng 429
-```
-
-Khách nhìn 429 sẽ tưởng họ vượt limit của mình và đi giảm tải một cách vô ích.
-
-## J.3 Một chỗ duy nhất
+### Preserving D1's Disambiguation Principles
 
 ```
-ExceptionFilter toàn cục
- ├─ AihubError            -> dùng code/status đã gắn sẵn
- ├─ lỗi validate Fastify  -> INVALID_REQUEST + đường dẫn field
- ├─ lỗi undici/opossum    -> DownstreamErrorMapper (dùng chung mọi service)
- └─ còn lại               -> INTERNAL_ERROR + log full stack nội bộ
+Client breaches AIHUB rate limit     -> 429 RATE_LIMITED
+Organization exhausts quota           -> 429 QUOTA_EXCEEDED
+Downstream AI Service / LLM throttled -> 503 AI_SERVICE_THROTTLED   ← NEVER return 429
 ```
 
-**Controller không bao giờ tự dựng response lỗi. Adapter không bao giờ ném lỗi HTTP.**
+Sending 429 when downstream LLMs throttle leads customers to believe they breached their own contract tier, prompting them to needlessly attempt client-side backoff.
 
-## J.4 Internal downstream error (US08)
+## J.3 Centralized Error Handling
 
-Log nội bộ giữ đủ chi tiết cho AIHUB developer, và **chỉ ở đây**:
+```
+Global ExceptionFilter
+ ├─ AihubError            -> uses explicitly mapped code/status
+ ├─ Fastify schema error  -> INVALID_REQUEST + JSON path to invalid property
+ ├─ undici / opossum error-> DownstreamErrorMapper (shared across all adapters)
+ └─ Unhandled exceptions  -> INTERNAL_ERROR + full internal stack logging
+```
+
+**Controllers never craft custom error responses. Adapters never throw raw HTTP exceptions.**
+
+<a id="j4-internal-downstream-error-us08"></a>
+
+## J.4 Internal Downstream Error Telemetry (US08)
+
+Internal logs retain comprehensive diagnostics for AIHUB developers, and **strictly here**:
 
 ```json
 {
@@ -214,8 +218,8 @@ Log nội bộ giữ đủ chi tiết cho AIHUB developer, và **chỉ ở đây
 }
 ```
 
-**`downstream_error_code` và `downstream_message` là ví dụ minh hoạ, chưa điền được.** AI Writing trả `{"detail": "..."}` không kèm mã lỗi, nên `HttpOperationDispatcher` ghi `null` cho cả hai. Muốn điền thật thì AI Service phải có error contract chuẩn hoá trước, rồi AIHUB capture fixture lỗi và implement `parseError` — hook đã khai trong `DownstreamAdapter` nhưng chưa adapter nào dùng. Xem `docs/aihub_deliverable_1_api_contract_schema.md` mục US10, phần "Đề xuất — chờ AI Service xác nhận".
+**`downstream_error_code` and `downstream_message` are illustrative examples.** The live AI Writing service returns raw `{"detail": "..."}` without error codes, so `HttpOperationDispatcher` records `null` for both fields today. Populating them accurately requires a standardized downstream error contract, followed by fixture capture and implementing `parseError` in `DownstreamAdapter`. See `docs/aihub_deliverable_1_api_contract_schema.md` US10.
 
 ---
 
-→ Tiếp: [08 — Metering & Observability](08-metering-and-observability.md)
+→ Next: [08 — Metering & Observability](08-metering-and-observability.md)

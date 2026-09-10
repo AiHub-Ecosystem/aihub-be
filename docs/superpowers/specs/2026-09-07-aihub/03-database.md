@@ -1,15 +1,17 @@
 # 03 — Database Design (Control Plane)
 
-← [Mục lục](README.md) · [02 — Request Lifecycle](02-request-lifecycle.md)
+← [Table of Contents](README.md) · [02 — Request Lifecycle](02-request-lifecycle.md)
 
-> Brief §13.2 liệt kê 13 bảng. Thiết kế này dùng **5 bảng** cho D2. Lý do từng bảng bị cắt ở [§E.5](#e5-tám-bảng-bị-cắt-khỏi-d2).
+> Brief §13.2 listed 13 tables. This design utilizes **5 tables** for D2. Rationales for every pruned table are documented in [§E.5](#e5-eight-tables-cut-from-d2).
 
-## E.1 Quy ước
+## E.1 Conventions
 
-- **PK = ULID có prefix, kiểu `text`**: `org_01J8…`, `ak_01J8…`, `req_01J8…`. Tự mô tả trong log và response, sort được theo thời gian (index locality tốt), không lộ số lượng như bigint. Sinh ở app, không ở DB.
-- **Soft delete = cột `status`**, không có `deleted_at`. API key bị revoke không bao giờ xoá thật — cần cho audit.
-- **Audit fields**: `created_at` mọi bảng; `updated_at` cho bảng có sửa.
-- **Driver: Drizzle** — schema này dùng `text[]`, partial index, `ON CONFLICT`, BRIN; Drizzle giữ SQL gần nguyên bản, Prisma vướng đúng mấy chỗ đó.
+- **PK = Prefixed ULID, `text` type**: `org_01J8…`, `ak_01J8…`, `req_01J8…`. Self-describing in logs and responses, naturally sortable chronologically (excellent index locality), avoids leaking volume metrics unlike auto-incrementing bigints. Generated in the application, never in the DB.
+- **Soft delete = `status` column**, no `deleted_at`. Revoked API keys are never physically deleted — required for audit trails.
+- **Audit fields**: `created_at` on every table; `updated_at` on mutable tables.
+- **Driver: Drizzle** — this schema uses `text[]`, partial indexes, `ON CONFLICT`, and BRIN; Drizzle keeps SQL close to the metal, whereas Prisma struggles with exactly these constructs.
+
+<a id="e2-ddl"></a>
 
 ## E.2 DDL
 
@@ -22,8 +24,8 @@ CREATE TABLE organizations (
   entitlements          text[] NOT NULL DEFAULT '{}',        -- {writing,speaking}
   rate_limit_rpm        integer NOT NULL DEFAULT 600,
   max_concurrent        integer NOT NULL DEFAULT 20,
-  monthly_request_quota integer,                             -- NULL = không giới hạn
-  hard_stop_on_quota    boolean NOT NULL DEFAULT false,      -- xem 04 §F.5
+  monthly_request_quota integer,                             -- NULL = unlimited
+  hard_stop_on_quota    boolean NOT NULL DEFAULT false,      -- see 04 §F.5
   created_at            timestamptz NOT NULL DEFAULT now(),
   updated_at            timestamptz NOT NULL DEFAULT now()
 );
@@ -31,8 +33,8 @@ CREATE TABLE organizations (
 CREATE TABLE api_keys (
   id                   text PRIMARY KEY,                     -- ak_01J...
   organization_id      text NOT NULL REFERENCES organizations(id),
-  key_hash             bytea NOT NULL,                       -- sha256(raw), 32 byte
-  key_prefix           text NOT NULL,                        -- 'aihub_sk_a1b2c3', chỉ để hiển thị
+  key_hash             bytea NOT NULL,                       -- sha256(raw), 32 bytes
+  key_prefix           text NOT NULL,                        -- 'aihub_sk_a1b2c3', display only
   name                 text NOT NULL,
   scopes               text[] NOT NULL DEFAULT '{}',
   allowed_environments text[] NOT NULL DEFAULT '{production}',
@@ -43,14 +45,14 @@ CREATE TABLE api_keys (
   revoked_at           timestamptz,
   created_at           timestamptz NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX api_keys_hash_uq ON api_keys (key_hash);   -- đường lookup DUY NHẤT
+CREATE UNIQUE INDEX api_keys_hash_uq ON api_keys (key_hash);   -- SOLE lookup path
 CREATE INDEX api_keys_org_idx        ON api_keys (organization_id);
 
 CREATE TABLE organization_identity_configs (
   organization_id           text PRIMARY KEY REFERENCES organizations(id),
   issuer                    text NOT NULL,
   jwks_url                  text,
-  public_keys_jwks          jsonb,          -- fallback khi org không host JWKS
+  public_keys_jwks          jsonb,          -- fallback when org does not host JWKS
   allowed_algorithms        text[] NOT NULL DEFAULT '{RS256,ES256}',
   max_assertion_ttl_seconds integer NOT NULL DEFAULT 300,
   status                    text NOT NULL DEFAULT 'active',
@@ -104,43 +106,49 @@ CREATE INDEX usage_org_time_idx ON usage_records (organization_id, created_at DE
 CREATE INDEX usage_created_brin ON usage_records USING BRIN (created_at);
 ```
 
-## E.3 Bốn quyết định quan trọng nhất
+## E.3 The Four Most Critical Decisions
 
-### 1. API key hash bằng SHA-256, KHÔNG dùng bcrypt/argon2
+<a id="1-api-key-hash-bằng-sha-256-không-dùng-bcryptargon2"></a>
+<a id="1-api-key-hashed-with-sha-256-not-bcryptargon2"></a>
 
-Đây là chỗ hay bị làm sai nhất.
+### 1. API key hashed with SHA-256, NOT bcrypt/argon2
 
-Raw key là 256 bit ngẫu nhiên từ CSPRNG — **không có từ điển nào để tấn công**, nên slow hash không thêm một chút an toàn nào. Đổi lại bcrypt tốn ~100ms CPU **mỗi request**; ở 50 RPS đó là tự DoS chính mình. Stripe và GitHub đều dùng hash nhanh vì lý do này.
+This is where people most frequently make mistakes.
 
-Hệ quả rất đẹp: `key_hash` unique → lookup là **một index seek duy nhất**, không cần "tìm theo prefix rồi so hash từng cái". `key_prefix` chỉ để hiển thị trong dashboard. Cũng không cần so sánh constant-time, vì ta lookup *bằng* hash chứ không so sánh nó.
+The raw key is 256 bits of CSPRNG randomness — **there is zero dictionary to attack**, so a slow hash adds zero extra security. In exchange, bcrypt burns ~100ms of CPU **per request**; at 50 RPS that constitutes a self-inflicted denial of service. Stripe and GitHub both utilize fast cryptographic hashing for this exact reason.
 
-### 2. `issuer` UNIQUE toàn hệ thống
+The resulting mechanics are elegant: `key_hash` is unique → lookup is a **single index seek**, avoiding the "find by prefix then compare hashes one by one" pattern. `key_prefix` serves purely for display on dashboards. Constant-time comparison is also unnecessary, because we look up _by_ hash rather than verifying across candidates.
 
-Không có ràng buộc này, Org B đăng ký `iss` trùng của Org A rồi tự ký assertion mạo danh học viên của A. **Một dòng `UNIQUE INDEX` chặn cả một lớp tấn công cross-tenant.**
+### 2. Globally UNIQUE `issuer`
 
-### 3. `metering_status` là cách xử lý việc billing chưa chốt
+Without this constraint, Org B could register Org A's `iss` and sign assertions impersonating A's students. **A single `UNIQUE INDEX` eliminates an entire class of cross-tenant attacks.**
 
-Ghi **cả hai**: `billable_requests` luôn có, `*_tokens` có khi AI Service trả.
+### 3. `metering_status` solves the unfinalized billing dilemma
 
-| Giá trị | Khi nào |
-|---|---|
-| `complete` | AI Service trả usage đầy đủ |
-| `missing_usage` | Operation có gọi model nhưng AI Service quên trả usage |
-| `not_applicable` | Operation không gọi model (vd `/generate-question-task1`) |
-| `quota_unverified` | Redis chết nên không kiểm được quota, request vẫn cho qua |
+Record **both**: `billable_requests` is always present, `*_tokens` are present whenever the AI Service reports them.
 
-Không bao giờ giả `0` cho usage thiếu. Rẻ bây giờ, **không thể làm ngược lại sau** — dữ liệu tháng trước không tự mọc ra.
+| Value              | Condition                                                                   |
+| ------------------ | --------------------------------------------------------------------------- |
+| `complete`         | AI Service returned complete usage data                                     |
+| `missing_usage`    | Operation invokes a model but AI Service failed to return usage             |
+| `not_applicable`   | Operation does not invoke a model (e.g. `/generate-question-task1`)         |
+| `quota_unverified` | Redis was down so quota could not be validated; request was allowed through |
 
-### 4. `last_used_at` không ghi mỗi request
+Never fabricate `0` for missing usage. Doing this now is cheap, but **impossible to reverse later** — last month's dropped data cannot spontaneously regenerate.
 
-50 RPS ghi cùng một row là row contention thật. Chỉ update khi cũ hơn 1 phút, chạy ngoài luồng response, lỗi thì bỏ qua:
+### 4. `last_used_at` is not written on every request
+
+At 50 RPS, writing to the same row causes real row lock contention. Only update when older than 1 minute, out-of-band relative to the response cycle, ignoring errors on failure:
 
 ```sql
 UPDATE api_keys SET last_used_at = now()
 WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < now() - interval '1 minute');
 ```
 
-## E.4 Xử lý race của idempotency — không cần distributed lock
+<a id="e4-xử-lý-race-của-idempotency--không-cần-distributed-lock"></a>
+<a id="e4-handling-idempotency-race-conditions-without-distributed-locks"></a>
+
+## E.4 Handling Idempotency Race Conditions — No Distributed Lock
 
 ```sql
 INSERT INTO idempotency_records (...) VALUES (..., 'pending', ...)
@@ -148,53 +156,59 @@ ON CONFLICT (organization_id, operation, idempotency_key) DO NOTHING
 RETURNING request_id;
 ```
 
-| Kết quả | Xử lý |
-|---|---|
-| Có `RETURNING` | Mình là người đầu tiên → chạy tiếp |
-| Không có row, `fingerprint` khác | `409 IDEMPOTENCY_CONFLICT` |
-| Không có row, `state=completed` | Replay `response_body` + header `Idempotent-Replay: true` |
-| Không có row, `state=pending` | `409` (đang xử lý). **Không chờ** — chờ là giữ connection và gây sập dây chuyền |
-| Không có row, `state=failed` | Cho chạy lại |
+| Result                          | Handling                                                                                              |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Returns row (`RETURNING`)       | We are the first requester → proceed with execution                                                   |
+| No row, different `fingerprint` | `409 IDEMPOTENCY_CONFLICT`                                                                            |
+| No row, `state=completed`       | Replay stored `response_body` with header `Idempotent-Replay: true`                                   |
+| No row, `state=pending`         | `409` (in progress). **Do not block/wait** — waiting holds connections and risks cascading starvation |
+| No row, `state=failed`          | Permit retry                                                                                          |
 
-Primary key của Postgres lo phần đua. **Không Redis lock, không Redlock.**
+Postgres primary keys resolve races natively. **No Redis lock, no Redlock.**
 
-## E.5 Tám bảng bị cắt khỏi D2
+<a id="e5-tám-bảng-bị-cắt-khỏi-d2"></a>
+<a id="e5-eight-tables-cut-from-d2"></a>
 
-| Bảng | Vì sao bỏ | Thêm lại khi |
-|---|---|---|
-| `plans`, `subscriptions` | Business chưa chốt mô hình bán. Dựng bảng bây giờ = thiết kế cho một mô hình kinh doanh chưa tồn tại | Chốt pricing |
-| `organization_entitlements` | Là một danh sách giá trị, không có vòng đời riêng → `entitlements text[]` | Entitlement cần thời hạn/nguồn gốc riêng |
-| `api_key_scopes` | Luôn đọc kèm key, không bao giờ query ngang | Gần như không bao giờ |
-| `routing_rules`, `downstream_configs` | Xem ghi chú SSRF bên dưới | Cần canary/failover thật |
-| `quota_configs` | 3 cột trên `organizations` là đủ ở Stage A | Quota cần theo từng operation |
-| `assets` | Chỉ Speaking cần | Phase 4 |
-| `webhook_endpoints` | Chỉ async cần | Phase 4 |
+## E.5 Eight Tables Cut From D2
 
-### Vì sao routing catalog nằm ở code chứ không ở DB
+| Table                                 | Rationale for Removal                                                                                 | Reintroduce When                                           |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `plans`, `subscriptions`              | Business pricing model unfinalized. Creating tables now = designing for a non-existent business model | Pricing is finalized                                       |
+| `organization_entitlements`           | Pure list of string tokens with no independent lifecycle → stored as `entitlements text[]`            | Entitlements require independent expiration or attribution |
+| `api_key_scopes`                      | Always read alongside key, never queried across entities                                              | Virtually never                                            |
+| `routing_rules`, `downstream_configs` | See SSRF discussion below                                                                             | True canary/failover is required                           |
+| `quota_configs`                       | 3 columns on `organizations` suffice for Stage A                                                      | Per-operation quotas are needed                            |
+| `assets`                              | Required only by Speaking                                                                             | Phase 4                                                    |
+| `webhook_endpoints`                   | Required only for async operations                                                                    | Phase 4                                                    |
 
-Đây là challenge lớn nhất với brief. Operation Catalog và downstream URL nên nằm ở **code + biến môi trường**:
+<a id="vì-sao-routing-catalog-nằm-ở-code-chứ-không-ở-db"></a>
+<a id="why-the-routing-catalog-lives-in-code-not-db"></a>
 
-- Adapter vốn đã là code. Thêm AI Service mới = viết adapter mới = deploy. Config trong DB **không giúp khỏi deploy**, chỉ tách sự thật ra làm hai chỗ.
-- Catalog trong TypeScript được **type-check**; sai scope hay sai schema là lỗi compile chứ không phải sự cố production.
-- Quan trọng nhất: **URL downstream nằm trong DB là một lỗ SSRF**. Ai ghi được vào bảng đó thì trỏ được AIHUB vào `169.254.169.254` — và AIHUB đang cầm internal JWT. URL trong env var thì không có bề mặt tấn công đó.
+### Why the routing catalog lives in code, not in DB
 
-Brief §13.14 tự liệt kê "SSRF từ configurable downstream URL" là mối đe doạ. Cách rẻ nhất để trị nó là **đừng để URL configurable**.
+This is the largest departure from the initial brief. The Operation Catalog and downstream URLs belong in **code + environment variables**:
 
-## E.6 Partition và retention
+- Adapters are inherently code. Adding a new AI Service = writing an adapter = deployment. Database configuration **does not prevent deployment**, it merely fragments the source of truth across two places.
+- A TypeScript catalog is **type-checked**; a scope mismatch or schema mistake is a compiler error, not a production outage.
+- Most importantly: **Downstream URLs in the database introduce an SSRF vector**. Anyone who can write to that table can redirect AIHUB to `169.254.169.254` — and AIHUB carries an internal JWT. Environment variables eliminate that attack surface entirely.
 
-**Không partition `usage_records` ngay.** Ở 50 RPS peak, thực tế cỡ 1–5 triệu row/năm — Postgres xử lý thoải mái với BRIN trên `created_at`.
+Brief §13.14 explicitly listed "SSRF via configurable downstream URLs" as a threat. The cheapest mitigation is: **do not make downstream URLs configurable via database**.
 
-Trigger để partition: **> ~50 triệu row**, hoặc job xoá theo retention chạy quá vài phút. Migration khi đó là tạo bảng partitioned + copy + đổi tên, trong một cửa sổ bảo trì. Chấp nhận cái giá đó thay vì gánh phức tạp partitioning suốt năm đầu.
+## E.6 Partitioning and Retention
+
+**Do not partition `usage_records` immediately.** At 50 RPS peak, real volume is ~1–5 million rows/year — Postgres handles this effortlessly with BRIN on `created_at`.
+
+Partitioning trigger: **> ~50 million rows**, or retention pruning jobs taking more than several minutes. Migration involves creating a partitioned table + copying data + swap rename within a maintenance window. Accepting that one-off migration cost is vastly preferable to carrying partitioning complexity throughout year one.
 
 Retention:
 
-| Bảng | Giữ | Vì sao |
-|---|---|---|
-| `usage_records` | 13 tháng | Đủ so sánh cùng kỳ năm trước cho billing |
-| `idempotency_records` | 24h | Theo D1 §26 |
+| Table                 | Retention Period | Rationale                                |
+| --------------------- | ---------------- | ---------------------------------------- |
+| `usage_records`       | 13 months        | Allows year-over-year billing comparison |
+| `idempotency_records` | 24 hours         | Per D1 §26 specification                 |
 
-Một cron `DELETE` mỗi đêm, không cần scheduler riêng.
+A single nightly `DELETE` cron job; no dedicated job scheduler required.
 
 ---
 
-→ Tiếp: [04 — Redis](04-redis.md)
+→ Next: [04 — Redis](04-redis.md)

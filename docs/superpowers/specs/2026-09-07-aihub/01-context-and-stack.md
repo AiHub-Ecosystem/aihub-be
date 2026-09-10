@@ -1,31 +1,31 @@
-# 01 — Bối cảnh, hiện trạng, và Tech Stack
+# 01 — Context, Current State, and Tech Stack
 
-← [Mục lục](README.md)
+← [Table of Contents](README.md)
 
-## 0. Ràng buộc đã chốt
+## 0. Settled Constraints
 
-Mọi quyết định trong bộ tài liệu này suy ra từ 8 ràng buộc sau. Nếu một ràng buộc thay đổi, phải xem lại các quyết định gắn với nó.
+Every decision across this specification suite derives from the following 8 constraints. If a constraint changes, all decisions linked to it must be revisited.
 
-| # | Ràng buộc | Ảnh hưởng chính |
-|---|---|---|
-| 1 | Sản phẩm **thương mại thật**, có khách B2B trả tiền | Metering/billing là ràng buộc kiến trúc, không phải tính năng phụ |
-| 2 | Chỉ **AI Writing** đang tồn tại; Speaking/Reading là kế hoạch | MVP proxy 1 service, nhưng phải chứng minh mở rộng được |
-| 3 | Team **2–3 backend, không có DevOps riêng** | Loại K8s, service mesh, Kafka, Vault ở giai đoạn này |
-| 4 | Hạ tầng **VPS tự host** | Tự lo Postgres/Redis + backup nghiêm túc |
-| 5 | **Stage A**: vài org, 10–50 RPS peak | Không partition, không autoscale, không distributed tracing |
-| 6 | D2 trong **1–2 tháng**, chỉ Writing sync; Speaking ngay sau | Async chốt contract nhưng chưa implement |
-| 7 | Khách hàng **có team dev tốt** | JWKS/JWT asymmetric khả thi ngay từ đầu |
-| 8 | **Mô hình bán hàng chưa chốt** | Ghi cả request count lẫn token từ ngày đầu |
-| 9 | **Admin API hoãn** — onboard org/key bằng CLI/SQL tay | CLI là code sản xuất, không phải script vứt đi |
+| #   | Constraint                                                              | Primary Impact                                                           |
+| --- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| 1   | **Real commercial product**, paying B2B customers                       | Metering/billing is an architectural constraint, not a secondary feature |
+| 2   | Only **AI Writing** currently exists; Speaking/Reading are planned      | MVP proxies 1 service, but must prove extensibility                      |
+| 3   | Team of **2–3 backend engineers, no dedicated DevOps**                  | Exclude K8s, service mesh, Kafka, Vault at this stage                    |
+| 4   | **Self-hosted VPS** infrastructure                                      | Own Postgres/Redis management + take backups seriously                   |
+| 5   | **Stage A**: few orgs, 10–50 RPS peak                                   | No partitioning, no autoscaling, no distributed tracing                  |
+| 6   | D2 within **1–2 months**, only Writing sync; Speaking immediately after | Async contract frozen early, but implementation deferred                 |
+| 7   | Customers **have strong dev teams**                                     | Asymmetric JWKS/JWT feasible from day one                                |
+| 8   | **Sales model not finalized**                                           | Record both request counts and tokens from day one                       |
+| 9   | **Admin API deferred** — onboard org/key via CLI/manual SQL             | CLI is production code, not disposable scripts                           |
 
-## 0.1 Hiện trạng AI Writing (khảo sát thật)
+## 0.1 Current State of AI Writing (Live Survey)
 
 Service: `Wispace AI Writing Assistant` — `https://api-ielts-writing.aihubproduction.com`
 
-13 endpoint, path phẳng, không version, auth `HTTPBearer`:
+13 endpoints, flat paths, unversioned, `HTTPBearer` authentication:
 
 ```
-task 1                        task 2                      chung
+task 1                        task 2                      shared
 /generate-question-task1      /question-generated-task2   /five-minute-grading
 /writing-assistant-task1      /writing-assistant-task2    /create-micro-exercise
 /vocab-suggestion-task1       /vocab-suggestion-task2     /grading-micro-exercise
@@ -33,75 +33,75 @@ task 1                        task 2                      chung
 /essay-improvement-task1      /essay-improvement-task2
 ```
 
-Input của 4 endpoint được team ưu tiên (tạo đề + chấm bài, task 1 và task 2):
+Inputs for the 4 prioritized endpoints (question generation + grading, task 1 & task 2):
 
-| Endpoint | Required fields | Gọi model? |
-|---|---|---|
-| `/generate-question-task1` | `topic` (optional, default `""`) | **Không** — đọc từ DB |
-| `/question-generated-task2` | `topic`, `question_type` | Có |
-| `/grading-feedback-task1` | `question`, `url`, `topic`, `essay` | Có |
-| `/grading-feedback-task2` | `question`, `topic`, `essay` | Có |
+| Endpoint                    | Required fields                     | Calls model?           |
+| --------------------------- | ----------------------------------- | ---------------------- |
+| `/generate-question-task1`  | `topic` (optional, default `""`)    | **No** — reads from DB |
+| `/question-generated-task2` | `topic`, `question_type`            | Yes                    |
+| `/grading-feedback-task1`   | `question`, `url`, `topic`, `essay` | Yes                    |
+| `/grading-feedback-task2`   | `question`, `topic`, `essay`        | Yes                    |
 
-### Bốn phát hiện làm thay đổi thiết kế
+### Four findings that altered the design
 
-1. **Canonical schema trong D1 §10 không khớp thực tế.** D1 giả định `content` / `language` / `level`; chấm bài thật cần `question` / `topic` / `essay`, và Task 1 cần thêm `url` (ảnh biểu đồ). Không có `language` — IELTS thì luôn là tiếng Anh. Phải viết lại trước khi freeze D1.
-2. **Task 1 và Task 2 khác shape thật sự** (`url` chỉ có ở Task 1) → tách endpoint riêng, xem [06 §H.1](06-routing-adapter.md#h1-operation-catalog--code-có-kiểu).
-3. **`/generate-question-task1` không gọi model** → `usage` phải `omit`, không phải `0`. Đúng ca mà D1 §15 đã lường trước, và giờ có ví dụ cụ thể.
-4. **Response schema trong OpenAPI là `{}`** — không có mô tả nào. Đây là blocker duy nhất còn lại cho Phase 1, xem [11 §P.1](11-open-questions.md#p1-response-thật-của-grading-feedback-task12--chặn-phase-1).
+1. **Canonical schema in D1 §10 did not match reality.** D1 assumed `content` / `language` / `level`; real grading requires `question` / `topic` / `essay`, and Task 1 requires `url` (chart image). There is no `language` — IELTS is always English. Must rewrite before freezing D1.
+2. **Task 1 and Task 2 have fundamentally different shapes** (`url` only exists in Task 1) → split into separate endpoints, see [06 §H.1](06-routing-adapter.md#h1-operation-catalog-typed-code).
+3. **`/generate-question-task1` does not invoke a model** → `usage` must be `omit`, not `0`. Precisely the case D1 §15 anticipated, and now there is a concrete example.
+4. **Response schema in OpenAPI was `{}`** — completely empty. This was the remaining blocker for Phase 1, see [11 §P.1](11-open-questions.md#p1-real-response-for-grading-feedback-task12-phase-1-blocker).
 
-### Hai vấn đề an ninh trên service đang chạy production
+### Two security issues on the live production service
 
-- **`/five-minute-grading` không khai báo security** trong khi mọi endpoint khác dùng `HTTPBearer`. Service đang mở ra Internet → bất kỳ ai cũng gọi được và team trả tiền token.
-- **Cả service đang public trên Internet — và sẽ còn public một thời gian.** Writing đang phục vụ một ứng dụng khác (Wispace) chưa đi qua AIHUB, nên chưa đóng được. Kiến trúc đích vẫn là private network, nhưng đó là **hướng tương lai chứ không phải việc của Phase 2**.
+- **`/five-minute-grading` has no declared security** whereas every other endpoint uses `HTTPBearer`. The service is exposed to the Internet → anyone can invoke it and the team pays for tokens.
+- **The entire service is publicly accessible on the Internet — and will remain so for a while.** Writing currently serves another application (Wispace) not routed through AIHUB, so it cannot be closed off yet. The target architecture remains a private network, but that is **future work, not part of Phase 2**.
 
-  Hệ quả: **ranh giới ở giai đoạn này là credential, không phải network.** Miễn khách hàng AIHUB không bao giờ được cấp token của Writing thì với họ AIHUB vẫn là đường vào duy nhất. Xem [09 §M.3](09-security.md#m3-ai-writing-còn-public--rủi-ro-được-chấp-nhận-có-điều-kiện) cho điều kiện đi kèm.
+  Consequence: **The security boundary at this stage is credentials, not network isolation.** As long as AIHUB customers are never issued Writing tokens, AIHUB remains their only gateway. See [09 §M.3](09-security.md#m3-ai-writing-remains-public-conditionally-accepted-risk) for associated prerequisites.
 
-Ngoài ra: `url` trong Task 1 là URL do client cung cấp mà Writing sẽ tự đi fetch → SSRF nằm ở phía Writing. Cần chặn private IP ở đó, hoặc chuyển sang `asset_id` khi làm object storage ở Phase 4.
+Additionally: `url` in Task 1 is a client-supplied URL that Writing fetches directly → SSRF risk resides on Writing's side. Private IPs must be blocked there, or transitioned to `asset_id` via object storage in Phase 4.
 
 ---
 
 ## B. Recommended Tech Stack Matrix
 
-| Layer | Recommended | Alternatives đã cân nhắc | Vì sao |
-|---|---|---|---|
-| Runtime | **Node.js 22 LTS + TypeScript** | Go, Bun | Ở 50 RPS, request AI là I/O-bound — đúng chỗ Node mạnh. Go không trả công cho chi phí học ở Stage A |
-| Framework | **NestJS + Fastify adapter** | Fastify trần, Express, Go/chi | Module NestJS khớp 1-1 với §27 kiến trúc đích; sản phẩm sống lâu, nhiều người sửa → DI + boundary đáng giá |
-| Validation | **TypeBox** | Zod, class-validator, AJV thuần | Fastify chạy thẳng JSON Schema (compile được). Một định nghĩa ra ba thứ: type TS + validator + OpenAPI 3.1 |
-| HTTP client | **undici (Pool)** | axios, native fetch, got | Keep-alive pool, `AbortSignal`, timeout tách headers/body, sẵn sàng cho streaming |
-| Primary DB | **PostgreSQL 16** | MySQL, distributed SQL | `text[]`, partial index, `ON CONFLICT`, JSONB, BRIN — dùng hết trong thiết kế này |
-| DB access | **Drizzle** | Prisma, TypeORM, Kysely | Giữ SQL gần nguyên bản; Prisma vướng đúng ở array column, `ON CONFLICT`, partial index |
-| Cache / counters | **Redis 7** | Memcached, in-memory | Cần INCR nguyên tử + zset + TTL. Không bao giờ là nguồn sự thật |
-| Queue | **Không có ở MVP** → BullMQ ở Phase 4 | RabbitMQ, Kafka, SQS | Chưa có async use case. BullMQ dùng lại Redis sẵn có |
-| Object storage | **Không có ở MVP** → Cloudflare R2 ở Phase 4 | S3, MinIO, B2 | R2 không tính egress — hợp file audio Speaking |
-| Circuit breaker | **opossum** | tự viết | Half-open đúng cách khó viết; tự viết dễ thả cả trăm request vào lúc service vừa hồi |
-| Proxy / TLS | **Caddy** | nginx, Traefik | TLS tự động, config ~5 dòng, không ai phải nhớ gia hạn cert |
-| Observability | **Prometheus + Loki + Grafana** | + Tempo/Jaeger, Datadog | 3 container. Bỏ Tempo ở Stage A: với 2 service, `request_id` trong log đã đủ |
-| Deployment | **Docker Compose trên 1 VPS** | K8s, ECS, Cloud Run | 2–3 dev không DevOps. Trigger rời đi ở [10 §N.5](10-deployment-roadmap.md#n5-trigger-rời-khỏi-kiến-trúc-này) |
-| Secrets | **`.env` chmod 600** | Vault, SOPS, Doppler | Chưa tới ngưỡng. Trigger ở [05 §G.9](05-auth-identity.md#g9-secret) |
+| Layer            | Recommended                                | Alternatives Considered       | Rationale                                                                                                                                         |
+| ---------------- | ------------------------------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime          | **Node.js 22 LTS + TypeScript**            | Go, Bun                       | At 50 RPS, AI requests are I/O-bound — Node's sweet spot. Go does not justify the learning overhead in Stage A                                    |
+| Framework        | **NestJS + Fastify adapter**               | Bare Fastify, Express, Go/chi | NestJS modules map 1-to-1 with §27 target architecture; long-lived product with multiple maintainers → DI + architectural boundaries are worth it |
+| Validation       | **TypeBox**                                | Zod, class-validator, raw AJV | Fastify natively executes JSON Schema (compilable). One definition generates three things: TS type + validator + OpenAPI 3.1                      |
+| HTTP client      | **undici (Pool)**                          | axios, native fetch, got      | Keep-alive pool, `AbortSignal`, separated headers/body timeouts, ready for streaming                                                              |
+| Primary DB       | **PostgreSQL 16**                          | MySQL, distributed SQL        | `text[]`, partial indexes, `ON CONFLICT`, JSONB, BRIN — all heavily utilized in this design                                                       |
+| DB access        | **Drizzle**                                | Prisma, TypeORM, Kysely       | Keeps SQL close to the metal; Prisma struggles with array columns, `ON CONFLICT`, partial indexes                                                 |
+| Cache / counters | **Redis 7**                                | Memcached, in-memory          | Requires atomic INCR + sorted sets + TTL. Never the source of truth                                                                               |
+| Queue            | **None in MVP** → BullMQ in Phase 4        | RabbitMQ, Kafka, SQS          | No async use case yet. BullMQ reuses existing Redis                                                                                               |
+| Object storage   | **None in MVP** → Cloudflare R2 in Phase 4 | S3, MinIO, B2                 | R2 does not charge egress — ideal for Speaking audio files                                                                                        |
+| Circuit breaker  | **opossum**                                | Custom implementation         | Proper half-open state is hard to write; homegrown implementations easily flood hundreds of requests when service barely recovers                 |
+| Proxy / TLS      | **Caddy**                                  | nginx, Traefik                | Automatic TLS, ~5 lines of config, zero cert renewal maintenance                                                                                  |
+| Observability    | **Prometheus + Loki + Grafana**            | + Tempo/Jaeger, Datadog       | 3 containers. Drop Tempo in Stage A: with 2 services, `request_id` in logs is sufficient                                                          |
+| Deployment       | **Docker Compose on 1 VPS**                | K8s, ECS, Cloud Run           | 2–3 devs without DevOps. Exit trigger documented in [10 §N.5](10-deployment-roadmap.md#n5-triggers-to-exit-this-architecture)                     |
+| Secrets          | **`.env` chmod 600**                       | Vault, SOPS, Doppler          | Below threshold. Trigger in [05 §G.9](05-auth-identity.md#g9-secrets)                                                                             |
 
-### Đánh giá candidate stack trong brief §14
+### Evaluating candidate stack from brief §14
 
-| Item trong brief | Phán quyết | Ghi chú |
-|---|---|---|
-| TypeScript + Node.js | **Keep** | — |
-| NestJS + Fastify | **Keep** | Fastify vì schema-first, không phải vì RPS |
-| undici / native fetch | **Keep** (undici Pool) | Cần Pool để keep-alive per-downstream |
-| PostgreSQL | **Keep** | — |
-| Redis | **Keep**, thu hẹp vai trò | Bỏ khỏi đường idempotency hoàn toàn |
-| BullMQ | **Defer** → Phase 4 | Chưa có async use case |
-| S3-compatible / R2 | **Defer** → Phase 4 | Vào cùng Speaking |
-| OTel + Prometheus + Grafana + Tempo/Loki | **Keep một phần** | Bỏ Tempo. Giữ propagate `traceparent` để cắm sau |
-| OpenAPI 3.1 + JSON Schema | **Keep** | Sinh từ TypeBox, không viết tay |
-| Docker + VPS | **Keep** | — |
-| Kubernetes | **Defer** | Trigger ở [10 §N.5](10-deployment-roadmap.md#n5-trigger-rời-khỏi-kiến-trúc-này) |
+| Item from brief                          | Verdict                | Notes                                                                                |
+| ---------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------ |
+| TypeScript + Node.js                     | **Keep**               | —                                                                                    |
+| NestJS + Fastify                         | **Keep**               | Fastify for schema-first performance, not raw RPS                                    |
+| undici / native fetch                    | **Keep** (undici Pool) | Pool needed for per-downstream keep-alive                                            |
+| PostgreSQL                               | **Keep**               | —                                                                                    |
+| Redis                                    | **Keep**, scoped down  | Completely removed from idempotency path                                             |
+| BullMQ                                   | **Defer** → Phase 4    | No async use case yet                                                                |
+| S3-compatible / R2                       | **Defer** → Phase 4    | Ships with Speaking                                                                  |
+| OTel + Prometheus + Grafana + Tempo/Loki | **Partial Keep**       | Omit Tempo. Keep `traceparent` propagation for future hookup                         |
+| OpenAPI 3.1 + JSON Schema                | **Keep**               | Generated from TypeBox, not handwritten                                              |
+| Docker + VPS                             | **Keep**               | —                                                                                    |
+| Kubernetes                               | **Defer**              | Trigger in [10 §N.5](10-deployment-roadmap.md#n5-triggers-to-exit-this-architecture) |
 
-### Ba hướng đã cân nhắc cho câu hỏi lớn nhất của brief (§18.1, §18.2)
+### Three directions evaluated for the brief's primary architectural question (§18.1, §18.2)
 
-**Hướng A — Modular monolith, không data plane riêng.** *(chọn)* Một app Node làm hết; Caddy chỉ lo TLS. Giá phải trả: Node single-threaded nên muốn dùng hết CPU phải chạy nhiều instance — ở 50 RPS không thành vấn đề vì request AI là chờ I/O.
+**Direction A — Modular monolith, no separate data plane.** _(Chosen)_ Single Node app handles everything; Caddy only terminates TLS. Trade-off: Node is single-threaded, so multi-core utilization requires multiple instances — at 50 RPS this is non-issue because AI requests are I/O-bound.
 
-**Hướng B — Kong/Envoy làm data plane + app làm control plane.** *(loại)* Kong không biết gì về `entitlement ∩ api_key_scope`, không verify được assertion với JWKS *per-org*, không map được request. Phải viết plugin Lua cho từng thứ đó — tức là viết lại chính app của mình bằng ngôn ngữ tệ hơn. Cộng thêm Kong tự nó cần một Postgres nữa. Với 2–3 dev không DevOps, nuôi 2 hệ thống config là tự sát.
+**Direction B — Kong/Envoy as data plane + app as control plane.** _(Rejected)_ Kong knows nothing about `entitlement ∩ api_key_scope`, cannot verify assertions with _per-org_ JWKS, cannot map requests. Would require custom Lua plugins for each feature — essentially rewriting the app in an inferior language. Plus Kong requires its own Postgres. For 2–3 devs without DevOps, maintaining two configuration systems is fatal.
 
-**Hướng C — Go, single binary.** *(hoãn)* Deploy sướng, concurrency tốt hơn, RAM thấp hơn — nhưng ở 50 RPS lợi thế đó bằng 0. Đổi lại mất hệ sinh thái validation/OpenAPI/DI mà D1 đang cần. Trigger xét lại ở [10 §N.5](10-deployment-roadmap.md#n5-trigger-rời-khỏi-kiến-trúc-này).
+**Direction C — Go, single binary.** _(Deferred)_ Excellent deployment story, superior concurrency, lower RAM — but at 50 RPS that advantage is negligible. Loses the rich validation/OpenAPI/DI ecosystem needed for D1. Review trigger in [10 §N.5](10-deployment-roadmap.md#n5-triggers-to-exit-this-architecture).
 
 ---
 
@@ -111,12 +111,12 @@ Ngoài ra: `url` trong Task 1 là URL do client cung cấp mà Writing sẽ tự
                           Internet
                              │ :443 TLS
                         ┌────▼────┐
-                        │  Caddy  │  Let's Encrypt tự động, HTTP/2
+                        │  Caddy  │  Automatic Let's Encrypt, HTTP/2
                         └────┬────┘
                     ┌────────┴────────┐
                ┌────▼────┐       ┌────▼────┐
-               │ aihub-1 │       │ aihub-2 │   Node, 2 replica
-               └────┬────┘       └────┬────┘   (deploy không đứt)
+               │ aihub-1 │       │ aihub-2 │   Node, 2 replicas
+               └────┬────┘       └────┬────┘   (zero-downtime deploy)
                     └────────┬────────┘
           ┌──────────────────┼──────────────────┐
      ┌────▼─────┐      ┌─────▼────┐      ┌──────▼──────┐
@@ -125,23 +125,23 @@ Ngoài ra: `url` trong Task 1 là URL do client cung cấp mà Writing sẽ tự
      │          │      │ counter  │      │ Grafana     │
      └──────────┘      └──────────┘      └─────────────┘
                     │
-      ══════════════╪══════════════  private network, không expose
+       ══════════════╪══════════════  private network, unexposed
                     ▼
              ┌─────────────┐
              │ AI Writing  │  Bearer <internal JWT>, TTL 60s
              └──────┬──────┘
                     ▼
-            OpenAI / Anthropic / ...   (AI Service tự gọi, AIHUB không biết)
+            OpenAI / Anthropic / ...   (called by AI Service; AIHUB has no visibility)
 ```
 
-Đường async ở Phase 4:
+Async path in Phase 4:
 
 ```
-  AIHUB ──► jobs (Postgres, SoT) ──► BullMQ (Redis, thi hành) ──► worker ──► AI Speaking
+  AIHUB ──► jobs (Postgres, SoT) ──► BullMQ (Redis, execution) ──► worker ──► AI Speaking
      │                                                                          │
      └──────────────── R2 (audio, presigned upload) ◄───────────────────────────┘
 ```
 
 ---
 
-→ Tiếp: [02 — Request Lifecycle](02-request-lifecycle.md)
+→ Next: [02 — Request Lifecycle](02-request-lifecycle.md)

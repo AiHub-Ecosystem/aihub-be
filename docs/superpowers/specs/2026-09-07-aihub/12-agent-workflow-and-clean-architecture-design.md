@@ -1,6 +1,6 @@
 # 12 — Agent Workflow & Clean Architecture Scaffold Design
 
-← [Mục lục](README.md)
+← [Table of Contents](README.md)
 
 > **Status:** Implemented in the initial NestJS/Fastify source scaffold. Update this
 > document when the shared agent workflow or source-layout rules change.

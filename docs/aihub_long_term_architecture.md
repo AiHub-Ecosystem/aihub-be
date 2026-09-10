@@ -1,23 +1,23 @@
 # AIHUB — Long-Term Architecture
 
-> **Mục đích:** Mô tả kiến trúc đích dài hạn khi **AIHUB là public API gateway duy nhất**, còn các AI services phía sau chỉ expose **private API**.
+> **Purpose:** Describes the long-term target architecture where **AIHUB is the sole public API gateway**, and downstream AI services expose only **private APIs**.
 >
-> **Cách đọc tài liệu này.** Phần lớn kiến trúc mô tả ở đây đã được triển khai. Những mục đó nay chỉ còn **một dòng trỏ tới nguồn hiện hành** — spec, code, hoặc contract — vì hai tài liệu cùng mô tả một cơ chế thì cái cũ sẽ âm thầm sai. Tài liệu này giữ lại đúng ba thứ: **trạng thái đích chưa xây**, **ranh giới trách nhiệm giữa AIHUB và AI Service**, và **§32 — hồ sơ quyết định** mà `aihub_deliverable_1_api_contract_schema.md` trích dẫn.
+> **How to read this document:** Most of the architecture described here has been implemented. Those sections now consist of **a single line pointing to the canonical active source** — spec, code, or contract — because when two documents describe the same mechanism, the older one will silently drift. This document retains exactly three things: **unbuilt target states**, **responsibility boundaries between AIHUB and AI Services**, and **§32 — Decision Records** cited by `aihub_deliverable_1_api_contract_schema.md`.
 >
-> **Khi mâu thuẫn: implementation spec và code thắng.** Số mục giữ nguyên để các tham chiếu `§32.x` trong D1 không gãy.
+> **In case of conflict: implementation specs and code win.** Section numbers are preserved to avoid breaking `§32.x` references throughout D1.
 
 ---
 
 # 1. Executive Summary
 
-AIHUB được thiết kế như một **multi-tenant AI API Gateway + Identity Broker + Downstream Adapter Layer**.
+AIHUB is designed as a **multi-tenant AI API Gateway + Identity Broker + Downstream Adapter Layer**.
 
 ```text
 Customer Backend
        │
        │ AIHUB Public API
        │ Organization API Key
-       │ Signed End-user Assertion (nếu operation cần user context)
+       │ Signed End-user Assertion (when operation requires user context)
        ▼
 ┌────────────────────────────────────┐
 │               AIHUB                │
@@ -48,210 +48,208 @@ Customer Backend
         │          │           │
         └──── may call one or more ────┐
                                        ▼
-                              Model Providers
-                         OpenAI / Anthropic / ...
+                                Model Providers
+                          OpenAI / Anthropic / ...
 ```
 
 ### End-state
 
-- Client **không gọi trực tiếp** AI Writing / Speaking / Reading.
-- AIHUB là public API boundary duy nhất.
-- AI services chỉ reachable trong private network.
-- Client chỉ phụ thuộc vào contract của AIHUB.
-- AIHUB che giấu URL, contract và implementation details của downstream services.
-- Business data vẫn do từng AI service/domain sở hữu.
+- Clients **never directly invoke** AI Writing / Speaking / Reading.
+- AIHUB is the single public API boundary.
+- AI services are reachable only within a private network.
+- Clients depend strictly on AIHUB contracts.
+- AIHUB encapsulates internal URLs, contracts, and implementation details of downstream services.
+- Business data remains owned by each respective AI service/domain.
 
 ---
 
 # 2. Terminology
 
-Từ **Provider** dễ bị hiểu theo hai nghĩa khác nhau, nên bảng này cố định cách dùng.
+The term **Provider** is often ambiguous, so this table establishes fixed usage across the codebase:
 
-| Term                         | Ý nghĩa trong tài liệu                                                            |
+| Term                         | Meaning in Documentation                                                          |
 | ---------------------------- | --------------------------------------------------------------------------------- |
-| **Organization / Tenant**    | Khách hàng/doanh nghiệp sử dụng AIHUB                                             |
-| **End User / Actor**         | User/học viên cụ thể bên trong Organization                                       |
-| **AI Service**               | Downstream service của hệ thống, ví dụ AI Writing, AI Speaking, AI Reading        |
-| **Model Provider**           | Nền tảng/model bên dưới mà AI Service có thể gọi, ví dụ OpenAI, Anthropic, Google |
-| **Downstream Adapter**       | Lớp trong AIHUB map canonical contract sang contract của AI Service               |
-| **Canonical Contract**       | Public request/response contract thống nhất của AIHUB                             |
-| **Internal Contract**        | Contract private giữa AIHUB và AI Service                                         |
-| **Organization Entitlement** | Những capability/service mà Organization được phép dùng theo plan/subscription    |
-| **API Key Scope**            | Những capability cụ thể mà một API key được phép gọi                              |
+| **Organization / Tenant**    | The B2B customer/enterprise subscribing to AIHUB                                  |
+| **End User / Actor**         | The specific student/user within an Organization                                  |
+| **AI Service**               | Internal downstream domain service (e.g. AI Writing, AI Speaking, AI Reading)     |
+| **Model Provider**           | Underlying LLM provider invoked by an AI Service (e.g. OpenAI, Anthropic, Google) |
+| **Downstream Adapter**       | AIHUB layer translating canonical contracts to AI Service contracts               |
+| **Canonical Contract**       | Unified public request/response contract defined by AIHUB                         |
+| **Internal Contract**        | Private boundary contract between AIHUB and downstream AI Services                |
+| **Organization Entitlement** | Capabilities/services an Organization is licensed to access per plan/tier         |
+| **API Key Scope**            | Specific operational permissions granted to an individual API key                 |
 
-Glossary ngắn cho công việc hằng ngày: [`CONTEXT.md`](../CONTEXT.md).
+Short glossary for everyday engineering: [`CONTEXT.md`](../CONTEXT.md).
 
 ---
 
 # 3. Responsibility Boundary
 
-Phần này vẫn là nguồn chính khi **thêm một AI Service mới** — nó nói rõ AIHUB không nhận việc gì.
+This section remains the primary reference when **onboarding new AI Services** — explicitly defining what AIHUB does and does not do.
 
-## 3.1 AIHUB chịu trách nhiệm
+## 3.1 AIHUB Responsibilities
 
-- Public API contract.
-- Organization authentication bằng API key.
-- End-user identity verification khi operation cần user context.
-- Authorization.
-- Rate limiting / quota.
-- Routing tới AI Service.
-- Request/response transformation.
-- Unified error mapping.
-- Gateway-level timing.
-- Usage aggregation/metering dựa trên metadata do AI Service trả về.
-- Audit logging / tracing.
-- Issuing short-lived internal JWT.
+- Public API contract definition and enforcement.
+- Organization authentication via API key.
+- End-user identity verification when operations require user context.
+- Tier-based authorization.
+- Rate limiting and monthly quotas.
+- Routing to appropriate AI Services.
+- Request/response payload transformation.
+- Unified error normalization.
+- Gateway-level latency telemetry.
+- Usage aggregation and metering derived from metadata returned by AI Services.
+- Audit logging and distributed tracing.
+- Minting short-lived internal JWTs for downstream authentication.
 
-## 3.2 AI Service chịu trách nhiệm
+## 3.2 AI Service Responsibilities
 
-- Domain/business logic.
-- Domain database.
-- Gọi model/RAG/tool/worker nội bộ.
-- Trả usage/model/processing metadata mà chỉ service đó biết.
-- Enforce downstream identity context (`org_id`, `actor_id`) khi truy cập user-scoped data.
+- Domain-specific educational/business logic.
+- Domain persistence and database management.
+- Model invocations, RAG pipelines, tool execution, and worker orchestration.
+- Reporting accurate token usage, model identifiers, and processing durations.
+- Enforcing downstream identity context (`org_id`, `actor_id`) when accessing user-scoped data.
 
-## 3.3 Model Provider chịu trách nhiệm
+## 3.3 Model Provider Responsibilities
 
-- Inference/model execution.
-- Model-specific token usage hoặc metering nếu API hỗ trợ.
-- Model-specific errors/limits.
+- Raw model execution and LLM inference.
+- Reporting model-specific token consumption metrics via their respective APIs.
+- Emitting provider-specific errors and rate limit signals.
 
 ---
 
-# 4. Public Boundary và Private AI Services
+# 4. Public Boundary and Private AI Services
 
-Trạng thái đích: AI Service chỉ reachable từ private network / AIHUB.
+Target state: AI Services are reachable exclusively via the private network / AIHUB.
 
-**Hiện chưa đạt, và đó là quyết định có chủ đích.** `api-ielts-writing.aihubproduction.com` vẫn public vì đang phục vụ một ứng dụng khác chưa đi qua AIHUB. Không đóng được cho tới khi ứng dụng đó cũng chuyển sang gọi AIHUB.
+**This is not yet achieved, and that is a deliberate transitional choice.** `api-ielts-writing.aihubproduction.com` remains public because it currently serves an existing client app (Wispace) that does not yet route through AIHUB. It cannot be isolated until that client completes its migration.
 
-**Ranh giới thật ở giai đoạn này là credential, không phải network.** Chừng nào khách hàng của AIHUB không bao giờ được cấp token của Writing, thì với họ AIHUB vẫn là đường vào duy nhất.
+**The actual security boundary at this stage is credentials, not network isolation.** As long as AIHUB customers are never issued Writing tokens, AIHUB remains their sole entry point.
 
-Ba điều kiện giữ cho rủi ro ở mức chấp nhận được:
+Three conditions to keep residual risk acceptable:
 
-1. Token Writing **không bao giờ** cấp cho khách hàng AIHUB — đây là quy trình, không phải kỹ thuật.
-2. AIHUB dùng **token riêng**, tách khỏi token của ứng dụng kia, để usage tách bạch và thu hồi độc lập được.
-3. Mọi endpoint của Writing đều có auth — **hiện chưa đạt**: upstream
-   `/five-minute-grading` vẫn thiếu auth, như [security spec](superpowers/specs/2026-09-07-aihub/09-security.md)
-   ghi rõ.
+1. Writing tokens are **never** issued to AIHUB customers — an operational governance rule.
+2. AIHUB uses a **dedicated token**, separated from Wispace, ensuring isolated metering and revocation.
+3. Every endpoint on Writing requires authentication — **currently unfulfilled**: upstream `/five-minute-grading` lacks authentication, as documented in the [security spec](superpowers/specs/2026-09-07-aihub/09-security.md).
 
-→ Phân tích đầy đủ: [`09-security.md`](superpowers/specs/2026-09-07-aihub/09-security.md).
+→ Full analysis: [`09-security.md`](superpowers/specs/2026-09-07-aihub/09-security.md).
 
-Vì toàn bộ service sẽ private nên không bắt buộc phải có prefix `/internal`.
+Because services will eventually reside on a private network, internal `/internal` path prefixes are not mandated.
 
 ---
 
 # 5. Multi-tenant Model
 
-Identity của end-user là **composite**, không phải `external_user_id` đơn lẻ:
+End-user identity is **composite**, not an isolated string:
 
 ```text
 (organization_id, external_user_id)
 ```
 
-Org A → `user_123` và Org B → `user_123` là hai actor khác nhau. Không cần layer `Team` nếu requirement chỉ có một cấp Organization.
+Org A → `user_123` and Org B → `user_123` represent two completely distinct actors. A `Team` hierarchy is unnecessary as requirements dictate a single Organization tier.
 
-→ Đã triển khai. Schema: `database/migrations/0001_control_plane.sql`.
+→ Implemented. Database schema: `database/migrations/0001_control_plane.sql`.
 
 ---
 
 # 6. Organization API Key
 
-→ **Đã triển khai.** Format, sinh key, hash SHA-256 và lý do không dùng bcrypt/argon2, lookup flow, negative cache: [`05-auth-identity.md` §G.1–G.3](superpowers/specs/2026-09-07-aihub/05-auth-identity.md). Code: `src/modules/identity/`.
+→ **Implemented.** Key format, generation, SHA-256 hashing (and why bcrypt/argon2 were rejected), lookup pipeline, and negative caching: [`05-auth-identity.md` §G.1–G.3](superpowers/specs/2026-09-07-aihub/05-auth-identity.md). Code: `src/modules/identity/`.
 
-Một nguyên tắc vận hành không nằm trong code, nên nhắc lại ở đây: **không để frontend/mobile giữ Organization API Key.** Key phải nằm ở Customer Backend. Đây là quy trình onboarding, AIHUB không tự kiểm chứng được.
+Key operational rule: **Never store Organization API Keys in frontend or mobile apps.** Keys must reside exclusively on customer backends. This is an integration requirement verified during onboarding.
 
-→ Hướng dẫn cho khách: [`integration-guide.md`](integration-guide.md) §1.
+→ Customer integration guide: [`integration-guide.md`](integration-guide.md) §1.
 
 ---
 
 # 7. Environment
 
-**Deployment hostname là source of truth cho environment.** API key được bind vào `allowed_environments` nhưng không tự quyết định environment của request.
+**Deployment hostname is the source of truth for the environment.** API keys bind to `allowed_environments` but cannot dictate the environment of an incoming request.
 
-→ Đã triển khai, kèm cảnh báo `Host` header là do client tự khai và cần reverse proxy validate: [`05-auth-identity.md` §G.11](superpowers/specs/2026-09-07-aihub/05-auth-identity.md). Code: `src/modules/identity/presentation/request-environment.ts`.
+→ Implemented, with caveats that the `Host` header is client-provided and requires reverse-proxy validation: [`05-auth-identity.md` §G.11](superpowers/specs/2026-09-07-aihub/05-auth-identity.md). Code: `src/modules/identity/presentation/request-environment.ts`.
 
 ---
 
 # 8. End-user Identity
 
-Trust model: **Signed End-user Assertion**. Customer Backend ký, AIHUB verify bằng JWKS của Organization. AIHUB không quản lý user của khách.
+Trust model: **Signed End-user Assertion**. Signed by customer backends, verified by AIHUB via the organization's JWKS. AIHUB does not store customer user databases.
 
-→ **Đã triển khai.** Thứ tự verify, chống alg confusion, `UNIQUE(issuer)` chặn cross-tenant, trần TTL, chống SSRF khi fetch JWKS, chiến lược cache: [`05-auth-identity.md` §G.4–G.6](superpowers/specs/2026-09-07-aihub/05-auth-identity.md). Code: `src/modules/identity/application/user-assertion-verifier.ts`.
+→ **Implemented.** Verification sequence, algorithm confusion defense, cross-tenant isolation via `UNIQUE(issuer)`, TTL ceilings, SSRF protection on JWKS fetches, and caching strategies: [`05-auth-identity.md` §G.4–G.6](superpowers/specs/2026-09-07-aihub/05-auth-identity.md). Code: `src/modules/identity/application/user-assertion-verifier.ts`.
 
-→ Hướng dẫn ký cho khách, kèm ví dụ Node/Python/Java: [`integration-guide.md`](integration-guide.md) §3.
+→ Customer signing instructions with Node/Python/Java samples: [`integration-guide.md`](integration-guide.md) §3.
 
 ---
 
 # 9. Request Identity Context
 
-Sau khi authenticate/verify, AIHUB normalize thành một context nội bộ và **không để controller/business logic đọc raw headers để tự suy identity**.
+Following authentication and verification, AIHUB normalizes identity into an immutable internal context: **controllers and business logic never inspect raw headers to infer identity**.
 
-→ Đã triển khai: `src/common/request-context/`.
+→ Implemented: `src/common/request-context/`.
 
 ---
 
 # 10. Authorization
 
-Hai lớp khác nhau, giao nhau:
+Evaluated at the intersection of two distinct layers:
 
 ```text
 Organization Entitlement  ∩  API Key Scope  →  Effective Scope
 ```
 
-→ Đã triển khai, fail-closed: `src/modules/identity/application/authorization.ts`. Lý do và ví dụ: [`05-auth-identity.md` §G.10](superpowers/specs/2026-09-07-aihub/05-auth-identity.md).
+→ Implemented, fail-closed: `src/modules/identity/application/authorization.ts`. Rationale and examples: [`05-auth-identity.md` §G.10](superpowers/specs/2026-09-07-aihub/05-auth-identity.md).
 
 ---
 
 # 11. AIHUB → AI Service: Short-lived Internal JWT
 
-AIHUB không forward customer credential xuống AI Service. Nó mint JWT nội bộ just-in-time, TTL ngắn, `aud` riêng cho từng service, không lưu DB, không refresh.
+AIHUB never forwards customer credentials downstream. It mints short-lived internal JWTs just-in-time, scoped per downstream service, never persisted in DB, with zero refresh tokens.
 
-→ **Đã triển khai.** Claims, lý do chọn EdDSA, quy trình xoay khoá 5 bước: [`05-auth-identity.md` §G.7–G.8](superpowers/specs/2026-09-07-aihub/05-auth-identity.md). Code: `src/modules/gateway/infrastructure/configured-token-issuer.ts`.
+→ **Implemented.** Claims structure, EdDSA selection rationale, 5-step key rotation runbook: [`05-auth-identity.md` §G.7–G.8](superpowers/specs/2026-09-07-aihub/05-auth-identity.md). Code: `src/modules/gateway/infrastructure/configured-token-issuer.ts`.
 
 ---
 
 # 12. Service-to-service Security
 
-Hai lớp trả lời hai câu hỏi khác nhau, không thay thế nhau:
+Two layers resolving two distinct concerns:
 
 ```text
-Network policy / mTLS  →  service/workload nào đang kết nối?
-Internal JWT           →  request đang đại diện cho org/actor/scope nào?
+Network policy / mTLS  →  Which workload/service is initiating the TCP connection?
+Internal JWT           →  On behalf of which organization, actor, and scope?
 ```
 
-Quyết định phase đầu ở [§32.10](#3210-phase-đầu-có-cần-mtls-không).
+Initial phase decision documented in [§32.10](#3210-does-the-initial-phase-need-mtls).
 
 ---
 
 # 13. Canonical Public API Contract
 
-Client chỉ phụ thuộc contract của AIHUB. AIHUB che tên field, tên endpoint và cách đặt tên của AI Service.
+Clients depend strictly on AIHUB contracts. AIHUB abstracts field names, endpoint structures, and naming quirks of downstream AI Services.
 
-→ **Contract hiện hành là code, không phải tài liệu.** Schema: `src/contracts/writing/`. Bản sinh tự động: `openapi.json`, phục vụ tại `GET /docs`. Đặc tả và Data Dictionary: [`aihub_deliverable_1_api_contract_schema.md`](aihub_deliverable_1_api_contract_schema.md) §10 và §20.
+→ **The canonical contract is code, not documentation.** Schemas: `src/contracts/writing/`. Automatically generated documentation: `openapi.json` served at `GET /docs`. Detailed specification and Data Dictionary: [`aihub_deliverable_1_api_contract_schema.md`](aihub_deliverable_1_api_contract_schema.md) §10 and §20.
 
 ---
 
 # 14. Downstream Adapter Layer
 
-Lớp map canonical contract ↔ contract riêng của từng AI Service. Adapter là **hàm thuần**: không network, không config, không thời gian — nhờ vậy test được bằng fixture thật thay vì mock.
+The mapping layer between canonical contracts and AI Service proprietary contracts. Adapters are **pure functions**: zero networking, zero configuration lookups, zero clock reads — allowing testing via real fixtures without mocks.
 
-Adapter xử lý: field rename, enum/value conversion, default values, nested transformation, unsupported options, media transformation, service-specific response và error mapping.
+Adapters handle: field renaming, enum/value normalization, default fallback injection, nested transformations, stripping unsupported parameters, media adaptations, and proprietary response/error mapping.
 
-MVP dùng adapter bằng code thay vì dynamic rule engine.
+The MVP uses typed code adapters rather than a dynamic rule engine.
 
-→ **Đã triển khai.** Interface: `src/downstream/downstream-adapter.ts`. Adapter Writing: `src/downstream/writing/`. Nguyên tắc bắt buộc — không bao giờ đoán shape downstream, phải capture fixture thật trước: [`AGENTS.md`](../AGENTS.md) và [`06-routing-adapter.md`](superpowers/specs/2026-09-07-aihub/06-routing-adapter.md).
+→ **Implemented.** Interface: `src/downstream/downstream-adapter.ts`. Writing adapter: `src/downstream/writing/`. Non-negotiable rule: never guess downstream response shapes; capture production fixtures first: [`AGENTS.md`](../AGENTS.md) and [`06-routing-adapter.md`](superpowers/specs/2026-09-07-aihub/06-routing-adapter.md).
 
 ---
 
 # 15. Internal AI Service Response Contract
 
-> **Chưa đạt.** AI Writing hiện không trả `usage`, `models`, hay `metrics`. Đây là contract AIHUB đề nghị mọi AI Service tuân theo, và là điều kiện tiên quyết cho metering/billing ở §24.
+> **Unachieved.** AI Writing does not currently return `usage`, `models`, or `metrics`. This is the standardized contract AIHUB expects all AI Services to adopt, serving as a prerequisite for metering and billing in §24.
 
-Phân biệt rõ hai loại dữ liệu trong response:
+Clear separation of data categories:
 
 ```text
-Domain data          → khác nhau giữa Writing / Speaking / Reading
-Operational metadata → nên chuẩn hoá giữa mọi AI Service
+Domain data          → Unique across Writing / Speaking / Reading
+Operational metadata → Standardized across all downstream AI Services
 ```
 
 ```ts
@@ -262,7 +260,7 @@ interface InternalAIServiceResponse<TData> {
     inputTokens: number;
     outputTokens: number;
     totalTokens: number;
-    // Optional: chi tiết khi operation gọi model nhiều lần.
+    // Optional: breakdown when an operation invokes models multiple times.
     calls?: Array<{
       modelProvider?: string;
       model?: string;
@@ -278,117 +276,115 @@ interface InternalAIServiceResponse<TData> {
 }
 ```
 
-Quy tắc:
+Rules:
 
-- `data` là service-specific domain payload.
-- `usage`, `models`, `metrics` là common internal metadata.
-- Response Adapter map `data` thành canonical public data.
-- **AIHUB không tự đoán token usage.**
-
----
-
-# 16. Token Usage khi một request gọi model nhiều lần
-
-> **Chưa đạt**, phụ thuộc §15.
-
-Một operation có thể chạy: LLM call #1 + RAG + LLM call #2 + evaluator model. Nếu chỉ trả usage của một call thì billing sai.
-
-**`usage.inputTokens` / `outputTokens` / `totalTokens` là aggregate của toàn operation**, `calls[]` là breakdown optional cho internal metering.
-
-Public API chỉ expose aggregate — xem [§32.7](#327-public-response-expose-model-breakdown-hay-chỉ-aggregate-usage).
+- `data` represents service-specific domain output.
+- `usage`, `models`, and `metrics` represent standardized internal telemetry.
+- Response adapters map `data` into canonical public responses.
+- **AIHUB never guesses token usage.**
 
 ---
 
-# 17. Timing và Source of Truth
+# 16. Token Usage Across Multiple Model Invocations
 
-## 17.1 Định nghĩa
+> **Unachieved**, dependent on §15.
 
-Không dùng `provider_ms` vì từ này lẫn giữa AI Service và Model Provider.
+A single operation may trigger: LLM prompt #1 + RAG retrieval + LLM synthesis #2 + evaluator scoring model. Reporting tokens for only one invocation causes inaccurate billing.
+
+**`usage.inputTokens` / `outputTokens` / `totalTokens` represents the aggregate sum across the entire operation**, while `calls[]` provides an optional internal breakdown.
+
+The public API exposes aggregate counts only — see [§32.7](#327-should-public-responses-expose-model-breakdowns-or-aggregate-usage-only).
+
+---
+
+# 17. Timing and Source of Truth
+
+## 17.1 Definitions
+
+Avoid the term `provider_ms` due to ambiguity between AI Services and Model Providers.
 
 ```text
 total_ms
 = AIHUB ingress → AIHUB egress
 
 downstream_ms
-= từ lúc AIHUB bắt đầu HTTP call tới AI Service
-  cho tới khi AIHUB nhận xong response
-  (bao gồm network + AI Service execution)
+= Duration from AIHUB initiating HTTP request to AI Service
+  until response reception completes
+  (includes network latency + AI Service execution)
 
 ai_processing_ms
-= thời gian AI Service tự đo phần xử lý AI nội bộ
-  (optional, không bao gồm network AIHUB ↔ AI Service)
+= Time spent exclusively on internal model inference as measured by AI Service
+  (optional, excludes AIHUB ↔ AI Service network transit)
 
 gateway_overhead_ms
 ≈ total_ms - downstream_ms
 ```
 
-Không giả định `total_ms = gateway_ms + ai_processing_ms` — còn network/downstream overhead ở giữa.
+We do not assume `total_ms = gateway_ms + ai_processing_ms` — network latency and downstream service overhead sit in between.
 
-→ Ba trường đầu đã có trong `meta.timing` của mọi response. `ai_processing_ms` chờ §15. Shape thật: `src/common/http/success-envelope.interceptor.ts`.
+→ The first three metrics are emitted in `meta.timing` on all responses. `ai_processing_ms` awaits §15. Implementation: `src/common/http/success-envelope.interceptor.ts`.
 
-## 17.2 Source-of-truth matrix
+## 17.2 Source-of-Truth Matrix
 
-| Field                   | Source of truth                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------- |
-| `request_id`            | AIHUB                                                                                       |
-| `service` / `operation` | AIHUB routing metadata                                                                      |
-| `total_ms`              | AIHUB                                                                                       |
-| `downstream_ms`         | AIHUB                                                                                       |
-| `gateway_overhead_ms`   | AIHUB derived metric                                                                        |
-| `ai_processing_ms`      | AI Service                                                                                  |
-| `input_tokens`          | AI Service / underlying Model Provider                                                      |
-| `output_tokens`         | AI Service / underlying Model Provider                                                      |
-| `total_tokens`          | AI Service aggregate                                                                        |
-| model(s) thực tế        | AI Service — **internal only**, không có trong public response                              |
-| `metering_status`       | AIHUB — internal only. `complete` / `missing_usage` / `not_applicable` / `quota_unverified` |
-| public cost             | AIHUB từ normalized usage + pricing config, hoặc business rule riêng                        |
+| Field                   | Source of Truth                                                                          |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| `request_id`            | AIHUB                                                                                    |
+| `service` / `operation` | AIHUB routing catalog                                                                    |
+| `total_ms`              | AIHUB                                                                                    |
+| `downstream_ms`         | AIHUB                                                                                    |
+| `gateway_overhead_ms`   | AIHUB derived metric                                                                     |
+| `ai_processing_ms`      | AI Service                                                                               |
+| `input_tokens`          | AI Service / underlying Model Provider                                                   |
+| `output_tokens`         | AI Service / underlying Model Provider                                                   |
+| `total_tokens`          | AI Service aggregate sum                                                                 |
+| Actual model(s)         | AI Service — **internal only**, omitted from public response                             |
+| `metering_status`       | AIHUB — internal only: `complete`, `missing_usage`, `not_applicable`, `quota_unverified` |
+| Public cost / billing   | AIHUB normalized usage + pricing configuration, or business rules                        |
 
-> Endpoint không gọi model nên **omit `usage`** hoặc trả `null`; không nên giả token bằng `0`.
+> Endpoints that do not invoke LLMs must **omit `usage`** or return `null`; never report synthetic `0` values.
 
-**`meta.models[]` không có trong public response.** Cho khách thấy tên model cụ thể khiến public contract phụ thuộc implementation phía sau: đổi model trở thành breaking change, hoặc tệ hơn là khách viết logic dựa trên tên model. Chi tiết model vẫn giữ ở internal contract cho metering và debug.
-
----
-
-# 18. Request ID và Correlation ID
-
-Canonical `request_id` do **AIHUB generate**; không tin id từ client làm primary tracing id. Client có thể gửi `X-Correlation-Id` để nối log hai bên.
-
-→ Đã triển khai: `src/common/request-context/request-id.ts`, echo trong `meta.correlation_id`.
+**`meta.models[]` is omitted from public responses.** Exposing underlying model names couples the public API to ephemeral implementation details: upgrading models becomes a breaking contract change, or prompts client developers to branch UI logic on model names. Model telemetry remains strictly internal.
 
 ---
 
-# 19. Retry và Idempotency
+# 18. Request ID and Correlation ID
 
-→ **Đã triển khai.** Fingerprint, xử lý race không cần distributed lock, quy tắc xoá record khi 4xx, ca timeout + `Idempotency-Key` để không mất tiền hai lần: [`07-reliability-and-errors.md` §I.2–I.5](superpowers/specs/2026-09-07-aihub/07-reliability-and-errors.md). Code: `src/modules/idempotency/`.
+Canonical `request_id` is **generated exclusively by AIHUB**; client-provided identifiers are never trusted as primary tracing keys. Clients may supply `X-Correlation-Id`, which AIHUB logs and echoes back.
 
-TTL mặc định chốt ở [§32.9](#329-idempotency-retentionttl-là-bao-lâu).
+→ Implemented: `src/common/request-context/request-id.ts`, echoed in `meta.correlation_id`.
+
+---
+
+# 19. Retries and Idempotency
+
+→ **Implemented.** Request fingerprinting, race resolution without distributed locks, record purging on 4xx errors, background execution on timeouts with `Idempotency-Key` to prevent double charges: [`07-reliability-and-errors.md` §I.2–I.5](superpowers/specs/2026-09-07-aihub/07-reliability-and-errors.md). Code: `src/modules/idempotency/`.
+
+Default TTL confirmed in [§32.9](#329-what-is-the-retention-ttl-for-idempotency-records).
 
 ---
 
 # 20. Unified Error Model
 
-Nguyên tắc giữ nguyên: một envelope duy nhất, không tầng nào tự chọn HTTP status, và raw downstream error chỉ log nội bộ — không leak stack trace, private URL, DB error, hay secret của provider.
+Core principles: single error envelope, centralized HTTP status assignment, and internal-only logging of raw downstream errors — preventing leakage of stack traces, internal URLs, database errors, or provider secrets.
 
-→ **Đã triển khai.** Ma trận đầy đủ kèm cột Downstream Signal: [`aihub_deliverable_1_api_contract_schema.md`](aihub_deliverable_1_api_contract_schema.md) §25 (US10). Registry: `src/common/errors/error-registry.ts`. Bản rút gọn cho khách: [`integration-guide.md`](integration-guide.md) §8.
-
-Ba mã đáng tách riêng và lý do — `AI_SERVICE_CONTRACT_VIOLATION`, `IDENTITY_PROVIDER_UNAVAILABLE`, `CONCURRENCY_LIMIT` — ghi ở US10, không lặp lại ở đây.
+→ **Implemented.** Master matrix with Downstream Signal mappings: [`aihub_deliverable_1_api_contract_schema.md`](aihub_deliverable_1_api_contract_schema.md) §25 (US10). Error registry: `src/common/errors/error-registry.ts`. Client integration guide: [`integration-guide.md`](integration-guide.md) §8.
 
 ---
 
 # 21. Sync vs Async Operations
 
-> **Chưa xây phần async.** Cả 4 operation hiện tại đều sync.
+> **Async pipeline unbuilt.** All 4 current operations execute synchronously.
 
-## 21.1 Sync
+## 21.1 Synchronous
 
 ```http
 POST /v1/ielts/writing/task1/grade
 → 200 OK
 ```
 
-## 21.2 Async
+## 21.2 Asynchronous
 
-Phù hợp audio/video/pipeline dài:
+Suitable for audio/video processing and multi-stage evaluation pipelines:
 
 ```http
 POST /v1/speaking/grade
@@ -399,97 +395,97 @@ POST /v1/speaking/grade
 { "data": { "job_id": "job_01JXYZ", "status": "queued" } }
 ```
 
-Sau đó `GET /v1/jobs/{job_id}`, hoặc webhook/callback nếu platform hỗ trợ.
+Followed by `GET /v1/jobs/{job_id}`, or webhook notifications when supported.
 
-> Contract catalog phải ghi rõ **mỗi operation là sync hay async**; không để implementation tự quyết định sau khi client đã tích hợp.
+> The operation catalog must declare whether **each operation is sync or async** upfront; never leave this to runtime inference after client integration.
 
-Ngưỡng chốt ở [§32.5](#325-operation-nào-sync-operation-nào-async).
+Thresholds documented in [§32.5](#325-which-operations-are-synchronous-vs-asynchronous).
 
 ---
 
 # 22. File / Audio / Media Input Policy
 
-> **Chưa xây.** Cả 4 operation hiện tại chỉ nhận `application/json`. Object storage và presigned upload vào cùng lúc với Speaking.
+> **Unbuilt.** All 4 current operations accept `application/json` only. Object storage and presigned uploads arrive alongside Speaking.
 
-Không để mỗi capability tự chọn base64/multipart/url tuỳ ý.
+Input standards are centralized rather than ad-hoc per service:
 
-| Loại input        | Cách nhận                                                    |
-| ----------------- | ------------------------------------------------------------ |
-| Text / small JSON | `application/json`                                           |
-| Media nhỏ/vừa     | `multipart/form-data` với size limit rõ ràng                 |
-| Media lớn         | Presigned upload lên object storage → `asset_id` → gọi AIHUB |
+| Input Type           | Ingestion Mechanism                                           |
+| -------------------- | ------------------------------------------------------------- |
+| Text / small JSON    | `application/json`                                            |
+| Small / medium media | `multipart/form-data` with explicit size ceilings             |
+| Large media / audio  | Presigned upload to object storage → pass `asset_id` to AIHUB |
 
 ```json
 { "audio": { "asset_id": "asset_01JXYZ" } }
 ```
 
-Không khuyến nghị base64 cho file lớn: tăng payload, memory và bandwidth.
+Base64 encoding is strongly discouraged for large media: it inflates payloads, memory consumption, and bandwidth transfer.
 
-Ngưỡng chốt ở [§32.6](#326-fileaudio-dùng-multipart-hay-asset_id--presigned-upload).
+Thresholds documented in [§32.6](#326-should-filesaudio-use-multipart-or-asset_id--presigned-upload).
 
 ---
 
 # 23. Routing Catalog
 
-→ Bảng operation hiện hành nằm ở code: `src/catalog/operation-catalog.ts`.
+→ Active operations catalog resides in code: `src/catalog/operation-catalog.ts`.
 
-Hai quyết định về **chỗ đặt** catalog cần giữ lại, vì code không tự nói ra:
+Two key design decisions regarding catalog placement:
 
-**Routing catalog nằm ở code, không ở database.** Adapter vốn đã là code nên thêm AI Service mới vẫn phải deploy — config trong DB không giúp tránh deploy, chỉ tách sự thật ra làm hai chỗ.
+**The routing catalog belongs in code, not in the database.** Adapters are compiled code, so onboarding an AI Service requires a deployment regardless — database configuration does not avoid deployments, it merely splits source of truth.
 
-**URL downstream trong DB là một lỗ SSRF.** Ai ghi được vào bảng đó thì trỏ được AIHUB vào `169.254.169.254`, trong khi AIHUB đang cầm internal JWT. Để ở biến môi trường thì không có bề mặt tấn công đó.
+**Downstream URLs stored in a database introduce an SSRF vector.** Anyone with database write access could point AIHUB to `169.254.169.254`, and AIHUB carries signed internal JWTs. Environment variables eliminate that attack surface.
 
-Sinh đề là `organization`-scoped vì kết quả không thuộc về học viên nào; chấm bài là `user`-scoped vì kết quả gắn với một học viên cụ thể — theo nguyên tắc fail-closed ở [§32.4](#324-operation-nào-organization-scoped-operation-nào-user-scoped).
+Question generation is `organization`-scoped because prompts do not belong to specific students; grading is `user`-scoped because scores attach to specific learner profiles — following fail-closed rules in [§32.4](#324-which-operations-are-organization-scoped-vs-user-scoped).
 
 ---
 
-# 24. Rate Limit, Quota và Billing
+# 24. Rate Limiting, Quotas, and Billing
 
-Rate limit và concurrency limit **đã triển khai** (`src/modules/gateway/`, đếm trên Redis theo tổ chức). Quota, subscription, metering và billing **chưa**.
+Rate limiting and concurrency controls are **implemented** (`src/modules/gateway/`, tracked in Redis per organization). Quotas, subscriptions, metering reconciliation, and automated billing are **in progress**.
 
-Nguyên tắc cho phần chưa làm:
+Governing principles:
 
-- Usage/billing dựa trên **normalized usage do AI Service trả về**, không dựa trên token estimate tại gateway.
-- Nếu usage thiếu: **không tự bịa số**; đánh dấu metering incomplete; log/metric để phát hiện contract violation; business rule quyết định fail hay cho qua tuỳ operation/plan.
+- Usage and billing rely on **normalized usage reported by downstream AI Services**, never token estimation heuristics at the gateway.
+- Missing usage data: **never fabricate synthetic numbers**; flag metering as incomplete; emit metrics to track contract violations; apply business rules to either allow or reject requests per tier.
 
-Xử lý runtime khi thiếu usage chốt ở [§32.8](#328-nếu-ai-service-không-trả-usage-metadata-thì-xử-lý-thế-nào). Phụ thuộc §15.
+Runtime handling of missing usage documented in [§32.8](#328-how-should-aihub-handle-ai-services-failing-to-return-usage-metadata). Dependent on §15.
 
 ---
 
 # 25. Observability
 
-`request_id` do AIHUB sinh, truyền xuống downstream, và là **tracing metadata — không phải identity**.
+`request_id` is minted by AIHUB, passed downstream, and serves as **tracing metadata — never an identity anchor**.
 
-Cần đo, khi có chỗ để đo:
+Required metrics:
 
-- request count;
-- latency p50/p95/p99;
-- `downstream_ms`;
-- `ai_processing_ms` nếu downstream cung cấp;
-- error rate theo AI Service;
-- Model Provider error/throttle rate nếu AI Service expose;
-- rate-limit/quota rejects;
-- token usage từ downstream;
-- circuit breaker state.
+- Request counts.
+- Latency distributions (p50, p95, p99).
+- `downstream_ms`.
+- `ai_processing_ms` when downstream provides it.
+- Error rates segmented by AI Service.
+- Model provider error/throttle rates when exposed.
+- Rate limit and quota rejection counts.
+- Token consumption reported downstream.
+- Circuit breaker state per operation.
 
-→ Trạng thái hiện tại và quyết định hoãn distributed tracing: [`08-metering-and-observability.md`](superpowers/specs/2026-09-07-aihub/08-metering-and-observability.md).
+→ Telemetry architecture and deferred distributed tracing: [`08-metering-and-observability.md`](superpowers/specs/2026-09-07-aihub/08-metering-and-observability.md).
 
 ---
 
 # 26. Data Ownership
 
-AIHUB giữ **control-plane data**; mỗi AI Service giữ **business data** của mình.
+AIHUB retains **control-plane data**; each AI Service retains its **domain business data**.
 
-| AIHUB (control plane)                                                                                                       | AI Service (business data)                                                          |
-| --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `organizations`, `api_keys`, `organization_identity_configs`, `idempotency_records` — **đã có**                             | Writing attempts/results → Writing DB                                               |
-| `plans`, `subscriptions`, `organization_entitlements`, `quota_configs`, `usage_records` — **chưa có**, vào cùng lúc với §24 | Speaking results/audio → Speaking DB + Object Storage; Reading results → Reading DB |
+| AIHUB (Control Plane)                                                                                     | AI Service (Business Domain)                                                            |
+| --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `organizations`, `api_keys`, `organization_identity_configs`, `idempotency_records` — **active**          | Writing evaluation attempts & results → Writing DB                                      |
+| `plans`, `subscriptions`, `organization_entitlements`, `quota_configs`, `usage_records` — **in progress** | Speaking audio & scoring → Speaking DB + Object Storage; Reading analytics → Reading DB |
 
-Ranh giới này là bất biến của hệ thống: AIHUB không bao giờ lưu bài viết của học viên, và AI Service không bao giờ lưu API key.
+This boundary is an invariant: AIHUB never persists student essay bodies, and AI Services never store organization API keys.
 
 ---
 
-# 30. Kiến trúc chốt
+# 30. Settled Architecture
 
 > **AIHUB is a multi-tenant AI API Gateway that authenticates organizations using API keys, verifies end-user assertions for user-scoped operations, computes effective authorization from organization entitlements and API-key scopes, normalizes public API contracts, maps requests to private AI services, and propagates trusted identity downstream using short-lived internal JWTs.**
 
@@ -501,37 +497,41 @@ Signed End-user Assertion → Actor Identity
 AIHUB Internal JWT        → Trusted Downstream Identity (org_id + actor_id + scope)
 ```
 
-Luồng request đầy đủ theo từng chặng, kèm file và mã lỗi: [`02-request-lifecycle.md`](superpowers/specs/2026-09-07-aihub/02-request-lifecycle.md).
-
-> Mục 27–29 của bản trước — module design, full request flow, sequence diagram — đã bị gỡ vì code và spec mô tả chính xác hơn. Cấu trúc thư mục thật: [`README.md`](../README.md) mục Source layout.
+Full lifecycle request flow across each stage with mapped error codes: [`02-request-lifecycle.md`](superpowers/specs/2026-09-07-aihub/02-request-lifecycle.md).
 
 ---
 
 # 31. Roadmap
 
-| Phase                                      | Nội dung                                                                                                                         | Trạng thái                    |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| **1 — Contract Foundation**                | Canonical contract, API key contract, identity contract, adapter contract, error codes, usage/timing metadata, operation catalog | Xong, trừ usage metadata      |
-| **2 — Core Gateway + Private AI Services** | API key middleware, routing/dispatcher, internal JWT, user assertion verification, adapters, network policy                      | Xong, trừ network policy      |
-| **3 — Platform Capabilities**              | Rate limiting, quota, subscription/plan, usage metering, billing, audit logs, idempotency                                        | Rate limit + idempotency xong |
-| **4 — Reliability & Scale**                | Circuit breaker, retry + backoff/jitter, load shedding, downstream failover, distributed tracing, SLO/SLI                        | Chưa                          |
+| Phase                                      | Scope                                                                                                                                     | Status                               |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| **1 — Contract Foundation**                | Canonical contract, API key contract, identity contract, adapter interface, unified error codes, usage/timing metadata, operation catalog | Complete (except usage metadata)     |
+| **2 — Core Gateway + Private AI Services** | API key middleware, routing/dispatcher, internal JWT, user assertion verifier, adapters, network policies                                 | Complete (except network isolation)  |
+| **3 — Platform Capabilities**              | Rate limiting, quotas, subscriptions/plans, usage metering, billing, audit logging, idempotency                                           | Rate limiting + idempotency complete |
+| **4 — Reliability & Scale**                | Circuit breakers, retries + jitter, load shedding, failovers, distributed tracing, SLO/SLI                                                | Pending                              |
 
-Trigger cụ thể để rời khỏi kiến trúc hiện tại: [`10-deployment-roadmap.md` §N.5](superpowers/specs/2026-09-07-aihub/10-deployment-roadmap.md).
+Explicit triggers to evolve beyond this architecture: [`10-deployment-roadmap.md` §N.5](superpowers/specs/2026-09-07-aihub/10-deployment-roadmap.md).
 
 ---
 
-# 32. Open Decisions — đã chốt
+<a id="32-hồ-sơ-quyết-định"></a>
+<a id="32-open-decisions--settled"></a>
 
-> **Trạng thái 2026-09-07: cả 10 quyết định đã chốt theo Recommended default.**
-> Toàn bộ đã được phản ánh vào `aihub_deliverable_1_api_contract_schema.md` và vào architecture design ở
+# 32. Open Decisions — Settled Records
+
+> **Status 2026-09-07: All 10 architectural decisions settled based on Recommended Defaults.**
+> Synchronized into `aihub_deliverable_1_api_contract_schema.md` and the architecture specifications under
 > [`docs/superpowers/specs/2026-09-07-aihub/`](superpowers/specs/2026-09-07-aihub/README.md).
-> **Giữ nguyên phần options bên dưới làm hồ sơ lý do** — sau này muốn đổi thì đọc lại trade-off đã cân nhắc. Đây là lý do mục 32 không bị rút gọn như các mục khác.
+> **The option analyses below are preserved as historical decision records** — providing complete context on evaluated trade-offs if requirements shift.
 
-Nguyên tắc: các default dưới đây ưu tiên **contract rõ ràng, security đủ tốt, dễ triển khai ở phase đầu và vẫn có đường nâng cấp về sau**.
+Core principle: defaults prioritize **unambiguous contracts, rigorous security, minimal operational overhead at MVP, and clean forward-upgrade paths**.
 
 ---
 
-## 32.1 API key dùng `X-API-Key` hay `Authorization`?
+<a id="321-api-key-dùng-x-api-key-hay-authorization"></a>
+<a id="321-api-key-header-format"></a>
+
+## 32.1 API Key: `X-API-Key` or `Authorization` Header?
 
 ### Options
 
@@ -547,20 +547,20 @@ X-API-Key: aihub_sk_live_xxx
 Authorization: Bearer aihub_sk_live_xxx
 ```
 
-### Recommended default
+### Recommended Default
 
-**Chọn `X-API-Key`.**
+**Adopt `X-API-Key`.**
 
-### Lý do
+### Rationale
 
-AIHUB đang có nhiều loại credential/context khác nhau như Organization API Key, User Assertion và internal JWT. Dùng `X-API-Key` giúp vai trò của Organization API Key rõ ràng hơn và tránh nhầm với bearer JWT ở các boundary khác.
+AIHUB handles multiple concurrent credentials: Organization API Keys, User Assertions, and internal JWTs. Using `X-API-Key` cleanly delineates the Organization credential, avoiding ambiguity with Bearer tokens across different transport boundaries.
 
-Quy ước đề xuất:
+Established standard:
 
 ```text
 Client → AIHUB:
 X-API-Key          = Organization credential
-X-User-Assertion   = End-user identity assertion (khi operation user-scoped)
+X-User-Assertion   = End-user identity assertion (user-scoped operations)
 
 AIHUB → AI Service:
 Authorization      = Bearer <AIHUB_INTERNAL_JWT>
@@ -568,178 +568,196 @@ Authorization      = Bearer <AIHUB_INTERNAL_JWT>
 
 ---
 
-## 32.2 User Assertion dùng JWKS URL hay upload public key?
+<a id="322-user-assertion-dùng-jwks-url-hay-upload-public-key"></a>
+<a id="322-user-assertion-jwks-url-or-uploaded-public-key"></a>
+
+## 32.2 User Assertion: JWKS URL or Direct Public Key Upload?
 
 ### Options
 
 **Option A — JWKS URL**
 
-Organization đăng ký một URL như:
+Organization registers an endpoint:
 
 ```text
 https://customer.example.com/.well-known/jwks.json
 ```
 
-AIHUB fetch/cached public keys theo `kid` để verify assertion.
+AIHUB fetches and caches public keys by `kid` to verify incoming assertions.
 
-**Option B — Upload/Register public key trực tiếp trên AIHUB**
+**Option B — Upload / Register Public Keys Directly in AIHUB**
 
-Organization upload PEM/public key trong portal hoặc qua admin API.
+Organization uploads PEM public keys via management CLI or portal.
 
-### Recommended default
+### Recommended Default
 
-**Ưu tiên JWKS URL.**
-**Public-key upload có thể giữ làm fallback cho Organization chưa có JWKS.**
+**Prioritize JWKS URL.**
+**Support direct public key upload as a fallback for organizations unable to host JWKS.**
 
-### Lý do
+### Rationale
 
-JWKS hỗ trợ key rotation tốt hơn, không cần cập nhật thủ công public key ở AIHUB mỗi lần rotate và phù hợp với B2B federation lâu dài. Upload public key dễ làm hơn cho MVP nhưng operational burden cao hơn khi số Organization tăng.
+JWKS facilitates seamless key rotation without requiring manual key uploads in AIHUB on each cycle, aligning with B2B enterprise identity federation. Uploading keys is simpler for MVP but incurs higher operational overhead as tenant counts grow.
 
 ---
 
-## 32.3 TTL tối đa của User Assertion?
+<a id="323-ttl-tối-đa-của-user-assertion"></a>
+<a id="323-maximum-user-assertion-ttl"></a>
+
+## 32.3 Maximum TTL for User Assertions?
 
 ### Options
 
-- 1–2 phút: security chặt nhưng dễ gặp clock skew/network delay.
-- 5 phút: cân bằng security và khả năng vận hành.
-- 15 phút trở lên: dễ sử dụng hơn nhưng replay window lớn hơn.
+- 1–2 minutes: High security, but vulnerable to clock skew and network jitter.
+- 5 minutes: Optimal balance between security and operational stability.
+- 15+ minutes: Simpler for clients, but widens replay attack exposure.
 
-### Recommended default
+### Recommended Default
 
-**TTL tối đa: 5 phút.**
+**Maximum TTL: 5 minutes.**
 
-Ngoài ra nên yêu cầu:
+Enforced validation constraints:
 
 ```text
-exp - iat <= 5 phút
-clock skew cho phép khoảng ±60 giây
-jti nên có nếu cần chống replay ở operation nhạy cảm
+exp - iat <= 5 minutes
+Permitted clock skew: ±60 seconds
+jti should be supplied if replay prevention is needed on sensitive endpoints
 ```
 
-### Lý do
+### Rationale
 
-User Assertion nên là credential ngắn hạn, được Customer Backend tạo gần thời điểm gọi AIHUB. 5 phút đủ chịu network delay/clock skew nhưng vẫn giới hạn replay window.
+User Assertions are ephemeral tokens minted by customer backends immediately prior to dispatching requests to AIHUB. A 5-minute lifespan accommodates network latency while tightly bounding replay risk.
 
 ---
 
-## 32.4 Operation nào organization-scoped, operation nào user-scoped?
+<a id="324-operation-nào-organization-scoped-operation-nào-user-scoped"></a>
+<a id="324-organization-scoped-vs-user-scoped-operations"></a>
+
+## 32.4 Organization-Scoped vs User-Scoped Operations?
 
 ### Options
 
-**Organization-scoped**: chỉ cần xác định Organization.
+**Organization-scoped**: Requires organization identity only.
 
-Ví dụ:
+Examples:
 
 ```text
-- service/catalog metadata
-- organization usage summary
+- service / catalog metadata discovery
+- organization usage summaries
 - organization configuration
-- health/capability discovery
+- system health endpoints
 ```
 
-**User-scoped**: operation đọc, tạo hoặc thay đổi dữ liệu gắn với một end user cụ thể.
+**User-scoped**: Operations reading, mutating, or producing data tied to an individual end user.
 
-Ví dụ:
+Examples:
 
 ```text
 - writing.grade
 - writing.history
 - speaking.grade
 - speaking.history
-- user-specific feedback/result
+- personalized feedback and evaluation results
 ```
 
-### Recommended default
+### Recommended Default
 
-**Mặc định mọi operation có đọc/ghi dữ liệu cá nhân hoặc kết quả AI của một end user là `user-scoped`.**
-Chỉ các operation thực sự ở cấp Organization mới là `organization-scoped`.
+**By default, all operations reading or generating end-user personal data or AI outputs are `user-scoped`.**
+Only purely organizational endpoints may be marked `organization-scoped`.
 
-Operation Catalog phải khai báo explicit `identity_scope: user` hoặc `identity_scope: organization`.
+The Operation Catalog must declare an explicit `identity_scope: user` or `identity_scope: organization`.
 
-### Lý do
+### Rationale
 
-Fail-closed an toàn hơn fail-open. Nếu chưa chắc một operation có cần user identity hay không thì coi là user-scoped trước, sau đó relax khi requirement rõ ràng.
+Fail-closed security is safer than fail-open. When uncertain whether an operation requires user identity, treat it as user-scoped; relax only when requirements explicitly justify it.
 
 ---
 
-## 32.5 Operation nào sync, operation nào async?
+<a id="325-operation-nào-sync-operation-nào-async"></a>
+<a id="325-sync-vs-async-operations"></a>
+
+## 32.5 Synchronous vs Asynchronous Operations?
 
 ### Options
 
-**Sync**
+**Synchronous**
 
 ```text
-Request → AIHUB → AI Service → Response ngay
+Request → AIHUB → AI Service → Immediate Response
 ```
 
-Phù hợp operation ngắn và predictable.
+Ideal for short, predictable inference operations.
 
-**Async**
+**Asynchronous**
 
 ```text
 POST request
 → 202 Accepted + job_id
-→ xử lý background
-→ client GET /jobs/{job_id} hoặc webhook
+→ Background execution
+→ Client polls GET /jobs/{job_id} or receives webhook
 ```
 
-Phù hợp operation lâu, xử lý file/audio lớn hoặc pipeline nhiều bước.
+Ideal for long-running pipelines, heavy media files, or multi-step analysis.
 
-### Recommended default
+### Recommended Default
 
-- **Sync** nếu expected processing time thường **≤ 30 giây**.
-- **Async** nếu có khả năng thường xuyên **> 30 giây**, xử lý media lớn, hoặc pipeline nhiều bước.
+- **Synchronous** if execution time is typically **≤ 30 seconds**.
+- **Asynchronous** if latency frequently **exceeds 30 seconds**, involves large audio/video payloads, or executes multi-stage evaluation pipelines.
 
-Ví dụ mặc định ban đầu:
+Initial baseline:
 
 ```text
-Writing grade ngắn          → sync
-Simple text generation      → sync
-Speaking/audio dài          → async
-Long-running analysis       → async
-Batch processing            → async
+Short essay grading (Writing)     → Synchronous
+Simple text generation            → Synchronous
+Long audio evaluation (Speaking)  → Asynchronous
+Deep multidimensional analysis    → Asynchronous
+Batch submissions                 → Asynchronous
 ```
 
-### Lý do
+### Rationale
 
-Giữ API đơn giản cho request nhanh nhưng tránh giữ HTTP connection lâu và timeout/retry khó kiểm soát cho workload nặng.
+Keeps API integration simple for fast queries while preventing hung HTTP connections, client drops, and uncontrolled retries on resource-intensive workloads.
 
 ---
 
-## 32.6 File/audio dùng multipart hay `asset_id` + presigned upload?
+<a id="326-fileaudio-dùng-multipart-hay-asset_id--presigned-upload"></a>
+<a id="326-file-and-audio-multipart-vs-asset_id"></a>
+
+## 32.6 File / Audio Input: Multipart vs `asset_id` via Presigned Upload?
 
 ### Options
 
 **Option A — `multipart/form-data`**
 
-Client upload trực tiếp file qua request API.
+Clients upload binary files directly in the API request body.
 
-**Option B — Presigned upload + `asset_id`**
+**Option B — Presigned Upload + `asset_id`**
 
 ```text
-1. Client xin upload URL
-2. Upload trực tiếp object storage
-3. Nhận/giữ asset_id
-4. Gọi AI operation bằng asset_id
+1. Client requests upload URL
+2. Direct upload to cloud object storage
+3. Receives asset_id
+4. Invokes AIHUB operation referencing asset_id
 ```
 
-### Recommended default
+### Recommended Default
 
-**Long-term: ưu tiên presigned upload + `asset_id` cho audio/file.**
-Cho phép `multipart/form-data` với file nhỏ, đơn giản (gợi ý ≤ 10 MB) hoặc cho MVP.
+**Long-term: Presigned upload + `asset_id` for audio and media assets.**
+Permit `multipart/form-data` for small files (≤ 10 MB) or early prototypes.
 
-### Lý do
+### Rationale
 
-Không đẩy file lớn xuyên qua toàn bộ API Gateway giúp giảm memory/bandwidth pressure lên AIHUB, dễ retry upload và scale tốt hơn. Multipart vẫn tiện cho integration nhỏ nên không cần cấm hoàn toàn.
+Streaming large media through API Gateway instances creates severe memory and bandwidth bottlenecks. Presigned uploads isolate binary transit, improve upload retry reliability, and scale horizontally.
 
 ---
 
-## 32.7 Public response expose model breakdown hay chỉ aggregate usage?
+<a id="327-public-response-expose-model-breakdown-hay-chỉ-aggregate-usage"></a>
+<a id="327-public-response-model-breakdown-vs-aggregate-usage"></a>
+
+## 32.7 Public Response: Model Breakdown vs Aggregate Usage Only?
 
 ### Options
 
-**Option A — Aggregate usage only**
+**Option A — Aggregate Usage Only**
 
 ```json
 {
@@ -751,7 +769,7 @@ Không đẩy file lớn xuyên qua toàn bộ API Gateway giúp giảm memory/b
 }
 ```
 
-**Option B — Expose breakdown từng model call**
+**Option B — Detailed Breakdown per Model Invocation**
 
 ```json
 {
@@ -765,124 +783,135 @@ Không đẩy file lớn xuyên qua toàn bộ API Gateway giúp giảm memory/b
 }
 ```
 
-### Recommended default
+### Recommended Default
 
-**Public API chỉ expose aggregate usage.**
-Model/call breakdown giữ cho internal metering, observability hoặc admin/debug API nếu sau này cần.
+**The public API exposes aggregate usage only.**
+Model breakdowns are reserved strictly for internal metering, observability, or administrative auditing APIs.
 
-### Lý do
+### Rationale
 
-AIHUB có mục tiêu abstraction các AI Service/Model Provider. Expose chi tiết model quá sớm sẽ làm public contract phụ thuộc implementation phía sau và khó đổi provider/model về sau.
+AIHUB abstracts downstream AI Services and Model Providers. Exposing granular model identifiers couples public contracts to internal routing, making model upgrades a breaking change and encouraging client code to branch on model names.
 
 ---
 
-## 32.8 Nếu AI Service không trả usage metadata thì xử lý thế nào?
+<a id="328-nếu-ai-service-không-trả-usage-metadata-thì-xử-lý-thế-nào"></a>
+<a id="328-handling-missing-usage-metadata-from-ai-service"></a>
+
+## 32.8 How to Handle AI Services Omitting Usage Metadata?
 
 ### Options
 
-**Option A — Fail request ngay**
+**Option A — Fail the Request Immediately**
 
-AIHUB coi missing usage là protocol violation và trả lỗi cho client.
+Treat missing usage as an internal protocol violation and return an error to the client.
 
-**Option B — Trả business response nhưng đánh dấu metering incomplete**
+**Option B — Return Domain Result but Mark Metering Incomplete**
 
 ```text
-- trả kết quả thành công cho client
-- log/metric metering_status = INCOMPLETE
-- alert nội bộ
-- enqueue reconciliation nếu có thể
-- provider/service vi phạm lặp lại có thể bị disable/circuit-break
+- Return successful business response to client
+- Record log/metric metering_status = INCOMPLETE
+- Trigger internal telemetry alerts
+- Enqueue background reconciliation if available
+- Repeatedly delinquent services trigger automated circuit breakers
 ```
 
-### Recommended default
+### Recommended Default
 
-**Chọn Option B ở runtime. Không làm fail một business response đã xử lý thành công chỉ vì thiếu usage metadata.**
+**Adopt Option B at runtime. Never fail a successful business evaluation solely because telemetry metadata was omitted.**
 
-Tuy nhiên đối với operation `metering-critical`, contract/integration test phải coi `usage` là **required** trước khi AI Service được đưa lên production.
+However, for `metering-critical` endpoints, integration tests must enforce `usage` presence as a mandatory gate before promoting downstream services to production.
 
-### Lý do
+### Rationale
 
-Không nên làm mất kết quả của user chỉ vì lỗi telemetry/metering. Nhưng cũng không được âm thầm bỏ qua vì sẽ gây sai billing; cần alert và reconciliation rõ ràng.
+Do not compromise customer educational workflows for telemetry gaps. But never drop telemetry silently — flag anomalies for alerting and billing reconciliation.
 
 ---
 
-## 32.9 Idempotency retention/TTL là bao lâu?
+<a id="329-idempotency-retentionttl-là-bao-lâu"></a>
+<a id="329-idempotency-retention-and-ttl"></a>
+
+## 32.9 Idempotency Retention & TTL Window?
 
 ### Options
 
-- 1 giờ: nhẹ storage nhưng retry muộn không được deduplicate.
-- 24 giờ: đủ cho phần lớn retry/replay thực tế.
-- 72 giờ+: an toàn hơn cho workflow dài nhưng giữ record lâu hơn.
+- 1 hour: Minimal storage overhead, but late retries cannot be deduplicated.
+- 24 hours: Accommodates virtually all real-world client retries.
+- 72+ hours: Safer for long-lived workflows, but increases storage retention.
 
-### Recommended default
+### Recommended Default
 
-**TTL mặc định: 24 giờ cho mutating/generative POST có `Idempotency-Key`.**
+**Default TTL: 24 hours for mutating/generative POST requests carrying an `Idempotency-Key`.**
 
-Key nên được scope theo:
+Keys are scoped by:
 
 ```text
 (organization_id, operation, idempotency_key)
 ```
 
-Operation async/job dài có thể override TTL lên 48–72 giờ nếu cần.
+Long-running async operations may override TTL up to 48–72 hours as needed.
 
-### Lý do
+### Rationale
 
-24 giờ là điểm cân bằng tốt giữa khả năng retry an toàn và chi phí lưu idempotency record; vẫn cho phép override theo từng operation trong Operation Catalog.
+24 hours provides an optimal balance between reliable replay protection and reasonable storage footprints, while allowing per-operation overrides in the catalog.
 
 ---
 
-## 32.10 Phase đầu có cần mTLS không?
+<a id="3210-phase-đầu-có-cần-mtls-không"></a>
+<a id="3210-is-mtls-required-in-phase-1"></a>
+
+## 32.10 Is mTLS Required in Phase 1?
 
 ### Options
 
-**Option A — Private network + Internal JWT**
+**Option A — Private Network + Internal JWT**
 
 ```text
-Network Policy / Security Group
+Network Security Group / VPC isolation
 +
 AIHUB-signed short-lived JWT
 ```
 
-**Option B — Private network + Internal JWT + mTLS**
+**Option B — Private Network + Internal JWT + mTLS**
 
-Thêm workload/service identity ở transport layer.
+Adds cryptographic workload identity at the transport layer.
 
-### Recommended default
+### Recommended Default
 
-**Phase đầu: Private network + strict network policy + short-lived Internal JWT là đủ.**
-Thiết kế certificate/mTLS như một hardening step cho phase sau.
+**Phase 1: Private network isolation + strict security groups + short-lived Internal JWTs are sufficient.**
+Design mTLS as a future hardening enhancement.
 
-Nâng lên mTLS khi có một trong các nhu cầu:
+Upgrade to mTLS when:
 
 ```text
-- cross-VPC / cross-cluster / multi-region
-- Zero Trust requirement
-- compliance/security requirement cao
-- cần strong workload identity ở transport layer
+- Moving across VPCs, multi-cluster topologies, or multi-region networks
+- Mandated by Zero Trust enterprise architecture
+- Strict compliance audits require cryptographic transport identity
 ```
 
-### Lý do
+### Rationale
 
-mTLS tăng security nhưng kéo theo certificate issuance, rotation, trust store và operational complexity. Phase đầu nên giữ boundary đơn giản nếu các AI Service đã hoàn toàn private và chỉ nhận trusted internal JWT.
+mTLS improves security but adds certificate distribution, rotation lifecycles, and operational overhead. Phase 1 maintains simple boundaries provided AI Services reside strictly within private networks and validate trusted internal JWTs.
 
 ---
 
-## 32.11 Bảng default để team chốt nhanh
+<a id="3211-bảng-default-để-team-chốt-nhanh"></a>
+<a id="3211-default-decisions-reference-table"></a>
 
-| Decision                              | Recommended default                                             |
-| ------------------------------------- | --------------------------------------------------------------- |
-| Organization API Key header           | `X-API-Key`                                                     |
-| End-user identity                     | Signed User Assertion JWT                                       |
-| Assertion key discovery               | JWKS URL; public-key upload là fallback                         |
-| User Assertion TTL                    | ≤ 5 phút                                                        |
-| Identity scope                        | Dữ liệu end-user → `user`; còn lại phải khai báo explicit       |
-| Sync vs Async                         | ≤ 30s → sync; workload dài/media → async                        |
-| File/audio                            | Presigned upload + `asset_id`; multipart cho file nhỏ/MVP       |
-| Public usage                          | Aggregate only                                                  |
-| Missing usage at runtime              | Không fail business response; mark incomplete + alert/reconcile |
-| Idempotency TTL                       | 24 giờ mặc định                                                 |
-| Service-to-service security phase đầu | Private network + network policy + short-lived Internal JWT     |
-| mTLS                                  | Phase hardening sau hoặc khi có requirement cụ thể              |
+## 32.11 Default Decisions Reference Table
 
-> Khi một operation cần khác default, phải khai báo override rõ trong **Operation Catalog** thay vì để implementation tự suy đoán.
+| Decision Area                  | Adopted Default Standard                                                    |
+| ------------------------------ | --------------------------------------------------------------------------- |
+| Organization API Key header    | `X-API-Key`                                                                 |
+| End-user identity verification | Cryptographically signed User Assertion JWT                                 |
+| Customer JWKS discovery        | JWKS URL; direct public key upload supported as fallback                    |
+| User Assertion TTL ceiling     | ≤ 5 minutes                                                                 |
+| Identity scoping rules         | End-user data operations → `user`; otherwise explicitly `organization`      |
+| Sync vs Async boundary         | ≤ 30s expected latency → sync; long-running / audio → async                 |
+| Media / Audio inputs           | Presigned object storage upload + `asset_id`; multipart for small files/MVP |
+| Public usage reporting         | Aggregate total tokens only                                                 |
+| Missing downstream usage       | Do not fail business response; flag incomplete + trigger alerting           |
+| Idempotency record TTL         | 24 hours default                                                            |
+| Downstream service auth        | Private VPC isolation + network policies + short-lived Internal JWT         |
+| mTLS adoption                  | Deferred to hardening phase or specific compliance requirements             |
+
+> When an operation requires an exception to these defaults, it must declare an explicit override in the **Operation Catalog** rather than relying on custom implementation heuristics.

@@ -1,21 +1,21 @@
 # 08 — Metering, Billing & Observability
 
-← [Mục lục](README.md) · [07 — Reliability & Errors](07-reliability-and-errors.md)
+← [Table of Contents](README.md) · [07 — Reliability & Errors](07-reliability-and-errors.md)
 
 # K. Usage / Metering / Billing
 
-## K.1 Ghi ở đâu, lúc nào
+## K.1 Where and When to Record Telemetry
 
-`usage_records` ở Postgres là **nguồn sự thật duy nhất**. Ghi **trước khi trả response**, và `await` nó:
+`usage_records` in Postgres is the **single source of truth**. Written **before returning the HTTP response**, and directly `await`ed:
 
 ```ts
 await usageRepo.insert(record); // ~1ms
 return envelope;
 ```
 
-Nghe ngược với phản xạ "đừng chặn response", nhưng: request chấm bài mất 800–3000ms, thêm 1ms là nhiễu không đo được. Đổi lại **không cần queue, không cần buffer trong RAM, không lo mất dữ liệu khi process chết**. Đây là chỗ mà giải pháp lười nhất cũng là giải pháp đúng nhất.
+This sounds counter to the conventional "never block responses" reflex. However: grading requests consume 800–3,000ms; adding 1ms of Postgres write latency is imperceptible noise. In exchange, **we require no queuing infrastructure, no in-memory buffers, and carry zero risk of data loss on process crashes**. Here, the simplest possible solution is also the most correct.
 
-Nếu INSERT lỗi thì **vẫn trả response cho khách** — không thể để một lần ghi metering hỏng làm hỏng một request AI đã chạy thành công. Nhưng phải để lại dấu vết cứu được:
+If the INSERT fails, **still return the successful response to the customer** — a telemetry write failure must never fail a successfully completed AI generation. However, actionable audit breadcrumbs must be preserved:
 
 ```ts
 catch (e) {
@@ -23,18 +23,21 @@ catch (e) {
 }
 ```
 
-Record đầy đủ nằm trong log dưới dạng JSON → dựng lại được bằng tay từ Loki. Hai dòng, và nó là khác biệt giữa "mất một ít dữ liệu billing" với "biết chính xác đã mất cái gì".
+The complete record payload is logged as JSON → reconstructible manually from Loki logs. Two lines of code bridging the gap between "lost billing data" and "exact forensic knowledge of what failed".
 
-## K.2 Billing chưa chốt thì đo cả hai
+<a id="k2-billing-chưa-chốt-thì-đo-cả-hai"></a>
+<a id="k2-unfinalized-billing-model-measure-both"></a>
+
+## K.2 Unfinalized Billing Model — Measure Both Metrics
 
 ```sql
--- Bán theo request
+-- Request-based pricing
 SELECT organization_id, operation, count(*)
 FROM usage_records
 WHERE created_at >= :month_start AND outcome = 'success'
 GROUP BY 1, 2;
 
--- Bán theo token
+-- Token-based pricing
 SELECT organization_id,
        sum(total_tokens),
        count(*) FILTER (WHERE metering_status = 'missing_usage') AS unmetered
@@ -43,40 +46,40 @@ WHERE created_at >= :month_start AND outcome = 'success'
 GROUP BY 1;
 ```
 
-Cột `unmetered` quyết định bạn **có được phép** bán theo token hay không. Nếu còn khác 0 thì mô hình token chưa dùng được — và bạn biết điều đó **trước khi ký hợp đồng**, không phải sau.
+The `unmetered` column dictates whether you **are even legally permitted** to bill by token. If `unmetered > 0`, token billing is unviable — and you discover this **before signing client contracts**, not after.
 
-**Chỉ tính tiền `outcome = 'success'`.** Downstream lỗi thì mình chịu, không đẩy sang khách.
+**Invoiced strictly when `outcome = 'success'`.** Downstream failures are absorbed by us, never billed to customers.
 
-`models` (jsonb) được ghi lại để sau này tính giá theo từng model nếu cần.
+`models` (stored as `jsonb`) is preserved to facilitate tiered pricing per LLM model if required later.
 
-## K.3 Khi usage thiếu
+## K.3 Handling Missing Usage Data
 
-Theo kiến trúc đích §24 — không tự bịa số:
-
-```
-usage thiếu -> metering_status = 'missing_usage'
-            -> KHÔNG ước lượng token, KHÔNG ghi 0
-            -> metric aihub_metering_incomplete_total + alert nếu > 1%
-            -> business rule quyết định fail hay cho qua (hiện tại: cho qua)
-```
-
-AIHUB **không bao giờ tự tokenize lại request để ước lượng** (brief §17.7).
-
-## K.4 Reconciliation — job đêm
+Per target architecture §24 — never fabricate numbers:
 
 ```
-1. Dựng lại counter quota Redis từ usage_records          (04 §F.4)
-2. Đếm missing_usage theo operation -> alert nếu > 1%
-3. Xoá usage_records > 13 tháng, idempotency_records hết hạn
+Missing usage -> metering_status = 'missing_usage'
+              -> NEVER estimate tokens, NEVER record 0
+              -> metric aihub_metering_incomplete_total + alert if > 1%
+              -> business rules decide whether to reject or pass (currently: pass)
 ```
 
-Cron trong container app, không cần scheduler riêng.
+AIHUB **never re-tokenizes raw requests to estimate tokens** (brief §17.7).
+
+## K.4 Nightly Reconciliation Job
+
+```
+1. Reconcile Redis quota counters against usage_records (04 §F.4)
+2. Aggregate missing_usage counts per operation -> alert if > 1%
+3. Prune usage_records older than 13 months, delete expired idempotency_records
+```
+
+Executed via cron within the application container; no external scheduler required.
 
 ---
 
 # L. Observability
 
-## L.1 Log: một dòng JSON cho mỗi request
+## L.1 Structured Logging: Single JSON Line Per Request
 
 ```jsonc
 {
@@ -100,31 +103,34 @@ Cron trong container app, không cần scheduler riêng.
 }
 ```
 
-Cùng bộ field cho mọi request, kể cả lỗi. Truy sự cố bằng `request_id`, truy khách bằng `org_id`.
+Identical schema across all requests, including errors. Triage incidents via `request_id`; filter customer usage via `org_id`.
 
-Log lỗi downstream có thêm khối nội bộ ([07 §J.4](07-reliability-and-errors.md#j4-internal-downstream-error-us08)) — chỉ ở đây, không ra tới client.
+Downstream failure logs append internal diagnostic payloads ([07 §J.4](07-reliability-and-errors.md#j4-internal-downstream-error-us08)) — isolated internally, never dispatched to clients.
 
-### Ba ID, ba vai trò khác nhau
+### Three IDs, Three Distinct Roles
 
-Theo D1 §6.1 và kiến trúc đích §18:
+Per D1 §6.1 and target architecture §18:
 
-| ID               | Ai sinh                           | Dùng để                                       |
-| ---------------- | --------------------------------- | --------------------------------------------- |
-| `request_id`     | **AIHUB**                         | Tracing chính. Không bao giờ tin ID từ client |
-| `correlation_id` | Client gửi qua `X-Correlation-Id` | AIHUB chỉ giữ lại và echo                     |
-| `trace_id`       | OTel / `traceparent`              | Nối span nếu sau này cắm collector            |
+| Identifier       | Generator                     | Purpose                                                          |
+| ---------------- | ----------------------------- | ---------------------------------------------------------------- |
+| `request_id`     | **AIHUB**                     | Primary distributed tracing key. Never trust client-provided IDs |
+| `correlation_id` | Client via `X-Correlation-Id` | Gateway preserves and echoes for client convenience              |
+| `trace_id`       | OTel / `traceparent`          | Connects distributed spans when OTel collectors are deployed     |
 
-`request_id` là tracing metadata, **không phải identity**.
+`request_id` is tracing metadata, **never an identity anchor**.
 
-### Không bao giờ log
+<a id="không-bao-giờ-log"></a>
+<a id="never-logged"></a>
 
-- raw API key
-- `X-User-Assertion`
-- **nội dung bài viết của học viên**
+### Strictly Forbidden From Logs
 
-Cái cuối là dữ liệu cá nhân của khách hàng của khách hàng bạn — dính vào là chuyện pháp lý, không phải chuyện kỹ thuật. Có một **danh sách redact** ở logger và **một test kiểm tra nó** ([10 §N.7](10-deployment-roadmap.md#n7-testing-strategy)).
+- Raw API keys
+- `X-User-Assertion` JWTs
+- **Student essay body content**
 
-## L.2 Metric — 8 cái, không hơn
+Essay content represents PII belonging to our customer's end-users — logging it creates legal liability, not just technical bad practice. Enforced via a **redaction filter** in the logger alongside **automated test verification** ([10 §N.7](10-deployment-roadmap.md#n7-testing-strategy)).
+
+## L.2 Metrics Inventory — Exactly 8 Metrics
 
 ```
 aihub_requests_total{operation,status,outcome}
@@ -132,49 +138,46 @@ aihub_request_duration_seconds{operation}          histogram
 aihub_downstream_duration_seconds{operation}       histogram
 aihub_tokens_total{operation,org_id}               counter
 aihub_rejected_total{reason}                       rate_limit|quota|concurrency|auth
-aihub_breaker_state{operation}                     0 đóng / 1 mở / 2 half-open
+aihub_breaker_state{operation}                     0 closed / 1 open / 2 half-open
 aihub_metering_incomplete_total{operation}
 aihub_redis_unavailable_total
 ```
 
-Đủ trả lời mọi câu hỏi trong brief §13.12. `gateway_overhead` **không cần metric riêng** — nó là hiệu của hai histogram đầu.
+Answers every performance question raised in brief §13.12. `gateway_overhead` **requires no dedicated metric** — it is derived directly from the delta between the first two histograms.
 
-## L.3 Stack: 3 container, không có Tempo
-
-```
-Prometheus  -> scrape /metrics
-Loki        -> nhận log JSON qua docker log driver
-Grafana     -> dashboard + ALERT (không cần Alertmanager riêng)
-```
-
-**Bỏ Tempo/Jaeger ở giai đoạn này.** Với đúng hai service (AIHUB → Writing), `request_id` trong log đã trả lời được mọi câu hỏi mà distributed tracing trả lời — và đó là hai container ít hơn cho một team không có DevOps.
-
-**Nhưng giữ đường nâng cấp cho rẻ:** propagate header `traceparent` (W3C) xuống downstream và ghi `trace_id` vào log **ngay từ bây giờ**. Ngày nào thêm Tempo thì chỉ cần cắm collector, không phải đi sửa code.
-
-Trigger thêm Tempo: có ≥ 3 service trong một luồng request, hoặc có worker async (Phase 4).
-
-## L.4 Alert tối thiểu
+## L.3 Observability Stack: 3 Containers, No Tempo
 
 ```
-breaker mở > 2 phút
-error rate 5xx > 5% trong 5 phút
-p95 latency > 2x bình thường
-Redis không kết nối được
-missing_usage > 1% trong 1 giờ
-disk Postgres > 80%
+Prometheus  -> scrapes /metrics
+Loki        -> ingests JSON logs via docker log driver
+Grafana     -> dashboards + ALERTING (no dedicated Alertmanager needed)
 ```
 
-Grafana alert đẩy thẳng vào một kênh chat. Không dựng Alertmanager riêng — nó là một container nữa để cấu hình sai.
+**Tempo / Jaeger are omitted at this stage.** With exactly two active services (AIHUB → Writing), `request_id` in structured logs answers every operational question distributed tracing could answer — saving two containers for a team without dedicated DevOps.
 
-### L.4.1 Synthetic canary — AI Writing contract
+**However, the upgrade path remains cheap:** propagate W3C `traceparent` headers to downstreams and record `trace_id` in logs **from day one**. When Tempo is added in the future, operators merely plug in collectors without refactoring application code.
 
-Ngoài metric phản ứng, còn có một synthetic canary chủ động kiểm tra
-response shape của AI Writing mỗi 6 giờ. Nếu AI Writing deploy một breaking
-change, canary bắt được trong vòng run interval, trước khi request thật của
-khách hàng chạm vào nó.
+Trigger to add Tempo: ≥ 3 chained downstream services in a single synchronous path, or async workers in Phase 4.
 
-→ Xem runbook: [Canary: AI Writing Contract](../../../operations/canary-ai-writing.md)
+## L.4 Core Alerting Thresholds
+
+```
+Circuit breaker open > 2 minutes
+5xx error rate > 5% over 5 minutes
+p95 latency > 2x historical baseline
+Redis connection loss
+missing_usage > 1% over 1 hour
+Postgres disk space utilization > 80%
+```
+
+Grafana alerts push notifications directly to developer chat channels. No separate Alertmanager container — eliminates another misconfiguration vector.
+
+### L.4.1 Synthetic Canary — AI Writing Contract
+
+Beyond reactive metrics, a synthetic canary actively probes AI Writing's response shape every 6 hours. If AI Writing deploys an unannounced breaking change, the canary detects it within the run interval before customer traffic is impacted.
+
+→ Runbook: [Canary: AI Writing Contract](../../../operations/canary-ai-writing.md)
 
 ---
 
-→ Tiếp: [09 — Security Threat Model](09-security.md)
+→ Next: [09 — Security Threat Model](09-security.md)
