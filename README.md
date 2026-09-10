@@ -89,6 +89,8 @@ src/downstream/   pure AI-service request/response adapter seams
 test/             integration/e2e tests when external boundaries exist
 ```
 
+Customers integrating against the API should read the [integration guide](docs/integration-guide.md); the endpoint reference is served at `GET /docs`.
+
 Read [CONTEXT.md](CONTEXT.md) for the short glossary, then the [spec index](docs/superpowers/specs/2026-09-07-aihub/README.md) before changing behavior. Shared workflow rules live in [AGENTS.md](AGENTS.md); Claude-specific routing lives in [CLAUDE.md](CLAUDE.md) and `.claude/`.
 
 The Writing grading response contract is resolved. The live service was called on 2026-09-07, the captured responses are committed under `test/fixtures/ai-writing/`, and the shared grading parser is implemented against them.
