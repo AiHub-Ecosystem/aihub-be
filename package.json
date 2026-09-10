@@ -12,6 +12,8 @@
     "start": "node dist/main.js",
     "migrate": "node scripts/migrate.mjs",
     "cli": "node scripts/cli.mjs",
+    "dev:assertion": "node scripts/dev-sign-assertion.mjs",
+    "demo:bootstrap": "node scripts/demo-bootstrap.mjs",
     "generate:openapi": "tsx scripts/generate-openapi.ts && biome format --write openapi.json",
     "validate:openapi": "node scripts/validate-openapi.mjs",
     "generate:postman": "tsx scripts/generate-postman.ts && biome format --write aihub.postman_collection.json",

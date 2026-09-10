@@ -13,3 +13,7 @@ scripts/*.js
 Thumbs.db
 .idea/
 .vscode/
+
+# Demo assertion signing material (scripts/dev-sign-assertion.mjs)
+demo-private.pem
+demo-jwks.json
