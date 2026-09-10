@@ -8,19 +8,20 @@ Scaffold status: [Clean Architecture and agent workflow design](12-agent-workflo
 
 ## Mục lục
 
-| File                                                                 | Nội dung                                                                                                       | Mục brief |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------- |
-| [01-context-and-stack.md](01-context-and-stack.md)                   | Ràng buộc đã chốt, khảo sát AI Writing thật, executive recommendation, tech stack matrix, architecture diagram | A, B, C   |
-| [02-request-lifecycle.md](02-request-lifecycle.md)                   | Pipeline 17 bước, map vào NestJS, 3 lifecycle mẫu                                                              | D         |
-| [03-database.md](03-database.md)                                     | DDL 5 bảng, index, idempotency race, 8 bảng bị cắt                                                             | E         |
-| [04-redis.md](04-redis.md)                                           | Key inventory, rate limit, concurrency limit, quota, hành vi khi Redis chết                                    | F         |
-| [05-auth-identity.md](05-auth-identity.md)                           | API key, user assertion, JWKS/SSRF, internal JWT, xoay khoá, authorization                                     | G         |
-| [06-routing-adapter.md](06-routing-adapter.md)                       | Operation catalog, canonical schema, adapter interface, dispatcher, internal contract                          | H         |
-| [07-reliability-and-errors.md](07-reliability-and-errors.md)         | Timeout, retry, circuit breaker, idempotency, 18 mã lỗi                                                        | I, J      |
-| [08-metering-and-observability.md](08-metering-and-observability.md) | Metering, billing, reconciliation, log/metric/alert                                                            | K, L      |
-| [09-security.md](09-security.md)                                     | Threat model 18 mục theo Must/Should/Later                                                                     | M         |
-| [10-deployment-roadmap.md](10-deployment-roadmap.md)                 | Compose stack, deploy, backup, trigger scale, 6 phase, testing, ADR                                            | N, O      |
-| [11-open-questions.md](11-open-questions.md)                         | 5 câu hỏi còn mở, thay đổi cần đưa ngược vào D1, đối chiếu nguyên tắc                                          | P         |
+| File                                                                                                     | Nội dung                                                                                                       | Mục brief |
+| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------- |
+| [01-context-and-stack.md](01-context-and-stack.md)                                                       | Ràng buộc đã chốt, khảo sát AI Writing thật, executive recommendation, tech stack matrix, architecture diagram | A, B, C   |
+| [02-request-lifecycle.md](02-request-lifecycle.md)                                                       | Pipeline 17 bước, map vào NestJS, 3 lifecycle mẫu                                                              | D         |
+| [03-database.md](03-database.md)                                                                         | DDL 5 bảng, index, idempotency race, 8 bảng bị cắt                                                             | E         |
+| [04-redis.md](04-redis.md)                                                                               | Key inventory, rate limit, concurrency limit, quota, hành vi khi Redis chết                                    | F         |
+| [05-auth-identity.md](05-auth-identity.md)                                                               | API key, user assertion, JWKS/SSRF, internal JWT, xoay khoá, authorization                                     | G         |
+| [06-routing-adapter.md](06-routing-adapter.md)                                                           | Operation catalog, canonical schema, adapter interface, dispatcher, internal contract                          | H         |
+| [07-reliability-and-errors.md](07-reliability-and-errors.md)                                             | Timeout, retry, circuit breaker, idempotency, 18 mã lỗi                                                        | I, J      |
+| [08-metering-and-observability.md](08-metering-and-observability.md)                                     | Metering, billing, reconciliation, log/metric/alert                                                            | K, L      |
+| [09-security.md](09-security.md)                                                                         | Threat model 18 mục theo Must/Should/Later                                                                     | M         |
+| [10-deployment-roadmap.md](10-deployment-roadmap.md)                                                     | Compose stack, deploy, backup, trigger scale, 6 phase, testing, ADR                                            | N, O      |
+| [11-open-questions.md](11-open-questions.md)                                                             | 5 câu hỏi còn mở, thay đổi cần đưa ngược vào D1, đối chiếu nguyên tắc                                          | P         |
+| [12-agent-workflow-and-clean-architecture-design.md](12-agent-workflow-and-clean-architecture-design.md) | Agent workflow, source-of-truth hierarchy, clean architecture scaffold                                         | —         |
 
 ## Executive Recommendation
 
@@ -38,5 +39,6 @@ Toàn bộ chạy trên **một VPS với Docker Compose**, 8 container, khoản
 
 - **Muốn bắt đầu code ngay:** [01](01-context-and-stack.md) → [03](03-database.md) → [06](06-routing-adapter.md) → [10](10-deployment-roadmap.md#n6-phases)
 - **Review bảo mật:** [05](05-auth-identity.md) → [09](09-security.md)
-- **Chốt D1 trước khi freeze:** [11](11-open-questions.md#q-những-thay-đổi-cần-đưa-ngược-vào-d1)
+- **Theo dõi open questions và thay đổi cần đưa ngược vào D1:** [11](11-open-questions.md#q-những-thay-đổi-cần-đưa-ngược-vào-d1)
+- **Thay đổi workflow hoặc source layout:** [12](12-agent-workflow-and-clean-architecture-design.md)
 - **Bàn giao cho team AI Writing:** [06 §H.5](06-routing-adapter.md#h5-internal-contract--sửa-writing-mà-không-phá-app-hiện-tại) + [01 §0.1](01-context-and-stack.md#01-hiện-trạng-ai-writing-khảo-sát-thật)

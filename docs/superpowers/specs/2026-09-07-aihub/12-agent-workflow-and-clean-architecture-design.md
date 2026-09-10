@@ -2,7 +2,8 @@
 
 ← [Mục lục](README.md)
 
-> **Status:** Proposed — review before implementation.
+> **Status:** Implemented in the initial NestJS/Fastify source scaffold. Update this
+> document when the shared agent workflow or source-layout rules change.
 >
 > **Purpose:** Adapt the proven agent/code organization pattern from `casso-ledger` to AIHUB without copying its monorepo or accounting-specific rules.
 

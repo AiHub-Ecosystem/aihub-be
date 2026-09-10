@@ -303,8 +303,10 @@ Reusing a key with a **different** body returns `409 IDEMPOTENCY_CONFLICT`.
 That is deliberate: silently returning the earlier result for a different
 essay would be worse than an error.
 
-Two requests with the same key arriving at once are collapsed into one
-downstream call; the second waits for the first.
+If an identical request is already in flight, the second request returns
+`409 IDEMPOTENCY_CONFLICT` immediately; AIHUB does not hold the connection open.
+Wait for the first attempt to finish, then retry with the same key and identical
+body. A successful first attempt is returned as a replay.
 
 Client errors are not stored. If a request fails validation, you may fix the
 body and reuse the same key.
@@ -352,27 +354,27 @@ so you do not have to infer it from the status.
 
 When present, `retry_after_ms` is in the body, not in a `Retry-After` header.
 
-| HTTP | Code                            | What happened                                                    | What to do                                          |
-| ---: | ------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------- |
-|  400 | `INVALID_REQUEST`               | Body failed validation, or carried an unknown field              | Fix the request. Retrying is pointless              |
-|  401 | `UNAUTHORIZED`                  | Missing, unknown, revoked, or expired API key                    | Check the credential                                |
-|  401 | `USER_ASSERTION_REQUIRED`       | User-scoped operation called without an assertion                | Send `X-User-Assertion`                             |
-|  401 | `INVALID_USER_ASSERTION`        | Bad signature, expired, wrong `iss`/`aud`, unknown `kid`         | Mint a fresh assertion; check issuer and JWKS       |
-|  403 | `FORBIDDEN`                     | Key lacks the scope for this operation                           | Ask AIHUB to widen the key                          |
-|  403 | `ENVIRONMENT_NOT_ALLOWED`       | Key is not valid for this environment                            | Use the key issued for that environment             |
-|  404 | `NOT_FOUND`                     | No such route                                                    | Check path and method                               |
-|  409 | `IDEMPOTENCY_CONFLICT`          | Same key, different body — or the first attempt is still running | Use a new key, or wait and retry the identical body |
-|  413 | `PAYLOAD_TOO_LARGE`             | Body exceeded the operation's limit                              | Shorten the essay                                   |
-|  429 | `RATE_LIMITED`                  | Too many requests per minute                                     | Back off for `retry_after_ms`, then retry           |
-|  429 | `CONCURRENCY_LIMIT`             | Too many requests in flight at once                              | Reduce parallelism; retry in ~500ms                 |
-|  429 | `QUOTA_EXCEEDED`                | Monthly quota exhausted                                          | Wait for the reset, or upgrade                      |
-|  502 | `AI_SERVICE_ERROR`              | AI service returned an error                                     | Retry later if `retryable` is true                  |
-|  502 | `AI_SERVICE_CONTRACT_VIOLATION` | AI service returned an unexpected shape                          | Do not retry. Report it with the `request_id`       |
-|  503 | `AI_SERVICE_THROTTLED`          | AI service is throttling                                         | Back off and retry                                  |
-|  503 | `AI_SERVICE_UNAVAILABLE`        | AI service unreachable                                           | Retry with backoff                                  |
-|  503 | `IDENTITY_PROVIDER_UNAVAILABLE` | **Your** JWKS endpoint could not be reached                      | Check your own JWKS endpoint. The API key is fine   |
-|  504 | `AI_SERVICE_TIMEOUT`            | Grading exceeded the budget                                      | Retry with the **same** `Idempotency-Key`           |
-|  500 | `INTERNAL_ERROR`                | Fault on our side                                                | Retry later; report with the `request_id`           |
+| HTTP | Code                            | What happened                                                       | What to do                                                                               |
+| ---: | ------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+|  400 | `INVALID_REQUEST`               | Body failed validation, or carried an unknown field                 | Fix the request. Retrying is pointless                                                   |
+|  401 | `UNAUTHORIZED`                  | Missing, unknown, revoked, or expired API key                       | Check the credential                                                                     |
+|  401 | `USER_ASSERTION_REQUIRED`       | User-scoped operation called without an assertion                   | Send `X-User-Assertion`                                                                  |
+|  401 | `INVALID_USER_ASSERTION`        | Bad signature, expired, wrong `iss`/`aud`, unknown `kid`            | Mint a fresh assertion; check issuer and JWKS                                            |
+|  403 | `FORBIDDEN`                     | Key lacks the scope for this operation                              | Ask AIHUB to widen the key                                                               |
+|  403 | `ENVIRONMENT_NOT_ALLOWED`       | Key is not valid for this environment                               | Use the key issued for that environment                                                  |
+|  404 | `NOT_FOUND`                     | No such route                                                       | Check path and method                                                                    |
+|  409 | `IDEMPOTENCY_CONFLICT`          | Same key, different body — or an identical request is still running | Different body: use a new key; in-flight request: wait, then retry the same key and body |
+|  413 | `PAYLOAD_TOO_LARGE`             | Body exceeded the operation's limit                                 | Shorten the essay                                                                        |
+|  429 | `RATE_LIMITED`                  | Too many requests per minute                                        | Back off for `retry_after_ms`, then retry                                                |
+|  429 | `CONCURRENCY_LIMIT`             | Too many requests in flight at once                                 | Reduce parallelism; retry in ~500ms                                                      |
+|  429 | `QUOTA_EXCEEDED`                | Monthly quota exhausted                                             | Wait for the reset, or upgrade                                                           |
+|  502 | `AI_SERVICE_ERROR`              | AI service returned an error                                        | Retry later if `retryable` is true                                                       |
+|  502 | `AI_SERVICE_CONTRACT_VIOLATION` | AI service returned an unexpected shape                             | Do not retry. Report it with the `request_id`                                            |
+|  503 | `AI_SERVICE_THROTTLED`          | AI service is throttling                                            | Back off and retry                                                                       |
+|  503 | `AI_SERVICE_UNAVAILABLE`        | AI service unreachable                                              | Retry with backoff                                                                       |
+|  503 | `IDENTITY_PROVIDER_UNAVAILABLE` | **Your** JWKS endpoint could not be reached                         | Check your own JWKS endpoint. The API key is fine                                        |
+|  504 | `AI_SERVICE_TIMEOUT`            | Grading exceeded the budget                                         | Retry with the **same** `Idempotency-Key`                                                |
+|  500 | `INTERNAL_ERROR`                | Fault on our side                                                   | Retry later; report with the `request_id`                                                |
 
 `IDENTITY_PROVIDER_UNAVAILABLE` is worth singling out. It is a `503`, not a
 `401`, because nothing is wrong with your API key — AIHUB simply could not

@@ -9,7 +9,7 @@
 `usage_records` ở Postgres là **nguồn sự thật duy nhất**. Ghi **trước khi trả response**, và `await` nó:
 
 ```ts
-await usageRepo.insert(record);        // ~1ms
+await usageRepo.insert(record); // ~1ms
 return envelope;
 ```
 
@@ -79,13 +79,25 @@ Cron trong container app, không cần scheduler riêng.
 ## L.1 Log: một dòng JSON cho mỗi request
 
 ```jsonc
-{ "level":"info", "event":"request_completed",
-  "request_id":"req_01J8...", "correlation_id":"cust-123", "trace_id":"...",
-  "org_id":"org_01J8...", "api_key_id":"ak_01J8...", "actor_id":"student_456",
-  "operation":"writing.task1.grade", "environment":"production",
-  "http_status":200, "outcome":"success",
-  "total_ms":840, "downstream_ms":810, "ai_processing_ms":790,
-  "total_tokens":1130, "metering_status":"complete" }
+{
+  "level": "info",
+  "event": "request_completed",
+  "request_id": "req_01J8...",
+  "correlation_id": "cust-123",
+  "trace_id": "...",
+  "org_id": "org_01J8...",
+  "api_key_id": "ak_01J8...",
+  "actor_id": "student_456",
+  "operation": "writing.task1.grade",
+  "environment": "production",
+  "http_status": 200,
+  "outcome": "success",
+  "total_ms": 840,
+  "downstream_ms": 810,
+  "ai_processing_ms": 790,
+  "total_tokens": 1130,
+  "metering_status": "complete",
+}
 ```
 
 Cùng bộ field cho mọi request, kể cả lỗi. Truy sự cố bằng `request_id`, truy khách bằng `org_id`.
@@ -96,11 +108,11 @@ Log lỗi downstream có thêm khối nội bộ ([07 §J.4](07-reliability-and-
 
 Theo D1 §6.1 và kiến trúc đích §18:
 
-| ID | Ai sinh | Dùng để |
-|---|---|---|
-| `request_id` | **AIHUB** | Tracing chính. Không bao giờ tin ID từ client |
-| `correlation_id` | Client gửi qua `X-Correlation-Id` | AIHUB chỉ giữ lại và echo |
-| `trace_id` | OTel / `traceparent` | Nối span nếu sau này cắm collector |
+| ID               | Ai sinh                           | Dùng để                                       |
+| ---------------- | --------------------------------- | --------------------------------------------- |
+| `request_id`     | **AIHUB**                         | Tracing chính. Không bao giờ tin ID từ client |
+| `correlation_id` | Client gửi qua `X-Correlation-Id` | AIHUB chỉ giữ lại và echo                     |
+| `trace_id`       | OTel / `traceparent`              | Nối span nếu sau này cắm collector            |
 
 `request_id` là tracing metadata, **không phải identity**.
 
@@ -161,7 +173,7 @@ response shape của AI Writing mỗi 6 giờ. Nếu AI Writing deploy một bre
 change, canary bắt được trong vòng run interval, trước khi request thật của
 khách hàng chạm vào nó.
 
-→ Xem runbook: [docs/operations/canary-ai-writing.md](../../docs/operations/canary-ai-writing.md)
+→ Xem runbook: [Canary: AI Writing Contract](../../../operations/canary-ai-writing.md)
 
 ---
 

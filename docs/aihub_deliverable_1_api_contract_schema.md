@@ -14,7 +14,12 @@
 
 > **Cập nhật 2026-09-07:** file này đã được đồng bộ với khảo sát API thật của AI Writing
 > (`api-ielts-writing.aihubproduction.com`) và với architecture design ở
-> [`docs/superpowers/specs/2026-09-07-aihub/`](docs/superpowers/specs/2026-09-07-aihub/README.md).
+> [`implementation spec index`](superpowers/specs/2026-09-07-aihub/README.md).
+>
+> **Trạng thái hiện hành:** D1 đã freeze. Runtime source of truth là code trong
+> `src/contracts/` và `src/catalog/`; `openapi.json` và Postman collection được sinh
+> từ source. Các checklist trong PHẦN E là ảnh chụp lịch sử để traceability, không phải
+> danh sách blocker hiện tại.
 >
 > Các schema ví dụ trước đây (`content` / `language` / `level`) là **placeholder và đã sai so với thực tế** —
 > nay được thay bằng schema thật. Xem [§34](#34-nhật-ký-thay-đổi) để biết danh sách thay đổi.
@@ -1428,6 +1433,9 @@ Nếu đo thực tế cho thấy p95 vượt 30 giây thì phải chuyển `writ
 
 # PHẦN E — D1 ACCEPTANCE CHECKLIST
 
+> **Ảnh chụp lịch sử:** các ô chưa đánh dấu bên dưới phản ánh checklist trước khi D1
+> freeze. Xem phần trạng thái ở đầu tài liệu và `CONTEXT.md` để biết công việc hiện hành.
+
 # 28. API Contract & Schema
 
 - [ ] Chốt Base URL.
@@ -1659,7 +1667,7 @@ Một nghi vấn còn mở nhưng **không cản freeze**: band nửa điểm (x
 2. **`data.coT` lộ chain-of-thought** ra response (`layer1_errors`, `layer2_matching`, `layer3_calibration`).
 3. **Chấm điểm đáng ngờ:** 3 mẫu đều ra band nguyên và cả 4 tiêu chí luôn bằng nhau (7-7-7-7 rồi 5-5-5-5); bài Task 2 dài 98 từ (yêu cầu 250) vẫn được band 5.0.
 
-Chi tiết lập luận cho từng thay đổi: [`docs/superpowers/specs/2026-09-07-aihub/`](docs/superpowers/specs/2026-09-07-aihub/README.md)
+Chi tiết lập luận cho từng thay đổi: [`implementation spec index`](superpowers/specs/2026-09-07-aihub/README.md)
 
 ---
 

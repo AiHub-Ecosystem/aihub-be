@@ -130,7 +130,9 @@ Ba điều kiện giữ cho rủi ro ở mức chấp nhận được:
 
 1. Token Writing **không bao giờ** cấp cho khách hàng AIHUB — đây là quy trình, không phải kỹ thuật.
 2. AIHUB dùng **token riêng**, tách khỏi token của ứng dụng kia, để usage tách bạch và thu hồi độc lập được.
-3. Mọi endpoint của Writing đều có auth.
+3. Mọi endpoint của Writing đều có auth — **hiện chưa đạt**: upstream
+   `/five-minute-grading` vẫn thiếu auth, như [security spec](superpowers/specs/2026-09-07-aihub/09-security.md)
+   ghi rõ.
 
 → Phân tích đầy đủ: [`09-security.md`](superpowers/specs/2026-09-07-aihub/09-security.md).
 
