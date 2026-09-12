@@ -88,11 +88,11 @@ describe('buildPostmanCollection', () => {
     expect(names).toContain('apiKey');
   });
 
-  it('has exactly 18 D1 handover test cases (4 happy-path sub-cases + items 2-15), matching §G of the D1 contract doc', async () => {
+  it('has exactly 16 D1 handover test cases (2 happy-path sub-cases + items 2-15)', async () => {
     const collection = await build();
     const folder = findD1Folder(collection);
 
-    expect(folder.item).toHaveLength(18); // 4 happy-path sub-cases for item 1 + items 2-15
+    expect(folder.item).toHaveLength(16); // 2 happy-path sub-cases for item 1 + items 2-15
   });
 
   it('names the blocking slice on every case that cannot pass yet', async () => {
@@ -114,7 +114,7 @@ describe('buildPostmanCollection', () => {
     const collection = await build();
     const folder = findD1Folder(collection);
     const task1Grade = folder.item?.find(
-      (item) => item.name === '1c. Valid request routes to Task 1 grading',
+      (item) => item.name === '1a. Valid request routes to Task 1 grading',
     );
     const missingAssertion = folder.item?.find(
       (item) => item.name === '7. User-scoped operation missing User Assertion',
@@ -129,31 +129,19 @@ describe('buildPostmanCollection', () => {
     );
   });
 
-  it('includes required, optional, and none idempotency examples', async () => {
+  it('includes the required idempotency examples', async () => {
     const collection = await build();
     const folder = findIdempotencyFolder(collection);
 
-    expect(folder.item).toHaveLength(5);
+    expect(folder.item).toHaveLength(2);
     expect(folder.item?.map((item) => item.name)).toEqual([
       'Task 2 grading replays a completed result',
       'Task 2 grading rejects a conflicting payload',
-      'Task 2 question optionally replays a completed result',
-      'Task 2 question without an Idempotency-Key runs normally',
-      'Task 1 question ignores Idempotency-Key',
     ]);
 
     const conflict = folder.item?.[1];
     expect(conflict?.event?.[0]?.script.exec.join('\n')).toContain(
       'IDEMPOTENCY_CONFLICT',
-    );
-
-    const none = folder.item?.[4];
-    expect(none?.request?.header).toContainEqual({
-      key: 'Idempotency-Key',
-      value: '   ',
-    });
-    expect(none?.event?.[0]?.script.exec.join('\n')).toContain(
-      'does not replay or validate the key',
     );
   });
 
@@ -163,7 +151,7 @@ describe('buildPostmanCollection', () => {
 
     expect(folder.item).toHaveLength(1);
     expect(folder.item?.[0]?.request?.url).toBe(
-      '{{baseUrl}}/v1/ielts/writing/task1/questions',
+      '{{baseUrl}}/v1/ielts/writing/task1/grade',
     );
     expect(folder.item?.[0]?.event?.[0]?.script.exec.join('\n')).toContain(
       'CONCURRENCY_LIMIT',

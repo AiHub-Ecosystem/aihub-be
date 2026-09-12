@@ -24,8 +24,6 @@ function loadFixture(name: string): object {
   ) as object;
 }
 
-const Q1_RESPONSE = loadFixture('question-task1.response.json');
-const Q2_RESPONSE = loadFixture('question-task2.response.json');
 const G1_RESPONSE = loadFixture('grade-task1.response.json');
 const G2_RESPONSE = loadFixture('grade-task2.response.json');
 
@@ -43,14 +41,6 @@ function buildMockAgent(): MockAgent {
 }
 
 function registerAll(agent: MockAgent): void {
-  agent
-    .get(BASE_URL)
-    .intercept({ method: 'POST', path: '/generate-question-task1' })
-    .reply(200, Q1_RESPONSE);
-  agent
-    .get(BASE_URL)
-    .intercept({ method: 'POST', path: '/question-generated-task2' })
-    .reply(200, Q2_RESPONSE);
   agent
     .get(BASE_URL)
     .intercept({ method: 'POST', path: '/grading-feedback-task1' })
@@ -77,9 +67,9 @@ describe('runCanary', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Test 1: All four pass — outcome ok, exit 0, webhook sink not called
+  // Test 1: Both grading probes pass — outcome ok, exit 0, webhook sink not called
   // -------------------------------------------------------------------------
-  it('returns outcome ok and exit code 0 when all four fixture responses are valid', async () => {
+  it('returns outcome ok and exit code 0 when both fixture responses are valid', async () => {
     registerAll(mockAgent);
 
     const httpClient = new DownstreamHttpClient(BASE_URL, mockAgent);
@@ -93,11 +83,9 @@ describe('runCanary', () => {
 
     expect(result.outcome).toBe('ok');
     expect(result.failures).toHaveLength(0);
-    expect(result.successes).toHaveLength(4);
+    expect(result.successes).toHaveLength(2);
 
     const ops = result.successes.map((s) => s.operation);
-    expect(ops).toContain('writing.task1.question.generate');
-    expect(ops).toContain('writing.task2.question.generate');
     expect(ops).toContain('writing.task1.grade');
     expect(ops).toContain('writing.task2.grade');
 
@@ -116,14 +104,6 @@ describe('runCanary', () => {
     const essayMarker =
       'The bar chart illustrates the total duration, measured in billions of minutes';
 
-    mockAgent
-      .get(BASE_URL)
-      .intercept({ method: 'POST', path: '/generate-question-task1' })
-      .reply(200, Q1_RESPONSE);
-    mockAgent
-      .get(BASE_URL)
-      .intercept({ method: 'POST', path: '/question-generated-task2' })
-      .reply(200, Q2_RESPONSE);
     // Deliberately broken: strip `data.overall_band` so parseGradeResponse throws.
     mockAgent
       .get(BASE_URL)
@@ -175,14 +155,6 @@ describe('runCanary', () => {
   // Test 3: MockAgent replies 503 for one endpoint → unverified, class http_5xx
   // -------------------------------------------------------------------------
   it('classifies a 503 response as unverified with class http_5xx', async () => {
-    mockAgent
-      .get(BASE_URL)
-      .intercept({ method: 'POST', path: '/generate-question-task1' })
-      .reply(200, Q1_RESPONSE);
-    mockAgent
-      .get(BASE_URL)
-      .intercept({ method: 'POST', path: '/question-generated-task2' })
-      .reply(200, Q2_RESPONSE);
     // 503 on the task1 grade endpoint.
     mockAgent
       .get(BASE_URL)

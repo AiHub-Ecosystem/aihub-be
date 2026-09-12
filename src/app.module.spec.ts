@@ -92,6 +92,21 @@ describe('AppModule wiring', () => {
     expect(response.payload).not.toContain('/nope');
   });
 
+  it.each([
+    '/v1/ielts/writing/task1/questions',
+    '/v1/ielts/writing/task2/questions',
+  ])('does not expose removed question-generation route %s', async (url) => {
+    const response = await app.inject({
+      method: 'POST',
+      url,
+      headers: { 'content-type': 'application/json' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe('NOT_FOUND');
+  });
+
   it('stamps every response with a contract-shaped request id', async () => {
     const first = await app.inject({ method: 'GET', url: '/boom' });
     const second = await app.inject({ method: 'GET', url: '/boom' });

@@ -1,11 +1,6 @@
 import { Value } from '@sinclair/typebox/value';
 
-import {
-  GradeTask1RequestSchema,
-  GradeTask2RequestSchema,
-  Task1QuestionRequestSchema,
-  Task2QuestionRequestSchema,
-} from './grading';
+import { GradeTask1RequestSchema, GradeTask2RequestSchema } from './grading';
 
 const TASK1_GRADE = {
   question: 'Describe the chart',
@@ -84,29 +79,6 @@ describe('Writing contracts', () => {
     // Downstream cannot produce English yet, so the enum stays closed.
     expect(
       Value.Check(GradeTask1RequestSchema, { ...TASK1_GRADE, language: 'en' }),
-    ).toBe(false);
-  });
-
-  it('keeps question-generation schemas separate', () => {
-    expect(Value.Check(Task1QuestionRequestSchema, {})).toBe(true);
-    expect(
-      Value.Check(Task1QuestionRequestSchema, { chart_type: 'Line Graph' }),
-    ).toBe(true);
-    expect(
-      Value.Check(Task1QuestionRequestSchema, { topic: 'environment' }),
-    ).toBe(false);
-    expect(
-      Value.Check(Task1QuestionRequestSchema, { question_type: 'opinion' }),
-    ).toBe(false);
-
-    expect(
-      Value.Check(Task2QuestionRequestSchema, {
-        topic: 'education',
-        question_type: 'opinion',
-      }),
-    ).toBe(true);
-    expect(
-      Value.Check(Task2QuestionRequestSchema, { topic: 'education' }),
     ).toBe(false);
   });
 });

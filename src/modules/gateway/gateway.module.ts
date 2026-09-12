@@ -2,9 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { speakingGradingAdapter } from '../../downstream/speaking/speaking-grading.adapter';
 import { task1GradeAdapter } from '../../downstream/writing/task1-grade.adapter';
-import { task1QuestionAdapter } from '../../downstream/writing/task1-question.adapter';
 import { task2GradeAdapter } from '../../downstream/writing/task2-grade.adapter';
-import { task2QuestionAdapter } from '../../downstream/writing/task2-question.adapter';
 import {
   CONCURRENCY_LIMITER,
   type ConcurrencyLimiterPort,
@@ -78,8 +76,6 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
         tokenIssuer: ConfiguredTokenIssuer,
       ): HttpOperationDispatcher =>
         new HttpOperationDispatcher(httpClient, tokenIssuer, [
-          task1QuestionAdapter,
-          task2QuestionAdapter,
           task1GradeAdapter,
           task2GradeAdapter,
           speakingGradingAdapter,

@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
-import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
+import {
+  OPERATION_CATALOG,
+  type OperationDef,
+} from '../../../catalog/operation-catalog';
 import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
 import {
@@ -64,7 +67,7 @@ export class UserAssertionGuard implements CanActivate {
       throw configurationError();
     }
 
-    const operation = OPERATION_CATALOG[operationId];
+    const operation: OperationDef = OPERATION_CATALOG[operationId];
     const authenticated = getAuthenticatedApiKey(request);
     const header = request.headers['x-user-assertion'];
 

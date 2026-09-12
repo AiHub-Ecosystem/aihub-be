@@ -64,48 +64,6 @@ describe('UserAssertionGuard', () => {
     });
   });
 
-  it('allows organization-scoped requests without an assertion', async () => {
-    const request: Record<string, unknown> = {
-      headers: {},
-      aihubAuth: authenticated,
-    };
-
-    await expect(
-      guard('writing.task1.question.generate').canActivate(context(request)),
-    ).resolves.toBe(true);
-    expect(request.aihubIdentity).toBeUndefined();
-  });
-
-  it('verifies and attaches a supplied assertion even for organization scope', async () => {
-    const calls: string[] = [];
-    const verifier: UserAssertionVerifierPort = {
-      verify: async (input) => {
-        calls.push(input.signedAssertion);
-        return {
-          userId: 'user_123',
-          organizationId: input.organizationId,
-          scopes: [],
-        };
-      },
-    };
-    const request: Record<string, unknown> = {
-      headers: { 'x-user-assertion': 'signed.assertion' },
-      aihubAuth: authenticated,
-    };
-
-    await expect(
-      guard('writing.task1.question.generate', verifier).canActivate(
-        context(request),
-      ),
-    ).resolves.toBe(true);
-    expect(calls).toEqual(['signed.assertion']);
-    expect(request.aihubIdentity).toEqual({
-      userId: 'user_123',
-      organizationId: 'org_acme',
-      scopes: [],
-    });
-  });
-
   it('uses the synthetic actor only for the local development bypass', async () => {
     process.env.NODE_ENV = 'test';
     process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'true';

@@ -26,7 +26,7 @@ The Admin API is deferred (team design decision), so onboarding is performed via
 pnpm cli org:create --name "Acme Edu" --entitlements writing
 
 pnpm cli key:create --org org_01J8... --name "Prod backend" \
-                    --scopes writing.grade,writing.question.generate \
+                    --scopes writing.grade \
                     --envs production
 # -> prints raw key EXACTLY ONCE to stdout; never logged, never written to disk
 

@@ -7,14 +7,6 @@ import type {
   GradeResponse,
   GradeTask1Request,
 } from '../../../contracts/writing/grading';
-import type {
-  Task1QuestionRequest,
-  Task1QuestionResponse,
-} from '../../../contracts/writing/task1';
-import type {
-  Task2QuestionRequest,
-  Task2QuestionResponse,
-} from '../../../contracts/writing/task2';
 import type { DownstreamAdapter } from '../../../downstream/downstream-adapter';
 import type {
   DownstreamRequest,
@@ -24,52 +16,13 @@ import type { InternalTokenIssuerPort } from '../application/internal-token-issu
 import { DownstreamHttpClient } from './downstream-http.client';
 import { HttpOperationDispatcher } from './http-operation-dispatcher';
 
-function fakeTask1QuestionAdapter(
-  path: string,
-): DownstreamAdapter<Task1QuestionRequest, Task1QuestionResponse> {
-  return {
-    operation: 'writing.task1.question.generate',
-    downstream: 'ai-writing',
-    buildRequest: (input): DownstreamRequest => ({
-      method: 'POST',
-      path,
-      body: input,
-    }),
-    parseResponse: (
-      raw: InternalAIServiceResponse<unknown>,
-    ): Task1QuestionResponse => ({
-      question_id: 'q_1',
-      question: `${(raw.body as { echo: string }).echo}-parsed`,
-      chart_type: 'Bar Chart',
-      image_url: 'https://example.com/chart.png',
-    }),
-  };
-}
-
-function fakeTask2QuestionAdapter(
-  path: string,
-): DownstreamAdapter<Task2QuestionRequest, Task2QuestionResponse> {
-  return {
-    operation: 'writing.task2.question.generate',
-    downstream: 'ai-writing',
-    buildRequest: (input): DownstreamRequest => ({
-      method: 'POST',
-      path,
-      body: input,
-    }),
-    parseResponse: (
-      raw: InternalAIServiceResponse<unknown>,
-    ): Task2QuestionResponse => ({
-      question: `${(raw.body as { echo: string }).echo}-parsed`,
-      topic: '',
-      question_type: 'opinion',
-    }),
-  };
-}
-
 function fakeGradeAdapter(
   path: string,
-  error: AppError,
+  error = new AppError({
+    code: 'AI_SERVICE_CONTRACT_VIOLATION',
+    message: 'invalid response',
+    retryable: false,
+  }),
 ): DownstreamAdapter<GradeTask1Request, GradeResponse> {
   return {
     operation: 'writing.task1.grade',
@@ -89,6 +42,13 @@ function fakeGradeAdapter(
     },
   };
 }
+
+const gradeInput: GradeTask1Request = {
+  question: 'Describe the chart.',
+  chart_type: 'Bar Chart',
+  essay: 'A clear essay.',
+  image_url: 'https://example.com/chart.png',
+};
 
 class FakeTokenIssuer implements InternalTokenIssuerPort {
   constructor(private readonly token = 'token-abc') {}
@@ -148,36 +108,6 @@ describe('HttpOperationDispatcher', () => {
     loggerError.mockRestore();
   });
 
-  it('routes to the adapter registered for the requested operation, not any other one', async () => {
-    mockAgent
-      .get('https://ai-writing.test')
-      .intercept({ method: 'POST', path: '/task-two' })
-      .reply(200, { echo: 'ok' });
-    const httpClient = new DownstreamHttpClient(
-      'https://ai-writing.test',
-      mockAgent,
-    );
-    const dispatcher = new HttpOperationDispatcher(
-      httpClient,
-      new FakeTokenIssuer(),
-      [
-        fakeTask1QuestionAdapter('/task-one'),
-        fakeTask2QuestionAdapter('/task-two'),
-      ],
-    );
-
-    const result = await dispatcher.dispatch(
-      'writing.task2.question.generate',
-      { topic: 'education', question_type: 'opinion' },
-      context(),
-    );
-
-    expect(result).toMatchObject({
-      operation: 'writing.task2.question.generate',
-      data: { question: 'ok-parsed' },
-    });
-  });
-
   it('rejects an operation with no registered adapter instead of silently no-oping', async () => {
     const httpClient = new DownstreamHttpClient(
       'https://ai-writing.test',
@@ -186,18 +116,14 @@ describe('HttpOperationDispatcher', () => {
     const dispatcher = new HttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
-      [fakeTask1QuestionAdapter('/task-one')],
+      [],
     );
 
     // No interceptor registered at all: if the dispatcher tried to reach the
     // network for the unconfigured operation, `disableNetConnect` would
     // surface that as a network error rather than this config error.
     await expect(
-      dispatcher.dispatch(
-        'writing.task2.question.generate',
-        { topic: 'education', question_type: 'opinion' },
-        context(),
-      ),
+      dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
     ).rejects.toMatchObject({ code: 'INTERNAL_ERROR', httpStatus: 500 });
     expect(loggerError).not.toHaveBeenCalled();
   });
@@ -214,18 +140,18 @@ describe('HttpOperationDispatcher', () => {
     const dispatcher = new HttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
-      [fakeTask1QuestionAdapter('/task-one')],
+      [fakeGradeAdapter('/task-one')],
     );
 
     await expect(
-      dispatcher.dispatch('writing.task1.question.generate', {}, context()),
+      dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
     ).rejects.toMatchObject({ code: 'AI_SERVICE_ERROR', retryable: true });
 
     const logLine = readLogLine(loggerError);
     expect(JSON.parse(logLine)).toEqual({
       event: 'downstream_failed',
       request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
-      operation: 'writing.task1.question.generate',
+      operation: 'writing.task1.grade',
       ai_service: 'ai-writing',
       private_endpoint: '/task-one',
       downstream_status: 503,
@@ -250,18 +176,18 @@ describe('HttpOperationDispatcher', () => {
     const dispatcher = new HttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
-      [fakeTask1QuestionAdapter('/task-one')],
+      [fakeGradeAdapter('/task-one')],
     );
 
     await expect(
-      dispatcher.dispatch('writing.task1.question.generate', {}, context()),
+      dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
     ).rejects.toMatchObject({ code: 'AI_SERVICE_THROTTLED', httpStatus: 503 });
 
     const logLine = readLogLine(loggerError);
     expect(JSON.parse(logLine)).toEqual({
       event: 'downstream_failed',
       request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
-      operation: 'writing.task1.question.generate',
+      operation: 'writing.task1.grade',
       ai_service: 'ai-writing',
       private_endpoint: '/task-one',
       downstream_status: 429,
@@ -289,18 +215,18 @@ describe('HttpOperationDispatcher', () => {
     const dispatcher = new HttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
-      [fakeTask1QuestionAdapter('/task-one')],
+      [fakeGradeAdapter('/task-one')],
     );
 
     await expect(
-      dispatcher.dispatch('writing.task1.question.generate', {}, context()),
+      dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
     ).rejects.toBe(originalError);
 
     const logLine = readLogLine(loggerError);
     expect(JSON.parse(logLine)).toEqual({
       event: 'downstream_failed',
       request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
-      operation: 'writing.task1.question.generate',
+      operation: 'writing.task1.grade',
       ai_service: 'ai-writing',
       private_endpoint: '/task-one',
       downstream_status: null,
@@ -326,11 +252,11 @@ describe('HttpOperationDispatcher', () => {
     const dispatcher = new HttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
-      [fakeTask1QuestionAdapter('/task-one')],
+      [fakeGradeAdapter('/task-one')],
     );
 
     await expect(
-      dispatcher.dispatch('writing.task1.question.generate', {}, context()),
+      dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
     ).rejects.toMatchObject({
       code: 'AI_SERVICE_UNAVAILABLE',
       httpStatus: 503,
@@ -340,7 +266,7 @@ describe('HttpOperationDispatcher', () => {
     expect(JSON.parse(logLine)).toEqual({
       event: 'downstream_failed',
       request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
-      operation: 'writing.task1.question.generate',
+      operation: 'writing.task1.grade',
       ai_service: 'ai-writing',
       private_endpoint: '/task-one',
       downstream_status: null,

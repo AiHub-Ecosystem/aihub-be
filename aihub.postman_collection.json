@@ -1,141 +1,7 @@
 {
   "item": [
     {
-      "id": "ba8d922b-6e52-45c9-ad5a-1d55b7ad6683",
-      "name": "writing.task1.question.generate",
-      "request": {
-        "name": "writing.task1.question.generate",
-        "description": {},
-        "url": {
-          "path": ["v1", "ielts", "writing", "task1", "questions"],
-          "host": ["{{baseUrl}}"],
-          "query": [],
-          "variable": []
-        },
-        "header": [
-          {
-            "disabled": false,
-            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
-            "key": "X-Correlation-Id",
-            "value": "<string>"
-          },
-          {
-            "disabled": false,
-            "description": "Ignored. This operation never stores or replays an idempotency record.",
-            "key": "Idempotency-Key",
-            "value": "<string>"
-          },
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          },
-          {
-            "key": "Accept",
-            "value": "application/json"
-          }
-        ],
-        "method": "POST",
-        "auth": {
-          "type": "apikey",
-          "apikey": [
-            {
-              "key": "key",
-              "value": "X-API-Key"
-            },
-            {
-              "key": "value",
-              "value": "{{apiKey}}"
-            },
-            {
-              "key": "in",
-              "value": "header"
-            }
-          ]
-        },
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"chart_type\": \"<string>\"\n}",
-          "options": {
-            "raw": {
-              "language": "json"
-            }
-          }
-        }
-      },
-      "event": [],
-      "protocolProfileBehavior": {
-        "disableBodyPruning": true
-      }
-    },
-    {
-      "id": "b5418f8d-b11b-4dcc-b43a-aeccc379d627",
-      "name": "writing.task2.question.generate",
-      "request": {
-        "name": "writing.task2.question.generate",
-        "description": {},
-        "url": {
-          "path": ["v1", "ielts", "writing", "task2", "questions"],
-          "host": ["{{baseUrl}}"],
-          "query": [],
-          "variable": []
-        },
-        "header": [
-          {
-            "disabled": false,
-            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
-            "key": "X-Correlation-Id",
-            "value": "<string>"
-          },
-          {
-            "disabled": false,
-            "description": "Optional. This operation may call a model, so a client that wants replay safety should send one.",
-            "key": "Idempotency-Key",
-            "value": "<string>"
-          },
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          },
-          {
-            "key": "Accept",
-            "value": "application/json"
-          }
-        ],
-        "method": "POST",
-        "auth": {
-          "type": "apikey",
-          "apikey": [
-            {
-              "key": "key",
-              "value": "X-API-Key"
-            },
-            {
-              "key": "value",
-              "value": "{{apiKey}}"
-            },
-            {
-              "key": "in",
-              "value": "header"
-            }
-          ]
-        },
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"topic\": \"<string>\",\n  \"question_type\": \"<string>\"\n}",
-          "options": {
-            "raw": {
-              "language": "json"
-            }
-          }
-        }
-      },
-      "event": [],
-      "protocolProfileBehavior": {
-        "disableBodyPruning": true
-      }
-    },
-    {
-      "id": "d6ffffcc-7d79-4fb2-8ee4-f24a5ce2b61f",
+      "id": "c1dc5b75-eec1-4134-87f3-5a846a4cc0f6",
       "name": "writing.task1.grade",
       "request": {
         "name": "writing.task1.grade",
@@ -208,7 +74,7 @@
       }
     },
     {
-      "id": "26827148-128d-42bd-9ad3-0b9464ae7025",
+      "id": "ac80f542-2a47-4b13-b999-778032e9d7b0",
       "name": "writing.task2.grade",
       "request": {
         "name": "writing.task2.grade",
@@ -281,7 +147,7 @@
       }
     },
     {
-      "id": "aa473881-d99f-43e5-9243-e07c66feb476",
+      "id": "25b7fb41-8a63-4d73-8cb9-6947811c2a59",
       "name": "speaking.grading",
       "request": {
         "name": "speaking.grading",
@@ -394,85 +260,7 @@
       "name": "D1 handover test cases (docs/aihub_deliverable_1_api_contract_schema.md §G)",
       "item": [
         {
-          "name": "1a. Valid request routes to Task 1 question generation",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-API-Key",
-                "value": "{{apiKey}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"chart_type\": \"Bar Chart\"\n}"
-            },
-            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
-            "description": "Valid API key + valid request routes to the correct AI Service operation."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
-                  "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",
-                  "  const body = pm.response.json();",
-                  "  pm.expect(body.meta.operation).to.eql('writing.task1.question.generate');",
-                  "  pm.expect(body.meta.service).to.eql('ai-writing');",
-                  "  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "1b. Valid request routes to Task 2 question generation",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-API-Key",
-                "value": "{{apiKey}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"topic\": \"Technology\",\n  \"question_type\": \"opinion\"\n}"
-            },
-            "url": "{{baseUrl}}/v1/ielts/writing/task2/questions",
-            "description": "Valid API key + valid request routes to the correct AI Service operation."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
-                  "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",
-                  "  const body = pm.response.json();",
-                  "  pm.expect(body.meta.operation).to.eql('writing.task2.question.generate');",
-                  "  pm.expect(body.meta.service).to.eql('ai-writing');",
-                  "  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "1c. Valid request routes to Task 1 grading",
+          "name": "1a. Valid request routes to Task 1 grading",
           "request": {
             "method": "POST",
             "header": [
@@ -519,7 +307,7 @@
           ]
         },
         {
-          "name": "1d. Valid request routes to Task 2 grading",
+          "name": "1b. Valid request routes to Task 2 grading",
           "request": {
             "method": "POST",
             "header": [
@@ -577,9 +365,9 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{}"
+              "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
             "description": "No X-API-Key header at all."
           },
           "event": [
@@ -614,9 +402,9 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{}"
+              "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
             "description": "Fill {{otherEnvironmentApiKey}} with a real key provisioned for a different environment (e.g. a staging key called against production)."
           },
           "event": [
@@ -647,14 +435,22 @@
               {
                 "key": "X-API-Key",
                 "value": "{{apiKey}}"
+              },
+              {
+                "key": "X-User-Assertion",
+                "value": "{{userAssertion}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"topic\": \"Technology\"\n}"
+              "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\"\n}"
             },
-            "url": "{{baseUrl}}/v1/ielts/writing/task2/questions",
-            "description": "Task 2 question generation without the required 'question_type'."
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
+            "description": "Task 1 grading without the required 'essay'."
           },
           "event": [
             {
@@ -684,13 +480,21 @@
               {
                 "key": "X-API-Key",
                 "value": "{{apiKey}}"
+              },
+              {
+                "key": "X-User-Assertion",
+                "value": "{{userAssertion}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"chart_type\": \"Bar Chart\",\n  \"unexpected_field\": \"nope\"\n}"
+              "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\",\n  \"unexpected_field\": \"nope\"\n}"
             },
-            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
             "description": "Every request schema is additionalProperties: false; an unknown field must be rejected, not silently dropped."
           },
           "event": [
@@ -736,7 +540,7 @@
               "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
             "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
-            "description": "Fill {{wrongScopeApiKey}} with a real key that has only the 'writing.question.generate' scope, then call a 'writing.grade' operation with it."
+            "description": "Fill {{wrongScopeApiKey}} with a real key that lacks the 'writing.grade' scope, then call a Writing grading operation with it."
           },
           "event": [
             {
@@ -803,14 +607,22 @@
               {
                 "key": "X-API-Key",
                 "value": "{{apiKey}}"
+              },
+              {
+                "key": "X-User-Assertion",
+                "value": "{{userAssertion}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{}"
+              "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
-            "description": "Point {{baseUrl}} at a stub/mock that delays past the operation's catalogued timeoutMs (10s for question generation, 60s for grading) to force this."
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
+            "description": "Point {{baseUrl}} at a stub/mock that delays past the operation's catalogued 60s grading timeout to force this."
           },
           "event": [
             {
@@ -840,13 +652,21 @@
               {
                 "key": "X-API-Key",
                 "value": "{{apiKey}}"
+              },
+              {
+                "key": "X-User-Assertion",
+                "value": "{{userAssertion}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{}"
+              "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
             "description": "Point {{baseUrl}} at a stub returning a throttled response from AI Writing to confirm it is translated to a public 503, never a 429."
           },
           "event": [
@@ -877,13 +697,21 @@
               {
                 "key": "X-API-Key",
                 "value": "{{apiKey}}"
+              },
+              {
+                "key": "X-User-Assertion",
+                "value": "{{userAssertion}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{}"
+              "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
             "description": "Point {{baseUrl}} at a stub returning an unexpected downstream 4xx/5xx to confirm it surfaces as AI_SERVICE_ERROR (or AI_SERVICE_CONTRACT_VIOLATION for a malformed 200 body), never passed through raw."
           },
           "event": [
@@ -916,15 +744,23 @@
                 "value": "{{apiKey}}"
               },
               {
+                "key": "X-User-Assertion",
+                "value": "{{userAssertion}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              },
+              {
                 "key": "X-Correlation-Id",
                 "value": "client-trace-{{$guid}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"chart_type\": \"Bar Chart\"\n}"
+              "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
             "description": "Sends X-Correlation-Id and checks it is echoed back verbatim, alongside an independently AIHUB-generated request_id."
           },
           "event": [
@@ -958,13 +794,21 @@
               {
                 "key": "X-API-Key",
                 "value": "{{apiKey}}"
+              },
+              {
+                "key": "X-User-Assertion",
+                "value": "{{userAssertion}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"chart_type\": \"Bar Chart\"\n}"
+              "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
             "description": "downstream_ms + gateway_overhead_ms should equal total_ms (within rounding), and none may be negative."
           },
           "event": [
@@ -1257,159 +1101,6 @@
               }
             }
           ]
-        },
-        {
-          "name": "Task 2 question optionally replays a completed result",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-API-Key",
-                "value": "{{apiKey}}"
-              },
-              {
-                "key": "Idempotency-Key",
-                "value": "{{$guid}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"topic\": \"Technology\",\n  \"question_type\": \"opinion\"\n}"
-            },
-            "url": "{{baseUrl}}/v1/ielts/writing/task2/questions",
-            "description": "Optional idempotency: supplying a key enables replay safety for model-backed question generation."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
-                  "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",
-                  "  const body = pm.response.json();",
-                  "  pm.expect(body.meta.operation).to.eql('writing.task2.question.generate');",
-                  "  pm.expect(body.meta.service).to.eql('ai-writing');",
-                  "  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);",
-                  "});",
-                  "pm.sendRequest({",
-                  "  url: pm.request.url.toString(),",
-                  "  method: pm.request.method,",
-                  "  header: pm.request.headers.toJSON(),",
-                  "  body: { mode: 'raw', raw: pm.request.body.raw }",
-                  "}, function (error, response) {",
-                  "  pm.test('same optional key replays Task 2 question', function () {",
-                  "    pm.expect(error).to.equal(null);",
-                  "    pm.expect(response.code).to.eql(200);",
-                  "    pm.expect(response.headers.get('Idempotent-Replay')).to.eql('true');",
-                  "    pm.expect(response.json().data).to.eql(pm.response.json().data);",
-                  "  });",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Task 2 question without an Idempotency-Key runs normally",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-API-Key",
-                "value": "{{apiKey}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"topic\": \"Technology\",\n  \"question_type\": \"opinion\"\n}"
-            },
-            "url": "{{baseUrl}}/v1/ielts/writing/task2/questions",
-            "description": "Optional idempotency: omitting the key is allowed and does not emit a replay marker."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
-                  "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",
-                  "  const body = pm.response.json();",
-                  "  pm.expect(body.meta.operation).to.eql('writing.task2.question.generate');",
-                  "  pm.expect(body.meta.service).to.eql('ai-writing');",
-                  "  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);",
-                  "});",
-                  "pm.test('omitting the optional key does not emit a replay marker', function () {",
-                  "  pm.expect(pm.response.headers.get('Idempotent-Replay')).to.be.null;",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Task 1 question ignores Idempotency-Key",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-API-Key",
-                "value": "{{apiKey}}"
-              },
-              {
-                "key": "Idempotency-Key",
-                "value": "   "
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"chart_type\": \"Bar Chart\"\n}"
-            },
-            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
-            "description": "None idempotency: even a malformed key is ignored and the operation does not emit a replay marker."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
-                  "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",
-                  "  const body = pm.response.json();",
-                  "  pm.expect(body.meta.operation).to.eql('writing.task1.question.generate');",
-                  "  pm.expect(body.meta.service).to.eql('ai-writing');",
-                  "  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);",
-                  "});",
-                  "pm.sendRequest({",
-                  "  url: pm.request.url.toString(),",
-                  "  method: pm.request.method,",
-                  "  header: pm.request.headers.toJSON(),",
-                  "  body: { mode: 'raw', raw: pm.request.body.raw }",
-                  "}, function (error, response) {",
-                  "  pm.test('none mode does not replay or validate the key', function () {",
-                  "    pm.expect(error).to.equal(null);",
-                  "    pm.expect(response.code).to.eql(200);",
-                  "    pm.expect(response.headers.get('Idempotent-Replay')).to.be.null;",
-                  "  });",
-                  "});"
-                ]
-              }
-            }
-          ]
         }
       ]
     },
@@ -1428,13 +1119,21 @@
               {
                 "key": "X-API-Key",
                 "value": "{{apiKey}}"
+              },
+              {
+                "key": "X-User-Assertion",
+                "value": "{{userAssertion}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"chart_type\": \"Bar Chart\"\n}"
+              "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
-            "url": "{{baseUrl}}/v1/ielts/writing/task1/questions",
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
             "description": "Configure the organization with maxConcurrent=1 and point {{baseUrl}} at a deliberately slow downstream. Run two copies of this request in parallel; the second must return 429 while the first is still in flight."
           },
           "event": [
@@ -1473,7 +1172,7 @@
     },
     {
       "key": "wrongScopeApiKey",
-      "value": "REPLACE_WITH_A_KEY_SCOPED_TO_WRITING_QUESTION_GENERATE_ONLY"
+      "value": "REPLACE_WITH_A_KEY_WITHOUT_WRITING_GRADE_SCOPE"
     },
     {
       "key": "userAssertion",
@@ -1498,7 +1197,7 @@
     ]
   },
   "info": {
-    "_postman_id": "3070b424-50be-44ee-95db-70ce634bcb81",
+    "_postman_id": "ca2f1ec2-c390-4577-b331-7d4a2b581db0",
     "name": "AIHUB Writing API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Generated by `pnpm generate:postman` from openapi.json — do not hand-edit. The \"D1 handover test cases\" folder is the D2 handover artifact required by docs/aihub_deliverable_1_api_contract_schema.md §G; it is not a CI regression suite.",

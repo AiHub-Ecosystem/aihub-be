@@ -4,7 +4,7 @@ This is the short working index for agents. The full contract and architecture r
 
 ## Purpose
 
-AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authenticates to AIHUB, AIHUB enforces organization policy and metering, then dispatches a typed operation to a private AI service. The first MVP slice is Writing question generation and grading.
+AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authenticates to AIHUB, AIHUB enforces organization policy and metering, then dispatches a typed operation to a private AI service. The active MVP slice is Writing grading.
 
 ## Vocabulary
 
@@ -32,15 +32,15 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 
 ## Current scope and blockers
 
-- Current scope: one NestJS/Fastify app, the Writing vertical slice, and the D2 AI Speaking proxy proof-of-forwarding across Dev and Production. The D2 handoff also includes a test-client flow and a ten-section TSD aligned with the Provider and WISPACE.
-- Implemented: all four Writing operations (`task1/questions`, `task2/questions`, `task1/grade`, `task2/grade`) validate the public request, authenticate API keys against Postgres, use Redis for credential caching and rate limiting, dispatch through the typed Writing adapters, and return the `{ data, meta }` envelope. The D2 Speaking Dev proxy (`POST /v1/speaking/grading`) now validates bounded multipart input, derives provider identity from the verified assertion, dispatches through the typed Speaking adapter, and maps an approved synthetic response/error fixture. Local Postgres/Redis E2E verification passed on 2026-09-07.
+- Current scope: one NestJS/Fastify app, the Writing grading vertical slice, and the D2 AI Speaking proxy proof-of-forwarding across Dev and Production. The D2 handoff also includes a test-client flow and a ten-section TSD aligned with the Provider and WISPACE.
+- Implemented: Writing Task 1/Task 2 grading (`/task1/grade`, `/task2/grade`) validates the public request, authenticates API keys against Postgres, uses Redis for credential caching and rate limiting, dispatches through typed Writing adapters, and returns the `{ data, meta }` envelope. AIHUB question-generation routes and adapters were removed on 2026-09-12; upstream private service endpoints are outside this gateway. The D2 Speaking Dev proxy (`POST /v1/speaking/grading`) validates bounded multipart input, derives provider identity from the verified assertion, dispatches through the typed Speaking adapter, and maps an approved synthetic response/error fixture. Local Postgres/Redis E2E verification passed on 2026-09-07.
 - Deferred: the public Speaking grading job, object storage/presigned audio uploads, async workers and job polling, Reading, billing, dynamic routing, Kubernetes, and a dedicated proxy.
 - Resolved for D2: the AI Speaking service remains a synchronous downstream integration (multipart grading is the primary documented path; JSON-by-URL is a fallback). AIHUB keeps the previously frozen public Speaking operation asynchronous; the D2 proxy is a testable integration boundary and must not silently redefine that public contract.
 - Resolved D2 contract: the sync proxy route is `POST /v1/speaking/grading`, distinct from the future async `POST /v1/speaking/grade`. It accepts multipart audio with explicit `part` and `question_id`; `user_id` is server-derived, the D2 audio ceiling is 25 MB, and provider errors are mapped into shared AIHUB errors rather than passed through.
 - Known Speaking follow-ups: capture an authenticated live success fixture, confirm the prototype endpoint/path and downstream credential configuration, freeze the normalized result/error mapping, test the local client against Dev and Production, align the TSD with the Provider and WISPACE, and then decide when to promote the proxy into the async asset/job flow.
 - Next D2/D3 follow-up: expand the proxy to the remaining AI Provider endpoints, validate the Production routes with Postman, and publish a per-endpoint TSD without creating a second contract vocabulary.
 - No blockers. Both earlier ones were resolved on 2026-09-07.
-- Resolved: the Writing grading response contract. All four priority endpoints were called against the live service; captured responses are committed under `test/fixtures/ai-writing/` and the shared grading parser is implemented and tested. Catalog response contracts are real schemas, not `unresolved`.
+- Resolved: the Writing grading response contract. Both retained grading endpoints were called against the live service; captured responses are committed under `test/fixtures/ai-writing/` and the shared grading parser is implemented and tested. Catalog response contracts are real schemas, not `unresolved`.
 - Resolved as a decision, not as work: AI Writing stays reachable from the internet for now, because it still serves an application that does not go through AIHUB. The boundary at this stage is the credential, not the network — AIHUB customers hold only AIHUB keys, so metering and limits still bind them. Three conditions keep that acceptable; see the security spec.
 - Resolved: Deliverable 1 is frozen as of 2026-09-07 — the OpenAPI 3.1 spec (`openapi.json`) and the Postman handover collection (`aihub.postman_collection.json`) are both generated from source, not hand-written.
 - Implemented: idempotency replay for completed successful attempts, the ErrorCode→httpStatus registry, and the public API docs page at `/docs` (with the raw spec at `/openapi.json`).

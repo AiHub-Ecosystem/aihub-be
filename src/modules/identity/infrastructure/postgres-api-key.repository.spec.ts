@@ -9,7 +9,7 @@ const row = {
   api_key_id: 'ak_backend',
   organization_status: 'active',
   api_key_status: 'active',
-  scopes: ['writing.question.generate'],
+  scopes: ['writing.grade'],
   entitlements: ['writing'],
   allowed_environments: ['development', 'production'],
   expires_at: null,
@@ -43,7 +43,7 @@ describe('PostgresApiKeyRepository', () => {
       apiKeyId: 'ak_backend',
       organizationStatus: 'active',
       status: 'active',
-      scopes: ['writing.question.generate'],
+      scopes: ['writing.grade'],
       entitlements: ['writing'],
       allowedEnvironments: ['development', 'production'],
       expiresAt: null,
@@ -69,7 +69,7 @@ describe('PostgresApiKeyRepository', () => {
 
   it('rejects malformed control-plane data without leaking the row', async () => {
     const client = new FakePostgres();
-    client.result = [{ ...row, scopes: ['writing.question.generate', 7] }];
+    client.result = [{ ...row, scopes: ['writing.grade', 7] }];
 
     const error = await new PostgresApiKeyRepository(client)
       .findByHash('ab'.repeat(32))

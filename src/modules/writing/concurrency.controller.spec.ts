@@ -6,7 +6,7 @@ import { Test } from '@nestjs/testing';
 
 import { AppModule } from '../../app.module';
 import { generateRequestId } from '../../common/request-context/request-id';
-import type { Task1QuestionResponse } from '../../contracts/writing/task1';
+import type { GradeResponse } from '../../contracts/writing/grading';
 import {
   CONCURRENCY_LIMITER,
   type ConcurrencyDecision,
@@ -21,6 +21,14 @@ import {
   RATE_LIMITER,
   type RateLimiterPort,
 } from '../gateway/application/rate-limiter.port';
+import type {
+  IdempotencyExecution,
+  IdempotencyExecutionInput,
+  IdempotencyReplayDecoder,
+  IdempotencyServicePort,
+  IdempotencyWork,
+} from '../idempotency/application/idempotency-service.port';
+import { IDEMPOTENCY_SERVICE } from '../idempotency/application/idempotency-service.port';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
@@ -31,23 +39,38 @@ import {
 const VALID_API_KEY = `aihub_sk_${'C'.repeat(43)}`;
 
 const authenticatedApiKey: AuthenticatedApiKey = {
-  organizationId: 'org_acme',
+  organizationId: 'local-development',
   apiKeyId: 'ak_backend',
   environment: 'production',
-  scopes: ['writing.question.generate'],
+  scopes: ['writing.grade'],
   rateLimitRpm: 600,
   maxConcurrent: 2,
   monthlyRequestQuota: null,
   hardStopOnQuota: false,
 };
 
-const dispatchResult: DispatchResult<Task1QuestionResponse> = {
-  operation: 'writing.task1.question.generate',
+const dispatchResult: DispatchResult<GradeResponse> = {
+  operation: 'writing.task1.grade',
   data: {
-    question_id: 'question-concurrency',
-    question: 'Describe the chart.',
-    chart_type: 'Bar Chart',
-    image_url: 'https://example.com/chart.png',
+    overall_band: 6,
+    language: 'vi',
+    criteria: [
+      'task_achievement',
+      'coherence_cohesion',
+      'lexical_resource',
+      'grammatical_range_accuracy',
+    ].map((id) => ({
+      id: id as GradeResponse['criteria'][number]['id'],
+      name: id,
+      band: 6,
+      band_reason: 'clear',
+      strengths: [],
+      improvements: [],
+    })),
+    summary: 'summary',
+    suggestions: [],
+    next_steps: [],
+    annotations: [],
   },
   downstreamMs: 1,
 };
@@ -89,11 +112,11 @@ class PendingDispatcher {
   calls = 0;
   fail = false;
   private readonly pending: Array<
-    (result: DispatchResult<Task1QuestionResponse>) => void
+    (result: DispatchResult<GradeResponse>) => void
   > = [];
 
   readonly port = {
-    dispatch: (): Promise<DispatchResult<Task1QuestionResponse>> => {
+    dispatch: (): Promise<DispatchResult<GradeResponse>> => {
       this.calls += 1;
       if (this.fail) {
         return Promise.reject(new Error('downstream failed'));
@@ -113,15 +136,24 @@ class PendingDispatcher {
   }
 }
 
+let nextRequestKey = 0;
+
 function requestOptions() {
+  nextRequestKey += 1;
   return {
     method: 'POST' as const,
-    url: '/v1/ielts/writing/task1/questions',
+    url: '/v1/ielts/writing/task1/grade',
     headers: {
       host: 'api.aihub.example.com',
       'x-api-key': VALID_API_KEY,
+      'idempotency-key': `concurrency-test-${nextRequestKey}`,
     },
-    payload: { chart_type: 'Bar Chart' },
+    payload: {
+      question: 'Describe the chart.',
+      chart_type: 'Bar Chart',
+      essay: 'The chart shows a clear trend.',
+      image_url: 'https://example.com/chart.png',
+    },
   };
 }
 
@@ -144,10 +176,25 @@ describe('Writing concurrency HTTP flow', () => {
   const rateLimiter: RateLimiterPort = {
     consume: async () => ({ allowed: true }),
   };
+  const idempotencyService: IdempotencyServicePort = {
+    async execute<T>(
+      input: IdempotencyExecutionInput,
+      work: IdempotencyWork<T>,
+      _decodeReplay: IdempotencyReplayDecoder<T>,
+    ): Promise<IdempotencyExecution<T>> {
+      return {
+        result: await work({
+          signal: input.signal,
+          deadlineAt: input.deadlineAt,
+        }),
+        replay: false,
+      };
+    },
+  };
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'false';
+    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'true';
 
     limiter = new InMemoryConcurrencyLimiter();
     dispatcher = new PendingDispatcher();
@@ -161,6 +208,8 @@ describe('Writing concurrency HTTP flow', () => {
       .useValue(rateLimiter)
       .overrideProvider(CONCURRENCY_LIMITER)
       .useValue(limiter)
+      .overrideProvider(IDEMPOTENCY_SERVICE)
+      .useValue(idempotencyService)
       .overrideProvider(OPERATION_DISPATCHER)
       .useValue(dispatcher.port)
       .compile();

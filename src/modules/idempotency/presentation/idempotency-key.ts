@@ -1,4 +1,7 @@
-import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
+import {
+  type IdempotencyMode,
+  OPERATION_CATALOG,
+} from '../../../catalog/operation-catalog';
 import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
 
@@ -8,6 +11,10 @@ function invalidIdempotencyKey(): AppError {
     message: 'Idempotency-Key must be between 1 and 255 UTF-8 bytes',
     retryable: false,
   });
+}
+
+function isOptionalIdempotency(mode: IdempotencyMode): boolean {
+  return mode === 'optional';
 }
 
 export function requireIdempotencyKey(
@@ -29,8 +36,11 @@ export function resolveIdempotencyKey(
   operation: OperationId,
   header: string | readonly string[] | undefined,
 ): string | undefined {
-  const mode = OPERATION_CATALOG[operation].idempotency;
-  if (mode === 'none' || (mode === 'optional' && header === undefined)) {
+  const mode: IdempotencyMode = OPERATION_CATALOG[operation].idempotency;
+  if (
+    mode === 'none' ||
+    (isOptionalIdempotency(mode) && header === undefined)
+  ) {
     return undefined;
   }
   return requireIdempotencyKey(header);

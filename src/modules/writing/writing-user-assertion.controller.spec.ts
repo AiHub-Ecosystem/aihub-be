@@ -38,7 +38,7 @@ const authenticatedApiKey: AuthenticatedApiKey = {
   organizationId: 'org_acme',
   apiKeyId: 'ak_backend',
   environment: 'development',
-  scopes: ['writing.grade', 'writing.question.generate'],
+  scopes: ['writing.grade'],
   rateLimitRpm: 600,
   maxConcurrent: 20,
   monthlyRequestQuota: null,
@@ -278,30 +278,5 @@ describe('Writing user assertion HTTP flow', () => {
       },
     });
     expect(response.payload).not.toContain('provider down');
-  });
-
-  it('allows an organization-scoped request without an assertion', async () => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/v1/ielts/writing/task1/questions',
-      headers: apiKeyHeaders(),
-      payload: { chart_type: 'Bar Chart' },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(capturedContext?.organizationId).toBe('org_acme');
-    expect(capturedContext?.userId).toBeUndefined();
-  });
-
-  it('still verifies an assertion supplied to an organization-scoped request', async () => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/v1/ielts/writing/task1/questions',
-      headers: apiKeyHeaders('not-a-jwt'),
-      payload: { chart_type: 'Bar Chart' },
-    });
-
-    expect(response.statusCode).toBe(401);
-    expect(response.json().error.code).toBe('INVALID_USER_ASSERTION');
   });
 });

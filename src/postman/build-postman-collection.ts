@@ -28,8 +28,6 @@ const USER_ASSERTION_HEADER = {
   value: '{{userAssertion}}',
 } as const;
 
-const TASK1_QUESTION_PATH = '/v1/ielts/writing/task1/questions';
-const TASK2_QUESTION_PATH = '/v1/ielts/writing/task2/questions';
 const TASK1_GRADE_PATH = '/v1/ielts/writing/task1/grade';
 const TASK2_GRADE_PATH = '/v1/ielts/writing/task2/grade';
 
@@ -75,38 +73,14 @@ function assertEnvelope(operationId: string): readonly string[] {
 }
 
 /**
- * The 15 numbered items are `docs/aihub_deliverable_1_api_contract_schema.md`
- * §G "D2 Postman tests tối thiểu" verbatim, in order. Items 13 and 14
+ * The active handover scenarios are derived from `docs/aihub_deliverable_1_api_contract_schema.md`
+ * §G "D2 Postman tests tối thiểu" in order. Items 13 and 14
  * cannot pass yet — each names the slice it is waiting on, per that issue's
  * acceptance criteria, instead of silently asserting today's (wrong) result.
  */
 const D1_SCENARIOS: readonly Scenario[] = [
   {
-    name: '1a. Valid request routes to Task 1 question generation',
-    description:
-      'Valid API key + valid request routes to the correct AI Service operation.',
-    path: TASK1_QUESTION_PATH,
-    headers: [JSON_HEADER, VALID_KEY_HEADER],
-    body: { chart_type: 'Bar Chart' },
-    testScript: [
-      assertStatus(200),
-      ...assertEnvelope('writing.task1.question.generate'),
-    ],
-  },
-  {
-    name: '1b. Valid request routes to Task 2 question generation',
-    description:
-      'Valid API key + valid request routes to the correct AI Service operation.',
-    path: TASK2_QUESTION_PATH,
-    headers: [JSON_HEADER, VALID_KEY_HEADER],
-    body: { topic: 'Technology', question_type: 'opinion' },
-    testScript: [
-      assertStatus(200),
-      ...assertEnvelope('writing.task2.question.generate'),
-    ],
-  },
-  {
-    name: '1c. Valid request routes to Task 1 grading',
+    name: '1a. Valid request routes to Task 1 grading',
     description:
       'Valid API key + valid request routes to the correct AI Service operation.',
     path: TASK1_GRADE_PATH,
@@ -120,7 +94,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
     testScript: [assertStatus(200), ...assertEnvelope('writing.task1.grade')],
   },
   {
-    name: '1d. Valid request routes to Task 2 grading',
+    name: '1b. Valid request routes to Task 2 grading',
     description:
       'Valid API key + valid request routes to the correct AI Service operation.',
     path: TASK2_GRADE_PATH,
@@ -136,21 +110,21 @@ const D1_SCENARIOS: readonly Scenario[] = [
   {
     name: '2. Missing/invalid API key',
     description: 'No X-API-Key header at all.',
-    path: TASK1_QUESTION_PATH,
+    path: TASK1_GRADE_PATH,
     headers: [JSON_HEADER],
-    body: {},
+    body: TASK1_GRADE_BODY,
     testScript: [assertStatus(401), ...assertErrorCode(['UNAUTHORIZED'])],
   },
   {
     name: '3. API key not allowed in the current environment',
     description:
       'Fill {{otherEnvironmentApiKey}} with a real key provisioned for a different environment (e.g. a staging key called against production).',
-    path: TASK1_QUESTION_PATH,
+    path: TASK1_GRADE_PATH,
     headers: [
       JSON_HEADER,
       { key: 'X-API-Key', value: '{{otherEnvironmentApiKey}}' },
     ],
-    body: {},
+    body: TASK1_GRADE_BODY,
     testScript: [
       assertStatus(403),
       ...assertErrorCode(['ENVIRONMENT_NOT_ALLOWED']),
@@ -158,26 +132,35 @@ const D1_SCENARIOS: readonly Scenario[] = [
   },
   {
     name: '4. Missing required parameter',
-    description:
-      "Task 2 question generation without the required 'question_type'.",
-    path: TASK2_QUESTION_PATH,
-    headers: [JSON_HEADER, VALID_KEY_HEADER],
-    body: { topic: 'Technology' },
+    description: "Task 1 grading without the required 'essay'.",
+    path: TASK1_GRADE_PATH,
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
+    ],
+    body: { ...TASK1_GRADE_BODY, essay: undefined },
     testScript: [assertStatus(400), ...assertErrorCode(['INVALID_REQUEST'])],
   },
   {
     name: '5. Unknown/unsupported field',
     description:
       'Every request schema is additionalProperties: false; an unknown field must be rejected, not silently dropped.',
-    path: TASK1_QUESTION_PATH,
-    headers: [JSON_HEADER, VALID_KEY_HEADER],
-    body: { chart_type: 'Bar Chart', unexpected_field: 'nope' },
+    path: TASK1_GRADE_PATH,
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
+    ],
+    body: { ...TASK1_GRADE_BODY, unexpected_field: 'nope' },
     testScript: [assertStatus(400), ...assertErrorCode(['INVALID_REQUEST'])],
   },
   {
     name: '6. Scope/service mismatch',
     description:
-      "Fill {{wrongScopeApiKey}} with a real key that has only the 'writing.question.generate' scope, then call a 'writing.grade' operation with it.",
+      "Fill {{wrongScopeApiKey}} with a real key that lacks the 'writing.grade' scope, then call a Writing grading operation with it.",
     path: TASK1_GRADE_PATH,
     headers: [
       JSON_HEADER,
@@ -203,19 +186,29 @@ const D1_SCENARIOS: readonly Scenario[] = [
   {
     name: '8. Downstream timeout',
     description:
-      "Point {{baseUrl}} at a stub/mock that delays past the operation's catalogued timeoutMs (10s for question generation, 60s for grading) to force this.",
-    path: TASK1_QUESTION_PATH,
-    headers: [JSON_HEADER, VALID_KEY_HEADER],
-    body: {},
+      "Point {{baseUrl}} at a stub/mock that delays past the operation's catalogued 60s grading timeout to force this.",
+    path: TASK1_GRADE_PATH,
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
+    ],
+    body: TASK1_GRADE_BODY,
     testScript: [assertStatus(504), ...assertErrorCode(['AI_SERVICE_TIMEOUT'])],
   },
   {
     name: '9. Downstream throttle surfaces as 503, not a client 429',
     description:
       'Point {{baseUrl}} at a stub returning a throttled response from AI Writing to confirm it is translated to a public 503, never a 429.',
-    path: TASK1_QUESTION_PATH,
-    headers: [JSON_HEADER, VALID_KEY_HEADER],
-    body: {},
+    path: TASK1_GRADE_PATH,
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
+    ],
+    body: TASK1_GRADE_BODY,
     testScript: [
       assertStatus(503),
       ...assertErrorCode(['AI_SERVICE_THROTTLED']),
@@ -225,9 +218,14 @@ const D1_SCENARIOS: readonly Scenario[] = [
     name: '10. Downstream 4xx/5xx maps to a unified error',
     description:
       'Point {{baseUrl}} at a stub returning an unexpected downstream 4xx/5xx to confirm it surfaces as AI_SERVICE_ERROR (or AI_SERVICE_CONTRACT_VIOLATION for a malformed 200 body), never passed through raw.',
-    path: TASK1_QUESTION_PATH,
-    headers: [JSON_HEADER, VALID_KEY_HEADER],
-    body: {},
+    path: TASK1_GRADE_PATH,
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
+    ],
+    body: TASK1_GRADE_BODY,
     testScript: [
       assertStatus(502),
       ...assertErrorCode(['AI_SERVICE_ERROR', 'AI_SERVICE_CONTRACT_VIOLATION']),
@@ -237,13 +235,15 @@ const D1_SCENARIOS: readonly Scenario[] = [
     name: '11. request_id is AIHUB-generated; correlation_id is preserved when sent',
     description:
       'Sends X-Correlation-Id and checks it is echoed back verbatim, alongside an independently AIHUB-generated request_id.',
-    path: TASK1_QUESTION_PATH,
+    path: TASK1_GRADE_PATH,
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
       { key: 'X-Correlation-Id', value: 'client-trace-{{$guid}}' },
     ],
-    body: { chart_type: 'Bar Chart' },
+    body: TASK1_GRADE_BODY,
     testScript: [
       assertStatus(200),
       "pm.test('correlation_id echoes the client header; request_id is independently generated', function () {",
@@ -259,9 +259,14 @@ const D1_SCENARIOS: readonly Scenario[] = [
     name: '12. Timing fields carry their documented meaning',
     description:
       'downstream_ms + gateway_overhead_ms should equal total_ms (within rounding), and none may be negative.',
-    path: TASK1_QUESTION_PATH,
-    headers: [JSON_HEADER, VALID_KEY_HEADER],
-    body: { chart_type: 'Bar Chart' },
+    path: TASK1_GRADE_PATH,
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
+    ],
+    body: TASK1_GRADE_BODY,
     testScript: [
       assertStatus(200),
       "pm.test('timing fields are non-negative and sum to total_ms', function () {",
@@ -403,74 +408,6 @@ const IDEMPOTENCY_SCENARIOS: readonly Scenario[] = [
       '});',
     ],
   },
-  {
-    name: 'Task 2 question optionally replays a completed result',
-    description:
-      'Optional idempotency: supplying a key enables replay safety for model-backed question generation.',
-    path: TASK2_QUESTION_PATH,
-    headers: [JSON_HEADER, VALID_KEY_HEADER, IDEMPOTENCY_HEADER],
-    body: { topic: 'Technology', question_type: 'opinion' },
-    testScript: [
-      assertStatus(200),
-      ...assertEnvelope('writing.task2.question.generate'),
-      'pm.sendRequest({',
-      '  url: pm.request.url.toString(),',
-      '  method: pm.request.method,',
-      '  header: pm.request.headers.toJSON(),',
-      "  body: { mode: 'raw', raw: pm.request.body.raw }",
-      '}, function (error, response) {',
-      "  pm.test('same optional key replays Task 2 question', function () {",
-      '    pm.expect(error).to.equal(null);',
-      '    pm.expect(response.code).to.eql(200);',
-      "    pm.expect(response.headers.get('Idempotent-Replay')).to.eql('true');",
-      '    pm.expect(response.json().data).to.eql(pm.response.json().data);',
-      '  });',
-      '});',
-    ],
-  },
-  {
-    name: 'Task 2 question without an Idempotency-Key runs normally',
-    description:
-      'Optional idempotency: omitting the key is allowed and does not emit a replay marker.',
-    path: TASK2_QUESTION_PATH,
-    headers: [JSON_HEADER, VALID_KEY_HEADER],
-    body: { topic: 'Technology', question_type: 'opinion' },
-    testScript: [
-      assertStatus(200),
-      ...assertEnvelope('writing.task2.question.generate'),
-      "pm.test('omitting the optional key does not emit a replay marker', function () {",
-      "  pm.expect(pm.response.headers.get('Idempotent-Replay')).to.be.null;",
-      '});',
-    ],
-  },
-  {
-    name: 'Task 1 question ignores Idempotency-Key',
-    description:
-      'None idempotency: even a malformed key is ignored and the operation does not emit a replay marker.',
-    path: TASK1_QUESTION_PATH,
-    headers: [
-      JSON_HEADER,
-      VALID_KEY_HEADER,
-      { key: 'Idempotency-Key', value: '   ' },
-    ],
-    body: { chart_type: 'Bar Chart' },
-    testScript: [
-      assertStatus(200),
-      ...assertEnvelope('writing.task1.question.generate'),
-      'pm.sendRequest({',
-      '  url: pm.request.url.toString(),',
-      '  method: pm.request.method,',
-      '  header: pm.request.headers.toJSON(),',
-      "  body: { mode: 'raw', raw: pm.request.body.raw }",
-      '}, function (error, response) {',
-      "  pm.test('none mode does not replay or validate the key', function () {",
-      '    pm.expect(error).to.equal(null);',
-      '    pm.expect(response.code).to.eql(200);',
-      "    pm.expect(response.headers.get('Idempotent-Replay')).to.be.null;",
-      '  });',
-      '});',
-    ],
-  },
 ];
 
 const CONCURRENCY_SCENARIOS: readonly Scenario[] = [
@@ -478,9 +415,14 @@ const CONCURRENCY_SCENARIOS: readonly Scenario[] = [
     name: 'Concurrency limit rejects excess in-flight requests',
     description:
       'Configure the organization with maxConcurrent=1 and point {{baseUrl}} at a deliberately slow downstream. Run two copies of this request in parallel; the second must return 429 while the first is still in flight.',
-    path: TASK1_QUESTION_PATH,
-    headers: [JSON_HEADER, VALID_KEY_HEADER],
-    body: { chart_type: 'Bar Chart' },
+    path: TASK1_GRADE_PATH,
+    headers: [
+      JSON_HEADER,
+      VALID_KEY_HEADER,
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
+    ],
+    body: TASK1_GRADE_BODY,
     testScript: [assertStatus(429), ...assertErrorCode(['CONCURRENCY_LIMIT'])],
   },
 ];
@@ -601,7 +543,7 @@ export async function buildPostmanCollection(
       },
       {
         key: 'wrongScopeApiKey',
-        value: 'REPLACE_WITH_A_KEY_SCOPED_TO_WRITING_QUESTION_GENERATE_ONLY',
+        value: 'REPLACE_WITH_A_KEY_WITHOUT_WRITING_GRADE_SCOPE',
       },
       {
         key: 'userAssertion',

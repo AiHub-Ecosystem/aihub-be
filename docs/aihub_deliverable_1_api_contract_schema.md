@@ -21,6 +21,11 @@
 > from source. Checklists in PART E are preserved as historical snapshots for traceability, not
 > active blocker lists.
 >
+> **Runtime scope update 2026-09-12:** AIHUB now exposes Writing grading only. The
+> question-generation routes and their AIHUB adapters were removed; the upstream AI Writing
+> service may still retain its private generation endpoints. The historical generation sections
+> below are retained only to explain the original D1 decision and are not public AIHUB routes.
+>
 > Legacy placeholder schemas (`content` / `language` / `level`) were **invalid against production** —
 > replaced with empirical schemas. See [§34](#34-changelog) for the changelog.
 
@@ -121,11 +126,9 @@ URLs must cleanly distinguish the AI capability requested by the client.
 /v{version}/{capability}/{task}/{resource-or-action}
 ```
 
-Examples — 4 MVP operations:
+Current AIHUB Writing operations:
 
 ```http
-POST /v1/ielts/writing/task1/questions     # Generate Task 1 prompt
-POST /v1/ielts/writing/task2/questions     # Generate Task 2 prompt
 POST /v1/ielts/writing/task1/grade         # Grade Task 1 essay
 POST /v1/ielts/writing/task2/grade         # Grade Task 2 essay
 ```
@@ -458,7 +461,7 @@ Currently downstream only generates feedback in **Vietnamese**, so the enum temp
 
 The response always echoes `language` so clients know the feedback language.
 
-## Question Generation — Task 1 and Task 2
+## Historical Question Generation — Task 1 and Task 2 (not exposed by AIHUB)
 
 `POST /v1/ielts/writing/task1/questions`
 
@@ -532,15 +535,13 @@ Base64 is strongly discouraged for large files.
 
 ### Operation Catalog Requirements
 
-| Operation                         | Input mode                    |                   Max body | Allowed types      |
-| --------------------------------- | ----------------------------- | -------------------------: | ------------------ |
-| `writing.task1.question.generate` | JSON                          |                       8 KB | text               |
-| `writing.task2.question.generate` | JSON                          |                       8 KB | text               |
-| `writing.task1.grade`             | JSON                          |                     256 KB | text + `image_url` |
-| `writing.task2.grade`             | JSON                          |                     256 KB | text               |
-| `speaking.grade`                  | `asset_id` + presigned upload | 10 MB (multipart fallback) | `audio/*`          |
+| Operation             | Input mode          | Max body | Allowed types      |
+| --------------------- | ------------------- | -------: | ------------------ |
+| `writing.task1.grade` | JSON                |   256 KB | text + `image_url` |
+| `writing.task2.grade` | JSON                |   256 KB | text               |
+| `speaking.grading`    | multipart/form-data |    25 MB | `audio/*`          |
 
-Body limits are configured **per operation**, not as a single global threshold — question generation requires only a few kilobytes; there is no reason to permit 256 KB.
+Body limits are configured **per operation**, not as a single global threshold.
 
 Exceeding the limit → `413 PAYLOAD_TOO_LARGE`.
 
@@ -971,16 +972,14 @@ AIHUB maps the requested service to system authorization scopes and downstream A
 
 ## [Implementation Proposal]
 
-| Public Endpoint                          | Operation                         | Required Scope              | AI Service  | Downstream path             |
-| ---------------------------------------- | --------------------------------- | --------------------------- | ----------- | --------------------------- |
-| `POST /v1/ielts/writing/task1/questions` | `writing.task1.question.generate` | `writing.question.generate` | AI Writing  | `/generate-question-task1`  |
-| `POST /v1/ielts/writing/task2/questions` | `writing.task2.question.generate` | `writing.question.generate` | AI Writing  | `/question-generated-task2` |
-| `POST /v1/ielts/writing/task1/grade`     | `writing.task1.grade`             | `writing.grade`             | AI Writing  | `/grading-feedback-task1`   |
-| `POST /v1/ielts/writing/task2/grade`     | `writing.task2.grade`             | `writing.grade`             | AI Writing  | `/grading-feedback-task2`   |
-| `POST /v1/speaking/grade`                | `speaking.grade`                  | `speaking.grade`            | AI Speaking | _(Phase 4)_                 |
-| `POST /v1/reading/analyze`               | `reading.analyze`                 | `reading.analyze`           | AI Reading  | _(future)_                  |
+| Public Endpoint                      | Operation             | Required Scope    | AI Service  | Downstream path            |
+| ------------------------------------ | --------------------- | ----------------- | ----------- | -------------------------- |
+| `POST /v1/ielts/writing/task1/grade` | `writing.task1.grade` | `writing.grade`   | AI Writing  | `/grading-feedback-task1`  |
+| `POST /v1/ielts/writing/task2/grade` | `writing.task2.grade` | `writing.grade`   | AI Writing  | `/grading-feedback-task2`  |
+| `POST /v1/speaking/grading`          | `speaking.grading`    | `speaking.grade`  | AI Speaking | `/api/v1/speaking/grading` |
+| `POST /v1/reading/analyze`           | `reading.analyze`     | `reading.analyze` | AI Reading  | _(future)_                 |
 
-Both tasks share identical scopes (`writing.grade`, `writing.question.generate`) because customers purchase "Writing grading", not individual tasks. If separate licensing is needed later, they can be split into `writing.task1.grade` / `writing.task2.grade` — operations are already decoupled, so this does not break architecture.
+Both Writing grading tasks share the `writing.grade` scope because customers purchase Writing grading, not individual tasks. Question generation is no longer an AIHUB capability.
 
 The `Downstream path` column is **internal**, provided here solely for implementation reference. The public contract never leaks it.
 
@@ -1015,7 +1014,7 @@ Every request and response key must define clear semantics, datatypes, constrain
 | `image_url`  | string | **Task 1 only** | URI, ≤2000 chars         | Prompt chart image       |
 | `language`   | enum   |              no | `vi`                     | Feedback language        |
 
-### Request — Question Generation
+### Historical Request — Question Generation (not exposed by AIHUB)
 
 | Field           | Type   |                  Required | Constraints                                                                         |
 | --------------- | ------ | ------------------------: | ----------------------------------------------------------------------------------- |
@@ -1067,7 +1066,7 @@ grammatical_range_accuracy
 
 > Empirical benchmark on 2026-09-07: grading takes **16–18 seconds**, response size is **~12 KB**. Since it remains comfortably below the 30-second boundary, it is kept as `execution: sync`.
 
-### Response — Question Generation
+### Historical Response — Question Generation (not exposed by AIHUB)
 
 | Field                | Type   |        Required | Description                        |
 | -------------------- | ------ | --------------: | ---------------------------------- |
@@ -1382,55 +1381,21 @@ request_schema: GradeTask2Request
 response_schema: GradeResponse
 ```
 
-```yaml
-operation: writing.task1.question.generate
-method: POST
-path: /v1/ielts/writing/task1/questions
-scope: writing.question.generate
-identity_scope: organization
-execution: sync
-content_type: application/json
-idempotency: none # reads DB, zero model cost, safely repeatable
-max_body_bytes: 8192
-timeout_ms: 10000
-downstream_service: ai-writing
-downstream_path: /generate-question-task1
-request_schema: Task1QuestionRequest
-response_schema: Task1QuestionResponse
-observed_latency: 1.4s # reads DB, does not call model
-```
+Speaking grading:
 
 ```yaml
-operation: writing.task2.question.generate
+operation: speaking.grading
 method: POST
-path: /v1/ielts/writing/task2/questions
-scope: writing.question.generate
-identity_scope: organization
-execution: sync
-content_type: application/json
-idempotency: optional # DOES call model -> incurs cost
-max_body_bytes: 8192
-timeout_ms: 30000
-downstream_service: ai-writing
-downstream_path: /question-generated-task2
-request_schema: Task2QuestionRequest
-response_schema: Task2QuestionResponse
-```
-
-Speaking (Phase 4, async envelope frozen in §12):
-
-```yaml
-operation: speaking.grade
-method: POST
-path: /v1/speaking/grade
+path: /v1/speaking/grading
 scope: speaking.grade
 identity_scope: user
-execution: async # frozen
-content_type: application/json # + asset_id; multipart for small files
-idempotency: required
-max_body_bytes: TBD # finalized in Phase 4
-timeout_ms: TBD
+execution: sync
+content_type: multipart/form-data
+idempotency: none
+max_body_bytes: 26214400
+timeout_ms: 30000
 downstream_service: ai-speaking
+downstream_path: /api/v1/speaking/grading
 ```
 
 ### `idempotency` Takes Three Values, Not a Boolean
@@ -1443,7 +1408,9 @@ The initial draft used boolean `idempotency_required: true/false`. Three distinc
 | `optional` | Honored if provided, allowed without | Costly operations that do not produce permanent state |
 | `none`     | Header ignored if provided           | Read-only operations, safely repeatable               |
 
-`writing.task1.question.generate` is `none` because it **reads prompts from the database** without invoking a model. Enforcing idempotency there creates needless client friction without providing any protection.
+The current runtime uses `required` for Writing grading and `none` for Speaking grading. The
+`optional` mode remains a reserved catalog value for a future operation; it is not used by any
+public AIHUB route today.
 
 ### `timeout_ms` Is a Ceiling, Not Expected Duration
 
@@ -1554,7 +1521,7 @@ By the conclusion of D1, the following artifacts must exist:
 22. Sync/Async Decision per Operation
 23. Example Request/Response for each primary capability
 24. OpenAPI/Swagger draft — ✅ COMPLETED 2026-09-07, openapi.json (OpenAPI 3.1), generated from operation catalog via pnpm generate:openapi, not hand-crafted (issue #2)
-25. Postman examples for handoff to D2 — ✅ COMPLETED 2026-09-07, aihub.postman_collection.json, generated from openapi.json via pnpm generate:postman, containing all 15 cases in §G; 2 cases (13, 14) awaiting #9 metering (issue #6)
+25. Postman examples for handoff to D2 — ✅ COMPLETED 2026-09-07, aihub.postman_collection.json, generated from openapi.json via pnpm generate:postman, containing the 16 active handover scenarios in §G; 2 cases (13, 14) awaiting #9 metering (issue #6)
 ```
 
 ---
@@ -1617,7 +1584,7 @@ Canonical Response
 
 # 32. Decisions Required Before Freezing D1
 
-**Status: 17/18 finalized.** Table below provides finalized decisions; question 14 remains open but belongs to Phase 4, thus not blocking the D1 freeze.
+**Status: superseded for the current runtime.** The table preserves the original D1 freeze for traceability; the 2026-09-12 scope update removes public question-generation operations.
 
 |   # | Question                                    | Decision                                                                                                                                                                                                     |
 | --: | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1630,12 +1597,12 @@ Canonical Response
 |   7 | How much to expose `models[]`/breakdown?    | **Aggregate usage only.** `models[]` and `usage.calls[]` remain internal — per LTA §32.7 (§16)                                                                                                               |
 |   8 | JWKS URL or upload public key?              | **Both.** `jwks_url` is primary, `public_keys_jwks` is fallback (§8)                                                                                                                                         |
 |   9 | Maximum assertion TTL                       | **300 seconds**, configurable per org via `max_assertion_ttl_seconds`. Clock skew ±60s                                                                                                                       |
-|  10 | Which capabilities mandate user identity?   | Grading (`writing.task1.grade`, `writing.task2.grade`) → `user`. Question generation → `organization`. Default fail-closed: if unsure, classify as `user`                                                    |
+|  10 | Which capabilities mandate user identity?   | All active grading operations (`writing.task1.grade`, `writing.task2.grade`, `speaking.grading`) → `user`. Default fail-closed: if unsure, classify as `user`                                                |
 |  11 | `writing.grade` sync or async?              | **Sync**, `timeout_ms: 60000` (ceiling, not expectation — see §27)                                                                                                                                           |
-|  12 | `speaking.grade` sync or async?             | **Async.** Envelope frozen in §12, implementation in Phase 4                                                                                                                                                 |
+|  12 | `speaking.grading` sync or async?           | **Sync** for the current multipart proxy; the future asset/job API remains deferred                                                                                                                          |
 |  13 | Speaking multipart or `asset_id`?           | **`asset_id` + presigned upload** is primary; multipart for small files ≤10 MB (LTA §32.6)                                                                                                                   |
 |  14 | Max media size / MIME                       | ⏳ **Open** — finalized in Phase 4. Does not block D1 freeze because async envelope is locked                                                                                                                |
-|  15 | Idempotency mandatory for which operations? | `required` for both grading operations; `optional` for Task 2 question generation; `none` for Task 1 question generation (§27)                                                                               |
+|  15 | Idempotency mandatory for which operations? | `required` for Writing grading; `none` for current Speaking grading; `optional` reserved for future operations (§27)                                                                                         |
 |  16 | Scope/entitlement enforcement starting D2?  | **Yes, starting in D2.** `Entitlement ∩ Key Scope` requires no extra query — data is retrieved during key lookup (§9)                                                                                        |
 |  17 | Missing usage for metering-critical op?     | **Do not fail business responses.** Record `metering_status: missing_usage` + alert + reconcile (LTA §32.8). However, contract/integration tests must treat `usage` as required before deploying AI Services |
 |  18 | Finalized public error codes list v1        | **19 codes** in §25                                                                                                                                                                                          |
@@ -1663,6 +1630,14 @@ One open question remains but **does not block freeze**: half-band score granula
 <a id="34-nhật-ký-thay-đổi"></a>
 
 # 34. Changelog
+
+## 2026-09-12 — AIHUB scope reduced to grading
+
+AIHUB no longer exposes or dispatches the Task 1/Task 2 question-generation
+routes. Writing clients submit their own prompts to the two grading endpoints;
+upstream AI Writing generation endpoints, if retained, remain private to that
+service. `writing.question.generate` is no longer issued for new API keys, and
+existing stored scopes/records remain historical data only.
 
 ## 2026-09-07 — Synchronized with Empirical AI Writing Exploration
 

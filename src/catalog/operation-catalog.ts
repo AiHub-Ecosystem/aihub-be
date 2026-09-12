@@ -8,10 +8,6 @@ import {
   GradeResponseSchema,
   GradeTask1RequestSchema,
   GradeTask2RequestSchema,
-  Task1QuestionRequestSchema,
-  Task1QuestionResponseSchema,
-  Task2QuestionRequestSchema,
-  Task2QuestionResponseSchema,
 } from '../contracts/writing/grading';
 import type { DownstreamId } from '../downstream/downstream.types';
 import type { OperationId } from './operation-id';
@@ -37,36 +33,6 @@ export interface OperationDef {
 }
 
 export const OPERATION_CATALOG = {
-  'writing.task1.question.generate': {
-    method: 'POST',
-    path: '/v1/ielts/writing/task1/questions',
-    requiredScope: 'writing.question.generate',
-    identityScope: 'organization',
-    execution: 'sync',
-    contentType: 'application/json',
-    idempotency: 'none',
-    maxBodyBytes: 8 * 1024,
-    timeoutMs: 10_000,
-    downstream: 'ai-writing',
-    downstreamPath: '/generate-question-task1',
-    requestSchema: Task1QuestionRequestSchema,
-    responseContract: Task1QuestionResponseSchema,
-  },
-  'writing.task2.question.generate': {
-    method: 'POST',
-    path: '/v1/ielts/writing/task2/questions',
-    requiredScope: 'writing.question.generate',
-    identityScope: 'organization',
-    execution: 'sync',
-    contentType: 'application/json',
-    idempotency: 'optional',
-    maxBodyBytes: 8 * 1024,
-    timeoutMs: 30_000,
-    downstream: 'ai-writing',
-    downstreamPath: '/question-generated-task2',
-    requestSchema: Task2QuestionRequestSchema,
-    responseContract: Task2QuestionResponseSchema,
-  },
   'writing.task1.grade': {
     method: 'POST',
     path: '/v1/ielts/writing/task1/grade',

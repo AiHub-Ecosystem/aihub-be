@@ -1,4 +1,7 @@
-import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
+import {
+  type IdempotencyMode,
+  OPERATION_CATALOG,
+} from '../../../catalog/operation-catalog';
 import { AppError } from '../../../common/errors/app-error';
 import {
   type IdempotencyFingerprintInput,
@@ -26,6 +29,10 @@ export const IDEMPOTENCY_RETENTION_MS = 24 * 60 * 60 * 1_000;
 
 class ResponseDeadlineReached extends Error {}
 class HardDeadlineReached extends Error {}
+
+function isOptionalIdempotency(mode: IdempotencyMode): boolean {
+  return mode === 'optional';
+}
 
 function conflictError(): AppError {
   return new AppError({
@@ -97,10 +104,11 @@ export class IdempotencyService implements IdempotencyServicePort {
     work: IdempotencyWork<T>,
     decodeReplay: IdempotencyReplayDecoder<T>,
   ): Promise<IdempotencyExecution<T>> {
-    const mode = OPERATION_CATALOG[input.operation].idempotency;
+    const mode: IdempotencyMode =
+      OPERATION_CATALOG[input.operation].idempotency;
     if (
       mode === 'none' ||
-      (mode === 'optional' && input.idempotencyKey === undefined)
+      (isOptionalIdempotency(mode) && input.idempotencyKey === undefined)
     ) {
       return {
         result: await work({

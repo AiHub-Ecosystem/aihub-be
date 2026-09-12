@@ -158,8 +158,8 @@ String assertion = jwt.serialize();
 
 ### Which calls need one
 
-Grading operations are user-scoped and require an assertion. Question
-generation is organization-scoped and does not.
+All Writing operations are grading calls, are user-scoped, and require an
+assertion.
 
 Sending an assertion where none is required is allowed — but it must still be
 valid. AIHUB will not ignore a malformed one, because silently accepting
@@ -185,12 +185,10 @@ organization, so publish first and switch second.
 Base path: `/v1/ielts/writing`. All operations are `POST` with
 `Content-Type: application/json`.
 
-| Path               | Assertion | `Idempotency-Key` | Max body | Timeout |
-| ------------------ | --------- | ----------------- | -------: | ------: |
-| `/task1/questions` | No        | Not used          |     8 KB |     10s |
-| `/task2/questions` | No        | Optional          |     8 KB |     30s |
-| `/task1/grade`     | **Yes**   | **Required**      |   256 KB |     60s |
-| `/task2/grade`     | **Yes**   | **Required**      |   256 KB |     60s |
+| Path           | Assertion | `Idempotency-Key` | Max body | Timeout |
+| -------------- | --------- | ----------------- | -------: | ------: |
+| `/task1/grade` | **Yes**   | **Required**      |   256 KB |     60s |
+| `/task2/grade` | **Yes**   | **Required**      |   256 KB |     60s |
 
 ### Enumerated values
 
@@ -198,46 +196,12 @@ Base path: `/v1/ielts/writing`. All operations are `POST` with
 `Bar Chart`, `Line Graph`, `Pie Chart`, `Table`, `Map`, `Process Diagram`,
 `Multiple Graphs`.
 
-`question_type` (Task 2): `opinion`, `discussion`, `problem_solution`,
-`advantages_disadvantages`, `two_part`.
-
 `language` is optional and currently accepts `vi` only. Feedback is returned
 in Vietnamese.
 
-### A worked pair of calls
+### A worked grading call
 
-Generate a question:
-
-```bash
-curl -X POST https://api.example.com/v1/ielts/writing/task1/questions \
-  -H "X-API-Key: $AIHUB_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"chart_type": "Bar Chart"}'
-```
-
-```json
-{
-  "data": {
-    "question_id": "85f98a4d-bbcb-4ccf-927c-8988aa623306",
-    "question": "The graph shows estimated oil production capacity...",
-    "chart_type": "Bar Chart",
-    "image_url": "https://s3.example.com/ielts-task1/e9c9b064969b6492"
-  },
-  "meta": {
-    "request_id": "req_01M23NTNTAMPQXEQAFAVBCVPS7",
-    "service": "writing",
-    "operation": "writing.task1.question.generate",
-    "timing": {
-      "downstream_ms": 660,
-      "gateway_overhead_ms": 3,
-      "total_ms": 663
-    }
-  }
-}
-```
-
-Then grade an essay written against it. Three of the four required fields come
-straight from the response above:
+Supply the prompt and essay from your own application:
 
 ```bash
 curl -X POST https://api.example.com/v1/ielts/writing/task1/grade \

@@ -60,7 +60,7 @@ PostgreSQL and Redis, then apply the control-plane migration:
 docker compose up -d
 pnpm migrate
 pnpm cli org:create --name "Acme Edu" --entitlements writing,speaking
-pnpm cli key:create --org org_... --name "Local backend" --scopes writing.question.generate,writing.grade,speaking.grade --envs development
+pnpm cli key:create --org org_... --name "Local backend" --scopes writing.grade,speaking.grade --envs development
 ```
 
 Schedule `pnpm cli idempotency:cleanup` from the deployment environment once

@@ -1,7 +1,7 @@
 /**
  * Synthetic canary check for the AI Writing contract.
  *
- * Calls all four live AI Writing endpoints with fixed known-good inputs,
+ * Calls both live AI Writing grading endpoints with fixed known-good inputs,
  * parses each response through the real production adapter code, and reports
  * drift. Catches response-shape drift before a customer's request hits it.
  *
@@ -9,7 +9,7 @@
  * interval: every 6 hours — see docs/operations/canary-ai-writing.md.
  *
  * Exit codes:
- *   0 — all four passed
+ *   0 — both passed
  *   1 — drift (AI_SERVICE_CONTRACT_VIOLATION on at least one)
  *   2 — unverified (transport / timeout / HTTP error, no contract violation)
  *   3 — webhook delivery failed
@@ -23,9 +23,7 @@ import { ulid } from 'ulid';
 import { AppError } from '../src/common/errors/app-error';
 import type { RequestContext } from '../src/common/request-context/request-context';
 import { task1GradeAdapter } from '../src/downstream/writing/task1-grade.adapter';
-import { task1QuestionAdapter } from '../src/downstream/writing/task1-question.adapter';
 import { task2GradeAdapter } from '../src/downstream/writing/task2-grade.adapter';
-import { task2QuestionAdapter } from '../src/downstream/writing/task2-question.adapter';
 import type { DownstreamHttpRequestOptions } from '../src/modules/gateway/infrastructure/downstream-http.client';
 import { DownstreamHttpClient } from '../src/modules/gateway/infrastructure/downstream-http.client';
 
@@ -106,7 +104,7 @@ const CANARY_TIMEOUT_MS = 30_000;
 // ---------------------------------------------------------------------------
 // Minimal RequestContext stub
 //
-// All four adapters call `void context` — they accept and immediately discard
+// Both adapters call `void context` — they accept and immediately discard
 // the context. A minimal stub that satisfies the type is all we need.
 // ---------------------------------------------------------------------------
 
@@ -260,7 +258,7 @@ function loadFixture<T>(relativePath: string): T {
 // ---------------------------------------------------------------------------
 
 /**
- * Run all four canary probes sequentially and return a structured result.
+ * Run both grading canary probes sequentially and return a structured result.
  *
  * Fully injectable: pass a MockAgent-backed httpClient to test without network.
  * Does NOT call process.exit or loadEnvFile — those belong to the entrypoint.
@@ -274,15 +272,6 @@ export async function runCanary(deps: CanaryRunDeps): Promise<CanaryResult> {
   const { httpClient, authorization, webhookSink } = deps;
   const runId = ulid();
   const checkedAt = new Date().toISOString();
-
-  // Question-generation fixtures (added by this PR).
-  const task1QuestionInput = loadFixture<{ chart_type?: string }>(
-    'test/fixtures/ai-writing/question-task1.request.json',
-  );
-  const task2QuestionInput = loadFixture<{
-    topic: string;
-    question_type: string;
-  }>('test/fixtures/ai-writing/question-task2.request.json');
 
   // Grade fixtures already exist. They store the downstream field names
   // (topic, url) — map to public contract names before passing to adapters.
@@ -312,10 +301,8 @@ export async function runCanary(deps: CanaryRunDeps): Promise<CanaryResult> {
 
   const probeOpts: ProbeOptions = { httpClient, authorization };
 
-  // Run all four sequentially — collect every result even if one fails.
+  // Run both sequentially — collect every result even if one fails.
   const rawResults = [
-    await probeOperation(task1QuestionAdapter, task1QuestionInput, probeOpts),
-    await probeOperation(task2QuestionAdapter, task2QuestionInput, probeOpts),
     await probeOperation(task1GradeAdapter, gradeTask1Input, probeOpts),
     await probeOperation(task2GradeAdapter, gradeTask2Input, probeOpts),
   ];

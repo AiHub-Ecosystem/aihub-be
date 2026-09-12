@@ -13,14 +13,6 @@ import type {
   GradeTask1Request,
   GradeTask2Request,
 } from '../../../contracts/writing/grading';
-import type {
-  Task1QuestionRequest,
-  Task1QuestionResponse,
-} from '../../../contracts/writing/task1';
-import type {
-  Task2QuestionRequest,
-  Task2QuestionResponse,
-} from '../../../contracts/writing/task2';
 import type { DownstreamAdapter } from '../../../downstream/downstream-adapter';
 import type { InternalAIServiceResponse } from '../../../downstream/downstream.types';
 import type { InternalTokenIssuerPort } from '../application/internal-token-issuer.port';
@@ -129,18 +121,8 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
   // Repeats `OperationDispatcherPort`'s overloads here, immediately followed
   // by the one broader implementation signature below — the standard
   // TypeScript pattern for an overloaded method, so every external caller
-  // sees only the four precise signatures and the internal, type-erased
+  // sees only the three precise signatures and the internal, type-erased
   // implementation never leaks out as part of the public type.
-  dispatch(
-    operation: 'writing.task1.question.generate',
-    input: Task1QuestionRequest,
-    context: RequestContext,
-  ): Promise<DispatchResult<Task1QuestionResponse>>;
-  dispatch(
-    operation: 'writing.task2.question.generate',
-    input: Task2QuestionRequest,
-    context: RequestContext,
-  ): Promise<DispatchResult<Task2QuestionResponse>>;
   dispatch(
     operation: 'writing.task1.grade',
     input: GradeTask1Request,

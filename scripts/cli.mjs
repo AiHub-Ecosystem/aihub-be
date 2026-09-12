@@ -356,7 +356,7 @@ async function createKey(options) {
         keyHash,
         rawKey.slice(0, 15),
         requiredOption(options, 'name'),
-        listOption(options, 'scopes', 'writing.question.generate'),
+        listOption(options, 'scopes', 'writing.grade'),
         listOption(options, 'envs', 'production'),
       ],
     );

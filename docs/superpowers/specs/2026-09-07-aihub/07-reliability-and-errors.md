@@ -68,7 +68,7 @@ new CircuitBreaker(call, {
 
 **Never roll custom circuit breakers.** Correct breakers require rolling statistical windows and a half-open state that permits strictly **one** trial request through. Custom implementations frequently leak hundreds of concurrent requests in half-open state, crashing recovering services immediately.
 
-**Keyed by `operation`, not by `downstream`.** If `/grading-feedback-task1` is failing while `/generate-question-task1` is healthy, a service-wide breaker would needlessly take down question generation. Same amount of code, vastly superior fault isolation.
+**Keyed by `operation`, not by `downstream`.** If `/grading-feedback-task1` is failing while another AI Writing operation is healthy, a service-wide breaker would needlessly take down the healthy grading path. Same amount of code, vastly superior fault isolation.
 
 **Only 5xx / timeouts / transport connection faults count as failures.** `4xx` responses from downstream **never** count — the service is healthy; the client simply submitted invalid parameters. Counting 4xx errors would allow a single client sending invalid payloads to trip the circuit breaker and knock out service for **all other customers**.
 

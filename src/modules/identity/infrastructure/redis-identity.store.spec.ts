@@ -10,7 +10,7 @@ const record: ApiKeyRecord = {
   apiKeyId: 'ak_backend',
   organizationStatus: 'active',
   status: 'active',
-  scopes: ['writing.question.generate'],
+  scopes: ['writing.grade'],
   entitlements: ['writing'],
   allowedEnvironments: ['development'],
   expiresAt: null,

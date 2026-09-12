@@ -127,12 +127,12 @@ Without this constraint, Org B could register Org A's `iss` and sign assertions 
 
 Record **both**: `billable_requests` is always present, `*_tokens` are present whenever the AI Service reports them.
 
-| Value              | Condition                                                                   |
-| ------------------ | --------------------------------------------------------------------------- |
-| `complete`         | AI Service returned complete usage data                                     |
-| `missing_usage`    | Operation invokes a model but AI Service failed to return usage             |
-| `not_applicable`   | Operation does not invoke a model (e.g. `/generate-question-task1`)         |
-| `quota_unverified` | Redis was down so quota could not be validated; request was allowed through |
+| Value              | Condition                                                                         |
+| ------------------ | --------------------------------------------------------------------------------- |
+| `complete`         | AI Service returned complete usage data                                           |
+| `missing_usage`    | Operation invokes a model but AI Service failed to return usage                   |
+| `not_applicable`   | Reserved for future non-model operations; no current public Writing route uses it |
+| `quota_unverified` | Redis was down so quota could not be validated; request was allowed through       |
 
 Never fabricate `0` for missing usage. Doing this now is cheap, but **impossible to reverse later** — last month's dropped data cannot spontaneously regenerate.
 

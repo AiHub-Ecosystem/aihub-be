@@ -5,7 +5,7 @@ const apiKey: AuthenticatedApiKey = {
   organizationId: 'org_acme',
   apiKeyId: 'ak_backend',
   environment: 'production',
-  scopes: ['writing.question.generate'],
+  scopes: ['writing.grade'],
   rateLimitRpm: 600,
   maxConcurrent: 20,
   monthlyRequestQuota: null,
@@ -14,10 +14,10 @@ const apiKey: AuthenticatedApiKey = {
 
 describe('hasRequiredScope', () => {
   it('allows an effective scope that is present on the authenticated key', () => {
-    expect(hasRequiredScope(apiKey, 'writing.question.generate')).toBe(true);
+    expect(hasRequiredScope(apiKey, 'writing.grade')).toBe(true);
   });
 
   it('denies a scope that is absent from the authenticated key', () => {
-    expect(hasRequiredScope(apiKey, 'writing.grade')).toBe(false);
+    expect(hasRequiredScope(apiKey, 'speaking.grade')).toBe(false);
   });
 });

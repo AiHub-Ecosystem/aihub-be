@@ -16,13 +16,13 @@ describe('DownstreamHttpClient', () => {
   });
 
   it('uses the trusted base URL, bearer token, request metadata, and JSON body', async () => {
-    const responseBody = { data: { data: { question: 'A question' } } };
+    const responseBody = { data: { data: { overall_band: 6 } } };
     const mock = mockAgent.get('https://ai-writing.test');
     mock
       .intercept({
         method: 'POST',
-        path: '/generate-question-task1',
-        body: JSON.stringify({ topic: 'Bar Chart' }),
+        path: '/grading-feedback-task1',
+        body: JSON.stringify({ topic: 'Bar Chart', essay: 'An essay.' }),
         headers: {
           authorization: 'Bearer writing-token',
           'x-request-id': 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
@@ -38,8 +38,8 @@ describe('DownstreamHttpClient', () => {
     const response = await client.request(
       {
         method: 'POST',
-        path: '/generate-question-task1',
-        body: { topic: 'Bar Chart' },
+        path: '/grading-feedback-task1',
+        body: { topic: 'Bar Chart', essay: 'An essay.' },
         contentType: 'application/json',
       },
       {

@@ -22,6 +22,10 @@ Every decision across this specification suite derives from the following 8 cons
 
 Service: `Wispace AI Writing Assistant` — `https://api-ielts-writing.aihubproduction.com`
 
+> **Runtime scope update 2026-09-12:** The upstream service survey below is
+> historical. AIHUB currently proxies only the two grading endpoints; its
+> question-generation routes were removed from the public catalog.
+
 13 endpoints, flat paths, unversioned, `HTTPBearer` authentication:
 
 ```
@@ -33,20 +37,19 @@ task 1                        task 2                      shared
 /essay-improvement-task1      /essay-improvement-task2
 ```
 
-Inputs for the 4 prioritized endpoints (question generation + grading, task 1 & task 2):
+Inputs for the two active AIHUB Writing endpoints (grading, task 1 & task 2):
 
-| Endpoint                    | Required fields                     | Calls model?           |
-| --------------------------- | ----------------------------------- | ---------------------- |
-| `/generate-question-task1`  | `topic` (optional, default `""`)    | **No** — reads from DB |
-| `/question-generated-task2` | `topic`, `question_type`            | Yes                    |
-| `/grading-feedback-task1`   | `question`, `url`, `topic`, `essay` | Yes                    |
-| `/grading-feedback-task2`   | `question`, `topic`, `essay`        | Yes                    |
+| Endpoint                  | Required fields                     | Calls model? |
+| ------------------------- | ----------------------------------- | ------------ |
+| `/grading-feedback-task1` | `question`, `url`, `topic`, `essay` | Yes          |
+| `/grading-feedback-task2` | `question`, `topic`, `essay`        | Yes          |
 
 ### Four findings that altered the design
 
 1. **Canonical schema in D1 §10 did not match reality.** D1 assumed `content` / `language` / `level`; real grading requires `question` / `topic` / `essay`, and Task 1 requires `url` (chart image). There is no `language` — IELTS is always English. Must rewrite before freezing D1.
 2. **Task 1 and Task 2 have fundamentally different shapes** (`url` only exists in Task 1) → split into separate endpoints, see [06 §H.1](06-routing-adapter.md#h1-operation-catalog-typed-code).
-3. **`/generate-question-task1` does not invoke a model** → `usage` must be `omit`, not `0`. Precisely the case D1 §15 anticipated, and now there is a concrete example.
+3. **Historical generation endpoints differ in model usage** → this informed
+   the original D1 metering rules; those endpoints are not exposed by AIHUB.
 4. **Response schema in OpenAPI was `{}`** — completely empty. This was the remaining blocker for Phase 1, see [11 §P.1](11-open-questions.md#p1-real-response-for-grading-feedback-task12-phase-1-blocker).
 
 ### Two security issues on the live production service

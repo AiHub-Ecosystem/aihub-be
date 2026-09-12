@@ -435,7 +435,10 @@ Two key design decisions regarding catalog placement:
 
 **Downstream URLs stored in a database introduce an SSRF vector.** Anyone with database write access could point AIHUB to `169.254.169.254`, and AIHUB carries signed internal JWTs. Environment variables eliminate that attack surface.
 
-Question generation is `organization`-scoped because prompts do not belong to specific students; grading is `user`-scoped because scores attach to specific learner profiles — following fail-closed rules in [§32.4](#324-which-operations-are-organization-scoped-vs-user-scoped).
+The active AIHUB catalog exposes grading as `user`-scoped because scores attach
+to specific learner profiles. Question-generation operations were removed from
+the gateway on 2026-09-12; any upstream generation service remains outside the
+public AIHUB contract.
 
 ---
 

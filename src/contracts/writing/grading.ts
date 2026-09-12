@@ -5,15 +5,8 @@ import { ChartTypeSchema } from './task1';
 export {
   CHART_TYPES,
   ChartTypeSchema,
-  Task1QuestionRequestSchema,
-  Task1QuestionResponseSchema,
 } from './task1';
 export type { ChartType } from './task1';
-export {
-  QUESTION_TYPES,
-  Task2QuestionRequestSchema,
-  Task2QuestionResponseSchema,
-} from './task2';
 
 /**
  * Downstream only produces Vietnamese feedback today. Widening this later is a

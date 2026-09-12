@@ -3,53 +3,25 @@
 ← [Table of Contents](README.md) · [05 — Auth & Identity](05-auth-identity.md)
 
 > The objective of this document is to answer question §18.8 from the brief: _How much effort is required to onboard a new AI Service?_ The litmus test is detailed in [§H.9](#h9-litmus-test-effort-to-add-ai-reading).
+>
+> **Scope update 2026-09-12:** AIHUB exposes only the two Writing grading
+> operations below. The question-generation entries and adapter examples later
+> in this historical design note are no longer part of the runtime catalog.
 
 <a id="h1-operation-catalog--code-có-kiểu"></a>
 <a id="h1-operation-catalog-typed-code"></a>
 
 ## H.1 Operation Catalog — Typed Code
 
-The MVP consists of **4 operations**: question generation and grading for Task 1 and Task 2.
+The active Writing integration consists of **2 grading operations**.
 
-| Public Endpoint                          | Operation ID                      | Scope                       | Identity | Idempotency | Downstream Path             |
-| ---------------------------------------- | --------------------------------- | --------------------------- | -------- | ----------- | --------------------------- |
-| `POST /v1/ielts/writing/task1/questions` | `writing.task1.question.generate` | `writing.question.generate` | org      | none        | `/generate-question-task1`  |
-| `POST /v1/ielts/writing/task2/questions` | `writing.task2.question.generate` | `writing.question.generate` | org      | optional    | `/question-generated-task2` |
-| `POST /v1/ielts/writing/task1/grade`     | `writing.task1.grade`             | `writing.grade`             | **user** | required    | `/grading-feedback-task1`   |
-| `POST /v1/ielts/writing/task2/grade`     | `writing.task2.grade`             | `writing.grade`             | **user** | required    | `/grading-feedback-task2`   |
+| Public Endpoint                      | Operation ID          | Scope           | Identity | Idempotency | Downstream Path           |
+| ------------------------------------ | --------------------- | --------------- | -------- | ----------- | ------------------------- |
+| `POST /v1/ielts/writing/task1/grade` | `writing.task1.grade` | `writing.grade` | **user** | required    | `/grading-feedback-task1` |
+| `POST /v1/ielts/writing/task2/grade` | `writing.task2.grade` | `writing.grade` | **user** | required    | `/grading-feedback-task2` |
 
 ```ts
 export const OPERATIONS = {
-  "writing.task1.question.generate": {
-    method: "POST",
-    path: "/v1/ielts/writing/task1/questions",
-    requiredScope: "writing.question.generate",
-    identityScope: "organization",
-    execution: "sync",
-    contentType: "application/json",
-    idempotency: "none", // reads from DB, zero model cost, duplicate calls harmless
-    maxBodyBytes: 8 * 1024,
-    timeoutMs: 10_000,
-    downstream: "ai-writing",
-    downstreamPath: "/generate-question-task1",
-    requestSchema: Task1QuestionRequest,
-    responseSchema: Task1QuestionResponse,
-  },
-  "writing.task2.question.generate": {
-    method: "POST",
-    path: "/v1/ielts/writing/task2/questions",
-    requiredScope: "writing.question.generate",
-    identityScope: "organization",
-    execution: "sync",
-    contentType: "application/json",
-    idempotency: "optional", // DOES invoke model -> incurs monetary cost
-    maxBodyBytes: 8 * 1024,
-    timeoutMs: 30_000,
-    downstream: "ai-writing",
-    downstreamPath: "/question-generated-task2",
-    requestSchema: Task2QuestionRequest,
-    responseSchema: Task2QuestionResponse,
-  },
   "writing.task1.grade": {
     method: "POST",
     path: "/v1/ielts/writing/task1/grade",
@@ -79,21 +51,23 @@ Downstream URL in environment: `DOWNSTREAM_AI_WRITING_URL=http://ai-writing:8080
 
 Strict per-task schemas (task 1 **requires** `image_url`, task 2 **forbids** it), clean validation errors, pristine generated SDKs, and granular pricing/scope controls. Merging into a single endpoint with a discriminator forces `oneOf` unions, leading to unhelpful validation diagnostics.
 
-### Closed-Loop Workflow
+### Grading Workflow
 
 ```
-generate question  -> returns question + image_url
+client supplies question + image_url (Task 1) or topic (Task 2)
                              ↓
 student writes essay
                              ↓
-grade essay        -> submits original question + image_url + essay
+grade essay        -> submits the prompt and essay to AIHUB
 ```
 
-Matches precisely the `url` field that `/grading-feedback-task1` expects.
+The Task 1 payload maps `image_url` to the private `url` field expected by the
+downstream grading service.
 
 ### Adapters Prove Their Value Immediately
 
-Downstream named its endpoints `/generate-question-task1` but `/question-generated-task2` — **same conceptual operation, inverted naming conventions**. The public API preserves symmetry: `/v1/ielts/writing/task1/questions` and `/v1/ielts/writing/task2/questions`. Clients are insulated from upstream inconsistencies without requiring downstream teams to refactor legacy code.
+The public grading API preserves symmetry while insulating clients from the
+private downstream endpoint names.
 
 <a id="h2-canonical-schemas"></a>
 
@@ -111,14 +85,6 @@ const CHART_TYPES = [
   "Map",
   "Process Diagram",
   "Multiple Graphs",
-] as const;
-
-const QUESTION_TYPES = [
-  "opinion",
-  "discussion",
-  "problem_solution",
-  "advantages_disadvantages",
-  "two_part",
 ] as const;
 
 // Downstream currently emits feedback exclusively in Vietnamese.
@@ -184,32 +150,6 @@ export const GradeResponse = Type.Object(
         explanation: Type.String(),
       })
     ),
-  },
-  { additionalProperties: false }
-);
-
-export const Task1QuestionRequest = Type.Object(
-  {
-    chart_type: Type.Optional(Type.Union(CHART_TYPES.map(Type.Literal))), // omitted = random
-  },
-  { additionalProperties: false }
-);
-
-export const Task1QuestionResponse = Type.Object(
-  {
-    question_id: Type.String(),
-    question: Type.String(),
-    chart_type: Type.Union(CHART_TYPES.map(Type.Literal)),
-    image_url: Type.String({ format: "uri" }),
-  },
-  { additionalProperties: false }
-);
-
-export const Task2QuestionResponse = Type.Object(
-  {
-    question: Type.String(),
-    topic: Type.String(),
-    question_type: Type.Union(QUESTION_TYPES.map(Type.Literal)),
   },
   { additionalProperties: false }
 );
@@ -375,56 +315,6 @@ export const gradeTask2Adapter: DownstreamAdapter<GradeTask2Req, GradeRes> = {
   }),
   parseResponse: parseGrading,
 };
-
-export const task1QuestionAdapter: DownstreamAdapter<
-  Task1QuestionReq,
-  Task1QuestionRes
-> = {
-  operation: "writing.task1.question.generate",
-  downstream: "ai-writing",
-  buildRequest: (req) => ({
-    method: "POST",
-    path: "/generate-question-task1",
-    body: req.chart_type ? { topic: req.chart_type } : {},
-  }),
-  // Downstream wraps in a double envelope: { data: { data: {...} } }
-  parseResponse: (raw: any) => {
-    const d = raw?.data?.data ?? raw?.data;
-    if (!d?.question || !d?.image_url) {
-      throw new ContractViolationError("missing question or image_url");
-    }
-    return {
-      question_id: d.question_id,
-      question: d.question,
-      chart_type: d.topic,
-      image_url: d.image_url,
-    };
-  },
-};
-
-export const task2QuestionAdapter: DownstreamAdapter<
-  Task2QuestionReq,
-  Task2QuestionRes
-> = {
-  operation: "writing.task2.question.generate",
-  downstream: "ai-writing",
-  buildRequest: (req) => ({
-    method: "POST",
-    path: "/question-generated-task2",
-    body: { topic: req.topic, question_type: req.question_type },
-  }),
-  // Flat envelope with naming divergent from task 1
-  parseResponse: (raw: any) => {
-    const d = raw?.data;
-    if (!d?.description)
-      throw new ContractViolationError("missing data.description");
-    return {
-      question: d.description, // 'description' -> 'question'
-      topic: d.topic ?? "",
-      question_type: d.instruction, // 'instruction'  -> 'question_type'
-    };
-  },
-};
 ```
 
 ### Four Elements Intentionally Stripped by the Adapter
@@ -507,7 +397,8 @@ Requirements for the Writing team are minimal:
 }
 ```
 
-- `/generate-question-task1` reads from DB → **omit `usage`**, do not return `0`.
+- Historical generation endpoints were outside the active AIHUB catalog and
+  are no longer part of this gateway's usage contract.
 - Operations invoking models multiple times → `usage` represents the **sum total for the entire operation**; breakdown lives in `usage.calls[]` (optional). Per D1 §15 and target architecture §16.
 
 AIHUB seamlessly parses both flat and wrapped envelopes via 3 lines of code without configuration:
@@ -593,7 +484,7 @@ src/
 ├─ downstream/
 │  ├─ adapter.types.ts   registry.ts   dispatcher.ts
 │  ├─ http-client.ts     error-mapper.ts        <- shared across all services
-│  └─ writing/  grade-task1.adapter.ts  grade-task2.adapter.ts  question-*.adapter.ts
+│  └─ writing/  grade-task1.adapter.ts  grade-task2.adapter.ts
 ├─ internal-token/   issuer.ts  jwks.controller.ts
 ├─ idempotency/  metering/  rate-limit/  errors/  observability/
 └─ cli/              org.ts  key.ts  identity.ts
@@ -614,7 +505,7 @@ Adheres tightly to §27 target architecture, with two modifications: added `cata
 5. test/fixtures/reading/*.json            golden fixtures
 ```
 
-**Zero database migrations. Zero controller modifications. Zero changes to auth, rate limiting, metering, error mapping, or observability.** Routes generate automatically from the catalog; response envelopes wrap automatically in the interceptor.
+**Zero database migrations. Zero controller modifications. Zero changes to auth, rate limiting, metering, error mapping, or observability.** New routes follow the catalog/controller pattern; response envelopes wrap automatically in the interceptor.
 
 If adding an AI service ever touches files outside these 5 areas, business logic has leaked beyond adapter boundaries — **use this as an architectural health metric**.
 

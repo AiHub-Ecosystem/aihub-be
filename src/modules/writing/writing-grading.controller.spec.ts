@@ -123,9 +123,8 @@ class InMemoryIdempotencyRepository implements IdempotencyRepositoryPort {
   }
 }
 
-// Auth and rate limiting are the same shared guards already exercised in
-// depth by writing-question.controller.spec.ts; this file focuses on what
-// is actually new for grading: field renaming per task, the shared response
+// Auth and rate limiting use shared guards; this file focuses on what is
+// actually new for grading: field renaming per task, the shared response
 // parser wired end to end, and the coT leak guard from grade-response.adapter.
 describe('Writing grading HTTP flow', () => {
   let app: NestFastifyApplication;

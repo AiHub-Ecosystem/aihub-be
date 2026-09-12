@@ -80,7 +80,7 @@ describe('buildOpenApiDocument', () => {
 
   it('documents an ignored Idempotency-Key parameter for an operation catalogued as none', () => {
     const doc = build();
-    const operation = doc.paths['/v1/ielts/writing/task1/questions']?.post;
+    const operation = doc.paths['/v1/speaking/grading']?.post;
     const names = operation?.parameters.map(
       (parameter) => parameter.name ?? parameter.$ref,
     );
@@ -96,21 +96,19 @@ describe('buildOpenApiDocument', () => {
     });
   });
 
-  it('marks Idempotency-Key required only for an operation catalogued as required', () => {
+  it('marks Idempotency-Key required for grading operations', () => {
     const doc = build();
     const required = doc.paths[
       '/v1/ielts/writing/task1/grade'
     ]?.post.parameters.find(
       (parameter) => parameter.name === 'Idempotency-Key',
     );
-    const optional = doc.paths[
-      '/v1/ielts/writing/task2/questions'
-    ]?.post.parameters.find(
+    const none = doc.paths['/v1/speaking/grading']?.post.parameters.find(
       (parameter) => parameter.name === 'Idempotency-Key',
     );
 
     expect(required?.required).toBe(true);
-    expect(optional?.required).toBe(false);
+    expect(none?.required).toBe(false);
   });
 
   it('references the correlation id header on every operation', () => {
@@ -129,13 +127,13 @@ describe('buildOpenApiDocument', () => {
   it('requires a user assertion only for user-scoped operations', () => {
     const userParameters =
       build().paths['/v1/ielts/writing/task1/grade']?.post.parameters;
-    const organizationParameters =
-      build().paths['/v1/ielts/writing/task1/questions']?.post.parameters;
+    const speakingParameters =
+      build().paths['/v1/speaking/grading']?.post.parameters;
 
     expect(userParameters).toContainEqual({
       $ref: '#/components/parameters/UserAssertion',
     });
-    expect(organizationParameters).not.toContainEqual({
+    expect(speakingParameters).toContainEqual({
       $ref: '#/components/parameters/UserAssertion',
     });
     expect(build().components.parameters.UserAssertion).toMatchObject({
@@ -243,18 +241,8 @@ describe('buildOpenApiDocument', () => {
     });
   });
 
-  it('documents replay and conflict responses for optional idempotency', () => {
-    const operation = build().paths['/v1/ielts/writing/task2/questions']?.post;
-    const success = operation?.responses['200'] as {
-      readonly headers?: Record<string, unknown>;
-    };
-
-    expect(success.headers?.['Idempotent-Replay']).toBeDefined();
-    expect(operation?.responses['409']).toBeDefined();
-  });
-
   it('does not advertise idempotency conflicts for operations catalogued as none', () => {
-    const operation = build().paths['/v1/ielts/writing/task1/questions']?.post;
+    const operation = build().paths['/v1/speaking/grading']?.post;
 
     expect(operation?.responses['409']).toBeUndefined();
   });

@@ -1,4 +1,4 @@
-import { FormatRegistry, type Static, Type } from '@sinclair/typebox';
+import { FormatRegistry, Type } from '@sinclair/typebox';
 
 if (!FormatRegistry.Has('uri')) {
   FormatRegistry.Set('uri', (value) => {
@@ -31,27 +31,5 @@ export type ChartType = (typeof CHART_TYPES)[number];
 const ChartTypeSchema = Type.Union(
   CHART_TYPES.map((value) => Type.Literal(value)),
 );
-
-export const Task1QuestionRequestSchema = Type.Object(
-  {
-    // Omitting it draws a random question and is the most common call.
-    chart_type: Type.Optional(ChartTypeSchema),
-  },
-  { additionalProperties: false },
-);
-
-export type Task1QuestionRequest = Static<typeof Task1QuestionRequestSchema>;
-
-export const Task1QuestionResponseSchema = Type.Object(
-  {
-    question_id: Type.String(),
-    question: Type.String(),
-    chart_type: ChartTypeSchema,
-    image_url: Type.String({ format: 'uri' }),
-  },
-  { additionalProperties: false },
-);
-
-export type Task1QuestionResponse = Static<typeof Task1QuestionResponseSchema>;
 
 export { ChartTypeSchema };

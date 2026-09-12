@@ -3,9 +3,8 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
 import { registerBodySizeGuard } from './body-size.hook';
 
-const CATALOGUED_PATH =
-  OPERATION_CATALOG['writing.task1.question.generate'].path;
-const LIMIT = OPERATION_CATALOG['writing.task1.question.generate'].maxBodyBytes;
+const CATALOGUED_PATH = OPERATION_CATALOG['writing.task1.grade'].path;
+const LIMIT = OPERATION_CATALOG['writing.task1.grade'].maxBodyBytes;
 
 describe('registerBodySizeGuard', () => {
   let app: FastifyInstance;

@@ -29,8 +29,6 @@ function collectTypeScriptFiles(directory) {
 const catalogPath = join(root, 'src', 'catalog', 'operation-catalog.ts');
 const catalog = readFileSync(catalogPath, 'utf8');
 const expectedPaths = [
-  '/v1/ielts/writing/task1/questions',
-  '/v1/ielts/writing/task2/questions',
   '/v1/ielts/writing/task1/grade',
   '/v1/ielts/writing/task2/grade',
   '/v1/speaking/grading',
