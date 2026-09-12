@@ -58,7 +58,11 @@ for (const path of requiredPaths) {
     fail(`the runtime identity cannot read ${path}`);
   }
 
-  const capabilities = runVault(['token', 'capabilities', path]);
+  const capabilities = runVault([
+    'token',
+    'capabilities',
+    path.replace(/^secret\//, 'secret/data/'),
+  ]);
   if (
     capabilities.status !== 0 ||
     capabilities.stdout.trim().toLowerCase() !== 'read'

@@ -96,6 +96,8 @@ runVault(
     `auth/approle/role/${policyName}`,
     `token_policies=${policyName}`,
     'token_type=service',
+    'secret_id_ttl=10m',
+    'secret_id_num_uses=1',
     'token_ttl=1h',
     'token_max_ttl=24h',
   ],
