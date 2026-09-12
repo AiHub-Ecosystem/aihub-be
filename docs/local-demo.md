@@ -1,35 +1,40 @@
 # AIHUB Local Demo
 
-This guide runs the shipped Writing slice locally and sends a real request through:
+This guide runs the shipped Writing slice and the synchronous Speaking grading
+proxy locally, sending real requests through:
 
 ```text
-curl / Postman → AIHUB → AI Writing
+curl / Postman → AIHUB → AI Writing or AI Speaking
 ```
 
 It also exercises the organization API key and the customer-style user assertion
 flow. There is no customer app or customer backend in this repository. The
 `dev:assertion` script stands in for that backend by signing a short-lived JWT.
 
-> **Cost warning:** Task 2 question generation and both grading operations reach
-> model-backed AI Writing endpoints and may consume model quota. Start with Task
-> 1 question generation when you only need a routing smoke test.
+> **Cost warning:** Question generation and grading reach model-backed AI
+> services and may consume provider quota. Start with Task 1 question generation
+> when you only need a Writing routing smoke test. Speaking also requires valid
+> provider configuration and an audio file.
 
 ## What you need
 
 - Node.js 22 or newer
 - pnpm 11 (the repository pins `pnpm@11.20.0`)
 - Docker Desktop or another Docker Compose implementation
-- A valid AI Writing bearer token from the AI Writing team
+- A valid AI Writing bearer token from the AI Writing team (for Writing calls)
+- AI Speaking Dev URL and server-side `x-client-id`/`x-secret-key` values (for
+  Speaking calls; obtain them from the provider/WISPACE owner)
 - Ports `3000`, `5432`, and `6379` available locally
 
 The demo uses:
 
-| Component  | Local address                             | Purpose                                               |
-| ---------- | ----------------------------------------- | ----------------------------------------------------- |
-| AIHUB      | `http://localhost:3000`                   | Public gateway                                        |
-| PostgreSQL | `localhost:5432`                          | Organizations, API keys, identity config, idempotency |
-| Redis      | `localhost:6379`                          | Credential cache, rate limits, concurrency protection |
-| AI Writing | configured by `DOWNSTREAM_AI_WRITING_URL` | Downstream AI service                                 |
+| Component   | Local address                              | Purpose                                               |
+| ----------- | ------------------------------------------ | ----------------------------------------------------- |
+| AIHUB       | `http://localhost:3000`                    | Public gateway                                        |
+| PostgreSQL  | `localhost:5432`                           | Organizations, API keys, identity config, idempotency |
+| Redis       | `localhost:6379`                           | Credential cache, rate limits, concurrency protection |
+| AI Writing  | configured by `DOWNSTREAM_AI_WRITING_URL`  | Downstream AI service                                 |
+| AI Speaking | configured by `DOWNSTREAM_AI_SPEAKING_URL` | Synchronous multipart grading service                 |
 
 ## Choose a demo mode
 
@@ -85,6 +90,18 @@ Open `.env` and set the downstream token:
 DOWNSTREAM_AI_WRITING_TOKEN=<token supplied by the AI Writing team>
 ```
 
+To run the Speaking demo, also set the provider-owned Dev configuration. These
+values stay in `.env` or a secret manager; they are never sent by the client:
+
+```dotenv
+DOWNSTREAM_AI_SPEAKING_URL=<AI Speaking Dev origin>
+DOWNSTREAM_AI_SPEAKING_CLIENT_ID=<Dev client id>
+DOWNSTREAM_AI_SPEAKING_SECRET_KEY=<Dev secret key>
+```
+
+Leave the Speaking values empty when running Writing only. Restart AIHUB after
+changing any downstream setting.
+
 Keep the token, API key, and signing private key out of source control. The
 default `.env.example` values are suitable for local development:
 
@@ -131,10 +148,10 @@ The script performs all of the following:
 1. Generates an RSA signing key pair for the demo customer backend.
 2. Writes the private key to `demo-private.pem` and the public JWKS to
    `demo-jwks.json`. Both files are ignored by Git.
-3. Creates an organization with the `writing` entitlement.
+3. Creates an organization with the `writing` and `speaking` entitlements.
 4. Registers the demo issuer and public JWKS with AIHUB.
-5. Creates a development API key scoped to `writing.question.generate` and
-   `writing.grade`.
+5. Creates a development API key scoped to `writing.question.generate`,
+   `writing.grade`, and `speaking.grade`.
 6. Appends `DEMO_ORG_ID` and `DEMO_API_KEY` to `.env`.
 7. Prints the API key and one initial `X-User-Assertion`.
 
@@ -318,9 +335,64 @@ requires `chart_type` and a publicly reachable `image_url`:
 Use the `image_url` returned by Task 1 question generation where possible.
 Do not send `image_url` or `chart_type` to the Task 2 grading endpoint.
 
+### 6.5 Speaking grading (synchronous multipart proxy)
+
+Speaking grading is user-scoped and requires the organization API key plus a
+fresh `X-User-Assertion`. The client uploads one audio file and sends `part`
+and `question_id`; AIHUB derives the downstream `user_id` from the verified
+assertion. Do not send `user_id` from the client.
+
+The accepted audio extensions are `wav`, `mp3`, `m4a`, `webm`, and `ogg`. The
+file must be at least 100 bytes and the whole multipart request is capped at
+25 MiB. The examples below assume a local `sample.wav` that is safe to send to
+the configured AI Speaking Dev service.
+
+PowerShell 7:
+
+```powershell
+$headers = @{
+  'X-API-Key' = $env:AIHUB_API_KEY
+  'X-User-Assertion' = $env:AIHUB_ASSERTION
+}
+$form = @{
+  audio = Get-Item -LiteralPath '.\sample.wav'
+  part = '1'
+  question_id = 'p1_hometown'
+  prompt_text = 'Do you enjoy living in your hometown?'
+  test_type = 'Practice'
+}
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "$env:AIHUB_BASE_URL/v1/speaking/grading" `
+  -Headers $headers `
+  -Form $form |
+  ConvertTo-Json -Depth 30
+```
+
+macOS/Linux:
+
+```bash
+curl -sS -X POST "$AIHUB_BASE_URL/v1/speaking/grading" \
+  -H "X-API-Key: $AIHUB_API_KEY" \
+  -H "X-User-Assertion: $AIHUB_ASSERTION" \
+  -F "audio=@sample.wav;type=audio/wav" \
+  -F 'part=1' \
+  -F 'question_id=p1_hometown' \
+  -F 'prompt_text=Do you enjoy living in your hometown?' \
+  -F 'test_type=Practice'
+```
+
+The response uses the common `{ "data", "meta" }` envelope and has
+`meta.operation` equal to `speaking.grading`. The normalized data contains the
+scorability, estimated band, transcript, relevance, fluency, pronunciation,
+language-analysis, feedback, and timing groups. The current automated fixture
+is contract-based; run an authenticated Dev smoke test before treating the
+provider response shape as live-compatible.
+
 ## 7. Verify idempotency
 
-For a grading request, resend the identical body with the same
+For a Writing grading request, resend the identical body with the same
 `Idempotency-Key`. AIHUB should return the stored successful result instead of
 calling AI Writing again. The replay response is marked with:
 
@@ -331,7 +403,8 @@ Idempotent-Replay: true
 If the body changes while the key stays the same, AIHUB returns
 `409 IDEMPOTENCY_CONFLICT`. A new logical submission needs a new key. When a
 request fails validation, the idempotency record is not stored, so the body can
-be fixed and retried.
+be fixed and retried. Speaking grading is synchronous but currently has no
+idempotency key; do not expect an idempotent replay header for that route.
 
 ## 8. Verify authentication failures
 
@@ -344,6 +417,7 @@ local bypass.
 | Call a grading route without `X-User-Assertion` |             401 | `USER_ASSERTION_REQUIRED` |
 | Use an expired or altered assertion             |             401 | `INVALID_USER_ASSERTION`  |
 | Use a key without `writing.grade`               |             403 | `FORBIDDEN`               |
+| Use a key without `speaking.grade`              |             403 | `FORBIDDEN`               |
 | Send an unknown body field                      |             400 | `INVALID_REQUEST`         |
 
 The question-generation routes are organization-scoped, so they do not require
@@ -385,11 +459,13 @@ X-User-Assertion
   → verify issuer, audience, timestamps, key id, and signature
   → extract the user id from `sub`
 operation catalog and policy checks
-  → validate, authorize, rate-limit, and enforce idempotency
-Writing adapter
+  → validate, authorize, rate-limit, and apply operation-specific replay policy
+Writing adapter (JSON)
   → map the canonical request to AI Writing
+Speaking parser and adapter (multipart)
+  → map the canonical request to AI Speaking
 downstream client
-  → call AI Writing with the configured Phase 1 bearer token
+  → call each service with its trusted, environment-specific credentials
 public response
   → return the canonical `{ data, meta }` envelope
 ```
@@ -414,8 +490,17 @@ Confirm that `DATABASE_URL` in `.env` matches the Compose configuration.
 
 ### The health route works but an API call returns `INTERNAL_ERROR`
 
-The most common cause is a missing downstream token. Set
-`DOWNSTREAM_AI_WRITING_TOKEN` in `.env` and restart `pnpm dev`.
+The most common cause is missing downstream configuration. For Writing, set
+`DOWNSTREAM_AI_WRITING_TOKEN`; for Speaking, set
+`DOWNSTREAM_AI_SPEAKING_URL`, `DOWNSTREAM_AI_SPEAKING_CLIENT_ID`, and
+`DOWNSTREAM_AI_SPEAKING_SECRET_KEY` in `.env`, then restart `pnpm dev`.
+
+### `AI_SERVICE_ERROR` or `AI_SERVICE_TIMEOUT` on Speaking
+
+Confirm that the configured Speaking origin is the Dev service, the provider
+credentials belong to that environment, and the audio file is supported and
+within the 25 MiB limit. Provider credentials are server-side only; do not put
+them in curl, Postman, browser code, or the multipart form.
 
 ### `UNAUTHORIZED`
 

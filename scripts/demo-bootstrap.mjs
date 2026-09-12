@@ -15,8 +15,8 @@ import { loadEnvFile } from 'node:process';
 
 const ENV_FILE = '.env';
 const JWKS_FILE = 'demo-jwks.json';
-const SCOPES = 'writing.question.generate,writing.grade';
-const ENTITLEMENTS = 'writing';
+const SCOPES = 'writing.question.generate,writing.grade,speaking.grade';
+const ENTITLEMENTS = 'writing,speaking';
 
 if (existsSync(ENV_FILE)) {
   loadEnvFile(ENV_FILE);

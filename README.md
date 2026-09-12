@@ -1,14 +1,15 @@
 # AIHUB Backend
 
-AIHUB is a B2B multi-tenant AI API Gateway and identity broker. The backend is a single NestJS/Fastify application. The first MVP slice is the Writing service; the gateway owns organization identity, scopes, metering, quota, idempotency, and typed dispatch while Writing owns its business data and model behavior.
+AIHUB is a B2B multi-tenant AI API Gateway and identity broker. The backend is a single NestJS/Fastify application. The shipped slices are Writing and the synchronous AI Speaking grading proxy; the gateway owns organization identity, scopes, metering, quota, idempotency, and typed dispatch while each AI service owns its business behavior.
 
 ## Architecture
 
 AIHUB terminates the public API, authenticates the organization, enforces its
 limits, then dispatches one typed operation to a private AI service.
 PostgreSQL holds control-plane truth; Redis holds only cache, counters, and
-protection state. Writing is the shipped slice; the other services are
-planned and reuse the same gateway path.
+protection state. Writing and the D2 synchronous Speaking proxy are shipped;
+the future asynchronous Speaking flow and the other services reuse the same
+gateway path when they are implemented.
 
 ```mermaid
 flowchart LR
@@ -25,18 +26,18 @@ flowchart LR
     writing["AI Writing service"]
     reading["AI Reading service<br/>(planned)"]
     listening["AI Listening service<br/>(planned)"]
-    speaking["AI Speaking service<br/>(planned)"]
+    speaking["AI Speaking service<br/>(D2 sync grading)"]
 
     client -->|X-API-Key| identity --> gateway --> dispatch
     dispatch -->|internal JWT| writing
     dispatch -.-> reading
     dispatch -.-> listening
-    dispatch -.-> speaking
+    dispatch -->|provider credentials| speaking
     identity --- pg
     gateway --- redis
 
     classDef planned stroke-dasharray: 5 5,color:#888,stroke:#888
-    class reading,listening,speaking planned
+    class reading,listening planned
 ```
 
 ## Quick start
@@ -46,9 +47,11 @@ pnpm install
 pnpm dev
 ```
 
-The bootstrap health route is `GET http://localhost:3000/health`. The Writing
-question route requires a real API key when `AIHUB_ALLOW_UNAUTHENTICATED_DEV`
-is not enabled.
+The bootstrap health route is `GET http://localhost:3000/health`. Writing and
+Speaking routes require a real API key when
+`AIHUB_ALLOW_UNAUTHENTICATED_DEV` is not enabled. See the [local demo
+guide](docs/local-demo.md) for authenticated Writing and multipart Speaking
+requests.
 
 For a local authenticated run, copy `.env.example` to `.env`, start
 PostgreSQL and Redis, then apply the control-plane migration:
@@ -56,8 +59,8 @@ PostgreSQL and Redis, then apply the control-plane migration:
 ```text
 docker compose up -d
 pnpm migrate
-pnpm cli org:create --name "Acme Edu" --entitlements writing
-pnpm cli key:create --org org_... --name "Local backend" --scopes writing.question.generate --envs development
+pnpm cli org:create --name "Acme Edu" --entitlements writing,speaking
+pnpm cli key:create --org org_... --name "Local backend" --scopes writing.question.generate,writing.grade,speaking.grade --envs development
 ```
 
 Schedule `pnpm cli idempotency:cleanup` from the deployment environment once
@@ -88,7 +91,7 @@ pnpm verify
 src/common/       shared errors, request context, and redaction
 src/catalog/      typed operation routing metadata
 src/contracts/    TypeBox boundary contracts
-src/modules/      identity, gateway, and Writing application seams
+src/modules/      identity, gateway, Writing, and Speaking application seams
 src/downstream/   pure AI-service request/response adapter seams
 test/             integration/e2e tests when external boundaries exist
 ```
@@ -100,6 +103,6 @@ and run `pnpm canary:ai-writing` with the documented environment variables.
 
 Read [CONTEXT.md](CONTEXT.md) for the short glossary, then the [spec index](docs/superpowers/specs/2026-09-07-aihub/README.md) before changing behavior. Shared workflow rules live in [AGENTS.md](AGENTS.md); Claude-specific routing lives in [CLAUDE.md](CLAUDE.md) and `.claude/`.
 
-The Writing grading response contract is resolved. The live service was called on 2026-09-07, the captured responses are committed under `test/fixtures/ai-writing/`, and the shared grading parser is implemented against them.
+The Writing grading response contract is resolved. The live service was called on 2026-09-07, the captured responses are committed under `test/fixtures/ai-writing/`, and the shared grading parser is implemented against them. The D2 Speaking route is implemented as a synchronous multipart proxy at `POST /v1/speaking/grading`; its current response fixture is contract-based pending authenticated Dev capture. The future asynchronous `POST /v1/speaking/grade` operation remains a separate roadmap item.
 
 The rule that produced that fixture still stands for every other service: never write a parser from a guess. Capture a real response first, commit it as a fixture, and map from that.
