@@ -5,6 +5,12 @@
  * of which copy of a framework's types produced it.
  */
 export interface DisconnectableRequest {
+  on(event: 'aborted', listener: () => void): void;
+  off(event: 'aborted', listener: () => void): void;
+  readonly socket?: DisconnectableSocket;
+}
+
+export interface DisconnectableSocket {
   on(event: 'close', listener: () => void): void;
   off(event: 'close', listener: () => void): void;
 }
@@ -16,14 +22,12 @@ export interface DisconnectSignal {
 }
 
 /**
- * An `AbortSignal` that fires when the underlying connection for this
- * specific request closes — including a premature client disconnect, not
- * only a clean completion.
+ * An `AbortSignal` that fires when the client disconnects from this request.
  *
- * Node's `IncomingMessage` emits `'close'` once per request even on a
- * keep-alive connection (the event is scoped to the message, not the shared
- * socket), so this is safe to attach per-request without affecting sibling
- * requests on the same connection.
+ * `IncomingMessage` emits `'close'` when the request body has been consumed,
+ * so it cannot be used as a disconnect signal. `'aborted'` covers a client
+ * that disconnects during upload; the socket's `'close'` covers a client that
+ * disconnects while the downstream request is still running.
  *
  * Firing after the request has already resolved is harmless: nothing is
  * listening on the signal by then, so `abort()` is a no-op. There is no need
@@ -33,12 +37,17 @@ export function createClientDisconnectSignal(
   request: DisconnectableRequest,
 ): DisconnectSignal {
   const controller = new AbortController();
-  const onClose = (): void => controller.abort();
+  const onDisconnect = (): void => controller.abort();
+  const socket = request.socket;
 
-  request.on('close', onClose);
+  request.on('aborted', onDisconnect);
+  socket?.on('close', onDisconnect);
 
   return {
     signal: controller.signal,
-    dispose: () => request.off('close', onClose),
+    dispose: () => {
+      request.off('aborted', onDisconnect);
+      socket?.off('close', onDisconnect);
+    },
   };
 }
