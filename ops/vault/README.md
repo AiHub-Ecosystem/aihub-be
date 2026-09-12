@@ -14,9 +14,9 @@ secret/aihub/{environment}/ai-writing
 secret/aihub/{environment}/seaweedfs
 ```
 
-The first two bundles are required by the current gateway. SeaweedFS is
-reserved for the future audio-asset integration and may be absent until that
-consumer is deployed.
+All three bundles are part of the V1 runtime-secret document. SeaweedFS has no
+consumer in the current gateway yet, but provisioning it now keeps the
+rendered contract complete for the later audio-asset integration.
 
 ## Policy bootstrap
 
@@ -29,9 +29,22 @@ vault policy write aihub-staging-runtime ops/vault/policies/aihub-staging-runtim
 vault policy write aihub-production-runtime ops/vault/policies/aihub-production-runtime.hcl
 ```
 
-Provision one AppRole per environment with a short token TTL and a bounded
-maximum TTL. Deliver the Role ID and one-time Secret ID to Vault Agent through
-the deployment secret channel; never commit or paste them into an issue.
+The repository also includes an explicit operator-only provisioning helper. It
+expects a mode-700 directory with `ai-speaking.json`, `ai-writing.json`, and
+`seaweedfs.json` containing only the flat bundle keys. It passes file paths to
+the Vault CLI, never secret values:
+
+```powershell
+$env:AIHUB_VAULT_PROVISION_ALLOW = 'true'
+$env:AIHUB_VAULT_ENVIRONMENT = 'staging'
+$env:AIHUB_VAULT_CREDENTIALS_DIR = 'C:\secure\aihub-vault\staging'
+pnpm vault:provision
+```
+
+The helper writes the selected policy, creates an AppRole with a short token
+TTL and bounded maximum TTL, and writes all three KV bundles. Deliver the Role
+ID and one-time Secret ID to Vault Agent through the deployment secret channel;
+never commit or paste them into an issue.
 
 The AppRole policy must be read-only and must not receive `root`, `sys`, auth
 management, write, delete, or broad-list capabilities. Revoke bootstrap/root
@@ -54,4 +67,7 @@ application logs, images, backups, or source control.
 Use the repository's opt-in `pnpm vault:smoke` command only with a dedicated,
 non-root AppRole identity. It reports path access and policy failures without
 printing Vault responses or secret values. It is not part of CI or the default
-verification loop.
+verification loop. Set `AIHUB_VAULT_SMOKE_AUTH_METHOD=approle` as proof that
+the operator authenticated through the intended machine-identity flow. The
+check uses Vault capability reads for unrelated paths rather than performing a
+write/delete probe.

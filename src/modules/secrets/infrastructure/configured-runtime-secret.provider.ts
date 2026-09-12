@@ -79,10 +79,6 @@ function resolveSource(
     return 'agent-file';
   }
 
-  if (options.nodeEnv === 'test') {
-    return 'env';
-  }
-
   throw configurationError(
     'AIHUB_RUNTIME_SECRET_SOURCE or AIHUB_RUNTIME_SECRETS_FILE is required',
   );
@@ -91,14 +87,10 @@ function resolveSource(
 function loadFromEnvironment(
   options: RuntimeSecretProviderOptions,
 ): RuntimeSecretSnapshot {
-  const allowTestPlaceholders = options.nodeEnv === 'test';
   const getRequired = (name: string, label: string): string => {
     const value = options.values[name];
     if (hasValue(value)) {
       return value;
-    }
-    if (allowTestPlaceholders) {
-      return `test-${label}`;
     }
     throw configurationError(`required runtime secret is missing: ${label}`);
   };
@@ -144,12 +136,27 @@ function loadFromAgentFile(
   }
 
   const root = asRecord(parsed, 'runtime secret document');
+  assertAllowedKeys(
+    root,
+    ['ai-speaking', 'ai-writing', 'seaweedfs'],
+    'runtime secret document',
+  );
   const aiSpeakingRecord = asRecord(
     root['ai-speaking'],
     'ai-speaking runtime secret bundle',
   );
+  assertAllowedKeys(
+    aiSpeakingRecord,
+    ['client_id', 'secret_key'],
+    'ai-speaking runtime secret bundle',
+  );
   const aiWritingRecord = asRecord(
     root['ai-writing'],
+    'ai-writing runtime secret bundle',
+  );
+  assertAllowedKeys(
+    aiWritingRecord,
+    ['token'],
     'ai-writing runtime secret bundle',
   );
   const aiSpeaking: AiSpeakingRuntimeSecrets = {
@@ -175,6 +182,13 @@ function loadFromAgentFile(
       : loadSeaweedFsRecord(
           asRecord(seaweedfsValue, 'SeaweedFS runtime secret bundle'),
         );
+  if (seaweedfs !== undefined) {
+    assertAllowedKeys(
+      asRecord(seaweedfsValue, 'SeaweedFS runtime secret bundle'),
+      ['access_key_id', 'secret_access_key'],
+      'SeaweedFS runtime secret bundle',
+    );
+  }
   return freezeSnapshot(aiSpeaking, aiWriting, seaweedfs);
 }
 
@@ -207,6 +221,17 @@ function loadSeaweedFsRecord(
       'SeaweedFS secret access key',
     ),
   };
+}
+
+function assertAllowedKeys(
+  record: Record<string, unknown>,
+  allowedKeys: readonly string[],
+  label: string,
+): void {
+  const allowed = new Set(allowedKeys);
+  if (Object.keys(record).some((key) => !allowed.has(key))) {
+    throw configurationError(`${label} contains unexpected fields`);
+  }
 }
 
 function requiredRecordString(

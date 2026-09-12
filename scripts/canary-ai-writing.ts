@@ -26,6 +26,7 @@ import { task1GradeAdapter } from '../src/downstream/writing/task1-grade.adapter
 import { task2GradeAdapter } from '../src/downstream/writing/task2-grade.adapter';
 import type { DownstreamHttpRequestOptions } from '../src/modules/gateway/infrastructure/downstream-http.client';
 import { DownstreamHttpClient } from '../src/modules/gateway/infrastructure/downstream-http.client';
+import { createRuntimeSecretProviderFromProcessEnvironment } from '../src/modules/secrets/infrastructure/configured-runtime-secret.provider';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -410,7 +411,6 @@ async function main(): Promise<void> {
   }
 
   const writingUrl = process.env.DOWNSTREAM_AI_WRITING_URL;
-  const writingToken = process.env.DOWNSTREAM_AI_WRITING_TOKEN;
   const webhookUrl = process.env.CANARY_WEBHOOK_URL;
   const resolvedWebhookUrl =
     webhookUrl && webhookUrl.trim().length > 0 ? webhookUrl.trim() : undefined;
@@ -425,11 +425,16 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  if (!writingToken || writingToken.trim().length === 0) {
+  let writingToken: string;
+  try {
+    writingToken =
+      createRuntimeSecretProviderFromProcessEnvironment().getSnapshot()
+        .aiWriting.token;
+  } catch {
     console.error(
       JSON.stringify({
         event: 'canary_ai_writing_startup_failed',
-        reason: 'DOWNSTREAM_AI_WRITING_TOKEN is not set',
+        reason: 'runtime secret source is not configured',
       }),
     );
     process.exit(2);

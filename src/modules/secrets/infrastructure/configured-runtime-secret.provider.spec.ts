@@ -73,12 +73,15 @@ describe('ConfiguredRuntimeSecretProvider', () => {
     expect(provider.getSnapshot()).toBe(first);
   });
 
-  it('allows the implicit env source only for tests, never for production', () => {
+  it('requires an explicit env source and rejects it for production', () => {
     expect(
-      new ConfiguredRuntimeSecretProvider(
-        options({ nodeEnv: 'test', source: undefined }),
-      ).getSnapshot().aiWriting.token,
-    ).toBe(writingToken);
+      () =>
+        new ConfiguredRuntimeSecretProvider(
+          options({ nodeEnv: 'test', source: undefined }),
+        ),
+    ).toThrow(
+      'AIHUB_RUNTIME_SECRET_SOURCE or AIHUB_RUNTIME_SECRETS_FILE is required',
+    );
 
     expect(
       () =>
@@ -88,6 +91,46 @@ describe('ConfiguredRuntimeSecretProvider', () => {
     ).toThrow(
       'environment source is allowed only for local development and tests',
     );
+  });
+
+  it('rejects unexpected Agent-file root and bundle fields', () => {
+    expect(
+      () =>
+        new ConfiguredRuntimeSecretProvider(
+          options({
+            source: 'agent-file',
+            secretsFile: 'runtime-secrets.json',
+            readFile: () =>
+              JSON.stringify({
+                'ai-speaking': {
+                  client_id: speakingClient,
+                  secret_key: speakingSecret,
+                  leaked: 'unexpected',
+                },
+                'ai-writing': { token: writingToken },
+              }),
+          }),
+        ),
+    ).toThrow('contains unexpected fields');
+
+    expect(
+      () =>
+        new ConfiguredRuntimeSecretProvider(
+          options({
+            source: 'agent-file',
+            secretsFile: 'runtime-secrets.json',
+            readFile: () =>
+              JSON.stringify({
+                'ai-speaking': {
+                  client_id: speakingClient,
+                  secret_key: speakingSecret,
+                },
+                'ai-writing': { token: writingToken },
+                extra: { value: 'unexpected' },
+              }),
+          }),
+        ),
+    ).toThrow('contains unexpected fields');
   });
 
   it('rejects a missing required credential without exposing its value', () => {
@@ -119,6 +162,18 @@ describe('ConfiguredRuntimeSecretProvider', () => {
     }
   });
 
+  it('does not invent placeholder credentials in test mode', () => {
+    expect(
+      () =>
+        new ConfiguredRuntimeSecretProvider(
+          options({
+            nodeEnv: 'test',
+            values: {},
+          }),
+        ),
+    ).toThrow('required runtime secret is missing');
+  });
+
   it('rejects malformed Agent-rendered data without exposing raw JSON', () => {
     const marker = 'private-json-secret';
 
@@ -144,6 +199,21 @@ describe('ConfiguredRuntimeSecretProvider', () => {
     } catch (error) {
       expect(String(error)).not.toContain(marker);
     }
+  });
+
+  it('fails closed when the Agent-rendered file is unavailable', () => {
+    expect(
+      () =>
+        new ConfiguredRuntimeSecretProvider(
+          options({
+            source: 'agent-file',
+            secretsFile: 'runtime-secrets.json',
+            readFile: () => {
+              throw new Error('private file-system detail');
+            },
+          }),
+        ),
+    ).toThrow('runtime secret file cannot be read');
   });
 
   it('rejects a partial optional SeaweedFS bundle', () => {

@@ -25,7 +25,8 @@ tsx scripts/canary-ai-writing.ts
 | Variable                      | Required | Description                                                                                          |
 | ----------------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `DOWNSTREAM_AI_WRITING_URL`   | Yes      | Base URL of AI Writing (origin only, e.g. `https://api.wispace.app`)                                 |
-| `DOWNSTREAM_AI_WRITING_TOKEN` | Yes      | Phase 1 static bearer token; sent as `Authorization: Bearer <token>`                                 |
+| `AIHUB_RUNTIME_SECRET_SOURCE` | Yes      | `env` for local development/test or `agent-file` for Dev/Staging/Production                          |
+| `AIHUB_RUNTIME_SECRETS_FILE`  | Agent    | Path to the Vault Agent-rendered JSON when the source is `agent-file`                                |
 | `CANARY_WEBHOOK_URL`          | No       | HTTP POST target for failure payloads. Unset → log the payload at info level, do not fail the script |
 
 ## Operations
@@ -107,6 +108,11 @@ On exit 0 the script emits one structured JSON line to stdout:
 `detail` contains only `AppError.code` plus the HTTP status. It never carries
 `cause.message` — on the contract-violation path that field can contain a
 fragment of the raw downstream body (same leak class as issue #17).
+
+The canary resolves its bearer token through the same startup-only runtime
+secret provider as the Gateway. It never reads `DOWNSTREAM_AI_WRITING_TOKEN`
+directly, so a Dev/Staging/Production Agent-file cutover applies to the canary
+as well.
 
 ## Failure class taxonomy
 

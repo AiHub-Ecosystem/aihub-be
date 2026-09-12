@@ -33,9 +33,9 @@ request.
    template under the AIHUB service account.
 5. Set `AIHUB_RUNTIME_SECRET_SOURCE=agent-file` and the rendered-file path in
    the deployment secret/config channel.
-6. Start one instance and run the opt-in smoke test with a non-root identity.
-   Verify health, Speaking/Writing dispatch, and redacted logs before rolling
-   the change across the deployment.
+6. Start one instance and run the opt-in smoke test with the AppRole-authenticated
+   non-root identity. Verify health, Speaking/Writing dispatch, and redacted
+   logs before rolling the change across the deployment.
 7. After the rolling restart is healthy, remove the migrated long-lived
    downstream credentials from Dev/Production deployment environments.
 
@@ -50,10 +50,13 @@ Runtime rotation is startup-only in V1:
    request after each batch.
 4. Retire the old downstream credential only after all instances are healthy.
 
-Rollback uses the previous approved KV version and another rolling restart. It
-does not reintroduce an untracked production `.env` fallback. Hot reload,
-per-request Vault reads, and automatic rotation orchestration are intentionally
-out of scope for V1.
+Rollback uses the previous approved KV version and another rolling restart. The
+cutover switch is the `AIHUB_RUNTIME_SECRETS_FILE` deployment setting: point it
+at the Agent-rendered snapshot for the previous approved version (or restore
+the Agent destination symlink), then restart instances gradually. It does not
+reintroduce an untracked production `.env` fallback. Hot reload, per-request
+Vault reads, and automatic rotation orchestration are intentionally out of
+scope for V1.
 
 ## Failure matrix
 
@@ -66,3 +69,16 @@ out of scope for V1.
 | Root or non-expiring root-derived identity | Forbidden for AIHUB                             |
 
 See ADR-0013 and issue #30 for the architectural decision and adoption scope.
+
+The smoke command is deliberately opt-in and requires both an explicit
+environment and AppRole provenance:
+
+```powershell
+$env:AIHUB_VAULT_SMOKE_ALLOW = 'true'
+$env:AIHUB_VAULT_SMOKE_AUTH_METHOD = 'approle'
+$env:AIHUB_VAULT_ENVIRONMENT = 'staging'
+pnpm vault:smoke
+```
+
+It checks required data reads, read-only capabilities, denied unrelated data
+and metadata paths, and never performs a write/delete probe.

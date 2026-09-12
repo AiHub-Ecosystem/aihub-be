@@ -58,6 +58,29 @@ for (const file of collectTypeScriptFiles(downstreamDirectory)) {
   }
 }
 
+const srcDirectory = join(root, 'src');
+const secretsInfrastructureDirectory = join(
+  srcDirectory,
+  'modules',
+  'secrets',
+  'infrastructure',
+);
+for (const file of collectTypeScriptFiles(srcDirectory)) {
+  if (
+    file.endsWith('.spec.ts') ||
+    file.startsWith(secretsInfrastructureDirectory)
+  ) {
+    continue;
+  }
+
+  const source = readFileSync(file, 'utf8');
+  if (/\bvault\b|AIHUB_RUNTIME_SECRETS_FILE/i.test(source)) {
+    fail(
+      `${relative(root, file)} contains Vault-specific infrastructure; keep it behind the runtime-secret provider`,
+    );
+  }
+}
+
 if (process.exitCode !== undefined) {
   process.exit(process.exitCode);
 }

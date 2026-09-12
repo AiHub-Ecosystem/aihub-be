@@ -2,6 +2,7 @@
 module.exports = {
   testEnvironment: 'node',
   rootDir: '.',
+  setupFiles: ['<rootDir>/test/runtime-secret-env.ts'],
   transform: {
     '^.+\\.(t|j)s?$': ['@swc/jest'],
   },

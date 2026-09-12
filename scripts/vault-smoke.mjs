@@ -13,6 +13,10 @@ if (process.env.AIHUB_VAULT_SMOKE_ALLOW !== 'true') {
   fail('set AIHUB_VAULT_SMOKE_ALLOW=true to run this opt-in check');
 }
 
+if (process.env.AIHUB_VAULT_SMOKE_AUTH_METHOD !== 'approle') {
+  fail('set AIHUB_VAULT_SMOKE_AUTH_METHOD=approle to prove AppRole provenance');
+}
+
 if (environment === undefined || !allowedEnvironments.has(environment)) {
   fail('AIHUB_VAULT_ENVIRONMENT must be development, staging, or production');
 }
@@ -53,6 +57,14 @@ for (const path of requiredPaths) {
   if (result.status !== 0) {
     fail(`the runtime identity cannot read ${path}`);
   }
+
+  const capabilities = runVault(['token', 'capabilities', path]);
+  if (
+    capabilities.status !== 0 ||
+    capabilities.stdout.trim().toLowerCase() !== 'read'
+  ) {
+    fail(`the runtime identity has broader-than-read access to ${path}`);
+  }
 }
 
 const metadataPath = `secret/aihub/${environment}/ai-speaking`;
@@ -69,6 +81,32 @@ if (metadata.status === 0) {
   );
 }
 
+const unrelatedPath = `secret/data/aihub/${environment}/unrelated`;
+const unrelatedCapabilities = runVault([
+  'token',
+  'capabilities',
+  unrelatedPath,
+]);
+if (
+  unrelatedCapabilities.status !== 0 ||
+  unrelatedCapabilities.stdout.trim().toLowerCase() !== 'deny'
+) {
+  fail('the runtime identity can access an unrelated data path');
+}
+
+const unrelatedMetadataPath = `secret/metadata/aihub/${environment}/unrelated`;
+const unrelatedMetadataCapabilities = runVault([
+  'token',
+  'capabilities',
+  unrelatedMetadataPath,
+]);
+if (
+  unrelatedMetadataCapabilities.status !== 0 ||
+  unrelatedMetadataCapabilities.stdout.trim().toLowerCase() !== 'deny'
+) {
+  fail('the runtime identity can access unrelated KV metadata');
+}
+
 console.log(
-  `Vault smoke test passed for ${environment}: required data paths readable and metadata denied`,
+  `Vault smoke test passed for ${environment}: required data paths readable, unrelated data denied, and metadata denied`,
 );
