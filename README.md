@@ -98,6 +98,8 @@ test/             integration/e2e tests when external boundaries exist
 
 Customers integrating against the API should read the [integration guide](docs/integration-guide.md); the endpoint reference is served at `GET /docs`.
 
+AI service teams should use the versioned [AI Speaking provider contract](docs/contracts/ai-services/ai-speaking-grading-v1.md) and [AI Writing provider contract](docs/contracts/ai-services/ai-writing-grading-v1.md) when changing downstream request or response shapes.
+
 Operators should use the [AI Writing canary runbook](docs/operations/canary-ai-writing.md)
 and run `pnpm canary:ai-writing` with the documented environment variables.
 
