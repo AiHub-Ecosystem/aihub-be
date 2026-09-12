@@ -8,6 +8,10 @@ scripts/*.js
 .env
 .env.*
 !.env.example
+# Vault Agent-rendered runtime secrets; keep the deployment destination outside
+# the repository whenever possible.
+runtime-secrets.json
+*.runtime-secrets.json
 .claude/settings.local.json
 .DS_Store
 Thumbs.db

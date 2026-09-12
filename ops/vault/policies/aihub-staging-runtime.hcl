@@ -1,0 +1,12 @@
+# AIHUB staging runtime identity. This policy is intentionally read-only.
+path "secret/data/aihub/staging/ai-speaking" {
+  capabilities = ["read"]
+}
+
+path "secret/data/aihub/staging/ai-writing" {
+  capabilities = ["read"]
+}
+
+path "secret/data/aihub/staging/seaweedfs" {
+  capabilities = ["read"]
+}

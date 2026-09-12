@@ -4,6 +4,11 @@ import { speakingGradingAdapter } from '../../downstream/speaking/speaking-gradi
 import { task1GradeAdapter } from '../../downstream/writing/task1-grade.adapter';
 import { task2GradeAdapter } from '../../downstream/writing/task2-grade.adapter';
 import {
+  RUNTIME_SECRET_PROVIDER,
+  type RuntimeSecretProvider,
+} from '../secrets/application/runtime-secret-provider.port';
+import { SecretsModule } from '../secrets/secrets.module';
+import {
   CONCURRENCY_LIMITER,
   type ConcurrencyLimiterPort,
 } from './application/concurrency-limiter.port';
@@ -25,6 +30,7 @@ import { ConcurrencyGuard } from './presentation/concurrency.guard';
 import { RateLimitGuard } from './presentation/rate-limit.guard';
 
 @Module({
+  imports: [SecretsModule],
   providers: [
     {
       provide: REDIS_GATEWAY_CLIENT,
@@ -33,8 +39,11 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     },
     {
       provide: DownstreamHttpClient,
-      useFactory: (): DownstreamHttpClient =>
-        new DownstreamHttpClient(
+      useFactory: (
+        secretProvider: RuntimeSecretProvider,
+      ): DownstreamHttpClient => {
+        const secrets = secretProvider.getSnapshot();
+        return new DownstreamHttpClient(
           {
             'ai-writing': process.env.DOWNSTREAM_AI_WRITING_URL ?? '',
             'ai-speaking': process.env.DOWNSTREAM_AI_SPEAKING_URL ?? '',
@@ -42,19 +51,21 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
           undefined,
           {
             'ai-speaking': {
-              'x-client-id': process.env.DOWNSTREAM_AI_SPEAKING_CLIENT_ID ?? '',
-              'x-secret-key':
-                process.env.DOWNSTREAM_AI_SPEAKING_SECRET_KEY ?? '',
+              'x-client-id': secrets.aiSpeaking.clientId,
+              'x-secret-key': secrets.aiSpeaking.secretKey,
             },
           },
-        ),
+        );
+      },
+      inject: [RUNTIME_SECRET_PROVIDER],
     },
     {
       provide: INTERNAL_TOKEN_ISSUER,
-      useFactory: (): ConfiguredTokenIssuer =>
-        new ConfiguredTokenIssuer(
-          process.env.DOWNSTREAM_AI_WRITING_TOKEN ?? '',
-        ),
+      useFactory: (
+        secretProvider: RuntimeSecretProvider,
+      ): ConfiguredTokenIssuer =>
+        new ConfiguredTokenIssuer(secretProvider.getSnapshot().aiWriting.token),
+      inject: [RUNTIME_SECRET_PROVIDER],
     },
     {
       provide: RATE_LIMITER,

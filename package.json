@@ -18,6 +18,7 @@
     "validate:openapi": "node scripts/validate-openapi.mjs",
     "generate:postman": "tsx scripts/generate-postman.ts && biome format --write aihub.postman_collection.json",
     "canary:ai-writing": "tsx scripts/canary-ai-writing.ts",
+    "vault:smoke": "node scripts/vault-smoke.mjs",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "type-check": "tsc --noEmit",

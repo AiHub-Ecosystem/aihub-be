@@ -86,6 +86,7 @@ cp .env.example .env
 Open `.env` and set the downstream token:
 
 ```dotenv
+AIHUB_RUNTIME_SECRET_SOURCE=env
 DOWNSTREAM_AI_WRITING_TOKEN=<token supplied by the AI Writing team>
 ```
 
@@ -98,8 +99,15 @@ DOWNSTREAM_AI_SPEAKING_CLIENT_ID=<Dev client id>
 DOWNSTREAM_AI_SPEAKING_SECRET_KEY=<Dev secret key>
 ```
 
-Leave the Speaking values empty when running Writing only. Restart AIHUB after
-changing any downstream setting.
+The explicit `env` source is allowed only for local development and tests. The
+runtime-secret provider validates both active downstream credential bundles at
+startup, so fill the Speaking values before starting the gateway even when a
+particular request flow is not being exercised. Restart AIHUB after changing
+any downstream setting.
+
+For Dev/Staging/Production, use the Vault Agent-rendered JSON source instead of
+placing credentials in deployment environment variables. See the [Vault
+runtime-secret runbook](operations/vault-runtime-secrets.md).
 
 Keep the token, API key, and signing private key out of source control. The
 default `.env.example` values are suitable for local development:
@@ -441,10 +449,12 @@ Confirm that `DATABASE_URL` in `.env` matches the Compose configuration.
 
 ### The health route works but an API call returns `INTERNAL_ERROR`
 
-The most common cause is missing downstream configuration. For Writing, set
-`DOWNSTREAM_AI_WRITING_TOKEN`; for Speaking, set
-`DOWNSTREAM_AI_SPEAKING_URL`, `DOWNSTREAM_AI_SPEAKING_CLIENT_ID`, and
-`DOWNSTREAM_AI_SPEAKING_SECRET_KEY` in `.env`, then restart `pnpm dev`.
+The most common cause is missing runtime-secret configuration. For local
+development, set `AIHUB_RUNTIME_SECRET_SOURCE=env` plus
+`DOWNSTREAM_AI_WRITING_TOKEN`, `DOWNSTREAM_AI_SPEAKING_CLIENT_ID`, and
+`DOWNSTREAM_AI_SPEAKING_SECRET_KEY` in `.env`, then restart `pnpm dev`. For a
+Vault Agent deployment, check the rendered file path and required bundle keys;
+the process fails closed when the file is absent or malformed.
 
 ### `AI_SERVICE_ERROR` or `AI_SERVICE_TIMEOUT` on Speaking
 
