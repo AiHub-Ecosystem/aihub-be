@@ -1,4 +1,15 @@
-export type DownstreamId = 'ai-writing';
+export type DownstreamId = 'ai-writing' | 'ai-speaking';
+
+export interface DownstreamMultipartBody {
+  readonly kind: 'multipart';
+  readonly fields: Readonly<Record<string, string>>;
+  readonly file: {
+    readonly fieldName: string;
+    readonly bytes: Uint8Array;
+    readonly filename: string;
+    readonly contentType: string;
+  };
+}
 
 export interface DownstreamRequest {
   readonly method: 'GET' | 'POST';

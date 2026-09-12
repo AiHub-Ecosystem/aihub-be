@@ -1,17 +1,29 @@
-import { type Dispatcher, Pool } from 'undici';
+import { File } from 'node:buffer';
+
+import { type Dispatcher, Pool, FormData as UndiciFormData } from 'undici';
 
 import { AppError } from '../../../common/errors/app-error';
 import type {
+  DownstreamId,
+  DownstreamMultipartBody,
   DownstreamRequest,
   InternalAIServiceResponse,
 } from '../../../downstream/downstream.types';
 
 export interface DownstreamHttpRequestOptions {
-  readonly authorization: string;
+  readonly authorization?: string;
+  readonly downstream?: DownstreamId;
   readonly requestId: string;
   readonly deadlineMs: number;
   readonly signal: AbortSignal;
 }
+
+type DownstreamBaseUrls =
+  | string
+  | Readonly<Partial<Record<DownstreamId, string>>>;
+type DownstreamHeaders = Readonly<
+  Partial<Record<DownstreamId, Readonly<Record<string, string>>>>
+>;
 
 function configurationError(reason: string): AppError {
   return new AppError({
@@ -23,11 +35,8 @@ function configurationError(reason: string): AppError {
 }
 
 function transportError(error: unknown): AppError {
-  const name = error instanceof Error ? error.name : '';
-  const code =
-    typeof error === 'object' && error !== null && 'code' in error
-      ? String(error.code)
-      : '';
+  const name = errorName(error);
+  const code = errorCode(error);
 
   if (
     name === 'AbortError' ||
@@ -52,6 +61,30 @@ function transportError(error: unknown): AppError {
   });
 }
 
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : '';
+}
+
+function errorCode(error: unknown): string {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String(error.code)
+    : '';
+}
+
+function isTransportFailure(error: unknown): boolean {
+  const name = errorName(error);
+  const code = errorCode(error);
+  return (
+    name === 'AbortError' ||
+    name === 'TimeoutError' ||
+    code.startsWith('UND_ERR_') ||
+    code === 'ECONNRESET' ||
+    code === 'ECONNREFUSED' ||
+    code === 'EPIPE' ||
+    code === 'ETIMEDOUT'
+  );
+}
+
 function normalizeHeaders(
   headers: ResponseHeaders,
 ): Readonly<Record<string, string>> {
@@ -71,20 +104,20 @@ function normalizeHeaders(
 }
 
 export class DownstreamHttpClient {
-  private dispatcher: Dispatcher | undefined;
+  private readonly dispatchers = new Map<string, Dispatcher>();
 
   constructor(
-    private readonly baseUrl: string,
-    dispatcher?: Dispatcher,
-  ) {
-    this.dispatcher = dispatcher;
-  }
+    private readonly baseUrls: DownstreamBaseUrls,
+    private readonly sharedDispatcher?: Dispatcher,
+    private readonly configuredHeaders: DownstreamHeaders = {},
+  ) {}
 
   async request(
     request: DownstreamRequest,
     options: DownstreamHttpRequestOptions,
   ): Promise<InternalAIServiceResponse<unknown>> {
-    const base = this.parseBaseUrl();
+    const downstream = options.downstream ?? 'ai-writing';
+    const base = this.parseBaseUrl(downstream);
 
     if (!request.path.startsWith('/') || request.path.startsWith('//')) {
       throw configurationError(
@@ -97,11 +130,11 @@ export class DownstreamHttpClient {
       throw configurationError('downstream path changed the configured origin');
     }
 
-    let body: string | undefined;
+    let body: Dispatcher.RequestOptions['body'];
     if (request.body !== undefined) {
-      body = JSON.stringify(request.body);
+      body = toRequestBody(request.body);
       if (body === undefined) {
-        throw configurationError('downstream body is not JSON serializable');
+        throw configurationError('downstream body is not serializable');
       }
     }
 
@@ -112,8 +145,13 @@ export class DownstreamHttpClient {
         path: `${url.pathname}${url.search}`,
         method: request.method,
         headers: {
-          authorization: options.authorization,
-          'content-type': request.contentType ?? 'application/json',
+          ...(this.configuredHeaders[downstream] ?? {}),
+          ...(options.authorization === undefined
+            ? {}
+            : { authorization: options.authorization }),
+          ...(isMultipartBody(request.body)
+            ? {}
+            : { 'content-type': request.contentType ?? 'application/json' }),
           'x-request-id': options.requestId,
           'x-request-deadline': String(options.deadlineMs),
         },
@@ -124,7 +162,7 @@ export class DownstreamHttpClient {
       if (body !== undefined) {
         requestOptions.body = body;
       }
-      response = await this.getDispatcher().request(requestOptions);
+      response = await this.getDispatcher(base).request(requestOptions);
     } catch (error) {
       throw transportError(error);
     }
@@ -133,6 +171,9 @@ export class DownstreamHttpClient {
     try {
       parsedBody = await response.body.json();
     } catch (error) {
+      if (isTransportFailure(error)) {
+        throw transportError(error);
+      }
       if (response.statusCode >= 400) {
         parsedBody = undefined;
       } else {
@@ -153,38 +194,54 @@ export class DownstreamHttpClient {
   }
 
   async close(): Promise<void> {
-    if (this.dispatcher !== undefined) {
-      await this.dispatcher.close();
+    if (this.sharedDispatcher !== undefined) {
+      await this.sharedDispatcher.close();
+      return;
     }
+
+    await Promise.all(
+      [...this.dispatchers.values()].map((dispatcher) => dispatcher.close()),
+    );
   }
 
   async onModuleDestroy(): Promise<void> {
     await this.close();
   }
 
-  private getDispatcher(): Dispatcher {
-    if (this.dispatcher === undefined) {
-      const base = this.parseBaseUrl();
-      this.dispatcher = new Pool(base.origin, {
-        connections: 10,
-        keepAliveTimeout: 10_000,
-        keepAliveMaxTimeout: 60_000,
-      });
+  private getDispatcher(base: URL): Dispatcher {
+    if (this.sharedDispatcher !== undefined) {
+      return this.sharedDispatcher;
     }
 
-    return this.dispatcher;
+    const existing = this.dispatchers.get(base.origin);
+    if (existing !== undefined) {
+      return existing;
+    }
+
+    const dispatcher = new Pool(base.origin, {
+      connections: 10,
+      keepAliveTimeout: 10_000,
+      keepAliveMaxTimeout: 60_000,
+    });
+    this.dispatchers.set(base.origin, dispatcher);
+    return dispatcher;
   }
 
-  private parseBaseUrl(): URL {
-    if (this.baseUrl.trim().length === 0) {
-      throw configurationError('DOWNSTREAM_AI_WRITING_URL is missing');
+  private parseBaseUrl(downstream: DownstreamId): URL {
+    const baseUrl =
+      typeof this.baseUrls === 'string'
+        ? this.baseUrls
+        : (this.baseUrls[downstream] ?? '');
+
+    if (baseUrl.trim().length === 0) {
+      throw configurationError(`URL for ${downstream} is missing`);
     }
 
     let url: URL;
     try {
-      url = new URL(this.baseUrl);
+      url = new URL(baseUrl);
     } catch (error) {
-      throw configurationError('DOWNSTREAM_AI_WRITING_URL is invalid');
+      throw configurationError(`URL for ${downstream} is invalid`);
     }
 
     if (
@@ -195,10 +252,40 @@ export class DownstreamHttpClient {
       url.search.length > 0 ||
       url.hash.length > 0
     ) {
-      throw configurationError('DOWNSTREAM_AI_WRITING_URL must be an origin');
+      throw configurationError(`URL for ${downstream} must be an origin`);
     }
 
     return url;
   }
+}
+
+function isMultipartBody(value: unknown): value is DownstreamMultipartBody {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'kind' in value &&
+    value.kind === 'multipart'
+  );
+}
+
+function toRequestBody(
+  value: unknown,
+): Dispatcher.RequestOptions['body'] | undefined {
+  if (isMultipartBody(value)) {
+    const form = new UndiciFormData();
+    form.set(
+      value.file.fieldName,
+      new File([Buffer.from(value.file.bytes)], value.file.filename, {
+        type: value.file.contentType,
+      }),
+      value.file.filename,
+    );
+    for (const [name, fieldValue] of Object.entries(value.fields)) {
+      form.set(name, fieldValue);
+    }
+    return form;
+  }
+
+  return JSON.stringify(value);
 }
 type ResponseHeaders = Record<string, string | string[] | undefined>;

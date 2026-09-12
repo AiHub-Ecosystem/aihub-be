@@ -14,6 +14,7 @@ import {
   assertAuthBypassFlagIsSafe,
   assertHostConfigurationIsSafe,
 } from './modules/identity/presentation/request-environment';
+import { registerSpeakingMultipartParser } from './modules/speaking/infrastructure/fastify-speaking-multipart.parser';
 
 const DEFAULT_PORT = 3000;
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -40,6 +41,8 @@ export async function bootstrap(): Promise<void> {
       genReqId: () => generateRequestId(),
     }),
   );
+
+  registerSpeakingMultipartParser(app.getHttpAdapter().getInstance());
 
   // Registered directly on the raw Fastify instance rather than through
   // Nest's own middleware/guard pipeline, so it runs before the body is

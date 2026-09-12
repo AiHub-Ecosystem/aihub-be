@@ -5,6 +5,10 @@ import { AppError } from '../../../common/errors/app-error';
 import type { ErrorCode } from '../../../common/errors/error-code';
 import type { RequestContext } from '../../../common/request-context/request-context';
 import type {
+  SpeakingGradeInput,
+  SpeakingGradeResponse,
+} from '../../../contracts/speaking/grading';
+import type {
   GradeResponse,
   GradeTask1Request,
   GradeTask2Request,
@@ -147,6 +151,11 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
     input: GradeTask2Request,
     context: RequestContext,
   ): Promise<DispatchResult<GradeResponse>>;
+  dispatch(
+    operation: 'speaking.grading',
+    input: SpeakingGradeInput,
+    context: RequestContext,
+  ): Promise<DispatchResult<SpeakingGradeResponse>>;
   async dispatch(
     operation: OperationId,
     input: unknown,
@@ -158,7 +167,10 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
     }
 
     const downstreamRequest = adapter.buildRequest(input, context);
-    const token = await this.tokenIssuer.mint(context, operation);
+    const authorization =
+      adapter.downstream === 'ai-writing'
+        ? `Bearer ${await this.tokenIssuer.mint(context, operation)}`
+        : undefined;
     const remainingMs = Math.max(1, context.deadlineAt.getTime() - Date.now());
     const timeoutMs = remainingMs;
     const signal = AbortSignal.any([
@@ -170,7 +182,8 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
 
     try {
       response = await this.httpClient.request(downstreamRequest, {
-        authorization: `Bearer ${token}`,
+        ...(authorization === undefined ? {} : { authorization }),
+        downstream: adapter.downstream,
         requestId: context.requestId,
         deadlineMs: timeoutMs,
         signal,

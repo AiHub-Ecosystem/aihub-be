@@ -1,6 +1,10 @@
 import type { OperationId } from '../../../catalog/operation-id';
 import type { RequestContext } from '../../../common/request-context/request-context';
 import type {
+  SpeakingGradeInput,
+  SpeakingGradeResponse,
+} from '../../../contracts/speaking/grading';
+import type {
   GradeResponse,
   GradeTask1Request,
   GradeTask2Request,
@@ -50,6 +54,11 @@ export interface OperationDispatcherPort {
     input: GradeTask2Request,
     context: RequestContext,
   ): Promise<DispatchResult<GradeResponse>>;
+  dispatch(
+    operation: 'speaking.grading',
+    input: SpeakingGradeInput,
+    context: RequestContext,
+  ): Promise<DispatchResult<SpeakingGradeResponse>>;
 }
 
 export const OPERATION_DISPATCHER = Symbol('OPERATION_DISPATCHER');

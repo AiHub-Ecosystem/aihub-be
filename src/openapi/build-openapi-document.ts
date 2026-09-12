@@ -234,7 +234,7 @@ export function buildOpenApiDocument(version: string): unknown {
   return {
     openapi: OPENAPI_VERSION,
     info: {
-      title: 'AIHUB Writing API',
+      title: 'AIHUB API',
       version,
     },
     security: [{ ApiKeyAuth: [] }],

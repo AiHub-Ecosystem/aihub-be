@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { speakingGradingAdapter } from '../../downstream/speaking/speaking-grading.adapter';
 import { task1GradeAdapter } from '../../downstream/writing/task1-grade.adapter';
 import { task1QuestionAdapter } from '../../downstream/writing/task1-question.adapter';
 import { task2GradeAdapter } from '../../downstream/writing/task2-grade.adapter';
@@ -35,7 +36,20 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     {
       provide: DownstreamHttpClient,
       useFactory: (): DownstreamHttpClient =>
-        new DownstreamHttpClient(process.env.DOWNSTREAM_AI_WRITING_URL ?? ''),
+        new DownstreamHttpClient(
+          {
+            'ai-writing': process.env.DOWNSTREAM_AI_WRITING_URL ?? '',
+            'ai-speaking': process.env.DOWNSTREAM_AI_SPEAKING_URL ?? '',
+          },
+          undefined,
+          {
+            'ai-speaking': {
+              'x-client-id': process.env.DOWNSTREAM_AI_SPEAKING_CLIENT_ID ?? '',
+              'x-secret-key':
+                process.env.DOWNSTREAM_AI_SPEAKING_SECRET_KEY ?? '',
+            },
+          },
+        ),
     },
     {
       provide: INTERNAL_TOKEN_ISSUER,
@@ -68,6 +82,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
           task2QuestionAdapter,
           task1GradeAdapter,
           task2GradeAdapter,
+          speakingGradingAdapter,
         ]),
       inject: [DownstreamHttpClient, INTERNAL_TOKEN_ISSUER],
     },

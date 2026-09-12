@@ -14,21 +14,31 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Internal JWT:** a short-lived AIHUB-signed token used only on AIHUB-to-service calls.
 - **Operation Catalog:** the typed code-owned mapping of public path, scope, identity mode, limits, timeout, and downstream operation.
 - **Downstream Adapter:** a pure mapper between a public operation and a private AI service contract; it never performs network I/O.
+- **Speaking grading proxy:** the synchronous D2 integration path used to prove the AI Speaking handoff; it is not the public async Speaking contract.
+- **Speaking grading job:** the future durable async operation that accepts an organization-owned audio asset and returns a job result.
+- **Audio asset:** an organization-owned reference to recorded audio; downstream URLs and partner credentials never become public request fields.
 
 ## Ownership and invariants
 
 - AIHUB owns the control plane: organization identity, API keys, scopes, metering, quota, idempotency, and routing policy.
 - Each AI service owns its business data and model-specific behavior.
 - `organizationId` is explicit in request context and application ports.
+- The D2 Speaking grading proxy authenticates the client at AIHUB; downstream partner credentials remain server-side configuration.
+- Downstream Speaking `user_id` comes from the verified user assertion, never from an untrusted client identity field.
+- D2 Speaking proxy responses use the shared `{ data, meta }` envelope; raw downstream bodies are not public responses.
 - Controllers are thin; application ports hide infrastructure; domain code is framework-free.
 - Redis is ephemeral protection/cache state, never durable source of truth.
 - Secrets, assertions, internal tokens, essays, and raw downstream bodies never enter logs.
 
 ## Current scope and blockers
 
-- Current scope: one NestJS/Fastify app and the Writing vertical slice.
-- Implemented: all four Writing operations (`task1/questions`, `task2/questions`, `task1/grade`, `task2/grade`) validate the public request, authenticate API keys against Postgres, use Redis for credential caching and rate limiting, dispatch through the typed Writing adapters, and return the `{ data, meta }` envelope. Local Postgres/Redis E2E verification passed on 2026-09-07.
-- Deferred: Speaking, Reading, object storage, async jobs, billing, dynamic routing, Kubernetes, and a dedicated proxy.
+- Current scope: one NestJS/Fastify app, the Writing vertical slice, and the D2 AI Speaking proxy proof-of-forwarding across Dev and Production. The D2 handoff also includes a test-client flow and a ten-section TSD aligned with the Provider and WISPACE.
+- Implemented: all four Writing operations (`task1/questions`, `task2/questions`, `task1/grade`, `task2/grade`) validate the public request, authenticate API keys against Postgres, use Redis for credential caching and rate limiting, dispatch through the typed Writing adapters, and return the `{ data, meta }` envelope. The D2 Speaking Dev proxy (`POST /v1/speaking/grading`) now validates bounded multipart input, derives provider identity from the verified assertion, dispatches through the typed Speaking adapter, and maps an approved synthetic response/error fixture. Local Postgres/Redis E2E verification passed on 2026-09-07.
+- Deferred: the public Speaking grading job, object storage/presigned audio uploads, async workers and job polling, Reading, billing, dynamic routing, Kubernetes, and a dedicated proxy.
+- Resolved for D2: the AI Speaking service remains a synchronous downstream integration (multipart grading is the primary documented path; JSON-by-URL is a fallback). AIHUB keeps the previously frozen public Speaking operation asynchronous; the D2 proxy is a testable integration boundary and must not silently redefine that public contract.
+- Resolved D2 contract: the sync proxy route is `POST /v1/speaking/grading`, distinct from the future async `POST /v1/speaking/grade`. It accepts multipart audio with explicit `part` and `question_id`; `user_id` is server-derived, the D2 audio ceiling is 25 MB, and provider errors are mapped into shared AIHUB errors rather than passed through.
+- Known Speaking follow-ups: capture an authenticated live success fixture, confirm the prototype endpoint/path and downstream credential configuration, freeze the normalized result/error mapping, test the local client against Dev and Production, align the TSD with the Provider and WISPACE, and then decide when to promote the proxy into the async asset/job flow.
+- Next D2/D3 follow-up: expand the proxy to the remaining AI Provider endpoints, validate the Production routes with Postman, and publish a per-endpoint TSD without creating a second contract vocabulary.
 - No blockers. Both earlier ones were resolved on 2026-09-07.
 - Resolved: the Writing grading response contract. All four priority endpoints were called against the live service; captured responses are committed under `test/fixtures/ai-writing/` and the shared grading parser is implemented and tested. Catalog response contracts are real schemas, not `unresolved`.
 - Resolved as a decision, not as work: AI Writing stays reachable from the internet for now, because it still serves an application that does not go through AIHUB. The boundary at this stage is the credential, not the network — AIHUB customers hold only AIHUB keys, so metering and limits still bind them. Three conditions keep that acceptable; see the security spec.

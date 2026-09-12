@@ -1,6 +1,10 @@
 import type { TSchema } from '@sinclair/typebox';
 
 import {
+  SpeakingGradeRequestSchema,
+  SpeakingGradeResponseSchema,
+} from '../contracts/speaking/grading';
+import {
   GradeResponseSchema,
   GradeTask1RequestSchema,
   GradeTask2RequestSchema,
@@ -9,6 +13,7 @@ import {
   Task2QuestionRequestSchema,
   Task2QuestionResponseSchema,
 } from '../contracts/writing/grading';
+import type { DownstreamId } from '../downstream/downstream.types';
 import type { OperationId } from './operation-id';
 
 export type IdentityScope = 'organization' | 'user';
@@ -21,11 +26,11 @@ export interface OperationDef {
   readonly requiredScope: string;
   readonly identityScope: IdentityScope;
   readonly execution: 'sync';
-  readonly contentType: 'application/json';
+  readonly contentType: 'application/json' | 'multipart/form-data';
   readonly idempotency: IdempotencyMode;
   readonly maxBodyBytes: number;
   readonly timeoutMs: number;
-  readonly downstream: 'ai-writing';
+  readonly downstream: DownstreamId;
   readonly downstreamPath: string;
   readonly requestSchema: TSchema;
   readonly responseContract: ResponseContract;
@@ -91,5 +96,20 @@ export const OPERATION_CATALOG = {
     downstreamPath: '/grading-feedback-task2',
     requestSchema: GradeTask2RequestSchema,
     responseContract: GradeResponseSchema,
+  },
+  'speaking.grading': {
+    method: 'POST',
+    path: '/v1/speaking/grading',
+    requiredScope: 'speaking.grade',
+    identityScope: 'user',
+    execution: 'sync',
+    contentType: 'multipart/form-data',
+    idempotency: 'none',
+    maxBodyBytes: 25 * 1024 * 1024,
+    timeoutMs: 30_000,
+    downstream: 'ai-speaking',
+    downstreamPath: '/api/v1/speaking/grading',
+    requestSchema: SpeakingGradeRequestSchema,
+    responseContract: SpeakingGradeResponseSchema,
   },
 } as const satisfies Record<OperationId, OperationDef>;

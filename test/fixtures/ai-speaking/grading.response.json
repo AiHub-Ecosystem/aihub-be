@@ -1,0 +1,66 @@
+{
+  "status": "success",
+  "data": {
+    "session_id": "session-test-1",
+    "test_id": "test-test-1",
+    "test_type": "Practice",
+    "user_id": "local-development",
+    "question_id": "p1_hometown",
+    "scorability": {
+      "is_scorable": true,
+      "confidence": "high",
+      "display_band": true,
+      "message_vi": "Bai noi hop le va du dieu kien cham diem."
+    },
+    "estimated_band": {
+      "overall": 6.5,
+      "fluency_coherence": 6.5,
+      "lexical_resource": 6.5,
+      "grammatical_range_accuracy": 6,
+      "pronunciation": 7
+    },
+    "transcript": {
+      "text": "I enjoy living in my hometown.",
+      "word_count": 24,
+      "duration_seconds": 11.5
+    },
+    "relevance": {
+      "on_topic": true,
+      "score": 1,
+      "feedback_vi": "Cau tra loi bam sat cau hoi."
+    },
+    "fluency_metrics": {
+      "speech_rate_wpm": 125,
+      "pause_count": 2,
+      "mean_length_run_words": 6.8
+    },
+    "pronunciation_detail": {
+      "summary": {
+        "good_count": 22,
+        "fair_count": 2,
+        "poor_count": 0
+      },
+      "words": []
+    },
+    "language_analysis": {
+      "grammar_errors": [],
+      "vocabulary_upgrades": []
+    },
+    "feedback": {
+      "summary_vi": "Bai noi mo dau tot.",
+      "strong_point_vi": "Phat am ro rang.",
+      "action_plan_vi": "Luyen tap phat trien y."
+    },
+    "performance_timing": {
+      "total_seconds": 2.15,
+      "acoustic_processing_seconds": 1.85,
+      "language_processing_seconds": 1.12,
+      "stt_seconds": 0.38,
+      "speechace_seconds": 1.85,
+      "openrouter_seconds": 1.12,
+      "llm_seconds": 1.12,
+      "storage_seconds": 0,
+      "db_seconds": 0
+    }
+  }
+}
