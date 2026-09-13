@@ -1481,16 +1481,37 @@
                           ],
                           "properties": {
                             "speech_rate_wpm": {
-                              "minimum": 0,
-                              "type": "number"
+                              "anyOf": [
+                                {
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "pause_count": {
-                              "minimum": 0,
-                              "type": "integer"
+                              "anyOf": [
+                                {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "mean_length_run_words": {
-                              "minimum": 0,
-                              "type": "number"
+                              "anyOf": [
+                                {
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             }
                           }
                         },
@@ -1567,7 +1588,7 @@
                                           "anyOf": [
                                             {
                                               "minimum": 0,
-                                              "maximum": 1,
+                                              "maximum": 2,
                                               "type": "integer"
                                             },
                                             {
@@ -1577,7 +1598,7 @@
                                         },
                                         "predicted_stress": {
                                           "minimum": 0,
-                                          "maximum": 1,
+                                          "maximum": 2,
                                           "type": "integer"
                                         },
                                         "stress_score": {
@@ -1638,7 +1659,7 @@
                                           "anyOf": [
                                             {
                                               "minimum": 0,
-                                              "maximum": 1,
+                                              "maximum": 2,
                                               "type": "integer"
                                             },
                                             {
@@ -1774,8 +1795,7 @@
                             "language_processing_seconds",
                             "stt_seconds",
                             "speechace_seconds",
-                            "openrouter_seconds",
-                            "llm_seconds",
+                            "deepseek_seconds",
                             "storage_seconds",
                             "db_seconds"
                           ],
@@ -1800,11 +1820,7 @@
                               "minimum": 0,
                               "type": "number"
                             },
-                            "openrouter_seconds": {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            "llm_seconds": {
+                            "deepseek_seconds": {
                               "minimum": 0,
                               "type": "number"
                             },

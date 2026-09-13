@@ -1,66 +1,779 @@
 {
   "status": "success",
   "data": {
-    "session_id": "session-test-1",
-    "test_id": "test-test-1",
+    "session_id": "[redacted]",
+    "test_id": "[redacted]",
     "test_type": "Practice",
-    "user_id": "local-development",
+    "user_id": "[redacted]",
     "question_id": "p1_hometown",
     "scorability": {
-      "is_scorable": true,
-      "confidence": "high",
-      "display_band": true,
-      "message_vi": "Bai noi hop le va du dieu kien cham diem."
+      "is_scorable": false,
+      "confidence": "[redacted]",
+      "display_band": false,
+      "message_vi": "[redacted]"
     },
     "estimated_band": {
       "overall": 6.5,
       "fluency_coherence": 6.5,
-      "lexical_resource": 6.5,
-      "grammatical_range_accuracy": 6,
-      "pronunciation": 7
+      "lexical_resource": 5,
+      "grammatical_range_accuracy": 5,
+      "pronunciation": 9
     },
     "transcript": {
-      "text": "I enjoy living in my hometown.",
-      "word_count": 24,
-      "duration_seconds": 11.5
+      "text": "[redacted]",
+      "word_count": 15,
+      "duration_seconds": 4.1
     },
     "relevance": {
       "on_topic": true,
       "score": 1,
-      "feedback_vi": "Cau tra loi bam sat cau hoi."
+      "feedback_vi": "[redacted]"
     },
     "fluency_metrics": {
-      "speech_rate_wpm": 125,
-      "pause_count": 2,
-      "mean_length_run_words": 6.8
+      "speech_rate_wpm": null,
+      "pause_count": null,
+      "mean_length_run_words": null
     },
     "pronunciation_detail": {
       "summary": {
-        "good_count": 22,
-        "fair_count": 2,
+        "good_count": 15,
+        "fair_count": 0,
         "poor_count": 0
       },
-      "words": []
+      "words": [
+        {
+          "word": "[redacted]",
+          "quality_score": 100,
+          "quality_class": "[redacted]",
+          "syllables": {
+            "letters": "[redacted]",
+            "stress_level": 1,
+            "predicted_stress": 1,
+            "stress_score": 100,
+            "quality_score": 100,
+            "audio_extent_ms": [110, 230]
+          },
+          "phonemes": {
+            "phone": "[redacted]",
+            "quality_score": 100,
+            "sound_most_like": "[redacted]",
+            "stress_level": 1,
+            "audio_extent_ms": [110, 230],
+            "char_index": [0, 1]
+          }
+        },
+        {
+          "word": "[redacted]",
+          "quality_score": 98,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "stress_level": 0,
+              "predicted_stress": 0,
+              "stress_score": 100,
+              "quality_score": 96,
+              "audio_extent_ms": [230, 380]
+            },
+            {
+              "letters": "[redacted]",
+              "stress_level": 1,
+              "predicted_stress": 1,
+              "stress_score": 100,
+              "quality_score": 99,
+              "audio_extent_ms": [380, 590]
+            }
+          ],
+          "phonemes": [
+            {
+              "phone": "[redacted]",
+              "quality_score": 92,
+              "sound_most_like": "[redacted]",
+              "stress_level": 0,
+              "audio_extent_ms": [230, 290],
+              "char_index": [0, 1]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [290, 380],
+              "char_index": [1, 2]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 98.7,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [380, 470],
+              "char_index": [2, 3]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 99.5,
+              "sound_most_like": "[redacted]",
+              "stress_level": 1,
+              "audio_extent_ms": [470, 590],
+              "char_index": [3, 5]
+            }
+          ]
+        },
+        {
+          "word": "[redacted]",
+          "quality_score": 100,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "stress_level": 1,
+              "predicted_stress": 1,
+              "stress_score": 100,
+              "quality_score": 100,
+              "audio_extent_ms": [590, 800]
+            },
+            {
+              "letters": "[redacted]",
+              "stress_level": 0,
+              "predicted_stress": 0,
+              "stress_score": 100,
+              "quality_score": 100,
+              "audio_extent_ms": [800, 890]
+            }
+          ],
+          "phonemes": [
+            {
+              "phone": "[redacted]",
+              "quality_score": 99.3,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [590, 680],
+              "char_index": [0, 1]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": 1,
+              "audio_extent_ms": [680, 740],
+              "char_index": [1, 2]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 99.5,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [740, 800],
+              "char_index": [2, 3]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": 0,
+              "audio_extent_ms": [800, 830],
+              "char_index": [3, 4]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [830, 890],
+              "char_index": [4, 6]
+            }
+          ]
+        },
+        {
+          "word": "[redacted]",
+          "quality_score": 100,
+          "quality_class": "[redacted]",
+          "syllables": {
+            "letters": "[redacted]",
+            "stress_level": 0,
+            "predicted_stress": 0,
+            "stress_score": 100,
+            "quality_score": 100,
+            "audio_extent_ms": [890, 1040]
+          },
+          "phonemes": [
+            {
+              "phone": "[redacted]",
+              "quality_score": 99.7,
+              "sound_most_like": "[redacted]",
+              "stress_level": 0,
+              "audio_extent_ms": [890, 980],
+              "char_index": [0, 1]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [980, 1040],
+              "char_index": [1, 2]
+            }
+          ]
+        },
+        {
+          "word": "[redacted]",
+          "quality_score": 100,
+          "quality_class": "[redacted]",
+          "syllables": {
+            "letters": "[redacted]",
+            "stress_level": 1,
+            "predicted_stress": 2,
+            "stress_score": 100,
+            "quality_score": 100,
+            "audio_extent_ms": [1040, 1220]
+          },
+          "phonemes": [
+            {
+              "phone": "[redacted]",
+              "quality_score": 99,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [1040, 1130],
+              "char_index": [0, 1]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": 1,
+              "audio_extent_ms": [1130, 1220],
+              "char_index": [1, 2]
+            }
+          ]
+        },
+        {
+          "word": "[redacted]",
+          "quality_score": 100,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "stress_level": 1,
+              "predicted_stress": 0,
+              "stress_score": 0,
+              "quality_score": 99,
+              "audio_extent_ms": [1220, 1430]
+            },
+            {
+              "letters": "[redacted]",
+              "stress_level": 2,
+              "predicted_stress": 1,
+              "stress_score": 100,
+              "quality_score": 100,
+              "audio_extent_ms": [1430, 1700]
+            }
+          ],
+          "phonemes": [
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [1220, 1280],
+              "char_index": [0, 1]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 98,
+              "sound_most_like": "[redacted]",
+              "stress_level": 1,
+              "audio_extent_ms": [1280, 1370],
+              "char_index": [1, 2]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [1370, 1430],
+              "char_index": [2, 3]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 99.8,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [1430, 1550],
+              "char_index": [4, 5]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 99.3,
+              "sound_most_like": "[redacted]",
+              "stress_level": 2,
+              "audio_extent_ms": [1550, 1640],
+              "char_index": [5, 7]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [1640, 1700],
+              "char_index": [7, 8]
+            }
+          ]
+        },
+        {
+          "word": "[redacted]",
+          "quality_score": 99,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "stress_level": 0,
+              "predicted_stress": 0,
+              "stress_score": 100,
+              "quality_score": 100,
+              "audio_extent_ms": [1700, 1820]
+            },
+            {
+              "letters": "[redacted]",
+              "stress_level": 1,
+              "predicted_stress": 1,
+              "stress_score": 100,
+              "quality_score": 98,
+              "audio_extent_ms": [1820, 2090]
+            }
+          ],
+          "phonemes": [
+            {
+              "phone": "[redacted]",
+              "quality_score": 99.5,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [1700, 1760],
+              "char_index": [0, 1]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": 0,
+              "audio_extent_ms": [1760, 1820],
+              "char_index": [1, 2]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [1820, 1910],
+              "char_index": [2, 3]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 94,
+              "sound_most_like": "[redacted]",
+              "stress_level": 1,
+              "audio_extent_ms": [1910, 1970],
+              "char_index": [3, 4]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [1970, 2090],
+              "char_index": [5, 6]
+            }
+          ]
+        },
+        {
+          "word": "[redacted]",
+          "quality_score": 100,
+          "quality_class": "[redacted]",
+          "syllables": {
+            "letters": "[redacted]",
+            "stress_level": 1,
+            "predicted_stress": 1,
+            "stress_score": 100,
+            "quality_score": 100,
+            "audio_extent_ms": [2090, 2180]
+          },
+          "phonemes": [
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": 1,
+              "audio_extent_ms": [2090, 2120],
+              "char_index": [0, 1]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [2120, 2180],
+              "char_index": [1, 2]
+            }
+          ]
+        },
+        {
+          "word": "[redacted]",
+          "quality_score": 100,
+          "quality_class": "[redacted]",
+          "syllables": {
+            "letters": "[redacted]",
+            "stress_level": 1,
+            "predicted_stress": 0,
+            "stress_score": 100,
+            "quality_score": 100,
+            "audio_extent_ms": [2180, 2360]
+          },
+          "phonemes": [
+            {
+              "phone": "[redacted]",
+              "quality_score": 99.7,
+              "sound_most_like": "[redacted]",
+              "stress_level": 1,
+              "audio_extent_ms": [2180, 2270],
+              "char_index": [0, 1]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [2270, 2360],
+              "char_index": [1, 2]
+            }
+          ]
+        },
+        {
+          "word": "[redacted]",
+          "quality_score": 99,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "stress_level": 1,
+              "predicted_stress": 1,
+              "stress_score": 100,
+              "quality_score": 99,
+              "audio_extent_ms": [2360, 2600]
+            },
+            {
+              "letters": "[redacted]",
+              "stress_level": 0,
+              "predicted_stress": 0,
+              "stress_score": 100,
+              "quality_score": 100,
+              "audio_extent_ms": [2600, 2810]
+            }
+          ],
+          "phonemes": [
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [2360, 2420],
+              "char_index": [0, 1]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 97.2,
+              "sound_most_like": "[redacted]",
+              "stress_level": 1,
+              "audio_extent_ms": [2420, 2570],
+              "char_index": [1, 3]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [2570, 2600],
+              "char_index": [3, 5]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 98.7,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [2600, 2690],
+              "char_index": [5, 6]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": 0,
+              "audio_extent_ms": [2690, 2720],
+              "char_index": [6, 7]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [2720, 2810],
+              "char_index": [7, 8]
+            }
+          ]
+        },
+        {
+          "word": "[redacted]",
+          "quality_score": 99,
+          "quality_class": "[redacted]",
+          "syllables": {
+            "letters": "[redacted]",
+            "stress_level": 1,
+            "predicted_stress": 1,
+            "stress_score": 100,
+            "quality_score": 99,
+            "audio_extent_ms": [2810, 2990]
+          },
+          "phonemes": [
+            {
+              "phone": "[redacted]",
+              "quality_score": 98.7,
+              "sound_most_like": "[redacted]",
+              "stress_level": 1,
+              "audio_extent_ms": [2810, 2900],
+              "char_index": [0, 1]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 99.5,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [2900, 2960],
+              "char_index": [1, 2]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [2960, 2990],
+              "char_index": [2, 3]
+            }
+          ]
+        },
+        {
+          "word": "[redacted]",
+          "quality_score": 100,
+          "quality_class": "[redacted]",
+          "syllables": {
+            "letters": "[redacted]",
+            "stress_level": 1,
+            "predicted_stress": 1,
+            "stress_score": 100,
+            "quality_score": 100,
+            "audio_extent_ms": [2990, 3320]
+          },
+          "phonemes": [
+            {
+              "phone": "[redacted]",
+              "quality_score": 99.7,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [2990, 3080],
+              "char_index": [0, 1]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [3080, 3140],
+              "char_index": [1, 2]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": 1,
+              "audio_extent_ms": [3140, 3230],
+              "char_index": [2, 3]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [3230, 3320],
+              "char_index": [3, 4]
+            }
+          ]
+        },
+        {
+          "word": "[redacted]",
+          "quality_score": 100,
+          "quality_class": "[redacted]",
+          "syllables": {
+            "letters": "[redacted]",
+            "stress_level": 1,
+            "predicted_stress": 1,
+            "stress_score": 100,
+            "quality_score": 100,
+            "audio_extent_ms": [3320, 3440]
+          },
+          "phonemes": [
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [3320, 3380],
+              "char_index": [0, 1]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": 1,
+              "audio_extent_ms": [3380, 3440],
+              "char_index": [1, 2]
+            }
+          ]
+        },
+        {
+          "word": "[redacted]",
+          "quality_score": 100,
+          "quality_class": "[redacted]",
+          "syllables": {
+            "letters": "[redacted]",
+            "stress_level": 1,
+            "predicted_stress": 2,
+            "stress_score": 100,
+            "quality_score": 100,
+            "audio_extent_ms": [3440, 3620]
+          },
+          "phonemes": [
+            {
+              "phone": "[redacted]",
+              "quality_score": 99.7,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [3440, 3530],
+              "char_index": [0, 1]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": 1,
+              "audio_extent_ms": [3530, 3620],
+              "char_index": [1, 2]
+            }
+          ]
+        },
+        {
+          "word": "[redacted]",
+          "quality_score": 99,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "stress_level": 1,
+              "predicted_stress": 1,
+              "stress_score": 100,
+              "quality_score": 100,
+              "audio_extent_ms": [3620, 3920]
+            },
+            {
+              "letters": "[redacted]",
+              "stress_level": 0,
+              "predicted_stress": 0,
+              "stress_score": 100,
+              "quality_score": 98,
+              "audio_extent_ms": [3920, 4130]
+            }
+          ],
+          "phonemes": [
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [3620, 3740],
+              "char_index": [0, 1]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 100,
+              "sound_most_like": "[redacted]",
+              "stress_level": 1,
+              "audio_extent_ms": [3740, 3830],
+              "char_index": [1, 2]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 99.7,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [3830, 3920],
+              "char_index": [2, 3]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 96.5,
+              "sound_most_like": "[redacted]",
+              "stress_level": null,
+              "audio_extent_ms": [3920, 3980],
+              "char_index": [4, 5]
+            },
+            {
+              "phone": "[redacted]",
+              "quality_score": 99.2,
+              "sound_most_like": "[redacted]",
+              "stress_level": 0,
+              "audio_extent_ms": [3980, 4130],
+              "char_index": [5, 6]
+            }
+          ]
+        }
+      ]
     },
     "language_analysis": {
-      "grammar_errors": [],
-      "vocabulary_upgrades": []
+      "grammar_errors": null,
+      "vocabulary_upgrades": [
+        {
+          "original_word": "[redacted]",
+          "suggested_word": "[redacted]",
+          "cefr_level": "[redacted]",
+          "context": "[redacted]",
+          "reason_vi": "[redacted]"
+        },
+        {
+          "original_word": "[redacted]",
+          "suggested_word": "[redacted]",
+          "cefr_level": "[redacted]",
+          "context": "[redacted]",
+          "reason_vi": "[redacted]"
+        },
+        {
+          "original_word": "[redacted]",
+          "suggested_word": "[redacted]",
+          "cefr_level": "[redacted]",
+          "context": "[redacted]",
+          "reason_vi": "[redacted]"
+        }
+      ]
     },
     "feedback": {
-      "summary_vi": "Bai noi mo dau tot.",
-      "strong_point_vi": "Phat am ro rang.",
-      "action_plan_vi": "Luyen tap phat trien y."
+      "summary_vi": "[redacted]",
+      "strong_point_vi": "[redacted]",
+      "action_plan_vi": "[redacted]"
     },
     "performance_timing": {
-      "total_seconds": 2.15,
-      "acoustic_processing_seconds": 1.85,
-      "language_processing_seconds": 1.12,
-      "stt_seconds": 0.38,
-      "speechace_seconds": 1.85,
-      "openrouter_seconds": 1.12,
-      "llm_seconds": 1.12,
+      "total_seconds": 4.24,
+      "acoustic_processing_seconds": 1.3,
+      "language_processing_seconds": 3.88,
+      "stt_seconds": 0.35,
       "storage_seconds": 0,
-      "db_seconds": 0
+      "db_seconds": 0,
+      "speechace_seconds": 1.3,
+      "deepseek_seconds": 3.88
     }
   }
 }

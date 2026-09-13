@@ -50,6 +50,71 @@ function requiredGroup(data: Record<string, unknown>, field: string): unknown {
   return value;
 }
 
+function normalizedCollection(
+  value: unknown,
+  field: string,
+  nullAsEmpty = false,
+): unknown[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (isRecord(value)) {
+    return [value];
+  }
+  if (value === null && nullAsEmpty) {
+    return [];
+  }
+  throw contractViolation(`field ${field} is not a collection`);
+}
+
+function normalizePronunciationDetail(value: unknown): unknown {
+  if (!isRecord(value)) {
+    throw contractViolation('missing object group pronunciation_detail');
+  }
+
+  const words = normalizedCollection(
+    value.words,
+    'pronunciation_detail.words',
+  ).map((word, index) => {
+    if (!isRecord(word)) {
+      throw contractViolation(`pronunciation word ${index} is not an object`);
+    }
+    return {
+      ...word,
+      syllables: normalizedCollection(
+        word.syllables,
+        `pronunciation_detail.words[${index}].syllables`,
+      ),
+      phonemes: normalizedCollection(
+        word.phonemes,
+        `pronunciation_detail.words[${index}].phonemes`,
+      ),
+    };
+  });
+
+  return { ...value, words };
+}
+
+function normalizeLanguageAnalysis(value: unknown): unknown {
+  if (!isRecord(value)) {
+    throw contractViolation('missing object group language_analysis');
+  }
+
+  return {
+    ...value,
+    grammar_errors: normalizedCollection(
+      value.grammar_errors,
+      'language_analysis.grammar_errors',
+      true,
+    ),
+    vocabulary_upgrades: normalizedCollection(
+      value.vocabulary_upgrades,
+      'language_analysis.vocabulary_upgrades',
+      true,
+    ),
+  };
+}
+
 /**
  * Maps only the documented Speaking result groups. The field-level schemas
  * reject unconfirmed nested provider fields, and unknown top-level fields are
@@ -74,8 +139,10 @@ export function parseSpeakingGradeResponse(
     transcript: requiredGroup(data, 'transcript'),
     relevance: requiredGroup(data, 'relevance'),
     fluency_metrics: requiredGroup(data, 'fluency_metrics'),
-    pronunciation_detail: requiredGroup(data, 'pronunciation_detail'),
-    language_analysis: requiredGroup(data, 'language_analysis'),
+    pronunciation_detail: normalizePronunciationDetail(
+      data.pronunciation_detail,
+    ),
+    language_analysis: normalizeLanguageAnalysis(data.language_analysis),
     feedback: requiredGroup(data, 'feedback'),
     performance_timing: requiredGroup(data, 'performance_timing'),
   };

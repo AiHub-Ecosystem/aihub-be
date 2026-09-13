@@ -1,13 +1,14 @@
 # AI Speaking grading provider contract v1
 
-Status: Draft for AI Speaking provider and WISPACE approval.
+Status: Draft; redacted live capture added on 2026-09-13, pending AI Speaking
+provider and WISPACE approval.
 
 Owner: AI Speaking service. Consumer: the AIHUB gateway.
 
-Sources: `API_Grading.md`, the D2 implementation contract, and
-`test/fixtures/ai-speaking/grading.response.json`. The fixture is currently
-contract-based and must be replaced or approved from an authenticated Dev
-response before anyone claims live compatibility.
+Sources: `API_Grading.md`, the D2 implementation contract, and the redacted
+live capture in `test/fixtures/ai-speaking/grading.response.json`. The capture
+must still be approved by the provider and WISPACE before anyone claims live
+compatibility.
 
 ## 1. Scope and endpoint ownership
 
@@ -82,17 +83,17 @@ an acceptable public contract.
 The provider success body is a JSON object with `status: "success"` and a
 `data` object. The following groups are the contract consumed by AIHUB:
 
-| Group                  | Required fields                                                                                                              |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `scorability`          | `is_scorable`, `confidence`, `display_band`, `message_vi`                                                                    |
-| `estimated_band`       | `overall`, `fluency_coherence`, `lexical_resource`, `grammatical_range_accuracy`, `pronunciation`; each is 0–9 in 0.5 steps. |
-| `transcript`           | `text`, non-negative `word_count`, non-negative `duration_seconds`                                                           |
-| `relevance`            | `on_topic`, `score` from 0–1, `feedback_vi`                                                                                  |
-| `fluency_metrics`      | non-negative `speech_rate_wpm`, `pause_count`, `mean_length_run_words`                                                       |
-| `pronunciation_detail` | `summary` counts plus per-word `word`, scores/classes, `syllables`, and `phonemes`                                           |
-| `language_analysis`    | `grammar_errors` and `vocabulary_upgrades` with the documented text fields                                                   |
-| `feedback`             | `summary_vi`, `strong_point_vi`, `action_plan_vi`                                                                            |
-| `performance_timing`   | non-negative processing durations, including total, acoustic, language, STT, and provider sub-pipeline timings               |
+| Group                  | Required fields                                                                                                                                                        |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scorability`          | `is_scorable`, `confidence`, `display_band`, `message_vi`                                                                                                              |
+| `estimated_band`       | `overall`, `fluency_coherence`, `lexical_resource`, `grammatical_range_accuracy`, `pronunciation`; each is 0–9 in 0.5 steps.                                           |
+| `transcript`           | `text`, non-negative `word_count`, non-negative `duration_seconds`                                                                                                     |
+| `relevance`            | `on_topic`, `score` from 0–1, `feedback_vi`                                                                                                                            |
+| `fluency_metrics`      | `speech_rate_wpm`, `pause_count`, and `mean_length_run_words`; each may be `null` when the provider cannot derive the metric. AIHUB must not replace `null` with zero. |
+| `pronunciation_detail` | `summary` counts plus per-word `word`, scores/classes, `syllables`, and `phonemes`                                                                                     |
+| `language_analysis`    | `grammar_errors` and `vocabulary_upgrades` with the documented text fields                                                                                             |
+| `feedback`             | `summary_vi`, `strong_point_vi`, `action_plan_vi`                                                                                                                      |
+| `performance_timing`   | non-negative processing durations, including total, acoustic, language, STT, storage, database, Speechace, and DeepSeek sub-pipeline timings                           |
 
 `question_id` is required in `data`; `test_type` may be a string or `null`.
 Provider-only identifiers such as `session_id`, `test_id`, and `user_id` may be

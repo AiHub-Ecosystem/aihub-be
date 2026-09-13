@@ -45,6 +45,14 @@ const BandSchema = Type.Number({
 
 const ScoreSchema = Type.Number({ minimum: 0, maximum: 100 });
 const NonNegativeNumberSchema = Type.Number({ minimum: 0 });
+const NullableNonNegativeNumberSchema = Type.Union([
+  NonNegativeNumberSchema,
+  Type.Null(),
+]);
+const NullableNonNegativeIntegerSchema = Type.Union([
+  Type.Integer({ minimum: 0 }),
+  Type.Null(),
+]);
 
 const ScorabilitySchema = Type.Object(
   {
@@ -87,9 +95,9 @@ const RelevanceSchema = Type.Object(
 
 const FluencyMetricsSchema = Type.Object(
   {
-    speech_rate_wpm: NonNegativeNumberSchema,
-    pause_count: Type.Integer({ minimum: 0 }),
-    mean_length_run_words: NonNegativeNumberSchema,
+    speech_rate_wpm: NullableNonNegativeNumberSchema,
+    pause_count: NullableNonNegativeIntegerSchema,
+    mean_length_run_words: NullableNonNegativeNumberSchema,
   },
   { additionalProperties: false },
 );
@@ -103,10 +111,10 @@ const SyllableSchema = Type.Object(
   {
     letters: Type.String(),
     stress_level: Type.Union([
-      Type.Integer({ minimum: 0, maximum: 1 }),
+      Type.Integer({ minimum: 0, maximum: 2 }),
       Type.Null(),
     ]),
-    predicted_stress: Type.Integer({ minimum: 0, maximum: 1 }),
+    predicted_stress: Type.Integer({ minimum: 0, maximum: 2 }),
     stress_score: ScoreSchema,
     quality_score: ScoreSchema,
     audio_extent_ms: AudioExtentSchema,
@@ -120,7 +128,7 @@ const PhonemeSchema = Type.Object(
     quality_score: ScoreSchema,
     sound_most_like: Type.String(),
     stress_level: Type.Union([
-      Type.Integer({ minimum: 0, maximum: 1 }),
+      Type.Integer({ minimum: 0, maximum: 2 }),
       Type.Null(),
     ]),
     audio_extent_ms: AudioExtentSchema,
@@ -201,8 +209,7 @@ const PerformanceTimingSchema = Type.Object(
     language_processing_seconds: NonNegativeNumberSchema,
     stt_seconds: NonNegativeNumberSchema,
     speechace_seconds: NonNegativeNumberSchema,
-    openrouter_seconds: NonNegativeNumberSchema,
-    llm_seconds: NonNegativeNumberSchema,
+    deepseek_seconds: NonNegativeNumberSchema,
     storage_seconds: NonNegativeNumberSchema,
     db_seconds: NonNegativeNumberSchema,
   },
