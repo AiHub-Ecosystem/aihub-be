@@ -81,7 +81,8 @@ services:
     <<: *app-common
     profiles:
       - migration
-    command: ["node", "scripts/migrate.mjs"]
+    entrypoint: ["node"]
+    command: ["scripts/migrate.mjs"]
     environment: *app-environment
     networks: *app-database-networks
     volumes:
