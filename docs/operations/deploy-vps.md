@@ -61,8 +61,8 @@ Use the existing production Wispace Redis without printing its credential:
 
 ```sh
 set -eu
-redis_host="$(vault kv get -field=REDIS_HOST secret/wispace-bots/messenger/prd)"
-redis_port="$(vault kv get -field=REDIS_PORT secret/wispace-bots/messenger/prd)"
+redis_host="redis.aihubproduction.com"
+redis_port="6379"
 redis_password="$(vault kv get -field=REDIS_PASSWORD secret/wispace-bots/messenger/prd)"
 redis_url="redis://:${redis_password}@${redis_host}:${redis_port}/0"
 tmp_env="$(mktemp)"
@@ -73,10 +73,10 @@ mv "$tmp_env" .env.production
 unset redis_host redis_port redis_password redis_url tmp_env
 ```
 
-The source bundle currently resolves to the private endpoint `172.24.0.1:6379`;
-the AIHUB container must run on the same VPS/network boundary. Do not grant the
-AIHUB runtime AppRole access to the `wispace-bots` path; the operator copies only
-the required connection into `.env.production`.
+The production Redis endpoint is `redis.aihubproduction.com:6379`; verify that
+the VPS firewall permits the Redis protocol before starting the gateway. Do not
+grant the AIHUB runtime AppRole access to the `wispace-bots` path; the operator
+copies only the required password into `.env.production`.
 
 ## Provision production Vault data
 
