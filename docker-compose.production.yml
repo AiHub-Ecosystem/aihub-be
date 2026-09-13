@@ -60,6 +60,8 @@ services:
       AIHUB_VAULT_ENVIRONMENT: production
       VAULT_ADDR: ${VAULT_ADDR:?VAULT_ADDR is required}
       VAULT_CACERT: /etc/aihub/vault/ca.pem
+      SKIP_CHOWN: "true"
+      SKIP_SETCAP: "true"
     volumes:
       - ${VAULT_ROLE_ID_FILE:?VAULT_ROLE_ID_FILE is required}:/run/secrets/vault/role_id:ro
       - ${VAULT_SECRET_ID_FILE:?VAULT_SECRET_ID_FILE is required}:/run/secrets/vault/secret_id:ro
