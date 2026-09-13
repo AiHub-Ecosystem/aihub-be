@@ -1,13 +1,14 @@
 # VPS deployment
 
-This is the production baseline for the single-node Compose deployment. It keeps
-Postgres private, uses the existing private Wispace Redis, renders downstream
-runtime credentials through Vault Agent, and terminates public TLS at Caddy.
+This is the production baseline for the single-node Compose deployment. It uses
+the existing production `aihub-db` and Wispace Redis, renders downstream runtime
+credentials through Vault Agent, and terminates public TLS at Caddy.
 
 ## Prerequisites
 
 - Docker Engine with the Compose plugin.
 - DNS `A/AAAA` for `AIHUB_PRODUCTION_HOST` pointing to this VPS; ports 80 and 443 open.
+- The existing Docker network `aihub_aihub-network` with a healthy `aihub-db` container.
 - A production Vault AppRole whose policy can read only `secret/data/aihub/production/*`.
 - An operator Vault session that can read the existing Wispace Redis bundle at
   `secret/wispace-bots/messenger/prd`.
@@ -38,6 +39,23 @@ Speaking credentials, and SeaweedFS credentials at runtime; do not put those val
 in `.env.production`. The shared Redis password is the one exception in this
 baseline: render only `REDIS_URL` into the mode-600 deployment file from the
 operator Vault session below.
+
+Point the gateway at the existing production database over the shared Docker
+network. The password must be URL-encoded inside `DATABASE_URL` (for example,
+`@` becomes `%40`):
+
+```text
+DATABASE_URL=postgresql://aihub_admin:<url-encoded-db-password>@aihub-db:5432/aihub
+AIHUB_DATABASE_NETWORK=aihub_aihub-network
+```
+
+The Compose file does not create a second Postgres service or volume. Verify the
+existing service before starting the gateway:
+
+```sh
+docker network inspect "${AIHUB_DATABASE_NETWORK:-aihub_aihub-network}" >/dev/null
+docker inspect --format '{{.State.Health.Status}}' aihub-db
+```
 
 Use the existing production Wispace Redis without printing its credential:
 
@@ -100,7 +118,7 @@ then start the app and Caddy:
 
 ```sh
 docker compose --env-file .env.production -f docker-compose.production.yml build app
-docker compose --env-file .env.production -f docker-compose.production.yml up -d postgres vault-agent
+docker compose --env-file .env.production -f docker-compose.production.yml up -d vault-agent
 docker compose --env-file .env.production -f docker-compose.production.yml --profile migration run --rm migrate
 docker compose --env-file .env.production -f docker-compose.production.yml up -d app caddy
 # Replace api.example.com with AIHUB_PRODUCTION_HOST from .env.production.
@@ -108,8 +126,8 @@ curl --fail https://api.example.com/health
 ```
 
 The migration container is one-shot. Do not run `docker compose down -v`; the
-Postgres named volume contains durable data. Redis is managed by the Wispace stack,
-so coordinate Redis maintenance and backups with that owner.
+Postgres and Redis data belong to the existing VPS stacks. Back up the existing
+`aihub` database before running a new migration set.
 
 ## Verify and operate
 
@@ -118,7 +136,7 @@ docker compose --env-file .env.production -f docker-compose.production.yml ps
 docker compose --env-file .env.production -f docker-compose.production.yml logs --tail=100 app vault-agent caddy
 ```
 
-Back up Postgres before releases and test restore separately. Rotate Vault
+Back up the existing Postgres before releases and test restore separately. Rotate Vault
 `secret_id` and downstream credentials using the Vault runbook, then restart
 `vault-agent` and `app` so the startup snapshot is re-rendered. Caddy renews ACME
 certificates automatically while ports 80/443 remain reachable.
