@@ -56,37 +56,6 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command:
-      - redis-server
-      - --appendonly
-      - "yes"
-      - --save
-      - "900 1"
-      - --save
-      - "300 10"
-      - --maxmemory-policy
-      - noeviction
-      - --requirepass
-      - ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-    volumes:
-      - redis-data:/data
-    expose:
-      - "6379"
-    networks:
-      - backend
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep PONG"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
-    security_opt:
-      - no-new-privileges:true
-
   vault-agent:
     image: ${VAULT_IMAGE:-hashicorp/vault:1.21.4}
     restart: unless-stopped
@@ -144,8 +113,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
       vault-agent:
         condition: service_healthy
     healthcheck:
@@ -189,7 +156,6 @@ services:
 
 volumes:
   postgres-data:
-  redis-data:
   caddy-data:
   caddy-config:
 

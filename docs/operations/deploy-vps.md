@@ -1,14 +1,16 @@
 # VPS deployment
 
 This is the production baseline for the single-node Compose deployment. It keeps
-Postgres and Redis private, renders runtime credentials through Vault Agent, and
-terminates public TLS at Caddy.
+Postgres private, uses the existing private Wispace Redis, renders downstream
+runtime credentials through Vault Agent, and terminates public TLS at Caddy.
 
 ## Prerequisites
 
 - Docker Engine with the Compose plugin.
 - DNS `A/AAAA` for `AIHUB_PRODUCTION_HOST` pointing to this VPS; ports 80 and 443 open.
 - A production Vault AppRole whose policy can read only `secret/data/aihub/production/*`.
+- An operator Vault session that can read the existing Wispace Redis bundle at
+  `secret/wispace-bots/messenger/prd`.
 - A CA file trusted by Vault, plus the AppRole `role_id` and one-use `secret_id`.
 - A release image in the registry, or a local Docker build.
 
@@ -30,10 +32,33 @@ cp .env.production.example .env.production
 chmod 600 .env.production
 ```
 
-Set real hostnames, database/Redis passwords, Vault address and file paths in
+Set real hostnames, database password, Vault address and file paths in
 `.env.production`. The Vault template supplies `DOWNSTREAM_AI_WRITING_TOKEN`,
 Speaking credentials, and SeaweedFS credentials at runtime; do not put those values
-in `.env.production`.
+in `.env.production`. The shared Redis password is the one exception in this
+baseline: render only `REDIS_URL` into the mode-600 deployment file from the
+operator Vault session below.
+
+Use the existing production Wispace Redis without printing its credential:
+
+```sh
+set -eu
+redis_host="$(vault kv get -field=REDIS_HOST secret/wispace-bots/messenger/prd)"
+redis_port="$(vault kv get -field=REDIS_PORT secret/wispace-bots/messenger/prd)"
+redis_password="$(vault kv get -field=REDIS_PASSWORD secret/wispace-bots/messenger/prd)"
+redis_url="redis://:${redis_password}@${redis_host}:${redis_port}/0"
+tmp_env="$(mktemp)"
+grep -v '^REDIS_URL=' .env.production > "$tmp_env"
+printf 'REDIS_URL=%s\n' "$redis_url" >> "$tmp_env"
+chmod 600 "$tmp_env"
+mv "$tmp_env" .env.production
+unset redis_host redis_port redis_password redis_url tmp_env
+```
+
+The source bundle currently resolves to the private endpoint `172.24.0.1:6379`;
+the AIHUB container must run on the same VPS/network boundary. Do not grant the
+AIHUB runtime AppRole access to the `wispace-bots` path; the operator copies only
+the required connection into `.env.production`.
 
 ## Provision production Vault data
 
@@ -75,15 +100,16 @@ then start the app and Caddy:
 
 ```sh
 docker compose --env-file .env.production -f docker-compose.production.yml build app
-docker compose --env-file .env.production -f docker-compose.production.yml up -d postgres redis vault-agent
+docker compose --env-file .env.production -f docker-compose.production.yml up -d postgres vault-agent
 docker compose --env-file .env.production -f docker-compose.production.yml --profile migration run --rm migrate
 docker compose --env-file .env.production -f docker-compose.production.yml up -d app caddy
 # Replace api.example.com with AIHUB_PRODUCTION_HOST from .env.production.
 curl --fail https://api.example.com/health
 ```
 
-The migration container is one-shot. Do not run `docker compose down -v`; named
-volumes contain the database and Redis data.
+The migration container is one-shot. Do not run `docker compose down -v`; the
+Postgres named volume contains durable data. Redis is managed by the Wispace stack,
+so coordinate Redis maintenance and backups with that owner.
 
 ## Verify and operate
 
@@ -92,11 +118,10 @@ docker compose --env-file .env.production -f docker-compose.production.yml ps
 docker compose --env-file .env.production -f docker-compose.production.yml logs --tail=100 app vault-agent caddy
 ```
 
-Back up Postgres before releases and test restore separately. Redis is protection
-state and can be rebuilt. Rotate Vault `secret_id` and downstream credentials using
-the Vault runbook, then restart `vault-agent` and `app` so the startup snapshot is
-re-rendered. Caddy renews ACME certificates automatically while ports 80/443 remain
-reachable.
+Back up Postgres before releases and test restore separately. Rotate Vault
+`secret_id` and downstream credentials using the Vault runbook, then restart
+`vault-agent` and `app` so the startup snapshot is re-rendered. Caddy renews ACME
+certificates automatically while ports 80/443 remain reachable.
 
 ## Rollback
 
