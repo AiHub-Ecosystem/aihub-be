@@ -84,6 +84,11 @@ services:
     command: ["node", "scripts/migrate.mjs"]
     environment: *app-environment
     networks: *app-database-networks
+    volumes:
+      - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro
+    depends_on:
+      vault-agent:
+        condition: service_healthy
     restart: "no"
 
   app:
