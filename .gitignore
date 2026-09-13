@@ -8,6 +8,7 @@ scripts/*.js
 .env
 .env.*
 !.env.example
+!.env.production.example
 # Vault Agent-rendered runtime secrets; keep the deployment destination outside
 # the repository whenever possible.
 runtime-secrets.json

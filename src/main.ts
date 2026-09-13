@@ -42,6 +42,8 @@ export async function bootstrap(): Promise<void> {
     }),
   );
 
+  app.enableShutdownHooks();
+
   registerSpeakingMultipartParser(app.getHttpAdapter().getInstance());
 
   // Registered directly on the raw Fastify instance rather than through

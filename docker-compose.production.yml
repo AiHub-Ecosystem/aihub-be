@@ -1,0 +1,198 @@
+name: aihub-production
+
+x-app-common: &app-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: ${AIHUB_IMAGE:-aihub-be:local}
+  init: true
+  user: "10001:10001"
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 150
+  mem_limit: 768m
+  cpus: 1.5
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=64m
+  networks:
+    - backend
+
+x-app-environment: &app-environment
+  NODE_ENV: production
+  PORT: "3000"
+  AIHUB_ALLOW_UNAUTHENTICATED_DEV: "false"
+  AIHUB_RUNTIME_SECRET_SOURCE: agent-file
+  AIHUB_RUNTIME_SECRETS_FILE: /run/secrets/aihub/runtime-secrets.json
+  AIHUB_PRODUCTION_HOST: ${AIHUB_PRODUCTION_HOST:?AIHUB_PRODUCTION_HOST is required}
+  AIHUB_STAGING_HOST: ${AIHUB_STAGING_HOST:?AIHUB_STAGING_HOST is required}
+  AIHUB_DEVELOPMENT_HOST: ${AIHUB_DEVELOPMENT_HOST:?AIHUB_DEVELOPMENT_HOST is required}
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+  REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+  DOWNSTREAM_AI_WRITING_URL: ${DOWNSTREAM_AI_WRITING_URL:?DOWNSTREAM_AI_WRITING_URL is required}
+  DOWNSTREAM_AI_SPEAKING_URL: ${DOWNSTREAM_AI_SPEAKING_URL:?DOWNSTREAM_AI_SPEAKING_URL is required}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-aihub}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --save
+      - "900 1"
+      - --save
+      - "300 10"
+      - --maxmemory-policy
+      - noeviction
+      - --requirepass
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    volumes:
+      - redis-data:/data
+    expose:
+      - "6379"
+    networks:
+      - backend
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    security_opt:
+      - no-new-privileges:true
+
+  vault-agent:
+    image: ${VAULT_IMAGE:-hashicorp/vault:1.21.4}
+    restart: unless-stopped
+    command:
+      - agent
+      - -config=/etc/aihub/vault/agent.hcl
+      - -log-level=info
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 50
+    mem_limit: 256m
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    environment:
+      AIHUB_VAULT_ENVIRONMENT: production
+      VAULT_ADDR: ${VAULT_ADDR:?VAULT_ADDR is required}
+      VAULT_CACERT: /etc/aihub/vault/ca.pem
+    volumes:
+      - ${VAULT_ROLE_ID_FILE:?VAULT_ROLE_ID_FILE is required}:/run/secrets/vault/role_id:ro
+      - ${VAULT_SECRET_ID_FILE:?VAULT_SECRET_ID_FILE is required}:/run/secrets/vault/secret_id:ro
+      - ${VAULT_CA_CERT_FILE:?VAULT_CA_CERT_FILE is required}:/etc/aihub/vault/ca.pem:ro
+      - ./ops/vault/agent/aihub-runtime.hcl:/etc/aihub/vault/agent.hcl:ro
+      - ./ops/vault/templates/runtime-secrets.json.ctmpl:/etc/aihub/vault/runtime-secrets.json.ctmpl:ro
+      - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "test -s /run/secrets/aihub/runtime-secrets.json"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    <<: *app-common
+    profiles:
+      - migration
+    command: ["node", "scripts/migrate.mjs"]
+    environment: *app-environment
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    <<: *app-common
+    environment: *app-environment
+    restart: unless-stopped
+    stop_grace_period: 90s
+    volumes:
+      - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vault-agent:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 12
+
+  caddy:
+    image: caddy:2.9.1-alpine
+    restart: unless-stopped
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
+      AIHUB_DOMAIN: ${AIHUB_PRODUCTION_HOST:?AIHUB_PRODUCTION_HOST is required}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./ops/deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - public
+      - backend
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+
+volumes:
+  postgres-data:
+  redis-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  public:
+  backend:
