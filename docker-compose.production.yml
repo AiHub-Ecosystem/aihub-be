@@ -88,6 +88,8 @@ services:
     <<: *app-common
     environment: *app-environment
     networks: *app-database-networks
+    ports:
+      - "127.0.0.1:${AIHUB_APP_PORT:-3021}:3000"
     restart: unless-stopped
     stop_grace_period: 90s
     volumes:

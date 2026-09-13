@@ -8,6 +8,7 @@ credentials through Vault Agent, and terminates public TLS at Caddy.
 
 - Docker Engine with the Compose plugin.
 - DNS `A/AAAA` for `AIHUB_PRODUCTION_HOST` pointing to this VPS; ports 80 and 443 open.
+- An existing reverse proxy may use `AIHUB_APP_PORT` (default `3021`) as its upstream.
 - The existing Docker network `aihub_aihub-network` with a healthy `aihub-db` container.
 - A production Vault AppRole whose policy can read only `secret/data/aihub/production/*`.
 - An operator Vault session that can read the existing Wispace Redis bundle at
@@ -120,7 +121,7 @@ then start the app and Caddy:
 docker compose --env-file .env.production -f docker-compose.production.yml build app
 docker compose --env-file .env.production -f docker-compose.production.yml up -d vault-agent
 docker compose --env-file .env.production -f docker-compose.production.yml --profile migration run --rm migrate
-docker compose --env-file .env.production -f docker-compose.production.yml up -d app caddy
+docker compose --env-file .env.production -f docker-compose.production.yml up -d app
 # Replace api.example.com with AIHUB_PRODUCTION_HOST from .env.production.
 curl --fail https://api.example.com/health
 ```
