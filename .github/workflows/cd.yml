@@ -132,7 +132,7 @@ jobs:
 
           "${compose[@]}" config --quiet
           "${compose[@]}" pull app
-          "${compose[@]}" --profile migration run --rm migrate
+          "${compose[@]}" --profile migration run --rm migrate </dev/null
           # The production VPS already terminates TLS and owns ports 80/443.
           "${compose[@]}" up -d --no-build --force-recreate app
 
