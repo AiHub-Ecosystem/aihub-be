@@ -10,10 +10,13 @@ credentials through Vault Agent, and terminates public TLS at Caddy.
 - DNS `A/AAAA` for `AIHUB_PRODUCTION_HOST` pointing to this VPS; ports 80 and 443 open.
 - An existing reverse proxy may use `AIHUB_APP_PORT` (default `3021`) as its upstream.
 - The existing Docker network `aihub_aihub-network` with a healthy `aihub-db` container.
-- A production Vault AppRole whose policy can read only `secret/data/aihub/production/*`.
+- A production Vault AppRole whose policy can read only
+  `secret/data/aihub/production/*` (required for the future Vault mode; the
+  temporary Stage A override below does not use it).
 - An operator Vault session that can read the existing Wispace Redis bundle at
   `secret/wispace-bots/messenger/prd`.
-- A CA file trusted by Vault, plus the AppRole `role_id` and one-use `secret_id`.
+- A CA file trusted by Vault, plus the AppRole `role_id` and one-use `secret_id`
+  (Vault mode only).
 - A release image in the registry, or a local Docker build.
 
 Do not reuse the development AppRole or the development rendered snapshot.
@@ -35,11 +38,12 @@ chmod 600 .env.production
 ```
 
 Set real hostnames, database password, Vault address and file paths in
-`.env.production`. The Vault template supplies `DOWNSTREAM_AI_WRITING_TOKEN`,
-Speaking credentials, and SeaweedFS credentials at runtime; do not put those values
-in `.env.production`. The shared Redis password is the one exception in this
-baseline: render only `REDIS_URL` into the mode-600 deployment file from the
-operator Vault session below.
+`.env.production`. In Vault-backed mode, the template supplies
+`DOWNSTREAM_AI_WRITING_TOKEN`, Speaking credentials, and SeaweedFS credentials at
+runtime; do not put those values in `.env.production`. The temporary Stage A
+exception is documented below. The shared Redis password is the one exception
+in the Vault baseline: render only `REDIS_URL` into the mode-600 deployment file
+from the operator Vault session below.
 
 Point the gateway at the existing production database over the shared Docker
 network. The password must be URL-encoded inside `DATABASE_URL` (for example,
@@ -79,7 +83,45 @@ the VPS firewall permits the Redis protocol before starting the gateway. Do not
 grant the AIHUB runtime AppRole access to the `wispace-bots` path; the operator
 copies only the required password into `.env.production`.
 
-## Provision production Vault data
+## Temporary Stage A env mode
+
+Until the Vault adoption trigger in issue #30 is met, use the explicit Compose
+override `docker-compose.production.env.yml`. It removes the Vault Agent
+dependency and passes the downstream credentials from the mode-600
+`.env.production` file to the app and migration containers.
+
+Set these values in `.env.production` without committing or printing them:
+
+```text
+AIHUB_RUNTIME_SECRET_SOURCE=env
+AIHUB_ALLOW_PRODUCTION_ENV_SECRETS=true
+DOWNSTREAM_AI_WRITING_TOKEN=<real-token>
+DOWNSTREAM_AI_SPEAKING_CLIENT_ID=<real-client-id>
+DOWNSTREAM_AI_SPEAKING_SECRET_KEY=<real-secret-key>
+```
+
+Validate and start the temporary stack:
+
+```sh
+sudo -n docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  -f docker-compose.production.env.yml config --quiet
+sudo -n docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  -f docker-compose.production.env.yml pull app
+sudo -n docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  -f docker-compose.production.env.yml --profile migration run --rm --no-build migrate
+sudo -n docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  -f docker-compose.production.env.yml up -d --no-build app caddy
+```
+
+This is a deliberate temporary exception: keep `.env.production` at mode 600,
+rotate the long-lived provider credentials after Vault cutover, and remove the
+override from the CD command when `agent-file` is ready.
+
+## Provision production Vault data (future)
 
 Use the repository helper with the production operator workflow. It writes only the
 three production KV paths and never prints secret values:
@@ -105,7 +147,7 @@ AIHUB_VAULT_ENVIRONMENT=production \
 Run the smoke command from a Vault CLI session authenticated as the generated
 non-root AppRole, not as the provisioning operator or a root token.
 
-## Start the stack
+## Start the Vault-backed stack (future)
 
 Validate interpolation first; this does not start containers:
 
@@ -147,3 +189,27 @@ certificates automatically while ports 80/443 remain reachable.
 Set `AIHUB_IMAGE` to the previous immutable image tag, run
 `docker compose ... up -d app`, and verify `/health` plus one authenticated staging request before reopening
 traffic. Never roll back by deleting the database volume.
+
+## GitHub Actions CD
+
+The `CD` workflow publishes the tested `main` commit to GHCR, then deploys that
+immutable image over SSH after `CI` succeeds. The VPS must already be prepared
+using this runbook, with the Compose files and `.env.production` in the app
+directory. The deploy user must be allowed to run Docker non-interactively,
+either directly or via passwordless `sudo -n docker`.
+
+Create a protected GitHub Environment named `production` and add these secrets:
+
+- `VPS_HOST`
+- `VPS_USER`
+- `VPS_SSH_PORT` (optional; defaults to `22`)
+- `VPS_APP_DIR`
+- `VPS_SSH_PRIVATE_KEY`
+- `VPS_SSH_KNOWN_HOSTS` (the trusted host-key line for the VPS)
+- `GHCR_USERNAME`
+- `GHCR_PULL_TOKEN` (a read-only token with `read:packages`)
+
+The workflow uses the commit SHA as the release tag and also updates `latest`.
+The SHA tag is what the VPS deploys, so rollback remains the immutable-image
+procedure above. Keep all runtime, database, Vault, and downstream credentials
+in the VPS/Vault setup; never add them to GitHub Actions or the repository.

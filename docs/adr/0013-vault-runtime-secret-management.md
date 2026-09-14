@@ -75,6 +75,15 @@ When the Vault adoption trigger is met, implement the following boundary:
 - The current Stage A `.env` decision remains valid until its documented Vault
   adoption trigger is met.
 
+## Temporary Stage A operating exception
+
+Until the Vault adoption trigger is met, production may use the explicit
+`docker-compose.production.env.yml` override with
+`AIHUB_ALLOW_PRODUCTION_ENV_SECRETS=true`. The deployment `.env.production`
+file remains outside Git, is mode `600`, and is never copied into CI output or
+logs. The override is removed during the issue #30 Vault cutover, followed by
+rotation and removal of the long-lived downstream credentials.
+
 ## Rejected alternatives
 
 - Direct AppRole login and renewal inside NestJS, which expands application

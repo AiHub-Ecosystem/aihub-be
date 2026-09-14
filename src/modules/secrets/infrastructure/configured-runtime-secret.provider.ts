@@ -17,6 +17,7 @@ export interface RuntimeSecretProviderOptions {
   readonly nodeEnv: string | undefined;
   readonly source: string | undefined;
   readonly secretsFile: string | undefined;
+  readonly allowProductionEnvSecrets?: boolean;
   readonly values: SecretValues;
   readonly readFile?: ReadFile;
 }
@@ -33,6 +34,8 @@ export function createRuntimeSecretProviderFromProcessEnvironment(): RuntimeSecr
     nodeEnv: process.env.NODE_ENV,
     source: process.env.AIHUB_RUNTIME_SECRET_SOURCE,
     secretsFile: process.env.AIHUB_RUNTIME_SECRETS_FILE,
+    allowProductionEnvSecrets:
+      process.env.AIHUB_ALLOW_PRODUCTION_ENV_SECRETS === 'true',
     values: process.env,
   });
 }
@@ -62,7 +65,11 @@ function resolveSource(
     if (
       explicitSource === 'env' &&
       options.nodeEnv !== 'development' &&
-      options.nodeEnv !== 'test'
+      options.nodeEnv !== 'test' &&
+      !(
+        options.nodeEnv === 'production' &&
+        options.allowProductionEnvSecrets === true
+      )
     ) {
       throw configurationError(
         'environment source is allowed only for local development and tests',

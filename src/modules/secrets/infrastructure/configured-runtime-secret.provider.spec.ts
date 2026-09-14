@@ -93,6 +93,39 @@ describe('ConfiguredRuntimeSecretProvider', () => {
     );
   });
 
+  it('allows production env secrets only with an explicit opt-in', () => {
+    const provider = new ConfiguredRuntimeSecretProvider(
+      options({
+        nodeEnv: 'production',
+        source: 'env',
+        allowProductionEnvSecrets: true,
+      }),
+    );
+
+    expect(provider.getSnapshot()).toEqual({
+      aiSpeaking: {
+        clientId: speakingClient,
+        secretKey: speakingSecret,
+      },
+      aiWriting: { token: writingToken },
+    });
+  });
+
+  it('does not extend the production opt-in to staging', () => {
+    expect(
+      () =>
+        new ConfiguredRuntimeSecretProvider(
+          options({
+            nodeEnv: 'staging',
+            source: 'env',
+            allowProductionEnvSecrets: true,
+          }),
+        ),
+    ).toThrow(
+      'environment source is allowed only for local development and tests',
+    );
+  });
+
   it('rejects unexpected Agent-file root and bundle fields', () => {
     expect(
       () =>

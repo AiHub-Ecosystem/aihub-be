@@ -1,0 +1,162 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish image
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}
+      IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - name: Check out tested commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image tag
+        id: image
+        shell: bash
+        run: echo "image=${IMAGE_NAME}:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.image.outputs.image }}
+            ${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to VPS
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    env:
+      AIHUB_IMAGE: ${{ needs.publish.outputs.image }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PORT: ${{ secrets.VPS_SSH_PORT || '22' }}
+      VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
+    steps:
+      - name: Configure SSH
+        id: ssh
+        shell: bash
+        env:
+          VPS_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          test -n "$VPS_PRIVATE_KEY"
+          test -n "$VPS_KNOWN_HOSTS"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VPS_PRIVATE_KEY" > "$HOME/.ssh/aihub-deploy"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/aihub-deploy"
+          chmod 644 "$HOME/.ssh/known_hosts"
+
+      - name: Log in to GHCR on VPS
+        shell: bash
+        env:
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: |
+          set -eu
+          test -n "$GHCR_USERNAME"
+          test -n "$GHCR_PULL_TOKEN"
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          printf '%s' "$GHCR_PULL_TOKEN" | ssh "${ssh_opts[@]}" "$target" \
+            "sudo -n docker login ghcr.io --username '$GHCR_USERNAME' --password-stdin"
+
+      - name: Deploy release
+        shell: bash
+        run: |
+          set -eu
+          test -n "$VPS_APP_DIR"
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          image_arg="$(printf '%q' "$AIHUB_IMAGE")"
+          ssh "${ssh_opts[@]}" "$target" \
+            "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
+          set -eu
+          cd "$APP_DIR"
+          compose=(sudo -n docker compose --env-file .env.production -f docker-compose.production.yml -f docker-compose.production.env.yml)
+
+          "${compose[@]}" config --quiet
+          "${compose[@]}" pull app
+          "${compose[@]}" --profile migration run --rm --no-build migrate
+          "${compose[@]}" up -d --no-build app caddy
+
+          app_id="$("${compose[@]}" ps -q app)"
+          test -n "$app_id"
+          healthy=0
+          status=""
+          for attempt in $(seq 1 45); do
+            status="$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$app_id" 2>/dev/null || true)"
+            if [ "$status" = healthy ]; then
+              healthy=1
+              break
+            fi
+            if [ "$status" = unhealthy ]; then
+              break
+            fi
+            sleep 2
+          done
+          if [ "$healthy" -ne 1 ]; then
+            "${compose[@]}" ps
+            printf 'app health status: %s\n' "$status" >&2
+            exit 1
+          fi
+
+          caddy_id="$("${compose[@]}" ps -q caddy)"
+          test -n "$caddy_id"
+          test "$(sudo -n docker inspect --format '{{.State.Status}}' "$caddy_id")" = running
+          REMOTE
+
+      - name: Log out of GHCR on VPS
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          ssh "${ssh_opts[@]}" "$target" "sudo -n docker logout ghcr.io >/dev/null 2>&1 || true"

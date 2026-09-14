@@ -9,13 +9,16 @@ is met.
 
 AIHUB supports two sources:
 
-- `AIHUB_RUNTIME_SECRET_SOURCE=env` — development/test only; reads the existing
-  downstream credential variables from the local environment.
+- `AIHUB_RUNTIME_SECRET_SOURCE=env` — development/test by default. A temporary
+  production exception is available only through the tracked Stage A Compose
+  override with `AIHUB_ALLOW_PRODUCTION_ENV_SECRETS=true` and a mode-600
+  deployment `.env.production` file.
 - `AIHUB_RUNTIME_SECRET_SOURCE=agent-file` plus
   `AIHUB_RUNTIME_SECRETS_FILE=<agent-rendered JSON path>` — the Dev/Staging/
   Production path. The application reads the file once during startup.
 
-Production and Dev must never silently fall back from an Agent file to `.env`.
+Production and Dev must never silently fall back from an Agent file to `.env`;
+the temporary production exception is explicit and tracked by issue #30.
 If a required bundle is missing or malformed, startup fails closed. A process
 that has already loaded a valid snapshot continues using that in-memory
 snapshot during a temporary Vault/Agent outage; it does not read Vault per
@@ -60,13 +63,13 @@ scope for V1.
 
 ## Failure matrix
 
-| Condition                                  | Expected behavior                               |
-| ------------------------------------------ | ----------------------------------------------- |
-| Missing Agent file before startup          | Dev/Production refuse to start                  |
-| Malformed or incomplete bundle             | Refuse to start with a safe configuration error |
-| Vault unavailable after snapshot load      | Current process keeps its in-memory snapshot    |
-| Local explicit `env` source                | Allowed only in development/test                |
-| Root or non-expiring root-derived identity | Forbidden for AIHUB                             |
+| Condition                                  | Expected behavior                                                      |
+| ------------------------------------------ | ---------------------------------------------------------------------- |
+| Missing Agent file before startup          | Dev/Production refuse to start                                         |
+| Malformed or incomplete bundle             | Refuse to start with a safe configuration error                        |
+| Vault unavailable after snapshot load      | Current process keeps its in-memory snapshot                           |
+| Local explicit `env` source                | Allowed in development/test; temporary production override is explicit |
+| Root or non-expiring root-derived identity | Forbidden for AIHUB                                                    |
 
 See ADR-0013 and issue #30 for the architectural decision and adoption scope.
 
