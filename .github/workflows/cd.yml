@@ -121,6 +121,13 @@ jobs:
             "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
           set -eu
           cd "$APP_DIR"
+          env_tmp="$(mktemp .env.production.tmp.XXXXXX)"
+          trap 'rm -f "$env_tmp"' EXIT
+          awk '!/^AIHUB_IMAGE=/' .env.production >"$env_tmp"
+          printf 'AIHUB_IMAGE=%s\n' "$AIHUB_IMAGE" >>"$env_tmp"
+          chmod 600 "$env_tmp"
+          mv "$env_tmp" .env.production
+          trap - EXIT
           compose=(sudo -n docker compose --env-file .env.production -f docker-compose.production.yml -f docker-compose.production.env.yml)
 
           "${compose[@]}" config --quiet
