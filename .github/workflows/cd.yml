@@ -133,7 +133,8 @@ jobs:
           "${compose[@]}" config --quiet
           "${compose[@]}" pull app
           "${compose[@]}" --profile migration run --rm migrate
-          "${compose[@]}" up -d --no-build --force-recreate app caddy
+          # The production VPS already terminates TLS and owns ports 80/443.
+          "${compose[@]}" up -d --no-build --force-recreate app
 
           app_id="$("${compose[@]}" ps -q app)"
           test -n "$app_id"
@@ -156,9 +157,6 @@ jobs:
             exit 1
           fi
 
-          caddy_id="$("${compose[@]}" ps -q caddy)"
-          test -n "$caddy_id"
-          test "$(sudo -n docker inspect --format '{{.State.Status}}' "$caddy_id")" = running
           REMOTE
 
       - name: Log out of GHCR on VPS
