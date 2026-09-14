@@ -2,12 +2,13 @@
 
 Technical Specification Document (TSD)
 
-- Status: Review (not Approved)
+- Status: Approved
 - Version: v1.0
 - Date: 2026-09-14
 - Scope owner: AIHUB Tech Lead
 - Review roles: AI Speaking service owner; WISPACE integration owner
-- Review date: TBD
+- Review date: 2026-09-14
+- Approval: AI Speaking service owner and WISPACE integration owner confirmed approval on 2026-09-14
 - Related issues: #24, #25, #27
 
 This document specifies the synchronous D2 Speaking grading proxy. It does
@@ -294,9 +295,9 @@ circuit-breaker implementation.
   semantics require a new version and role-owned review. The executable
   schema, redacted fixture, tests, generated artifacts, and this TSD must be
   updated together before approval.
-- Once Approved, this TSD is the shared human vocabulary for generated
-  Postman artifacts, the test UI, Production smoke, and Deli 3 endpoint
-  expansion; executable schemas remain the machine-readable source of truth.
+- This Approved TSD is the shared human vocabulary for generated Postman
+  artifacts, the test UI, Production smoke, and Deli 3 endpoint expansion;
+  executable schemas remain the machine-readable source of truth.
 
 ## Traceability and review
 
@@ -313,21 +314,20 @@ circuit-breaker implementation.
 | 9. Error matrix               | dispatcher; error-code registry; controller tests                   | N/A — status mappings                      | #24 production handoff; negative paths automated |
 | 10. Operational/security      | deadline/cancellation dispatcher; multipart limits; redaction tests | Redacted fixture contains no secrets/audio | #24 accepted Production smoke substitute         |
 
-| Review role               | Status  | Owner                     | Review date | Follow-up date |
-| ------------------------- | ------- | ------------------------- | ----------- | -------------- |
-| AIHUB Tech Lead           | Pending | AIHUB Tech Lead           | TBD         | TBD            |
-| AI Speaking service owner | Pending | AI Speaking service owner | TBD         | TBD            |
-| WISPACE integration owner | Pending | WISPACE integration owner | TBD         | TBD            |
+| Review role               | Status   | Owner                     | Review date | Follow-up date |
+| ------------------------- | -------- | ------------------------- | ----------- | -------------- |
+| AIHUB Tech Lead           | Approved | AIHUB Tech Lead           | 2026-09-14  | N/A — approved |
+| AI Speaking service owner | Approved | AI Speaking service owner | 2026-09-14  | N/A — approved |
+| WISPACE integration owner | Approved | WISPACE integration owner | 2026-09-14  | N/A — approved |
 
-| Open review item                                       | Owner role                | Follow-up date | Status |
-| ------------------------------------------------------ | ------------------------- | -------------- | ------ |
-| Approve redacted fixture and normalized scoring groups | AI Speaking service owner | TBD            | Open   |
-| Approve error matrix and integration handoff           | WISPACE integration owner | TBD            | Open   |
+| Review item                                    | Owner role                | Follow-up date | Status   |
+| ---------------------------------------------- | ------------------------- | -------------- | -------- |
+| Redacted fixture and normalized scoring groups | AI Speaking service owner | N/A — approved | Resolved |
+| Error matrix and integration handoff           | WISPACE integration owner | N/A — approved | Resolved |
 
-This TSD remains Review until the normalized fixture, scoring groups, and
-error matrix are approved by the service owner and WISPACE. Any unresolved
-point must name one role owner and a follow-up date; TBD does not satisfy the
-Approved state.
+This TSD is Approved based on the service owner and WISPACE approvals
+confirmed on 2026-09-14. Any future unresolved point must name one role owner
+and a follow-up date before a version change is approved.
 
 The older docs/aihub_long_term_architecture.md contains a conflicting
 async/JSON and 10 MB media description. For this D2 slice, the implementation
