@@ -125,7 +125,7 @@ jobs:
 
           "${compose[@]}" config --quiet
           "${compose[@]}" pull app
-          "${compose[@]}" --profile migration run --rm --no-build migrate
+          "${compose[@]}" --profile migration run --rm migrate
           "${compose[@]}" up -d --no-build app caddy
 
           app_id="$("${compose[@]}" ps -q app)"
