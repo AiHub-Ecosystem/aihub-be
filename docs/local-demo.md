@@ -346,9 +346,10 @@ curl -sS -X POST "$AIHUB_BASE_URL/v1/speaking/grading" \
 The response uses the common `{ "data", "meta" }` envelope and has
 `meta.operation` equal to `speaking.grading`. The normalized data contains the
 scorability, estimated band, transcript, relevance, fluency, pronunciation,
-language-analysis, feedback, and timing groups. The current automated fixture
-is contract-based; run an authenticated Dev smoke test before treating the
-provider response shape as live-compatible.
+language-analysis, and feedback groups. Provider `performance_timing` is
+intentionally omitted; gateway timing remains in `meta.timing`. The current
+automated fixture is contract-based; run an authenticated Dev smoke test before
+treating the provider response shape as live-compatible.
 
 ## 7. Verify idempotency
 

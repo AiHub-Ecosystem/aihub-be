@@ -50,19 +50,20 @@ function requiredGroup(data: Record<string, unknown>, field: string): unknown {
   return value;
 }
 
-function normalizedCollection(
-  value: unknown,
+function requiredNullableGroup(
+  data: Record<string, unknown>,
   field: string,
-  nullAsEmpty = false,
-): unknown[] {
+): Record<string, unknown> | null {
+  const value = data[field];
+  if (value !== null && !isRecord(value)) {
+    throw contractViolation(`missing object or null group ${field}`);
+  }
+  return value;
+}
+
+function requiredCollection(value: unknown, field: string): unknown[] {
   if (Array.isArray(value)) {
     return value;
-  }
-  if (isRecord(value)) {
-    return [value];
-  }
-  if (value === null && nullAsEmpty) {
-    return [];
   }
   throw contractViolation(`field ${field} is not a collection`);
 }
@@ -72,7 +73,7 @@ function normalizePronunciationDetail(value: unknown): unknown {
     throw contractViolation('missing object group pronunciation_detail');
   }
 
-  const words = normalizedCollection(
+  const words = requiredCollection(
     value.words,
     'pronunciation_detail.words',
   ).map((word, index) => {
@@ -81,11 +82,11 @@ function normalizePronunciationDetail(value: unknown): unknown {
     }
     return {
       ...word,
-      syllables: normalizedCollection(
+      syllables: requiredCollection(
         word.syllables,
         `pronunciation_detail.words[${index}].syllables`,
       ),
-      phonemes: normalizedCollection(
+      phonemes: requiredCollection(
         word.phonemes,
         `pronunciation_detail.words[${index}].phonemes`,
       ),
@@ -102,15 +103,13 @@ function normalizeLanguageAnalysis(value: unknown): unknown {
 
   return {
     ...value,
-    grammar_errors: normalizedCollection(
+    grammar_errors: requiredCollection(
       value.grammar_errors,
       'language_analysis.grammar_errors',
-      true,
     ),
-    vocabulary_upgrades: normalizedCollection(
+    vocabulary_upgrades: requiredCollection(
       value.vocabulary_upgrades,
       'language_analysis.vocabulary_upgrades',
-      true,
     ),
   };
 }
@@ -138,13 +137,12 @@ export function parseSpeakingGradeResponse(
     estimated_band: requiredGroup(data, 'estimated_band'),
     transcript: requiredGroup(data, 'transcript'),
     relevance: requiredGroup(data, 'relevance'),
-    fluency_metrics: requiredGroup(data, 'fluency_metrics'),
+    fluency_metrics: requiredNullableGroup(data, 'fluency_metrics'),
     pronunciation_detail: normalizePronunciationDetail(
       data.pronunciation_detail,
     ),
     language_analysis: normalizeLanguageAnalysis(data.language_analysis),
     feedback: requiredGroup(data, 'feedback'),
-    performance_timing: requiredGroup(data, 'performance_timing'),
   };
 
   if (!Value.Check(SpeakingGradeResponseSchema, normalized)) {

@@ -15,9 +15,9 @@
     "estimated_band": {
       "overall": 6.5,
       "fluency_coherence": 6.5,
-      "lexical_resource": 5,
-      "grammatical_range_accuracy": 5,
-      "pronunciation": 9
+      "lexical_resource": 5.0,
+      "grammatical_range_accuracy": 5.0,
+      "pronunciation": 9.0
     },
     "transcript": {
       "text": "[redacted]",
@@ -26,7 +26,7 @@
     },
     "relevance": {
       "on_topic": true,
-      "score": 1,
+      "score": 1.0,
       "feedback_vi": "[redacted]"
     },
     "fluency_metrics": {
@@ -43,51 +43,55 @@
       "words": [
         {
           "word": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 100.0,
           "quality_class": "[redacted]",
-          "syllables": {
-            "letters": "[redacted]",
-            "stress_level": 1,
-            "predicted_stress": 1,
-            "stress_score": 100,
-            "quality_score": 100,
-            "audio_extent_ms": [110, 230]
-          },
-          "phonemes": {
-            "phone": "[redacted]",
-            "quality_score": 100,
-            "sound_most_like": "[redacted]",
-            "stress_level": 1,
-            "audio_extent_ms": [110, 230],
-            "char_index": [0, 1]
-          }
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "stress_level": 1,
+              "predicted_stress": 1,
+              "stress_score": 100.0,
+              "quality_score": 100.0,
+              "audio_extent_ms": [110, 230]
+            }
+          ],
+          "phonemes": [
+            {
+              "phone": "[redacted]",
+              "quality_score": 100.0,
+              "sound_most_like": "[redacted]",
+              "stress_level": 1,
+              "audio_extent_ms": [110, 230],
+              "char_index": [0, 1]
+            }
+          ]
         },
         {
           "word": "[redacted]",
-          "quality_score": 98,
+          "quality_score": 98.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
               "stress_level": 0,
               "predicted_stress": 0,
-              "stress_score": 100,
-              "quality_score": 96,
+              "stress_score": 100.0,
+              "quality_score": 96.0,
               "audio_extent_ms": [230, 380]
             },
             {
               "letters": "[redacted]",
               "stress_level": 1,
               "predicted_stress": 1,
-              "stress_score": 100,
-              "quality_score": 99,
+              "stress_score": 100.0,
+              "quality_score": 99.0,
               "audio_extent_ms": [380, 590]
             }
           ],
           "phonemes": [
             {
               "phone": "[redacted]",
-              "quality_score": 92,
+              "quality_score": 92.0,
               "sound_most_like": "[redacted]",
               "stress_level": 0,
               "audio_extent_ms": [230, 290],
@@ -95,7 +99,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [290, 380],
@@ -121,23 +125,23 @@
         },
         {
           "word": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 100.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
               "stress_level": 1,
               "predicted_stress": 1,
-              "stress_score": 100,
-              "quality_score": 100,
+              "stress_score": 100.0,
+              "quality_score": 100.0,
               "audio_extent_ms": [590, 800]
             },
             {
               "letters": "[redacted]",
               "stress_level": 0,
               "predicted_stress": 0,
-              "stress_score": 100,
-              "quality_score": 100,
+              "stress_score": 100.0,
+              "quality_score": 100.0,
               "audio_extent_ms": [800, 890]
             }
           ],
@@ -152,7 +156,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": 1,
               "audio_extent_ms": [680, 740],
@@ -168,7 +172,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": 0,
               "audio_extent_ms": [800, 830],
@@ -176,7 +180,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [830, 890],
@@ -186,16 +190,18 @@
         },
         {
           "word": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 100.0,
           "quality_class": "[redacted]",
-          "syllables": {
-            "letters": "[redacted]",
-            "stress_level": 0,
-            "predicted_stress": 0,
-            "stress_score": 100,
-            "quality_score": 100,
-            "audio_extent_ms": [890, 1040]
-          },
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "stress_level": 0,
+              "predicted_stress": 0,
+              "stress_score": 100.0,
+              "quality_score": 100.0,
+              "audio_extent_ms": [890, 1040]
+            }
+          ],
           "phonemes": [
             {
               "phone": "[redacted]",
@@ -207,7 +213,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [980, 1040],
@@ -217,20 +223,22 @@
         },
         {
           "word": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 100.0,
           "quality_class": "[redacted]",
-          "syllables": {
-            "letters": "[redacted]",
-            "stress_level": 1,
-            "predicted_stress": 2,
-            "stress_score": 100,
-            "quality_score": 100,
-            "audio_extent_ms": [1040, 1220]
-          },
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "stress_level": 1,
+              "predicted_stress": 2,
+              "stress_score": 100.0,
+              "quality_score": 100.0,
+              "audio_extent_ms": [1040, 1220]
+            }
+          ],
           "phonemes": [
             {
               "phone": "[redacted]",
-              "quality_score": 99,
+              "quality_score": 99.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [1040, 1130],
@@ -238,7 +246,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": 1,
               "audio_extent_ms": [1130, 1220],
@@ -248,30 +256,30 @@
         },
         {
           "word": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 100.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
               "stress_level": 1,
               "predicted_stress": 0,
-              "stress_score": 0,
-              "quality_score": 99,
+              "stress_score": 0.0,
+              "quality_score": 99.0,
               "audio_extent_ms": [1220, 1430]
             },
             {
               "letters": "[redacted]",
               "stress_level": 2,
               "predicted_stress": 1,
-              "stress_score": 100,
-              "quality_score": 100,
+              "stress_score": 100.0,
+              "quality_score": 100.0,
               "audio_extent_ms": [1430, 1700]
             }
           ],
           "phonemes": [
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [1220, 1280],
@@ -279,7 +287,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 98,
+              "quality_score": 98.0,
               "sound_most_like": "[redacted]",
               "stress_level": 1,
               "audio_extent_ms": [1280, 1370],
@@ -287,7 +295,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [1370, 1430],
@@ -311,7 +319,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [1640, 1700],
@@ -321,23 +329,23 @@
         },
         {
           "word": "[redacted]",
-          "quality_score": 99,
+          "quality_score": 99.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
               "stress_level": 0,
               "predicted_stress": 0,
-              "stress_score": 100,
-              "quality_score": 100,
+              "stress_score": 100.0,
+              "quality_score": 100.0,
               "audio_extent_ms": [1700, 1820]
             },
             {
               "letters": "[redacted]",
               "stress_level": 1,
               "predicted_stress": 1,
-              "stress_score": 100,
-              "quality_score": 98,
+              "stress_score": 100.0,
+              "quality_score": 98.0,
               "audio_extent_ms": [1820, 2090]
             }
           ],
@@ -352,7 +360,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": 0,
               "audio_extent_ms": [1760, 1820],
@@ -360,7 +368,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [1820, 1910],
@@ -368,7 +376,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 94,
+              "quality_score": 94.0,
               "sound_most_like": "[redacted]",
               "stress_level": 1,
               "audio_extent_ms": [1910, 1970],
@@ -376,7 +384,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [1970, 2090],
@@ -386,20 +394,22 @@
         },
         {
           "word": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 100.0,
           "quality_class": "[redacted]",
-          "syllables": {
-            "letters": "[redacted]",
-            "stress_level": 1,
-            "predicted_stress": 1,
-            "stress_score": 100,
-            "quality_score": 100,
-            "audio_extent_ms": [2090, 2180]
-          },
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "stress_level": 1,
+              "predicted_stress": 1,
+              "stress_score": 100.0,
+              "quality_score": 100.0,
+              "audio_extent_ms": [2090, 2180]
+            }
+          ],
           "phonemes": [
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": 1,
               "audio_extent_ms": [2090, 2120],
@@ -407,7 +417,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [2120, 2180],
@@ -417,16 +427,18 @@
         },
         {
           "word": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 100.0,
           "quality_class": "[redacted]",
-          "syllables": {
-            "letters": "[redacted]",
-            "stress_level": 1,
-            "predicted_stress": 0,
-            "stress_score": 100,
-            "quality_score": 100,
-            "audio_extent_ms": [2180, 2360]
-          },
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "stress_level": 1,
+              "predicted_stress": 0,
+              "stress_score": 100.0,
+              "quality_score": 100.0,
+              "audio_extent_ms": [2180, 2360]
+            }
+          ],
           "phonemes": [
             {
               "phone": "[redacted]",
@@ -438,7 +450,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [2270, 2360],
@@ -448,30 +460,30 @@
         },
         {
           "word": "[redacted]",
-          "quality_score": 99,
+          "quality_score": 99.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
               "stress_level": 1,
               "predicted_stress": 1,
-              "stress_score": 100,
-              "quality_score": 99,
+              "stress_score": 100.0,
+              "quality_score": 99.0,
               "audio_extent_ms": [2360, 2600]
             },
             {
               "letters": "[redacted]",
               "stress_level": 0,
               "predicted_stress": 0,
-              "stress_score": 100,
-              "quality_score": 100,
+              "stress_score": 100.0,
+              "quality_score": 100.0,
               "audio_extent_ms": [2600, 2810]
             }
           ],
           "phonemes": [
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [2360, 2420],
@@ -487,7 +499,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [2570, 2600],
@@ -503,7 +515,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": 0,
               "audio_extent_ms": [2690, 2720],
@@ -511,7 +523,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [2720, 2810],
@@ -521,16 +533,18 @@
         },
         {
           "word": "[redacted]",
-          "quality_score": 99,
+          "quality_score": 99.0,
           "quality_class": "[redacted]",
-          "syllables": {
-            "letters": "[redacted]",
-            "stress_level": 1,
-            "predicted_stress": 1,
-            "stress_score": 100,
-            "quality_score": 99,
-            "audio_extent_ms": [2810, 2990]
-          },
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "stress_level": 1,
+              "predicted_stress": 1,
+              "stress_score": 100.0,
+              "quality_score": 99.0,
+              "audio_extent_ms": [2810, 2990]
+            }
+          ],
           "phonemes": [
             {
               "phone": "[redacted]",
@@ -550,7 +564,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [2960, 2990],
@@ -560,16 +574,18 @@
         },
         {
           "word": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 100.0,
           "quality_class": "[redacted]",
-          "syllables": {
-            "letters": "[redacted]",
-            "stress_level": 1,
-            "predicted_stress": 1,
-            "stress_score": 100,
-            "quality_score": 100,
-            "audio_extent_ms": [2990, 3320]
-          },
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "stress_level": 1,
+              "predicted_stress": 1,
+              "stress_score": 100.0,
+              "quality_score": 100.0,
+              "audio_extent_ms": [2990, 3320]
+            }
+          ],
           "phonemes": [
             {
               "phone": "[redacted]",
@@ -581,7 +597,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [3080, 3140],
@@ -589,7 +605,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": 1,
               "audio_extent_ms": [3140, 3230],
@@ -597,7 +613,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [3230, 3320],
@@ -607,20 +623,22 @@
         },
         {
           "word": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 100.0,
           "quality_class": "[redacted]",
-          "syllables": {
-            "letters": "[redacted]",
-            "stress_level": 1,
-            "predicted_stress": 1,
-            "stress_score": 100,
-            "quality_score": 100,
-            "audio_extent_ms": [3320, 3440]
-          },
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "stress_level": 1,
+              "predicted_stress": 1,
+              "stress_score": 100.0,
+              "quality_score": 100.0,
+              "audio_extent_ms": [3320, 3440]
+            }
+          ],
           "phonemes": [
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [3320, 3380],
@@ -628,7 +646,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": 1,
               "audio_extent_ms": [3380, 3440],
@@ -638,16 +656,18 @@
         },
         {
           "word": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 100.0,
           "quality_class": "[redacted]",
-          "syllables": {
-            "letters": "[redacted]",
-            "stress_level": 1,
-            "predicted_stress": 2,
-            "stress_score": 100,
-            "quality_score": 100,
-            "audio_extent_ms": [3440, 3620]
-          },
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "stress_level": 1,
+              "predicted_stress": 2,
+              "stress_score": 100.0,
+              "quality_score": 100.0,
+              "audio_extent_ms": [3440, 3620]
+            }
+          ],
           "phonemes": [
             {
               "phone": "[redacted]",
@@ -659,7 +679,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": 1,
               "audio_extent_ms": [3530, 3620],
@@ -669,30 +689,30 @@
         },
         {
           "word": "[redacted]",
-          "quality_score": 99,
+          "quality_score": 99.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
               "stress_level": 1,
               "predicted_stress": 1,
-              "stress_score": 100,
-              "quality_score": 100,
+              "stress_score": 100.0,
+              "quality_score": 100.0,
               "audio_extent_ms": [3620, 3920]
             },
             {
               "letters": "[redacted]",
               "stress_level": 0,
               "predicted_stress": 0,
-              "stress_score": 100,
-              "quality_score": 98,
+              "stress_score": 100.0,
+              "quality_score": 98.0,
               "audio_extent_ms": [3920, 4130]
             }
           ],
           "phonemes": [
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": null,
               "audio_extent_ms": [3620, 3740],
@@ -700,7 +720,7 @@
             },
             {
               "phone": "[redacted]",
-              "quality_score": 100,
+              "quality_score": 100.0,
               "sound_most_like": "[redacted]",
               "stress_level": 1,
               "audio_extent_ms": [3740, 3830],
@@ -735,7 +755,7 @@
       ]
     },
     "language_analysis": {
-      "grammar_errors": null,
+      "grammar_errors": [],
       "vocabulary_upgrades": [
         {
           "original_word": "[redacted]",
@@ -770,10 +790,12 @@
       "acoustic_processing_seconds": 1.3,
       "language_processing_seconds": 3.88,
       "stt_seconds": 0.35,
-      "storage_seconds": 0,
-      "db_seconds": 0,
+      "storage_seconds": 0.0,
+      "db_seconds": 0.0,
       "speechace_seconds": 1.3,
-      "deepseek_seconds": 3.88
+      "openrouter_seconds": 3.88,
+      "deepseek_seconds": 3.88,
+      "llm_seconds": 3.88
     }
   }
 }

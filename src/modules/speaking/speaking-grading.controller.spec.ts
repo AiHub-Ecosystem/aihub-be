@@ -202,7 +202,19 @@ describe('Speaking grading HTTP flow', () => {
     expect(body.data.estimated_band.overall).toEqual(expect.any(Number));
     expect(body.data.transcript.word_count).toBeGreaterThanOrEqual(0);
     expect(body.data.fluency_metrics.speech_rate_wpm).toBeNull();
-    expect(body.data.performance_timing).toHaveProperty('deepseek_seconds');
+    expect(body.data.pronunciation_detail.words[0].syllables).toEqual(
+      expect.any(Array),
+    );
+    expect(body.data.pronunciation_detail.words[0].phonemes).toEqual(
+      expect.any(Array),
+    );
+    expect(body.data.language_analysis.grammar_errors).toEqual(
+      expect.any(Array),
+    );
+    expect(body.data.language_analysis.vocabulary_upgrades).toEqual(
+      expect.any(Array),
+    );
+    expect(body.data).not.toHaveProperty('performance_timing');
     expect(body.data).not.toHaveProperty('session_id');
     expect(body.data).not.toHaveProperty('test_id');
     expect(body.data).not.toHaveProperty('user_id');
@@ -213,6 +225,80 @@ describe('Speaking grading HTTP flow', () => {
       'Do you enjoy living in your hometown?',
     );
     expect(response.payload).not.toContain('speaking-secret');
+  });
+
+  it('applies the Practice default when test_type is omitted', async () => {
+    const request = multipartPayload(
+      { part: '1', question_id: 'p1_hometown' },
+      Buffer.alloc(200, 1),
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/speaking/grading',
+      headers: { 'content-type': request.contentType },
+      payload: request.payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(outboundBody?.get('test_type')).toBe('Practice');
+    expect(outboundBody?.get('prompt_text')).toBeNull();
+    expect(outboundBody?.get('test_code')).toBeNull();
+    expect(outboundBody?.get('transcript')).toBeNull();
+  });
+
+  it('preserves a null fluency_metrics group from the provider', async () => {
+    const providerBody = fixture('grading.response.json');
+    if (!isRecord(providerBody.data)) {
+      throw new Error('Fixture data must be an object');
+    }
+    providerResponse = {
+      statusCode: 200,
+      body: {
+        ...providerBody,
+        data: { ...providerBody.data, fluency_metrics: null },
+      },
+    };
+
+    const request = multipartPayload(
+      { part: '1', question_id: 'p1_hometown' },
+      Buffer.alloc(200, 1),
+    );
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/speaking/grading',
+      headers: { 'content-type': request.contentType },
+      payload: request.payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.fluency_metrics).toBeNull();
+
+    providerResponse = {
+      statusCode: 200,
+      body: fixture('grading.response.json'),
+    };
+  });
+
+  it('rejects an unsupported test_type at the public boundary', async () => {
+    const request = multipartPayload(
+      {
+        part: '1',
+        question_id: 'p1_hometown',
+        test_type: 'Exam',
+      },
+      Buffer.alloc(200, 1),
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/speaking/grading',
+      headers: { 'content-type': request.contentType },
+      payload: request.payload,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('INVALID_REQUEST');
   });
 
   it('rejects a request that tries to override the verified downstream user', async () => {

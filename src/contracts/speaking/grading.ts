@@ -9,10 +9,20 @@ export const SpeakingGradeRequestSchema = Type.Object(
     audio: Type.String({ format: 'binary' }),
     part: Type.Integer({ minimum: 1, maximum: 3 }),
     question_id: Type.String({ minLength: 1 }),
-    prompt_text: Type.Optional(Type.String()),
-    test_type: Type.Optional(Type.String()),
-    test_code: Type.Optional(Type.String()),
-    transcript: Type.Optional(Type.String()),
+    prompt_text: Type.Optional(
+      Type.Union([Type.String(), Type.Null()], { default: null }),
+    ),
+    test_type: Type.Optional(
+      Type.Union([Type.Literal('Practice'), Type.Literal('Full-test')], {
+        default: 'Practice',
+      }),
+    ),
+    test_code: Type.Optional(
+      Type.Union([Type.String(), Type.Null()], { default: null }),
+    ),
+    transcript: Type.Optional(
+      Type.Union([Type.String(), Type.Null()], { default: null }),
+    ),
   },
   { additionalProperties: false },
 );
@@ -59,7 +69,7 @@ const ScorabilitySchema = Type.Object(
     is_scorable: Type.Boolean(),
     confidence: Type.String(),
     display_band: Type.Boolean(),
-    message_vi: Type.String(),
+    message_vi: Type.Union([Type.String(), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -88,12 +98,12 @@ const RelevanceSchema = Type.Object(
   {
     on_topic: Type.Boolean(),
     score: Type.Number({ minimum: 0, maximum: 1 }),
-    feedback_vi: Type.String(),
+    feedback_vi: Type.Union([Type.String(), Type.Null()]),
   },
   { additionalProperties: false },
 );
 
-const FluencyMetricsSchema = Type.Object(
+const FluencyMetricsValueSchema = Type.Object(
   {
     speech_rate_wpm: NullableNonNegativeNumberSchema,
     pause_count: NullableNonNegativeIntegerSchema,
@@ -101,6 +111,10 @@ const FluencyMetricsSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+const FluencyMetricsSchema = Type.Union([
+  FluencyMetricsValueSchema,
+  Type.Null(),
+]);
 
 const AudioExtentSchema = Type.Tuple([
   Type.Integer({ minimum: 0 }),
@@ -202,20 +216,6 @@ const FeedbackSchema = Type.Object(
   { additionalProperties: false },
 );
 
-const PerformanceTimingSchema = Type.Object(
-  {
-    total_seconds: NonNegativeNumberSchema,
-    acoustic_processing_seconds: NonNegativeNumberSchema,
-    language_processing_seconds: NonNegativeNumberSchema,
-    stt_seconds: NonNegativeNumberSchema,
-    speechace_seconds: NonNegativeNumberSchema,
-    deepseek_seconds: NonNegativeNumberSchema,
-    storage_seconds: NonNegativeNumberSchema,
-    db_seconds: NonNegativeNumberSchema,
-  },
-  { additionalProperties: false },
-);
-
 export const SpeakingGradeResponseSchema = Type.Object(
   {
     test_type: Type.Optional(Type.Union([Type.String(), Type.Null()])),
@@ -228,7 +228,6 @@ export const SpeakingGradeResponseSchema = Type.Object(
     pronunciation_detail: PronunciationDetailSchema,
     language_analysis: LanguageAnalysisSchema,
     feedback: FeedbackSchema,
-    performance_timing: PerformanceTimingSchema,
   },
   { additionalProperties: false },
 );

@@ -125,7 +125,7 @@ function parseFields(
   const part = Number(fields.get('part'));
   const questionId = fields.get('question_id');
   const promptText = fields.get('prompt_text');
-  const testType = fields.get('test_type');
+  const testType = fields.get('test_type') ?? 'Practice';
   const testCode = fields.get('test_code');
   const transcript = fields.get('transcript');
   const boundaryValue = {
@@ -133,7 +133,7 @@ function parseFields(
     part,
     question_id: questionId ?? '',
     ...(promptText === undefined ? {} : { prompt_text: promptText }),
-    ...(testType === undefined ? {} : { test_type: testType }),
+    test_type: testType,
     ...(testCode === undefined ? {} : { test_code: testCode }),
     ...(transcript === undefined ? {} : { transcript }),
   };
@@ -146,7 +146,7 @@ function parseFields(
     part,
     questionId: questionId ?? '',
     ...(promptText === undefined ? {} : { promptText }),
-    ...(testType === undefined ? {} : { testType }),
+    testType,
     ...(testCode === undefined ? {} : { testCode }),
     ...(transcript === undefined ? {} : { transcript }),
   };

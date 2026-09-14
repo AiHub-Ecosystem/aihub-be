@@ -1308,16 +1308,50 @@
                     "type": "string"
                   },
                   "prompt_text": {
-                    "type": "string"
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "test_type": {
-                    "type": "string"
+                    "default": "Practice",
+                    "anyOf": [
+                      {
+                        "const": "Practice",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Full-test",
+                        "type": "string"
+                      }
+                    ]
                   },
                   "test_code": {
-                    "type": "string"
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "transcript": {
-                    "type": "string"
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
               }
@@ -1346,8 +1380,7 @@
                         "fluency_metrics",
                         "pronunciation_detail",
                         "language_analysis",
-                        "feedback",
-                        "performance_timing"
+                        "feedback"
                       ],
                       "properties": {
                         "test_type": {
@@ -1384,7 +1417,14 @@
                               "type": "boolean"
                             },
                             "message_vi": {
-                              "type": "string"
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             }
                           }
                         },
@@ -1467,53 +1507,67 @@
                               "type": "number"
                             },
                             "feedback_vi": {
-                              "type": "string"
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             }
                           }
                         },
                         "fluency_metrics": {
-                          "additionalProperties": false,
-                          "type": "object",
-                          "required": [
-                            "speech_rate_wpm",
-                            "pause_count",
-                            "mean_length_run_words"
-                          ],
-                          "properties": {
-                            "speech_rate_wpm": {
-                              "anyOf": [
-                                {
-                                  "minimum": 0,
-                                  "type": "number"
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "speech_rate_wpm",
+                                "pause_count",
+                                "mean_length_run_words"
+                              ],
+                              "properties": {
+                                "speech_rate_wpm": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 0,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 },
-                                {
-                                  "type": "null"
+                                "pause_count": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "mean_length_run_words": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 0,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 }
-                              ]
+                              }
                             },
-                            "pause_count": {
-                              "anyOf": [
-                                {
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "mean_length_run_words": {
-                              "anyOf": [
-                                {
-                                  "minimum": 0,
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
+                            {
+                              "type": "null"
                             }
-                          }
+                          ]
                         },
                         "pronunciation_detail": {
                           "additionalProperties": false,
@@ -1783,54 +1837,6 @@
                             },
                             "action_plan_vi": {
                               "type": "string"
-                            }
-                          }
-                        },
-                        "performance_timing": {
-                          "additionalProperties": false,
-                          "type": "object",
-                          "required": [
-                            "total_seconds",
-                            "acoustic_processing_seconds",
-                            "language_processing_seconds",
-                            "stt_seconds",
-                            "speechace_seconds",
-                            "deepseek_seconds",
-                            "storage_seconds",
-                            "db_seconds"
-                          ],
-                          "properties": {
-                            "total_seconds": {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            "acoustic_processing_seconds": {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            "language_processing_seconds": {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            "stt_seconds": {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            "speechace_seconds": {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            "deepseek_seconds": {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            "storage_seconds": {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            "db_seconds": {
-                              "minimum": 0,
-                              "type": "number"
                             }
                           }
                         }

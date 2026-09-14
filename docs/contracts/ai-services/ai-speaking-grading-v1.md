@@ -5,10 +5,11 @@ the AI Speaking service owner and WISPACE on 2026-09-14.
 
 Owner: AI Speaking service. Consumer: the AIHUB gateway.
 
-Sources: `API_Grading.md`, the D2 implementation contract, and the redacted
-live capture in `test/fixtures/ai-speaking/grading.response.json`. The
-approved capture is the evidence boundary for live compatibility; raw audio,
-credentials, and AI Speaking service response bodies remain excluded.
+Sources: the AI Speaking `API_Grading.md` v1.0.0 / OpenAPI 3.1 contract, the D2
+implementation contract, and the redacted live capture in
+`test/fixtures/ai-speaking/grading.response.json`. The approved capture is the
+evidence boundary for live compatibility; raw audio, credentials, and AI
+Speaking service response bodies remain excluded.
 
 ## 1. Scope and endpoint ownership
 
@@ -46,10 +47,10 @@ below. Unknown or duplicate fields are invalid.
 | `user_id`     | string  | yes      | Verified learner identity supplied by AIHUB.                              |
 | `part`        | integer | yes      | `1`, `2`, or `3`.                                                         |
 | `question_id` | string  | yes      | Non-empty question-bank identifier.                                       |
-| `prompt_text` | string  | no       | Prompt used for relevance analysis.                                       |
-| `test_type`   | string  | no       | For example `Practice` or `Full-test`.                                    |
-| `test_code`   | string  | no       | Correlates questions in one full test.                                    |
-| `transcript`  | string  | no       | Existing transcript; skips service STT when supported.                    |
+| `prompt_text` | string  | no       | Prompt used for relevance analysis; provider default is `null`.           |
+| `test_type`   | string  | no       | `Practice` (default) or `Full-test`.                                      |
+| `test_code`   | string  | no       | Correlates questions in one full test; provider default is `null`.        |
+| `transcript`  | string  | no       | Existing transcript; provider default is `null`.                          |
 
 The AI Speaking service must treat the audio bytes and text fields as untrusted input,
 enforce the stated limits, and return a documented 4xx response rather than a
@@ -93,11 +94,16 @@ The AI Speaking service success body is a JSON object with `status: "success"` a
 | `pronunciation_detail` | `summary` counts plus per-word `word`, scores/classes, `syllables`, and `phonemes`                                                                                    |
 | `language_analysis`    | `grammar_errors` and `vocabulary_upgrades` with the documented text fields                                                                                            |
 | `feedback`             | `summary_vi`, `strong_point_vi`, `action_plan_vi`                                                                                                                     |
-| `performance_timing`   | non-negative processing durations, including total, acoustic, language, STT, storage, database, Speechace, and DeepSeek sub-pipeline timings                          |
 
 `question_id` is required in `data`; `test_type` may be a string or `null`.
 AI Speaking service-only identifiers such as `session_id`, `test_id`, and `user_id` may be
 present for internal tracing but are not part of the AIHUB public response.
+
+The provider may include `performance_timing` for internal telemetry, including
+`llm_seconds` and component timings. AIHUB must drop that entire group before
+returning the normalized response. The provider's `words`, `syllables`,
+`phonemes`, `grammar_errors`, and `vocabulary_upgrades` values are always arrays;
+`fluency_metrics` may be `null` and AIHUB preserves that value.
 
 The machine-enforced boundary is
 `src/contracts/speaking/grading.ts`. A 2xx body that does not satisfy that
@@ -107,7 +113,8 @@ through the raw AI Speaking service envelope.
 ## 6. AIHUB normalized response
 
 AIHUB returns the shared `{ data, meta }` envelope. `data` contains only the
-approved scoring groups above plus `question_id` and optional `test_type`.
+approved scoring groups above plus `question_id` and optional `test_type`; it
+never contains `performance_timing`.
 AI Speaking service envelopes, credentials, assertions, audio, private IDs, and
 raw service details never cross the public boundary.
 
@@ -121,6 +128,7 @@ body such as `{ "detail": "..." }` for diagnostics:
 | `400`  | Invalid or missing metadata/audio.                      |
 | `401`  | Missing or invalid AI Speaking service credentials.     |
 | `413`  | Audio or request exceeds the AI Speaking service limit. |
+| `422`  | Input parameter type or schema validation failure.      |
 | `429`  | AI Speaking service throttling.                         |
 | `5xx`  | AI Speaking service or pipeline failure.                |
 

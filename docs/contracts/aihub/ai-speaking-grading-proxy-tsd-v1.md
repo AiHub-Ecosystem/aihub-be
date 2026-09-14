@@ -133,13 +133,15 @@ translation belong to infrastructure.
 The mapper accepts only a successful AI Speaking service body with status "success" and
 an object data. It emits only the normalized groups in section 6.
 
-- Singleton pronunciation_detail.words, and each word's syllables and
-  phonemes collections, are normalized to arrays.
-- language_analysis.grammar_errors and
-  language_analysis.vocabulary_upgrades with null values are normalized to
-  empty arrays.
-- Nullable fluency metrics remain null; they are not changed to zero.
+- `pronunciation_detail.words`, each word's `syllables` and `phonemes`,
+  `language_analysis.grammar_errors`, and
+  `language_analysis.vocabulary_upgrades` must already be arrays; a singleton
+  object or `null` is a contract violation.
+- `fluency_metrics` may be `null`, and nullable metrics remain null; they are
+  not changed to zero.
 - test_type may be a string, null, or omitted in the public response.
+- provider-only `performance_timing` telemetry, including `llm_seconds`, is
+  dropped and never crosses the public boundary.
 - session_id, test_id, user_id, unknown service-private top-level fields, and
   raw service detail are dropped.
 - Missing groups, wrong types, invalid ranges, or unapproved nested shapes
@@ -154,10 +156,10 @@ an object data. It emits only the normalized groups in section 6.
 | audio       | Yes      | Exactly one file; extension wav, mp3, m4a, webm, or ogg; minimum 100 bytes; parser cap 25 MiB |
 | part        | Yes      | Integer 1, 2, or 3                                                                            |
 | question_id | Yes      | Non-empty string                                                                              |
-| prompt_text | No       | String if present; empty string is accepted by the current runtime                            |
-| test_type   | No       | String if present; empty string is accepted by the current runtime                            |
-| test_code   | No       | String if present; empty string is accepted by the current runtime                            |
-| transcript  | No       | String if present; empty string is accepted by the current runtime                            |
+| prompt_text | No       | String if present; provider default is `null`                                                 |
+| test_type   | No       | `Practice` (default) or `Full-test`                                                           |
+| test_code   | No       | String if present; provider default is `null`                                                 |
+| transcript  | No       | String if present; provider default is `null`                                                 |
 
 null is not accepted for multipart text fields. Unknown or duplicate fields
 are invalid. The total multipart wire-body ceiling is 25 MiB
@@ -176,23 +178,22 @@ type contract; MIME metadata is not a separate trust boundary.
 
 ### Normalized public response data
 
-| Group                                   | Required fields and constraints                                                                                                                                     |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| question_id                             | Non-empty string                                                                                                                                                    |
-| test_type                               | Optional string or null                                                                                                                                             |
-| scorability                             | is_scorable boolean; confidence string; display_band boolean; message_vi string                                                                                     |
-| estimated_band                          | overall, fluency_coherence, lexical_resource, grammatical_range_accuracy, pronunciation; each number 0–9 in 0.5 steps                                               |
-| transcript                              | text string; word_count integer >= 0; duration_seconds number >= 0                                                                                                  |
-| relevance                               | on_topic boolean; score 0–1; feedback_vi string                                                                                                                     |
-| fluency_metrics                         | speech_rate_wpm, pause_count, mean_length_run_words; each non-negative or null                                                                                      |
-| pronunciation_detail                    | summary counts (good_count, fair_count, poor_count), each integer >= 0, and words array                                                                             |
-| pronunciation_detail.words[]            | word, quality_score 0–100, quality_class, syllables[], phonemes[]                                                                                                   |
-| syllables[]                             | letters, nullable stress_level 0–2, predicted_stress 0–2, stress_score 0–100, quality_score 0–100, non-negative audio_extent_ms pair                                |
-| phonemes[]                              | phone, quality_score 0–100, sound_most_like, nullable stress_level 0–2, non-negative audio_extent_ms pair, non-negative char_index[]                                |
-| language_analysis.grammar_errors[]      | sentence, error_segment, correction, error_type, explanation_vi                                                                                                     |
-| language_analysis.vocabulary_upgrades[] | original_word, suggested_word, cefr_level, optional context, reason_vi                                                                                              |
-| feedback                                | summary_vi, strong_point_vi, action_plan_vi                                                                                                                         |
-| performance_timing                      | Non-negative total_seconds, acoustic_processing_seconds, language_processing_seconds, stt_seconds, speechace_seconds, deepseek_seconds, storage_seconds, db_seconds |
+| Group                                   | Required fields and constraints                                                                                                      |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| question_id                             | Non-empty string                                                                                                                     |
+| test_type                               | Optional string or null                                                                                                              |
+| scorability                             | is_scorable boolean; confidence string; display_band boolean; message_vi string or null                                              |
+| estimated_band                          | overall, fluency_coherence, lexical_resource, grammatical_range_accuracy, pronunciation; each number 0–9 in 0.5 steps                |
+| transcript                              | text string; word_count integer >= 0; duration_seconds number >= 0                                                                   |
+| relevance                               | on_topic boolean; score 0–1; feedback_vi string or null                                                                              |
+| fluency_metrics                         | Object or `null`; speech_rate_wpm, pause_count, mean_length_run_words are each non-negative or null                                  |
+| pronunciation_detail                    | summary counts (good_count, fair_count, poor_count), each integer >= 0, and words array                                              |
+| pronunciation_detail.words[]            | word, quality_score 0–100, quality_class, syllables[], phonemes[]                                                                    |
+| syllables[]                             | letters, nullable stress_level 0–2, predicted_stress 0–2, stress_score 0–100, quality_score 0–100, non-negative audio_extent_ms pair |
+| phonemes[]                              | phone, quality_score 0–100, sound_most_like, nullable stress_level 0–2, non-negative audio_extent_ms pair, non-negative char_index[] |
+| language_analysis.grammar_errors[]      | sentence, error_segment, correction, error_type, explanation_vi                                                                      |
+| language_analysis.vocabulary_upgrades[] | original_word, suggested_word, cefr_level, optional context, reason_vi                                                               |
+| feedback                                | summary_vi, strong_point_vi, action_plan_vi                                                                                          |
 
 ## 7. Detailed AI Speaking service errors
 
@@ -201,6 +202,7 @@ type contract; MIME metadata is not a separate trust boundary.
 | 400            | Invalid or missing metadata/audio                | Map to shared service error; do not expose detail                |
 | 401            | Missing or invalid downstream credentials        | Map to shared service error; investigate server configuration    |
 | 413            | AI Speaking service audio/request limit exceeded | Map to shared service error; AIHUB boundary 413 remains distinct |
+| 422            | Downstream parameter/schema validation failure   | Map to shared service error; do not expose detail                |
 | 429            | Downstream throttling                            | Map to AI_SERVICE_THROTTLED                                      |
 | 5xx            | Downstream or pipeline failure                   | Map to retryable AI_SERVICE_ERROR                                |
 
