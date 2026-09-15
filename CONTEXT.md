@@ -49,13 +49,16 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - Resolved as a future production cutover decision: the typed runtime-secret provider and Agent-file boundary are implemented, while Vault adoption remains deferred until the Stage A trigger is met. The agreed scope, KV v2 paths, AppRole/Vault Agent bootstrap, least-privilege policy, startup-only rotation, and fail-closed behavior are recorded in [ADR-0013](docs/adr/0013-vault-runtime-secret-management.md) and issue #30.
 - Resolved for D2: the AI Speaking service remains a synchronous downstream integration (multipart grading is the primary path; JSON-by-URL is a fallback). AIHUB exposes the two synchronous proxy transports under the `/v1/ielts/speaking/*` namespace while keeping the future public Speaking operation asynchronous; the D2 proxy must not silently redefine that async contract.
 - Resolved D2 contract: the sync proxy route is `POST /v1/ielts/speaking/grading`, distinct from the future async `POST /v1/speaking/grade`. It accepts multipart audio with explicit `part` and `question_id`; the total wire-body ceiling is 25 MiB, `user_id` is server-derived, Speaking has no idempotent replay, and downstream AI Service errors are mapped into shared AIHUB errors rather than passed through.
-- Known Speaking follow-ups: hand the approved TSD to Production integration, validate the Production routes with Postman, obtain AI Speaking evidence for no-redirect URL retrieval/25 MiB download/30-second completion, and then decide when to promote the proxy into the async asset/job flow.
+- Known Speaking follow-ups: the Production handoff smoke is verified for both synchronous transports; keep the provider-owned no-redirect, 25 MiB download, and 30-second guarantees under the AI Speaking contract, then decide when to promote the proxy into the async asset/job flow.
 - Next D2/D3 follow-up: expand the proxy to the remaining AI Service endpoints, validate the Production routes with Postman, and publish a per-endpoint TSD without creating a second contract vocabulary.
-- No AIHUB infrastructure or contract-approval blockers remain. The JSON
-  fallback still has one external AI Speaking release gate: evidence that its
-  URL retrieval follows the no-redirect, 25 MiB, and shared 30-second rules.
-  AI Speaking service/WISPACE approval was recorded on 2026-09-14; #25 can
-  proceed to Production handoff while #28 remains open for that evidence.
+- No AIHUB infrastructure or contract-approval blockers remain. On 2026-09-15,
+  authenticated Production smoke covered multipart success, JSON-by-URL success
+  with a real `s3.wispace.app` WAV object, missing credentials, missing metadata,
+  and the multipart size boundary. The gateway returned the expected shared
+  statuses/envelopes and dropped provider-only telemetry. No-redirect,
+  downloaded-audio ceiling, and downstream deadline behavior remain provider-owned
+  guarantees recorded in the approved contract; #25 is the Production handoff
+  record and #28 is closed after the JSON smoke evidence.
 - Resolved: the Writing grading response contract. Both retained grading endpoints were called against the live service; captured responses are committed under `test/fixtures/ai-writing/` and the shared grading parser is implemented and tested. Catalog response contracts are real schemas, not `unresolved`.
 - Resolved as a decision, not as work: AI Writing stays reachable from the internet for now, because it still serves an application that does not go through AIHUB. The boundary at this stage is the credential, not the network — AIHUB customers hold only AIHUB keys, so metering and limits still bind them. Three conditions keep that acceptable; see the security spec.
 - Resolved: Deliverable 1 is frozen as of 2026-09-07 — the OpenAPI 3.1 spec (`openapi.json`) and the Postman handover collection (`aihub.postman_collection.json`) are both generated from source, not hand-written.

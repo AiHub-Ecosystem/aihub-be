@@ -184,6 +184,34 @@ Back up the existing Postgres before releases and test restore separately. Rotat
 `vault-agent` and `app` so the startup snapshot is re-rendered. Caddy renews ACME
 certificates automatically while ports 80/443 remain reachable.
 
+## AI Speaking Production handoff
+
+The release image contains the authenticated multipart smoke helper. Run it from
+the VPS with a real WAV fixture after a deployment; the helper reads the
+temporary test API key and assertion-signing key from their restricted files,
+keeps them out of output, and removes its in-container key copy on exit:
+
+```sh
+bash /home/ngoc_anh/speaking-gateway-smoke.sh \
+  /home/ngoc_anh/aihub-speaking-contract-probe.wav
+```
+
+Expected output is `HTTP_STATUS=200`. The request is sent to
+`https://api.aihubproduction.com/v1/ielts/speaking/grading` by default and must
+return the normalized `{data, meta}` envelope. Run the same helper with an
+explicit `AIHUB_BASE_URL` when validating another environment.
+
+The Production handoff matrix is split by safety boundary:
+
+- Production smoke covers a successful authenticated multipart request and the
+  public validation/authentication/size boundaries (`401`, `400`, and `413`).
+- The provider `401`/`4xx`/`5xx`, throttling, timeout/cancellation, and malformed
+  success mappings are covered by the Speaking HTTP seam tests; do not corrupt
+  live provider credentials or deliberately overload Production to manufacture
+  those failures.
+- Health is checked by the Compose container healthcheck and the CD workflow;
+  rollback uses the immutable `AIHUB_IMAGE` tag described below.
+
 ## Rollback
 
 Set `AIHUB_IMAGE` to the previous immutable image tag, run
