@@ -37,7 +37,7 @@ export const SpeakingGradeJsonRequestSchema = Type.Object(
       minLength: 1,
       maxLength: 2_048,
       description:
-        'HTTPS URL on storage.wispace.vn; signed query parameters are allowed',
+        'HTTPS URL on s3.wispace.app; signed query parameters are allowed',
     }),
     part: Type.Integer({ minimum: 1, maximum: 3 }),
     question_id: Type.String({ minLength: 1 }),

@@ -1971,7 +1971,7 @@
                   "audio_url": {
                     "minLength": 1,
                     "maxLength": 2048,
-                    "description": "HTTPS URL on storage.wispace.vn; signed query parameters are allowed",
+                    "description": "HTTPS URL on s3.wispace.app; signed query parameters are allowed",
                     "type": "string"
                   },
                   "part": {

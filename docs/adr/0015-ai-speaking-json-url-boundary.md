@@ -20,10 +20,11 @@ Speaking grading job are already separate contracts.
    `test_type` defaults to `Practice`; `prompt_text`, `test_code`, and
    `transcript` are optional and may be `null`. `user_id` is never a public
    field; AIHUB derives it from the verified User Assertion.
-3. An approved audio URL is HTTPS on the exact host `storage.wispace.vn`, with
-   the default HTTPS port only. Query parameters are allowed for signed object
-   URLs. Credentials, fragments, other schemes/hosts/ports, and URLs longer
-   than 2,048 characters are rejected before dispatch.
+3. An approved audio URL is HTTPS on the exact S3-compatible SeaweedFS host
+   `s3.wispace.app`, with the default HTTPS port only. Query parameters are
+   allowed for signed object URLs. Credentials, fragments, other
+   schemes/hosts/ports, and URLs longer than 2,048 characters are rejected
+   before dispatch.
 4. AIHUB validates the URL but does not download or proxy the audio. AI
    Speaking owns URL retrieval, redirect handling (no redirects), the 25 MiB
    downloaded-audio ceiling, and completion within the shared 30-second

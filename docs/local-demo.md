@@ -355,7 +355,7 @@ treating the provider response shape as live-compatible.
 
 The JSON fallback uses the same headers and metadata but sends an approved
 object URL instead of an uploaded file. AIHUB accepts only HTTPS URLs on
-`storage.wispace.vn`, allows query parameters for signed URLs, and does not
+`s3.wispace.app`, allows query parameters for signed URLs, and does not
 download the object itself. Do not send `user_id`; it is derived from the
 assertion.
 
@@ -363,7 +363,7 @@ PowerShell 7:
 
 ```powershell
 $json = @{
-  audio_url = 'https://storage.wispace.vn/audio/sample.mp3?signature=demo'
+  audio_url = 'https://s3.wispace.app/audio/sample.mp3?signature=demo'
   part = 1
   question_id = 'p1_hometown'
   prompt_text = 'Do you enjoy living in your hometown?'
@@ -387,7 +387,7 @@ curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/speaking/grading-json" \
   -H "X-User-Assertion: $AIHUB_ASSERTION" \
   -H 'Content-Type: application/json' \
   -d '{
-    "audio_url": "https://storage.wispace.vn/audio/sample.mp3?signature=demo",
+    "audio_url": "https://s3.wispace.app/audio/sample.mp3?signature=demo",
     "part": 1,
     "question_id": "p1_hometown",
     "prompt_text": "Do you enjoy living in your hometown?",

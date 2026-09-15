@@ -354,7 +354,7 @@ Send the learner identity only through `X-User-Assertion`; do not send a
 
 `POST /v1/ielts/speaking/grading-json` is the URL fallback. It accepts the same
 Speaking metadata but replaces `audio` with `audio_url`. The URL must be HTTPS
-on the exact host `storage.wispace.vn`, may include query parameters for a
+on the exact host `s3.wispace.app`, may include query parameters for a
 signed object URL, and may be at most 2,048 characters. AIHUB rejects embedded
 credentials, fragments, other hosts/schemes/ports, and unknown fields before
 dispatch. AIHUB validates but does not download the URL; the provider owns
@@ -366,7 +366,7 @@ curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/speaking/grading-json" \
   -H "X-User-Assertion: $AIHUB_ASSERTION" \
   -H 'Content-Type: application/json' \
   -d '{
-    "audio_url": "https://storage.wispace.vn/audio/sample.mp3?signature=demo",
+    "audio_url": "https://s3.wispace.app/audio/sample.mp3?signature=demo",
     "part": 1,
     "question_id": "p1_hometown",
     "prompt_text": "Do you enjoy living in your hometown?",

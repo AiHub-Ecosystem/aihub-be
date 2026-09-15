@@ -302,7 +302,7 @@ describe('Speaking grading HTTP flow', () => {
       headers: { 'content-type': 'application/json' },
       payload: {
         audio_url:
-          'https://storage.wispace.vn/audio/sample.mp3?signature=contract-test',
+          'https://s3.wispace.app/audio/sample.mp3?signature=contract-test',
         part: 1,
         question_id: 'p1_hometown',
         prompt_text: 'Do you enjoy living in your hometown?',
@@ -321,7 +321,7 @@ describe('Speaking grading HTTP flow', () => {
       part: 1,
       question_id: 'p1_hometown',
       audio_url:
-        'https://storage.wispace.vn/audio/sample.mp3?signature=contract-test',
+        'https://s3.wispace.app/audio/sample.mp3?signature=contract-test',
       test_type: 'Practice',
       prompt_text: 'Do you enjoy living in your hometown?',
       test_code: 'TEST-001',
@@ -342,7 +342,7 @@ describe('Speaking grading HTTP flow', () => {
         headers: { 'content-type': 'application/json' },
         payload: Readable.from([
           JSON.stringify({
-            audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+            audio_url: 'https://s3.wispace.app/audio/sample.mp3',
             part: 1,
             question_id: 'p1_hometown',
           }),
@@ -363,7 +363,7 @@ describe('Speaking grading HTTP flow', () => {
       url: '/v1/speaking/grading-json',
       headers: { 'content-type': 'application/json' },
       payload: {
-        audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+        audio_url: 'https://s3.wispace.app/audio/sample.mp3',
         part: 1,
         question_id: 'p1_hometown',
       },
@@ -380,7 +380,7 @@ describe('Speaking grading HTTP flow', () => {
       url: '/v1/ielts/speaking/grading-json',
       headers: { 'content-type': 'application/json' },
       payload: {
-        audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+        audio_url: 'https://s3.wispace.app/audio/sample.mp3',
         part: 1,
         question_id: 'p1_hometown',
       },
@@ -400,7 +400,7 @@ describe('Speaking grading HTTP flow', () => {
       url: '/v1/ielts/speaking/grading-json',
       headers: { 'content-type': 'application/json' },
       payload: {
-        audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+        audio_url: 'https://s3.wispace.app/audio/sample.mp3',
         part: 1,
         question_id: 'p1_hometown',
         user_id: 'attacker-user',
@@ -413,9 +413,9 @@ describe('Speaking grading HTTP flow', () => {
 
   it.each([
     {},
-    { audio_url: 'https://storage.wispace.vn/audio/sample.mp3', part: 1 },
+    { audio_url: 'https://s3.wispace.app/audio/sample.mp3', part: 1 },
     {
-      audio_url: 'http://storage.wispace.vn/audio/sample.mp3',
+      audio_url: 'http://s3.wispace.app/audio/sample.mp3',
       part: 1,
       question_id: 'p1_hometown',
     },
@@ -425,7 +425,7 @@ describe('Speaking grading HTTP flow', () => {
       question_id: 'p1_hometown',
     },
     {
-      audio_url: 'https://storage.wispace.vn:8443/audio/sample.mp3',
+      audio_url: 'https://s3.wispace.app:8443/audio/sample.mp3',
       part: 1,
       question_id: 'p1_hometown',
     },
@@ -454,7 +454,7 @@ describe('Speaking grading HTTP flow', () => {
       url: '/v1/ielts/speaking/grading-json',
       headers: { 'content-type': 'application/json' },
       payload: {
-        audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+        audio_url: 'https://s3.wispace.app/audio/sample.mp3',
         part: 1,
         question_id: 'p1_hometown',
       },
@@ -487,7 +487,7 @@ describe('Speaking grading HTTP flow', () => {
           url: '/v1/ielts/speaking/grading-json',
           headers: { 'content-type': 'application/json' },
           payload: {
-            audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+            audio_url: 'https://s3.wispace.app/audio/sample.mp3',
             part: 1,
             question_id: 'p1_hometown',
           },
@@ -511,7 +511,7 @@ describe('Speaking grading HTTP flow', () => {
   it('maps a JSON downstream timeout to the public timeout contract', async () => {
     const client = app.get(DownstreamHttpClient);
     const request = {
-      audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+      audio_url: 'https://s3.wispace.app/audio/sample.mp3',
       part: 1,
       question_id: 'p1_hometown',
     };
@@ -543,7 +543,7 @@ describe('Speaking grading HTTP flow', () => {
         url: '/v1/ielts/speaking/grading-json',
         headers: { 'content-type': 'application/json' },
         payload: {
-          audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+          audio_url: 'https://s3.wispace.app/audio/sample.mp3',
           part: 1,
           question_id: 'p1_hometown',
         },

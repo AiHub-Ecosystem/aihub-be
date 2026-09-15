@@ -177,15 +177,15 @@ type contract; MIME metadata is not a separate trust boundary.
 
 ### Public JSON-by-URL request
 
-| Field       | Required | Contract                                                                                                  |
-| ----------- | -------- | --------------------------------------------------------------------------------------------------------- |
-| audio_url   | Yes      | HTTPS URL on `storage.wispace.vn`; maximum 2,048 characters; query parameters are allowed for signed URLs |
-| part        | Yes      | Integer 1, 2, or 3                                                                                        |
-| question_id | Yes      | Non-empty string                                                                                          |
-| prompt_text | No       | String or `null`; provider default is `null`                                                              |
-| test_type   | No       | `Practice` (default) or `Full-test`                                                                       |
-| test_code   | No       | String or `null`; provider default is `null`                                                              |
-| transcript  | No       | String or `null`; provider default is `null`                                                              |
+| Field       | Required | Contract                                                                                                                               |
+| ----------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| audio_url   | Yes      | HTTPS URL on `s3.wispace.app` (S3-compatible SeaweedFS origin); maximum 2,048 characters; query parameters are allowed for signed URLs |
+| part        | Yes      | Integer 1, 2, or 3                                                                                                                     |
+| question_id | Yes      | Non-empty string                                                                                                                       |
+| prompt_text | No       | String or `null`; provider default is `null`                                                                                           |
+| test_type   | No       | `Practice` (default) or `Full-test`                                                                                                    |
+| test_code   | No       | String or `null`; provider default is `null`                                                                                           |
+| transcript  | No       | String or `null`; provider default is `null`                                                                                           |
 
 The gateway rejects non-HTTPS schemes, non-approved hosts, non-default ports,
 embedded credentials, fragments, and any URL longer than 2,048 characters. It

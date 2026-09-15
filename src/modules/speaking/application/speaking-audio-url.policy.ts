@@ -1,5 +1,5 @@
 export const SPEAKING_AUDIO_URL_MAX_LENGTH = 2_048;
-export const SPEAKING_AUDIO_URL_HOST = 'storage.wispace.vn';
+export const SPEAKING_AUDIO_URL_HOST = 's3.wispace.app';
 
 /**
  * The gateway validates the URL shape and approved object-storage origin but

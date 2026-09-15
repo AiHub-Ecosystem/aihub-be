@@ -69,7 +69,7 @@ operation but replaces `audio` with `audio_url`. AIHUB exposes this operation at
   "part": 1,
   "question_id": "p1_hometown",
   "prompt_text": "Do you enjoy living in your hometown?",
-  "audio_url": "https://storage.wispace.vn/audio/sample.mp3",
+  "audio_url": "https://s3.wispace.app/audio/sample.mp3",
   "test_type": "Practice",
   "test_code": "FULL-TEST-001",
   "transcript": null
@@ -77,7 +77,7 @@ operation but replaces `audio` with `audio_url`. AIHUB exposes this operation at
 ```
 
 The AIHUB public boundary accepts only HTTPS URLs on the exact
-`storage.wispace.vn` host, with the default HTTPS port, no embedded credentials
+`s3.wispace.app` host (the S3-compatible SeaweedFS origin), with the default HTTPS port, no embedded credentials
 or fragment, a maximum length of 2,048 characters, and optional query
 parameters for signed URLs. AIHUB validates the URL but does not download it.
 The AI Speaking service owns retrieval, does not follow redirects, enforces the

@@ -21,8 +21,8 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Downstream Adapter:** a pure mapper between a public operation and a private AI service contract; it never performs network I/O.
 - **Speaking grading proxy:** the synchronous D2 integration path used to prove the AI Speaking handoff; it is not the public async Speaking contract.
 - **Approved audio URL:** an HTTPS reference to an audio object on the exact
-  object-storage origin approved for Speaking JSON-by-URL grading; it is not an
-  arbitrary remote URL.
+  S3-compatible SeaweedFS origin `s3.wispace.app` approved for Speaking
+  JSON-by-URL grading; it is not an arbitrary remote URL.
 - **JSON-by-URL grading:** the synchronous Speaking grading transport that
   carries an approved audio URL; it is a fallback transport beside multipart
   grading, not the async grading job.
