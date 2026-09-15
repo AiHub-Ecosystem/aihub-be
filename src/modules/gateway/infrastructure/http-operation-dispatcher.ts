@@ -6,6 +6,7 @@ import type { ErrorCode } from '../../../common/errors/error-code';
 import type { RequestContext } from '../../../common/request-context/request-context';
 import type {
   SpeakingGradeInput,
+  SpeakingGradeJsonInput,
   SpeakingGradeResponse,
 } from '../../../contracts/speaking/grading';
 import type {
@@ -121,7 +122,7 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
   // Repeats `OperationDispatcherPort`'s overloads here, immediately followed
   // by the one broader implementation signature below — the standard
   // TypeScript pattern for an overloaded method, so every external caller
-  // sees only the three precise signatures and the internal, type-erased
+  // sees only the four precise signatures and the internal, type-erased
   // implementation never leaks out as part of the public type.
   dispatch(
     operation: 'writing.task1.grade',
@@ -136,6 +137,11 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
   dispatch(
     operation: 'speaking.grading',
     input: SpeakingGradeInput,
+    context: RequestContext,
+  ): Promise<DispatchResult<SpeakingGradeResponse>>;
+  dispatch(
+    operation: 'speaking.grading-json',
+    input: SpeakingGradeJsonInput,
     context: RequestContext,
   ): Promise<DispatchResult<SpeakingGradeResponse>>;
   async dispatch(

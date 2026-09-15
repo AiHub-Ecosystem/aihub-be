@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   HttpCode,
   Inject,
@@ -8,12 +9,22 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 
+import { Value } from '@sinclair/typebox/value';
 import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import { AppError } from '../../../common/errors/app-error';
-import { createClientDisconnectSignal } from '../../../common/http/client-disconnect-signal';
+import {
+  type RequestLifecycleState,
+  createRequestLifecycleState,
+  getRequestLifecycle,
+} from '../../../common/http/request-lifecycle.hook';
 import { SuccessEnvelopeInterceptor } from '../../../common/http/success-envelope.interceptor';
 import { createRequestContext } from '../../../common/request-context/request-context.factory';
-import type { SpeakingGradeResponse } from '../../../contracts/speaking/grading';
+
+import {
+  type SpeakingGradeJsonInput,
+  SpeakingGradeJsonRequestSchema,
+  type SpeakingGradeResponse,
+} from '../../../contracts/speaking/grading';
 import {
   type DispatchResult,
   OPERATION_DISPATCHER,
@@ -29,6 +40,7 @@ import {
 } from '../../identity/presentation/authenticated-request';
 import { RequireOperation } from '../../identity/presentation/require-operation.decorator';
 import { UserAssertionGuard } from '../../identity/presentation/user-assertion.guard';
+import { isApprovedSpeakingAudioUrl } from '../application/speaking-audio-url.policy';
 import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,
@@ -36,6 +48,47 @@ import {
 import { createFastifySpeakingMultipartSource } from './fastify-speaking-multipart.source';
 
 const OPERATION = 'speaking.grading' as const;
+const JSON_OPERATION = 'speaking.grading-json' as const;
+
+function invalidRequest(): AppError {
+  return new AppError({
+    code: 'INVALID_REQUEST',
+    message: 'Request failed validation',
+    retryable: false,
+  });
+}
+
+function parseJsonBody(body: unknown): SpeakingGradeJsonInput {
+  if (!Value.Check(SpeakingGradeJsonRequestSchema, body)) {
+    throw invalidRequest();
+  }
+
+  try {
+    const parsed = Value.Parse(SpeakingGradeJsonRequestSchema, body);
+    if (!isApprovedSpeakingAudioUrl(parsed.audio_url)) {
+      throw invalidRequest();
+    }
+
+    return {
+      audioUrl: parsed.audio_url,
+      part: parsed.part,
+      questionId: parsed.question_id,
+      ...(parsed.prompt_text === undefined
+        ? {}
+        : { promptText: parsed.prompt_text }),
+      testType: parsed.test_type ?? 'Practice',
+      ...(parsed.test_code === undefined ? {} : { testCode: parsed.test_code }),
+      ...(parsed.transcript === undefined
+        ? {}
+        : { transcript: parsed.transcript }),
+    };
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+    throw invalidRequest();
+  }
+}
 
 function userId(request: AuthenticatedRequest): string {
   const value = request.aihubIdentity?.userId;
@@ -47,6 +100,16 @@ function userId(request: AuthenticatedRequest): string {
     });
   }
   return value;
+}
+
+function requestLifecycle(
+  request: AuthenticatedRequest,
+  timeoutMs: number,
+): RequestLifecycleState {
+  return (
+    getRequestLifecycle(request.raw) ??
+    createRequestLifecycleState(request.raw, timeoutMs)
+  );
 }
 
 @Controller()
@@ -68,29 +131,61 @@ export class SpeakingGradingController {
   ): Promise<DispatchResult<SpeakingGradeResponse>> {
     const authenticated = getAuthenticatedApiKey(request);
     const verifiedUserId = userId(request);
-    const { signal, dispose } = createClientDisconnectSignal(request.raw);
+    const lifecycle = requestLifecycle(
+      request,
+      OPERATION_CATALOG[OPERATION].timeoutMs,
+    );
 
     try {
       const context = createRequestContext({
         requestId: String(request.id),
-        receivedAt: new Date(),
+        receivedAt: lifecycle.receivedAt,
         deadlineMs: OPERATION_CATALOG[OPERATION].timeoutMs,
         organizationId: authenticated.organizationId,
         apiKeyId: authenticated.apiKeyId,
         userId: verifiedUserId,
         scopes: authenticated.scopes,
-        signal,
+        signal: lifecycle.signal,
       });
-      const uploadSignal = AbortSignal.any([
-        context.signal,
-        AbortSignal.timeout(OPERATION_CATALOG[OPERATION].timeoutMs),
-      ]);
       const source = createFastifySpeakingMultipartSource(request);
-      const input = await this.multipartParser.parse(source, uploadSignal);
+      const input = await this.multipartParser.parse(source, context.signal);
 
       return await this.dispatcher.dispatch(OPERATION, input, context);
     } finally {
-      dispose();
+      lifecycle.dispose();
+    }
+  }
+
+  @Post(OPERATION_CATALOG[JSON_OPERATION].path)
+  @HttpCode(200)
+  @RequireOperation(JSON_OPERATION)
+  async gradeJson(
+    @Req() request: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<DispatchResult<SpeakingGradeResponse>> {
+    const input = parseJsonBody(body);
+    const authenticated = getAuthenticatedApiKey(request);
+    const verifiedUserId = userId(request);
+    const lifecycle = requestLifecycle(
+      request,
+      OPERATION_CATALOG[JSON_OPERATION].timeoutMs,
+    );
+
+    try {
+      const context = createRequestContext({
+        requestId: String(request.id),
+        receivedAt: lifecycle.receivedAt,
+        deadlineMs: OPERATION_CATALOG[JSON_OPERATION].timeoutMs,
+        organizationId: authenticated.organizationId,
+        apiKeyId: authenticated.apiKeyId,
+        userId: verifiedUserId,
+        scopes: authenticated.scopes,
+        signal: lifecycle.signal,
+      });
+
+      return await this.dispatcher.dispatch(JSON_OPERATION, input, context);
+    } finally {
+      lifecycle.dispose();
     }
   }
 }

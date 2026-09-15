@@ -1927,6 +1927,682 @@
           }
         }
       }
+    },
+    "/v1/ielts/speaking/grading-json": {
+      "post": {
+        "operationId": "speaking.grading-json",
+        "summary": "speaking.grading-json",
+        "x-required-scope": "speaking.grade",
+        "x-identity-scope": "user",
+        "x-idempotency": "none",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/UserAssertion"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "description": "Ignored. This operation never stores or replays an idempotency record."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["audio_url", "part", "question_id"],
+                "properties": {
+                  "audio_url": {
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "description": "HTTPS URL on storage.wispace.vn; signed query parameters are allowed",
+                    "type": "string"
+                  },
+                  "part": {
+                    "minimum": 1,
+                    "maximum": 3,
+                    "type": "integer"
+                  },
+                  "question_id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "prompt_text": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "test_type": {
+                    "default": "Practice",
+                    "anyOf": [
+                      {
+                        "const": "Practice",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Full-test",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "test_code": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "transcript": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "question_id",
+                        "scorability",
+                        "estimated_band",
+                        "transcript",
+                        "relevance",
+                        "fluency_metrics",
+                        "pronunciation_detail",
+                        "language_analysis",
+                        "feedback"
+                      ],
+                      "properties": {
+                        "test_type": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "question_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "scorability": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "is_scorable",
+                            "confidence",
+                            "display_band",
+                            "message_vi"
+                          ],
+                          "properties": {
+                            "is_scorable": {
+                              "type": "boolean"
+                            },
+                            "confidence": {
+                              "type": "string"
+                            },
+                            "display_band": {
+                              "type": "boolean"
+                            },
+                            "message_vi": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        "estimated_band": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "overall",
+                            "fluency_coherence",
+                            "lexical_resource",
+                            "grammatical_range_accuracy",
+                            "pronunciation"
+                          ],
+                          "properties": {
+                            "overall": {
+                              "minimum": 0,
+                              "maximum": 9,
+                              "multipleOf": 0.5,
+                              "type": "number"
+                            },
+                            "fluency_coherence": {
+                              "minimum": 0,
+                              "maximum": 9,
+                              "multipleOf": 0.5,
+                              "type": "number"
+                            },
+                            "lexical_resource": {
+                              "minimum": 0,
+                              "maximum": 9,
+                              "multipleOf": 0.5,
+                              "type": "number"
+                            },
+                            "grammatical_range_accuracy": {
+                              "minimum": 0,
+                              "maximum": 9,
+                              "multipleOf": 0.5,
+                              "type": "number"
+                            },
+                            "pronunciation": {
+                              "minimum": 0,
+                              "maximum": 9,
+                              "multipleOf": 0.5,
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "transcript": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "text",
+                            "word_count",
+                            "duration_seconds"
+                          ],
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            },
+                            "word_count": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "duration_seconds": {
+                              "minimum": 0,
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "relevance": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": ["on_topic", "score", "feedback_vi"],
+                          "properties": {
+                            "on_topic": {
+                              "type": "boolean"
+                            },
+                            "score": {
+                              "minimum": 0,
+                              "maximum": 1,
+                              "type": "number"
+                            },
+                            "feedback_vi": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        "fluency_metrics": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "speech_rate_wpm",
+                                "pause_count",
+                                "mean_length_run_words"
+                              ],
+                              "properties": {
+                                "speech_rate_wpm": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 0,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "pause_count": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "mean_length_run_words": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 0,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "pronunciation_detail": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": ["summary", "words"],
+                          "properties": {
+                            "summary": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "good_count",
+                                "fair_count",
+                                "poor_count"
+                              ],
+                              "properties": {
+                                "good_count": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "fair_count": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "poor_count": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              }
+                            },
+                            "words": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "word",
+                                  "quality_score",
+                                  "quality_class",
+                                  "syllables",
+                                  "phonemes"
+                                ],
+                                "properties": {
+                                  "word": {
+                                    "type": "string"
+                                  },
+                                  "quality_score": {
+                                    "minimum": 0,
+                                    "maximum": 100,
+                                    "type": "number"
+                                  },
+                                  "quality_class": {
+                                    "type": "string"
+                                  },
+                                  "syllables": {
+                                    "type": "array",
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "letters",
+                                        "stress_level",
+                                        "predicted_stress",
+                                        "stress_score",
+                                        "quality_score",
+                                        "audio_extent_ms"
+                                      ],
+                                      "properties": {
+                                        "letters": {
+                                          "type": "string"
+                                        },
+                                        "stress_level": {
+                                          "anyOf": [
+                                            {
+                                              "minimum": 0,
+                                              "maximum": 2,
+                                              "type": "integer"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "predicted_stress": {
+                                          "minimum": 0,
+                                          "maximum": 2,
+                                          "type": "integer"
+                                        },
+                                        "stress_score": {
+                                          "minimum": 0,
+                                          "maximum": 100,
+                                          "type": "number"
+                                        },
+                                        "quality_score": {
+                                          "minimum": 0,
+                                          "maximum": 100,
+                                          "type": "number"
+                                        },
+                                        "audio_extent_ms": {
+                                          "type": "array",
+                                          "items": [
+                                            {
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            {
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          ],
+                                          "additionalItems": false,
+                                          "minItems": 2,
+                                          "maxItems": 2
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "phonemes": {
+                                    "type": "array",
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "phone",
+                                        "quality_score",
+                                        "sound_most_like",
+                                        "stress_level",
+                                        "audio_extent_ms",
+                                        "char_index"
+                                      ],
+                                      "properties": {
+                                        "phone": {
+                                          "type": "string"
+                                        },
+                                        "quality_score": {
+                                          "minimum": 0,
+                                          "maximum": 100,
+                                          "type": "number"
+                                        },
+                                        "sound_most_like": {
+                                          "type": "string"
+                                        },
+                                        "stress_level": {
+                                          "anyOf": [
+                                            {
+                                              "minimum": 0,
+                                              "maximum": 2,
+                                              "type": "integer"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "audio_extent_ms": {
+                                          "type": "array",
+                                          "items": [
+                                            {
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            {
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          ],
+                                          "additionalItems": false,
+                                          "minItems": 2,
+                                          "maxItems": 2
+                                        },
+                                        "char_index": {
+                                          "type": "array",
+                                          "items": {
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "language_analysis": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": ["grammar_errors", "vocabulary_upgrades"],
+                          "properties": {
+                            "grammar_errors": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "sentence",
+                                  "error_segment",
+                                  "correction",
+                                  "error_type",
+                                  "explanation_vi"
+                                ],
+                                "properties": {
+                                  "sentence": {
+                                    "type": "string"
+                                  },
+                                  "error_segment": {
+                                    "type": "string"
+                                  },
+                                  "correction": {
+                                    "type": "string"
+                                  },
+                                  "error_type": {
+                                    "type": "string"
+                                  },
+                                  "explanation_vi": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            },
+                            "vocabulary_upgrades": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "original_word",
+                                  "suggested_word",
+                                  "cefr_level",
+                                  "reason_vi"
+                                ],
+                                "properties": {
+                                  "original_word": {
+                                    "type": "string"
+                                  },
+                                  "suggested_word": {
+                                    "type": "string"
+                                  },
+                                  "cefr_level": {
+                                    "type": "string"
+                                  },
+                                  "context": {
+                                    "type": "string"
+                                  },
+                                  "reason_vi": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "feedback": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "summary_vi",
+                            "strong_point_vi",
+                            "action_plan_vi"
+                          ],
+                          "properties": {
+                            "summary_vi": {
+                              "type": "string"
+                            },
+                            "strong_point_vi": {
+                              "type": "string"
+                            },
+                            "action_plan_vi": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "request_id",
+                        "service",
+                        "operation",
+                        "timing"
+                      ],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "correlation_id": {
+                          "type": "string"
+                        },
+                        "service": {
+                          "type": "string"
+                        },
+                        "operation": {
+                          "type": "string"
+                        },
+                        "timing": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "downstream_ms",
+                            "gateway_overhead_ms",
+                            "total_ms"
+                          ],
+                          "properties": {
+                            "downstream_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "gateway_overhead_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "total_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error502"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error504"
+          }
+        }
+      }
     }
   }
 }

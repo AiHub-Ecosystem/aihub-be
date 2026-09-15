@@ -2,6 +2,7 @@ import type { OperationId } from '../../../catalog/operation-id';
 import type { RequestContext } from '../../../common/request-context/request-context';
 import type {
   SpeakingGradeInput,
+  SpeakingGradeJsonInput,
   SpeakingGradeResponse,
 } from '../../../contracts/speaking/grading';
 import type {
@@ -19,7 +20,7 @@ export interface DispatchResult<TOutput> {
 
 /**
  * One overload per operation rather than a single generic signature: with
- * only three operations, this gives every call site full type safety (the
+ * only four operations, this gives every call site full type safety (the
  * input and result are pinned to the literal operation string) without
  * needing schema-derived mapped types. The implementation's own signature is
  * necessarily broader than any one overload — that is where the type
@@ -39,6 +40,11 @@ export interface OperationDispatcherPort {
   dispatch(
     operation: 'speaking.grading',
     input: SpeakingGradeInput,
+    context: RequestContext,
+  ): Promise<DispatchResult<SpeakingGradeResponse>>;
+  dispatch(
+    operation: 'speaking.grading-json',
+    input: SpeakingGradeJsonInput,
     context: RequestContext,
   ): Promise<DispatchResult<SpeakingGradeResponse>>;
 }

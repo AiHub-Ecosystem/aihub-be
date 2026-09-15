@@ -34,11 +34,12 @@ function configurationError(reason: string): AppError {
   });
 }
 
-function transportError(error: unknown): AppError {
+function transportError(error: unknown, signalAborted = false): AppError {
   const name = errorName(error);
   const code = errorCode(error);
 
   if (
+    signalAborted ||
     name === 'AbortError' ||
     name === 'TimeoutError' ||
     code === 'UND_ERR_HEADERS_TIMEOUT' ||
@@ -164,15 +165,15 @@ export class DownstreamHttpClient {
       }
       response = await this.getDispatcher(base).request(requestOptions);
     } catch (error) {
-      throw transportError(error);
+      throw transportError(error, options.signal.aborted);
     }
 
     let parsedBody: unknown;
     try {
       parsedBody = await response.body.json();
     } catch (error) {
-      if (isTransportFailure(error)) {
-        throw transportError(error);
+      if (options.signal.aborted || isTransportFailure(error)) {
+        throw transportError(error, options.signal.aborted);
       }
       if (response.statusCode >= 400) {
         parsedBody = undefined;

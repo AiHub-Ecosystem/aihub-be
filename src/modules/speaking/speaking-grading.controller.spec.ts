@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
 
 import {
   FastifyAdapter,
@@ -11,6 +12,7 @@ import { MockAgent, FormData as UndiciFormData } from 'undici';
 import { AppModule } from '../../app.module';
 import { AppError } from '../../common/errors/app-error';
 import { registerBodySizeGuard } from '../../common/http/body-size.hook';
+import { registerRequestLifecycle } from '../../common/http/request-lifecycle.hook';
 import { generateRequestId } from '../../common/request-context/request-id';
 import { DownstreamHttpClient } from '../gateway/infrastructure/downstream-http.client';
 import {
@@ -31,6 +33,18 @@ function fixture(name: string): Record<string, unknown> {
     throw new Error(`Fixture ${name} must be a JSON object`);
   }
   return value;
+}
+
+function jsonBody(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value === 'string') {
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) ? parsed : undefined;
+  }
+  if (value instanceof Uint8Array) {
+    const parsed: unknown = JSON.parse(Buffer.from(value).toString('utf8'));
+    return isRecord(parsed) ? parsed : undefined;
+  }
+  return undefined;
 }
 
 function multipartPayload(
@@ -92,6 +106,8 @@ describe('Speaking grading HTTP flow', () => {
   let mockAgent: MockAgent;
   let providerResponse: { statusCode: number; body: Record<string, unknown> };
   let outboundBody: UndiciFormData | undefined;
+  let outboundJson: Record<string, unknown> | undefined;
+  let abortJsonRequest = false;
   const originalEnv = {
     allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
     nodeEnv: process.env.NODE_ENV,
@@ -133,6 +149,24 @@ describe('Speaking grading HTTP flow', () => {
         };
       })
       .persist();
+    mockAgent
+      .get('https://ai-speaking.test')
+      .intercept({
+        method: 'POST',
+        path: '/api/v1/speaking/grading-json',
+        headers: {
+          'x-client-id': 'speaking-client',
+          'x-secret-key': 'speaking-secret',
+        },
+      })
+      .reply((options) => {
+        outboundJson = jsonBody(options.body);
+        return {
+          statusCode: providerResponse.statusCode,
+          data: providerResponse.body,
+        };
+      })
+      .persist();
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -163,6 +197,19 @@ describe('Speaking grading HTTP flow', () => {
     );
     registerSpeakingMultipartParser(app.getHttpAdapter().getInstance());
     registerBodySizeGuard(app.getHttpAdapter().getInstance());
+    registerRequestLifecycle(app.getHttpAdapter().getInstance());
+    app
+      .getHttpAdapter()
+      .getInstance()
+      .addHook('preHandler', (request, _reply, done) => {
+        if (
+          abortJsonRequest &&
+          request.url === '/v1/ielts/speaking/grading-json'
+        ) {
+          request.raw.emit('aborted');
+        }
+        done();
+      });
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });
@@ -245,6 +292,268 @@ describe('Speaking grading HTTP flow', () => {
     expect(outboundBody?.get('prompt_text')).toBeNull();
     expect(outboundBody?.get('test_code')).toBeNull();
     expect(outboundBody?.get('transcript')).toBeNull();
+  });
+
+  it('forwards a valid JSON audio URL and normalizes the scoring response', async () => {
+    outboundJson = undefined;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/speaking/grading-json',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        audio_url:
+          'https://storage.wispace.vn/audio/sample.mp3?signature=contract-test',
+        part: 1,
+        question_id: 'p1_hometown',
+        prompt_text: 'Do you enjoy living in your hometown?',
+        test_type: 'Practice',
+        test_code: 'TEST-001',
+        transcript: null,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().meta.operation).toBe('speaking.grading-json');
+    expect(response.json().data).not.toHaveProperty('performance_timing');
+    expect(response.json().data).not.toHaveProperty('user_id');
+    expect(outboundJson).toEqual({
+      user_id: 'local-development',
+      part: 1,
+      question_id: 'p1_hometown',
+      audio_url:
+        'https://storage.wispace.vn/audio/sample.mp3?signature=contract-test',
+      test_type: 'Practice',
+      prompt_text: 'Do you enjoy living in your hometown?',
+      test_code: 'TEST-001',
+      transcript: null,
+    });
+  });
+
+  it('maps a JSON upload deadline that expires while parsing to 504', async () => {
+    outboundJson = undefined;
+    const timeout = jest
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(AbortSignal.abort());
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/speaking/grading-json',
+        headers: { 'content-type': 'application/json' },
+        payload: Readable.from([
+          JSON.stringify({
+            audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+            part: 1,
+            question_id: 'p1_hometown',
+          }),
+        ]),
+      });
+
+      expect(response.statusCode).toBe(504);
+      expect(response.json().error.code).toBe('AI_SERVICE_TIMEOUT');
+      expect(outboundJson).toBeUndefined();
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
+  it('does not expose the old unnamespaced JSON route alias', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/speaking/grading-json',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+        part: 1,
+        question_id: 'p1_hometown',
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe('NOT_FOUND');
+  });
+
+  it('applies JSON defaults and does not accept a client user_id', async () => {
+    outboundJson = undefined;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/speaking/grading-json',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+        part: 1,
+        question_id: 'p1_hometown',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(outboundJson).toMatchObject({
+      user_id: 'local-development',
+      test_type: 'Practice',
+      prompt_text: null,
+      test_code: null,
+      transcript: null,
+    });
+
+    const override = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/speaking/grading-json',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+        part: 1,
+        question_id: 'p1_hometown',
+        user_id: 'attacker-user',
+      },
+    });
+
+    expect(override.statusCode).toBe(400);
+    expect(override.json().error.code).toBe('INVALID_REQUEST');
+  });
+
+  it.each([
+    {},
+    { audio_url: 'https://storage.wispace.vn/audio/sample.mp3', part: 1 },
+    {
+      audio_url: 'http://storage.wispace.vn/audio/sample.mp3',
+      part: 1,
+      question_id: 'p1_hometown',
+    },
+    {
+      audio_url: 'https://evil.example/audio/sample.mp3',
+      part: 1,
+      question_id: 'p1_hometown',
+    },
+    {
+      audio_url: 'https://storage.wispace.vn:8443/audio/sample.mp3',
+      part: 1,
+      question_id: 'p1_hometown',
+    },
+  ])('rejects invalid JSON audio request %#', async (payload) => {
+    outboundJson = undefined;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/speaking/grading-json',
+      headers: { 'content-type': 'application/json' },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expect(outboundJson).toBeUndefined();
+  });
+
+  it('maps a malformed JSON provider success body to a contract violation', async () => {
+    providerResponse = {
+      statusCode: 200,
+      body: { status: 'success', data: { session_id: 'session-only' } },
+    };
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/speaking/grading-json',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+        part: 1,
+        question_id: 'p1_hometown',
+      },
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error.code).toBe('AI_SERVICE_CONTRACT_VIOLATION');
+
+    providerResponse = {
+      statusCode: 200,
+      body: fixture('grading.response.json'),
+    };
+  });
+
+  it.each([
+    [400, 502, 'AI_SERVICE_ERROR', false],
+    [429, 503, 'AI_SERVICE_THROTTLED', true],
+    [500, 502, 'AI_SERVICE_ERROR', true],
+  ] as const)(
+    'maps JSON provider HTTP %i to the public error contract',
+    async (providerStatus, publicStatus, errorCode, retryable) => {
+      providerResponse = {
+        statusCode: providerStatus,
+        body: { detail: 'private JSON provider failure detail' },
+      };
+
+      try {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/ielts/speaking/grading-json',
+          headers: { 'content-type': 'application/json' },
+          payload: {
+            audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+            part: 1,
+            question_id: 'p1_hometown',
+          },
+        });
+
+        expect(response.statusCode).toBe(publicStatus);
+        expect(response.json().error.code).toBe(errorCode);
+        expect(response.json().error.retryable).toBe(retryable);
+        expect(response.payload).not.toContain(
+          'private JSON provider failure detail',
+        );
+      } finally {
+        providerResponse = {
+          statusCode: 200,
+          body: fixture('grading.response.json'),
+        };
+      }
+    },
+  );
+
+  it('maps a JSON downstream timeout to the public timeout contract', async () => {
+    const client = app.get(DownstreamHttpClient);
+    const request = {
+      audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+      part: 1,
+      question_id: 'p1_hometown',
+    };
+    const timeout = jest
+      .spyOn(client, 'request')
+      .mockRejectedValueOnce(speakingTimeout());
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/speaking/grading-json',
+        headers: { 'content-type': 'application/json' },
+        payload: request,
+      });
+
+      expect(response.statusCode).toBe(504);
+      expect(response.json().error.code).toBe('AI_SERVICE_TIMEOUT');
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
+  it('maps a JSON client disconnect to the public timeout contract', async () => {
+    abortJsonRequest = true;
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/speaking/grading-json',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          audio_url: 'https://storage.wispace.vn/audio/sample.mp3',
+          part: 1,
+          question_id: 'p1_hometown',
+        },
+      });
+
+      expect(response.statusCode).toBe(504);
+      expect(response.json().error.code).toBe('AI_SERVICE_TIMEOUT');
+    } finally {
+      abortJsonRequest = false;
+    }
   });
 
   it('preserves a null fluency_metrics group from the provider', async () => {

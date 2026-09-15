@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { speakingGradingJsonAdapter } from '../../downstream/speaking/speaking-grading-json.adapter';
 import { speakingGradingAdapter } from '../../downstream/speaking/speaking-grading.adapter';
 import { task1GradeAdapter } from '../../downstream/writing/task1-grade.adapter';
 import { task2GradeAdapter } from '../../downstream/writing/task2-grade.adapter';
@@ -90,6 +91,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
           task1GradeAdapter,
           task2GradeAdapter,
           speakingGradingAdapter,
+          speakingGradingJsonAdapter,
         ]),
       inject: [DownstreamHttpClient, INTERNAL_TOKEN_ISSUER],
     },

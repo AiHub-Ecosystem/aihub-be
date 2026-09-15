@@ -9,14 +9,16 @@ Technical Specification Document (TSD)
 - Review roles: AI Speaking service owner; WISPACE integration owner
 - Review date: 2026-09-14
 - Approval: AI Speaking service owner and WISPACE integration owner confirmed approval on 2026-09-14
-- Related issues: #24, #25, #27
+- Related issues: #24, #25, #27, #28
+- JSON-by-URL extension decision: accepted in #28 on 2026-09-15
 
-This document specifies the synchronous D2 Speaking grading proxy. It does
-not redefine the future asynchronous Speaking grading job, and it does not
-expose the AI Speaking service JSON-by-URL operation.
+This document specifies the synchronous D2 Speaking grading proxy, including
+the JSON-by-URL fallback in issue #28. It does not redefine the future
+asynchronous Speaking grading job.
 
 The executable boundary is src/contracts/speaking/grading.ts; the redacted
-live-shape fixture is test/fixtures/ai-speaking/grading.response.json; and
+live-shape fixture is test/fixtures/ai-speaking/grading.response.json and is
+the common response evidence for both transports; and
 the downstream contract is
 docs/contracts/ai-services/ai-speaking-grading-v1.md. OpenAPI and Postman
 artifacts remain generated from executable source. This TSD is the
@@ -24,10 +26,12 @@ human-facing contract and review record.
 
 ## 1. Endpoint and base URL
 
-| Surface                        | Method | Path                       | Content type        |
-| ------------------------------ | ------ | -------------------------- | ------------------- |
-| AIHUB public                   | POST   | /v1/ielts/speaking/grading | multipart/form-data |
-| Downstream AI Speaking service | POST   | /api/v1/speaking/grading   | multipart/form-data |
+| Surface                        | Method | Path                            | Content type        |
+| ------------------------------ | ------ | ------------------------------- | ------------------- |
+| AIHUB public                   | POST   | /v1/ielts/speaking/grading      | multipart/form-data |
+| AIHUB public                   | POST   | /v1/ielts/speaking/grading-json | application/json    |
+| Downstream AI Speaking service | POST   | /api/v1/speaking/grading        | multipart/form-data |
+| Downstream AI Speaking service | POST   | /api/v1/speaking/grading-json   | application/json    |
 
 Canonical AIHUB host convention:
 
@@ -52,13 +56,13 @@ The future public POST /v1/speaking/grade asset/job operation is separate.
 
 ## 2. Naming
 
-| Name               | Value               |
-| ------------------ | ------------------- |
-| Operation id       | speaking.grading    |
-| Required scope     | speaking.grade      |
-| Public capability  | Speaking grading    |
-| Downstream service | AI Speaking service |
-| Execution          | Synchronous         |
+| Name               | Value                                       |
+| ------------------ | ------------------------------------------- |
+| Operation ids      | `speaking.grading`, `speaking.grading-json` |
+| Required scope     | speaking.grade                              |
+| Public capability  | Speaking grading                            |
+| Downstream service | AI Speaking service                         |
+| Execution          | Synchronous                                 |
 
 AI Service means a downstream domain service behind AIHUB. Model Provider
 means an upstream foundational model service invoked by an AI Service. The
@@ -70,13 +74,13 @@ async operation.
 
 ## 3. Request headers
 
-| Header           | Required     | Source and rule                                                  |
-| ---------------- | ------------ | ---------------------------------------------------------------- |
-| X-API-Key        | Yes          | Organization credential; validated before dispatch               |
-| X-User-Assertion | Yes          | Organization-signed assertion; verified before dispatch          |
-| X-Correlation-Id | No           | Echoed in meta when present                                      |
-| Content-Type     | Yes          | Must be a supported multipart request                            |
-| Idempotency-Key  | No semantics | Speaking v1 does not consume it and provides no replay guarantee |
+| Header           | Required     | Source and rule                                                              |
+| ---------------- | ------------ | ---------------------------------------------------------------------------- |
+| X-API-Key        | Yes          | Organization credential; validated before dispatch                           |
+| X-User-Assertion | Yes          | Organization-signed assertion; verified before dispatch                      |
+| X-Correlation-Id | No           | Echoed in meta when present                                                  |
+| Content-Type     | Yes          | `multipart/form-data` for file grading or `application/json` for JSON-by-URL |
+| Idempotency-Key  | No semantics | Speaking v1 does not consume it and provides no replay guarantee             |
 
 AIHUB generates the primary request_id; a client-supplied X-Request-Id is not
 the primary tracing id.
@@ -85,8 +89,8 @@ The outbound request adds x-client-id and x-secret-key from
 environment-specific server configuration. They are never request fields,
 browser values, fixtures, logs, public responses, or ordinary business data.
 
-The client must not send a user_id form field. AIHUB derives downstream
-user_id from the verified assertion sub claim.
+The client must not send a `user_id` form or JSON field. AIHUB derives
+downstream `user_id` from the verified assertion sub claim.
 
 ## 4. Response envelope
 
@@ -107,7 +111,9 @@ A successful response is HTTP 200 with the shared envelope:
       }
     }
 
-correlation_id is omitted when the request did not send one. AI Speaking
+correlation_id is omitted when the request did not send one. The JSON
+transport uses `operation: "speaking.grading-json"`; all other envelope rules
+are identical. AI Speaking
 service envelopes, credentials, assertions, audio, raw service detail, and
 service-private ids do not cross this boundary.
 
@@ -124,7 +130,9 @@ service-private ids do not cross this boundary.
 | Optional text fields   | Same names                | Forward only when present               |
 | Server configuration   | x-client-id, x-secret-key | Inject at dispatcher/HTTP boundary      |
 
-The downstream path is fixed by the operation catalog. The adapter is a pure
+For JSON-by-URL grading, `audio_url` replaces the multipart `audio` file and
+the same verified identity and metadata mapping applies. The downstream path
+is fixed by the operation catalog for each transport. The adapter is a pure
 mapper; host selection, credentials, timeout, cancellation, and HTTP status
 translation belong to infrastructure.
 
@@ -166,6 +174,29 @@ are invalid. The total multipart wire-body ceiling is 25 MiB
 (26,214,400 bytes), including multipart overhead. The parser also applies a
 64 KiB per-text-field defense limit. The extension allowlist is the supported
 type contract; MIME metadata is not a separate trust boundary.
+
+### Public JSON-by-URL request
+
+| Field       | Required | Contract                                                                                                  |
+| ----------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| audio_url   | Yes      | HTTPS URL on `storage.wispace.vn`; maximum 2,048 characters; query parameters are allowed for signed URLs |
+| part        | Yes      | Integer 1, 2, or 3                                                                                        |
+| question_id | Yes      | Non-empty string                                                                                          |
+| prompt_text | No       | String or `null`; provider default is `null`                                                              |
+| test_type   | No       | `Practice` (default) or `Full-test`                                                                       |
+| test_code   | No       | String or `null`; provider default is `null`                                                              |
+| transcript  | No       | String or `null`; provider default is `null`                                                              |
+
+The gateway rejects non-HTTPS schemes, non-approved hosts, non-default ports,
+embedded credentials, fragments, and any URL longer than 2,048 characters. It
+does not resolve or download the URL. The JSON request body is capped at 256
+KiB. AI Speaking owns retrieval, does not
+follow redirects, enforces the 25 MiB downloaded-audio ceiling, and must finish
+retrieval and grading within the shared 30-second operation deadline.
+These provider-side guarantees are an external release precondition: AIHUB
+cannot enforce them while it deliberately avoids fetching customer URLs. Issue
+#28 stays open until the AI Speaking owner supplies authenticated JSON smoke
+evidence or an equivalent provider-side test result for these guarantees.
 
 ### Derived and server-only values
 
@@ -291,8 +322,10 @@ circuit-breaker implementation.
 - The contract must be identical across Dev and Production. Current evidence
   is the authenticated Production smoke accepted as the Dev-gate substitute
   in #24; a future Dev environment check is separate follow-up work.
-- The JSON-by-URL operation is deferred to #28. The asynchronous Speaking
-  grading job remains a separate roadmap contract.
+- JSON-by-URL grading is a synchronous fallback at
+  `POST /v1/ielts/speaking/grading-json`; it validates an approved URL but does
+  not download it. The asynchronous Speaking grading job remains a separate
+  roadmap contract.
 - Breaking changes to field types, ranges, nullability, enums, or error
   semantics require a new version and role-owned review. The executable
   schema, redacted fixture, tests, generated artifacts, and this TSD must be
@@ -303,18 +336,19 @@ circuit-breaker implementation.
 
 ## Traceability and review
 
-| TSD section                   | Executable behavior                                                 | Fixture evidence                           | Smoke evidence                                   |
-| ----------------------------- | ------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------ |
-| 1. Endpoint/base URL          | src/catalog/operation-catalog.ts; speaking controller               | N/A — transport configuration              | #24 authenticated Production smoke (200 handoff) |
-| 2. Naming                     | src/catalog/operation-catalog.ts                                    | N/A — catalog metadata                     | #24 operation handoff                            |
-| 3. Request headers            | speaking controller; multipart parser                               | N/A — request metadata                     | #24 authenticated request                        |
-| 4. Response envelope          | src/contracts/speaking/grading.ts; shared envelope filter           | grading.response.json (redacted)           | #24 public 200 response                          |
-| 5. Mapper rules               | speaking-grading.adapter.ts; speaking-grading-response.adapter.ts   | grading.response.json (redacted shape)     | #24 forwarded grading request                    |
-| 6. Data dictionary            | speaking schema; fastify-speaking-multipart.parser.ts               | grading.response.json (normalized groups)  | #24 valid audio/metadata request                 |
-| 7. AI Speaking service errors | http-operation-dispatcher.ts; dispatcher tests                      | N/A — status mappings                      | #24 success boundary; negative paths automated   |
-| 8. Public error shape         | common error envelope/filter                                        | N/A — error envelope                       | #24 response envelope; negative paths automated  |
-| 9. Error matrix               | dispatcher; error-code registry; controller tests                   | N/A — status mappings                      | #24 production handoff; negative paths automated |
-| 10. Operational/security      | deadline/cancellation dispatcher; multipart limits; redaction tests | Redacted fixture contains no secrets/audio | #24 accepted Production smoke substitute         |
+| TSD section                   | Executable behavior                                                                              | Fixture evidence                                                 | Smoke evidence                                     |
+| ----------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- | -------------------------------------------------- |
+| 1. Endpoint/base URL          | src/catalog/operation-catalog.ts; speaking controller                                            | N/A — transport configuration                                    | #24 authenticated Production smoke (200 handoff)   |
+| 2. Naming                     | src/catalog/operation-catalog.ts                                                                 | N/A — catalog metadata                                           | #24 operation handoff                              |
+| 3. Request headers            | speaking controller; multipart parser                                                            | N/A — request metadata                                           | #24 authenticated request                          |
+| 4. Response envelope          | src/contracts/speaking/grading.ts; shared envelope filter                                        | grading.response.json (redacted)                                 | #24 public 200 response                            |
+| 5. Mapper rules               | speaking-grading.adapter.ts; speaking-grading-response.adapter.ts                                | grading.response.json (redacted shape)                           | #24 forwarded grading request                      |
+| 6. Data dictionary            | speaking schema; fastify-speaking-multipart.parser.ts                                            | grading.response.json (normalized groups)                        | #24 valid audio/metadata request                   |
+| 7. AI Speaking service errors | http-operation-dispatcher.ts; dispatcher tests                                                   | N/A — status mappings                                            | #24 success boundary; negative paths automated     |
+| 8. Public error shape         | common error envelope/filter                                                                     | N/A — error envelope                                             | #24 response envelope; negative paths automated    |
+| 9. Error matrix               | dispatcher; error-code registry; controller tests                                                | N/A — status mappings                                            | #24 production handoff; negative paths automated   |
+| 10. Operational/security      | request-lifecycle hook; deadline/cancellation dispatcher; per-route body limits; redaction tests | Redacted fixture contains no secrets/audio                       | #24 accepted Production smoke substitute           |
+| JSON-by-URL extension         | JSON schema, URL policy, catalog, JSON adapter/controller                                        | Same redacted fixture; provider JSON fixture has the same schema | #28 gateway tests; provider retrieval gate pending |
 
 | Review role               | Status   | Owner                     | Review date | Follow-up date |
 | ------------------------- | -------- | ------------------------- | ----------- | -------------- |
@@ -322,10 +356,11 @@ circuit-breaker implementation.
 | AI Speaking service owner | Approved | AI Speaking service owner | 2026-09-14  | N/A — approved |
 | WISPACE integration owner | Approved | WISPACE integration owner | 2026-09-14  | N/A — approved |
 
-| Review item                                    | Owner role                | Follow-up date | Status   |
-| ---------------------------------------------- | ------------------------- | -------------- | -------- |
-| Redacted fixture and normalized scoring groups | AI Speaking service owner | N/A — approved | Resolved |
-| Error matrix and integration handoff           | WISPACE integration owner | N/A — approved | Resolved |
+| Review item                                    | Owner role                | Follow-up date   | Status                            |
+| ---------------------------------------------- | ------------------------- | ---------------- | --------------------------------- |
+| Redacted fixture and normalized scoring groups | AI Speaking service owner | N/A — approved   | Resolved                          |
+| Error matrix and integration handoff           | WISPACE integration owner | N/A — approved   | Resolved                          |
+| JSON URL retrieval/no-redirect/25 MiB/30s gate | AI Speaking service owner | Before #28 close | Open — provider evidence required |
 
 This TSD is Approved based on the service owner and WISPACE approvals
 confirmed on 2026-09-14. Any future unresolved point must name one role owner

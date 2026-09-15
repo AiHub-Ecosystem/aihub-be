@@ -15,12 +15,13 @@ Speaking service response bodies remain excluded.
 
 The AI Speaking service exposes two synchronous grading transports:
 
-| AI Speaking service operation        | Content type          | Role                                                           |
-| ------------------------------------ | --------------------- | -------------------------------------------------------------- |
-| `POST /api/v1/speaking/grading`      | `multipart/form-data` | Primary audio-file path; proxied by AIHUB D2.                  |
-| `POST /api/v1/speaking/grading-json` | `application/json`    | Audio-URL fallback; not exposed by the current AIHUB D2 route. |
+| AI Speaking service operation        | Content type          | Role                                          |
+| ------------------------------------ | --------------------- | --------------------------------------------- |
+| `POST /api/v1/speaking/grading`      | `multipart/form-data` | Primary audio-file path; proxied by AIHUB D2. |
+| `POST /api/v1/speaking/grading-json` | `application/json`    | Audio-URL fallback; proxied by AIHUB D2.      |
 
-AIHUB currently exposes only `POST /v1/ielts/speaking/grading`. The future public
+AIHUB exposes `POST /v1/ielts/speaking/grading` and
+`POST /v1/ielts/speaking/grading-json`. The future public
 `POST /v1/speaking/grade` asset/job operation is a separate asynchronous
 contract and is not part of this document.
 
@@ -59,7 +60,8 @@ successful body when validation fails.
 ## 4. JSON audio-URL fallback
 
 `POST /api/v1/speaking/grading-json` uses the same metadata as the multipart
-operation but replaces `audio` with `audio_url`:
+operation but replaces `audio` with `audio_url`. AIHUB exposes this operation at
+`POST /v1/ielts/speaking/grading-json` after validating an approved URL:
 
 ```json
 {
@@ -67,17 +69,24 @@ operation but replaces `audio` with `audio_url`:
   "part": 1,
   "question_id": "p1_hometown",
   "prompt_text": "Do you enjoy living in your hometown?",
-  "audio_url": "https://approved-object-storage.example/audio.mp3",
+  "audio_url": "https://storage.wispace.vn/audio/sample.mp3",
   "test_type": "Practice",
   "test_code": "FULL-TEST-001",
   "transcript": null
 }
 ```
 
-The AI Speaking service must document the approved URL schemes, host policy, redirect
-policy, download timeout, and downloaded-size limit. AIHUB must validate an
-allowlisted HTTPS URL before this operation is exposed; an arbitrary URL is not
-an acceptable public contract.
+The AIHUB public boundary accepts only HTTPS URLs on the exact
+`storage.wispace.vn` host, with the default HTTPS port, no embedded credentials
+or fragment, a maximum length of 2,048 characters, and optional query
+parameters for signed URLs. AIHUB validates the URL but does not download it.
+The AI Speaking service owns retrieval, does not follow redirects, enforces the
+25 MiB downloaded-audio ceiling, and must complete retrieval and grading within
+the shared 30-second operation deadline. These are provider-side release
+guarantees, not behaviors the gateway can enforce while it avoids fetching the
+URL. The JSON fallback cannot be marked integrated until the AI Speaking owner
+provides authenticated smoke or equivalent provider-side test evidence for all
+three guarantees. An arbitrary URL is not an acceptable public contract.
 
 ## 5. Success response contract
 

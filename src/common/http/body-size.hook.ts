@@ -29,6 +29,12 @@ interface OnRequestReply {
   code(statusCode: number): { send(payload: unknown): void };
 }
 
+interface OnRouteParams {
+  readonly url?: string;
+  readonly method?: string | readonly string[];
+  bodyLimit?: number;
+}
+
 /**
  * Structural rather than the `fastify` package's own `FastifyInstance` type.
  * `@nestjs/platform-fastify` pins its own exact fastify version as a direct
@@ -38,6 +44,7 @@ interface OnRequestReply {
  * whichever copy Nest hands back at the call site satisfies this shape.
  */
 export interface HookableFastifyInstance {
+  addHook(name: 'onRoute', handler: (route: OnRouteParams) => void): void;
   addHook(
     name: 'onRequest',
     handler: (
@@ -60,12 +67,23 @@ export interface HookableFastifyInstance {
  * measures the wrong thing besides: the re-serialised size is not the number
  * of bytes that came in over the wire.
  *
- * This only catches clients that declare `Content-Length` honestly. A client
- * that omits it and streams a large chunked body is still capped by the
- * process-wide `bodyLimit` passed to the Fastify adapter — a coarser but
- * still-present backstop.
+ * The matching route also receives Fastify's native per-route `bodyLimit`, so
+ * chunked requests are capped while Fastify reads the stream rather than only
+ * when a client declares an oversized `Content-Length`.
  */
 export function registerBodySizeGuard(instance: HookableFastifyInstance): void {
+  instance.addHook('onRoute', (route) => {
+    const limit =
+      route.url === undefined
+        ? undefined
+        : MAX_BODY_BYTES_BY_PATH.get(pathnameOf(route.url));
+    const methods = Array.isArray(route.method) ? route.method : [route.method];
+
+    if (limit !== undefined && methods.includes('POST')) {
+      route.bodyLimit = limit;
+    }
+  });
+
   instance.addHook('onRequest', (request, reply, done) => {
     const limit = MAX_BODY_BYTES_BY_PATH.get(pathnameOf(request.url));
 

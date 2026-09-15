@@ -12,7 +12,7 @@ import type {
 } from '../downstream.types';
 import { parseSpeakingGradeResponse } from './speaking-grading-response.adapter';
 
-function requiredUserId(context: RequestContext): string {
+export function requiredSpeakingUserId(context: RequestContext): string {
   const userId = context.userId;
   if (userId === undefined || userId.trim().length === 0) {
     throw new AppError({
@@ -46,7 +46,7 @@ export const speakingGradingAdapter: DownstreamAdapter<
     context: RequestContext,
   ): DownstreamRequest {
     const fields: Record<string, string> = {
-      user_id: requiredUserId(context),
+      user_id: requiredSpeakingUserId(context),
       part: String(input.part),
       question_id: input.questionId,
     };

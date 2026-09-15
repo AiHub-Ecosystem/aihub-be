@@ -31,6 +31,38 @@ export type SpeakingGradeRequestContract = Static<
   typeof SpeakingGradeRequestSchema
 >;
 
+export const SpeakingGradeJsonRequestSchema = Type.Object(
+  {
+    audio_url: Type.String({
+      minLength: 1,
+      maxLength: 2_048,
+      description:
+        'HTTPS URL on storage.wispace.vn; signed query parameters are allowed',
+    }),
+    part: Type.Integer({ minimum: 1, maximum: 3 }),
+    question_id: Type.String({ minLength: 1 }),
+    prompt_text: Type.Optional(
+      Type.Union([Type.String(), Type.Null()], { default: null }),
+    ),
+    test_type: Type.Optional(
+      Type.Union([Type.Literal('Practice'), Type.Literal('Full-test')], {
+        default: 'Practice',
+      }),
+    ),
+    test_code: Type.Optional(
+      Type.Union([Type.String(), Type.Null()], { default: null }),
+    ),
+    transcript: Type.Optional(
+      Type.Union([Type.String(), Type.Null()], { default: null }),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export type SpeakingGradeJsonRequestContract = Static<
+  typeof SpeakingGradeJsonRequestSchema
+>;
+
 export interface SpeakingAudio {
   readonly bytes: Uint8Array;
   readonly filename: string;
@@ -45,6 +77,16 @@ export interface SpeakingGradeInput {
   readonly testType?: string;
   readonly testCode?: string;
   readonly transcript?: string;
+}
+
+export interface SpeakingGradeJsonInput {
+  readonly audioUrl: string;
+  readonly part: number;
+  readonly questionId: string;
+  readonly promptText?: string | null;
+  readonly testType?: string;
+  readonly testCode?: string | null;
+  readonly transcript?: string | null;
 }
 
 const BandSchema = Type.Number({

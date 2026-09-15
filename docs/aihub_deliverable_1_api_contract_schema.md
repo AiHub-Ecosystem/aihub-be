@@ -972,12 +972,13 @@ AIHUB maps the requested service to system authorization scopes and downstream A
 
 ## [Implementation Proposal]
 
-| Public Endpoint                      | Operation             | Required Scope    | AI Service  | Downstream path            |
-| ------------------------------------ | --------------------- | ----------------- | ----------- | -------------------------- |
-| `POST /v1/ielts/writing/task1/grade` | `writing.task1.grade` | `writing.grade`   | AI Writing  | `/grading-feedback-task1`  |
-| `POST /v1/ielts/writing/task2/grade` | `writing.task2.grade` | `writing.grade`   | AI Writing  | `/grading-feedback-task2`  |
-| `POST /v1/ielts/speaking/grading`    | `speaking.grading`    | `speaking.grade`  | AI Speaking | `/api/v1/speaking/grading` |
-| `POST /v1/reading/analyze`           | `reading.analyze`     | `reading.analyze` | AI Reading  | _(future)_                 |
+| Public Endpoint                        | Operation               | Required Scope    | AI Service  | Downstream path                 |
+| -------------------------------------- | ----------------------- | ----------------- | ----------- | ------------------------------- |
+| `POST /v1/ielts/writing/task1/grade`   | `writing.task1.grade`   | `writing.grade`   | AI Writing  | `/grading-feedback-task1`       |
+| `POST /v1/ielts/writing/task2/grade`   | `writing.task2.grade`   | `writing.grade`   | AI Writing  | `/grading-feedback-task2`       |
+| `POST /v1/ielts/speaking/grading`      | `speaking.grading`      | `speaking.grade`  | AI Speaking | `/api/v1/speaking/grading`      |
+| `POST /v1/ielts/speaking/grading-json` | `speaking.grading-json` | `speaking.grade`  | AI Speaking | `/api/v1/speaking/grading-json` |
+| `POST /v1/reading/analyze`             | `reading.analyze`       | `reading.analyze` | AI Reading  | _(future)_                      |
 
 Both Writing grading tasks share the `writing.grade` scope because customers purchase Writing grading, not individual tasks. Question generation is no longer an AIHUB capability.
 
@@ -1398,6 +1399,23 @@ downstream_service: ai-speaking
 downstream_path: /api/v1/speaking/grading
 ```
 
+Speaking JSON-by-URL fallback:
+
+```yaml
+operation: speaking.grading-json
+method: POST
+path: /v1/ielts/speaking/grading-json
+scope: speaking.grade
+identity_scope: user
+execution: sync
+content_type: application/json
+idempotency: none
+max_body_bytes: 262144
+timeout_ms: 30000
+downstream_service: ai-speaking
+downstream_path: /api/v1/speaking/grading-json
+```
+
 ### `idempotency` Takes Three Values, Not a Boolean
 
 The initial draft used boolean `idempotency_required: true/false`. Three distinct states accurately reflect reality:
@@ -1408,7 +1426,8 @@ The initial draft used boolean `idempotency_required: true/false`. Three distinc
 | `optional` | Honored if provided, allowed without | Costly operations that do not produce permanent state |
 | `none`     | Header ignored if provided           | Read-only operations, safely repeatable               |
 
-The current runtime uses `required` for Writing grading and `none` for Speaking grading. The
+The current runtime uses `required` for Writing grading and `none` for Speaking grading,
+including the JSON-by-URL fallback. The
 `optional` mode remains a reserved catalog value for a future operation; it is not used by any
 public AIHUB route today.
 

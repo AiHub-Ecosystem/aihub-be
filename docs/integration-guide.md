@@ -288,14 +288,16 @@ issuer, JWKS URL, algorithm, or rotation process itself changes.
 
 ## 4. Endpoints
 
-All public grading operations are `POST` routes. Writing uses
-`Content-Type: application/json`; Speaking uses `multipart/form-data`.
+All public grading operations are `POST` routes. Writing and Speaking
+JSON-by-URL use `Content-Type: application/json`; Speaking file grading uses
+`multipart/form-data`.
 
-| Path                            | Assertion | `Idempotency-Key` | Max body | Timeout |
-| ------------------------------- | --------- | ----------------- | -------: | ------: |
-| `/v1/ielts/writing/task1/grade` | **Yes**   | **Required**      |   256 KB |     60s |
-| `/v1/ielts/writing/task2/grade` | **Yes**   | **Required**      |   256 KB |     60s |
-| `/v1/ielts/speaking/grading`    | **Yes**   | **None**          |   25 MiB |     30s |
+| Path                              | Assertion | `Idempotency-Key` | Max body | Timeout |
+| --------------------------------- | --------- | ----------------- | -------: | ------: |
+| `/v1/ielts/writing/task1/grade`   | **Yes**   | **Required**      |   256 KB |     60s |
+| `/v1/ielts/writing/task2/grade`   | **Yes**   | **Required**      |   256 KB |     60s |
+| `/v1/ielts/speaking/grading`      | **Yes**   | **None**          |   25 MiB |     30s |
+| `/v1/ielts/speaking/grading-json` | **Yes**   | **None**          |   256 KB |     30s |
 
 ### Enumerated values
 
@@ -349,6 +351,28 @@ Send the learner identity only through `X-User-Assertion`; do not send a
 `user_id` form field. AIHUB derives the downstream identity from the verified
 `sub` claim. The response uses the common `{ "data", "meta" }` envelope; see
 `/docs` for the complete Speaking response schema.
+
+`POST /v1/ielts/speaking/grading-json` is the URL fallback. It accepts the same
+Speaking metadata but replaces `audio` with `audio_url`. The URL must be HTTPS
+on the exact host `storage.wispace.vn`, may include query parameters for a
+signed object URL, and may be at most 2,048 characters. AIHUB rejects embedded
+credentials, fragments, other hosts/schemes/ports, and unknown fields before
+dispatch. AIHUB validates but does not download the URL; the provider owns
+retrieval and does not follow redirects.
+
+```bash
+curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/speaking/grading-json" \
+  -H "X-API-Key: $AIHUB_API_KEY" \
+  -H "X-User-Assertion: $AIHUB_ASSERTION" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "audio_url": "https://storage.wispace.vn/audio/sample.mp3?signature=demo",
+    "part": 1,
+    "question_id": "p1_hometown",
+    "prompt_text": "Do you enjoy living in your hometown?",
+    "test_type": "Practice"
+  }'
+```
 
 ---
 

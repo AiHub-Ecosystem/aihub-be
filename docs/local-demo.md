@@ -33,7 +33,7 @@ The demo uses:
 | PostgreSQL  | `localhost:5432`                           | Organizations, API keys, identity config, idempotency |
 | Redis       | `localhost:6379`                           | Credential cache, rate limits, concurrency protection |
 | AI Writing  | configured by `DOWNSTREAM_AI_WRITING_URL`  | Downstream AI service                                 |
-| AI Speaking | configured by `DOWNSTREAM_AI_SPEAKING_URL` | Synchronous multipart grading service                 |
+| AI Speaking | configured by `DOWNSTREAM_AI_SPEAKING_URL` | Synchronous multipart and JSON-by-URL grading service |
 
 ## Choose a demo mode
 
@@ -351,6 +351,54 @@ intentionally omitted; gateway timing remains in `meta.timing`. The current
 automated fixture is contract-based; run an authenticated Dev smoke test before
 treating the provider response shape as live-compatible.
 
+### 6.4 Speaking grading by approved audio URL
+
+The JSON fallback uses the same headers and metadata but sends an approved
+object URL instead of an uploaded file. AIHUB accepts only HTTPS URLs on
+`storage.wispace.vn`, allows query parameters for signed URLs, and does not
+download the object itself. Do not send `user_id`; it is derived from the
+assertion.
+
+PowerShell 7:
+
+```powershell
+$json = @{
+  audio_url = 'https://storage.wispace.vn/audio/sample.mp3?signature=demo'
+  part = 1
+  question_id = 'p1_hometown'
+  prompt_text = 'Do you enjoy living in your hometown?'
+  test_type = 'Practice'
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "$env:AIHUB_BASE_URL/v1/ielts/speaking/grading-json" `
+  -Headers $headers `
+  -ContentType 'application/json' `
+  -Body $json |
+  ConvertTo-Json -Depth 30
+```
+
+macOS/Linux:
+
+```bash
+curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/speaking/grading-json" \
+  -H "X-API-Key: $AIHUB_API_KEY" \
+  -H "X-User-Assertion: $AIHUB_ASSERTION" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "audio_url": "https://storage.wispace.vn/audio/sample.mp3?signature=demo",
+    "part": 1,
+    "question_id": "p1_hometown",
+    "prompt_text": "Do you enjoy living in your hometown?",
+    "test_type": "Practice"
+  }'
+```
+
+The response uses the same normalized envelope with
+`meta.operation` equal to `speaking.grading-json`. The 30-second Speaking
+deadline and no-idempotency behavior are unchanged.
+
 ## 7. Verify idempotency
 
 For a Writing grading request, resend the identical body with the same
@@ -422,7 +470,7 @@ operation catalog and policy checks
   → validate, authorize, rate-limit, and apply operation-specific replay policy
 Writing adapter (JSON)
   → map the canonical request to AI Writing
-Speaking parser and adapter (multipart)
+Speaking parser and adapter (multipart or JSON-by-URL)
   → map the canonical request to AI Speaking
 downstream client
   → call each service with its trusted, environment-specific credentials
