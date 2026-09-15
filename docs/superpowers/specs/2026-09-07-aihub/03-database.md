@@ -90,7 +90,7 @@ CREATE TABLE usage_records (
                       ('success','client_error','downstream_error','internal_error')),
   http_status       integer NOT NULL,
   error_code        text,
-  billable_requests integer NOT NULL DEFAULT 1,
+  billable_requests integer NOT NULL DEFAULT 0 CHECK (billable_requests IN (0, 1)),
   input_tokens      integer,
   output_tokens     integer,
   total_tokens      integer,

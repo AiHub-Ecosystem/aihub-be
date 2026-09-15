@@ -4,10 +4,11 @@ import { SuccessEnvelopeInterceptor } from '../../common/http/success-envelope.i
 import { GatewayModule } from '../gateway/gateway.module';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
 import { IdentityModule } from '../identity/identity.module';
+import { MeteringModule } from '../metering/metering.module';
 import { WritingGradingController } from './presentation/writing-grading.controller';
 
 @Module({
-  imports: [GatewayModule, IdentityModule, IdempotencyModule],
+  imports: [GatewayModule, IdentityModule, IdempotencyModule, MeteringModule],
   controllers: [WritingGradingController],
   providers: [SuccessEnvelopeInterceptor],
 })

@@ -1,18 +1,33 @@
 import {
   type CallHandler,
   type ExecutionContext,
+  Inject,
   Injectable,
   type NestInterceptor,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { type Observable, map } from 'rxjs';
+import { type Observable, mergeMap } from 'rxjs';
 
+import { isOperationId } from '../../catalog/operation-id';
+import { finalizeRequestMetering } from '../metering/finalize-request-metering';
+import {
+  METERING_FINALIZER,
+  type MeteringFinalizerPort,
+} from '../metering/metering-finalizer.port';
+import type { MeteringModel, MeteringUsage } from '../metering/metering.types';
+import {
+  getRequestMeteringState,
+  setRequestMeteringTelemetry,
+} from '../metering/request-metering-state';
 import { isRequestId } from '../request-context/request-id';
 
 interface DispatchResultLike {
   readonly operation: string;
   readonly data: unknown;
   readonly downstreamMs: number;
+  readonly usage?: MeteringUsage;
+  readonly models?: readonly MeteringModel[];
+  readonly aiProcessingMs?: number;
   readonly idempotentReplay?: boolean;
 }
 
@@ -51,6 +66,11 @@ function correlationId(request: FastifyRequest): string | undefined {
 
 @Injectable()
 export class SuccessEnvelopeInterceptor implements NestInterceptor {
+  constructor(
+    @Inject(METERING_FINALIZER)
+    private readonly metering: MeteringFinalizerPort,
+  ) {}
+
   intercept(
     context: ExecutionContext,
     next: CallHandler,
@@ -60,13 +80,31 @@ export class SuccessEnvelopeInterceptor implements NestInterceptor {
     const reply = context.switchToHttp().getResponse<FastifyReply>();
 
     return next.handle().pipe(
-      map((value: unknown) => {
+      mergeMap(async (value: unknown) => {
         if (!isDispatchResult(value)) {
           throw new Error('success response is missing dispatch metadata');
         }
 
-        const totalMs = Math.round(performance.now() - startedAt);
         const downstreamMs = Math.max(0, Math.round(value.downstreamMs));
+        if (
+          getRequestMeteringState(request) !== undefined &&
+          isOperationId(value.operation)
+        ) {
+          setRequestMeteringTelemetry(request, value.operation, {
+            downstreamMs,
+            ...(value.usage === undefined ? {} : { usage: value.usage }),
+            ...(value.models === undefined ? {} : { models: value.models }),
+            ...(value.aiProcessingMs === undefined
+              ? {}
+              : { aiProcessingMs: value.aiProcessingMs }),
+            ...(value.idempotentReplay === undefined
+              ? {}
+              : { idempotentReplay: value.idempotentReplay }),
+            modelCalled: true,
+          });
+        }
+
+        const totalMs = Math.max(0, Math.round(performance.now() - startedAt));
         const requestId = isRequestId(request.id)
           ? request.id
           : String(request.id);
@@ -85,6 +123,12 @@ export class SuccessEnvelopeInterceptor implements NestInterceptor {
             total_ms: totalMs,
           },
         };
+
+        await finalizeRequestMetering(request, this.metering, {
+          outcome: 'success',
+          httpStatus: 200,
+          totalMs,
+        });
 
         return { data: value.data, meta };
       }),

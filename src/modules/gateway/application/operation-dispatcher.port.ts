@@ -1,4 +1,8 @@
 import type { OperationId } from '../../../catalog/operation-id';
+import type {
+  MeteringModel,
+  MeteringUsage,
+} from '../../../common/metering/metering.types';
 import type { RequestContext } from '../../../common/request-context/request-context';
 import type {
   SpeakingGradeInput,
@@ -15,6 +19,9 @@ export interface DispatchResult<TOutput> {
   readonly operation: OperationId;
   readonly data: TOutput;
   readonly downstreamMs: number;
+  readonly usage?: MeteringUsage;
+  readonly models?: readonly MeteringModel[];
+  readonly aiProcessingMs?: number;
   readonly idempotentReplay?: boolean;
 }
 

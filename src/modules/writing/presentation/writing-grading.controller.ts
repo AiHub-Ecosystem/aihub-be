@@ -24,6 +24,10 @@ import {
   type GradeTask2Request as Task2Request,
 } from '../../../contracts/writing/grading';
 import {
+  readDispatchTelemetry,
+  withDispatchTelemetry,
+} from '../../gateway/application/dispatch-telemetry';
+import {
   type DispatchResult,
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
@@ -102,11 +106,14 @@ function decodeTask1Replay(value: unknown): DispatchResult<GradeResponse> {
     throw new Error('stored Task 1 grading response is malformed');
   }
 
-  return {
-    operation: TASK1_OPERATION,
-    data: Value.Parse(GradeResponseSchema, value.data),
-    downstreamMs: value.downstreamMs,
-  };
+  return withDispatchTelemetry(
+    {
+      operation: TASK1_OPERATION,
+      data: Value.Parse(GradeResponseSchema, value.data),
+      downstreamMs: value.downstreamMs,
+    },
+    readDispatchTelemetry(value),
+  );
 }
 
 function decodeTask2Replay(value: unknown): DispatchResult<GradeResponse> {
@@ -122,11 +129,14 @@ function decodeTask2Replay(value: unknown): DispatchResult<GradeResponse> {
     throw new Error('stored Task 2 grading response is malformed');
   }
 
-  return {
-    operation: TASK2_OPERATION,
-    data: Value.Parse(GradeResponseSchema, value.data),
-    downstreamMs: value.downstreamMs,
-  };
+  return withDispatchTelemetry(
+    {
+      operation: TASK2_OPERATION,
+      data: Value.Parse(GradeResponseSchema, value.data),
+      downstreamMs: value.downstreamMs,
+    },
+    readDispatchTelemetry(value),
+  );
 }
 
 function requireUserId(request: AuthenticatedRequest): string {

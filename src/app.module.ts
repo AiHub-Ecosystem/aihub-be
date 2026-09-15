@@ -5,6 +5,7 @@ import { HttpExceptionFilter } from './common/errors/http-exception.filter';
 import { HealthController } from './health/health.controller';
 import { GatewayModule } from './modules/gateway/gateway.module';
 import { IdentityModule } from './modules/identity/identity.module';
+import { MeteringModule } from './modules/metering/metering.module';
 import { SpeakingModule } from './modules/speaking/speaking.module';
 import { WritingModule } from './modules/writing/writing.module';
 import { OpenApiModule } from './openapi/openapi.module';
@@ -16,6 +17,7 @@ import { OpenApiModule } from './openapi/openapi.module';
     GatewayModule,
     WritingModule,
     SpeakingModule,
+    MeteringModule,
     OpenApiModule,
   ],
   providers: [

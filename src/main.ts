@@ -10,6 +10,7 @@ import {
 import { AppModule } from './app.module';
 import { registerBodySizeGuard } from './common/http/body-size.hook';
 import { registerRequestLifecycle } from './common/http/request-lifecycle.hook';
+import { registerRequestMeteringStart } from './common/metering/request-metering-state';
 import { generateRequestId } from './common/request-context/request-id';
 import {
   assertAuthBypassFlagIsSafe,
@@ -51,6 +52,7 @@ export async function bootstrap(): Promise<void> {
   // Nest's own middleware/guard pipeline, so it runs before the body is
   // parsed instead of after.
   registerBodySizeGuard(app.getHttpAdapter().getInstance());
+  registerRequestMeteringStart(app.getHttpAdapter().getInstance());
   registerRequestLifecycle(app.getHttpAdapter().getInstance());
 
   // No global prefix: the operation catalog carries the full public path

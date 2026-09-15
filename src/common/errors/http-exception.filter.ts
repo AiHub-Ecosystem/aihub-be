@@ -3,9 +3,19 @@ import {
   Catch,
   type ExceptionFilter,
   HttpException,
+  Inject,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { finalizeRequestMetering } from '../metering/finalize-request-metering';
+import {
+  METERING_FINALIZER,
+  type MeteringFinalizerPort,
+} from '../metering/metering-finalizer.port';
+import {
+  elapsedRequestMs,
+  getRequestMeteringState,
+} from '../metering/request-metering-state';
 import { isRequestId } from '../request-context/request-id';
 import { AppError } from './app-error';
 import type { ErrorCode } from './error-code';
@@ -46,15 +56,46 @@ function fromHttpException(status: number): FrameworkError {
     : { code: 'INTERNAL_ERROR', message: 'Internal server error' };
 }
 
+function isDownstreamFailure(exception: unknown): boolean {
+  return (
+    exception instanceof AppError &&
+    (exception.downstreamStatus !== undefined ||
+      exception.code.startsWith('AI_SERVICE_'))
+  );
+}
+
+function meteringOutcome(
+  exception: unknown,
+  status: number,
+): 'client_error' | 'downstream_error' | 'internal_error' {
+  if (isDownstreamFailure(exception)) {
+    return 'downstream_error';
+  }
+  return status >= 500 ? 'internal_error' : 'client_error';
+}
+
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
-  catch(exception: unknown, host: ArgumentsHost): void {
+  constructor(
+    @Inject(METERING_FINALIZER)
+    private readonly metering: MeteringFinalizerPort,
+  ) {}
+
+  async catch(exception: unknown, host: ArgumentsHost): Promise<void> {
     const http = host.switchToHttp();
     const request = http.getRequest<FastifyRequest>();
     const response = http.getResponse<FastifyReply>();
     const requestId = isRequestId(request.id) ? request.id : 'unknown';
 
     const { status, envelope } = this.resolve(exception, requestId);
+
+    const state = getRequestMeteringState(request);
+    await finalizeRequestMetering(request, this.metering, {
+      outcome: meteringOutcome(exception, status),
+      httpStatus: status,
+      errorCode: envelope.error.code,
+      totalMs: state === undefined ? 0 : elapsedRequestMs(state),
+    });
 
     response.status(status).send(envelope);
   }

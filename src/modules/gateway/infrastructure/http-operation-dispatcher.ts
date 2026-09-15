@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
 import type { ErrorCode } from '../../../common/errors/error-code';
+import { extractDownstreamTelemetry } from '../../../common/metering/telemetry';
 import type { RequestContext } from '../../../common/request-context/request-context';
 import type {
   SpeakingGradeInput,
@@ -181,10 +182,18 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
         throw mapDownstreamStatus(response.status);
       }
 
+      const telemetry = extractDownstreamTelemetry(response.body);
       return {
         operation,
         data: adapter.parseResponse(response),
         downstreamMs: Math.round(performance.now() - startedAt),
+        ...(telemetry?.usage === undefined ? {} : { usage: telemetry.usage }),
+        ...(telemetry?.models === undefined
+          ? {}
+          : { models: telemetry.models }),
+        ...(telemetry?.aiProcessingMs === undefined
+          ? {}
+          : { aiProcessingMs: telemetry.aiProcessingMs }),
       };
     } catch (error) {
       const errorCode = loggedDownstreamErrorCode(error);

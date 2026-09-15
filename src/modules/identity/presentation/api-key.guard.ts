@@ -9,6 +9,7 @@ import { Reflector } from '@nestjs/core';
 import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
+import { setRequestMeteringIdentity } from '../../../common/metering/request-metering-state';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
@@ -83,7 +84,14 @@ export class ApiKeyGuard implements CanActivate {
       header === undefined &&
       isLocalAuthBypassEnabled()
     ) {
-      request.aihubAuth = localDevelopmentIdentity(operation, environment);
+      const authenticated = localDevelopmentIdentity(operation, environment);
+      request.aihubAuth = authenticated;
+      setRequestMeteringIdentity(request, {
+        operation: operationId,
+        organizationId: authenticated.organizationId,
+        apiKeyId: authenticated.apiKeyId,
+        environment: authenticated.environment,
+      });
       return true;
     }
 
@@ -94,11 +102,18 @@ export class ApiKeyGuard implements CanActivate {
       clientIp: request.ip.length === 0 ? 'unknown' : request.ip,
     });
 
+    request.aihubAuth = authenticated;
+    setRequestMeteringIdentity(request, {
+      operation: operationId,
+      organizationId: authenticated.organizationId,
+      apiKeyId: authenticated.apiKeyId,
+      environment: authenticated.environment,
+    });
+
     if (!hasRequiredScope(authenticated, operation.requiredScope)) {
       throw forbidden();
     }
 
-    request.aihubAuth = authenticated;
     return true;
   }
 }

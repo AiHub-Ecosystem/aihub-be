@@ -12,6 +12,7 @@ import {
 } from '../../../catalog/operation-catalog';
 import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
+import { setRequestMeteringActor } from '../../../common/metering/request-metering-state';
 import {
   USER_ASSERTION_VERIFIER,
   type UserAssertionVerifierPort,
@@ -85,6 +86,7 @@ export class UserAssertionGuard implements CanActivate {
           organizationId: authenticated.organizationId,
           scopes: [],
         };
+        setRequestMeteringActor(request, 'local-development');
         return true;
       }
 
@@ -99,6 +101,7 @@ export class UserAssertionGuard implements CanActivate {
       signedAssertion: header,
       organizationId: authenticated.organizationId,
     });
+    setRequestMeteringActor(request, request.aihubIdentity.userId);
     return true;
   }
 }

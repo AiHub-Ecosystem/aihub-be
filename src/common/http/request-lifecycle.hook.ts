@@ -195,6 +195,11 @@ export function registerRequestLifecycle(
         return;
       }
 
+      if (lifecycle.signal.aborted) {
+        done(timeoutError());
+        return;
+      }
+
       done(null, abortablePayload(payload, lifecycle.signal));
     },
   ]);

@@ -17,6 +17,13 @@ describe('operation catalog', () => {
     expect(
       entries.every((operation) => operation.requiredScope.length > 0),
     ).toBe(true);
+    expect(
+      entries.every(
+        (operation) =>
+          operation.meteringMode === 'model' ||
+          operation.meteringMode === 'none',
+      ),
+    ).toBe(true);
     expect(entries.every((operation) => operation.timeoutMs > 0)).toBe(true);
   });
 

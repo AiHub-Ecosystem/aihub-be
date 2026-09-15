@@ -15,6 +15,7 @@ import type { OperationId } from './operation-id';
 
 export type IdentityScope = 'organization' | 'user';
 export type IdempotencyMode = 'none' | 'optional' | 'required';
+export type MeteringMode = 'model' | 'none';
 export type ResponseContract = TSchema | 'unresolved';
 
 export interface OperationDef {
@@ -25,6 +26,7 @@ export interface OperationDef {
   readonly execution: 'sync';
   readonly contentType: 'application/json' | 'multipart/form-data';
   readonly idempotency: IdempotencyMode;
+  readonly meteringMode: MeteringMode;
   readonly maxBodyBytes: number;
   readonly timeoutMs: number;
   readonly downstream: DownstreamId;
@@ -42,6 +44,7 @@ export const OPERATION_CATALOG = {
     execution: 'sync',
     contentType: 'application/json',
     idempotency: 'required',
+    meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
     timeoutMs: 60_000,
     downstream: 'ai-writing',
@@ -57,6 +60,7 @@ export const OPERATION_CATALOG = {
     execution: 'sync',
     contentType: 'application/json',
     idempotency: 'required',
+    meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
     timeoutMs: 60_000,
     downstream: 'ai-writing',
@@ -72,6 +76,7 @@ export const OPERATION_CATALOG = {
     execution: 'sync',
     contentType: 'multipart/form-data',
     idempotency: 'none',
+    meteringMode: 'model',
     maxBodyBytes: 25 * 1024 * 1024,
     timeoutMs: 30_000,
     downstream: 'ai-speaking',
@@ -87,6 +92,7 @@ export const OPERATION_CATALOG = {
     execution: 'sync',
     contentType: 'application/json',
     idempotency: 'none',
+    meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
     timeoutMs: 30_000,
     downstream: 'ai-speaking',

@@ -32,14 +32,14 @@ The complete record payload is logged as JSON → reconstructible manually from 
 
 ```sql
 -- Request-based pricing
-SELECT organization_id, operation, count(*)
+SELECT organization_id, operation, sum(billable_requests) AS billable_requests
 FROM usage_records
 WHERE created_at >= :month_start AND outcome = 'success'
 GROUP BY 1, 2;
 
 -- Token-based pricing
 SELECT organization_id,
-       sum(total_tokens),
+       sum(total_tokens) FILTER (WHERE billable_requests = 1),
        count(*) FILTER (WHERE metering_status = 'missing_usage') AS unmetered
 FROM usage_records
 WHERE created_at >= :month_start AND outcome = 'success'

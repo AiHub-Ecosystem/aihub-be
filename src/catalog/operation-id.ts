@@ -6,3 +6,7 @@ export const OPERATION_IDS = [
 ] as const;
 
 export type OperationId = (typeof OPERATION_IDS)[number];
+
+export function isOperationId(value: string): value is OperationId {
+  return (OPERATION_IDS as readonly string[]).includes(value);
+}
