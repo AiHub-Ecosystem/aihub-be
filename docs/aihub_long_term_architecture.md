@@ -243,7 +243,7 @@ The MVP uses typed code adapters rather than a dynamic rule engine.
 
 # 15. Internal AI Service Response Contract
 
-> **Unachieved.** AI Writing does not currently return `usage`, `models`, or `metrics`. This is the standardized contract AIHUB expects all AI Services to adopt, serving as a prerequisite for metering and billing in §24.
+> **Unachieved.** AI Writing does not currently return `usage` or `metrics`. This is the standardized contract AIHUB expects all AI Services to adopt, serving as a prerequisite for metering and billing in §24.
 
 Clear separation of data categories:
 
@@ -260,17 +260,7 @@ interface InternalAIServiceResponse<TData> {
     inputTokens: number;
     outputTokens: number;
     totalTokens: number;
-    // Optional: breakdown when an operation invokes models multiple times.
-    calls?: Array<{
-      modelProvider?: string;
-      model?: string;
-      inputTokens: number;
-      outputTokens: number;
-      totalTokens: number;
-    }>;
   };
-
-  models?: Array<{ provider?: string; name?: string }>;
 
   metrics?: { aiProcessingMs?: number };
 }
@@ -279,7 +269,7 @@ interface InternalAIServiceResponse<TData> {
 Rules:
 
 - `data` represents service-specific domain output.
-- `usage`, `models`, and `metrics` represent standardized internal telemetry.
+- `usage` and `metrics` represent standardized internal telemetry.
 - Response adapters map `data` into canonical public responses.
 - **AIHUB never guesses token usage.**
 
@@ -291,7 +281,7 @@ Rules:
 
 A single operation may trigger: LLM prompt #1 + RAG retrieval + LLM synthesis #2 + evaluator scoring model. Reporting tokens for only one invocation causes inaccurate billing.
 
-**`usage.inputTokens` / `outputTokens` / `totalTokens` represents the aggregate sum across the entire operation**, while `calls[]` provides an optional internal breakdown.
+**`usage.inputTokens` / `outputTokens` / `totalTokens` represents the aggregate sum across the entire operation.** AI Services do not return model identity or per-call breakdown.
 
 The public API exposes aggregate counts only — see [§32.7](#327-should-public-responses-expose-model-breakdowns-or-aggregate-usage-only).
 
@@ -337,13 +327,12 @@ We do not assume `total_ms = gateway_ms + ai_processing_ms` — network latency 
 | `input_tokens`          | AI Service / underlying Model Provider                                                   |
 | `output_tokens`         | AI Service / underlying Model Provider                                                   |
 | `total_tokens`          | AI Service aggregate sum                                                                 |
-| Actual model(s)         | AI Service — **internal only**, omitted from public response                             |
 | `metering_status`       | AIHUB — internal only: `complete`, `missing_usage`, `not_applicable`, `quota_unverified` |
 | Public cost / billing   | AIHUB normalized usage + pricing configuration, or business rules                        |
 
 > Endpoints that do not invoke LLMs must **omit `usage`** or return `null`; never report synthetic `0` values.
 
-**`meta.models[]` is omitted from public responses.** Exposing underlying model names couples the public API to ephemeral implementation details: upgrading models becomes a breaking contract change, or prompts client developers to branch UI logic on model names. Model telemetry remains strictly internal.
+Model identity is not part of the current AI Service telemetry contract and is omitted from all responses. The public API exposes no provider-specific model details.
 
 ---
 
@@ -789,7 +778,7 @@ Streaming large media through API Gateway instances creates severe memory and ba
 ### Recommended Default
 
 **The public API exposes aggregate usage only.**
-Model breakdowns are reserved strictly for internal metering, observability, or administrative auditing APIs.
+Current AI Services return aggregate usage only; model identity and per-call breakdown are not part of the provider contract. Future administrative telemetry may define a separate internal breakdown if needed.
 
 ### Rationale
 

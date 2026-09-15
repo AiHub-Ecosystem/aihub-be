@@ -616,9 +616,8 @@ When the AI Service makes model calls directly, AIHUB cannot know natively:
 - `input_tokens`;
 - `output_tokens`;
 - `total_tokens`;
-- actual model(s);
 - `ai_processing_ms`;
-- usage breakdown when an operation makes multiple model calls.
+- aggregate usage across all model calls made by one operation.
 
 AIHUB **does not re-tokenize requests to estimate tokens**.
 
@@ -666,7 +665,7 @@ D1 must freeze the minimum private contract required to make US04 feasible.
 data
 → service-specific
 
-usage / models / metrics
+usage / metrics
 → standardized common metadata
 ```
 
@@ -681,23 +680,8 @@ Example:
   "usage": {
     "input_tokens": 820,
     "output_tokens": 310,
-    "total_tokens": 1130,
-    "calls": [
-      {
-        "model_provider": "provider-y",
-        "model": "model-x",
-        "input_tokens": 820,
-        "output_tokens": 310,
-        "total_tokens": 1130
-      }
-    ]
+    "total_tokens": 1130
   },
-  "models": [
-    {
-      "provider": "provider-y",
-      "name": "model-x"
-    }
-  ],
   "metrics": {
     "ai_processing_ms": 790
   }
@@ -716,7 +700,7 @@ usage.total_tokens
 
 must represent the **aggregate across the entire operation**.
 
-`usage.calls[]` is an optional breakdown for debugging and detailed metering.
+Model identity and per-call breakdown are not part of the current AI Service contract.
 
 ### Endpoints Not Calling Models
 
@@ -746,11 +730,10 @@ AI Writing is currently running in production with live applications consuming i
 However, **adding** top-level fields does not break existing clients — they simply ignore unrecognized keys. Therefore, the requirement on the AI Service is strictly additive:
 
 ```jsonc
-// keep all existing fields intact, ONLY ADD 3 fields:
+// keep all existing fields intact, ONLY ADD 2 fields:
 {
   "...": "...",
   "usage": { "input_tokens": 820, "output_tokens": 310, "total_tokens": 1130 },
-  "models": [{ "provider": "openai", "name": "gpt-4o-mini" }],
   "metrics": { "ai_processing_ms": 790 },
 }
 ```
@@ -759,8 +742,8 @@ AIHUB accepts **both representations** — flat or wrapped in `data` — during 
 
 ```ts
 function splitEnvelope(body) {
-  const { usage, models, metrics, data, ...rest } = body ?? {};
-  return { data: data ?? rest, usage, models, metrics };
+  const { usage, metrics, data, ...rest } = body ?? {};
+  return { data: data ?? rest, usage, metrics };
 }
 ```
 
@@ -868,28 +851,28 @@ AIHUB maps the service-specific `data` into canonical public `data`, then enrich
 | `evaluation.*.feedback_detail` | Merely a stringified flattening of `data_micro`. `annotations` preserves the structured representation                                                 |
 | `data_micro.*.*.question_type` | Task 1 returns `bar_chart`, Task 2 returns `education` — two contradictory semantics under the exact same property name                                |
 
-### `meta.models[]` Removed from Public Responses
+### Model Identity Is Not Part of the Provider Contract
 
 The initial D1 draft included `meta.models[]`. This **conflicted with `aihub_long_term_architecture.md` §32.7**, which established that public APIs only expose aggregate usage while model details remain internal.
 
 Rationale for upholding §32.7: AIHUB's objective is to abstract away AI Services and Model Providers. Exposing specific model names ties the public contract to behind-the-scenes implementation details — changing models or providers down the road would become a breaking change, or worse, clients might write brittle logic branching on specific model names.
 
-`models[]` is still returned by AI Services under the internal contract and persists into `usage_records` for metering, debugging, and model-level cost accounting. It is simply **never exposed to clients**.
+AI Services do not return model identity under the current internal contract. AIHUB therefore does not require or expose `models[]`; aggregate token usage and `metrics.ai_processing_ms` are the only provider telemetry fields required for metering.
 
 ## Source-of-truth matrix
 
-| Field                             | Source of truth                                             |
-| --------------------------------- | ----------------------------------------------------------- |
-| `meta.request_id`                 | AIHUB                                                       |
-| `meta.correlation_id`             | Client-supplied, AIHUB preserves                            |
-| `meta.service` / `operation`      | AIHUB                                                       |
-| `meta.timing.total_ms`            | AIHUB                                                       |
-| `meta.timing.downstream_ms`       | AIHUB                                                       |
-| `meta.timing.gateway_overhead_ms` | AIHUB derived                                               |
-| `meta.timing.ai_processing_ms`    | AI Service                                                  |
-| `meta.usage.*`                    | AI Service / underlying Model Provider                      |
-| `models[]`                        | AI Service — **internal only**, absent from public response |
-| `metering_status`                 | AIHUB — **internal only**                                   |
+| Field                             | Source of truth                             |
+| --------------------------------- | ------------------------------------------- |
+| `meta.request_id`                 | AIHUB                                       |
+| `meta.correlation_id`             | Client-supplied, AIHUB preserves            |
+| `meta.service` / `operation`      | AIHUB                                       |
+| `meta.timing.total_ms`            | AIHUB                                       |
+| `meta.timing.downstream_ms`       | AIHUB                                       |
+| `meta.timing.gateway_overhead_ms` | AIHUB derived                               |
+| `meta.timing.ai_processing_ms`    | AI Service                                  |
+| `meta.usage.*`                    | AI Service / underlying Model Provider      |
+| model identity                    | Not part of the current AI Service contract |
+| `metering_status`                 | AIHUB — **internal only**                   |
 
 ---
 
@@ -1593,8 +1576,8 @@ Canonical Response
 10. Downstream 4xx/5xx → correctly mapped unified error.
 11. `request_id` generated by AIHUB; client `correlation_id` preserved when present.
 12. Timing fields adhere to defined semantics.
-13. Public usage/model metadata matches downstream payload.
-14. Multi-model usage aggregates properly when downstream returns breakdown.
+13. Provider usage and processing telemetry is metered internally and absent from the public response.
+14. Aggregate usage across multiple model calls is persisted correctly.
 15. Idempotency behavior when implemented in scope.
 
 ---
@@ -1613,7 +1596,7 @@ Canonical Response
 |   4 | `/v1` or header versioning?                 | **`/v1` in path**                                                                                                                                                                                            |
 |   5 | Unknown fields reject 400?                  | **Yes, zero exceptions.** `additionalProperties: false` (§18)                                                                                                                                                |
 |   6 | `usage` when not calling models             | **Omit.** Neither `null` nor `0`. Accompanied by `metering_status: not_applicable` (§15)                                                                                                                     |
-|   7 | How much to expose `models[]`/breakdown?    | **Aggregate usage only.** `models[]` and `usage.calls[]` remain internal — per LTA §32.7 (§16)                                                                                                               |
+|   7 | How much to expose `models[]`/breakdown?    | **Aggregate token counts only.** AI Services do not return model identity or per-call breakdown; only aggregate usage is exchanged (§16)                                                                     |
 |   8 | JWKS URL or upload public key?              | **Both.** `jwks_url` is primary, `public_keys_jwks` is fallback (§8)                                                                                                                                         |
 |   9 | Maximum assertion TTL                       | **300 seconds**, configurable per org via `max_assertion_ttl_seconds`. Clock skew ±60s                                                                                                                       |
 |  10 | Which capabilities mandate user identity?   | All active grading operations (`writing.task1.grade`, `writing.task2.grade`, `speaking.grading`) → `user`. Default fail-closed: if unsure, classify as `user`                                                |

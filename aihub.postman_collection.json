@@ -1,7 +1,7 @@
 {
   "item": [
     {
-      "id": "30801f33-6f86-4b3a-bab7-1e3817933d2d",
+      "id": "630c1d73-9d62-41f8-81c4-fbd542da1e99",
       "name": "writing.task1.grade",
       "request": {
         "name": "writing.task1.grade",
@@ -74,7 +74,7 @@
       }
     },
     {
-      "id": "80a0ae9f-ebd6-418b-9cab-e4e0ebcbdbe7",
+      "id": "d7858e6e-f791-4ddd-a1a6-0744e9623a5d",
       "name": "writing.task2.grade",
       "request": {
         "name": "writing.task2.grade",
@@ -147,7 +147,7 @@
       }
     },
     {
-      "id": "6c140230-5a5c-429d-8471-b47c8d1f8a4d",
+      "id": "a78607a7-2c7f-41c9-8cd2-bdf37ca63418",
       "name": "speaking.grading",
       "request": {
         "name": "speaking.grading",
@@ -257,7 +257,7 @@
       }
     },
     {
-      "id": "56d1cfa9-b6fd-44a7-840e-bcb0e3fb7185",
+      "id": "f6933de1-7000-4c59-abdc-95aa758e2dfc",
       "name": "speaking.grading-json",
       "request": {
         "name": "speaking.grading-json",
@@ -904,7 +904,7 @@
           ]
         },
         {
-          "name": "13. Usage/model metadata matches downstream — BLOCKED",
+          "name": "13. Provider telemetry remains internal — BLOCKED",
           "request": {
             "method": "POST",
             "header": [
@@ -930,7 +930,7 @@
               "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
             "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
-            "description": "BLOCKED: waiting on #9 (metering). No usage or model field exists on the public response yet."
+            "description": "BLOCKED: provider usage and processing telemetry is internal and must not appear in the public response."
           },
           "event": [
             {
@@ -938,7 +938,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('BLOCKED: waiting on #9 (metering) - add real usage/model field assertions once it lands', function () {",
+                  "pm.test('BLOCKED: provider telemetry stays internal - add metering assertions outside the public response', function () {",
                   "  pm.expect(true).to.be.true;",
                   "});"
                 ]
@@ -947,7 +947,7 @@
           ]
         },
         {
-          "name": "14. Multi-model usage aggregates correctly — BLOCKED",
+          "name": "14. Aggregate usage is metered internally — BLOCKED",
           "request": {
             "method": "POST",
             "header": [
@@ -973,7 +973,7 @@
               "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
             "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
-            "description": "BLOCKED: waiting on #9 (metering). No usage breakdown field exists on the public response yet."
+            "description": "BLOCKED: aggregate provider usage is stored internally and is not exposed in the public response."
           },
           "event": [
             {
@@ -981,7 +981,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('BLOCKED: waiting on #9 (metering) - add real multi-model aggregate assertions once it lands', function () {",
+                  "pm.test('BLOCKED: aggregate usage is verified in internal metering, not public response', function () {",
                   "  pm.expect(true).to.be.true;",
                   "});"
                 ]
@@ -1270,7 +1270,7 @@
     ]
   },
   "info": {
-    "_postman_id": "6d63fb5a-583d-4609-bd52-9842cd548dfe",
+    "_postman_id": "390a7a60-20f5-47b0-8d1b-922c7f7967e7",
     "name": "AIHUB Writing API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Generated by `pnpm generate:postman` from openapi.json — do not hand-edit. The \"D1 handover test cases\" folder is the D2 handover artifact required by docs/aihub_deliverable_1_api_contract_schema.md §G; it is not a CI regression suite.",

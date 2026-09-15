@@ -387,26 +387,25 @@ Writing is live in production serving the existing Wispace client app. Wrapping 
 Requirements for the Writing team are minimal:
 
 ```jsonc
-// /grading-feedback-task1 — keep all existing fields intact, ONLY ADD 3 fields:
+// /grading-feedback-task1 — keep all existing fields intact, ONLY ADD 2 fields:
 {
   "...": "...", // untouched existing payload
 
   "usage": { "input_tokens": 820, "output_tokens": 310, "total_tokens": 1130 },
-  "models": [{ "provider": "openai", "name": "gpt-4o-mini" }],
   "metrics": { "ai_processing_ms": 790 },
 }
 ```
 
 - Historical generation endpoints were outside the active AIHUB catalog and
   are no longer part of this gateway's usage contract.
-- Operations invoking models multiple times → `usage` represents the **sum total for the entire operation**; breakdown lives in `usage.calls[]` (optional). Per D1 §15 and target architecture §16.
+- Operations invoking models multiple times → `usage` represents the **sum total for the entire operation**. Model identity and per-call breakdown are not part of the current AI Service contract.
 
 AIHUB seamlessly parses both flat and wrapped envelopes via 3 lines of code without configuration:
 
 ```ts
 function splitEnvelope(body: any) {
-  const { usage, models, metrics, data, ...rest } = body ?? {};
-  return { data: data ?? rest, usage, models, metrics };
+  const { usage, metrics, data, ...rest } = body ?? {};
+  return { data: data ?? rest, usage, metrics };
 }
 // Remove `?? rest` fallback once all AI services adhere to standard envelope.
 ```
@@ -421,7 +420,7 @@ Derived from **direct empirical testing of all 4 endpoints** on 2026-09-07; fixt
 
 | #   | Action Item                                                                      | Priority   | Rationale                                                                                                                                                      |
 | --- | -------------------------------------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Add `usage`/`models`/`metrics`** to responses (additive)                       | 🔴 Blocker | Current metering coverage is 0%. Grading takes 16–18s with multiple model calls, but reports zero token metrics                                                |
+| 1   | **Add `usage`/`metrics`** to responses (additive)                                | 🔴 Blocker | Current metering coverage is 0%. Grading takes 16–18s with multiple model calls, but reports zero token metrics                                                |
 | 2   | **Strip `data.coT` from responses**                                              | 🔴 Blocker | Currently exposes `layer1_errors` / `layer2_matching` / `layer3_calibration`. AIHUB strips it, but downstream should not emit it                               |
 | 3   | **Fix 404s erroneously masked as 500s**                                          | 🟠 High    | `{"detail":"404: Không tìm thấy dữ liệu cho topic này!"}` returns HTTP 500. See explanation below                                                              |
 | 4   | **Verify half-band score emissions**                                             | 🟠 High    | All 3 test samples yielded integer scores with identical marks across all 4 criteria (7-7-7-7 and 5-5-5-5). High probability `.5` increments are never emitted |

@@ -94,7 +94,7 @@ CREATE TABLE usage_records (
   input_tokens      integer,
   output_tokens     integer,
   total_tokens      integer,
-  models            jsonb,
+  models            jsonb,                                  -- nullable compatibility field; current AI Services omit model identity
   metering_status   text NOT NULL CHECK (metering_status IN
                       ('complete','missing_usage','not_applicable','quota_unverified')),
   total_ms          integer NOT NULL,

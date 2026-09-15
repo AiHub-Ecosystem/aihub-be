@@ -95,7 +95,7 @@ describe('buildPostmanCollection', () => {
     expect(folder.item).toHaveLength(16); // 2 happy-path sub-cases for item 1 + items 2-15
   });
 
-  it('names the blocking slice on every case that cannot pass yet', async () => {
+  it('names internal metering on every deferred telemetry case', async () => {
     const collection = await build();
     const folder = findD1Folder(collection);
     const blocked = (folder.item ?? []).filter((item) =>
@@ -106,7 +106,7 @@ describe('buildPostmanCollection', () => {
 
     for (const item of blocked) {
       const exec = item.event?.[0]?.script.exec.join('\n') ?? '';
-      expect(exec).toMatch(/#9|#10/);
+      expect(exec).toMatch(/metering/);
     }
   });
 

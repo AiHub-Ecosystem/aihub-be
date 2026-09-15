@@ -92,7 +92,7 @@ Concrete action checklist for `../../../aihub_deliverable_1_api_contract_schema.
 | 5   | **Explicitly specify `usage` omission when models are not invoked** for any future non-model operation                                                 | §15                 |
 | 6   | **Add `metering_status`** to internal contract: `complete` / `missing_usage` / `not_applicable`                                                        | §15, §16            |
 | 7   | **Resolve Speaking TBD placeholders** at async envelope boundary; media size/MIME deferred                                                             | §11, §12, §27       |
-| 8   | **Codify internal contract as additive** — Writing adds `usage`/`models`/`metrics`, never wraps `data`                                                 | §15                 |
+| 8   | **Codify internal contract as additive** — Writing adds `usage`/`metrics`, never wraps `data`                                                          | §15                 |
 | 9   | Provide answers for all 18 questions in §32                                                                                                            | §32                 |
 | 10  | **Omit `meta.models[]` from public responses** — eliminates conflict with LTA §32.7                                                                    | §16                 |
 | 11  | Migrate `idempotency_required` boolean → 3-state `idempotency` enum (`none`, `optional`, `required`)                                                   | §27                 |
@@ -105,26 +105,26 @@ Items 1–11 were synchronized into D1 on 2026-09-07; items 12–15 emerged foll
 
 ## Answers for D1 §32 (18 Decisions Frozen Prior to Implementation)
 
-| #   | Question                                     | Decision Adopted                                                                                                       |
-| --- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| 1   | `X-API-Key` or `Authorization: Bearer`?      | **`X-API-Key`** — cleanly disambiguated from internal JWTs which use `Authorization`                                   |
-| 2   | Do API keys require `live/test` modes?       | **No.** Environment is derived strictly from hostname; keys bind via `allowed_environments`                            |
-| 3   | Are environments derived from hostnames?     | **Settled: Yes**                                                                                                       |
-| 4   | `/v1` path prefix or version headers?        | **`/v1` path prefix**                                                                                                  |
-| 5   | Reject unknown properties with 400?          | **Yes** — `additionalProperties: false`, zero exceptions                                                               |
-| 6   | `usage` behavior when no model call occurs   | **Omit**, not `null`, not `0`                                                                                          |
-| 7   | Scope of public LLM model/breakdown exposure | **Aggregate token counts only.** `models[]` and `usage.calls[]` remain internal — per LTA §32.7                        |
-| 8   | Customer JWKS URL or uploaded public keys?   | **Both** — `jwks_url` prioritized, `public_keys_jwks` supported as fallback                                            |
-| 9   | Maximum assertion TTL limit                  | **300s default**, configurable per tenant                                                                              |
-| 10  | Which operations mandate user assertions?    | All active grading operations (`writing.task1.grade`, `writing.task2.grade`, `speaking.grading`) are user-scoped       |
-| 11  | `writing.grade` synchronous or async?        | **Synchronous**, 60s timeout                                                                                           |
-| 12  | `speaking.grading` synchronous or async?     | **Synchronous** for the current multipart proxy; the future asset/job API remains deferred                             |
-| 13  | Speaking multipart upload or `asset_id`?     | **`asset_id`** via presigned cloud upload in Phase 4                                                                   |
-| 14  | Maximum audio size / supported MIME types    | ⏳ Open — Phase 4. Does not block freezing D1                                                                          |
-| 15  | Idempotency requirements across operations   | `required` for Writing grading; `none` for current Speaking grading; `optional` remains reserved for future operations |
-| 16  | Apply scopes and entitlements in D2?         | **Yes** — [05 §G.10](05-auth-identity.md#g10-authorization), zero added database queries                               |
-| 17  | Missing usage on metering-critical calls     | **Pass through** + flag `metering_status='missing_usage'` + alert. See [§P.3](#p3-sales-and-pricing-model)             |
-| 18  | Inventory of v1 public error codes           | 18 canonical error codes in [07 §J.2](07-reliability-and-errors.md#j2-error-code-inventory-v1)                         |
+| #   | Question                                     | Decision Adopted                                                                                                                   |
+| --- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `X-API-Key` or `Authorization: Bearer`?      | **`X-API-Key`** — cleanly disambiguated from internal JWTs which use `Authorization`                                               |
+| 2   | Do API keys require `live/test` modes?       | **No.** Environment is derived strictly from hostname; keys bind via `allowed_environments`                                        |
+| 3   | Are environments derived from hostnames?     | **Settled: Yes**                                                                                                                   |
+| 4   | `/v1` path prefix or version headers?        | **`/v1` path prefix**                                                                                                              |
+| 5   | Reject unknown properties with 400?          | **Yes** — `additionalProperties: false`, zero exceptions                                                                           |
+| 6   | `usage` behavior when no model call occurs   | **Omit**, not `null`, not `0`                                                                                                      |
+| 7   | Scope of public LLM model/breakdown exposure | **Aggregate token counts only.** AI Services do not return model identity or per-call breakdown; only aggregate usage is exchanged |
+| 8   | Customer JWKS URL or uploaded public keys?   | **Both** — `jwks_url` prioritized, `public_keys_jwks` supported as fallback                                                        |
+| 9   | Maximum assertion TTL limit                  | **300s default**, configurable per tenant                                                                                          |
+| 10  | Which operations mandate user assertions?    | All active grading operations (`writing.task1.grade`, `writing.task2.grade`, `speaking.grading`) are user-scoped                   |
+| 11  | `writing.grade` synchronous or async?        | **Synchronous**, 60s timeout                                                                                                       |
+| 12  | `speaking.grading` synchronous or async?     | **Synchronous** for the current multipart proxy; the future asset/job API remains deferred                                         |
+| 13  | Speaking multipart upload or `asset_id`?     | **`asset_id`** via presigned cloud upload in Phase 4                                                                               |
+| 14  | Maximum audio size / supported MIME types    | ⏳ Open — Phase 4. Does not block freezing D1                                                                                      |
+| 15  | Idempotency requirements across operations   | `required` for Writing grading; `none` for current Speaking grading; `optional` remains reserved for future operations             |
+| 16  | Apply scopes and entitlements in D2?         | **Yes** — [05 §G.10](05-auth-identity.md#g10-authorization), zero added database queries                                           |
+| 17  | Missing usage on metering-critical calls     | **Pass through** + flag `metering_status='missing_usage'` + alert. See [§P.3](#p3-sales-and-pricing-model)                         |
+| 18  | Inventory of v1 public error codes           | 18 canonical error codes in [07 §J.2](07-reliability-and-errors.md#j2-error-code-inventory-v1)                                     |
 
 ---
 
