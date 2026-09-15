@@ -65,7 +65,7 @@ export const OPERATION_CATALOG = {
   },
   'speaking.grading': {
     method: 'POST',
-    path: '/v1/speaking/grading',
+    path: '/v1/ielts/speaking/grading',
     requiredScope: 'speaking.grade',
     identityScope: 'user',
     execution: 'sync',

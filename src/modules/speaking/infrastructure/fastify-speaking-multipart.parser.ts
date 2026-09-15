@@ -234,7 +234,10 @@ export function registerSpeakingMultipartParser(
       const methods = Array.isArray(route.method)
         ? route.method
         : [route.method];
-      if (route.url === '/v1/speaking/grading' && methods.includes('POST')) {
+      if (
+        route.url === '/v1/ielts/speaking/grading' &&
+        methods.includes('POST')
+      ) {
         route.bodyLimit = SPEAKING_AUDIO_MAX_BYTES;
       }
     },

@@ -153,7 +153,7 @@
         "name": "speaking.grading",
         "description": {},
         "url": {
-          "path": ["v1", "speaking", "grading"],
+          "path": ["v1", "ielts", "speaking", "grading"],
           "host": ["{{baseUrl}}"],
           "query": [],
           "variable": []

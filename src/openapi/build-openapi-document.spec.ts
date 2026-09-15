@@ -80,7 +80,7 @@ describe('buildOpenApiDocument', () => {
 
   it('documents an ignored Idempotency-Key parameter for an operation catalogued as none', () => {
     const doc = build();
-    const operation = doc.paths['/v1/speaking/grading']?.post;
+    const operation = doc.paths['/v1/ielts/speaking/grading']?.post;
     const names = operation?.parameters.map(
       (parameter) => parameter.name ?? parameter.$ref,
     );
@@ -103,7 +103,7 @@ describe('buildOpenApiDocument', () => {
     ]?.post.parameters.find(
       (parameter) => parameter.name === 'Idempotency-Key',
     );
-    const none = doc.paths['/v1/speaking/grading']?.post.parameters.find(
+    const none = doc.paths['/v1/ielts/speaking/grading']?.post.parameters.find(
       (parameter) => parameter.name === 'Idempotency-Key',
     );
 
@@ -128,7 +128,7 @@ describe('buildOpenApiDocument', () => {
     const userParameters =
       build().paths['/v1/ielts/writing/task1/grade']?.post.parameters;
     const speakingParameters =
-      build().paths['/v1/speaking/grading']?.post.parameters;
+      build().paths['/v1/ielts/speaking/grading']?.post.parameters;
 
     expect(userParameters).toContainEqual({
       $ref: '#/components/parameters/UserAssertion',
@@ -242,7 +242,7 @@ describe('buildOpenApiDocument', () => {
   });
 
   it('does not advertise idempotency conflicts for operations catalogued as none', () => {
-    const operation = build().paths['/v1/speaking/grading']?.post;
+    const operation = build().paths['/v1/ielts/speaking/grading']?.post;
 
     expect(operation?.responses['409']).toBeUndefined();
   });

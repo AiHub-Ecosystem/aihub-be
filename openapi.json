@@ -1254,7 +1254,7 @@
         }
       }
     },
-    "/v1/speaking/grading": {
+    "/v1/ielts/speaking/grading": {
       "post": {
         "operationId": "speaking.grading",
         "summary": "speaking.grading",

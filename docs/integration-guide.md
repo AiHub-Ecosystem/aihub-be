@@ -295,7 +295,7 @@ All public grading operations are `POST` routes. Writing uses
 | ------------------------------- | --------- | ----------------- | -------: | ------: |
 | `/v1/ielts/writing/task1/grade` | **Yes**   | **Required**      |   256 KB |     60s |
 | `/v1/ielts/writing/task2/grade` | **Yes**   | **Required**      |   256 KB |     60s |
-| `/v1/speaking/grading`          | **Yes**   | **None**          |   25 MiB |     30s |
+| `/v1/ielts/speaking/grading`    | **Yes**   | **None**          |   25 MiB |     30s |
 
 ### Enumerated values
 
@@ -331,7 +331,7 @@ for the full schema.
 
 ### Speaking grading
 
-`POST /v1/speaking/grading` accepts one audio file and the fields below. The
+`POST /v1/ielts/speaking/grading` accepts one audio file and the fields below. The
 route is synchronous, user-scoped, and does not currently provide an
 idempotent replay. A client retry can therefore start another grading run.
 
@@ -413,7 +413,7 @@ body and reuse the same key.
 Writing grading has a 60-second AIHUB budget. **Set your client timeout to at
 least 90 seconds** for Writing `/grade` calls. Speaking grading has a
 30-second budget; use a client timeout of at least 60 seconds for
-`/v1/speaking/grading`. A client timeout equal to the server budget is unsafe
+`/v1/ielts/speaking/grading`. A client timeout equal to the server budget is unsafe
 because connection setup and response transfer also consume time.
 
 AIHUB's per-operation budget is a single clock: it is set when the request

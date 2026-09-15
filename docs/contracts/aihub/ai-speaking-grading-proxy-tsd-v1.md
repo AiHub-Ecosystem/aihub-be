@@ -24,10 +24,10 @@ human-facing contract and review record.
 
 ## 1. Endpoint and base URL
 
-| Surface                        | Method | Path                     | Content type        |
-| ------------------------------ | ------ | ------------------------ | ------------------- |
-| AIHUB public                   | POST   | /v1/speaking/grading     | multipart/form-data |
-| Downstream AI Speaking service | POST   | /api/v1/speaking/grading | multipart/form-data |
+| Surface                        | Method | Path                       | Content type        |
+| ------------------------------ | ------ | -------------------------- | ------------------- |
+| AIHUB public                   | POST   | /v1/ielts/speaking/grading | multipart/form-data |
+| Downstream AI Speaking service | POST   | /api/v1/speaking/grading   | multipart/form-data |
 
 Canonical AIHUB host convention:
 

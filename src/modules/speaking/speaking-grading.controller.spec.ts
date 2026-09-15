@@ -190,7 +190,7 @@ describe('Speaking grading HTTP flow', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/speaking/grading',
+      url: '/v1/ielts/speaking/grading',
       headers: { 'content-type': request.contentType },
       payload: request.payload,
     });
@@ -235,7 +235,7 @@ describe('Speaking grading HTTP flow', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/speaking/grading',
+      url: '/v1/ielts/speaking/grading',
       headers: { 'content-type': request.contentType },
       payload: request.payload,
     });
@@ -266,7 +266,7 @@ describe('Speaking grading HTTP flow', () => {
     );
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/speaking/grading',
+      url: '/v1/ielts/speaking/grading',
       headers: { 'content-type': request.contentType },
       payload: request.payload,
     });
@@ -292,7 +292,7 @@ describe('Speaking grading HTTP flow', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/speaking/grading',
+      url: '/v1/ielts/speaking/grading',
       headers: { 'content-type': request.contentType },
       payload: request.payload,
     });
@@ -313,7 +313,7 @@ describe('Speaking grading HTTP flow', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/speaking/grading',
+      url: '/v1/ielts/speaking/grading',
       headers: { 'content-type': request.contentType },
       payload: request.payload,
     });
@@ -330,7 +330,7 @@ describe('Speaking grading HTTP flow', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/speaking/grading',
+      url: '/v1/ielts/speaking/grading',
       headers: { 'content-type': request.contentType },
       payload: request.payload,
     });
@@ -348,7 +348,7 @@ describe('Speaking grading HTTP flow', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/speaking/grading',
+      url: '/v1/ielts/speaking/grading',
       headers: { 'content-type': request.contentType },
       payload: request.payload,
     });
@@ -365,7 +365,7 @@ describe('Speaking grading HTTP flow', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/speaking/grading',
+      url: '/v1/ielts/speaking/grading',
       headers: {
         'content-type': request.contentType,
         'content-length': String(25 * 1024 * 1024 + 1),
@@ -385,7 +385,7 @@ describe('Speaking grading HTTP flow', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/speaking/grading',
+      url: '/v1/ielts/speaking/grading',
       headers: { 'content-type': request.contentType },
       payload: request.payload,
     });
@@ -402,7 +402,7 @@ describe('Speaking grading HTTP flow', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/speaking/grading',
+      url: '/v1/ielts/speaking/grading',
       headers: { 'content-type': request.contentType },
       payload: request.payload,
     });
@@ -427,7 +427,7 @@ describe('Speaking grading HTTP flow', () => {
       );
       const response = await app.inject({
         method: 'POST',
-        url: '/v1/speaking/grading',
+        url: '/v1/ielts/speaking/grading',
         headers: { 'content-type': request.contentType },
         payload: request.payload,
       });
@@ -459,7 +459,7 @@ describe('Speaking grading HTTP flow', () => {
       await expect(
         app.inject({
           method: 'POST',
-          url: '/v1/speaking/grading',
+          url: '/v1/ielts/speaking/grading',
           headers: { 'content-type': request.contentType },
           payload: request.payload,
         }),
@@ -481,7 +481,7 @@ describe('Speaking grading HTTP flow', () => {
     );
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/speaking/grading',
+      url: '/v1/ielts/speaking/grading',
       headers: { 'content-type': request.contentType },
       payload: request.payload,
     });
@@ -513,7 +513,7 @@ describe('Speaking grading HTTP flow', () => {
       );
       const response = await app.inject({
         method: 'POST',
-        url: '/v1/speaking/grading',
+        url: '/v1/ielts/speaking/grading',
         headers: { 'content-type': request.contentType },
         payload: request.payload,
       });
@@ -542,7 +542,7 @@ describe('Speaking grading HTTP flow', () => {
     );
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/speaking/grading',
+      url: '/v1/ielts/speaking/grading',
       headers: { 'content-type': request.contentType },
       payload: request.payload,
     });

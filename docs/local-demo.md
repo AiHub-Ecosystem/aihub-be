@@ -324,7 +324,7 @@ $form = @{
 
 Invoke-RestMethod `
   -Method Post `
-  -Uri "$env:AIHUB_BASE_URL/v1/speaking/grading" `
+  -Uri "$env:AIHUB_BASE_URL/v1/ielts/speaking/grading" `
   -Headers $headers `
   -Form $form |
   ConvertTo-Json -Depth 30
@@ -333,7 +333,7 @@ Invoke-RestMethod `
 macOS/Linux:
 
 ```bash
-curl -sS -X POST "$AIHUB_BASE_URL/v1/speaking/grading" \
+curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/speaking/grading" \
   -H "X-API-Key: $AIHUB_API_KEY" \
   -H "X-User-Assertion: $AIHUB_ASSERTION" \
   -F "audio=@sample.wav;type=audio/wav" \

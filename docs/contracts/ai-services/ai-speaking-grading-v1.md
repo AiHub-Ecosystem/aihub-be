@@ -20,7 +20,7 @@ The AI Speaking service exposes two synchronous grading transports:
 | `POST /api/v1/speaking/grading`      | `multipart/form-data` | Primary audio-file path; proxied by AIHUB D2.                  |
 | `POST /api/v1/speaking/grading-json` | `application/json`    | Audio-URL fallback; not exposed by the current AIHUB D2 route. |
 
-AIHUB currently exposes only `POST /v1/speaking/grading`. The future public
+AIHUB currently exposes only `POST /v1/ielts/speaking/grading`. The future public
 `POST /v1/speaking/grade` asset/job operation is a separate asynchronous
 contract and is not part of this document.
 

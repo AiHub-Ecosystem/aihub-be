@@ -74,7 +74,7 @@ curl_config="$(mktemp /tmp/aihub-speaking-curl.XXXXXX)"
 response_file="$(mktemp /tmp/aihub-speaking-response.XXXXXX)"
 chmod 600 "$curl_config" "$response_file"
 
-printf 'url = "%s/v1/speaking/grading"\n' "${base_url%/}" > "$curl_config"
+printf 'url = "%s/v1/ielts/speaking/grading"\n' "${base_url%/}" > "$curl_config"
 printf 'request = "POST"\n' >> "$curl_config"
 printf 'header = "X-API-Key: %s"\n' "$api_key" >> "$curl_config"
 printf 'header = "X-User-Assertion: %s"\n' "$assertion" >> "$curl_config"

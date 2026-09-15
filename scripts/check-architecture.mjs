@@ -31,7 +31,7 @@ const catalog = readFileSync(catalogPath, 'utf8');
 const expectedPaths = [
   '/v1/ielts/writing/task1/grade',
   '/v1/ielts/writing/task2/grade',
-  '/v1/speaking/grading',
+  '/v1/ielts/speaking/grading',
 ];
 
 for (const path of expectedPaths) {

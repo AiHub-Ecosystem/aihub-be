@@ -976,7 +976,7 @@ AIHUB maps the requested service to system authorization scopes and downstream A
 | ------------------------------------ | --------------------- | ----------------- | ----------- | -------------------------- |
 | `POST /v1/ielts/writing/task1/grade` | `writing.task1.grade` | `writing.grade`   | AI Writing  | `/grading-feedback-task1`  |
 | `POST /v1/ielts/writing/task2/grade` | `writing.task2.grade` | `writing.grade`   | AI Writing  | `/grading-feedback-task2`  |
-| `POST /v1/speaking/grading`          | `speaking.grading`    | `speaking.grade`  | AI Speaking | `/api/v1/speaking/grading` |
+| `POST /v1/ielts/speaking/grading`    | `speaking.grading`    | `speaking.grade`  | AI Speaking | `/api/v1/speaking/grading` |
 | `POST /v1/reading/analyze`           | `reading.analyze`     | `reading.analyze` | AI Reading  | _(future)_                 |
 
 Both Writing grading tasks share the `writing.grade` scope because customers purchase Writing grading, not individual tasks. Question generation is no longer an AIHUB capability.
@@ -1386,7 +1386,7 @@ Speaking grading:
 ```yaml
 operation: speaking.grading
 method: POST
-path: /v1/speaking/grading
+path: /v1/ielts/speaking/grading
 scope: speaking.grade
 identity_scope: user
 execution: sync
