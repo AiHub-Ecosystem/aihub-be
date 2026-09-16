@@ -131,6 +131,24 @@ describe('RedisQuotaCounter', () => {
     );
   });
 
+  // The month segment is built from a zero-based month plus one, so December
+  // is the only value that has to carry into the next year. A key that read
+  // `2026-13` would make January start on a count December had already spent.
+  it('rolls the month key from December into January', async () => {
+    const redis = new FakeRedis();
+    const counter = new RedisQuotaCounter(redis, now);
+
+    current = new Date('2026-12-31T23:59:59.000Z');
+    await counter.increment({ organizationId: 'org_acme' });
+
+    expect([...redis.values.keys()]).toEqual([
+      'aihub:v1:quota:org_acme:2026-12',
+    ]);
+
+    current = new Date('2027-01-01T00:00:01.000Z');
+    await expect(counter.read({ organizationId: 'org_acme' })).resolves.toBe(0);
+  });
+
   it('reports expiry maintenance failure after the increment', async () => {
     const redis = new FakeRedis();
     redis.expireResult = 0;

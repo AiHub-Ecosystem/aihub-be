@@ -103,6 +103,25 @@ describe('QuotaGuard', () => {
     },
   );
 
+  // December is the one month where "the first of next month" crosses a year.
+  // `Date.UTC(2026, 12, 1)` rolls over to 2027 on purpose; a hand-rolled
+  // increment that clamped the month would point the caller at a date in the
+  // past and hand back a retry delay of zero.
+  it('points a December rejection at the first of the next year', async () => {
+    const counter = new FakeQuotaCounter();
+    counter.current = 5;
+    const request = requestFor();
+    const guard = new QuotaGuard(
+      counter,
+      () => new Date('2026-12-31T23:00:00.000Z'),
+    );
+
+    await expect(guard.canActivate(contextFor(request))).rejects.toMatchObject({
+      code: 'QUOTA_EXCEEDED',
+      retryAfterMs: 3_600_000,
+    });
+  });
+
   it('rejects a zero quota with an empty counter', async () => {
     const counter = new FakeQuotaCounter();
     const request = requestFor({
