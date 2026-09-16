@@ -24,14 +24,31 @@ import {
  * that registers its public half.
  */
 
-const ALGORITHM = 'RS256';
-const KEY_ID = 'demo-2026-01';
-const PRIVATE_KEY_FILE = 'demo-private.pem';
-const JWKS_FILE = 'demo-jwks.json';
-const TTL_SECONDS = 300;
-
 if (existsSync('.env')) {
   loadEnvFile('.env');
+}
+
+// Defaults reproduce the local demo stack. Override them to sign with a key
+// registered for another organization -- the key id must match a `kid` in that
+// organization's registered JWKS, or the gateway rejects every token with
+// INVALID_USER_ASSERTION.
+const ALGORITHM = process.env.ASSERTION_ALG ?? 'RS256';
+const KEY_ID = process.env.ASSERTION_KID ?? 'demo-2026-01';
+const PRIVATE_KEY_FILE =
+  process.env.ASSERTION_PRIVATE_KEY_FILE ?? 'demo-private.pem';
+const JWKS_FILE = process.env.ASSERTION_JWKS_FILE ?? 'demo-jwks.json';
+const TTL_SECONDS = Number(process.env.ASSERTION_TTL_SECONDS ?? 300);
+
+if (ALGORITHM !== 'RS256' && ALGORITHM !== 'ES256') {
+  console.error(`ASSERTION_ALG must be RS256 or ES256, got ${ALGORITHM}`);
+  process.exit(2);
+}
+
+if (!Number.isSafeInteger(TTL_SECONDS) || TTL_SECONDS <= 0) {
+  console.error(
+    `ASSERTION_TTL_SECONDS must be a positive integer, got ${process.env.ASSERTION_TTL_SECONDS}`,
+  );
+  process.exit(2);
 }
 
 const issuer = process.env.DEMO_ASSERTION_ISSUER ?? 'https://demo.acme.edu';
