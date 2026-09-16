@@ -133,12 +133,10 @@ jobs:
           "${compose[@]}" config --quiet
           "${compose[@]}" pull app
           "${compose[@]}" --profile migration run --rm migrate </dev/null
-          # The production VPS already terminates TLS and owns ports 80/443,
-          # so the `caddy` service in the Compose file is not the edge on this
-          # host and must not be started here — it would fail to bind port 80
-          # against whatever actually holds it, and take the deploy down with
-          # it. Adding the sandbox hostname to the public edge is a change to
-          # that proxy, not to `ops/deploy/Caddyfile`.
+          # Host nginx terminates TLS and owns ports 80/443 on this VPS, and
+          # serves other projects from the same instance. This stack publishes
+          # no public port: `app` binds 127.0.0.1 only. Adding a hostname is an
+          # nginx server block plus a certbot certificate, never a change here.
           "${compose[@]}" up -d --no-build app
 
           app_id="$("${compose[@]}" ps -q app)"

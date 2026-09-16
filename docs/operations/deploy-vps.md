@@ -1,17 +1,23 @@
 # VPS deployment
 
 This is the production baseline for the single-node Compose deployment. It uses
-the existing production `aihub-db` and Wispace Redis, renders downstream runtime
-credentials through Vault Agent, and terminates public TLS at Caddy.
+the existing production `aihub-db` and Wispace Redis, and renders downstream
+runtime credentials through Vault Agent.
+
+**Public TLS is terminated by nginx on the host, not by this Compose stack.**
+The `app` service binds `127.0.0.1:${AIHUB_APP_PORT}` and nothing else; nginx
+owns ports 80 and 443 and proxies to it. See [The public edge](#the-public-edge)
+before changing anything about hostnames or certificates.
 
 ## Prerequisites
 
 - Docker Engine with the Compose plugin.
-- DNS `A/AAAA` for `AIHUB_PRODUCTION_HOST` pointing to this VPS; ports 80 and 443 open.
-- Add DNS for `AIHUB_SANDBOX_HOST` when it is configured. Leave an unused tier
-  blank; blank tiers are not bound, and this production Caddy serves only the
-  configured production and sandbox hosts.
-- An existing reverse proxy may use `AIHUB_APP_PORT` (default `3021`) as its upstream.
+- DNS `A/AAAA` for `AIHUB_PRODUCTION_HOST` pointing to this VPS, and an nginx
+  server block for it. Ports 80 and 443 are already held by nginx.
+- Add DNS and an nginx server block for `AIHUB_SANDBOX_HOST` when it is
+  configured. Leave an unused tier blank: a blank tier is absent from the
+  application's hostname map, so no `Host` header can select it.
+- nginx uses `AIHUB_APP_PORT` (default `3021`) as its upstream.
 - The existing Docker network `aihub_aihub-network` with a healthy `aihub-db` container.
 - A production Vault AppRole whose policy can read only
   `secret/data/aihub/production/*` (required for the future Vault mode; the
@@ -48,11 +54,11 @@ exception is documented below. The shared Redis password is the one exception
 in the Vault baseline: render only `REDIS_URL` into the mode-600 deployment file
 from the operator Vault session below.
 
-`AIHUB_PRODUCTION_HOST` is the only required host setting. The optional
-`AIHUB_SANDBOX_HOST` is an explicit addition to the Caddy site list, so Caddy
-never uses a wildcard or catch-all certificate. If it is set, point its DNS
-record at this VPS before starting the stack; leaving it blank keeps the
-sandbox host unbound.
+`AIHUB_PRODUCTION_HOST` is the only required host setting. Setting
+`AIHUB_SANDBOX_HOST` tells the application to recognise that hostname; it does
+not publish it. Serving it is a separate nginx change described in
+[The public edge](#the-public-edge). Leaving it blank keeps the sandbox host
+absent from the resolver entirely.
 
 Point the gateway at the existing production database over the shared Docker
 network. The password must be URL-encoded inside `DATABASE_URL` (for example,
@@ -123,7 +129,7 @@ sudo -n docker compose --env-file .env.production \
   -f docker-compose.production.env.yml --profile migration run --rm --no-build migrate
 sudo -n docker compose --env-file .env.production \
   -f docker-compose.production.yml \
-  -f docker-compose.production.env.yml up -d --no-build app caddy
+  -f docker-compose.production.env.yml up -d --no-build app
 ```
 
 This is a deliberate temporary exception: keep `.env.production` at mode 600,
@@ -166,13 +172,13 @@ docker compose --env-file .env.production \
 ```
 
 Build or pull the release, start dependencies and Vault Agent, run migrations once,
-then start the app and Caddy:
+then start the app:
 
 ```sh
 docker compose --env-file .env.production -f docker-compose.production.yml build app
 docker compose --env-file .env.production -f docker-compose.production.yml up -d vault-agent
 docker compose --env-file .env.production -f docker-compose.production.yml --profile migration run --rm migrate
-docker compose --env-file .env.production -f docker-compose.production.yml up -d app caddy
+docker compose --env-file .env.production -f docker-compose.production.yml up -d app
 # Replace api.example.com with AIHUB_PRODUCTION_HOST from .env.production.
 curl --fail https://api.example.com/health
 ```
@@ -181,17 +187,75 @@ The migration container is one-shot. Do not run `docker compose down -v`; the
 Postgres and Redis data belong to the existing VPS stacks. Back up the existing
 `aihub` database before running a new migration set.
 
+## The public edge
+
+nginx on the host terminates TLS for every site on this VPS and proxies AIHUB to
+`127.0.0.1:${AIHUB_APP_PORT}`. This Compose stack publishes no public port and
+contains no reverse proxy; an earlier Caddy service in this file never ran here
+and was removed after it failed a release by trying to bind port 80 against
+nginx.
+
+**This VPS is shared.** `/etc/nginx/sites-enabled/` serves eleven sites, most of
+them unrelated to AIHUB, and `docker ps` lists around twenty containers from
+several projects. Taking port 80 or 443 from nginx takes those sites down with
+it. Do not stop nginx, do not add a container that binds those ports, and do not
+"free up" a port that appears to be in use.
+
+The live production site lives in `/etc/nginx/conf.d/aihub.conf`:
+
+```nginx
+server_name api.aihubproduction.com;
+
+location / {
+    proxy_pass http://127.0.0.1:3021;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+listen 443 ssl; # managed by Certbot
+ssl_certificate /etc/letsencrypt/live/api.aihubproduction.com/fullchain.pem;
+ssl_certificate_key /etc/letsencrypt/live/api.aihubproduction.com/privkey.pem;
+```
+
+`proxy_set_header Host $host` is load-bearing. The application resolves the
+request environment from that header, so a block that rewrites or drops it would
+make every request on that hostname fail with `ENVIRONMENT_NOT_ALLOWED`.
+
+### Publishing another hostname
+
+To serve a new hostname — the sandbox tier, for example — copy the block above,
+change `server_name` and the `proxy_pass` port, and let certbot issue the
+certificate:
+
+```sh
+sudo nginx -t                                    # before
+sudo certbot --nginx -d sandbox-api.example.com  # issues and wires up TLS
+sudo nginx -t && sudo systemctl reload nginx     # after
+```
+
+DNS must already point at this VPS or certbot cannot complete the challenge.
+Setting `AIHUB_SANDBOX_HOST` in `.env.production` only teaches the application
+to recognise the hostname; without the nginx block, nothing reaches it.
+
+Never add a wildcard or default server block. nginx refusing an unknown
+hostname is what makes the application's environment binding trustworthy —
+`Host` is client-supplied, and the edge serving only names it was given is the
+half of that guarantee the application cannot enforce itself.
+
 ## Verify and operate
 
 ```sh
 docker compose --env-file .env.production -f docker-compose.production.yml ps
-docker compose --env-file .env.production -f docker-compose.production.yml logs --tail=100 app vault-agent caddy
+docker compose --env-file .env.production -f docker-compose.production.yml logs --tail=100 app vault-agent
 ```
 
 Back up the existing Postgres before releases and test restore separately. Rotate Vault
 `secret_id` and downstream credentials using the Vault runbook, then restart
-`vault-agent` and `app` so the startup snapshot is re-rendered. Caddy renews ACME
-certificates automatically while ports 80/443 remain reachable.
+`vault-agent` and `app` so the startup snapshot is re-rendered. Certificates are
+renewed by certbot on the host, not by this stack.
 
 ## AI Speaking Production handoff
 
@@ -224,8 +288,8 @@ The Production handoff matrix is split by safety boundary:
 ## Rollback
 
 Set `AIHUB_IMAGE` to the previous immutable image tag, run
-`docker compose ... up -d app caddy`, and verify `/health` plus one authenticated request before reopening
-traffic. Never roll back by deleting the database volume.
+`docker compose ... up -d app`, and verify `/health` plus one authenticated
+request before reopening traffic. Never roll back by deleting the database volume.
 
 ## GitHub Actions CD
 

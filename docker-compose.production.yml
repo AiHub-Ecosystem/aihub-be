@@ -119,38 +119,7 @@ services:
       start_period: 20s
       retries: 12
 
-  caddy:
-    image: caddy:2.9.1-alpine
-    restart: unless-stopped
-    environment:
-      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
-      AIHUB_CADDY_DOMAINS: "${AIHUB_PRODUCTION_HOST:?AIHUB_PRODUCTION_HOST is required}${AIHUB_SANDBOX_HOST:+ }${AIHUB_SANDBOX_HOST:-}"
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./ops/deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      app:
-        condition: service_healthy
-    networks:
-      - public
-      - backend
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_BIND_SERVICE
-
-volumes:
-  caddy-data:
-  caddy-config:
-
 networks:
-  public:
   backend:
   aihub-database:
     external: true
