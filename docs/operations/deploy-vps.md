@@ -8,6 +8,9 @@ credentials through Vault Agent, and terminates public TLS at Caddy.
 
 - Docker Engine with the Compose plugin.
 - DNS `A/AAAA` for `AIHUB_PRODUCTION_HOST` pointing to this VPS; ports 80 and 443 open.
+- Add DNS for `AIHUB_SANDBOX_HOST` when it is configured. Leave an unused tier
+  blank; blank tiers are not bound, and this production Caddy serves only the
+  configured production and sandbox hosts.
 - An existing reverse proxy may use `AIHUB_APP_PORT` (default `3021`) as its upstream.
 - The existing Docker network `aihub_aihub-network` with a healthy `aihub-db` container.
 - A production Vault AppRole whose policy can read only
@@ -44,6 +47,12 @@ runtime; do not put those values in `.env.production`. The temporary Stage A
 exception is documented below. The shared Redis password is the one exception
 in the Vault baseline: render only `REDIS_URL` into the mode-600 deployment file
 from the operator Vault session below.
+
+`AIHUB_PRODUCTION_HOST` is the only required host setting. The optional
+`AIHUB_SANDBOX_HOST` is an explicit addition to the Caddy site list, so Caddy
+never uses a wildcard or catch-all certificate. If it is set, point its DNS
+record at this VPS before starting the stack; leaving it blank keeps the
+sandbox host unbound.
 
 Point the gateway at the existing production database over the shared Docker
 network. The password must be URL-encoded inside `DATABASE_URL` (for example,
@@ -163,7 +172,7 @@ then start the app and Caddy:
 docker compose --env-file .env.production -f docker-compose.production.yml build app
 docker compose --env-file .env.production -f docker-compose.production.yml up -d vault-agent
 docker compose --env-file .env.production -f docker-compose.production.yml --profile migration run --rm migrate
-docker compose --env-file .env.production -f docker-compose.production.yml up -d app
+docker compose --env-file .env.production -f docker-compose.production.yml up -d app caddy
 # Replace api.example.com with AIHUB_PRODUCTION_HOST from .env.production.
 curl --fail https://api.example.com/health
 ```
@@ -215,7 +224,7 @@ The Production handoff matrix is split by safety boundary:
 ## Rollback
 
 Set `AIHUB_IMAGE` to the previous immutable image tag, run
-`docker compose ... up -d app`, and verify `/health` plus one authenticated staging request before reopening
+`docker compose ... up -d app caddy`, and verify `/health` plus one authenticated request before reopening
 traffic. Never roll back by deleting the database volume.
 
 ## GitHub Actions CD

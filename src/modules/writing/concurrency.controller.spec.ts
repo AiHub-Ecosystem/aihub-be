@@ -144,7 +144,7 @@ function requestOptions() {
     method: 'POST' as const,
     url: '/v1/ielts/writing/task1/grade',
     headers: {
-      host: 'api.aihub.example.com',
+      host: 'api.aihub.test',
       'x-api-key': VALID_API_KEY,
       'idempotency-key': `concurrency-test-${nextRequestKey}`,
     },
@@ -168,6 +168,7 @@ describe('Writing concurrency HTTP flow', () => {
   const originalEnv = {
     allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
     nodeEnv: process.env.NODE_ENV,
+    productionHost: process.env.AIHUB_PRODUCTION_HOST,
   };
 
   const authenticator: ApiKeyAuthenticatorPort = {
@@ -195,6 +196,7 @@ describe('Writing concurrency HTTP flow', () => {
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
     process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'true';
+    process.env.AIHUB_PRODUCTION_HOST = 'api.aihub.test';
 
     limiter = new InMemoryConcurrencyLimiter();
     dispatcher = new PendingDispatcher();
@@ -231,6 +233,11 @@ describe('Writing concurrency HTTP flow', () => {
 
     process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = originalEnv.allowDev;
     process.env.NODE_ENV = originalEnv.nodeEnv;
+    if (originalEnv.productionHost === undefined) {
+      Reflect.deleteProperty(process.env, 'AIHUB_PRODUCTION_HOST');
+    } else {
+      process.env.AIHUB_PRODUCTION_HOST = originalEnv.productionHost;
+    }
   });
 
   it('rejects exactly one of N+1 concurrent requests and releases both successful leases', async () => {

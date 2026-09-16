@@ -56,4 +56,34 @@ function booleanOption(options, name, fallback = false) {
   return value === 'true';
 }
 
-module.exports = { CliUsageError, usageError, quotaOption, booleanOption };
+const ALLOWED_ENVIRONMENTS = new Set([
+  'development',
+  'staging',
+  'production',
+  'sandbox',
+]);
+
+function environmentListOption(options, name, fallback = 'production') {
+  const raw = options.get(name) ?? fallback;
+  const values = raw.split(',').map((item) => item.trim());
+
+  if (
+    values.length === 0 ||
+    values.some((value) => value.length === 0) ||
+    new Set(values).size !== values.length ||
+    values.some((value) => !ALLOWED_ENVIRONMENTS.has(value)) ||
+    (values.includes('sandbox') && values.length !== 1)
+  ) {
+    usageError();
+  }
+
+  return values;
+}
+
+module.exports = {
+  CliUsageError,
+  usageError,
+  quotaOption,
+  booleanOption,
+  environmentListOption,
+};

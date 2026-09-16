@@ -10,7 +10,7 @@ import { SandboxApiKeyGuard } from './sandbox-api-key.guard';
 const authenticated: AuthenticatedApiKey = {
   organizationId: 'org_sandbox',
   apiKeyId: 'ak_sandbox',
-  environment: 'production',
+  environment: 'sandbox',
   scopes: ['speaking.grade'],
   rateLimitRpm: 60,
   maxConcurrent: 3,
@@ -21,7 +21,7 @@ const authenticated: AuthenticatedApiKey = {
 function request(overrides: Record<string, unknown> = {}) {
   return {
     headers: { 'x-api-key': 'aihub_sk_value' },
-    hostname: 'api.aihub.test',
+    hostname: 'sandbox.aihub.test',
     ip: '203.0.113.7',
     ...overrides,
   };
@@ -56,14 +56,18 @@ function guard(
 }
 
 describe('SandboxApiKeyGuard', () => {
-  const originalHost = process.env.AIHUB_PRODUCTION_HOST;
+  const originalHost = process.env.AIHUB_SANDBOX_HOST;
 
   beforeEach(() => {
-    process.env.AIHUB_PRODUCTION_HOST = 'api.aihub.test';
+    process.env.AIHUB_SANDBOX_HOST = 'sandbox.aihub.test';
   });
 
   afterEach(() => {
-    process.env.AIHUB_PRODUCTION_HOST = originalHost;
+    if (originalHost === undefined) {
+      Reflect.deleteProperty(process.env, 'AIHUB_SANDBOX_HOST');
+    } else {
+      process.env.AIHUB_SANDBOX_HOST = originalHost;
+    }
   });
 
   it('authenticates a sandbox key and exposes it on the request', async () => {

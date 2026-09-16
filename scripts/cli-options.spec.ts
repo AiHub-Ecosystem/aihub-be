@@ -1,4 +1,9 @@
-import { CliUsageError, booleanOption, quotaOption } from './cli-options.cjs';
+import {
+  CliUsageError,
+  booleanOption,
+  environmentListOption,
+  quotaOption,
+} from './cli-options.cjs';
 
 function options(
   entries: Readonly<Record<string, string>> = {},
@@ -62,4 +67,39 @@ describe('booleanOption', () => {
       ).toThrow(CliUsageError);
     },
   );
+});
+
+describe('environmentListOption', () => {
+  it('defaults key creation to production', () => {
+    expect(environmentListOption(options(), 'envs')).toEqual(['production']);
+  });
+
+  it.each(['development', 'staging', 'production', 'sandbox'])(
+    'accepts %s',
+    (environment) => {
+      expect(
+        environmentListOption(options({ envs: environment }), 'envs'),
+      ).toEqual([environment]);
+    },
+  );
+
+  it('accepts multiple non-sandbox environments', () => {
+    expect(
+      environmentListOption(options({ envs: 'development,staging' }), 'envs'),
+    ).toEqual(['development', 'staging']);
+  });
+
+  it.each([
+    'unknown',
+    '',
+    'production,',
+    'production,production',
+    'sandbox,production',
+    'sandbox,staging',
+    'sandbox,development',
+  ])('rejects invalid environment list %s', (value) => {
+    expect(() =>
+      environmentListOption(options({ envs: value }), 'envs'),
+    ).toThrow(CliUsageError);
+  });
 });

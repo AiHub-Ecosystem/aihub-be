@@ -212,14 +212,14 @@ All necessary metadata is already in memory from the initial key lookup → **ze
 
 ## G.11 Host Header Is Not an Absolute Source of Truth
 
-`resolveAihubEnvironment` determines `production`/`staging`/`development` by matching the incoming `Host` header against `AIHUB_PRODUCTION_HOST`/`AIHUB_STAGING_HOST`/`AIHUB_DEVELOPMENT_HOST`. However, `Host` is a client-supplied header — inherently self-asserted, just like a custom `X-Environment` header.
+`resolveAihubEnvironment` determines `production`/`staging`/`development`/`sandbox` by matching the incoming `Host` header against the corresponding `AIHUB_*_HOST` settings. Production is required; staging, development, and sandbox are optional and are absent from the host map when unset. However, `Host` is a client-supplied header — inherently self-asserted, just like a custom `X-Environment` header.
 
 Consequence: If the reverse proxy/LB in front of a deployment **fails to validate** that the `Host` matches its own actual domain, a client connecting directly to that deployment (bypassing DNS via IP) could send `Host: <domain of another tier>`, causing AIHUB to resolve the incorrect environment — undermining the premise that clients cannot dictate environments (US01).
 
 Two defensive layers, neither sufficient alone:
 
 1. **Infrastructure (Mandatory, outside AIHUB codebase).** The reverse proxy/LB in front of each environment must validate or overwrite `Host` to match its authentic domain / TLS SNI before forwarding requests to AIHUB. This is an operational requirement — AIHUB code cannot verify whether the TCP connection arrived at the intended domain.
-2. **Code (`assertHostConfigurationIsSafe()`).** Halts application bootstrap in non-development environments if any of the three environment host settings remains set to default placeholders (`api.aihub.example.com`, etc.) — since placeholders are public knowledge and leaving them open invites spoofing. This guard catches "forgotten configuration", but **cannot catch** upstream reverse-proxy misconfiguration — which remains the responsibility of layer 1.
+2. **Code (`assertHostConfigurationIsSafe()`).** Halts application bootstrap in non-development environments if the required production host is missing or any configured host remains a default placeholder (`api.aihub.example.com`, etc.) — since placeholders are public knowledge and leaving them open invites spoofing. This guard catches "forgotten configuration", but **cannot catch** upstream reverse-proxy misconfiguration — which remains the responsibility of layer 1.
 
 ---
 

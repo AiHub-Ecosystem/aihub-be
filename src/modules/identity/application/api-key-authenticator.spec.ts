@@ -169,6 +169,28 @@ describe('ApiKeyAuthenticator', () => {
     expect(failures.failures).toBe(0);
   });
 
+  it.each([
+    ['sandbox key on production', ['sandbox'], 'production'],
+    ['production key on sandbox', ['production'], 'sandbox'],
+  ])(
+    'rejects a %s without counting it as brute-force auth failure',
+    async (_label, allowedEnvironments, requestEnvironment) => {
+      const { authenticator, failures } = createAuthenticator({
+        ...activeRecord,
+        allowedEnvironments,
+      });
+
+      await expect(
+        authenticator.authenticate({
+          value: VALID_KEY,
+          environment: requestEnvironment,
+          clientIp: '203.0.113.10',
+        }),
+      ).rejects.toMatchObject({ code: 'ENVIRONMENT_NOT_ALLOWED' });
+      expect(failures.failures).toBe(0);
+    },
+  );
+
   it('rejects revoked and expired keys as unauthorized credentials', async () => {
     const revoked = createAuthenticator({ ...activeRecord, status: 'revoked' });
     await expect(

@@ -98,16 +98,18 @@ Clients require a unified, intuitive, and easy-to-remember Base URL structure.
 Production: https://api.aihub.example.com/v1
 Staging:    https://staging-api.aihub.example.com/v1
 Dev:        https://dev-api.aihub.example.com/v1
+Sandbox:    https://sandbox-api.aihub.example.com/v1
 ```
 
 ### Environment Source of Truth
 
-**Settled proposal:** Hostname / deployment URL is the sole source of truth for `dev/staging/prod`.
+**Settled proposal:** Hostname / deployment URL is the sole source of truth for `dev/staging/prod/sandbox`.
 
 ```text
 api.aihub...          → production
 staging-api.aihub...  → staging
 dev-api.aihub...      → development
+sandbox-api.aihub...  → sandbox
 ```
 
 API keys bind to `allowed_environments`, but environment is never self-asserted by clients via request headers.
@@ -188,7 +190,7 @@ Service    = writing
 Task       = task1
 Operation  = writing.task1.grade
 
-api.aihub... / staging-api.aihub...
+api.aihub... / staging-api.aihub... / sandbox-api.aihub...
    ↓
 Environment
 ```
@@ -1588,26 +1590,26 @@ Canonical Response
 
 **Status: superseded for the current runtime.** The table preserves the original D1 freeze for traceability; the 2026-09-12 scope update removes public question-generation operations.
 
-|   # | Question                                    | Decision                                                                                                                                                                                                     |
-| --: | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-|   1 | `X-API-Key` or `Authorization: Bearer`?     | **`X-API-Key`.** `Authorization` is reserved for internal JWTs across the AIHUB → AI Service boundary, preventing two credential classes from colliding on one header                                        |
-|   2 | Does key require `live/test` mode?          | **No.** Environment is determined by hostname; keys are strictly _bound_ via `allowed_environments`. Embedding mode into the key creates a dual source of truth                                              |
-|   3 | `dev/staging/prod` derived from hostname?   | **Yes, finalized** (§4)                                                                                                                                                                                      |
-|   4 | `/v1` or header versioning?                 | **`/v1` in path**                                                                                                                                                                                            |
-|   5 | Unknown fields reject 400?                  | **Yes, zero exceptions.** `additionalProperties: false` (§18)                                                                                                                                                |
-|   6 | `usage` when not calling models             | **Omit.** Neither `null` nor `0`. Accompanied by `metering_status: not_applicable` (§15)                                                                                                                     |
-|   7 | How much to expose `models[]`/breakdown?    | **Aggregate token counts only.** AI Services do not return model identity or per-call breakdown; only aggregate usage is exchanged (§16)                                                                     |
-|   8 | JWKS URL or upload public key?              | **Both.** `jwks_url` is primary, `public_keys_jwks` is fallback (§8)                                                                                                                                         |
-|   9 | Maximum assertion TTL                       | **300 seconds**, configurable per org via `max_assertion_ttl_seconds`. Clock skew ±60s                                                                                                                       |
-|  10 | Which capabilities mandate user identity?   | All active grading operations (`writing.task1.grade`, `writing.task2.grade`, `speaking.grading`) → `user`. Default fail-closed: if unsure, classify as `user`                                                |
-|  11 | `writing.grade` sync or async?              | **Sync**, `timeout_ms: 60000` (ceiling, not expectation — see §27)                                                                                                                                           |
-|  12 | `speaking.grading` sync or async?           | **Sync** for the current multipart proxy; the future asset/job API remains deferred                                                                                                                          |
-|  13 | Speaking multipart or `asset_id`?           | **`asset_id` + presigned upload** is primary; multipart for small files ≤10 MB (LTA §32.6)                                                                                                                   |
-|  14 | Max media size / MIME                       | ⏳ **Open** — finalized in Phase 4. Does not block D1 freeze because async envelope is locked                                                                                                                |
-|  15 | Idempotency mandatory for which operations? | `required` for Writing grading; `none` for current Speaking grading; `optional` reserved for future operations (§27)                                                                                         |
-|  16 | Scope/entitlement enforcement starting D2?  | **Yes, starting in D2.** `Entitlement ∩ Key Scope` requires no extra query — data is retrieved during key lookup (§9)                                                                                        |
-|  17 | Missing usage for metering-critical op?     | **Do not fail business responses.** Record `metering_status: missing_usage` + alert + reconcile (LTA §32.8). However, contract/integration tests must treat `usage` as required before deploying AI Services |
-|  18 | Finalized public error codes list v1        | **19 codes** in §25                                                                                                                                                                                          |
+|   # | Question                                          | Decision                                                                                                                                                                                                     |
+| --: | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+|   1 | `X-API-Key` or `Authorization: Bearer`?           | **`X-API-Key`.** `Authorization` is reserved for internal JWTs across the AIHUB → AI Service boundary, preventing two credential classes from colliding on one header                                        |
+|   2 | Does key require `live/test` mode?                | **No.** Environment is determined by hostname; keys are strictly _bound_ via `allowed_environments`. Embedding mode into the key creates a dual source of truth                                              |
+|   3 | `dev/staging/prod/sandbox` derived from hostname? | **Yes, finalized** (§4)                                                                                                                                                                                      |
+|   4 | `/v1` or header versioning?                       | **`/v1` in path**                                                                                                                                                                                            |
+|   5 | Unknown fields reject 400?                        | **Yes, zero exceptions.** `additionalProperties: false` (§18)                                                                                                                                                |
+|   6 | `usage` when not calling models                   | **Omit.** Neither `null` nor `0`. Accompanied by `metering_status: not_applicable` (§15)                                                                                                                     |
+|   7 | How much to expose `models[]`/breakdown?          | **Aggregate token counts only.** AI Services do not return model identity or per-call breakdown; only aggregate usage is exchanged (§16)                                                                     |
+|   8 | JWKS URL or upload public key?                    | **Both.** `jwks_url` is primary, `public_keys_jwks` is fallback (§8)                                                                                                                                         |
+|   9 | Maximum assertion TTL                             | **300 seconds**, configurable per org via `max_assertion_ttl_seconds`. Clock skew ±60s                                                                                                                       |
+|  10 | Which capabilities mandate user identity?         | All active grading operations (`writing.task1.grade`, `writing.task2.grade`, `speaking.grading`) → `user`. Default fail-closed: if unsure, classify as `user`                                                |
+|  11 | `writing.grade` sync or async?                    | **Sync**, `timeout_ms: 60000` (ceiling, not expectation — see §27)                                                                                                                                           |
+|  12 | `speaking.grading` sync or async?                 | **Sync** for the current multipart proxy; the future asset/job API remains deferred                                                                                                                          |
+|  13 | Speaking multipart or `asset_id`?                 | **`asset_id` + presigned upload** is primary; multipart for small files ≤10 MB (LTA §32.6)                                                                                                                   |
+|  14 | Max media size / MIME                             | ⏳ **Open** — finalized in Phase 4. Does not block D1 freeze because async envelope is locked                                                                                                                |
+|  15 | Idempotency mandatory for which operations?       | `required` for Writing grading; `none` for current Speaking grading; `optional` reserved for future operations (§27)                                                                                         |
+|  16 | Scope/entitlement enforcement starting D2?        | **Yes, starting in D2.** `Entitlement ∩ Key Scope` requires no extra query — data is retrieved during key lookup (§9)                                                                                        |
+|  17 | Missing usage for metering-critical op?           | **Do not fail business responses.** Record `metering_status: missing_usage` + alert + reconcile (LTA §32.8). However, contract/integration tests must treat `usage` as required before deploying AI Services |
+|  18 | Finalized public error codes list v1              | **19 codes** in §25                                                                                                                                                                                          |
 
 ---
 

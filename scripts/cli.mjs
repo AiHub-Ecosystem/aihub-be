@@ -27,6 +27,7 @@ const PRIVATE_JWK_MEMBERS = new Set([
 import {
   CliUsageError,
   booleanOption,
+  environmentListOption,
   quotaOption,
   usageError,
 } from './cli-options.cjs';
@@ -365,7 +366,7 @@ async function createKey(options) {
         rawKey.slice(0, 15),
         requiredOption(options, 'name'),
         listOption(options, 'scopes', 'writing.grade'),
-        listOption(options, 'envs', 'production'),
+        environmentListOption(options, 'envs', 'production'),
       ],
     );
 

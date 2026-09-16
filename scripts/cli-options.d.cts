@@ -11,3 +11,8 @@ export declare function booleanOption(
   name: string,
   fallback?: boolean,
 ): boolean;
+export declare function environmentListOption(
+  options: ReadonlyMap<string, string>,
+  name: string,
+  fallback?: string,
+): string[];
