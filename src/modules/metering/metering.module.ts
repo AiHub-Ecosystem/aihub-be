@@ -5,6 +5,11 @@ import {
   type MeteringFinalizerPort,
 } from '../../common/metering/metering-finalizer.port';
 import {
+  QUOTA_COUNTER,
+  type QuotaCounterPort,
+} from '../gateway/application/quota-counter.port';
+import { GatewayModule } from '../gateway/gateway.module';
+import {
   METERING_FAILURE_LOGGER,
   type MeteringFailureLoggerPort,
 } from './application/metering-logger.port';
@@ -20,6 +25,7 @@ import {
 } from './infrastructure/postgres-usage.repository';
 
 @Module({
+  imports: [GatewayModule],
   providers: [
     {
       provide: USAGE_REPOSITORY,
@@ -37,8 +43,10 @@ import {
       useFactory: (
         repository: UsageRepositoryPort,
         logger: MeteringFailureLoggerPort,
-      ): MeteringFinalizerPort => new MeteringService(repository, logger),
-      inject: [USAGE_REPOSITORY, METERING_FAILURE_LOGGER],
+        quotaCounter: QuotaCounterPort,
+      ): MeteringFinalizerPort =>
+        new MeteringService(repository, logger, quotaCounter),
+      inject: [USAGE_REPOSITORY, METERING_FAILURE_LOGGER, QUOTA_COUNTER],
     },
   ],
   exports: [METERING_FINALIZER, USAGE_REPOSITORY],

@@ -24,6 +24,7 @@ export interface MeteringFinalizeInput {
   readonly aiProcessingMs?: number;
   readonly idempotentReplay?: boolean;
   readonly modelCalled?: boolean;
+  readonly quotaTracked?: boolean;
   readonly quotaUnverified?: boolean;
 }
 

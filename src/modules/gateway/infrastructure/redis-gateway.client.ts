@@ -1,6 +1,7 @@
 import Redis from 'ioredis';
 
 export interface RedisGatewayClient {
+  get(key: string): Promise<string | null>;
   incr(key: string): Promise<number>;
   expire(key: string, seconds: number): Promise<number>;
   eval(
@@ -16,6 +17,10 @@ export const REDIS_GATEWAY_CLIENT = Symbol('REDIS_GATEWAY_CLIENT');
 
 class IoredisGatewayClient implements RedisGatewayClient {
   constructor(private readonly client: Redis) {}
+
+  get(key: string): Promise<string | null> {
+    return this.client.get(key);
+  }
 
   incr(key: string): Promise<number> {
     return this.client.incr(key);

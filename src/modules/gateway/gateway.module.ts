@@ -15,6 +15,10 @@ import {
 } from './application/concurrency-limiter.port';
 import { INTERNAL_TOKEN_ISSUER } from './application/internal-token-issuer.port';
 import { OPERATION_DISPATCHER } from './application/operation-dispatcher.port';
+import {
+  QUOTA_COUNTER,
+  type QuotaCounterPort,
+} from './application/quota-counter.port';
 import { RATE_LIMITER } from './application/rate-limiter.port';
 import { ConfiguredTokenIssuer } from './infrastructure/configured-token-issuer';
 import { DownstreamHttpClient } from './infrastructure/downstream-http.client';
@@ -25,9 +29,11 @@ import {
   type RedisGatewayClient,
   createRedisGatewayClient,
 } from './infrastructure/redis-gateway.client';
+import { RedisQuotaCounter } from './infrastructure/redis-quota-counter';
 import { RedisRateLimiter } from './infrastructure/redis-rate-limiter';
 import { ConcurrencyReleaseInterceptor } from './presentation/concurrency-release.interceptor';
 import { ConcurrencyGuard } from './presentation/concurrency.guard';
+import { QuotaGuard } from './presentation/quota.guard';
 import { RateLimitGuard } from './presentation/rate-limit.guard';
 
 @Module({
@@ -82,6 +88,12 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       inject: [REDIS_GATEWAY_CLIENT],
     },
     {
+      provide: QUOTA_COUNTER,
+      useFactory: (client: RedisGatewayClient | undefined): QuotaCounterPort =>
+        new RedisQuotaCounter(client),
+      inject: [REDIS_GATEWAY_CLIENT],
+    },
+    {
       provide: OPERATION_DISPATCHER,
       useFactory: (
         httpClient: DownstreamHttpClient,
@@ -96,6 +108,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       inject: [DownstreamHttpClient, INTERNAL_TOKEN_ISSUER],
     },
     RateLimitGuard,
+    QuotaGuard,
     ConcurrencyGuard,
     ConcurrencyReleaseInterceptor,
   ],
@@ -104,6 +117,8 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     DownstreamHttpClient,
     RATE_LIMITER,
     RateLimitGuard,
+    QUOTA_COUNTER,
+    QuotaGuard,
     CONCURRENCY_LIMITER,
     ConcurrencyGuard,
     ConcurrencyReleaseInterceptor,

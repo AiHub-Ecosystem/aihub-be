@@ -9,11 +9,15 @@ import type {
 } from '../../../common/metering/metering-finalizer.port';
 import type { MeteringStatus } from '../../../common/metering/metering.types';
 import { normalizeMeteringTelemetry } from '../../../common/metering/telemetry';
+import type { QuotaCounterPort } from '../../gateway/application/quota-counter.port';
 import type { MeteringFailureLoggerPort } from './metering-logger.port';
 import type { UsageRecord, UsageRepositoryPort } from './usage-repository.port';
 
 const NOOP_LOGGER: MeteringFailureLoggerPort = {
   writeFailed: () => undefined,
+};
+const NOOP_QUOTA_COUNTER: Pick<QuotaCounterPort, 'increment'> = {
+  increment: async () => undefined,
 };
 
 function nonNegativeInteger(value: number | undefined): number | undefined {
@@ -70,17 +74,19 @@ function usageRecord(input: MeteringFinalizeInput): UsageRecord {
   const telemetry = normalizeMeteringTelemetry(input);
   const mode = operationMode(input.operation);
   const meteringStatus =
-    input.meteringStatus ??
-    resolveMeteringStatus({
-      mode,
-      ...(telemetry.usage === undefined ? {} : { usage: telemetry.usage }),
-      ...(input.quotaUnverified === undefined
-        ? {}
-        : { quotaUnverified: input.quotaUnverified }),
-      ...(input.modelCalled === undefined
-        ? { modelCalled: input.outcome === 'success' }
-        : { modelCalled: input.modelCalled }),
-    });
+    input.quotaUnverified === true
+      ? 'quota_unverified'
+      : (input.meteringStatus ??
+        resolveMeteringStatus({
+          mode,
+          ...(telemetry.usage === undefined ? {} : { usage: telemetry.usage }),
+          ...(input.quotaUnverified === undefined
+            ? {}
+            : { quotaUnverified: input.quotaUnverified }),
+          ...(input.modelCalled === undefined
+            ? { modelCalled: input.outcome === 'success' }
+            : { modelCalled: input.modelCalled }),
+        }));
   const billableRequests =
     input.outcome === 'success' && input.idempotentReplay !== true ? 1 : 0;
   const actorId = safeText(input.actorId);
@@ -114,10 +120,23 @@ export class MeteringService implements MeteringFinalizerPort {
   constructor(
     private readonly repository: UsageRepositoryPort,
     private readonly logger: MeteringFailureLoggerPort = NOOP_LOGGER,
+    private readonly quotaCounter: Pick<
+      QuotaCounterPort,
+      'increment'
+    > = NOOP_QUOTA_COUNTER,
   ) {}
 
   async finalize(input: MeteringFinalizeInput): Promise<void> {
-    const record = usageRecord(input);
+    let record = usageRecord(input);
+    if (input.quotaTracked === true && record.billableRequests === 1) {
+      try {
+        await this.quotaCounter.increment({
+          organizationId: input.organizationId,
+        });
+      } catch {
+        record = { ...record, meteringStatus: 'quota_unverified' };
+      }
+    }
     try {
       await this.repository.insert(record);
     } catch {

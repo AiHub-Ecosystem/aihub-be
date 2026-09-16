@@ -4,6 +4,8 @@ import {
   getRequestMeteringState,
   initializeRequestMetering,
   setRequestMeteringIdentity,
+  setRequestMeteringQuotaTracked,
+  setRequestMeteringQuotaUnverified,
   setRequestMeteringTelemetry,
 } from './request-metering-state';
 
@@ -22,6 +24,8 @@ describe('request metering state', () => {
       usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 },
       idempotentReplay: true,
     });
+    setRequestMeteringQuotaTracked(request, true);
+    setRequestMeteringQuotaUnverified(request);
 
     const state = getRequestMeteringState(request);
     expect(state).toEqual(
@@ -30,6 +34,8 @@ describe('request metering state', () => {
         apiKeyId: 'ak_backend',
         downstreamMs: 42,
         idempotentReplay: true,
+        quotaTracked: true,
+        quotaUnverified: true,
       }),
     );
     expect(

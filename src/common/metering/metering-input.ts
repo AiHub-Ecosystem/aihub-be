@@ -44,6 +44,9 @@ export function createMeteringFinalizeInput(
     ...(state.modelCalled === undefined
       ? {}
       : { modelCalled: state.modelCalled }),
+    ...(state.quotaTracked === undefined
+      ? {}
+      : { quotaTracked: state.quotaTracked }),
     ...(state.quotaUnverified === undefined
       ? {}
       : { quotaUnverified: state.quotaUnverified }),

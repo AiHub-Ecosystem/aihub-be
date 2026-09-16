@@ -33,6 +33,7 @@ import {
 } from '../../gateway/application/operation-dispatcher.port';
 import { ConcurrencyReleaseInterceptor } from '../../gateway/presentation/concurrency-release.interceptor';
 import { ConcurrencyGuard } from '../../gateway/presentation/concurrency.guard';
+import { QuotaGuard } from '../../gateway/presentation/quota.guard';
 import { RateLimitGuard } from '../../gateway/presentation/rate-limit.guard';
 import { ApiKeyGuard } from '../../identity/presentation/api-key.guard';
 import {
@@ -106,7 +107,13 @@ function requestLifecycle(
 }
 
 @Controller()
-@UseGuards(ApiKeyGuard, UserAssertionGuard, RateLimitGuard, ConcurrencyGuard)
+@UseGuards(
+  ApiKeyGuard,
+  UserAssertionGuard,
+  RateLimitGuard,
+  QuotaGuard,
+  ConcurrencyGuard,
+)
 @UseInterceptors(ConcurrencyReleaseInterceptor, SuccessEnvelopeInterceptor)
 export class SpeakingGradingController {
   constructor(

@@ -10,6 +10,8 @@ import type {
 import {
   initializeRequestMetering,
   setRequestMeteringIdentity,
+  setRequestMeteringQuotaTracked,
+  setRequestMeteringQuotaUnverified,
 } from './request-metering-state';
 
 function contextFor(
@@ -32,7 +34,10 @@ class FakeFinalizer implements MeteringFinalizerPort {
   }
 }
 
-function authenticatedRequest(): Record<string, unknown> {
+function authenticatedRequest(
+  quotaTracked = false,
+  quotaUnverified = false,
+): Record<string, unknown> {
   const request = {
     id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
     headers: {},
@@ -44,6 +49,12 @@ function authenticatedRequest(): Record<string, unknown> {
     apiKeyId: 'ak_backend',
     environment: 'production',
   });
+  if (quotaTracked) {
+    setRequestMeteringQuotaTracked(request, true);
+  }
+  if (quotaUnverified) {
+    setRequestMeteringQuotaUnverified(request);
+  }
   return request;
 }
 
@@ -104,6 +115,52 @@ describe('metering request boundary', () => {
     expect(send).toHaveBeenCalledTimes(2);
     expect(send.mock.calls[0]?.[0].error).toEqual(
       expect.objectContaining({ code: 'AI_SERVICE_TIMEOUT' }),
+    );
+  });
+
+  it('passes quota tracking state to the finalizer', async () => {
+    const finalizer = new FakeFinalizer();
+    const request = authenticatedRequest(true);
+    const interceptor = new SuccessEnvelopeInterceptor(finalizer);
+
+    await firstValueFrom(
+      interceptor.intercept(contextFor(request, { header: () => undefined }), {
+        handle: () =>
+          of({
+            operation: 'writing.task1.grade',
+            data: { band: 7 },
+            downstreamMs: 80,
+          }),
+      }),
+    );
+
+    expect(finalizer.inputs[0]).toEqual(
+      expect.objectContaining({ quotaTracked: true }),
+    );
+  });
+
+  it('passes quota-unverified state through error metering', async () => {
+    const finalizer = new FakeFinalizer();
+    const request = authenticatedRequest(true, true);
+    const filter = new HttpExceptionFilter(finalizer);
+    const context = contextFor(request, {
+      status: () => ({ send: jest.fn() }),
+    });
+
+    await filter.catch(
+      new AppError({
+        code: 'INVALID_REQUEST',
+        message: 'Request failed validation',
+        retryable: false,
+      }),
+      context,
+    );
+
+    expect(finalizer.inputs[0]).toEqual(
+      expect.objectContaining({
+        quotaTracked: true,
+        quotaUnverified: true,
+      }),
     );
   });
 });

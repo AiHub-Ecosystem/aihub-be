@@ -100,6 +100,13 @@ export function setRequestMeteringQuotaUnverified(request: object): void {
   initializeRequestMetering(request).quotaUnverified = true;
 }
 
+export function setRequestMeteringQuotaTracked(
+  request: object,
+  tracked: boolean,
+): void {
+  initializeRequestMetering(request).quotaTracked = tracked;
+}
+
 export function claimRequestMetering(
   request: unknown,
 ): RequestMeteringState | undefined {

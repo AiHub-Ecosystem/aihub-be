@@ -1,6 +1,7 @@
 import type { MeteringMode } from '../../../catalog/operation-catalog';
 import type { MeteringFinalizeInput } from '../../../common/metering/metering-finalizer.port';
 import type { MeteringStatus } from '../../../common/metering/metering.types';
+import type { QuotaCounterPort } from '../../gateway/application/quota-counter.port';
 import type { MeteringFailureLoggerPort } from './metering-logger.port';
 import { MeteringService, resolveMeteringStatus } from './metering.service';
 import type { UsageRecord, UsageRepositoryPort } from './usage-repository.port';
@@ -26,6 +27,22 @@ class FakeFailureLogger implements MeteringFailureLoggerPort {
 
   writeFailed(record: UsageRecord): void {
     this.records.push(record);
+  }
+}
+
+class FakeQuotaCounter implements QuotaCounterPort {
+  readonly increments: string[] = [];
+  shouldFail = false;
+
+  read(): Promise<number> {
+    return Promise.resolve(0);
+  }
+
+  async increment(input: { readonly organizationId: string }): Promise<void> {
+    if (this.shouldFail) {
+      throw new Error('quota counter unavailable');
+    }
+    this.increments.push(input.organizationId);
   }
 }
 
@@ -92,6 +109,86 @@ describe('MeteringService', () => {
 
     expect(repository.records[0]?.billableRequests).toBe(0);
     expect(repository.records[0]?.outcome).toBe('success');
+  });
+
+  it('increments the quota counter for a tracked billable record', async () => {
+    const repository = new FakeUsageRepository();
+    const counter = new FakeQuotaCounter();
+    const service = new MeteringService(repository, undefined, counter);
+
+    await service.finalize({ ...input, quotaTracked: true });
+
+    expect(counter.increments).toEqual(['org_acme']);
+    expect(repository.records).toHaveLength(1);
+  });
+
+  it('does not increment the quota counter for a replay', async () => {
+    const repository = new FakeUsageRepository();
+    const counter = new FakeQuotaCounter();
+    const service = new MeteringService(repository, undefined, counter);
+
+    await service.finalize({
+      ...input,
+      quotaTracked: true,
+      idempotentReplay: true,
+    });
+
+    expect(counter.increments).toHaveLength(0);
+    expect(repository.records[0]?.billableRequests).toBe(0);
+  });
+
+  it('keeps the successful response path when the quota increment fails', async () => {
+    const repository = new FakeUsageRepository();
+    const counter = new FakeQuotaCounter();
+    counter.shouldFail = true;
+    const service = new MeteringService(repository, undefined, counter);
+
+    await expect(
+      service.finalize({ ...input, quotaTracked: true }),
+    ).resolves.toBeUndefined();
+
+    expect(repository.records[0]).toEqual(
+      expect.objectContaining({
+        billableRequests: 1,
+        meteringStatus: 'quota_unverified',
+      }),
+    );
+  });
+
+  it('preserves quota-unverified evidence for an allowed non-billable outcome', async () => {
+    const repository = new FakeUsageRepository();
+    const counter = new FakeQuotaCounter();
+    const service = new MeteringService(repository, undefined, counter);
+
+    await service.finalize({
+      ...input,
+      outcome: 'client_error',
+      httpStatus: 400,
+      modelCalled: false,
+      quotaTracked: true,
+      quotaUnverified: true,
+    });
+
+    expect(counter.increments).toHaveLength(0);
+    expect(repository.records[0]).toEqual(
+      expect.objectContaining({
+        billableRequests: 0,
+        meteringStatus: 'quota_unverified',
+      }),
+    );
+  });
+
+  it('lets quota-unverified evidence override a supplied metering status', async () => {
+    const repository = new FakeUsageRepository();
+    const service = new MeteringService(repository);
+
+    await service.finalize({
+      ...input,
+      meteringStatus: 'complete',
+      quotaUnverified: true,
+    });
+
+    expect(repository.records[0]?.meteringStatus).toBe('quota_unverified');
   });
 
   it('marks an authenticated failure before dispatch as not applicable', async () => {

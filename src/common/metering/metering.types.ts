@@ -44,6 +44,7 @@ export interface RequestMeteringState {
   models?: readonly MeteringModel[];
   idempotentReplay?: boolean;
   modelCalled?: boolean;
+  quotaTracked?: boolean;
   quotaUnverified?: boolean;
   finalized: boolean;
 }

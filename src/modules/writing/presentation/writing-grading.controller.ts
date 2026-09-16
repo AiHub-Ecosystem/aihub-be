@@ -36,6 +36,7 @@ import {
 import { getConcurrencyBackgroundLifecycle } from '../../gateway/presentation/concurrency-permit';
 import { ConcurrencyReleaseInterceptor } from '../../gateway/presentation/concurrency-release.interceptor';
 import { ConcurrencyGuard } from '../../gateway/presentation/concurrency.guard';
+import { QuotaGuard } from '../../gateway/presentation/quota.guard';
 import { RateLimitGuard } from '../../gateway/presentation/rate-limit.guard';
 import {
   IDEMPOTENCY_SERVICE,
@@ -150,7 +151,13 @@ function requireUserId(request: AuthenticatedRequest): string {
  * the class-level guard/interceptor wiring for no benefit.
  */
 @Controller()
-@UseGuards(ApiKeyGuard, UserAssertionGuard, RateLimitGuard, ConcurrencyGuard)
+@UseGuards(
+  ApiKeyGuard,
+  UserAssertionGuard,
+  RateLimitGuard,
+  QuotaGuard,
+  ConcurrencyGuard,
+)
 @UseInterceptors(ConcurrencyReleaseInterceptor, SuccessEnvelopeInterceptor)
 export class WritingGradingController {
   constructor(
