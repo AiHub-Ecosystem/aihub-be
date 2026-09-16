@@ -24,14 +24,15 @@ const PRIVATE_JWK_MEMBERS = new Set([
   'k',
 ]);
 
+import {
+  CliUsageError,
+  booleanOption,
+  quotaOption,
+  usageError,
+} from './cli-options.cjs';
+
 if (existsSync('.env')) {
   loadEnvFile('.env');
-}
-
-class CliUsageError extends Error {}
-
-function usageError() {
-  throw new CliUsageError('Invalid CLI arguments');
 }
 
 function parseOptions(values) {
@@ -315,8 +316,10 @@ async function createOrganization(options) {
   const pool = databasePool();
   try {
     const result = await pool.query(
-      `INSERT INTO organizations (id, name, entitlements, rate_limit_rpm, max_concurrent)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO organizations
+         (id, name, entitlements, rate_limit_rpm, max_concurrent,
+          monthly_request_quota, hard_stop_on_quota)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
       [
         `org_${ulid()}`,
@@ -324,6 +327,11 @@ async function createOrganization(options) {
         listOption(options, 'entitlements', 'writing'),
         positiveIntegerOption(options, 'rate-limit-rpm', '600'),
         positiveIntegerOption(options, 'max-concurrent', '20'),
+        // Quota and hard stop live on the organization, not the key: they are
+        // one budget shared by every key it issues, which is what makes
+        // per-person keys safe to hand out.
+        quotaOption(options, 'monthly-quota'),
+        booleanOption(options, 'hard-stop'),
       ],
     );
     console.log(result.rows[0].id);
