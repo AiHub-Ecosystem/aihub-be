@@ -279,9 +279,9 @@ const D1_SCENARIOS: readonly Scenario[] = [
     ],
   },
   {
-    name: '13. Usage/model metadata matches downstream — BLOCKED',
+    name: '13. Provider telemetry remains internal — BLOCKED',
     description:
-      'BLOCKED: waiting on #9 (metering). No usage or model field exists on the public response yet.',
+      'BLOCKED: provider usage and processing telemetry is internal and must not appear in the public response.',
     path: TASK1_GRADE_PATH,
     headers: [
       JSON_HEADER,
@@ -291,15 +291,15 @@ const D1_SCENARIOS: readonly Scenario[] = [
     ],
     body: TASK1_GRADE_BODY,
     testScript: [
-      "pm.test('BLOCKED: waiting on #9 (metering) - add real usage/model field assertions once it lands', function () {",
+      "pm.test('BLOCKED: provider telemetry stays internal - add metering assertions outside the public response', function () {",
       '  pm.expect(true).to.be.true;',
       '});',
     ],
   },
   {
-    name: '14. Multi-model usage aggregates correctly — BLOCKED',
+    name: '14. Aggregate usage is metered internally — BLOCKED',
     description:
-      'BLOCKED: waiting on #9 (metering). No usage breakdown field exists on the public response yet.',
+      'BLOCKED: aggregate provider usage is stored internally and is not exposed in the public response.',
     path: TASK1_GRADE_PATH,
     headers: [
       JSON_HEADER,
@@ -309,7 +309,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
     ],
     body: TASK1_GRADE_BODY,
     testScript: [
-      "pm.test('BLOCKED: waiting on #9 (metering) - add real multi-model aggregate assertions once it lands', function () {",
+      "pm.test('BLOCKED: aggregate usage is verified in internal metering, not public response', function () {",
       '  pm.expect(true).to.be.true;',
       '});',
     ],

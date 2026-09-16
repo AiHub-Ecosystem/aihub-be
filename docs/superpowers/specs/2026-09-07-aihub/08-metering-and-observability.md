@@ -50,7 +50,7 @@ The `unmetered` column dictates whether you **are even legally permitted** to bi
 
 **Invoiced strictly when `outcome = 'success'`.** Downstream failures are absorbed by us, never billed to customers.
 
-`models` (stored as `jsonb`) is preserved to facilitate tiered pricing per LLM model if required later.
+AI Services return aggregate token usage and `metrics.ai_processing_ms` only. Model identity is intentionally outside the provider contract and is not required for metering or billing aggregates.
 
 ## K.3 Handling Missing Usage Data
 

@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS usage_records (
   input_tokens      integer CHECK (input_tokens IS NULL OR input_tokens >= 0),
   output_tokens     integer CHECK (output_tokens IS NULL OR output_tokens >= 0),
   total_tokens      integer CHECK (total_tokens IS NULL OR total_tokens >= 0),
-  models            jsonb,
+  models            jsonb, -- nullable compatibility field; current AI Services omit model identity
   metering_status   text NOT NULL CHECK (metering_status IN
                     ('complete','missing_usage','not_applicable','quota_unverified')),
   total_ms          integer NOT NULL CHECK (total_ms >= 0),

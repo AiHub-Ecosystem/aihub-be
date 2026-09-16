@@ -66,7 +66,7 @@ Customer BE ──X-API-Key, X-User-Assertion, Idempotency-Key──► AIHUB
                                           t1 ─┤
    ──Bearer <internal JWT, exp=t1+60s>──► ai-writing        │
        POST /grading-feedback-task1                         │ downstream_ms
-   ◄── { ...fields, usage{}, models[], metrics{} } ──       │
+   ◄── { ...fields, usage{}, metrics{} } ──                 │
                                           t2 ─┤
    splitEnvelope -> parseResponse -> record usage_records
                                           t3 ─┘

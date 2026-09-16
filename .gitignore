@@ -19,6 +19,8 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Demo assertion signing material (scripts/dev-sign-assertion.mjs)
-demo-private.pem
+# Assertion signing material (scripts/dev-sign-assertion.mjs). Broad on purpose:
+# a real organization's signing key copied into the repo root must never become
+# committable because its filename happened not to be listed here.
+*.pem
 demo-jwks.json
