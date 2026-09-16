@@ -12,6 +12,7 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import { AppError } from '../../../common/errors/app-error';
+import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
   type RequestLifecycleState,
   createRequestLifecycleState,
@@ -49,14 +50,6 @@ import { createFastifySpeakingMultipartSource } from './fastify-speaking-multipa
 
 const OPERATION = 'speaking.grading' as const;
 const JSON_OPERATION = 'speaking.grading-json' as const;
-
-function invalidRequest(): AppError {
-  return new AppError({
-    code: 'INVALID_REQUEST',
-    message: 'Request failed validation',
-    retryable: false,
-  });
-}
 
 function parseJsonBody(body: unknown): SpeakingGradeJsonInput {
   if (!Value.Check(SpeakingGradeJsonRequestSchema, body)) {

@@ -12,6 +12,7 @@ import { Value } from '@sinclair/typebox/value';
 
 import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import { AppError } from '../../../common/errors/app-error';
+import { invalidRequest } from '../../../common/errors/invalid-request';
 import { createClientDisconnectSignal } from '../../../common/http/client-disconnect-signal';
 import { SuccessEnvelopeInterceptor } from '../../../common/http/success-envelope.interceptor';
 import { createRequestContext } from '../../../common/request-context/request-context.factory';
@@ -52,15 +53,6 @@ import { UserAssertionGuard } from '../../identity/presentation/user-assertion.g
 
 const TASK1_OPERATION = 'writing.task1.grade' as const;
 const TASK2_OPERATION = 'writing.task2.grade' as const;
-
-function invalidRequest(cause?: unknown): AppError {
-  return new AppError({
-    code: 'INVALID_REQUEST',
-    message: 'Request failed validation',
-    retryable: false,
-    ...(cause === undefined ? {} : { cause }),
-  });
-}
 
 // Body size is enforced earlier, before parsing, by the `onRequest` hook
 // registered in main.ts (see `registerBodySizeGuard`) — a body that reaches
