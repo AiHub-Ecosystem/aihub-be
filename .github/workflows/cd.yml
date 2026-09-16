@@ -133,8 +133,13 @@ jobs:
           "${compose[@]}" config --quiet
           "${compose[@]}" pull app
           "${compose[@]}" --profile migration run --rm migrate </dev/null
-          # The production VPS already terminates TLS and owns ports 80/443.
-          "${compose[@]}" up -d --no-build app caddy
+          # The production VPS already terminates TLS and owns ports 80/443,
+          # so the `caddy` service in the Compose file is not the edge on this
+          # host and must not be started here — it would fail to bind port 80
+          # against whatever actually holds it, and take the deploy down with
+          # it. Adding the sandbox hostname to the public edge is a change to
+          # that proxy, not to `ops/deploy/Caddyfile`.
+          "${compose[@]}" up -d --no-build app
 
           app_id="$("${compose[@]}" ps -q app)"
           test -n "$app_id"
