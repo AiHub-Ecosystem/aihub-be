@@ -1,6 +1,7 @@
 import { exportJWK, exportPKCS8, generateKeyPair } from 'jose';
 
 import { AppError } from '../../common/errors/app-error';
+import { createRequestContext } from '../../common/request-context/request-context.factory';
 import type { JwksKeyProviderPort } from './application/jwks-key-provider.port';
 import { MintSandboxAssertion } from './application/mint-sandbox-assertion';
 import type {
@@ -98,12 +99,11 @@ describe('sandbox assertion round trip', () => {
 
     minter = new MintSandboxAssertion(
       repository(organizations),
-      new JoseSandboxAssertionSigner({
-        organizationIds: [SANDBOX_ORG],
+      new JoseSandboxAssertionSigner(() => ({
         privateKeyPem: sandbox.privateKeyPem,
         keyId: KEY_ID,
         algorithm: 'RS256',
-      }),
+      })),
     );
 
     verifier = new UserAssertionVerifier(
@@ -113,9 +113,20 @@ describe('sandbox assertion round trip', () => {
     );
   });
 
+  function context(organizationId: string) {
+    return createRequestContext({
+      requestId: 'req_01M2MNRPCGCT96P54KDBE82MH7',
+      receivedAt: new Date(),
+      deadlineMs: 5_000,
+      organizationId,
+      apiKeyId: 'ak_sandbox',
+      scopes: [],
+    });
+  }
+
   it('mints an assertion the sandbox organization accepts', async () => {
     const minted = await minter.mint({
-      organizationId: SANDBOX_ORG,
+      context: context(SANDBOX_ORG),
       userId: 'student_456',
     });
 
@@ -133,7 +144,7 @@ describe('sandbox assertion round trip', () => {
 
   it('rejects that same assertion under another organization', async () => {
     const minted = await minter.mint({
-      organizationId: SANDBOX_ORG,
+      context: context(SANDBOX_ORG),
       userId: 'student_456',
     });
 
@@ -147,7 +158,7 @@ describe('sandbox assertion round trip', () => {
 
   it('honours the organization assertion lifetime', async () => {
     const minted = await minter.mint({
-      organizationId: SANDBOX_ORG,
+      context: context(SANDBOX_ORG),
       userId: 'student_456',
     });
     const nowSeconds = Math.floor(Date.now() / 1_000);
@@ -158,7 +169,7 @@ describe('sandbox assertion round trip', () => {
 
   it('refuses to mint for an organization with no identity configuration', async () => {
     await expect(
-      minter.mint({ organizationId: 'org_unknown', userId: 'student_456' }),
+      minter.mint({ context: context('org_unknown'), userId: 'student_456' }),
     ).rejects.toBeInstanceOf(AppError);
   });
 });

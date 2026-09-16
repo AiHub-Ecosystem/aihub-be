@@ -1,29 +1,28 @@
-import {
-  IDENTITY_CONFIG_ALGORITHMS,
-  type IdentityConfigAlgorithm,
-} from '../domain/organization-identity-config';
+import type { IdentityConfigAlgorithm } from '../domain/organization-identity-config';
 
-export interface SandboxAssertionConfig {
-  /** Organizations permitted to mint. Everything else is rejected. */
-  readonly organizationIds: readonly string[];
+/**
+ * The key this deployment signs sandbox assertions with.
+ *
+ * `RS256` is fixed rather than configurable. The verifier accepts `RS256` and
+ * `ES256`, but nothing has asked to sign sandbox tokens with the second, and a
+ * knob whose only wrong setting produces tokens that never verify is a knob
+ * worth not having. Introduce it when an organization actually needs it.
+ */
+export interface SandboxSigningMaterial {
   readonly privateKeyPem: string;
   readonly keyId: string;
   readonly algorithm: IdentityConfigAlgorithm;
 }
 
-const DEFAULT_ALGORITHM: IdentityConfigAlgorithm = 'RS256';
+const ALGORITHM: IdentityConfigAlgorithm = 'RS256';
 
 function trimmed(value: string | undefined): string {
   return value === undefined ? '' : value.trim();
 }
 
-function isAlgorithm(value: string): value is IdentityConfigAlgorithm {
-  return (IDENTITY_CONFIG_ALGORITHMS as readonly string[]).includes(value);
-}
-
 /**
- * Reads sandbox signing material from the environment, or returns `undefined`
- * when this deployment has no sandbox.
+ * Reads the sandbox signing key, or returns `undefined` when this deployment
+ * has none.
  *
  * Absence is a supported state, not an error: a deployment that never wanted a
  * sandbox must start and serve every other operation exactly as before, with
@@ -36,38 +35,34 @@ function isAlgorithm(value: string): value is IdentityConfigAlgorithm {
  * loads `.env`, so anything resolved at import time would see an empty
  * environment in local development.
  */
-export function readSandboxAssertionConfig(
+export function readSandboxSigningMaterial(
   env: NodeJS.ProcessEnv = process.env,
-): SandboxAssertionConfig | undefined {
-  const organizationIds = trimmed(env.AIHUB_SANDBOX_ORG_IDS)
-    .split(',')
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
+): SandboxSigningMaterial | undefined {
   // A PEM carried in an environment variable usually arrives with its line
   // breaks escaped, and `importPKCS8` rejects the single-line form outright.
   const privateKeyPem = trimmed(
     env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY,
   ).replace(/\\n/g, '\n');
   const keyId = trimmed(env.AIHUB_SANDBOX_ASSERTION_KID);
-  const rawAlgorithm = trimmed(env.AIHUB_SANDBOX_ASSERTION_ALG);
 
-  if (
-    organizationIds.length === 0 ||
-    privateKeyPem.length === 0 ||
-    keyId.length === 0
-  ) {
+  if (privateKeyPem.length === 0 || keyId.length === 0) {
     return undefined;
   }
 
-  // An unrecognised algorithm is a typo in a security-relevant setting. Falling
-  // back to the default would hide it behind tokens that never verify.
-  if (rawAlgorithm.length > 0 && !isAlgorithm(rawAlgorithm)) {
-    return undefined;
-  }
+  return { privateKeyPem, keyId, algorithm: ALGORITHM };
+}
 
-  const algorithm: IdentityConfigAlgorithm = isAlgorithm(rawAlgorithm)
-    ? rawAlgorithm
-    : DEFAULT_ALGORITHM;
-
-  return { organizationIds, privateKeyPem, keyId, algorithm };
+/**
+ * The organizations permitted to mint. Kept apart from the signing material
+ * because they answer different questions — who may ask, and what the answer
+ * is signed with — and because handing the allowlist to a signer that never
+ * reads it invites the two to be confused for each other.
+ */
+export function readSandboxOrganizationIds(
+  env: NodeJS.ProcessEnv = process.env,
+): readonly string[] {
+  return trimmed(env.AIHUB_SANDBOX_ORG_IDS)
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
 }

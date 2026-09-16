@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -6,6 +7,7 @@ import { Test } from '@nestjs/testing';
 import { exportPKCS8, generateKeyPair } from 'jose';
 
 import { AppModule } from '../../app.module';
+import { AppError } from '../../common/errors/app-error';
 import { generateRequestId } from '../../common/request-context/request-id';
 import {
   API_KEY_AUTHENTICATOR,
@@ -30,6 +32,7 @@ const identityConfig: OrganizationIdentityConfig = {
 };
 
 let authenticatedApiKey: AuthenticatedApiKey;
+let authenticationError: AppError | undefined;
 
 describe('Sandbox assertion HTTP flow', () => {
   let app: NestFastifyApplication;
@@ -48,7 +51,13 @@ describe('Sandbox assertion HTTP flow', () => {
     process.env.AIHUB_SANDBOX_ASSERTION_KID = 'sandbox-2026-09';
 
     const authenticator: ApiKeyAuthenticatorPort = {
-      authenticate: async () => authenticatedApiKey,
+      authenticate: async () => {
+        if (authenticationError !== undefined) {
+          throw authenticationError;
+        }
+
+        return authenticatedApiKey;
+      },
     };
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -71,6 +80,8 @@ describe('Sandbox assertion HTTP flow', () => {
   });
 
   beforeEach(() => {
+    jest.restoreAllMocks();
+    authenticationError = undefined;
     process.env.AIHUB_SANDBOX_ORG_IDS = SANDBOX_ORG;
     authenticatedApiKey = {
       organizationId: SANDBOX_ORG,
@@ -93,16 +104,66 @@ describe('Sandbox assertion HTTP flow', () => {
     });
   }
 
-  it('returns an assertion and its expiry', async () => {
+  it('returns an assertion and its expiry, with the request id', async () => {
     const response = await mint({ user_id: 'student_456' });
 
     expect(response.statusCode).toBe(200);
     const body: unknown = response.json();
     expect(body).toMatchObject({
-      user_id: 'student_456',
-      expires_at: expect.any(Number),
-      assertion: expect.any(String),
+      data: {
+        user_id: 'student_456',
+        expires_at: expect.any(Number),
+        assertion: expect.any(String),
+      },
+      meta: { request_id: expect.stringMatching(/^req_/) },
     });
+  });
+
+  it('rejects a request with no api key through the shared authenticator', async () => {
+    authenticationError = new AppError({
+      code: 'UNAUTHORIZED',
+      message: 'API key is invalid',
+      retryable: false,
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/sandbox/assertions',
+      headers: { host: 'localhost' },
+      payload: { user_id: 'student_456' },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      error: { code: 'UNAUTHORIZED' },
+    });
+  });
+
+  // The assertion is a credential: one written to a log file outlives the
+  // request that produced it.
+  it('logs who minted what, and never the token itself', async () => {
+    const logged: string[] = [];
+    jest.spyOn(Logger.prototype, 'log').mockImplementation((message) => {
+      logged.push(String(message));
+    });
+
+    const response = await mint({ user_id: 'student_456' });
+    const body = response.json<{ data: { assertion: string } }>();
+    const line = logged.find((entry) =>
+      entry.includes('sandbox_assertion_minted'),
+    );
+
+    expect(line).toBeDefined();
+    expect(JSON.parse(line ?? '{}')).toMatchObject({
+      event: 'sandbox_assertion_minted',
+      requestId: expect.stringMatching(/^req_/),
+      organizationId: SANDBOX_ORG,
+      apiKeyId: 'ak_sandbox',
+      userId: 'student_456',
+      jti: expect.any(String),
+    });
+    expect(line).not.toContain(body.data.assertion);
+    expect(line).not.toContain('PRIVATE KEY');
   });
 
   it('rejects a key outside the sandbox allowlist', async () => {
@@ -148,5 +209,14 @@ describe('Sandbox assertion HTTP flow', () => {
 
     expect(response.body).not.toContain('PRIVATE KEY');
     expect(response.body).not.toContain('test-api-key');
+  });
+
+  it('applies the rate limit the api key carries', async () => {
+    authenticatedApiKey = { ...authenticatedApiKey, rateLimitRpm: 0 };
+
+    const response = await mint({ user_id: 'student_456' });
+
+    expect(response.statusCode).toBe(429);
+    expect(response.json()).toMatchObject({ error: { code: 'RATE_LIMITED' } });
   });
 });

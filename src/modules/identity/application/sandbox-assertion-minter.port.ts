@@ -1,5 +1,12 @@
+import type { RequestContext } from '../../../common/request-context/request-context';
+
 export interface MintSandboxAssertionInput {
-  readonly organizationId: string;
+  /**
+   * Carries the request id, the organization the API key resolved to, and the
+   * deadline. The organization is read from here rather than passed beside it,
+   * so there is one answer to "which tenant is this" on the way in.
+   */
+  readonly context: RequestContext;
   readonly userId: string;
 }
 

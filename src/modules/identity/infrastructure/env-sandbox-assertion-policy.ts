@@ -1,5 +1,8 @@
 import type { SandboxAssertionPolicyPort } from '../application/sandbox-assertion-policy.port';
-import { readSandboxAssertionConfig } from './sandbox-assertion.config';
+import {
+  readSandboxOrganizationIds,
+  readSandboxSigningMaterial,
+} from './sandbox-assertion.config';
 
 /**
  * Resolves the sandbox allowlist from the process environment on every call.
@@ -9,14 +12,21 @@ import { readSandboxAssertionConfig } from './sandbox-assertion.config';
  * individual cases, and costs nothing on a route that is not on the hot path.
  */
 export class EnvSandboxAssertionPolicy implements SandboxAssertionPolicyPort {
+  /**
+   * Both halves must be present. An allowlist without a key would accept the
+   * request and then fail to sign it, and a key without an allowlist has
+   * nobody entitled to use it.
+   */
   isEnabled(): boolean {
-    return readSandboxAssertionConfig() !== undefined;
+    return (
+      readSandboxOrganizationIds().length > 0 &&
+      readSandboxSigningMaterial() !== undefined
+    );
   }
 
   allows(organizationId: string): boolean {
     return (
-      readSandboxAssertionConfig()?.organizationIds.includes(organizationId) ===
-      true
+      this.isEnabled() && readSandboxOrganizationIds().includes(organizationId)
     );
   }
 }

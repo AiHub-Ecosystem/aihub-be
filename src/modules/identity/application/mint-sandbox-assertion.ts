@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
 import { AppError } from '../../../common/errors/app-error';
+import { invalidRequest } from '../../../common/errors/invalid-request';
+import { isSandboxUserId } from '../domain/sandbox-user-id';
 import type {
   OrganizationIdentityConfig,
   OrganizationIdentityConfigRepositoryPort,
@@ -11,17 +13,6 @@ import type {
   SandboxAssertionMinterPort,
 } from './sandbox-assertion-minter.port';
 import type { SandboxAssertionSignerPort } from './sandbox-assertion-signer.port';
-
-const MAX_USER_ID_LENGTH = 128;
-const USER_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
-
-function invalidRequest(): AppError {
-  return new AppError({
-    code: 'INVALID_REQUEST',
-    message: 'Request failed validation',
-    retryable: false,
-  });
-}
 
 function configurationError(cause?: unknown): AppError {
   return new AppError({
@@ -64,16 +55,24 @@ export class MintSandboxAssertion implements SandboxAssertionMinterPort {
   async mint(
     input: MintSandboxAssertionInput,
   ): Promise<MintedSandboxAssertion> {
-    const userId = input.userId.trim();
-    if (
-      userId.length === 0 ||
-      userId.length > MAX_USER_ID_LENGTH ||
-      !USER_ID_PATTERN.test(userId)
-    ) {
+    const { userId } = input;
+    const organizationId = input.context.organizationId ?? '';
+
+    // Checked again behind the transport schema that already checked it: the
+    // port is a seam, and the next caller through it may not be a controller.
+    // Both checks read the same domain rule, so neither can be stricter than
+    // the other and leave an unreachable branch behind.
+    if (!isSandboxUserId(userId)) {
       throw invalidRequest();
     }
 
-    const config = await this.loadConfig(input.organizationId);
+    // The guard resolves the organization from the API key before this runs,
+    // so a context without one is a wiring fault, not a caller fault.
+    if (organizationId.length === 0) {
+      throw configurationError();
+    }
+
+    const config = await this.loadConfig(organizationId);
 
     // Signing with an algorithm the organization does not allow would produce
     // tokens that fail verification every time, with nothing at the failure

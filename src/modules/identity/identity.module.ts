@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 
+import { GatewayModule } from '../gateway/gateway.module';
+
 import { ApiKeyAuthenticator } from './application/api-key-authenticator';
 import {
   API_KEY_AUTHENTICATOR,
@@ -43,13 +45,14 @@ import {
   RedisAuthFailureCounter,
   RedisIdentityStore,
 } from './infrastructure/redis-identity.store';
-import { readSandboxAssertionConfig } from './infrastructure/sandbox-assertion.config';
 import { ApiKeyGuard } from './presentation/api-key.guard';
 import { SandboxApiKeyGuard } from './presentation/sandbox-api-key.guard';
 import { SandboxAssertionController } from './presentation/sandbox-assertion.controller';
 import { UserAssertionGuard } from './presentation/user-assertion.guard';
 
 @Module({
+  // `RateLimitGuard` on the sandbox route consumes the gateway's rate limiter.
+  imports: [GatewayModule],
   controllers: [SandboxAssertionController],
   providers: [
     {
@@ -116,20 +119,11 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
       useClass: EnvSandboxAssertionPolicy,
     },
     {
-      // Built even when no sandbox is configured, because the environment is
-      // not loaded yet when this module is evaluated. `SandboxApiKeyGuard`
-      // rejects the request with 404 before the minter is ever reached, so an
-      // unconfigured deployment holds a signer that cannot be called.
+      // The signer resolves its key on first use, not here: this factory runs
+      // while the module graph is assembled, and a deployment without a
+      // sandbox must still assemble.
       provide: SANDBOX_ASSERTION_SIGNER,
-      useFactory: (): SandboxAssertionSignerPort =>
-        new JoseSandboxAssertionSigner(
-          readSandboxAssertionConfig() ?? {
-            organizationIds: [],
-            privateKeyPem: '',
-            keyId: '',
-            algorithm: 'RS256',
-          },
-        ),
+      useClass: JoseSandboxAssertionSigner,
     },
     {
       provide: SANDBOX_ASSERTION_MINTER,

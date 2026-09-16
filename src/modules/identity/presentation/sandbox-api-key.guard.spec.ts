@@ -96,7 +96,20 @@ describe('SandboxApiKeyGuard', () => {
         },
       }).canActivate(context(value)),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    expect(value).not.toHaveProperty('aihubAuth');
+    // The key authenticated; it is the allowlist that refused it. `ApiKeyGuard`
+    // attaches before its own scope check for the same reason: the identity is
+    // real and the error handler may want it.
+    expect(value).toMatchObject({
+      aihubAuth: { organizationId: 'org_acme' },
+    });
+  });
+
+  it('refuses when the allowlist names an organization but no key is configured', async () => {
+    await expect(
+      guard({
+        policy: policy({ isEnabled: () => false, allows: () => true }),
+      }).canActivate(context(request())),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('lets an authentication failure surface unchanged', async () => {

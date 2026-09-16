@@ -1,3 +1,4 @@
+import { createRequestContext } from '../../../common/request-context/request-context.factory';
 import { MintSandboxAssertion } from './mint-sandbox-assertion';
 import type {
   OrganizationIdentityConfig,
@@ -52,12 +53,23 @@ function minter(
   };
 }
 
+function context(organizationId = 'org_sandbox') {
+  return createRequestContext({
+    requestId: 'req_01M2MNRPCGCT96P54KDBE82MH7',
+    receivedAt: new Date(),
+    deadlineMs: 5_000,
+    organizationId,
+    apiKeyId: 'ak_sandbox',
+    scopes: [],
+  });
+}
+
 describe('MintSandboxAssertion', () => {
   it('derives every claim except the end user from configuration', async () => {
     const { service, signer } = minter();
 
     const minted = await service.mint({
-      organizationId: 'org_sandbox',
+      context: context(),
       userId: 'student_456',
     });
 
@@ -83,7 +95,7 @@ describe('MintSandboxAssertion', () => {
     });
 
     const minted = await service.mint({
-      organizationId: 'org_sandbox',
+      context: context(),
       userId: 'student_456',
     });
 
@@ -92,7 +104,7 @@ describe('MintSandboxAssertion', () => {
 
   it.each([
     ['empty', ''],
-    ['blank', '   '],
+    ['padded', ' student_456 '],
     ['punctuated', 'student 456'],
     ['injected', 'student\n456'],
     ['oversized', 'a'.repeat(129)],
@@ -100,7 +112,7 @@ describe('MintSandboxAssertion', () => {
     const { service, signer } = minter();
 
     await expect(
-      service.mint({ organizationId: 'org_sandbox', userId }),
+      service.mint({ context: context(), userId }),
     ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
     expect((signer as RecordingSigner).claims).toBeUndefined();
   });
@@ -111,7 +123,7 @@ describe('MintSandboxAssertion', () => {
     });
 
     await expect(
-      service.mint({ organizationId: 'org_sandbox', userId: 'student_456' }),
+      service.mint({ context: context(), userId: 'student_456' }),
     ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
   });
 
@@ -119,7 +131,7 @@ describe('MintSandboxAssertion', () => {
     const { service } = minter({ config: null });
 
     await expect(
-      service.mint({ organizationId: 'org_sandbox', userId: 'student_456' }),
+      service.mint({ context: context(), userId: 'student_456' }),
     ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
   });
 
@@ -134,7 +146,7 @@ describe('MintSandboxAssertion', () => {
     );
 
     await expect(
-      service.mint({ organizationId: 'org_sandbox', userId: 'student_456' }),
+      service.mint({ context: context(), userId: 'student_456' }),
     ).rejects.toMatchObject({
       code: 'IDENTITY_PROVIDER_UNAVAILABLE',
       retryable: true,

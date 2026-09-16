@@ -16,20 +16,13 @@ import {
   type AuthenticatedApiKey,
 } from '../application/api-key-authenticator.port';
 import { hasRequiredScope } from '../application/authorization';
+import { authenticateApiKey, forbidden } from './authenticate-api-key';
 import type { AuthenticatedRequest } from './authenticated-request';
 import {
   isLocalAuthBypassEnabled,
   resolveAihubEnvironment,
 } from './request-environment';
 import { REQUIRED_OPERATION_METADATA } from './require-operation.decorator';
-
-function forbidden(): AppError {
-  return new AppError({
-    code: 'FORBIDDEN',
-    message: 'API key is not authorized for this operation',
-    retryable: false,
-  });
-}
 
 function configurationError(): AppError {
   return new AppError({
@@ -95,14 +88,7 @@ export class ApiKeyGuard implements CanActivate {
       return true;
     }
 
-    const apiKey = typeof header === 'string' ? header : '';
-    const authenticated = await this.authenticator.authenticate({
-      value: apiKey,
-      environment,
-      clientIp: request.ip.length === 0 ? 'unknown' : request.ip,
-    });
-
-    request.aihubAuth = authenticated;
+    const authenticated = await authenticateApiKey(request, this.authenticator);
     setRequestMeteringIdentity(request, {
       operation: operationId,
       organizationId: authenticated.organizationId,

@@ -1,18 +1,27 @@
 import { type Static, Type } from '@sinclair/typebox';
 
+import {
+  SANDBOX_USER_ID_MAX_LENGTH,
+  SANDBOX_USER_ID_PATTERN,
+} from '../../modules/identity/domain/sandbox-user-id';
+
 /**
- * The end-user identifier is the only value the caller controls. It travels
- * into the `sub` claim, request logs, and metering, so it is bounded here at
- * the transport boundary rather than deeper in. The ceiling is well under the
- * 256-character limit `UserAssertionVerifier` enforces on bounded claims, and
- * the character set excludes anything that could confuse a log reader.
+ * The end-user identifier is the only value the caller controls. Its bounds
+ * come from the domain rather than being restated here, so the schema and the
+ * application service that re-checks it cannot drift apart.
  */
 export const SandboxUserIdSchema = Type.String({
   minLength: 1,
-  maxLength: 128,
-  pattern: '^[A-Za-z0-9_-]+$',
+  maxLength: SANDBOX_USER_ID_MAX_LENGTH,
+  pattern: SANDBOX_USER_ID_PATTERN,
 });
 
+/**
+ * Unknown properties are rejected rather than ignored. This is a
+ * credential-minting boundary: a caller who sends `exp` or `iss` believes they
+ * are setting them, and silently dropping the field would leave them holding a
+ * token whose lifetime is not what they asked for.
+ */
 export const MintSandboxAssertionRequestSchema = Type.Object(
   {
     user_id: SandboxUserIdSchema,
