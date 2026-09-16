@@ -36,6 +36,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Billable request:** a successfully completed operation eligible for request-based billing; recorded failures remain non-billable evidence.
 - **Monthly request quota:** the organization-scoped maximum number of billable requests in one UTC calendar month; `null` means unlimited and zero freezes billable work.
 - **Quota counter:** the ephemeral count of billable requests for one organization and UTC month; it gates admission heuristically and is never the durable source of truth.
+- **Quota reconciliation:** the periodic comparison that restores a quota counter from the durable billable request evidence for the same organization and UTC month; the durable evidence wins when the two disagree.
 - **Usage aggregate:** provider-reported input, output, and total token counts for an operation; AIHUB does not infer or estimate them.
 
 ## Ownership and invariants

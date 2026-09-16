@@ -65,15 +65,30 @@ Missing usage -> metering_status = 'missing_usage'
 
 AIHUB **never re-tokenizes raw requests to estimate tokens** (brief §17.7).
 
-## K.4 Nightly Reconciliation Job
+## K.4 Nightly Maintenance Slices
+
+Quota reconciliation is its own command and issue (#53):
 
 ```
-1. Reconcile Redis quota counters against usage_records (04 §F.4)
+pnpm cli quota:reconcile
+```
+
+It restores the current UTC-month Redis quota counters from the durable
+`usage_records` evidence. The command is executed by cron within the
+application container; no external scheduler is required. The runbook is
+[`docs/operations/quota-reconciliation.md`](../../../operations/quota-reconciliation.md).
+
+The broader nightly maintenance plan remains three separate slices:
+
+```
+1. Reconcile Redis quota counters against usage_records (Issue #53)
 2. Aggregate missing_usage counts per operation -> alert if > 1%
 3. Prune usage_records older than 13 months, delete expired idempotency_records
 ```
 
-Executed via cron within the application container; no external scheduler required.
+Issue #53 covers only the first slice. Missing-usage alerting and retention /
+idempotency cleanup are separate follow-ups; the existing
+`idempotency:cleanup` command is unchanged.
 
 ---
 
