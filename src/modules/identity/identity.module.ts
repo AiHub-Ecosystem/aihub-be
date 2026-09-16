@@ -15,16 +15,25 @@ import {
   JWKS_KEY_PROVIDER,
   type JwksKeyProviderPort,
 } from './application/jwks-key-provider.port';
+import { MintSandboxAssertion } from './application/mint-sandbox-assertion';
 import {
   ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
   type OrganizationIdentityConfigRepositoryPort,
 } from './application/organization-identity-config-repository.port';
+import { SANDBOX_ASSERTION_MINTER } from './application/sandbox-assertion-minter.port';
+import { SANDBOX_ASSERTION_POLICY } from './application/sandbox-assertion-policy.port';
+import {
+  SANDBOX_ASSERTION_SIGNER,
+  type SandboxAssertionSignerPort,
+} from './application/sandbox-assertion-signer.port';
 import {
   USER_ASSERTION_CRYPTO,
   type UserAssertionCryptoPort,
 } from './application/user-assertion-crypto.port';
 import { UserAssertionVerifier } from './application/user-assertion-verifier';
 import { USER_ASSERTION_VERIFIER } from './application/user-assertion-verifier.port';
+import { EnvSandboxAssertionPolicy } from './infrastructure/env-sandbox-assertion-policy';
+import { JoseSandboxAssertionSigner } from './infrastructure/jose-sandbox-assertion-signer';
 import { JoseUserAssertionCrypto } from './infrastructure/jose-user-assertion-crypto';
 import { JwksKeyProvider } from './infrastructure/jwks-key-provider';
 import { PostgresApiKeyRepository } from './infrastructure/postgres-api-key.repository';
@@ -34,10 +43,14 @@ import {
   RedisAuthFailureCounter,
   RedisIdentityStore,
 } from './infrastructure/redis-identity.store';
+import { readSandboxAssertionConfig } from './infrastructure/sandbox-assertion.config';
 import { ApiKeyGuard } from './presentation/api-key.guard';
+import { SandboxApiKeyGuard } from './presentation/sandbox-api-key.guard';
+import { SandboxAssertionController } from './presentation/sandbox-assertion.controller';
 import { UserAssertionGuard } from './presentation/user-assertion.guard';
 
 @Module({
+  controllers: [SandboxAssertionController],
   providers: [
     {
       provide: API_KEY_REPOSITORY,
@@ -98,7 +111,39 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
       provide: USER_ASSERTION_CRYPTO,
       useClass: JoseUserAssertionCrypto,
     },
+    {
+      provide: SANDBOX_ASSERTION_POLICY,
+      useClass: EnvSandboxAssertionPolicy,
+    },
+    {
+      // Built even when no sandbox is configured, because the environment is
+      // not loaded yet when this module is evaluated. `SandboxApiKeyGuard`
+      // rejects the request with 404 before the minter is ever reached, so an
+      // unconfigured deployment holds a signer that cannot be called.
+      provide: SANDBOX_ASSERTION_SIGNER,
+      useFactory: (): SandboxAssertionSignerPort =>
+        new JoseSandboxAssertionSigner(
+          readSandboxAssertionConfig() ?? {
+            organizationIds: [],
+            privateKeyPem: '',
+            keyId: '',
+            algorithm: 'RS256',
+          },
+        ),
+    },
+    {
+      provide: SANDBOX_ASSERTION_MINTER,
+      useFactory: (
+        repository: OrganizationIdentityConfigRepositoryPort,
+        signer: SandboxAssertionSignerPort,
+      ) => new MintSandboxAssertion(repository, signer),
+      inject: [
+        ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
+        SANDBOX_ASSERTION_SIGNER,
+      ],
+    },
     ApiKeyGuard,
+    SandboxApiKeyGuard,
     UserAssertionGuard,
   ],
   exports: [
