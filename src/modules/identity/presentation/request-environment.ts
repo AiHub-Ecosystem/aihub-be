@@ -19,7 +19,7 @@ const PLACEHOLDER_HOSTS: Readonly<Record<AihubEnvironment, string>> = {
   production: 'api.aihub.example.com',
   staging: 'staging-api.aihub.example.com',
   development: 'dev-api.aihub.example.com',
-  sandbox: 'sandbox-api.aihub.example.com',
+  sandbox: 'sandbox.aihub.example.com',
 };
 
 const HOSTNAME_PATTERN =

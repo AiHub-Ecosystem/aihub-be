@@ -98,7 +98,7 @@ Clients require a unified, intuitive, and easy-to-remember Base URL structure.
 Production: https://api.aihub.example.com/v1
 Staging:    https://staging-api.aihub.example.com/v1
 Dev:        https://dev-api.aihub.example.com/v1
-Sandbox:    https://sandbox-api.aihub.example.com/v1
+Sandbox:    https://sandbox.aihub.example.com/v1
 ```
 
 ### Environment Source of Truth
@@ -109,7 +109,7 @@ Sandbox:    https://sandbox-api.aihub.example.com/v1
 api.aihub...          → production
 staging-api.aihub...  → staging
 dev-api.aihub...      → development
-sandbox-api.aihub...  → sandbox
+sandbox.aihub...      → sandbox
 ```
 
 API keys bind to `allowed_environments`, but environment is never self-asserted by clients via request headers.
@@ -190,7 +190,7 @@ Service    = writing
 Task       = task1
 Operation  = writing.task1.grade
 
-api.aihub... / staging-api.aihub... / sandbox-api.aihub...
+api.aihub... / staging-api.aihub... / sandbox.aihub...
    ↓
 Environment
 ```

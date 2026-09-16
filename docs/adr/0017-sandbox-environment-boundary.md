@@ -33,3 +33,15 @@ exclusivity, and cross-host rejection at the authentication boundary — are
 unaffected: they never depended on which proxy was in front. What changes is
 where a hostname is published, which is now an nginx server block and a certbot
 certificate, described in `docs/operations/deploy-vps.md`.
+
+The sandbox ingress hostname recorded above is also superseded: it is
+`sandbox.aihubproduction.com`, not `sandbox-api.aihubproduction.com`. Nothing
+had been published under either name when this changed, so the cost was a
+string in three documents.
+
+It now matches the sandbox organization's issuer exactly. That is deliberate
+and harmless — the issuer is compared as an opaque string and its key set is
+registered inline, so nothing ever fetches it — and it follows the OIDC
+convention of an issuer naming its own host. The one consequence worth
+knowing: the issuer URI now resolves to the gateway, so probing it returns a
+404 rather than failing to resolve.

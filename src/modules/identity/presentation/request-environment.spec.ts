@@ -47,7 +47,7 @@ function setAllHostsToRealDomains(): void {
   process.env.AIHUB_PRODUCTION_HOST = 'api.acme-real-domain.com';
   process.env.AIHUB_STAGING_HOST = 'staging-api.acme-real-domain.com';
   process.env.AIHUB_DEVELOPMENT_HOST = 'dev-api.acme-real-domain.com';
-  process.env.AIHUB_SANDBOX_HOST = 'sandbox-api.acme-real-domain.com';
+  process.env.AIHUB_SANDBOX_HOST = 'sandbox.acme-real-domain.com';
 }
 
 describe('resolveAihubEnvironment', () => {
@@ -73,7 +73,7 @@ describe('resolveAihubEnvironment', () => {
       resolveAihubEnvironment(request('dev-api.acme-real-domain.com')),
     ).toBe('development');
     expect(
-      resolveAihubEnvironment(request('sandbox-api.acme-real-domain.com')),
+      resolveAihubEnvironment(request('sandbox.acme-real-domain.com')),
     ).toBe('sandbox');
   });
 
@@ -82,7 +82,7 @@ describe('resolveAihubEnvironment', () => {
     setProductionHost();
 
     expect(() =>
-      resolveAihubEnvironment(request('sandbox-api.aihub.example.com')),
+      resolveAihubEnvironment(request('sandbox.aihub.example.com')),
     ).toThrow(AppError);
   });
 

@@ -232,7 +232,7 @@ certificate:
 
 ```sh
 sudo nginx -t                                    # before
-sudo certbot --nginx -d sandbox-api.example.com  # issues and wires up TLS
+sudo certbot --nginx -d sandbox.example.com      # issues and wires up TLS
 sudo nginx -t && sudo systemctl reload nginx     # after
 ```
 
