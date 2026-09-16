@@ -2,9 +2,9 @@
 
 How to stand up the organization that `POST /v1/sandbox/assertions` mints for, issue and revoke tester keys, and rotate the sandbox signing key.
 
-The mint endpoint itself is described in [`../integration-guide.md`]. This document covers only the control-plane objects it needs. Until they exist, the route answers `404` and the rest of the gateway is unaffected.
+The mint endpoint itself is described in [`../integration-guide.md`]. This document covers only the control-plane objects it needs. Until the sandbox organization and signing material exist, the route answers `404` and the rest of the gateway is unaffected.
 
-> **Environment.** Sandbox runs as its own `sandbox` environment on its own hostname; #47 adds it. Until that lands there is no valid environment to scope a tester key to, so do not provision yet — the `--envs` value in step 5 changes with it.
+> **Environment.** Sandbox runs as its own `sandbox` environment on its own hostname; #47 delivered it. Configure `AIHUB_SANDBOX_HOST` in the deployment before testing the route. The `--envs sandbox` value in step 5 is now the stable key scope.
 >
 > This is a boundary of clarity and defence in depth, not the thing that confines a sandbox key. A key is confined by the organization it belongs to: it can only ever act as that organization, its scopes are filtered through that organization's entitlements, and its spend is bounded by that organization's limits. That holds on any hostname. The hostname binding adds a second layer that catches a credential used in the wrong place, and unlike the first it depends on the reverse proxy passing a truthful `Host` — so it is worth having and not worth relying on alone.
 
@@ -16,7 +16,7 @@ A minted assertion carries the sandbox organization's issuer, and `UserAssertion
 
 What is **not** contained is spend. Sandbox requests reach the same AI Writing and AI Speaking services as production traffic and cost the same money.
 
-Be precise about what currently bounds that, because the limits below are not all equal. `--rate-limit-rpm` and `--max-concurrent` are enforced on every request. `--monthly-quota` and `--hard-stop` are **stored but not yet read by anything** — #51 adds the enforcement. Until it lands, a sandbox organization has a burst ceiling and no spending ceiling, so treat the quota as a value recorded for later rather than a control in force.
+Be precise about what currently bounds that, because the limits below are not all equal. `--rate-limit-rpm` and `--max-concurrent` are enforced on every request. `--monthly-quota` and `--hard-stop` are enforced by the quota gate from #51, so the sandbox has both a burst ceiling and a hard monthly spending ceiling.
 
 `usage_records` rows from sandbox traffic currently land in the same table as everything else and are distinguished by the `environment` column. #50 moves sandbox to its own database, after which the production usage table holds no sandbox rows at all.
 
