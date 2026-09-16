@@ -2,6 +2,12 @@ import Redis from 'ioredis';
 
 export interface RedisGatewayClient {
   get(key: string): Promise<string | null>;
+  set(
+    key: string,
+    value: string,
+    mode: 'EX',
+    seconds: number,
+  ): Promise<string | null>;
   incr(key: string): Promise<number>;
   expire(key: string, seconds: number): Promise<number>;
   eval(
@@ -20,6 +26,15 @@ class IoredisGatewayClient implements RedisGatewayClient {
 
   get(key: string): Promise<string | null> {
     return this.client.get(key);
+  }
+
+  set(
+    key: string,
+    value: string,
+    mode: 'EX',
+    seconds: number,
+  ): Promise<string | null> {
+    return this.client.set(key, value, mode, seconds);
   }
 
   incr(key: string): Promise<number> {

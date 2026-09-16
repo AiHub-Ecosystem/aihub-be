@@ -18,10 +18,18 @@ interface LoggerLike {
   log(message: string): void;
 }
 
+export function quotaKeyForMonth(
+  organizationId: string,
+  month: string,
+): string {
+  return `aihub:v1:quota:${organizationId}:${month}`;
+}
+
 function monthKey(organizationId: string, now: Date): string {
-  const year = String(now.getUTCFullYear()).padStart(4, '0');
-  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-  return `aihub:v1:quota:${organizationId}:${year}-${month}`;
+  const month = `${String(now.getUTCFullYear()).padStart(4, '0')}-${String(
+    now.getUTCMonth() + 1,
+  ).padStart(2, '0')}`;
+  return quotaKeyForMonth(organizationId, month);
 }
 
 function validCount(value: number): boolean {

@@ -3,11 +3,8 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { loadEnvFile } from 'node:process';
 
-import Redis from 'ioredis';
-import pg from 'pg';
 import { ulid } from 'ulid';
 
-const { Pool } = pg;
 const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const API_KEY_PREFIX = 'aihub_sk_';
 const IDENTITY_CONFIG_ALGORITHMS = new Set(['RS256', 'ES256']);
@@ -31,6 +28,10 @@ import {
   quotaOption,
   usageError,
 } from './cli-options.cjs';
+import {
+  parseTargetMonth,
+  runQuotaReconciliation,
+} from './quota-reconcile.cjs';
 
 if (existsSync('.env')) {
   loadEnvFile('.env');
@@ -305,16 +306,17 @@ function createApiKey() {
   return `${API_KEY_PREFIX}${secret.padStart(43, '0')}`;
 }
 
-function databasePool() {
+async function databasePool() {
   const databaseUrl = process.env.DATABASE_URL;
   if (databaseUrl === undefined || databaseUrl.trim().length === 0) {
     throw new Error('DATABASE_URL is required');
   }
-  return new Pool({ connectionString: databaseUrl });
+  const { default: pg } = await import('pg');
+  return new pg.Pool({ connectionString: databaseUrl });
 }
 
 async function createOrganization(options) {
-  const pool = databasePool();
+  const pool = await databasePool();
   try {
     const result = await pool.query(
       `INSERT INTO organizations
@@ -342,7 +344,7 @@ async function createOrganization(options) {
 }
 
 async function createKey(options) {
-  const pool = databasePool();
+  const pool = await databasePool();
   try {
     const organizationId = requiredOption(options, 'org');
     const organization = await pool.query(
@@ -378,7 +380,7 @@ async function createKey(options) {
 }
 
 async function revokeKey(options) {
-  const pool = databasePool();
+  const pool = await databasePool();
   let hashHex;
   try {
     const keyId = requiredOption(options, 'key');
@@ -403,6 +405,7 @@ async function revokeKey(options) {
 
   const redisUrl = process.env.REDIS_URL;
   if (redisUrl !== undefined && redisUrl.trim().length > 0) {
+    const { default: Redis } = await import('ioredis');
     const redis = new Redis(redisUrl, {
       commandTimeout: 100,
       maxRetriesPerRequest: 1,
@@ -422,7 +425,7 @@ async function revokeKey(options) {
 
 async function setIdentity(options) {
   const input = await parseIdentityOptions(options);
-  const pool = databasePool();
+  const pool = await databasePool();
   try {
     const organization = await pool.query(
       'SELECT 1 FROM organizations WHERE id = $1',
@@ -506,7 +509,7 @@ async function setIdentity(options) {
 }
 
 async function cleanupIdempotency() {
-  const pool = databasePool();
+  const pool = await databasePool();
   try {
     const result = await pool.query(
       `DELETE FROM idempotency_records
@@ -517,6 +520,24 @@ async function cleanupIdempotency() {
   } finally {
     await pool.end();
   }
+}
+
+async function reconcileQuotaCommand(options) {
+  for (const name of options.keys()) {
+    if (name !== 'month') {
+      usageError();
+    }
+  }
+
+  const requestedMonth = options.get('month');
+  const now = new Date();
+  await parseTargetMonth(requestedMonth, now);
+  await runQuotaReconciliation({
+    requestedMonth,
+    now,
+    databaseUrl: process.env.DATABASE_URL ?? '',
+    redisUrl: process.env.REDIS_URL ?? '',
+  });
 }
 
 async function main() {
@@ -541,6 +562,10 @@ async function main() {
   }
   if (command === 'idempotency:cleanup') {
     await cleanupIdempotency();
+    return;
+  }
+  if (command === 'quota:reconcile') {
+    await reconcileQuotaCommand(options);
     return;
   }
 
