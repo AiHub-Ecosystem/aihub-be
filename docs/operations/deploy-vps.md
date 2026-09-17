@@ -226,17 +226,59 @@ make every request on that hostname fail with `ENVIRONMENT_NOT_ALLOWED`.
 
 ### Publishing another hostname
 
-To serve a new hostname — the sandbox tier, for example — copy the block above,
-change `server_name` and the `proxy_pass` port, and let certbot issue the
-certificate:
+certbot cannot create a server block, only attach a certificate to one that
+already exists. Running `certbot --nginx -d <new host>` first obtains the
+certificate and then fails to install it:
+
+```
+Could not automatically find a matching server block for <new host>.
+Set the `server_name` directive to use the Nginx installer.
+```
+
+So write the block first, then let certbot fill in the TLS lines — or write
+them yourself against the certificate paths certbot reports. The sandbox tier
+was published this way, and `/etc/nginx/conf.d/sandbox.conf` is the result:
+
+```nginx
+server {
+    server_name sandbox.aihubproduction.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3021;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    listen 443 ssl;
+    ssl_certificate /etc/letsencrypt/live/sandbox.aihubproduction.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/sandbox.aihubproduction.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+
+server {
+    listen 80;
+    server_name sandbox.aihubproduction.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+The sequence:
 
 ```sh
-sudo nginx -t                                    # before
-sudo certbot --nginx -d sandbox.example.com      # issues and wires up TLS
-sudo nginx -t && sudo systemctl reload nginx     # after
+cp -r /etc/nginx ~/nginx-backup-$(date +%Y%m%d-%H%M%S)   # rollback point
+sudo certbot --nginx -d <new host>                        # obtains the cert
+sudo nano /etc/nginx/conf.d/<name>.conf                   # write the block
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 DNS must already point at this VPS or certbot cannot complete the challenge.
+
+Verify afterwards that the new hostname answers **and** that an unrelated site
+still does. One reload serves every site on this box.
 Setting `AIHUB_SANDBOX_HOST` in `.env.production` only teaches the application
 to recognise the hostname; without the nginx block, nothing reaches it.
 

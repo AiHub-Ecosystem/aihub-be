@@ -20,6 +20,39 @@ Be precise about what currently bounds that, because the limits below are not al
 
 `usage_records` rows from sandbox traffic currently land in the same table as everything else and are distinguished by the `environment` column. #50 moves sandbox to its own database, after which the production usage table holds no sandbox rows at all.
 
+## Running the CLI against production
+
+Every `pnpm cli` command below needs a database connection, and neither obvious
+place on the VPS can give it one. The release image ships only
+`scripts/migrate.mjs`, so `docker exec <app> node scripts/cli.mjs` fails with
+`Cannot find module '/app/scripts/cli.mjs'`. The source checkout at
+`/home/ngoc_anh/aihub-be` has the script but no `node_modules`, so it fails on
+`Cannot find package 'ioredis'`.
+
+Postgres is bound to loopback on the VPS, so reach it from a workstation
+checkout through an SSH tunnel:
+
+```sh
+ssh -f -N -L 15433:127.0.0.1:5433 <user>@<vps>
+
+DATABASE_URL='postgresql://<user>:<password>@127.0.0.1:15433/aihub' \
+  pnpm cli key:create --org org_... --name "..." --scopes ... --envs sandbox
+```
+
+Take the credentials from `.env.production` on the VPS and rewrite the host:
+the file names the container (`@aihub-db:5432`) because the application resolves
+it over the Docker network, which a tunnel cannot.
+
+Close the tunnel when finished.
+
+**`key:revoke` will appear to hang.** After updating the row it purges the Redis
+cache entry, and Redis is not reachable through the tunnel. The revocation is
+already committed by then — check `status` in the database rather than waiting.
+The unpurged cache entry means the key stays usable for up to the 60-second
+identity cache TTL, which is the window `key:revoke` normally closes. For a
+routine revocation that is acceptable; for a leaked credential, purge
+`aihub:v1:key:<sha256 hex>` on the VPS as well.
+
 ## 1. Generate the signing key pair
 
 Run this on a workstation, not on the server. Only the public half leaves it.
