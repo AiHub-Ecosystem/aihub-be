@@ -9,9 +9,11 @@ interface OpenApiOperation {
     readonly content: Record<string, { readonly schema: unknown }>;
   };
   readonly responses: Record<string, unknown>;
-  readonly 'x-required-scope': string;
+  // Optional because the sandbox mint route carries no scope: it is not a
+  // catalogued operation and has nothing to authorize against.
+  readonly 'x-required-scope'?: string;
   readonly 'x-identity-scope': string;
-  readonly 'x-idempotency': string;
+  readonly 'x-idempotency'?: string;
 }
 
 interface OpenApiDocument {
@@ -26,6 +28,9 @@ interface OpenApiDocument {
   readonly paths: Record<string, { readonly post: OpenApiOperation }>;
 }
 
+const SANDBOX_MINT_PATH = '/v1/sandbox/assertions';
+const SANDBOX_MINT_OPERATION_ID = 'sandbox.assertions.mint';
+
 function build(): OpenApiDocument {
   return buildOpenApiDocument('0.0.0-test') as OpenApiDocument;
 }
@@ -37,12 +42,42 @@ describe('buildOpenApiDocument', () => {
 
   it('has exactly one path entry per catalogued operation, so adding an operation without regenerating fails', () => {
     const doc = build();
-    const operationIds = Object.values(doc.paths).map(
-      (item) => item.post.operationId,
-    );
+    const operationIds = Object.values(doc.paths)
+      .map((item) => item.post.operationId)
+      .filter((operationId) => operationId !== SANDBOX_MINT_OPERATION_ID);
 
     expect(operationIds.sort()).toEqual([...OPERATION_IDS].sort());
     expect(operationIds).toHaveLength(OPERATION_IDS.length);
+  });
+
+  // The filter above would hide a second hand-written path as easily as it
+  // hides the intended one, so name the exception rather than only excluding
+  // it. Anything else off-catalog fails here.
+  it('publishes exactly one path that does not come from the catalog', () => {
+    const doc = build();
+    const catalogued = new Set<string>(
+      OPERATION_IDS.map((operationId) => OPERATION_CATALOG[operationId].path),
+    );
+
+    expect(
+      Object.keys(doc.paths).filter((path) => !catalogued.has(path)),
+    ).toEqual([SANDBOX_MINT_PATH]);
+    expect(doc.paths[SANDBOX_MINT_PATH]?.post.operationId).toBe(
+      SANDBOX_MINT_OPERATION_ID,
+    );
+  });
+
+  it('mints without an assertion, because issuing one is what it does', () => {
+    const mint = build().paths[SANDBOX_MINT_PATH]?.post;
+    const parameterRefs = (mint?.parameters ?? []).map(
+      (parameter) => parameter.$ref,
+    );
+
+    expect(parameterRefs).not.toContain(
+      '#/components/parameters/UserAssertion',
+    );
+    expect(mint?.['x-identity-scope']).toBe('organization');
+    expect(mint?.['x-required-scope']).toBeUndefined();
   });
 
   it('uses the exact public path the catalog declares, with no duplicated version prefix', () => {

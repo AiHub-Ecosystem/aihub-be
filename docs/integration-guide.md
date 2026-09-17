@@ -286,6 +286,75 @@ issuer, JWKS URL, algorithm, or rotation process itself changes.
 
 ---
 
+## 3a. The sandbox, for testing without a signing key
+
+Everything in section 3 assumes you are the one signing. If you are exercising
+AIHUB from a terminal or a test console rather than from your own backend,
+there is a sandbox that signs for you.
+
+**This is not how you integrate.** A customer with a backend signs assertions
+from their own identity provider, exactly as described above, and never calls
+this route. The sandbox exists so that people testing AIHUB do not have to hold
+an organization's private key to do it.
+
+It runs on its own hostname and its own environment, with its own organization
+and its own API keys. A sandbox key is refused on the production hostname and a
+production key is refused on the sandbox hostname, both with
+`ENVIRONMENT_NOT_ALLOWED`.
+
+### Minting
+
+```bash
+curl -sS -X POST 'https://sandbox.aihubproduction.com/v1/sandbox/assertions'   -H "X-API-Key: $SANDBOX_API_KEY"   -H 'Content-Type: application/json'   -d '{"user_id":"student_456"}'
+```
+
+```json
+{
+  "data": {
+    "assertion": "eyJhbGciOiJSUzI1NiIsImtpZCI6InNhbmRib3gtMjAyNi0wOSJ9...",
+    "user_id": "student_456",
+    "expires_at": 1789610600
+  },
+  "meta": { "request_id": "req_01M2PE7DDP2B6SM85DY0ENPWMC" }
+}
+```
+
+`user_id` is the only thing you choose. Issuer, audience, algorithm, key id,
+organization, and lifetime are all decided server-side — a sandbox assertion
+cannot be aimed at an organization you do not own. `expires_at` is seconds since
+the epoch; sandbox assertions last an hour rather than the five minutes a
+production tenant is capped at.
+
+Only API keys belonging to the sandbox organization may mint. Every other key is
+refused, and a deployment with no sandbox configured answers `404`.
+
+### Using it
+
+The assertion goes into `X-User-Assertion` on a normal grading call, against the
+sandbox hostname:
+
+```bash
+ASSERTION=$(curl -sS -X POST 'https://sandbox.aihubproduction.com/v1/sandbox/assertions'   -H "X-API-Key: $SANDBOX_API_KEY" -H 'Content-Type: application/json'   -d '{"user_id":"student_456"}' | python -c 'import json,sys; print(json.load(sys.stdin)["data"]["assertion"])')
+
+curl -sS -X POST 'https://sandbox.aihubproduction.com/v1/ielts/speaking/grading'   -H "X-API-Key: $SANDBOX_API_KEY"   -H "X-User-Assertion: $ASSERTION"   -F 'audio=@/path/to/sample.wav'   -F 'part=1'   -F 'question_id=p1_hometown'   -F 'prompt_text=Do you enjoy living in your hometown?'   -F 'test_type=Practice'
+```
+
+Note the path. Grading operations live under `/v1/ielts/...`, not `/v1/...`;
+`/v1/speaking/grading` is a 404 and is a common first mistake.
+
+### It is not free
+
+Sandbox requests reach the same AI services as production traffic and cost the
+same money. The sandbox organization carries a monthly request quota with a hard
+stop, plus a low rate limit and concurrency ceiling, so exceeding it returns
+`QUOTA_EXCEEDED` rather than running up a bill. Treat it as a small budget for
+hand-testing, not a free tier.
+
+Usage is metered exactly as production usage is, and recorded against the
+sandbox environment.
+
+---
+
 ## 4. Endpoints
 
 All public grading operations are `POST` routes. Writing and Speaking
@@ -298,6 +367,15 @@ JSON-by-URL use `Content-Type: application/json`; Speaking file grading uses
 | `/v1/ielts/writing/task2/grade`   | **Yes**   | **Required**      |   256 KB |     60s |
 | `/v1/ielts/speaking/grading`      | **Yes**   | **None**          |   25 MiB |     30s |
 | `/v1/ielts/speaking/grading-json` | **Yes**   | **None**          |   256 KB |     30s |
+
+One route is not a grading operation and appears here only so the list is
+complete:
+
+| Path                     | Assertion | `Idempotency-Key` | Notes                               |
+| ------------------------ | --------- | ----------------- | ----------------------------------- |
+| `/v1/sandbox/assertions` | **No**    | **None**          | Sandbox organization only — see §3a |
+
+It takes an API key and no assertion, because issuing one is what it does.
 
 ### Enumerated values
 

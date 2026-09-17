@@ -12,6 +12,10 @@ import {
   type HttpStatus,
   httpStatusForErrorCode,
 } from '../common/errors/error-registry';
+import {
+  MintSandboxAssertionRequestSchema,
+  MintSandboxAssertionResponseSchema,
+} from '../contracts/sandbox/assertion';
 
 /**
  * The error registry is the source of truth for status/code groupings. A
@@ -209,6 +213,79 @@ function operationToPathItem(
   };
 }
 
+const SANDBOX_ASSERTION_PATH = '/v1/sandbox/assertions';
+
+/**
+ * Described by hand rather than from `OPERATION_CATALOG`, because it is not a
+ * catalog operation: it has no downstream service, no downstream contract, and
+ * no scope. Adding a synthetic entry to reuse the generator would put a
+ * phantom proxy operation in front of every reader of this document.
+ *
+ * The envelope is narrower than a proxied operation's for the same reason. A
+ * dispatch envelope reports downstream and gateway timings for a call that
+ * reached an AI service; this one reaches none, and publishing zeroed timings
+ * would describe a measurement nobody took.
+ */
+function sandboxAssertionPathItem(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, unknown> {
+  const responses: Record<string, unknown> = {
+    '200': {
+      description: 'A freshly signed assertion for the sandbox organization',
+      content: {
+        'application/json': {
+          schema: Type.Object(
+            {
+              data: MintSandboxAssertionResponseSchema,
+              meta: Type.Object(
+                {
+                  request_id: Type.String({
+                    pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
+                  }),
+                },
+                { additionalProperties: false },
+              ),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+    },
+  };
+
+  for (const status of groupedErrors.keys()) {
+    // No idempotency, so no conflict to report.
+    if (status === 409) {
+      continue;
+    }
+    responses[String(status)] = {
+      $ref: `#/components/responses/Error${status}`,
+    };
+  }
+
+  return {
+    post: {
+      operationId: 'sandbox.assertions.mint',
+      summary: 'Mint a sandbox user assertion',
+      description: [
+        'Issues a short-lived user assertion for the sandbox organization, so that exercising the API does not require holding an organization signing key.',
+        'Available only to API keys belonging to a configured sandbox organization; every other key is refused. Deployments with no sandbox configured answer 404.',
+        'This is not the integration pattern for a customer with their own backend. Such a customer signs assertions from their own identity provider and never calls this route.',
+      ].join('\n\n'),
+      'x-identity-scope': 'organization',
+      security: [{ ApiKeyAuth: [] }],
+      parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': { schema: MintSandboxAssertionRequestSchema },
+        },
+      },
+      responses,
+    },
+  };
+}
+
 export function buildOpenApiDocument(version: string): unknown {
   const paths: Record<string, unknown> = {};
   const groupedErrors = errorsByStatus();
@@ -220,6 +297,8 @@ export function buildOpenApiDocument(version: string): unknown {
       ...operationToPathItem(operationId, operation, groupedErrors),
     };
   }
+
+  paths[SANDBOX_ASSERTION_PATH] = sandboxAssertionPathItem(groupedErrors);
 
   const errorResponses: Record<string, unknown> = {};
   for (const [status, codes] of groupedErrors) {
