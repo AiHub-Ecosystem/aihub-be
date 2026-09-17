@@ -23,6 +23,10 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Pass-through audio:** uploaded Speaking audio streamed from the Customer Web BFF to AIHUB and discarded after the response; it is not an MVP audio asset.
 - **Sandbox-only deployment:** the first Customer Web release is configured only for AIHUB's sandbox hostname and credential; Production is absent until the production bridge is approved.
 - **Live grading:** an authenticated Speaking grading request that crosses the Customer Web BFF boundary; the anonymous mock preview is not live grading.
+- **Mock preview:** an anonymous, non-AIHUB demonstration of the Speaking workflow and a sanitized sample result; it never consumes sandbox quota or performs live grading.
+- **Speaking prompt:** a selectable IELTS question identified by a stable `question_id` and Part; the sandbox MVP uses a Customer Web prompt catalog rather than an AIHUB question service.
+- **Customer Web BFF:** the server-side boundary that authenticates a Customer User, checks membership, and calls AIHUB; the browser never calls AIHUB directly.
+- **Public grading result:** the normalized `{ data, meta }` envelope safe for the Customer Web; provider-only identifiers, timing, credentials, assertions, audio, and raw downstream detail are excluded.
 - **API key:** an organization credential presented with `X-API-Key`; AIHUB stores only its SHA-256 hash and metadata.
 - **Environment:** the request tier derived from its deployment hostname; an API key may be restricted to a set of allowed environments.
 - **Sandbox environment:** AIHUB's fourth, hostname-bound request tier for controlled testing; it has its own sandbox organization and request-control configuration while the current deployment shares application/data stores, downstream services, and runtime secret realm.
@@ -72,6 +76,15 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - Logout invalidates the session for subsequent Live grading requests across tabs; no browser-side token cleanup is treated as authorization.
 - The Customer Web UI and BFF share one origin; the browser never calls AIHUB directly. BFF mutations require secure cookie handling and same-origin checks.
 - Logout clears the Customer Web session and invokes the Managed IdP logout path. Login, membership, and credential-mint failures fail closed; the anonymous mock preview remains available.
+- The Mock preview never calls AIHUB and remains available without a Customer User; Live grading uses the same Speaking surface only after active membership succeeds.
+- The Customer Web owns the sandbox Speaking prompt catalog; AIHUB's removed question-generation routes are not recreated for the Customer Web demo.
+- Mock and Live grading share one Public grading result renderer; the browser receives only normalized public data and never sees provider-shaped private fields.
+- The Customer Web Speaking slice accepts upload and browser recording as Pass-through audio, sends multipart grading through the Customer Web BFF, and does not add object storage or JSON-by-URL transport.
+- The Speaking surface uses explicit user retry only, aborts disconnected requests, and keeps an outer 90-second timeout so it does not pre-empt the approved D2 deadline or upload/response transit.
+- The Customer Web BFF preserves AIHUB's public Speaking error status, code, safe message, and request ID, mapping only local identity/configuration/transport failures and never returning raw upstream detail.
+- Sandbox Customer Web configuration fails closed unless it targets the approved sandbox host; Production configuration is not a valid fallback for this surface.
+- Live Speaking requests and results are no-store, use correlation IDs for diagnostics, and never become browser or server audio history.
+- The Customer Web validates the public grading envelope before rendering; an unrecognized normalized response is a safe contract error, not a guessed UI state.
 - Each AI service owns its business data and model-specific behavior.
 - `organizationId` is explicit in request context and application ports.
 - The D2 Speaking grading proxy authenticates the client at AIHUB; downstream partner credentials remain server-side configuration.
@@ -114,5 +127,6 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - [Spec index](docs/superpowers/specs/2026-09-07-aihub/README.md)
 - [ADR-0016: Durable metering boundary and billing evidence](docs/adr/0016-metering-boundary-and-billing-evidence.md)
 - [ADR-0020: Invite-only customer-web identity boundary for sandbox MVP](docs/adr/0020-customer-web-identity-boundary.md)
+- [ADR-0021: Customer Web Speaking sandbox boundary](docs/adr/0021-customer-web-speaking-sandbox-boundary.md)
 - [Agent and architecture design](docs/superpowers/specs/2026-09-07-aihub/12-agent-workflow-and-clean-architecture-design.md)
 - [Matt issue workflow](docs/agents/issue-tracker.md)
