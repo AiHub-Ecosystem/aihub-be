@@ -45,13 +45,25 @@ it over the Docker network, which a tunnel cannot.
 
 Close the tunnel when finished.
 
-**`key:revoke` will appear to hang.** After updating the row it purges the Redis
-cache entry, and Redis is not reachable through the tunnel. The revocation is
-already committed by then — check `status` in the database rather than waiting.
-The unpurged cache entry means the key stays usable for up to the 60-second
-identity cache TTL, which is the window `key:revoke` normally closes. For a
-routine revocation that is acceptable; for a leaked credential, purge
-`aihub:v1:key:<sha256 hex>` on the VPS as well.
+`key:revoke` also purges the identity cache entry, and Redis runs on a
+different host from Postgres. Forward it too if the purge should succeed:
+
+```sh
+ssh -f -N -L 15433:127.0.0.1:5433 -L 16379:<redis host>:6379 <user>@<vps>
+```
+
+The command reports which of the two happened, and succeeds either way:
+
+```
+Revoked ak_... and purged its identity cache entry.
+Revoked ak_..., but could not purge the identity cache; the key may still be
+accepted for up to 60 seconds.
+```
+
+The revocation is committed before the purge is attempted, so the second
+message means the key is revoked and merely still cached. Acceptable for a
+routine revocation; for a leaked credential, forward Redis and re-run so the
+window closes immediately.
 
 ## 1. Generate the signing key pair
 

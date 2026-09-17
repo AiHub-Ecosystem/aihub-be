@@ -380,10 +380,10 @@ async function createKey(options) {
 }
 
 async function revokeKey(options) {
+  const keyId = requiredOption(options, 'key');
   const pool = await databasePool();
   let hashHex;
   try {
-    const keyId = requiredOption(options, 'key');
     const result = await pool.query(
       "SELECT encode(key_hash, 'hex') AS hash_hex FROM api_keys WHERE id = $1",
       [keyId],
@@ -403,23 +403,47 @@ async function revokeKey(options) {
     await pool.end();
   }
 
+  // The row is committed by this point. What follows only closes the window
+  // where the identity cache would still admit the key, so its failure must
+  // read differently from the revocation failing — an operator revoking a
+  // leaked credential needs to know which of the two happened.
   const redisUrl = process.env.REDIS_URL;
-  if (redisUrl !== undefined && redisUrl.trim().length > 0) {
-    const { default: Redis } = await import('ioredis');
-    const redis = new Redis(redisUrl, {
-      commandTimeout: 100,
-      maxRetriesPerRequest: 1,
-      enableOfflineQueue: false,
-    });
-    redis.on('error', () => undefined);
-    try {
-      await redis.del(
-        `aihub:v1:key:${hashHex}`,
-        `aihub:v1:key:miss:${hashHex}`,
-      );
-    } finally {
-      await redis.quit();
-    }
+  if (redisUrl === undefined || redisUrl.trim().length === 0) {
+    console.error(
+      `Revoked ${keyId}. REDIS_URL is unset, so the identity cache was not purged; the key may still be accepted for up to 60 seconds.`,
+    );
+    return;
+  }
+
+  const { default: Redis } = await import('ioredis');
+  // `lazyConnect` and an explicit `connect()` are what make this work at all.
+  // Without them ioredis dials in the background and `del` is issued before the
+  // socket is ready; with `enableOfflineQueue` off there is nowhere to hold it,
+  // so the command is rejected immediately and the purge never happened. The
+  // timeout is also deliberately looser than the gateway's 100ms: that budget
+  // belongs to a request path beside its own Redis, and this is a one-shot
+  // command that may be run from a workstation through a tunnel.
+  const redis = new Redis(redisUrl, {
+    commandTimeout: 5_000,
+    connectTimeout: 5_000,
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+    lazyConnect: true,
+  });
+  redis.on('error', () => undefined);
+  try {
+    await redis.connect();
+    await redis.del(`aihub:v1:key:${hashHex}`, `aihub:v1:key:miss:${hashHex}`);
+    console.error(`Revoked ${keyId} and purged its identity cache entry.`);
+  } catch {
+    console.error(
+      `Revoked ${keyId}, but could not purge the identity cache; the key may still be accepted for up to 60 seconds.`,
+    );
+  } finally {
+    // `disconnect` rather than `quit`: a client that never finished connecting
+    // has no session to close politely, and waiting for one to answer is how
+    // this command ends up hanging instead of reporting what it did.
+    redis.disconnect();
   }
 }
 
