@@ -9,12 +9,20 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 ## Vocabulary
 
 - **Organization:** the tenant that owns API keys, identity configuration, quotas, usage, and downstream policy.
-- **Customer Web:** the separate Next.js application through which invited people access the AIHUB demo; it owns end-user login, sessions, and membership, not AIHUB.
+- **Customer Web:** the separate Next.js application through which invited people access the AIHUB demo; the existing sandbox uses Clerk, while future user-facing surfaces may consume AIHUB User Access JWTs through its BFF.
 - **Customer User:** a person authenticated by the Customer Web; this is not an AIHUB account.
+- **AIHUB User Account:** a credential-bearing account managed by AIHUB for user-facing access; it is distinct from an Organization and from the existing Customer User term until the Customer Web boundary is migrated.
+- **Auth Identity:** a login identity attached to an AIHUB User Account, such as the Phase 1 local email/password identity or a future Google identity; it is not itself an Organization or API key.
+- **User Access JWT:** a short-lived token issued by AIHUB after local credential authentication for user-facing APIs or the Customer Web BFF; it is distinct from `X-API-Key`, User Assertions, and internal downstream JWTs.
+- **Refresh Token:** a renewable login credential paired with a User Access JWT; it can be rotated and revoked without changing the user account or API key.
 - **Customer Organization:** the tenant concept in the Customer Web. During the invite-only sandbox MVP, all invited Customer Users belong to one Customer Organization mapped to the dedicated sandbox AIHUB Organization.
-- **Managed IdP:** the external identity provider used by the Customer Web; AIHUB does not issue login credentials or sessions.
-- **Clerk:** the selected Managed IdP for the Customer Web MVP; it owns passwordless sign-in, invitations, organization membership, and session lifecycle.
-- **Invite-only membership:** access granted by an operator to a known user; self-service signup and organization creation are outside the sandbox MVP.
+- **Managed IdP:** the external identity provider used by the existing Customer Web sandbox; it is separate from AIHUB's local credential auth and remains a future federation source for AIHUB accounts.
+- **Clerk:** the selected Managed IdP for the existing Customer Web sandbox; it owns that sandbox's passwordless sign-in, invitations, organization membership, and session lifecycle.
+- **Invite-only membership:** access granted by an operator to a known user; it remains the sandbox membership path, while local account registration does not grant Organization access.
+- **Organization Membership:** the explicit relationship that grants an AIHUB User Account access to an Organization; it is separate from account registration and API-key issuance.
+- **Email Verification:** proof that a User Account controls its registered email address; an unverified local account cannot complete login.
+- **Password Recovery:** a time-limited proof-of-control flow that lets a User Account replace its local password without exposing the existing password.
+- **Local Account Status:** the lifecycle state of a local User Account: pending verification, active, or disabled.
 - **Sandbox User ID:** an opaque deterministic identifier derived from the verified Managed IdP issuer and subject, encoded to AIHUB's `[A-Za-z0-9_-]` boundary; it is never an email address or a browser-supplied value.
 - **Server-side session:** a Customer Web session represented to the browser only by a secure, HttpOnly, same-site cookie; provider access tokens do not live in browser storage.
 - **Sandbox API key:** the single server-held API key for the dedicated sandbox AIHUB Organization; it is used by the Customer Web BFF and is never sent to a browser.
@@ -60,10 +68,19 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 ## Ownership and invariants
 
 - AIHUB owns the control plane: organization identity, API keys, scopes, metering, quota, idempotency, and routing policy.
-- The Customer Web and its Managed IdP own end-user login, sessions, and Invite-only membership; AIHUB remains login- and session-free.
+- AIHUB owns local credential authentication and User Access JWT issuance; the Customer Web may consume that identity through its BFF. External identity providers remain a future federation path, not part of the local credential flow.
+- The existing sandbox Customer Web and Clerk flow remain in parallel while AIHUB local auth is introduced; this does not silently replace the sandbox identity boundary.
+- Registration creates an AIHUB User Account only. It does not create an Organization, membership, or API key; access to an Organization is provisioned separately.
+- Organization Membership is independent of registration, and a User Access JWT does not freeze a single organization because membership can change.
+- Local registration requires email, username, and password, and the account must complete email verification before login succeeds.
+- Local email and username identities are normalized and unique; login uses the normalized email, while username remains a separate account identifier.
+- Local Account Status and Organization Membership status are evaluated at authorization time rather than assumed permanently from registration.
+- Login returns a User Access JWT and a Refresh Token. The local credential is one Auth Identity, and future Google sign-in must attach to the same User Account rather than silently creating duplicates.
+- User Access JWTs authenticate user-facing/BFF boundaries; grading routes continue to use the organization API-key and user-assertion boundaries until a separate authorization decision changes them.
+- Refresh Tokens are renewable credentials with explicit rotation and revocation; they are not interchangeable with API keys or User Access JWTs.
 - During the sandbox MVP, one dedicated sandbox AIHUB Organization serves all invited Customer Users, each with a stable sandbox `user_id`; users cannot switch organizations.
-- The Managed IdP owns invitation and disable actions; the Customer Web checks active membership on every BFF request rather than trusting a stale session alone.
-- The Managed IdP directory is the membership source of truth; the Customer Web does not duplicate a user table in the sandbox MVP.
+- The existing sandbox Managed IdP owns invitation and disable actions; the Customer Web checks active membership on every BFF request rather than trusting a stale session alone.
+- The existing sandbox Managed IdP directory is the membership source of truth for that sandbox; local AIHUB accounts use their own account and membership records.
 - The Customer Web derives the Sandbox User ID from the verified IdP identity; clients cannot choose the assertion subject or sandbox `user_id`.
 - The Customer Web BFF holds one Sandbox API key server-side and relies on the sandbox environment's global quota, rate, and concurrency limits while live grading remains invite-only.
 - The BFF mints a Per-request assertion immediately before grading and discards it after the call; it never persists assertions or Pass-through audio.
