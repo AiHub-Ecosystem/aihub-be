@@ -9,6 +9,20 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 ## Vocabulary
 
 - **Organization:** the tenant that owns API keys, identity configuration, quotas, usage, and downstream policy.
+- **Customer Web:** the separate Next.js application through which invited people access the AIHUB demo; it owns end-user login, sessions, and membership, not AIHUB.
+- **Customer User:** a person authenticated by the Customer Web; this is not an AIHUB account.
+- **Customer Organization:** the tenant concept in the Customer Web. During the invite-only sandbox MVP, all invited Customer Users belong to one Customer Organization mapped to the dedicated sandbox AIHUB Organization.
+- **Managed IdP:** the external identity provider used by the Customer Web; AIHUB does not issue login credentials or sessions.
+- **Clerk:** the selected Managed IdP for the Customer Web MVP; it owns passwordless sign-in, invitations, organization membership, and session lifecycle.
+- **Invite-only membership:** access granted by an operator to a known user; self-service signup and organization creation are outside the sandbox MVP.
+- **Sandbox User ID:** an opaque deterministic identifier derived from the verified Managed IdP issuer and subject, encoded to AIHUB's `[A-Za-z0-9_-]` boundary; it is never an email address or a browser-supplied value.
+- **Server-side session:** a Customer Web session represented to the browser only by a secure, HttpOnly, same-site cookie; provider access tokens do not live in browser storage.
+- **Sandbox API key:** the single server-held API key for the dedicated sandbox AIHUB Organization; it is used by the Customer Web BFF and is never sent to a browser.
+- **Membership decision:** the active/disabled authorization result for a Customer User; the Customer Web evaluates it on every BFF request and may cache it for no more than five minutes in the sandbox MVP.
+- **Per-request assertion:** a short-lived sandbox User Assertion minted immediately before one grading call; it is never persisted or reused for another request.
+- **Pass-through audio:** uploaded Speaking audio streamed from the Customer Web BFF to AIHUB and discarded after the response; it is not an MVP audio asset.
+- **Sandbox-only deployment:** the first Customer Web release is configured only for AIHUB's sandbox hostname and credential; Production is absent until the production bridge is approved.
+- **Live grading:** an authenticated Speaking grading request that crosses the Customer Web BFF boundary; the anonymous mock preview is not live grading.
 - **API key:** an organization credential presented with `X-API-Key`; AIHUB stores only its SHA-256 hash and metadata.
 - **Environment:** the request tier derived from its deployment hostname; an API key may be restricted to a set of allowed environments.
 - **Sandbox environment:** AIHUB's fourth, hostname-bound request tier for controlled testing; it has its own sandbox organization and request-control configuration while the current deployment shares application/data stores, downstream services, and runtime secret realm.
@@ -42,6 +56,22 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 ## Ownership and invariants
 
 - AIHUB owns the control plane: organization identity, API keys, scopes, metering, quota, idempotency, and routing policy.
+- The Customer Web and its Managed IdP own end-user login, sessions, and Invite-only membership; AIHUB remains login- and session-free.
+- During the sandbox MVP, one dedicated sandbox AIHUB Organization serves all invited Customer Users, each with a stable sandbox `user_id`; users cannot switch organizations.
+- The Managed IdP owns invitation and disable actions; the Customer Web checks active membership on every BFF request rather than trusting a stale session alone.
+- The Managed IdP directory is the membership source of truth; the Customer Web does not duplicate a user table in the sandbox MVP.
+- The Customer Web derives the Sandbox User ID from the verified IdP identity; clients cannot choose the assertion subject or sandbox `user_id`.
+- The Customer Web BFF holds one Sandbox API key server-side and relies on the sandbox environment's global quota, rate, and concurrency limits while live grading remains invite-only.
+- The BFF mints a Per-request assertion immediately before grading and discards it after the call; it never persists assertions or Pass-through audio.
+- Speaking grading is one attempt per user action with no automatic retry; the UI shows a safe error and AIHUB request ID, while logs contain only opaque identifiers, codes, and timing.
+- The first Customer Web release uses Clerk, no custom session store, a deployment secret for the operator-managed Sandbox API key, and fixed server-side mapping to the dedicated sandbox organization.
+- The first Customer Web release is Sandbox-only; Production configuration is absent until the production organization bridge is approved.
+- IdP invitation links are one-time and provider-expiring; resending an invitation invalidates the previous link, and the Customer Web does not mint invite tokens.
+- A disabled user loses Live grading access on the next membership decision within the five-minute cache ceiling; the mock preview remains available.
+- The BFF rejects audio above the 25 MiB boundary before forwarding, aborts an in-flight upstream stream when the client disconnects, and never stores the audio.
+- Logout invalidates the session for subsequent Live grading requests across tabs; no browser-side token cleanup is treated as authorization.
+- The Customer Web UI and BFF share one origin; the browser never calls AIHUB directly. BFF mutations require secure cookie handling and same-origin checks.
+- Logout clears the Customer Web session and invokes the Managed IdP logout path. Login, membership, and credential-mint failures fail closed; the anonymous mock preview remains available.
 - Each AI service owns its business data and model-specific behavior.
 - `organizationId` is explicit in request context and application ports.
 - The D2 Speaking grading proxy authenticates the client at AIHUB; downstream partner credentials remain server-side configuration.
@@ -83,5 +113,6 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - [ADR-0014: AI Speaking D2 contract boundary and evidence](docs/adr/0014-ai-speaking-d2-contract-boundary.md)
 - [Spec index](docs/superpowers/specs/2026-09-07-aihub/README.md)
 - [ADR-0016: Durable metering boundary and billing evidence](docs/adr/0016-metering-boundary-and-billing-evidence.md)
+- [ADR-0020: Invite-only customer-web identity boundary for sandbox MVP](docs/adr/0020-customer-web-identity-boundary.md)
 - [Agent and architecture design](docs/superpowers/specs/2026-09-07-aihub/12-agent-workflow-and-clean-architecture-design.md)
 - [Matt issue workflow](docs/agents/issue-tracker.md)
