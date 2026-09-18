@@ -24,7 +24,6 @@ jobs:
       contents: read
       packages: write
     env:
-      IMAGE_NAME: ghcr.io/${{ github.repository }}
       IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
     outputs:
       image: ${{ steps.image.outputs.image }}
@@ -47,7 +46,13 @@ jobs:
       - name: Resolve image tag
         id: image
         shell: bash
-        run: echo "image=${IMAGE_NAME}:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          image_name="ghcr.io/${REPOSITORY,,}"
+          echo "image_name=${image_name}" >> "$GITHUB_OUTPUT"
+          echo "image=${image_name}:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push image
         uses: docker/build-push-action@v7
@@ -57,7 +62,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.image.outputs.image }}
-            ${{ env.IMAGE_NAME }}:latest
+            ${{ steps.image.outputs.image_name }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
