@@ -96,12 +96,62 @@ services:
         condition: service_healthy
     restart: "no"
 
+  migrate-sandbox:
+    <<: *app-common
+    profiles:
+      - migration
+      - sandbox
+    entrypoint: ["node"]
+    command: ["scripts/migrate.mjs"]
+    environment:
+      <<: *app-environment
+      DATABASE_URL: ${AIHUB_SANDBOX_DATABASE_URL:-}
+      REDIS_URL: ${AIHUB_SANDBOX_REDIS_URL:-}
+    networks: *app-database-networks
+    volumes:
+      - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro
+    depends_on:
+      vault-agent:
+        condition: service_healthy
+    restart: "no"
+
   app:
     <<: *app-common
     environment: *app-environment
     networks: *app-database-networks
     ports:
       - "127.0.0.1:${AIHUB_APP_PORT:-3021}:3000"
+    restart: unless-stopped
+    stop_grace_period: 90s
+    volumes:
+      - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro
+    depends_on:
+      vault-agent:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 12
+
+  app-sandbox:
+    <<: *app-common
+    profiles:
+      - sandbox
+    environment:
+      <<: *app-environment
+      DATABASE_URL: ${AIHUB_SANDBOX_DATABASE_URL:-}
+      REDIS_URL: ${AIHUB_SANDBOX_REDIS_URL:-}
+    networks: *app-database-networks
+    ports:
+      - "127.0.0.1:${AIHUB_SANDBOX_APP_PORT:-3022}:3000"
     restart: unless-stopped
     stop_grace_period: 90s
     volumes:

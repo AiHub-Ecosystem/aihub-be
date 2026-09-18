@@ -1,15 +1,32 @@
 # ADR-0017: Sandbox as a hostname-bound fourth environment
 
 - Status: Accepted
-- Related issue: #47
+- Related issues: #47, #50
 
 AIHUB treats `sandbox` as a fourth request environment with its own API hostname, alongside `production`, `staging`, and `development`. `production` remains mandatory; the other tiers are optional and an unset tier is absent from the hostname map. On the production VPS, host nginx explicitly serves only the configured production and sandbox hosts; it never uses a wildcard, catch-all, or on-demand TLS. Hostnames must be unique after normalization, and host configuration changes reload nginx.
 
-Sandbox is an identity, metering, and request-control boundary, not a second deployment or secret realm in this issue. Sandbox traffic uses the same application, Postgres, Redis, downstream services, and deployment runtime credentials; its current controls are the sandbox organization, environment-bound API keys, issuer binding, rate limit, and concurrency ceiling. Monthly quota and hard-stop enforcement are tracked separately in #51. The sandbox ingress hostname is `sandbox-api.aihubproduction.com`; the sandbox organization's issuer remains the stable identity URI `https://sandbox.aihubproduction.com`.
+Sandbox is an identity, metering, and request-control boundary. #50 strengthens
+the data boundary with a second application container, a separate database in
+the existing Postgres instance, and Redis logical database `/1`; downstream
+services and the deployment runtime credential realm remain shared. Its
+controls are the sandbox organization, environment-bound API keys, issuer
+binding, rate limit, and concurrency ceiling. Monthly quota and hard-stop
+enforcement are tracked separately in #51. The sandbox ingress hostname is
+`sandbox.aihubproduction.com`; the sandbox organization's issuer remains the
+stable identity URI `https://sandbox.aihubproduction.com`.
 
 Local `localhost` remains the development-only convenience host, but public placeholder hostnames are never added to the map when their variables are absent. Host settings accept normalized hostnames only and fail closed on duplicates. Host configuration is independent of sandbox assertion-mint configuration: an unconfigured mint route is `404`, while environment binding remains available to authenticated operations. The CLI accepts only the four canonical environment names; the existing text-array schema remains extensible and unknown legacy values fail closed. `sandbox` is not a deployment secret realm, and cross-environment enforcement covers every API-key route, including assertion minting; infrastructure probes and documentation routes are outside that matrix.
 
-The production Compose stack may know about configured staging/development hosts for resolver compatibility while deliberately public-serving only production and sandbox through the host nginx configuration; another deployment or proxy owns the other tiers. Nginx receives an explicit production-plus-optional-sandbox server configuration and reloads when that list changes. The current deployment shares database rows until the future separate sandbox application/database boundary in #50, which depends on this issue. Verification covers boot guards, normalized host collisions, resolver absence, CLI validation, nginx configuration rendering, and cross-environment rejection at the application boundary; the edge may reject an unknown host with its own 421/404 response.
+The production Compose stack may know about configured staging/development hosts for resolver compatibility while deliberately public-serving only production and sandbox through the host nginx configuration; another deployment or proxy owns the other tiers. Nginx receives an explicit production-plus-optional-sandbox server configuration and reloads when that list changes. The sandbox profile uses the same image and downstream credentials as production but requires its own database URL, Redis URL, and loopback port. Verification covers boot guards, normalized host collisions, resolver absence, CLI validation, nginx configuration rendering, cross-environment rejection at the application boundary, and absence of sandbox rows from the production database; the edge may reject an unknown host with its own 421/404 response.
+
+## Update for #50 (2026-09-18)
+
+The implementation follows the live VPS topology rather than the issue's older
+Caddy wording. Host nginx already owns ports 80/443 and serves unrelated sites,
+so the isolated sandbox is published through a second nginx server block to the
+`app-sandbox` loopback port. No second Postgres or Redis service is introduced;
+the durable boundary is the `aihub_sandbox` database and Redis `/1` is only
+cache/counter separation.
 
 ## Deployment correction (2026-09-16)
 

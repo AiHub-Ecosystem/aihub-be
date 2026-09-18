@@ -136,34 +136,61 @@ jobs:
           compose=(sudo -n docker compose --env-file .env.production -f docker-compose.production.yml -f docker-compose.production.env.yml)
 
           "${compose[@]}" config --quiet
-          "${compose[@]}" pull app
-          "${compose[@]}" --profile migration run --rm migrate </dev/null
-          # Host nginx terminates TLS and owns ports 80/443 on this VPS, and
-          # serves other projects from the same instance. This stack publishes
-          # no public port: `app` binds 127.0.0.1 only. Adding a hostname is an
-          # nginx server block plus a certbot certificate, never a change here.
-          "${compose[@]}" up -d --no-build app
 
-          app_id="$("${compose[@]}" ps -q app)"
-          test -n "$app_id"
-          healthy=0
-          status=""
-          for attempt in $(seq 1 45); do
-            status="$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$app_id" 2>/dev/null || true)"
-            if [ "$status" = healthy ]; then
-              healthy=1
-              break
+          sandbox_keys=(AIHUB_SANDBOX_HOST AIHUB_SANDBOX_DATABASE_URL AIHUB_SANDBOX_REDIS_URL)
+          sandbox_set=0
+          for key in "${sandbox_keys[@]}"; do
+            if grep -Eq "^${key}=.+$" .env.production; then
+              sandbox_set=$((sandbox_set + 1))
             fi
-            if [ "$status" = unhealthy ]; then
-              break
-            fi
-            sleep 2
           done
-          if [ "$healthy" -ne 1 ]; then
-            "${compose[@]}" ps
-            printf 'app health status: %s\n' "$status" >&2
+          if [ "$sandbox_set" -ne 0 ] && [ "$sandbox_set" -ne "${#sandbox_keys[@]}" ]; then
+            printf 'sandbox configuration must set AIHUB_SANDBOX_HOST, AIHUB_SANDBOX_DATABASE_URL, and AIHUB_SANDBOX_REDIS_URL together\n' >&2
             exit 1
           fi
+
+          services=(app)
+          compose_runtime=("${compose[@]}")
+          if [ "$sandbox_set" -eq "${#sandbox_keys[@]}" ]; then
+            "${compose[@]}" --profile sandbox pull app app-sandbox
+            # Host nginx terminates TLS and owns ports 80/443 on this VPS. The
+            # sandbox app binds a second loopback port; nginx publishes the
+            # configured hostname and never a wildcard or catch-all.
+            services+=(app-sandbox)
+            compose_runtime+=(--profile sandbox)
+          else
+            "${compose[@]}" pull app
+          fi
+
+          "${compose[@]}" --profile migration run --rm migrate </dev/null
+          if [ "$sandbox_set" -eq "${#sandbox_keys[@]}" ]; then
+            "${compose[@]}" --profile migration --profile sandbox run --rm migrate-sandbox </dev/null
+          fi
+
+          "${compose_runtime[@]}" up -d --no-build "${services[@]}"
+
+          for service in "${services[@]}"; do
+            container_id="$("${compose_runtime[@]}" ps -q "$service")"
+            test -n "$container_id"
+            healthy=0
+            status=""
+            for attempt in $(seq 1 45); do
+              status="$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$container_id" 2>/dev/null || true)"
+              if [ "$status" = healthy ]; then
+                healthy=1
+                break
+              fi
+              if [ "$status" = unhealthy ]; then
+                break
+              fi
+              sleep 2
+            done
+            if [ "$healthy" -ne 1 ]; then
+              "${compose_runtime[@]}" ps
+              printf '%s health status: %s\n' "$service" "$status" >&2
+              exit 1
+            fi
+          done
 
           REMOTE
 
