@@ -11,6 +11,9 @@ docs
 test
 ops
 scripts/*
+!scripts/cli.mjs
+!scripts/cli-options.cjs
+!scripts/quota-reconcile.cjs
 !scripts/migrate.mjs
 database/*
 !database/migrations/

@@ -17,7 +17,7 @@ RUN pnpm prune --prod --ignore-scripts
 
 FROM node:22.14.0-bookworm-slim AS runtime
 
-LABEL org.opencontainers.image.source="https://github.com/lengocanh2005it/aihub-be"
+LABEL org.opencontainers.image.source="https://github.com/AiHub-Ecosystem/aihub-be"
 
 ENV NODE_ENV=production \
     PORT=3000
