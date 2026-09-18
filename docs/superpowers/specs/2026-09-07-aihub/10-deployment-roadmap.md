@@ -7,7 +7,7 @@
 ## N.1 Compose Stack
 
 ```
-caddy       :80 :443, automatic TLS termination, load balances app-1/app-2
+nginx       :80 :443, host TLS termination, load balances app-1/app-2
 app-1       aihub application, replica 1
 app-2       aihub application, replica 2
 postgres    16, dedicated persistent volume, NOT exposed to host ports
@@ -46,7 +46,7 @@ for c in app-1 app-2; do
 done
 ```
 
-Caddy automatically evicts unhealthy backends from upstream rotation. **Kubernetes is not required to achieve zero-downtime rolling deployments.**
+The deployment waits for each application health check before rotating an upstream; host nginx continues serving the existing upstream during rollout. **Kubernetes is not required to achieve zero-downtime rolling deployments.**
 
 CI: GitHub Actions compiles image → pushes to GHCR → executes deployment script via SSH.
 
@@ -106,7 +106,7 @@ Prerequisite for all subsequent work. Detailed change list: [11 §Q](11-open-que
 
 ### Phase 1 — Core Gateway Proxy · _~3 weeks_
 
-4 Writing operations; API key authentication + CLI; catalog + adapter + dispatcher; complete error handling; `usage_records` persistence; Docker Compose + Caddy + backups; **rate limiting + idempotency**.
+4 Writing operations; API key authentication + CLI; catalog + adapter + dispatcher; complete error handling; `usage_records` persistence; Docker Compose + host nginx + backups; **rate limiting + idempotency**.
 
 > **Milestone:** Customers invoke `/v1/ielts/writing/task1/grade` with real API keys, and retry storms never trigger double token billing.
 

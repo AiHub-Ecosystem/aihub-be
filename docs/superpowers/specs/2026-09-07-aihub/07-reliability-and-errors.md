@@ -7,7 +7,7 @@
 ## I.1 Cascading Timeout Budgets
 
 ```
-Caddy                     120s     must always EXCEED upstream application limits
+Host nginx                120s     must always EXCEED upstream application limits
  └─ AIHUB op.timeoutMs     60s     grading    (generation: 10s / 30s)
      └─ undici headers/bodyTimeout = remainder of the allocated budget
          └─ x-request-deadline header -> informs AI Writing how much time remains

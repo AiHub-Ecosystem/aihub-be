@@ -77,7 +77,7 @@ Additionally: `url` in Task 1 is a client-supplied URL that Writing fetches dire
 | Queue            | **None in MVP** → BullMQ in Phase 4        | RabbitMQ, Kafka, SQS          | No async use case yet. BullMQ reuses existing Redis                                                                                               |
 | Object storage   | **None in MVP** → Cloudflare R2 in Phase 4 | S3, MinIO, B2                 | R2 does not charge egress — ideal for Speaking audio files                                                                                        |
 | Circuit breaker  | **opossum**                                | Custom implementation         | Proper half-open state is hard to write; homegrown implementations easily flood hundreds of requests when service barely recovers                 |
-| Proxy / TLS      | **Caddy**                                  | nginx, Traefik                | Automatic TLS, ~5 lines of config, zero cert renewal maintenance                                                                                  |
+| Proxy / TLS      | **Host nginx**                             | Traefik                       | The shared VPS already owns ports 80/443; nginx terminates TLS and certbot manages certificates                                                   |
 | Observability    | **Prometheus + Loki + Grafana**            | + Tempo/Jaeger, Datadog       | 3 containers. Drop Tempo in Stage A: with 2 services, `request_id` in logs is sufficient                                                          |
 | Deployment       | **Docker Compose on 1 VPS**                | K8s, ECS, Cloud Run           | 2–3 devs without DevOps. Exit trigger documented in [10 §N.5](10-deployment-roadmap.md#n5-triggers-to-exit-this-architecture)                     |
 | Secrets          | **`.env` chmod 600**                       | Vault, SOPS, Doppler          | Below threshold. Trigger in [05 §G.9](05-auth-identity.md#g9-secrets)                                                                             |
@@ -100,7 +100,7 @@ Additionally: `url` in Task 1 is a client-supplied URL that Writing fetches dire
 
 ### Three directions evaluated for the brief's primary architectural question (§18.1, §18.2)
 
-**Direction A — Modular monolith, no separate data plane.** _(Chosen)_ Single Node app handles everything; Caddy only terminates TLS. Trade-off: Node is single-threaded, so multi-core utilization requires multiple instances — at 50 RPS this is non-issue because AI requests are I/O-bound.
+**Direction A — Modular monolith, no separate data plane.** _(Chosen)_ Single Node app handles everything; host nginx only terminates TLS. Trade-off: Node is single-threaded, so multi-core utilization requires multiple instances — at 50 RPS this is non-issue because AI requests are I/O-bound.
 
 **Direction B — Kong/Envoy as data plane + app as control plane.** _(Rejected)_ Kong knows nothing about `entitlement ∩ api_key_scope`, cannot verify assertions with _per-org_ JWKS, cannot map requests. Would require custom Lua plugins for each feature — essentially rewriting the app in an inferior language. Plus Kong requires its own Postgres. For 2–3 devs without DevOps, maintaining two configuration systems is fatal.
 
@@ -114,7 +114,7 @@ Additionally: `url` in Task 1 is a client-supplied URL that Writing fetches dire
                           Internet
                              │ :443 TLS
                         ┌────▼────┐
-                        │  Caddy  │  Automatic Let's Encrypt, HTTP/2
+                        │ host nginx │  certbot TLS, HTTP/2
                         └────┬────┘
                     ┌────────┴────────┐
                ┌────▼────┐       ┌────▼────┐

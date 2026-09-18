@@ -206,8 +206,8 @@ Postgres and Redis data belong to the existing VPS stacks. Back up the existing
 
 nginx on the host terminates TLS for every site on this VPS and proxies AIHUB to
 `127.0.0.1:${AIHUB_APP_PORT}`. This Compose stack publishes no public port and
-contains no reverse proxy; an earlier Caddy service in this file never ran here
-and was removed after it failed a release by trying to bind port 80 against
+contains no reverse proxy; an earlier containerized proxy service never ran
+here and was removed after it failed a release by trying to bind port 80 against
 nginx.
 
 **This VPS is shared.** `/etc/nginx/sites-enabled/` serves eleven sites, most of
