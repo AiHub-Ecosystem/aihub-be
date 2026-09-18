@@ -67,6 +67,9 @@ Schedule `pnpm cli idempotency:cleanup` from the deployment environment once
 per night to remove expired idempotency records. The command reports the
 deleted row count and exits non-zero when PostgreSQL is unavailable.
 
+The separate usage-retention command runs at 02:30 UTC per deployment database;
+see the [usage retention runbook](docs/operations/usage-retention.md).
+
 The key command prints the raw API key once. Store it outside the repository
 and send it as `X-API-Key`.
 
