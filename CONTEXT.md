@@ -37,7 +37,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Public grading result:** the normalized `{ data, meta }` envelope safe for the Customer Web; provider-only identifiers, timing, credentials, assertions, audio, and raw downstream detail are excluded.
 - **API key:** an organization credential presented with `X-API-Key`; AIHUB stores only its SHA-256 hash and metadata.
 - **Environment:** the request tier derived from its deployment hostname; an API key may be restricted to a set of allowed environments.
-- **Sandbox environment:** AIHUB's fourth, hostname-bound request tier for controlled testing; it has its own sandbox organization and request-control configuration while the current deployment shares application/data stores, downstream services, and runtime secret realm.
+- **Sandbox environment:** AIHUB's fourth, hostname-bound request tier for controlled testing; it has its own sandbox organization, request-control configuration, Postgres database, Redis logical database, and application container while sharing downstream services and the deployment secret realm with production.
 - **Deployment secret realm:** the environment scope used to select runtime credentials; `sandbox` is not a separate realm and sandbox traffic uses the enclosing deployment's credentials.
 - **User Assertion:** a short-lived organization-signed assertion in `X-User-Assertion` for user-scoped operations.
 - **Internal JWT:** a short-lived AIHUB-signed token used only on AIHUB-to-service calls.

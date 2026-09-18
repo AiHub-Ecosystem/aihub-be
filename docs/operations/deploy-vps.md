@@ -2,12 +2,15 @@
 
 This is the production baseline for the single-node Compose deployment. It uses
 the existing production `aihub-db` and Wispace Redis, and renders downstream
-runtime credentials through Vault Agent.
+runtime credentials through Vault Agent. When sandbox isolation is enabled,
+`app-sandbox` is a second container from the same image, backed by
+`aihub_sandbox` and Redis logical database `/1`.
 
 **Public TLS is terminated by nginx on the host, not by this Compose stack.**
-The `app` service binds `127.0.0.1:${AIHUB_APP_PORT}` and nothing else; nginx
-owns ports 80 and 443 and proxies to it. See [The public edge](#the-public-edge)
-before changing anything about hostnames or certificates.
+The `app` service binds `127.0.0.1:${AIHUB_APP_PORT}` and `app-sandbox` binds
+`127.0.0.1:${AIHUB_SANDBOX_APP_PORT}`; nginx owns ports 80 and 443 and proxies
+each hostname to its matching loopback port. See
+[The public edge](#the-public-edge) before changing hostnames or certificates.
 
 ## Prerequisites
 
@@ -18,6 +21,10 @@ before changing anything about hostnames or certificates.
   configured. Leave an unused tier blank: a blank tier is absent from the
   application's hostname map, so no `Host` header can select it.
 - nginx uses `AIHUB_APP_PORT` (default `3021`) as its upstream.
+- An isolated sandbox also needs `AIHUB_SANDBOX_DATABASE_URL`,
+  `AIHUB_SANDBOX_REDIS_URL` (logical database `/1`), and
+  `AIHUB_SANDBOX_APP_PORT` (default `3022`). Set all three together; leave all
+  three blank when this deployment does not serve sandbox.
 - The existing Docker network `aihub_aihub-network` with a healthy `aihub-db` container.
 - A production Vault AppRole whose policy can read only
   `secret/data/aihub/production/*` (required for the future Vault mode; the
@@ -56,9 +63,11 @@ from the operator Vault session below.
 
 `AIHUB_PRODUCTION_HOST` is the only required host setting. Setting
 `AIHUB_SANDBOX_HOST` tells the application to recognise that hostname; it does
-not publish it. Serving it is a separate nginx change described in
-[The public edge](#the-public-edge). Leaving it blank keeps the sandbox host
-absent from the resolver entirely.
+not publish it. An isolated sandbox additionally requires its own database and
+Redis URLs; the Compose profile is only started when all three sandbox settings
+are present. Serving the hostname is a separate nginx change described in
+[The public edge](#the-public-edge). Leaving the sandbox settings blank keeps
+the sandbox host and container absent.
 
 Point the gateway at the existing production database over the shared Docker
 network. The password must be URL-encoded inside `DATABASE_URL` (for example,
@@ -67,6 +76,15 @@ network. The password must be URL-encoded inside `DATABASE_URL` (for example,
 ```text
 DATABASE_URL=postgresql://aihub_admin:<url-encoded-db-password>@aihub-db:5432/aihub
 AIHUB_DATABASE_NETWORK=aihub_aihub-network
+```
+
+When sandbox is enabled, use the same Postgres instance and Redis host with a
+different database/logical index:
+
+```text
+AIHUB_SANDBOX_APP_PORT=3022
+AIHUB_SANDBOX_DATABASE_URL=postgresql://aihub_admin:<url-encoded-db-password>@aihub-db:5432/aihub_sandbox
+AIHUB_SANDBOX_REDIS_URL=redis://:<same-redis-password>@redis.aihubproduction.com:6379/1
 ```
 
 Speaking sample audio is stored in SeaweedFS. Keep `SEAWEEDFS_ENDPOINT_URL`
@@ -109,7 +127,110 @@ unset redis_host redis_port redis_password redis_url tmp_env
 The production Redis endpoint is `redis.aihubproduction.com:6379`; verify that
 the VPS firewall permits the Redis protocol before starting the gateway. Do not
 grant the AIHUB runtime AppRole access to the `wispace-bots` path; the operator
-copies only the required password into `.env.production`.
+copies only the required password into `.env.production`. Redis `/1` is not a
+durable isolation boundary: it keeps sandbox counters/cache keys out of the
+production logical database, while Postgres remains the durable boundary.
+
+## Create and cut over the sandbox database
+
+Run this once before starting the `sandbox` Compose profile. The procedure keeps
+the existing sandbox organization, identity configuration, API keys, usage, and
+idempotency evidence, then removes those rows from production. It deliberately
+stops the production gateway during the copy so no request can write one side
+while the other is being cut over.
+
+Back up production first and keep the dump until both smoke checks pass:
+
+```sh
+set -eu
+backup_dir="$HOME/aihub-backups"
+install -d -m 700 "$backup_dir"
+backup_file="$backup_dir/aihub-$(date +%Y%m%d-%H%M%S).dump"
+sudo -n docker exec aihub-db pg_dump -U aihub_admin -d aihub -Fc >"$backup_file"
+chmod 600 "$backup_file"
+test -s "$backup_file"
+```
+
+Create the database in the existing Postgres container, then run both schema
+migrations. `AIHUB_SANDBOX_ORG_IDS` must be the comma-separated allowlist already
+used by the sandbox assertion route:
+
+```sh
+sudo -n docker exec aihub-db psql -U aihub_admin -d postgres \
+  -v ON_ERROR_STOP=1 \
+  -c "SELECT 'CREATE DATABASE aihub_sandbox OWNER aihub_admin' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'aihub_sandbox')\\gexec"
+
+compose=(sudo -n docker compose --env-file .env.production \
+  -f docker-compose.production.yml -f docker-compose.production.env.yml)
+"${compose[@]}" --profile migration --profile sandbox run --rm migrate-sandbox
+```
+
+Freeze gateway writes before copying the current control-plane data. The plain
+SQL dump is piped directly between the database container and never written to
+the repository or shell history:
+
+```sh
+"${compose[@]}" stop app
+# Stop any other service that still connects to the production `aihub` database
+# (the shared VPS may have a legacy backend outside this Compose project).
+sudo -n docker stop <other-aihub-writer>
+sudo -n docker exec aihub-db psql -U aihub_admin -d postgres -Atc \
+  "SELECT count(*) FROM pg_stat_activity WHERE datname = 'aihub' AND client_addr IS NOT NULL"
+set -o pipefail
+sudo -n docker exec aihub-db pg_dump -U aihub_admin -d aihub \
+  --data-only --no-owner --no-privileges --column-inserts \
+  -t organizations -t organization_identity_configs -t api_keys \
+  -t usage_records -t idempotency_records \
+  | sudo -n docker exec -i aihub-db psql -U aihub_admin -d aihub_sandbox \
+      -v ON_ERROR_STOP=1
+```
+
+The activity query should show no application clients before the delete
+transaction; replace `<other-aihub-writer>` with the actual container name, or
+omit that line when no second writer exists. Start every stopped writer again
+only after both gateway containers are healthy.
+
+Retain only sandbox organizations in the new database, then remove those same
+organizations from production. The delete order follows the foreign keys:
+
+```sh
+sandbox_org_ids="${AIHUB_SANDBOX_ORG_IDS:?AIHUB_SANDBOX_ORG_IDS is required}"
+sudo -n docker exec -i aihub-db psql -U aihub_admin -d aihub_sandbox \
+  -v ON_ERROR_STOP=1 -v sandbox_org_ids="$sandbox_org_ids" <<'SQL'
+BEGIN;
+CREATE TEMP TABLE sandbox_organizations (id text PRIMARY KEY) ON COMMIT DROP;
+INSERT INTO sandbox_organizations (id)
+SELECT btrim(value)
+FROM unnest(string_to_array(:'sandbox_org_ids', ',')) AS input(value)
+WHERE btrim(value) <> '';
+DELETE FROM idempotency_records WHERE organization_id NOT IN (SELECT id FROM sandbox_organizations);
+DELETE FROM usage_records WHERE organization_id NOT IN (SELECT id FROM sandbox_organizations);
+DELETE FROM api_keys WHERE organization_id NOT IN (SELECT id FROM sandbox_organizations);
+DELETE FROM organization_identity_configs WHERE organization_id NOT IN (SELECT id FROM sandbox_organizations);
+DELETE FROM organizations WHERE id NOT IN (SELECT id FROM sandbox_organizations);
+COMMIT;
+SQL
+
+sudo -n docker exec -i aihub-db psql -U aihub_admin -d aihub \
+  -v ON_ERROR_STOP=1 -v sandbox_org_ids="$sandbox_org_ids" <<'SQL'
+BEGIN;
+CREATE TEMP TABLE sandbox_organizations (id text PRIMARY KEY) ON COMMIT DROP;
+INSERT INTO sandbox_organizations (id)
+SELECT btrim(value)
+FROM unnest(string_to_array(:'sandbox_org_ids', ',')) AS input(value)
+WHERE btrim(value) <> '';
+DELETE FROM idempotency_records WHERE organization_id IN (SELECT id FROM sandbox_organizations);
+DELETE FROM usage_records WHERE organization_id IN (SELECT id FROM sandbox_organizations);
+DELETE FROM api_keys WHERE organization_id IN (SELECT id FROM sandbox_organizations);
+DELETE FROM organization_identity_configs WHERE organization_id IN (SELECT id FROM sandbox_organizations);
+DELETE FROM organizations WHERE id IN (SELECT id FROM sandbox_organizations);
+COMMIT;
+SQL
+```
+
+Start both containers only after the cutover. If only one database is migrated,
+the other container fails at startup or serves stale identity/schema data; never
+run one side against a schema that has not received the same migration set.
 
 ## Temporary Stage A env mode
 
@@ -141,11 +262,28 @@ sudo -n docker compose --env-file .env.production \
   -f docker-compose.production.env.yml pull app
 sudo -n docker compose --env-file .env.production \
   -f docker-compose.production.yml \
-  -f docker-compose.production.env.yml --profile migration run --rm --no-build migrate
+  -f docker-compose.production.env.yml --profile migration run --rm migrate
 sudo -n docker compose --env-file .env.production \
   -f docker-compose.production.yml \
   -f docker-compose.production.env.yml up -d --no-build app
 ```
+
+For an isolated sandbox, set the three sandbox connection settings and run both
+migrations and both containers in the same Compose project:
+
+```sh
+compose=(sudo -n docker compose --env-file .env.production \
+  -f docker-compose.production.yml -f docker-compose.production.env.yml)
+"${compose[@]}" --profile sandbox pull app app-sandbox
+"${compose[@]}" --profile migration run --rm migrate
+"${compose[@]}" --profile migration --profile sandbox run --rm migrate-sandbox
+"${compose[@]}" --profile sandbox up -d --no-build app app-sandbox
+"${compose[@]}" --profile sandbox ps
+```
+
+The CD workflow runs the same sequence and waits for both health checks. A
+partial sandbox configuration is rejected rather than starting a hostname whose
+container has no isolated database.
 
 This is a deliberate temporary exception: keep `.env.production` at mode 600,
 rotate the long-lived provider credentials after Vault cutover, and remove the
@@ -205,10 +343,11 @@ Postgres and Redis data belong to the existing VPS stacks. Back up the existing
 ## The public edge
 
 nginx on the host terminates TLS for every site on this VPS and proxies AIHUB to
-`127.0.0.1:${AIHUB_APP_PORT}`. This Compose stack publishes no public port and
-contains no reverse proxy; an earlier containerized proxy service never ran
-here and was removed after it failed a release by trying to bind port 80 against
-nginx.
+`127.0.0.1:${AIHUB_APP_PORT}` for production and
+`127.0.0.1:${AIHUB_SANDBOX_APP_PORT}` for sandbox. This Compose stack publishes
+no public port and contains no reverse proxy; an earlier containerized proxy
+service never ran here and was removed after it failed a release by trying to
+bind port 80 against nginx.
 
 **This VPS is shared.** `/etc/nginx/sites-enabled/` serves eleven sites, most of
 them unrelated to AIHUB, and `docker ps` lists around twenty containers from
@@ -271,9 +410,12 @@ was published this way, and `/etc/nginx/conf.d/sandbox.conf` is the result:
 ```nginx
 server {
     server_name sandbox.aihubproduction.com;
+    client_max_body_size 27m;
 
     location / {
-        proxy_pass http://127.0.0.1:3021;
+        proxy_pass http://127.0.0.1:3022;
+        proxy_read_timeout 75s;
+        proxy_send_timeout 75s;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -309,19 +451,83 @@ DNS must already point at this VPS or certbot cannot complete the challenge.
 Verify afterwards that the new hostname answers **and** that an unrelated site
 still does. One reload serves every site on this box.
 Setting `AIHUB_SANDBOX_HOST` in `.env.production` only teaches the application
-to recognise the hostname; without the nginx block, nothing reaches it.
+to recognise the hostname; without the nginx block, nothing reaches it. The
+sandbox block must point at `AIHUB_SANDBOX_APP_PORT`, never at the production
+port, or the data boundary is bypassed at the edge.
 
 Never add a wildcard or default server block. nginx refusing an unknown
 hostname is what makes the application's environment binding trustworthy —
 `Host` is client-supplied, and the edge serving only names it was given is the
 half of that guarantee the application cannot enforce itself.
 
+### Disabling the sandbox tier
+
+Remove the sandbox nginx server block first, validate, and reload nginx so the
+hostname stops accepting traffic:
+
+```sh
+sudo nano /etc/nginx/conf.d/sandbox.conf
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Then remove the three sandbox deployment values from `.env.production` together:
+`AIHUB_SANDBOX_HOST`, `AIHUB_SANDBOX_DATABASE_URL`, and
+`AIHUB_SANDBOX_REDIS_URL`. The next `main` deployment removes the stale
+`app-sandbox` container. It does not drop `aihub_sandbox`; retain that database
+until its backup and disposal have been approved separately.
+
 ## Verify and operate
 
 ```sh
-docker compose --env-file .env.production -f docker-compose.production.yml ps
-docker compose --env-file .env.production -f docker-compose.production.yml logs --tail=100 app vault-agent
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml -f docker-compose.production.env.yml \
+  --profile sandbox ps
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml -f docker-compose.production.env.yml \
+  --profile sandbox logs --tail=100 app app-sandbox vault-agent
 ```
+
+The production database must contain no sandbox rows after cutover:
+
+```sh
+sandbox_org_ids="${AIHUB_SANDBOX_ORG_IDS:?AIHUB_SANDBOX_ORG_IDS is required}"
+remaining="$(sudo -n docker exec aihub-db psql -U aihub_admin -d aihub -At \
+  -v sandbox_org_ids="$sandbox_org_ids" -c "
+    SELECT count(*) FROM organizations
+      WHERE id = ANY(string_to_array(:'sandbox_org_ids', ','))
+    UNION ALL
+    SELECT count(*) FROM api_keys
+      WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','))
+    UNION ALL
+    SELECT count(*) FROM organization_identity_configs
+      WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','))
+    UNION ALL
+    SELECT count(*) FROM usage_records
+      WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','))
+    UNION ALL
+    SELECT count(*) FROM idempotency_records
+      WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','));")"
+test "$(printf '%s\n' "$remaining" | awk '{sum += $1} END {print sum + 0}')" -eq 0
+```
+
+The production backup must also be free of sandbox identifiers. Check the
+plain-text form of the dump without retaining another copy on disk:
+
+```sh
+IFS=',' read -r -a sandbox_org_id_list <<< "$sandbox_org_ids"
+for sandbox_org_id in "${sandbox_org_id_list[@]}"; do
+  if sudo -n docker exec aihub-db pg_dump -U aihub_admin -d aihub --data-only | grep -F -- "$sandbox_org_id" >/dev/null; then
+    echo 'sandbox identifier found in production dump' >&2
+    exit 1
+  fi
+done
+```
+
+Use real sandbox and production keys for the final boundary checks: a sandbox
+key on the production hostname and a production key on the sandbox hostname
+must both be rejected. Dropping `aihub_sandbox` is the destructive test and is
+only appropriate on a disposable rehearsal; the production backup above is the
+rollback point, not a reason to drop the live database.
 
 Back up the existing Postgres before releases and test restore separately. Rotate Vault
 `secret_id` and downstream credentials using the Vault runbook, then restart

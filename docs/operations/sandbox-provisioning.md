@@ -18,16 +18,18 @@ What is **not** contained is spend. Sandbox requests reach the same AI Writing a
 
 Be precise about what currently bounds that, because the limits below are not all equal. `--rate-limit-rpm` and `--max-concurrent` are enforced on every request. `--monthly-quota` and `--hard-stop` are enforced by the quota gate from #51, so the sandbox has both a burst ceiling and a hard monthly spending ceiling.
 
-`usage_records` rows from sandbox traffic currently land in the same table as everything else and are distinguished by the `environment` column. #50 moves sandbox to its own database, after which the production usage table holds no sandbox rows at all.
+Sandbox control-plane and metering rows now live in the isolated `aihub_sandbox`
+database. The production database must contain no sandbox organization, key,
+identity, usage, or idempotency rows after the #50 cutover. Sandbox still uses
+the same downstream AI services and runtime secret realm; only the data store,
+Redis logical database, and application container are separate.
 
-## Running the CLI against production
+## Running the CLI against the sandbox database
 
 Every `pnpm cli` command below needs a database connection, and neither obvious
-place on the VPS can give it one. The release image ships only
-`scripts/migrate.mjs`, so `docker exec <app> node scripts/cli.mjs` fails with
-`Cannot find module '/app/scripts/cli.mjs'`. The source checkout at
-`/home/ngoc_anh/aihub-be` has the script but no `node_modules`, so it fails on
-`Cannot find package 'ioredis'`.
+place on the VPS can give it one. Run the commands against `aihub_sandbox`, not
+the production database; using the production URL would recreate the boundary
+that #50 removes.
 
 Postgres is bound to loopback on the VPS, so reach it from a workstation
 checkout through an SSH tunnel:
@@ -35,13 +37,15 @@ checkout through an SSH tunnel:
 ```sh
 ssh -f -N -L 15433:127.0.0.1:5433 <user>@<vps>
 
-DATABASE_URL='postgresql://<user>:<password>@127.0.0.1:15433/aihub' \
+DATABASE_URL='postgresql://<user>:<password>@127.0.0.1:15433/aihub_sandbox' \
+REDIS_URL='redis://:<password>@127.0.0.1:16379/1' \
   pnpm cli key:create --org org_... --name "..." --scopes ... --envs sandbox
 ```
 
-Take the credentials from `.env.production` on the VPS and rewrite the host:
-the file names the container (`@aihub-db:5432`) because the application resolves
-it over the Docker network, which a tunnel cannot.
+Take the credentials from the sandbox URLs in `.env.production` on the VPS and
+rewrite the hosts: the file names the containers (`@aihub-db:5432` and the
+Redis hostname) because the application resolves them over Docker/network DNS,
+which a tunnel cannot.
 
 Close the tunnel when finished.
 

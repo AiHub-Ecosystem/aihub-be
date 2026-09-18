@@ -136,34 +136,97 @@ jobs:
           compose=(sudo -n docker compose --env-file .env.production -f docker-compose.production.yml -f docker-compose.production.env.yml)
 
           "${compose[@]}" config --quiet
-          "${compose[@]}" pull app
-          "${compose[@]}" --profile migration run --rm migrate </dev/null
-          # Host nginx terminates TLS and owns ports 80/443 on this VPS, and
-          # serves other projects from the same instance. This stack publishes
-          # no public port: `app` binds 127.0.0.1 only. Adding a hostname is an
-          # nginx server block plus a certbot certificate, never a change here.
-          "${compose[@]}" up -d --no-build app
 
-          app_id="$("${compose[@]}" ps -q app)"
-          test -n "$app_id"
-          healthy=0
-          status=""
-          for attempt in $(seq 1 45); do
-            status="$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$app_id" 2>/dev/null || true)"
-            if [ "$status" = healthy ]; then
-              healthy=1
-              break
+          sandbox_keys=(AIHUB_SANDBOX_HOST AIHUB_SANDBOX_DATABASE_URL AIHUB_SANDBOX_REDIS_URL)
+          sandbox_set=0
+          for key in "${sandbox_keys[@]}"; do
+            if grep -Eq "^${key}=.+$" .env.production; then
+              sandbox_set=$((sandbox_set + 1))
             fi
-            if [ "$status" = unhealthy ]; then
-              break
-            fi
-            sleep 2
           done
-          if [ "$healthy" -ne 1 ]; then
-            "${compose[@]}" ps
-            printf 'app health status: %s\n' "$status" >&2
+          if [ "$sandbox_set" -ne 0 ] && [ "$sandbox_set" -ne "${#sandbox_keys[@]}" ]; then
+            printf 'sandbox configuration must set AIHUB_SANDBOX_HOST, AIHUB_SANDBOX_DATABASE_URL, and AIHUB_SANDBOX_REDIS_URL together\n' >&2
             exit 1
           fi
+
+          if [ "$sandbox_set" -eq "${#sandbox_keys[@]}" ]; then
+            production_database_url="$(sed -n 's/^DATABASE_URL=//p' .env.production)"
+            sandbox_database_url="$(sed -n 's/^AIHUB_SANDBOX_DATABASE_URL=//p' .env.production)"
+            production_redis_url="$(sed -n 's/^REDIS_URL=//p' .env.production)"
+            sandbox_redis_url="$(sed -n 's/^AIHUB_SANDBOX_REDIS_URL=//p' .env.production)"
+            production_database_path="${production_database_url%%[?#]*}"
+            sandbox_database_path="${sandbox_database_url%%[?#]*}"
+            production_redis_path="${production_redis_url%%[?#]*}"
+            sandbox_redis_path="${sandbox_redis_url%%[?#]*}"
+
+            case "$production_database_path" in
+              */aihub) ;;
+              *) printf 'DATABASE_URL must target the production database /aihub\n' >&2; exit 1 ;;
+            esac
+            case "$sandbox_database_path" in
+              */aihub_sandbox) ;;
+              *) printf 'AIHUB_SANDBOX_DATABASE_URL must target /aihub_sandbox\n' >&2; exit 1 ;;
+            esac
+            case "$production_redis_path" in
+              */0) ;;
+              *) printf 'REDIS_URL must target Redis logical database /0\n' >&2; exit 1 ;;
+            esac
+            case "$sandbox_redis_path" in
+              */1) ;;
+              *) printf 'AIHUB_SANDBOX_REDIS_URL must target Redis logical database /1\n' >&2; exit 1 ;;
+            esac
+            if [ "$sandbox_database_url" = "$production_database_url" ] || [ "$sandbox_redis_url" = "$production_redis_url" ]; then
+              printf 'sandbox database and Redis URLs must differ from production URLs\n' >&2
+              exit 1
+            fi
+          fi
+
+          services=(app)
+          compose_runtime=("${compose[@]}")
+          if [ "$sandbox_set" -eq "${#sandbox_keys[@]}" ]; then
+            "${compose[@]}" --profile sandbox pull app app-sandbox
+            # Host nginx terminates TLS and owns ports 80/443 on this VPS. The
+            # sandbox app binds a second loopback port; nginx publishes the
+            # configured hostname and never a wildcard or catch-all.
+            services+=(app-sandbox)
+            compose_runtime+=(--profile sandbox)
+          else
+            # Removing the service prevents a stale sandbox container from
+            # surviving after its deployment configuration is disabled. Host
+            # nginx remains an explicit operator-managed configuration.
+            "${compose[@]}" --profile sandbox rm --stop --force app-sandbox </dev/null || true
+            "${compose[@]}" pull app
+          fi
+
+          "${compose[@]}" --profile migration run --rm migrate </dev/null
+          if [ "$sandbox_set" -eq "${#sandbox_keys[@]}" ]; then
+            "${compose[@]}" --profile migration --profile sandbox run --rm migrate-sandbox </dev/null
+          fi
+
+          "${compose_runtime[@]}" up -d --no-build "${services[@]}"
+
+          for service in "${services[@]}"; do
+            container_id="$("${compose_runtime[@]}" ps -q "$service")"
+            test -n "$container_id"
+            healthy=0
+            status=""
+            for attempt in $(seq 1 45); do
+              status="$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$container_id" 2>/dev/null || true)"
+              if [ "$status" = healthy ]; then
+                healthy=1
+                break
+              fi
+              if [ "$status" = unhealthy ]; then
+                break
+              fi
+              sleep 2
+            done
+            if [ "$healthy" -ne 1 ]; then
+              "${compose_runtime[@]}" ps
+              printf '%s health status: %s\n' "$service" "$status" >&2
+              exit 1
+            fi
+          done
 
           REMOTE
 
