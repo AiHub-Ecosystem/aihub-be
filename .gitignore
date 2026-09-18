@@ -24,3 +24,6 @@ Thumbs.db
 # committable because its filename happened not to be listed here.
 *.pem
 demo-jwks.json
+
+# pnpm store created by containerized verify runs (keep out of the repo)
+.pnpm-store/
