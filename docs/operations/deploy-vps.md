@@ -460,6 +460,22 @@ hostname is what makes the application's environment binding trustworthy —
 `Host` is client-supplied, and the edge serving only names it was given is the
 half of that guarantee the application cannot enforce itself.
 
+### Disabling the sandbox tier
+
+Remove the sandbox nginx server block first, validate, and reload nginx so the
+hostname stops accepting traffic:
+
+```sh
+sudo nano /etc/nginx/conf.d/sandbox.conf
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Then remove the three sandbox deployment values from `.env.production` together:
+`AIHUB_SANDBOX_HOST`, `AIHUB_SANDBOX_DATABASE_URL`, and
+`AIHUB_SANDBOX_REDIS_URL`. The next `main` deployment removes the stale
+`app-sandbox` container. It does not drop `aihub_sandbox`; retain that database
+until its backup and disposal have been approved separately.
+
 ## Verify and operate
 
 ```sh
@@ -483,9 +499,28 @@ remaining="$(sudo -n docker exec aihub-db psql -U aihub_admin -d aihub -At \
     SELECT count(*) FROM api_keys
       WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','))
     UNION ALL
+    SELECT count(*) FROM organization_identity_configs
+      WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','))
+    UNION ALL
     SELECT count(*) FROM usage_records
+      WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','))
+    UNION ALL
+    SELECT count(*) FROM idempotency_records
       WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','));")"
 test "$(printf '%s\n' "$remaining" | awk '{sum += $1} END {print sum + 0}')" -eq 0
+```
+
+The production backup must also be free of sandbox identifiers. Check the
+plain-text form of the dump without retaining another copy on disk:
+
+```sh
+IFS=',' read -r -a sandbox_org_id_list <<< "$sandbox_org_ids"
+for sandbox_org_id in "${sandbox_org_id_list[@]}"; do
+  if sudo -n docker exec aihub-db pg_dump -U aihub_admin -d aihub --data-only | grep -F -- "$sandbox_org_id" >/dev/null; then
+    echo 'sandbox identifier found in production dump' >&2
+    exit 1
+  fi
+done
 ```
 
 Use real sandbox and production keys for the final boundary checks: a sandbox

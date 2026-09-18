@@ -149,6 +149,38 @@ jobs:
             exit 1
           fi
 
+          if [ "$sandbox_set" -eq "${#sandbox_keys[@]}" ]; then
+            production_database_url="$(sed -n 's/^DATABASE_URL=//p' .env.production)"
+            sandbox_database_url="$(sed -n 's/^AIHUB_SANDBOX_DATABASE_URL=//p' .env.production)"
+            production_redis_url="$(sed -n 's/^REDIS_URL=//p' .env.production)"
+            sandbox_redis_url="$(sed -n 's/^AIHUB_SANDBOX_REDIS_URL=//p' .env.production)"
+            production_database_path="${production_database_url%%[?#]*}"
+            sandbox_database_path="${sandbox_database_url%%[?#]*}"
+            production_redis_path="${production_redis_url%%[?#]*}"
+            sandbox_redis_path="${sandbox_redis_url%%[?#]*}"
+
+            case "$production_database_path" in
+              */aihub) ;;
+              *) printf 'DATABASE_URL must target the production database /aihub\n' >&2; exit 1 ;;
+            esac
+            case "$sandbox_database_path" in
+              */aihub_sandbox) ;;
+              *) printf 'AIHUB_SANDBOX_DATABASE_URL must target /aihub_sandbox\n' >&2; exit 1 ;;
+            esac
+            case "$production_redis_path" in
+              */0) ;;
+              *) printf 'REDIS_URL must target Redis logical database /0\n' >&2; exit 1 ;;
+            esac
+            case "$sandbox_redis_path" in
+              */1) ;;
+              *) printf 'AIHUB_SANDBOX_REDIS_URL must target Redis logical database /1\n' >&2; exit 1 ;;
+            esac
+            if [ "$sandbox_database_url" = "$production_database_url" ] || [ "$sandbox_redis_url" = "$production_redis_url" ]; then
+              printf 'sandbox database and Redis URLs must differ from production URLs\n' >&2
+              exit 1
+            fi
+          fi
+
           services=(app)
           compose_runtime=("${compose[@]}")
           if [ "$sandbox_set" -eq "${#sandbox_keys[@]}" ]; then
@@ -159,6 +191,10 @@ jobs:
             services+=(app-sandbox)
             compose_runtime+=(--profile sandbox)
           else
+            # Removing the service prevents a stale sandbox container from
+            # surviving after its deployment configuration is disabled. Host
+            # nginx remains an explicit operator-managed configuration.
+            "${compose[@]}" --profile sandbox rm --stop --force app-sandbox </dev/null || true
             "${compose[@]}" pull app
           fi
 
