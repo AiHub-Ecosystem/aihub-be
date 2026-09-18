@@ -1,0 +1,43 @@
+/**
+ * Shared type definitions for SpecificationCollection modules
+ */
+import { OpenAPIV3 } from 'openapi-types';
+import { Collection, CollectionDefinition, Item, ItemGroup, QueryParamDefinition, RequestBodyDefinition, RequestDefinition, RequestAuthDefinition, Response, ResponseDefinition, UrlDefinition, Variable, VariableDefinition, VariableList, HeaderDefinition } from 'postman-collection';
+import { AUTH_TYPES } from './constants';
+export type { Collection, CollectionDefinition, Item, ItemGroup, QueryParamDefinition, RequestBodyDefinition, RequestDefinition, RequestAuthDefinition, Response, ResponseDefinition, UrlDefinition, Variable, VariableDefinition, VariableList, HeaderDefinition };
+export type { OpenAPIV3 };
+/**
+ * Type definition for authentication types
+ */
+export type AuthType = (typeof AUTH_TYPES)[keyof typeof AUTH_TYPES];
+export interface ResponseDetails {
+    [key: string]: unknown;
+}
+export interface CollectionTypeItem {
+    request: unknown;
+    response: ResponseDetails;
+}
+export interface CollectionTypeData {
+    [key: string]: CollectionTypeItem;
+}
+export interface MatchingSpecPath {
+    matchingKey: string;
+    matchingPath: OpenAPIV3.PathItemObject;
+}
+export interface SecuritySchemeMapping {
+    [oldName: string]: string;
+}
+export interface AuthMergeResult {
+    type: string;
+    params: VariableList | undefined;
+}
+export type SyncOptions = {
+    syncExamples: boolean;
+    /**
+     * When true, requests (and folders) that exist in the collection but no longer exist in the
+     * specification are removed during spec -> collection syncing.
+     * When false (default), such orphans are preserved to avoid unintentional data loss.
+     */
+    deleteOrphanedRequests?: boolean;
+};
+//# sourceMappingURL=types.d.ts.map

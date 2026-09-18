@@ -206,6 +206,13 @@ The live production site lives in `/etc/nginx/conf.d/aihub.conf`:
 ```nginx
 server_name api.aihubproduction.com;
 
+# Keep the edge above the application's own limits so AIHUB's JSON error
+# envelope, not nginx's bare HTML 413/504, reaches the client. The Speaking
+# multipart route accepts a 26 MiB wire body and runs on a 60-second budget.
+client_max_body_size 27m;
+proxy_read_timeout 75s;
+proxy_send_timeout 75s;
+
 location / {
     proxy_pass http://127.0.0.1:3021;
     proxy_http_version 1.1;
@@ -223,6 +230,13 @@ ssl_certificate_key /etc/letsencrypt/live/api.aihubproduction.com/privkey.pem;
 `proxy_set_header Host $host` is load-bearing. The application resolves the
 request environment from that header, so a block that rewrites or drops it would
 make every request on that hostname fail with `ENVIRONMENT_NOT_ALLOWED`.
+
+`client_max_body_size` and the proxy timeouts must stay above the application's
+own per-operation limits (`maxBodyBytes` and `timeoutMs` in
+`src/catalog/operation-catalog.ts`); the sandbox server block needs the same
+lines. Without them, nginx rejects a large Speaking upload with its default 1 MB
+body limit and a bare HTML 413 before the application ever sees the request, so
+the client loses the JSON `PAYLOAD_TOO_LARGE` envelope.
 
 ### Publishing another hostname
 

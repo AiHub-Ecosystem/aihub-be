@@ -541,7 +541,7 @@ Base64 is strongly discouraged for large files.
 | --------------------- | ------------------- | -------: | ------------------ |
 | `writing.task1.grade` | JSON                |   256 KB | text + `image_url` |
 | `writing.task2.grade` | JSON                |   256 KB | text               |
-| `speaking.grading`    | multipart/form-data |    25 MB | `audio/*`          |
+| `speaking.grading`    | multipart/form-data |    26 MB | `audio/*`          |
 
 Body limits are configured **per operation**, not as a single global threshold.
 
@@ -1378,8 +1378,8 @@ identity_scope: user
 execution: sync
 content_type: multipart/form-data
 idempotency: none
-max_body_bytes: 26214400
-timeout_ms: 30000
+max_body_bytes: 27262976 # 26 MiB
+timeout_ms: 60000
 downstream_service: ai-speaking
 downstream_path: /api/v1/speaking/grading
 ```

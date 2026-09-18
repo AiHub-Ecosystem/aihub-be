@@ -1,0 +1,58 @@
+{
+	"name": "@xhmikosr/decompress-unzip",
+	"version": "8.2.1",
+	"description": "decompress zip plugin",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/XhmikosR/decompress-unzip.git"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"author": {
+		"name": "Kevin Mårtensson",
+		"email": "kevinmartensson@gmail.com",
+		"url": "https://github.com/kevva"
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"ava": "ava",
+		"lint": "xo",
+		"xo": "xo",
+		"fix": "xo --fix",
+		"test": "npm run xo && npm run ava",
+		"test-ci": "c8 ava"
+	},
+	"main": "index.js",
+	"type": "module",
+	"exports": {
+		".": "./index.js"
+	},
+	"files": [
+		"index.js"
+	],
+	"keywords": [
+		"decompress",
+		"decompressplugin",
+		"extract",
+		"zip"
+	],
+	"dependencies": {
+		"file-type": "^21.3.4",
+		"get-stream": "^9.0.1",
+		"yauzl": "^3.4.0"
+	},
+	"devDependencies": {
+		"ava": "^7.0.0",
+		"c8": "^11.0.0",
+		"xo": "^2.0.2"
+	},
+	"xo": {
+		"rules": {
+			"unicorn/prevent-abbreviations": "off"
+		}
+	}
+}

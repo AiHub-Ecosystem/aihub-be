@@ -365,7 +365,7 @@ JSON-by-URL use `Content-Type: application/json`; Speaking file grading uses
 | --------------------------------- | --------- | ----------------- | -------: | ------: |
 | `/v1/ielts/writing/task1/grade`   | **Yes**   | **Required**      |   256 KB |     60s |
 | `/v1/ielts/writing/task2/grade`   | **Yes**   | **Required**      |   256 KB |     60s |
-| `/v1/ielts/speaking/grading`      | **Yes**   | **None**          |   25 MiB |     30s |
+| `/v1/ielts/speaking/grading`      | **Yes**   | **None**          |   26 MiB |     60s |
 | `/v1/ielts/speaking/grading-json` | **Yes**   | **None**          |   256 KB |     30s |
 
 One route is not a grading operation and appears here only so the list is
@@ -424,6 +424,10 @@ idempotent replay. A client retry can therefore start another grading run.
 | `test_type`   | No       | For example `Practice` or `Full-test`                                                 |
 | `test_code`   | No       | Identifier shared by questions in one full test                                       |
 | `transcript`  | No       | Existing transcript when the provider supports skipping STT                           |
+
+The multipart request itself is capped at 26 MiB, so a full 25 MiB audio file
+fits together with its multipart framing. The 25 MiB file cap mirrors the AI
+Speaking service's own limit.
 
 Send the learner identity only through `X-User-Assertion`; do not send a
 `user_id` form field. AIHUB derives the downstream identity from the verified
@@ -514,8 +518,10 @@ body and reuse the same key.
 
 Writing grading has a 60-second AIHUB budget. **Set your client timeout to at
 least 90 seconds** for Writing `/grade` calls. Speaking grading has a
-30-second budget; use a client timeout of at least 60 seconds for
-`/v1/ielts/speaking/grading`. A client timeout equal to the server budget is unsafe
+60-second budget; use a client timeout of at least 90 seconds for
+`/v1/ielts/speaking/grading`. The budget covers the upload too, so large files
+on slow links need a proportionally larger client timeout. A client timeout
+equal to the server budget is unsafe
 because connection setup and response transfer also consume time.
 
 AIHUB's per-operation budget is a single clock: it is set when the request

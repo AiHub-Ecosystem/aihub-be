@@ -1,0 +1,58 @@
+{
+	"name": "@xhmikosr/decompress-targz",
+	"version": "9.0.1",
+	"description": "decompress tar.gz plugin",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/XhmikosR/decompress-targz.git"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"author": {
+		"name": "Kevin Mårtensson",
+		"email": "kevinmartensson@gmail.com",
+		"url": "https://github.com/kevva"
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"ava": "ava",
+		"lint": "xo",
+		"xo": "xo",
+		"fix": "xo --fix",
+		"test": "npm run ava"
+	},
+	"main": "index.js",
+	"type": "module",
+	"exports": {
+		".": "./index.js"
+	},
+	"files": [
+		"index.js"
+	],
+	"keywords": [
+		"decompress",
+		"decompressplugin",
+		"extract",
+		"tar.gz",
+		"targz"
+	],
+	"dependencies": {
+		"@xhmikosr/decompress-tar": "^9.0.0",
+		"file-type": "^21.3.0",
+		"is-stream": "^4.0.1"
+	},
+	"devDependencies": {
+		"ava": "^6.4.1",
+		"is-jpg": "^3.0.0",
+		"xo": "^1.2.3"
+	},
+	"xo": {
+		"rules": {
+			"unicorn/prevent-abbreviations": "off"
+		}
+	}
+}

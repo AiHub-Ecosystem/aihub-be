@@ -303,9 +303,9 @@ and `question_id`; AIHUB derives the downstream `user_id` from the verified
 assertion. Do not send `user_id` from the client.
 
 The accepted audio extensions are `wav`, `mp3`, `m4a`, `webm`, and `ogg`. The
-file must be at least 100 bytes and the whole multipart request is capped at
-25 MiB. The examples below assume a local `sample.wav` that is safe to send to
-the configured AI Speaking Dev service.
+file must be at least 100 bytes and at most 25 MiB, and the whole multipart
+request is capped at 26 MiB. The examples below assume a local `sample.wav`
+that is safe to send to the configured AI Speaking Dev service.
 
 PowerShell 7:
 

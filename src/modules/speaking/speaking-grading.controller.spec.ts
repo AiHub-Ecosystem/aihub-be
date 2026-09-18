@@ -10,6 +10,7 @@ import { Test } from '@nestjs/testing';
 import { MockAgent, FormData as UndiciFormData } from 'undici';
 
 import { AppModule } from '../../app.module';
+import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
 import { AppError } from '../../common/errors/app-error';
 import { registerBodySizeGuard } from '../../common/http/body-size.hook';
 import { registerRequestLifecycle } from '../../common/http/request-lifecycle.hook';
@@ -19,7 +20,10 @@ import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,
 } from './application/speaking-multipart-parser.port';
-import { registerSpeakingMultipartParser } from './infrastructure/fastify-speaking-multipart.parser';
+import {
+  SPEAKING_AUDIO_MAX_BYTES,
+  registerSpeakingMultipartParser,
+} from './infrastructure/fastify-speaking-multipart.parser';
 
 const FIXTURES = join(__dirname, '../../../test/fixtures/ai-speaking');
 
@@ -666,7 +670,7 @@ describe('Speaking grading HTTP flow', () => {
     expect(response.json().error.code).toBe('INVALID_REQUEST');
   });
 
-  it('rejects a declared body beyond the 25 MB operation limit', async () => {
+  it('rejects a declared body beyond the 26 MB operation limit', async () => {
     const request = multipartPayload(
       { part: '1', question_id: 'p1_hometown' },
       Buffer.alloc(200, 1),
@@ -677,7 +681,9 @@ describe('Speaking grading HTTP flow', () => {
       url: '/v1/ielts/speaking/grading',
       headers: {
         'content-type': request.contentType,
-        'content-length': String(25 * 1024 * 1024 + 1),
+        'content-length': String(
+          OPERATION_CATALOG['speaking.grading'].maxBodyBytes + 1,
+        ),
       },
       payload: request.payload,
     });
@@ -686,10 +692,10 @@ describe('Speaking grading HTTP flow', () => {
     expect(response.json().error.code).toBe('PAYLOAD_TOO_LARGE');
   });
 
-  it('rejects an uploaded audio file beyond the 25 MB multipart limit', async () => {
+  it('rejects an uploaded audio file beyond the 25 MB audio limit', async () => {
     const request = multipartPayload(
       { part: '1', question_id: 'p1_hometown' },
-      Buffer.alloc(25 * 1024 * 1024 + 1, 1),
+      Buffer.alloc(SPEAKING_AUDIO_MAX_BYTES + 1, 1),
     );
 
     const response = await app.inject({
@@ -701,6 +707,22 @@ describe('Speaking grading HTTP flow', () => {
 
     expect(response.statusCode).toBe(413);
     expect(response.json().error.code).toBe('PAYLOAD_TOO_LARGE');
+  });
+
+  it('accepts a full-size 25 MB audio file within the 26 MB wire ceiling', async () => {
+    const request = multipartPayload(
+      { part: '1', question_id: 'p1_hometown' },
+      Buffer.alloc(SPEAKING_AUDIO_MAX_BYTES, 1),
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/speaking/grading',
+      headers: { 'content-type': request.contentType },
+      payload: request.payload,
+    });
+
+    expect(response.statusCode).toBe(200);
   });
 
   it('accepts multipart audio above the global JSON body ceiling', async () => {

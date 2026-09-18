@@ -1,0 +1,33 @@
+{
+    "name": "@types/postman-collection",
+    "version": "3.5.11",
+    "description": "TypeScript definitions for postman-collection",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/postman-collection",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Kyle Buzby",
+            "githubUsername": "kbuzby",
+            "url": "https://github.com/kbuzby"
+        },
+        {
+            "name": "Vincenzo Chianese",
+            "githubUsername": "XVincentX",
+            "url": "https://github.com/XVincentX"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/postman-collection"
+    },
+    "scripts": {},
+    "dependencies": {
+        "@types/node": "*"
+    },
+    "peerDependencies": {},
+    "typesPublisherContentHash": "c7021850dfd63aca631cfc1db11410548278238c9d017a4983a828d15adcfac1",
+    "typeScriptVersion": "5.1"
+}

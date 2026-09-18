@@ -1,0 +1,70 @@
+{
+	"name": "@xhmikosr/archive-type",
+	"version": "8.1.0",
+	"description": "Detect the archive type of a Buffer/Uint8Array",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/XhmikosR/archive-type.git"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"author": {
+		"name": "Kevin Mårtensson",
+		"email": "kevinmartensson@gmail.com",
+		"url": "https://github.com/kevva"
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"ava": "ava",
+		"lint": "xo",
+		"xo": "xo",
+		"fix": "xo --fix",
+		"test": "npm run ava"
+	},
+	"main": "index.js",
+	"type": "module",
+	"exports": {
+		".": "./index.js"
+	},
+	"files": [
+		"index.js"
+	],
+	"keywords": [
+		"7zip",
+		"archive",
+		"buffer",
+		"bz2",
+		"bzip2",
+		"check",
+		"detect",
+		"gz",
+		"gzip",
+		"mime",
+		"pkg",
+		"rar",
+		"tar.gz",
+		"tar",
+		"zip",
+		"zst",
+		"zstd",
+		"file",
+		"type"
+	],
+	"dependencies": {
+		"file-type": "^21.3.4"
+	},
+	"devDependencies": {
+		"ava": "^7.0.0",
+		"xo": "^2.0.2"
+	},
+	"xo": {
+		"rules": {
+			"capitalized-comments": "off",
+			"unicorn/prevent-abbreviations": "off"
+		}
+	}
+}

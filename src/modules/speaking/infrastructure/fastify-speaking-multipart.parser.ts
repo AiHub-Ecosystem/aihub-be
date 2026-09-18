@@ -2,6 +2,7 @@ import multipart from '@fastify/multipart';
 import { Injectable } from '@nestjs/common';
 import { Value } from '@sinclair/typebox/value';
 
+import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import { AppError } from '../../../common/errors/app-error';
 import {
   type SpeakingGradeInput,
@@ -13,6 +14,12 @@ import type {
   SpeakingMultipartSource,
 } from '../application/speaking-multipart-parser.port';
 
+/**
+ * Audio-file ceiling. Mirrors the AI Speaking provider contract (v1 section
+ * 3): the provider itself rejects audio above 25 MiB with 413, so AIHUB
+ * enforces the file cap locally instead of forwarding a request that cannot
+ * grade.
+ */
 export const SPEAKING_AUDIO_MAX_BYTES = 25 * 1024 * 1024;
 
 const MULTIPART_LIMITS = {
@@ -222,8 +229,10 @@ export function registerSpeakingMultipartParser(
   instance: MultipartRegistrableInstance,
 ): void {
   // Fastify's global bodyLimit is intentionally small for JSON routes. The
-  // multipart route gets its catalog limit at route registration time so the
-  // parser can stream up to the audio ceiling without widening JSON routes.
+  // multipart route gets its catalog wire limit at route registration time so
+  // the parser can stream a full-size audio file plus its multipart framing
+  // without widening JSON routes. Per-file enforcement stays at the 25 MiB
+  // provider cap above.
   Reflect.apply(instance.addHook, instance, [
     'onRoute',
     (route: {
@@ -238,7 +247,7 @@ export function registerSpeakingMultipartParser(
         route.url === '/v1/ielts/speaking/grading' &&
         methods.includes('POST')
       ) {
-        route.bodyLimit = SPEAKING_AUDIO_MAX_BYTES;
+        route.bodyLimit = OPERATION_CATALOG['speaking.grading'].maxBodyBytes;
       }
     },
   ]);

@@ -1,0 +1,72 @@
+{
+	"name": "@xhmikosr/decompress",
+	"version": "11.1.4",
+	"description": "Extracting archives made easy",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/XhmikosR/decompress.git"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"author": {
+		"name": "Kevin Mårtensson",
+		"email": "kevinmartensson@gmail.com",
+		"url": "https://github.com/kevva"
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"ava": "ava",
+		"lint": "xo",
+		"xo": "xo",
+		"fix": "xo --fix",
+		"test": "npm run xo && npm run ava",
+		"test-ci": "c8 ava"
+	},
+	"main": "index.js",
+	"type": "module",
+	"exports": {
+		".": "./index.js"
+	},
+	"files": [
+		"index.js"
+	],
+	"keywords": [
+		"bz2",
+		"bzip2",
+		"decompress",
+		"extract",
+		"tar",
+		"tar.bz",
+		"tar.gz",
+		"zip",
+		"unzip"
+	],
+	"dependencies": {
+		"@xhmikosr/decompress-tar": "^9.0.2",
+		"@xhmikosr/decompress-tarbz2": "^9.0.2",
+		"@xhmikosr/decompress-targz": "^9.0.1",
+		"@xhmikosr/decompress-unzip": "^8.2.1",
+		"graceful-fs": "^4.2.11",
+		"strip-dirs": "^3.0.0"
+	},
+	"devDependencies": {
+		"ava": "^7.0.0",
+		"c8": "^12.0.0",
+		"file-type": "^21.3.4",
+		"xo": "^2.0.2"
+	},
+	"xo": {
+		"rules": {
+			"capitalized-comments": "off",
+			"require-unicode-regexp": "off",
+			"unicorn/prevent-abbreviations": "off"
+		}
+	},
+	"allowScripts": {
+		"unrs-resolver@1.11.1": true
+	}
+}

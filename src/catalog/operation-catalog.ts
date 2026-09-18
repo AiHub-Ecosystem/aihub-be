@@ -77,8 +77,13 @@ export const OPERATION_CATALOG = {
     contentType: 'multipart/form-data',
     idempotency: 'none',
     meteringMode: 'model',
-    maxBodyBytes: 25 * 1024 * 1024,
-    timeoutMs: 30_000,
+    // Wire-body ceiling. Multipart framing rides on top of the audio file,
+    // which the AI Speaking provider itself caps at 25 MiB (contract v1
+    // section 3); 26 MiB lets a full-size file pass with its framing intact.
+    maxBodyBytes: 26 * 1024 * 1024,
+    // One deadline covers upload and downstream grading. Uploading 25 MiB on
+    // a slow link alone can outlast the old 30s budget before grading starts.
+    timeoutMs: 60_000,
     downstream: 'ai-speaking',
     downstreamPath: '/api/v1/speaking/grading',
     requestSchema: SpeakingGradeRequestSchema,

@@ -279,7 +279,7 @@ that a retry is safe. Speaking has no idempotent replay.
 | Key lacks speaking.grade                                     |  403 | FORBIDDEN                     | No                         |
 | Key not valid for environment                                |  403 | ENVIRONMENT_NOT_ALLOWED       | No                         |
 | Route not found                                              |  404 | NOT_FOUND                     | No                         |
-| AIHUB multipart body over 25 MiB                             |  413 | PAYLOAD_TOO_LARGE             | No                         |
+| AIHUB multipart wire body over 26 MiB or audio over 25 MiB   |  413 | PAYLOAD_TOO_LARGE             | No                         |
 | Organization rate limit exceeded                             |  429 | RATE_LIMITED                  | Yes                        |
 | Organization concurrency limit exceeded                      |  429 | CONCURRENCY_LIMIT             | Yes                        |
 | Shared quota exhausted, if enabled                           |  429 | QUOTA_EXCEEDED                | Policy-dependent           |
@@ -301,11 +301,11 @@ circuit-breaker implementation.
 
 ## 10. Operational and security notes
 
-- The operation has one 30-second deadline covering upload and downstream
+- The operation has one 60-second deadline covering upload and downstream
   network time. Cancellation follows the client connection and aborts the
   downstream call.
-- Clients should configure a request timeout of at least 60 seconds to allow
-  the 30-second server deadline plus upload and response transit.
+- Clients should configure a request timeout of at least 90 seconds to allow
+  the 60-second server deadline plus upload and response transit.
 - AIHUB does not add automatic retries inside this request path. A client
   retry can start another grading run; use it only when duplicate grading is
   acceptable.
