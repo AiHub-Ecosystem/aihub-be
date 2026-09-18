@@ -69,6 +69,19 @@ DATABASE_URL=postgresql://aihub_admin:<url-encoded-db-password>@aihub-db:5432/ai
 AIHUB_DATABASE_NETWORK=aihub_aihub-network
 ```
 
+Speaking sample audio is stored in SeaweedFS. Keep `SEAWEEDFS_ENDPOINT_URL`
+(`https://s3.wispace.app`), `SEAWEEDFS_BUCKET` (`aihub-speaking-samples`), and
+the SeaweedFS credentials in the runtime secret bundle. To create the bucket
+and upload the normalized sample set from an operator workstation, use the
+repository script without committing credentials:
+
+```powershell
+$env:SEAWEEDFS_ACCESS_KEY_ID = '<access-key>'
+$env:SEAWEEDFS_SECRET_ACCESS_KEY = '<secret-key>'
+node scripts/upload-speaking-audio.mjs --source E:\audios
+Remove-Item Env:\SEAWEEDFS_ACCESS_KEY_ID, Env:\SEAWEEDFS_SECRET_ACCESS_KEY
+```
+
 The Compose file does not create a second Postgres service or volume. Verify the
 existing service before starting the gateway:
 
@@ -113,6 +126,8 @@ AIHUB_ALLOW_PRODUCTION_ENV_SECRETS=true
 DOWNSTREAM_AI_WRITING_TOKEN=<real-token>
 DOWNSTREAM_AI_SPEAKING_CLIENT_ID=<real-client-id>
 DOWNSTREAM_AI_SPEAKING_SECRET_KEY=<real-secret-key>
+SEAWEEDFS_ACCESS_KEY_ID=<seaweedfs-access-key>
+SEAWEEDFS_SECRET_ACCESS_KEY=<seaweedfs-secret-key>
 ```
 
 Validate and start the temporary stack:

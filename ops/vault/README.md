@@ -14,9 +14,9 @@ secret/aihub/{environment}/ai-writing
 secret/aihub/{environment}/seaweedfs
 ```
 
-All three bundles are part of the V1 runtime-secret document. SeaweedFS has no
-consumer in the current gateway yet, but provisioning it now keeps the
-rendered contract complete for the later audio-asset integration.
+All three bundles are part of the V1 runtime-secret document. The Speaking
+question catalog uses the SeaweedFS bundle to create short-lived read URLs for
+the public sample-audio endpoint.
 
 ## Policy bootstrap
 
