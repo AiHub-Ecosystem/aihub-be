@@ -25,14 +25,18 @@ async function loadRunner() {
         return runnerExports(await import(pathToFileURL(builtPath).href));
       }
 
-      const { tsImport } = await import('tsx/esm/api');
-      return runnerExports(
-        await tsImport(
-          pathToFileURL(join(__dirname, '..', 'src', 'cli', 'usage-prune.ts'))
-            .href,
-          pathToFileURL(__filename).href,
-        ),
-      );
+      const { register, require: tsxRequire } = require('tsx/cjs/api');
+      const unregister = register();
+      try {
+        return runnerExports(
+          tsxRequire(
+            join(__dirname, '..', 'src', 'cli', 'usage-prune.ts'),
+            __filename,
+          ),
+        );
+      } finally {
+        unregister();
+      }
     })();
   }
   return runnerPromise;
