@@ -572,7 +572,6 @@ async function pruneUsageCommand(options) {
 
   await runUsagePrune({
     databaseUrl: process.env.DATABASE_URL ?? '',
-    now: new Date(),
   });
 }
 

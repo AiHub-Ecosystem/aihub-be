@@ -166,7 +166,7 @@ function aggregateNumber(value: unknown, field: string): number {
   return parsed;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 

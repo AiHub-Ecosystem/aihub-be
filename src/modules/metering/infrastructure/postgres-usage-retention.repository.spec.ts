@@ -48,7 +48,7 @@ class FakePostgres implements PostgresMeteringClient {
 }
 
 describe('PostgresUsageRetentionRepository', () => {
-  it('deletes one keyset batch in a transaction and returns its cursor', async () => {
+  it('uses a strict cutoff and skip-locked keyset batch in a transaction', async () => {
     const client = new FakePostgres();
     client.transactionClient.rows = [
       {

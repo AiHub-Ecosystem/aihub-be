@@ -1,6 +1,7 @@
 import {
   type UsageRetentionBatch,
   type UsageRetentionBatchRequest,
+  type UsageRetentionCursor,
   type UsageRetentionPort,
   UsageRetentionService,
   calculateUsageRetentionCutoff,
@@ -15,6 +16,44 @@ class FakeUsageRetentionPort implements UsageRetentionPort {
   ): Promise<UsageRetentionBatch> {
     this.requests.push(request);
     return this.batches.shift() ?? { deleted: 0 };
+  }
+}
+
+class InMemoryUsageRetentionPort implements UsageRetentionPort {
+  constructor(readonly rows: UsageRetentionCursor[]) {}
+
+  async pruneBatch(
+    request: UsageRetentionBatchRequest,
+  ): Promise<UsageRetentionBatch> {
+    const candidates = this.rows
+      .filter((row) => row.createdAt < request.cutoff)
+      .filter(
+        (row) =>
+          request.after === undefined ||
+          row.createdAt > request.after.createdAt ||
+          (row.createdAt.getTime() === request.after.createdAt.getTime() &&
+            row.requestId > request.after.requestId),
+      )
+      .sort((left, right) => {
+        const timeDifference =
+          left.createdAt.getTime() - right.createdAt.getTime();
+        return timeDifference === 0
+          ? left.requestId.localeCompare(right.requestId)
+          : timeDifference;
+      })
+      .slice(0, request.batchSize);
+
+    for (const candidate of candidates) {
+      const index = this.rows.indexOf(candidate);
+      if (index >= 0) {
+        this.rows.splice(index, 1);
+      }
+    }
+
+    const nextCursor = candidates.at(-1);
+    return nextCursor === undefined
+      ? { deleted: 0 }
+      : { deleted: candidates.length, nextCursor };
   }
 }
 
@@ -112,6 +151,41 @@ describe('UsageRetentionService', () => {
       deleted: 0,
       status: 'completed',
     });
+  });
+
+  it('retains cutoff and future rows and makes reruns idempotent', async () => {
+    const cutoff = new Date('2025-08-19T02:30:00.000Z');
+    const port = new InMemoryUsageRetentionPort([
+      {
+        createdAt: new Date('2025-08-19T02:29:59.999Z'),
+        requestId: 'req_expired',
+      },
+      { createdAt: cutoff, requestId: 'req_exact' },
+      {
+        createdAt: new Date('2026-09-19T02:30:00.000Z'),
+        requestId: 'req_future',
+      },
+    ]);
+    const service = new UsageRetentionService(
+      port,
+      () => new Date('2026-09-19T02:30:00.000Z'),
+    );
+
+    await expect(service.prune()).resolves.toMatchObject({
+      batches: 1,
+      deleted: 1,
+    });
+    await expect(service.prune()).resolves.toMatchObject({
+      batches: 0,
+      deleted: 0,
+    });
+    expect(port.rows).toEqual([
+      { createdAt: cutoff, requestId: 'req_exact' },
+      {
+        createdAt: new Date('2026-09-19T02:30:00.000Z'),
+        requestId: 'req_future',
+      },
+    ]);
   });
 
   it('reports committed progress when a later batch fails', async () => {

@@ -76,7 +76,7 @@ function validDate(value: Date): boolean {
   return !Number.isNaN(value.getTime());
 }
 
-function compareCursor(
+export function compareUsageRetentionCursor(
   left: UsageRetentionCursor,
   right: UsageRetentionCursor,
 ): number {
@@ -195,7 +195,7 @@ export class UsageRetentionService {
         }
         if (
           after !== undefined &&
-          compareCursor(batch.nextCursor, after) <= 0
+          compareUsageRetentionCursor(batch.nextCursor, after) <= 0
         ) {
           invalidBatch();
         }

@@ -1,4 +1,25 @@
+import type {
+  UsageRetentionBatch,
+  UsageRetentionPort,
+} from '../modules/metering/application/usage-retention';
 import { formatUsageRetentionEvent, runUsagePruneCommand } from './usage-prune';
+
+class FakeUsageRetentionPort implements UsageRetentionPort {
+  constructor(
+    private readonly batch: UsageRetentionBatch = { deleted: 0 },
+    private readonly closeError?: Error,
+  ) {}
+
+  async pruneBatch(): Promise<UsageRetentionBatch> {
+    return this.batch;
+  }
+
+  async close(): Promise<void> {
+    if (this.closeError !== undefined) {
+      throw this.closeError;
+    }
+  }
+}
 
 describe('formatUsageRetentionEvent', () => {
   it('formats completion as stable JSONL without sensitive fields', () => {
@@ -55,6 +76,86 @@ describe('formatUsageRetentionEvent', () => {
 });
 
 describe('runUsagePruneCommand', () => {
+  it('emits a completion event with a fresh end timestamp', async () => {
+    const lines: string[] = [];
+    const start = new Date('2026-09-19T02:30:00.000Z');
+    const end = new Date('2026-09-19T02:30:04.000Z');
+    const clock = jest
+      .fn<Date, []>()
+      .mockReturnValueOnce(start)
+      .mockReturnValueOnce(end);
+
+    await expect(
+      runUsagePruneCommand({
+        databaseUrl: 'postgres://test',
+        repository: new FakeUsageRetentionPort(),
+        clock,
+        emit: (line) => lines.push(line),
+      }),
+    ).resolves.toMatchObject({ batches: 0, deleted: 0 });
+
+    expect(lines.map((line) => JSON.parse(line))).toEqual([
+      {
+        event: 'usage_prune_started',
+        started_at: start.toISOString(),
+        cutoff: '2025-08-19T02:30:00.000Z',
+        batch_size: 1000,
+      },
+      {
+        event: 'usage_prune_completed',
+        completed_at: end.toISOString(),
+        cutoff: '2025-08-19T02:30:00.000Z',
+        batch_size: 1000,
+        batches: 0,
+        deleted: 0,
+        status: 'completed',
+      },
+    ]);
+  });
+
+  it('reports a safe failure when closing the database fails', async () => {
+    const lines: string[] = [];
+    const start = new Date('2026-09-19T02:30:00.000Z');
+    const failure = new Date('2026-09-19T02:30:04.000Z');
+    const clock = jest
+      .fn<Date, []>()
+      .mockReturnValueOnce(start)
+      .mockReturnValueOnce(new Date('2026-09-19T02:30:04.000Z'))
+      .mockReturnValueOnce(failure);
+
+    await expect(
+      runUsagePruneCommand({
+        databaseUrl: 'postgres://test',
+        repository: new FakeUsageRetentionPort(
+          { deleted: 0 },
+          new Error('raw pool shutdown detail'),
+        ),
+        clock,
+        emit: (line) => lines.push(line),
+      }),
+    ).rejects.toMatchObject({ code: 'DATABASE_FAILURE' });
+
+    expect(lines.map((line) => JSON.parse(line))).toEqual([
+      {
+        event: 'usage_prune_started',
+        started_at: start.toISOString(),
+        cutoff: '2025-08-19T02:30:00.000Z',
+        batch_size: 1000,
+      },
+      {
+        event: 'usage_prune_failed',
+        failed_at: failure.toISOString(),
+        cutoff: '2025-08-19T02:30:00.000Z',
+        batch_size: 1000,
+        batches: 0,
+        deleted: 0,
+        status: 'failed',
+        error_code: 'DATABASE_FAILURE',
+      },
+    ]);
+    expect(lines.join('\n')).not.toContain('raw pool shutdown detail');
+  });
+
   it('reports missing configuration before opening Postgres', async () => {
     const lines: string[] = [];
 

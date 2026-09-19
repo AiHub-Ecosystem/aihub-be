@@ -3,6 +3,7 @@ import {
   UsagePruneError,
   type UsagePruneErrorCode,
   type UsageRetentionEvent,
+  type UsageRetentionPort,
   UsageRetentionService,
   type UsageRetentionSummary,
 } from '../modules/metering/application/usage-retention';
@@ -11,6 +12,8 @@ import { createPostgresUsageRetentionRepository } from '../modules/metering/infr
 export interface UsagePruneCliInput {
   readonly databaseUrl: string;
   readonly now?: Date;
+  readonly clock?: () => Date;
+  readonly repository?: UsageRetentionPort;
   readonly emit?: (line: string) => void;
 }
 
@@ -79,37 +82,82 @@ export async function runUsagePruneCommand(
   input: UsagePruneCliInput,
 ): Promise<UsageRetentionSummary> {
   const emit = input.emit ?? console.log;
-  const now = input.now ?? new Date();
+  const clock = input.clock ?? (() => input.now ?? new Date());
   if (input.databaseUrl.trim().length === 0) {
     const error = new UsagePruneError(
       'CONFIGURATION_MISSING',
       'DATABASE_URL is required',
     );
-    emitFailure(emit, now, error.code);
+    emitFailure(emit, clock(), error.code);
     throw error;
   }
 
-  let repository: ReturnType<typeof createPostgresUsageRetentionRepository>;
+  let repository: UsageRetentionPort;
   try {
-    repository = createPostgresUsageRetentionRepository(input.databaseUrl);
+    repository =
+      input.repository ??
+      createPostgresUsageRetentionRepository(input.databaseUrl);
   } catch {
     const error = new UsagePruneError(
       'DATABASE_FAILURE',
       'usage retention database setup failed',
     );
-    emitFailure(emit, now, error.code);
+    emitFailure(emit, clock(), error.code);
     throw error;
   }
-  const service = new UsageRetentionService(
-    repository,
-    () => input.now ?? new Date(),
-  );
+
+  const service = new UsageRetentionService(repository, clock);
+  let summary: UsageRetentionSummary | undefined;
+  let completionLine: string | undefined;
+  let operationFailed = false;
+  let operationError: unknown;
 
   try {
-    return await service.prune((event) =>
-      emit(formatUsageRetentionEvent(event)),
-    );
-  } finally {
-    await repository.close();
+    summary = await service.prune((event) => {
+      if (event.type === 'completed') {
+        completionLine = formatUsageRetentionEvent(event);
+        return;
+      }
+      emit(formatUsageRetentionEvent(event));
+    });
+  } catch (error) {
+    operationFailed = true;
+    operationError = error;
   }
+
+  try {
+    await repository.close?.();
+  } catch {
+    if (!operationFailed) {
+      const error = new UsagePruneError(
+        'DATABASE_FAILURE',
+        'usage retention database shutdown failed',
+      );
+      emitFailure(
+        emit,
+        clock(),
+        error.code,
+        summary?.cutoff ?? null,
+        summary?.batches ?? 0,
+        summary?.deleted ?? 0,
+      );
+      operationFailed = true;
+      operationError = error;
+    }
+  }
+
+  if (operationFailed) {
+    throw operationError;
+  }
+  if (summary === undefined || completionLine === undefined) {
+    const error = new UsagePruneError(
+      'DATABASE_FAILURE',
+      'usage retention did not complete',
+    );
+    emitFailure(emit, clock(), error.code, summary?.cutoff ?? null);
+    throw error;
+  }
+
+  emit(completionLine);
+  return summary;
 }

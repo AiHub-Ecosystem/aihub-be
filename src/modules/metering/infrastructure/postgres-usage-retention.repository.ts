@@ -4,9 +4,11 @@ import type {
   UsageRetentionCursor,
   UsageRetentionPort,
 } from '../application/usage-retention';
+import { compareUsageRetentionCursor } from '../application/usage-retention';
 import {
   type PostgresMeteringClient,
   createPostgresMeteringClient,
+  isRecord,
 } from './postgres-usage.repository';
 
 export const USAGE_RETENTION_BATCH_SQL = [
@@ -28,10 +30,6 @@ export const USAGE_RETENTION_BATCH_SQL = [
   '  RETURNING usage.created_at, usage.request_id',
 ].join('\n');
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function cursorFromRow(value: unknown): UsageRetentionCursor {
   if (!isRecord(value) || typeof value.request_id !== 'string') {
     throw new Error('usage retention row is invalid');
@@ -52,21 +50,6 @@ function cursorFromRow(value: unknown): UsageRetentionCursor {
   return { createdAt, requestId: value.request_id };
 }
 
-function compareCursor(
-  left: UsageRetentionCursor,
-  right: UsageRetentionCursor,
-): number {
-  const timeDifference = left.createdAt.getTime() - right.createdAt.getTime();
-  if (timeDifference !== 0) {
-    return timeDifference;
-  }
-  return left.requestId < right.requestId
-    ? -1
-    : left.requestId > right.requestId
-      ? 1
-      : 0;
-}
-
 export class PostgresUsageRetentionRepository implements UsageRetentionPort {
   constructor(private readonly client: PostgresMeteringClient) {}
 
@@ -84,7 +67,7 @@ export class PostgresUsageRetentionRepository implements UsageRetentionPort {
         request.after?.requestId ?? null,
         request.batchSize,
       ]);
-      const cursors = rows.map(cursorFromRow).sort(compareCursor);
+      const cursors = rows.map(cursorFromRow).sort(compareUsageRetentionCursor);
       const nextCursor = cursors[cursors.length - 1];
       return nextCursor === undefined
         ? { deleted: 0 }
