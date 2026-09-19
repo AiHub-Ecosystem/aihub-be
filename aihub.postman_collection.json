@@ -1,7 +1,7 @@
 {
   "item": [
     {
-      "id": "c72bf47c-84d1-44bf-bc6d-823ba30c7439",
+      "id": "6c5884c5-d3e7-4494-9306-902d1a776469",
       "name": "writing.task1.grade",
       "request": {
         "name": "writing.task1.grade",
@@ -74,7 +74,7 @@
       }
     },
     {
-      "id": "863e944b-affc-4897-9166-eaf951b23e95",
+      "id": "0664b36f-aa13-4c52-8b50-37304bd91b5c",
       "name": "writing.task2.grade",
       "request": {
         "name": "writing.task2.grade",
@@ -147,7 +147,7 @@
       }
     },
     {
-      "id": "819ef03d-c7d1-4c7b-9847-948d2255545e",
+      "id": "27b47fe1-d46f-4f99-a17f-a4509744accd",
       "name": "speaking.grading",
       "request": {
         "name": "speaking.grading",
@@ -257,7 +257,7 @@
       }
     },
     {
-      "id": "ca8249d0-c3da-476e-9015-324a02348901",
+      "id": "d786ae7e-0a52-477f-88fe-2e0572d40a54",
       "name": "speaking.grading-json",
       "request": {
         "name": "speaking.grading-json",
@@ -330,7 +330,7 @@
       }
     },
     {
-      "id": "e4eaf309-c71f-476a-af53-0f24409bd10f",
+      "id": "71cc00d6-e27e-4972-b72a-159d698cbd05",
       "name": "Mint a sandbox user assertion",
       "request": {
         "name": "Mint a sandbox user assertion",
@@ -381,6 +381,141 @@
         "body": {
           "mode": "raw",
           "raw": "{\n  \"user_id\": \"<string>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "01aea66b-4f6b-4d2f-a5be-fccda4b77dbf",
+      "name": "Register a local AIHUB account",
+      "request": {
+        "name": "Register a local AIHUB account",
+        "description": {},
+        "url": {
+          "path": ["v1", "auth", "register"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": null,
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"<string>\",\n  \"username\": \"<string>\",\n  \"password\": \"<string>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "aa5adde5-9b46-48e6-bb90-68ca062d47f4",
+      "name": "Verify a local account email address",
+      "request": {
+        "name": "Verify a local account email address",
+        "description": {},
+        "url": {
+          "path": ["v1", "auth", "verify-email"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": null,
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"<string>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "510cb278-af6a-4cf9-9122-4f026e889efe",
+      "name": "Request a verification email resend",
+      "request": {
+        "name": "Request a verification email resend",
+        "description": {},
+        "url": {
+          "path": ["v1", "auth", "resend-verification"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": null,
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"<string>\"\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -1334,7 +1469,7 @@
     ]
   },
   "info": {
-    "_postman_id": "548de0cd-5455-4efc-98ff-7e77787219c2",
+    "_postman_id": "501010a2-e2d1-40ca-bebb-23dc4994bf8c",
     "name": "AIHUB Writing API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Generated by `pnpm generate:postman` from openapi.json — do not hand-edit. The \"D1 handover test cases\" folder is the D2 handover artifact required by docs/aihub_deliverable_1_api_contract_schema.md §G; it is not a CI regression suite.",

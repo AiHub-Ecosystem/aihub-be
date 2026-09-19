@@ -4,6 +4,7 @@ import process from 'node:process';
 import type {
   AiSpeakingRuntimeSecrets,
   AiWritingRuntimeSecrets,
+  ResendRuntimeSecrets,
   RuntimeSecretProvider,
   RuntimeSecretSnapshot,
   SeaweedFsRuntimeSecrets,
@@ -115,9 +116,12 @@ function loadFromEnvironment(
   const aiWriting: AiWritingRuntimeSecrets = {
     token: getRequired('DOWNSTREAM_AI_WRITING_TOKEN', 'ai-writing token'),
   };
+  const resend: ResendRuntimeSecrets = {
+    apiKey: getRequired('RESEND_API_KEY', 'Resend API key'),
+  };
 
   const seaweedfs = loadOptionalSeaweedFs(options.values);
-  return freezeSnapshot(aiSpeaking, aiWriting, seaweedfs);
+  return freezeSnapshot(aiSpeaking, aiWriting, resend, seaweedfs);
 }
 
 function loadFromAgentFile(
@@ -145,7 +149,7 @@ function loadFromAgentFile(
   const root = asRecord(parsed, 'runtime secret document');
   assertAllowedKeys(
     root,
-    ['ai-speaking', 'ai-writing', 'seaweedfs'],
+    ['ai-speaking', 'ai-writing', 'resend', 'seaweedfs'],
     'runtime secret document',
   );
   const aiSpeakingRecord = asRecord(
@@ -181,6 +185,11 @@ function loadFromAgentFile(
   const aiWriting: AiWritingRuntimeSecrets = {
     token: requiredRecordString(aiWritingRecord, 'token', 'ai-writing token'),
   };
+  const resendRecord = asRecord(root.resend, 'Resend runtime secret bundle');
+  assertAllowedKeys(resendRecord, ['api_key'], 'Resend runtime secret bundle');
+  const resend: ResendRuntimeSecrets = {
+    apiKey: requiredRecordString(resendRecord, 'api_key', 'Resend API key'),
+  };
 
   const seaweedfsValue = root.seaweedfs;
   const seaweedfs =
@@ -196,7 +205,7 @@ function loadFromAgentFile(
       'SeaweedFS runtime secret bundle',
     );
   }
-  return freezeSnapshot(aiSpeaking, aiWriting, seaweedfs);
+  return freezeSnapshot(aiSpeaking, aiWriting, resend, seaweedfs);
 }
 
 function loadOptionalSeaweedFs(
@@ -267,11 +276,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function freezeSnapshot(
   aiSpeaking: AiSpeakingRuntimeSecrets,
   aiWriting: AiWritingRuntimeSecrets,
+  resend: ResendRuntimeSecrets,
   seaweedfs: SeaweedFsRuntimeSecrets | undefined,
 ): RuntimeSecretSnapshot {
   const snapshot = {
     aiSpeaking: Object.freeze(aiSpeaking),
     aiWriting: Object.freeze(aiWriting),
+    resend: Object.freeze(resend),
     ...(seaweedfs === undefined ? {} : { seaweedfs: Object.freeze(seaweedfs) }),
   };
   return Object.freeze(snapshot);

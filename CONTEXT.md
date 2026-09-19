@@ -12,7 +12,8 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Customer Web:** the separate Next.js application through which invited people access the AIHUB demo; the existing sandbox uses Clerk, while future user-facing surfaces may consume AIHUB User Access JWTs through its BFF.
 - **Customer User:** a person authenticated by the Customer Web; this is not an AIHUB account.
 - **AIHUB User Account:** a credential-bearing account managed by AIHUB for user-facing access; it is distinct from an Organization and from the existing Customer User term until the Customer Web boundary is migrated.
-- **Auth Identity:** a login identity attached to an AIHUB User Account, such as the Phase 1 local email/password identity or a future Google identity; it is not itself an Organization or API key.
+- **Auth Identity:** a login identity attached to an AIHUB User Account, such as the Phase 1 local email/password identity or a future Google identity; it is not itself an Organization, API key, or username.
+- **Username:** the normalized, unique account identifier owned by an AIHUB User Account; it is separate from the Auth Identity used to authenticate.
 - **User Access JWT:** a short-lived token issued by AIHUB after local credential authentication for user-facing APIs or the Customer Web BFF; it is distinct from `X-API-Key`, User Assertions, and internal downstream JWTs.
 - **Refresh Token:** a renewable login credential paired with a User Access JWT; it can be rotated and revoked without changing the user account or API key.
 - **Customer Organization:** the tenant concept in the Customer Web. During the invite-only sandbox MVP, all invited Customer Users belong to one Customer Organization mapped to the dedicated sandbox AIHUB Organization.
@@ -20,7 +21,8 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Clerk:** the selected Managed IdP for the existing Customer Web sandbox; it owns that sandbox's passwordless sign-in, invitations, organization membership, and session lifecycle.
 - **Invite-only membership:** access granted by an operator to a known user; it remains the sandbox membership path, while local account registration does not grant Organization access.
 - **Organization Membership:** the explicit relationship that grants an AIHUB User Account access to an Organization; it is separate from account registration and API-key issuance.
-- **Email Verification:** proof that a User Account controls its registered email address; an unverified local account cannot complete login.
+- **Email Verification:** proof that a User Account controls its registered email address; an unverified local account cannot complete login. Its opaque one-time verification token is invalidated when a newer token is issued.
+- **Verification Token:** an opaque, single-use proof used by an Email Verification flow; only its hash is durable and the raw value is never logged or returned by an API response.
 - **Password Recovery:** a time-limited proof-of-control flow that lets a User Account replace its local password without exposing the existing password.
 - **Local Account Status:** the lifecycle state of a local User Account: pending verification, active, or disabled.
 - **Sandbox User ID:** an opaque deterministic identifier derived from the verified Managed IdP issuer and subject, encoded to AIHUB's `[A-Za-z0-9_-]` boundary; it is never an email address or a browser-supplied value.
@@ -78,7 +80,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - Registration creates an AIHUB User Account only. It does not create an Organization, membership, or API key; access to an Organization is provisioned separately.
 - Organization Membership is independent of registration, and a User Access JWT does not freeze a single organization because membership can change.
 - Local registration requires email, username, and password, and the account must complete email verification before login succeeds.
-- Local email and username identities are normalized and unique; login uses the normalized email, while username remains a separate account identifier.
+- The local Auth Identity owns the normalized email/password credential, while the User Account owns the normalized unique Username; login uses the normalized email and registration does not grant Organization access.
 - Local Account Status and Organization Membership status are evaluated at authorization time rather than assumed permanently from registration.
 - Login returns a User Access JWT and a Refresh Token. The local credential is one Auth Identity, and future Google sign-in must attach to the same User Account rather than silently creating duplicates.
 - User Access JWTs authenticate user-facing/BFF boundaries; grading routes continue to use the organization API-key and user-assertion boundaries until a separate authorization decision changes them.

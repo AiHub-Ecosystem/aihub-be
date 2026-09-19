@@ -7,6 +7,10 @@ path "secret/data/aihub/staging/ai-writing" {
   capabilities = ["read"]
 }
 
+path "secret/data/aihub/staging/resend" {
+  capabilities = ["read"]
+}
+
 path "secret/data/aihub/staging/seaweedfs" {
   capabilities = ["read"]
 }

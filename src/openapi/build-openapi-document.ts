@@ -13,6 +13,12 @@ import {
   httpStatusForErrorCode,
 } from '../common/errors/error-registry';
 import {
+  RegisterRequestSchema,
+  RegisterResponseSchema,
+  ResendVerificationRequestSchema,
+  VerifyEmailRequestSchema,
+} from '../contracts/auth/local-auth';
+import {
   MintSandboxAssertionRequestSchema,
   MintSandboxAssertionResponseSchema,
 } from '../contracts/sandbox/assertion';
@@ -214,6 +220,84 @@ function operationToPathItem(
 }
 
 const SANDBOX_ASSERTION_PATH = '/v1/sandbox/assertions';
+const AUTH_REGISTER_PATH = '/v1/auth/register';
+const AUTH_VERIFY_PATH = '/v1/auth/verify-email';
+const AUTH_RESEND_PATH = '/v1/auth/resend-verification';
+
+function authErrorResponses(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+  statuses: readonly HttpStatus[],
+): Record<string, unknown> {
+  return Object.fromEntries(
+    statuses.map((status) => [
+      String(status),
+      { $ref: `#/components/responses/Error${status}` },
+    ]),
+  );
+}
+
+function localAuthPathItems(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, Record<string, unknown>> {
+  // Keep auth responses intentionally narrow: these routes do not carry API
+  // key, assertion, downstream, or idempotency behavior.
+  const registerResponses = {
+    '201': {
+      description: 'Account created and pending email verification',
+      content: { 'application/json': { schema: RegisterResponseSchema } },
+    },
+    ...authErrorResponses(groupedErrors, [400, 409, 429, 500, 503]),
+  };
+  const verifyResponses = {
+    '204': { description: 'Email verified' },
+    ...authErrorResponses(groupedErrors, [400, 429, 500]),
+  };
+  const resendResponses = {
+    '202': { description: 'Verification resend accepted' },
+    ...authErrorResponses(groupedErrors, [400, 429, 500]),
+  };
+
+  const operation = (
+    operationId: string,
+    summary: string,
+    schema: TSchema,
+    responses: Record<string, unknown>,
+  ): Record<string, unknown> => ({
+    post: {
+      operationId,
+      summary,
+      'x-identity-scope': 'none',
+      security: [],
+      parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema } },
+      },
+      responses,
+    },
+  });
+
+  return {
+    [AUTH_REGISTER_PATH]: operation(
+      'auth.register',
+      'Register a local AIHUB account',
+      RegisterRequestSchema,
+      registerResponses,
+    ),
+    [AUTH_VERIFY_PATH]: operation(
+      'auth.verify_email',
+      'Verify a local account email address',
+      VerifyEmailRequestSchema,
+      verifyResponses,
+    ),
+    [AUTH_RESEND_PATH]: operation(
+      'auth.resend_verification',
+      'Request a verification email resend',
+      ResendVerificationRequestSchema,
+      resendResponses,
+    ),
+  };
+}
 
 /**
  * Described by hand rather than from `OPERATION_CATALOG`, because it is not a
@@ -299,6 +383,7 @@ export function buildOpenApiDocument(version: string): unknown {
   }
 
   paths[SANDBOX_ASSERTION_PATH] = sandboxAssertionPathItem(groupedErrors);
+  Object.assign(paths, localAuthPathItems(groupedErrors));
 
   const errorResponses: Record<string, unknown> = {};
   for (const [status, codes] of groupedErrors) {

@@ -55,6 +55,7 @@ describe('Gateway runtime-secret wiring', () => {
       secretKey: 'snapshot-speaking-secret',
     },
     aiWriting: { token: 'snapshot-writing-token' },
+    resend: { apiKey: 'snapshot-resend-api-key' },
   } as const;
   const fakeProvider: RuntimeSecretProvider = {
     getSnapshot: () => snapshot,

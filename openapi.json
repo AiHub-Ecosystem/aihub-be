@@ -41,7 +41,7 @@
     },
     "responses": {
       "Error400": {
-        "description": "INVALID_REQUEST",
+        "description": "INVALID_REQUEST | AUTH_VERIFICATION_TOKEN_INVALID",
         "content": {
           "application/json": {
             "schema": {
@@ -55,8 +55,16 @@
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
                     "code": {
-                      "const": "INVALID_REQUEST",
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "const": "INVALID_REQUEST",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AUTH_VERIFICATION_TOKEN_INVALID",
+                          "type": "string"
+                        }
+                      ]
                     },
                     "message": {
                       "type": "string"
@@ -233,7 +241,7 @@
         }
       },
       "Error409": {
-        "description": "IDEMPOTENCY_CONFLICT",
+        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE",
         "content": {
           "application/json": {
             "schema": {
@@ -247,8 +255,16 @@
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
                     "code": {
-                      "const": "IDEMPOTENCY_CONFLICT",
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "const": "IDEMPOTENCY_CONFLICT",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AUTH_IDENTITY_UNAVAILABLE",
+                          "type": "string"
+                        }
+                      ]
                     },
                     "message": {
                       "type": "string"
@@ -468,7 +484,7 @@
         }
       },
       "Error503": {
-        "description": "IDENTITY_PROVIDER_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
+        "description": "IDENTITY_PROVIDER_UNAVAILABLE | AUTH_EMAIL_DELIVERY_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
         "content": {
           "application/json": {
             "schema": {
@@ -485,6 +501,10 @@
                       "anyOf": [
                         {
                           "const": "IDENTITY_PROVIDER_UNAVAILABLE",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AUTH_EMAIL_DELIVERY_UNAVAILABLE",
                           "type": "string"
                         },
                         {
@@ -2714,6 +2734,196 @@
           },
           "504": {
             "$ref": "#/components/responses/Error504"
+          }
+        }
+      }
+    },
+    "/v1/auth/register": {
+      "post": {
+        "operationId": "auth.register",
+        "summary": "Register a local AIHUB account",
+        "x-identity-scope": "none",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["email", "username", "password"],
+                "properties": {
+                  "email": {
+                    "minLength": 1,
+                    "maxLength": 320,
+                    "type": "string"
+                  },
+                  "username": {
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "type": "string"
+                  },
+                  "password": {
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Account created and pending email verification",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": ["email", "username", "status"],
+                      "properties": {
+                        "email": {
+                          "type": "string"
+                        },
+                        "username": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": "pending_verification",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/v1/auth/verify-email": {
+      "post": {
+        "operationId": "auth.verify_email",
+        "summary": "Verify a local account email address",
+        "x-identity-scope": "none",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": {
+                    "minLength": 1,
+                    "maxLength": 512,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Email verified"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
+    "/v1/auth/resend-verification": {
+      "post": {
+        "operationId": "auth.resend_verification",
+        "summary": "Request a verification email resend",
+        "x-identity-scope": "none",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["email"],
+                "properties": {
+                  "email": {
+                    "minLength": 1,
+                    "maxLength": 320,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Verification resend accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
           }
         }
       }

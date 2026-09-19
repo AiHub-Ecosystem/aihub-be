@@ -7,6 +7,7 @@ import {
 const speakingClient = 'speaking-client';
 const speakingSecret = 'speaking-secret';
 const writingToken = 'writing-token';
+const resendApiKey = 'resend-api-key';
 
 function options(
   overrides: Partial<RuntimeSecretProviderOptions> = {},
@@ -19,6 +20,7 @@ function options(
       DOWNSTREAM_AI_SPEAKING_CLIENT_ID: speakingClient,
       DOWNSTREAM_AI_SPEAKING_SECRET_KEY: speakingSecret,
       DOWNSTREAM_AI_WRITING_TOKEN: writingToken,
+      RESEND_API_KEY: resendApiKey,
     },
     ...overrides,
   };
@@ -34,6 +36,7 @@ describe('ConfiguredRuntimeSecretProvider', () => {
         secretKey: speakingSecret,
       },
       aiWriting: { token: writingToken },
+      resend: { apiKey: resendApiKey },
     });
   });
 
@@ -44,6 +47,7 @@ describe('ConfiguredRuntimeSecretProvider', () => {
         secret_key: speakingSecret,
       },
       'ai-writing': { token: writingToken },
+      resend: { api_key: resendApiKey },
       seaweedfs: {
         access_key_id: 'storage-access',
         secret_access_key: 'storage-secret',
@@ -65,6 +69,7 @@ describe('ConfiguredRuntimeSecretProvider', () => {
         secretKey: speakingSecret,
       },
       aiWriting: { token: writingToken },
+      resend: { apiKey: resendApiKey },
       seaweedfs: {
         accessKeyId: 'storage-access',
         secretAccessKey: 'storage-secret',
@@ -108,6 +113,7 @@ describe('ConfiguredRuntimeSecretProvider', () => {
         secretKey: speakingSecret,
       },
       aiWriting: { token: writingToken },
+      resend: { apiKey: resendApiKey },
     });
   });
 
@@ -141,6 +147,7 @@ describe('ConfiguredRuntimeSecretProvider', () => {
                   leaked: 'unexpected',
                 },
                 'ai-writing': { token: writingToken },
+                resend: { api_key: resendApiKey },
               }),
           }),
         ),
@@ -159,6 +166,7 @@ describe('ConfiguredRuntimeSecretProvider', () => {
                   secret_key: speakingSecret,
                 },
                 'ai-writing': { token: writingToken },
+                resend: { api_key: resendApiKey },
                 extra: { value: 'unexpected' },
               }),
           }),
@@ -258,6 +266,7 @@ describe('ConfiguredRuntimeSecretProvider', () => {
               DOWNSTREAM_AI_SPEAKING_CLIENT_ID: speakingClient,
               DOWNSTREAM_AI_SPEAKING_SECRET_KEY: speakingSecret,
               DOWNSTREAM_AI_WRITING_TOKEN: writingToken,
+              RESEND_API_KEY: resendApiKey,
               SEAWEEDFS_ACCESS_KEY_ID: 'storage-access',
             },
           }),

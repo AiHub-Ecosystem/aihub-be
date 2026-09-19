@@ -88,6 +88,20 @@ describe('buildPostmanCollection', () => {
     expect(names).toContain('apiKey');
   });
 
+  it('includes unauthenticated local-auth requests from the OpenAPI contract', async () => {
+    const collection = await build();
+    const items = collection.item as readonly PostmanItemGroup[];
+    const names = items.map((item) => item.name);
+
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'Register a local AIHUB account',
+        'Verify a local account email address',
+        'Request a verification email resend',
+      ]),
+    );
+  });
+
   it('has exactly 16 D1 handover test cases (2 happy-path sub-cases + items 2-15)', async () => {
     const collection = await build();
     const folder = findD1Folder(collection);

@@ -11,6 +11,7 @@ function provider(
     getSnapshot: (): RuntimeSecretSnapshot => ({
       aiSpeaking: { clientId: 'client', secretKey: 'secret' },
       aiWriting: { token: 'token' },
+      resend: { apiKey: 'resend-api-key' },
       ...(seaweedfs === undefined ? {} : { seaweedfs }),
     }),
   };

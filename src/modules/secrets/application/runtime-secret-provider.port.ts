@@ -12,9 +12,14 @@ export interface SeaweedFsRuntimeSecrets {
   readonly secretAccessKey: string;
 }
 
+export interface ResendRuntimeSecrets {
+  readonly apiKey: string;
+}
+
 export interface RuntimeSecretSnapshot {
   readonly aiSpeaking: AiSpeakingRuntimeSecrets;
   readonly aiWriting: AiWritingRuntimeSecrets;
+  readonly resend: ResendRuntimeSecrets;
   readonly seaweedfs?: SeaweedFsRuntimeSecrets;
 }
 

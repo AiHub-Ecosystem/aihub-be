@@ -9,6 +9,7 @@ interface OpenApiOperation {
     readonly content: Record<string, { readonly schema: unknown }>;
   };
   readonly responses: Record<string, unknown>;
+  readonly security?: readonly Record<string, readonly string[]>[];
   // Optional because the sandbox mint route carries no scope: it is not a
   // catalogued operation and has nothing to authorize against.
   readonly 'x-required-scope'?: string;
@@ -30,6 +31,16 @@ interface OpenApiDocument {
 
 const SANDBOX_MINT_PATH = '/v1/sandbox/assertions';
 const SANDBOX_MINT_OPERATION_ID = 'sandbox.assertions.mint';
+const AUTH_PATHS = [
+  '/v1/auth/register',
+  '/v1/auth/verify-email',
+  '/v1/auth/resend-verification',
+] as const;
+const AUTH_OPERATION_IDS = [
+  'auth.register',
+  'auth.verify_email',
+  'auth.resend_verification',
+] as const;
 
 function build(): OpenApiDocument {
   return buildOpenApiDocument('0.0.0-test') as OpenApiDocument;
@@ -44,16 +55,19 @@ describe('buildOpenApiDocument', () => {
     const doc = build();
     const operationIds = Object.values(doc.paths)
       .map((item) => item.post.operationId)
-      .filter((operationId) => operationId !== SANDBOX_MINT_OPERATION_ID);
+      .filter(
+        (operationId) =>
+          operationId !== SANDBOX_MINT_OPERATION_ID &&
+          !AUTH_OPERATION_IDS.includes(
+            operationId as (typeof AUTH_OPERATION_IDS)[number],
+          ),
+      );
 
     expect(operationIds.sort()).toEqual([...OPERATION_IDS].sort());
     expect(operationIds).toHaveLength(OPERATION_IDS.length);
   });
 
-  // The filter above would hide a second hand-written path as easily as it
-  // hides the intended one, so name the exception rather than only excluding
-  // it. Anything else off-catalog fails here.
-  it('publishes exactly one path that does not come from the catalog', () => {
+  it('publishes the explicit sandbox and local-auth paths off the catalog', () => {
     const doc = build();
     const catalogued = new Set<string>(
       OPERATION_IDS.map((operationId) => OPERATION_CATALOG[operationId].path),
@@ -61,10 +75,26 @@ describe('buildOpenApiDocument', () => {
 
     expect(
       Object.keys(doc.paths).filter((path) => !catalogued.has(path)),
-    ).toEqual([SANDBOX_MINT_PATH]);
+    ).toEqual([SANDBOX_MINT_PATH, ...AUTH_PATHS]);
     expect(doc.paths[SANDBOX_MINT_PATH]?.post.operationId).toBe(
       SANDBOX_MINT_OPERATION_ID,
     );
+  });
+
+  it('documents local auth as unauthenticated and keeps token/password fields out of responses', () => {
+    const doc = build();
+    const register = doc.paths['/v1/auth/register']?.post;
+    const verify = doc.paths['/v1/auth/verify-email']?.post;
+    const resend = doc.paths['/v1/auth/resend-verification']?.post;
+
+    expect(register?.security).toEqual([]);
+    expect(register?.responses['201']).toBeDefined();
+    expect(verify?.responses['204']).toBeDefined();
+    expect(resend?.responses['202']).toBeDefined();
+    expect(JSON.stringify(register?.responses['201'])).not.toContain(
+      'password',
+    );
+    expect(JSON.stringify(register?.responses['201'])).not.toContain('token');
   });
 
   it('mints without an assertion, because issuing one is what it does', () => {

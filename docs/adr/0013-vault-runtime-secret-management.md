@@ -28,15 +28,18 @@ The terms used here are deliberate:
 
 When the Vault adoption trigger is met, implement the following boundary:
 
-1. **Scope:** move AI Speaking credentials, AI Writing credentials, and
-   SeaweedFS credentials first. Database and Redis credentials remain a later
-   decision. API-key hashes and other control-plane records stay in Postgres.
+1. **Scope:** move AI Speaking credentials, AI Writing credentials, SeaweedFS
+   credentials, and the Resend email-provider API key first. Database and Redis
+   credentials remain a later decision. API-key hashes, local-auth identity
+   records, password hashes, verification-token hashes, and other control-plane
+   records stay in Postgres.
 2. **Storage:** use the existing KV v2 mount with these paths:
 
    ```text
    secret/aihub/{environment}/ai-speaking
    secret/aihub/{environment}/ai-writing
    secret/aihub/{environment}/seaweedfs
+   secret/aihub/{environment}/resend
    ```
 
    Use flat, stable keys for credentials. Provider URLs, bucket names, and
