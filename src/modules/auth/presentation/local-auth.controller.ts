@@ -1,9 +1,19 @@
-import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Header,
+  HttpCode,
+  Inject,
+  Post,
+  Req,
+} from '@nestjs/common';
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyRequest } from 'fastify';
 
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
+  type LoginRequest,
+  LoginRequestSchema,
   type RegisterRequest,
   RegisterRequestSchema,
   type ResendVerificationRequest,
@@ -21,6 +31,15 @@ interface RegisterEnvelope {
     readonly email: string;
     readonly username: string;
     readonly status: 'pending_verification';
+  };
+  readonly meta: { readonly request_id: string };
+}
+
+interface LoginEnvelope {
+  readonly data: {
+    readonly access_token: string;
+    readonly token_type: 'Bearer';
+    readonly expires_in: number;
   };
   readonly meta: { readonly request_id: string };
 }
@@ -60,6 +79,25 @@ export class LocalAuthController {
     const result = await this.service.register(input, requestIp(request));
     return {
       data: result,
+      meta: { request_id: String(request.id) },
+    };
+  }
+
+  @Post('login')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  async login(
+    @Req() request: FastifyRequest,
+    @Body() body: unknown,
+  ): Promise<LoginEnvelope> {
+    const input = parseBody<LoginRequest>(LoginRequestSchema, body);
+    const result = await this.service.login(input, requestIp(request));
+    return {
+      data: {
+        access_token: result.accessToken,
+        token_type: 'Bearer',
+        expires_in: result.expiresIn,
+      },
       meta: { request_id: String(request.id) },
     };
   }

@@ -8,6 +8,7 @@ import type {
   RuntimeSecretProvider,
   RuntimeSecretSnapshot,
   SeaweedFsRuntimeSecrets,
+  UserAccessJwtRuntimeSecrets,
 } from '../application/runtime-secret-provider.port';
 
 type RuntimeSecretSource = 'env' | 'agent-file';
@@ -119,9 +120,22 @@ function loadFromEnvironment(
   const resend: ResendRuntimeSecrets = {
     apiKey: getRequired('RESEND_API_KEY', 'Resend API key'),
   };
+  const userAccessJwt: UserAccessJwtRuntimeSecrets = {
+    privateKeyPem: getRequired(
+      'AIHUB_USER_ACCESS_JWT_PRIVATE_KEY',
+      'User Access JWT private key',
+    ),
+    keyId: getRequired('AIHUB_USER_ACCESS_JWT_KID', 'User Access JWT key id'),
+  };
 
   const seaweedfs = loadOptionalSeaweedFs(options.values);
-  return freezeSnapshot(aiSpeaking, aiWriting, resend, seaweedfs);
+  return freezeSnapshot(
+    aiSpeaking,
+    aiWriting,
+    resend,
+    userAccessJwt,
+    seaweedfs,
+  );
 }
 
 function loadFromAgentFile(
@@ -149,7 +163,7 @@ function loadFromAgentFile(
   const root = asRecord(parsed, 'runtime secret document');
   assertAllowedKeys(
     root,
-    ['ai-speaking', 'ai-writing', 'resend', 'seaweedfs'],
+    ['ai-speaking', 'ai-writing', 'resend', 'user-access-jwt', 'seaweedfs'],
     'runtime secret document',
   );
   const aiSpeakingRecord = asRecord(
@@ -191,6 +205,28 @@ function loadFromAgentFile(
     apiKey: requiredRecordString(resendRecord, 'api_key', 'Resend API key'),
   };
 
+  const userAccessJwtRecord = asRecord(
+    root['user-access-jwt'],
+    'User Access JWT runtime secret bundle',
+  );
+  assertAllowedKeys(
+    userAccessJwtRecord,
+    ['private_key_pem', 'key_id'],
+    'User Access JWT runtime secret bundle',
+  );
+  const userAccessJwt: UserAccessJwtRuntimeSecrets = {
+    privateKeyPem: requiredRecordString(
+      userAccessJwtRecord,
+      'private_key_pem',
+      'User Access JWT private key',
+    ),
+    keyId: requiredRecordString(
+      userAccessJwtRecord,
+      'key_id',
+      'User Access JWT key id',
+    ),
+  };
+
   const seaweedfsValue = root.seaweedfs;
   const seaweedfs =
     seaweedfsValue === undefined
@@ -205,7 +241,13 @@ function loadFromAgentFile(
       'SeaweedFS runtime secret bundle',
     );
   }
-  return freezeSnapshot(aiSpeaking, aiWriting, resend, seaweedfs);
+  return freezeSnapshot(
+    aiSpeaking,
+    aiWriting,
+    resend,
+    userAccessJwt,
+    seaweedfs,
+  );
 }
 
 function loadOptionalSeaweedFs(
@@ -277,12 +319,14 @@ function freezeSnapshot(
   aiSpeaking: AiSpeakingRuntimeSecrets,
   aiWriting: AiWritingRuntimeSecrets,
   resend: ResendRuntimeSecrets,
+  userAccessJwt: UserAccessJwtRuntimeSecrets,
   seaweedfs: SeaweedFsRuntimeSecrets | undefined,
 ): RuntimeSecretSnapshot {
   const snapshot = {
     aiSpeaking: Object.freeze(aiSpeaking),
     aiWriting: Object.freeze(aiWriting),
     resend: Object.freeze(resend),
+    userAccessJwt: Object.freeze(userAccessJwt),
     ...(seaweedfs === undefined ? {} : { seaweedfs: Object.freeze(seaweedfs) }),
   };
   return Object.freeze(snapshot);

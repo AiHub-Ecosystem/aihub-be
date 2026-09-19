@@ -3,6 +3,7 @@ import { ulid } from 'ulid';
 import {
   AuthIdentityConflictError,
   type LocalAuthRepositoryPort,
+  type LoginIdentity,
   type RegisterLocalAccountInput,
   type ResendVerificationTarget,
 } from '../application/local-auth-repository.port';
@@ -171,6 +172,57 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
       );
       return activated.length > 0;
     });
+  }
+
+  async findLoginIdentityByEmail(
+    email: string,
+  ): Promise<LoginIdentity | undefined> {
+    const rows = await this.client.query(
+      `
+        SELECT ua.id, ua.status, ai.password_hash
+        FROM user_accounts ua
+        JOIN auth_identities ai ON ai.user_account_id = ua.id
+        WHERE ai.provider = 'password' AND ai.canonical_email = $1
+      `,
+      [email],
+    );
+    const row = rows[0];
+    if (row === undefined) {
+      return undefined;
+    }
+    if (
+      typeof row.id !== 'string' ||
+      typeof row.password_hash !== 'string' ||
+      (row.status !== 'pending_verification' &&
+        row.status !== 'active' &&
+        row.status !== 'disabled')
+    ) {
+      throw new Error('local auth identity projection is invalid');
+    }
+    return {
+      userId: row.id,
+      passwordHash: row.password_hash,
+      status: row.status,
+    };
+  }
+
+  async findUserAccountStatus(userId: string) {
+    const rows = await this.client.query(
+      'SELECT status FROM user_accounts WHERE id = $1',
+      [userId],
+    );
+    const status = rows[0]?.status;
+    if (status === undefined) {
+      return undefined;
+    }
+    if (
+      status !== 'pending_verification' &&
+      status !== 'active' &&
+      status !== 'disabled'
+    ) {
+      throw new Error('local account status projection is invalid');
+    }
+    return status;
   }
 
   async close(): Promise<void> {

@@ -27,6 +27,34 @@ export type ResendVerificationRequest = Static<
   typeof ResendVerificationRequestSchema
 >;
 
+export const LoginRequestSchema = Type.Object(
+  {
+    email: Type.String({ minLength: 1, maxLength: 320 }),
+    password: Type.String({ minLength: 1, maxLength: 256 }),
+  },
+  { additionalProperties: false },
+);
+
+export type LoginRequest = Static<typeof LoginRequestSchema>;
+
+export const LoginResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        access_token: Type.String({ minLength: 1 }),
+        token_type: Type.Literal('Bearer'),
+        expires_in: Type.Literal(900),
+      },
+      { additionalProperties: false },
+    ),
+    meta: Type.Object(
+      { request_id: Type.String({ minLength: 1 }) },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
 export const RegisterResponseSchema = Type.Object(
   {
     data: Type.Object({

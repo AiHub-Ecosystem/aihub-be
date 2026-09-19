@@ -1,4 +1,7 @@
-import type { RegisterRequest } from '../../../contracts/auth/local-auth';
+import type {
+  LoginRequest,
+  RegisterRequest,
+} from '../../../contracts/auth/local-auth';
 
 export interface LocalAuthServicePort {
   register(
@@ -11,6 +14,10 @@ export interface LocalAuthServicePort {
   }>;
   verify(token: string, ip: string): Promise<void>;
   resend(email: string, ip: string): Promise<void>;
+  login(
+    input: LoginRequest,
+    ip: string,
+  ): Promise<{ readonly accessToken: string; readonly expiresIn: number }>;
 }
 
 export const LOCAL_AUTH_SERVICE = Symbol('LOCAL_AUTH_SERVICE');

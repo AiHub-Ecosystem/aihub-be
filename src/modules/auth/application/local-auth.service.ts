@@ -6,6 +6,7 @@ import {
   type NormalizedRegistration,
   type RegistrationInput,
   normalizeEmail,
+  normalizeLogin,
   normalizeRegistration,
 } from '../domain/local-auth';
 import {
@@ -23,11 +24,21 @@ import {
   type PasswordHasherPort,
 } from './password-hasher.port';
 import {
+  USER_ACCESS_TOKEN_ISSUER,
+  type UserAccessTokenIssuerPort,
+} from './user-access-token.port';
+import {
   VERIFICATION_TOKEN,
   type VerificationTokenPort,
 } from './verification-token.port';
 
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+const LOGIN_IP_LIMIT = 20;
+const LOGIN_IP_WINDOW_MS = 5 * 60 * 1000;
+const LOGIN_EMAIL_LIMIT = 5;
+const LOGIN_EMAIL_WINDOW_MS = 15 * 60 * 1000;
+const DUMMY_PASSWORD_HASH =
+  '$argon2id$v=19$m=65536,t=3,p=1$SoHl8YUBzXgiAZ4xlgNZyg$qwZIFOa2OcIOgiHLRYImWLsza4k9/T4ZZvvhiWrD41k';
 
 export interface RegisteredLocalAccount {
   readonly email: string;
@@ -54,6 +65,8 @@ export class LocalAuthService {
     private readonly emailSender: EmailSenderPort,
     @Inject(AUTH_RATE_LIMITER)
     private readonly rateLimiter: AuthRateLimiterPort,
+    @Inject(USER_ACCESS_TOKEN_ISSUER)
+    private readonly accessTokenIssuer: UserAccessTokenIssuerPort,
   ) {
     this.clock = { now: () => new Date() };
   }
@@ -197,6 +210,56 @@ export class LocalAuthService {
     } catch {
       // The next generic resend can recover delivery without exposing state.
     }
+  }
+
+  async login(
+    input: { readonly email: string; readonly password: string },
+    ip: string,
+  ): Promise<{ readonly accessToken: string; readonly expiresIn: number }> {
+    let normalized: { readonly email: string; readonly password: string };
+    try {
+      normalized = normalizeLogin(input);
+    } catch (error) {
+      throw invalidRequest(error);
+    }
+
+    const identity = await this.repository.findLoginIdentityByEmail(
+      normalized.email,
+    );
+    const passwordHash = identity?.passwordHash ?? DUMMY_PASSWORD_HASH;
+    const passwordMatches = await this.passwordHasher.verify(
+      normalized.password,
+      passwordHash,
+    );
+
+    if (
+      identity === undefined ||
+      !passwordMatches ||
+      identity.status !== 'active'
+    ) {
+      await this.enforceRateLimits([
+        {
+          scope: 'login_ip',
+          key: ip,
+          limit: LOGIN_IP_LIMIT,
+          windowMs: LOGIN_IP_WINDOW_MS,
+        },
+        {
+          scope: 'login_email',
+          key: normalized.email,
+          limit: LOGIN_EMAIL_LIMIT,
+          windowMs: LOGIN_EMAIL_WINDOW_MS,
+        },
+      ]);
+      throw new AppError({
+        code: 'AUTH_CREDENTIALS_INVALID',
+        message: 'Email or password is invalid',
+        retryable: false,
+      });
+    }
+
+    const issued = await this.accessTokenIssuer.issue(identity.userId);
+    return { accessToken: issued.token, expiresIn: issued.expiresIn };
   }
 
   private async enforceRateLimits(

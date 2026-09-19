@@ -14,6 +14,12 @@ export interface ResendVerificationTarget {
   readonly email: string;
 }
 
+export interface LoginIdentity {
+  readonly userId: string;
+  readonly passwordHash: string;
+  readonly status: LocalAccountStatus;
+}
+
 export interface LocalAuthRepositoryPort {
   register(input: RegisterLocalAccountInput): Promise<void>;
   rotateVerificationToken(input: {
@@ -27,6 +33,10 @@ export interface LocalAuthRepositoryPort {
     readonly tokenHash: string;
     readonly now: Date;
   }): Promise<boolean>;
+  findLoginIdentityByEmail(email: string): Promise<LoginIdentity | undefined>;
+  findUserAccountStatus(
+    userId: string,
+  ): Promise<LocalAccountStatus | undefined>;
 }
 
 export class AuthIdentityConflictError extends Error {

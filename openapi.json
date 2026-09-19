@@ -16,6 +16,12 @@
         "in": "header",
         "name": "X-API-Key",
         "description": "Organization credential. Identifies the organization; does not identify an individual end user."
+      },
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "User Access JWT for protected user-facing routes."
       }
     },
     "parameters": {
@@ -92,7 +98,7 @@
         }
       },
       "Error401": {
-        "description": "UNAUTHORIZED | USER_ASSERTION_REQUIRED | INVALID_USER_ASSERTION",
+        "description": "UNAUTHORIZED | USER_ASSERTION_REQUIRED | INVALID_USER_ASSERTION | AUTH_CREDENTIALS_INVALID | AUTH_USER_ACCESS_TOKEN_REQUIRED | AUTH_USER_ACCESS_TOKEN_INVALID",
         "content": {
           "application/json": {
             "schema": {
@@ -117,6 +123,18 @@
                         },
                         {
                           "const": "INVALID_USER_ASSERTION",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AUTH_CREDENTIALS_INVALID",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AUTH_USER_ACCESS_TOKEN_REQUIRED",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AUTH_USER_ACCESS_TOKEN_INVALID",
                           "type": "string"
                         }
                       ]
@@ -2832,6 +2850,109 @@
           },
           "503": {
             "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/v1/auth/login": {
+      "post": {
+        "operationId": "auth.login",
+        "summary": "Issue a User Access JWT",
+        "x-identity-scope": "none",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": {
+                    "minLength": 1,
+                    "maxLength": 320,
+                    "type": "string"
+                  },
+                  "password": {
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access token issued",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["access_token", "token_type", "expires_in"],
+                      "properties": {
+                        "access_token": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "token_type": {
+                          "const": "Bearer",
+                          "type": "string"
+                        },
+                        "expires_in": {
+                          "const": 900,
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
           }
         }
       }

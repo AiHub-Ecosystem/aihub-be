@@ -13,6 +13,8 @@ import {
   httpStatusForErrorCode,
 } from '../common/errors/error-registry';
 import {
+  LoginRequestSchema,
+  LoginResponseSchema,
   RegisterRequestSchema,
   RegisterResponseSchema,
   ResendVerificationRequestSchema,
@@ -221,6 +223,7 @@ function operationToPathItem(
 
 const SANDBOX_ASSERTION_PATH = '/v1/sandbox/assertions';
 const AUTH_REGISTER_PATH = '/v1/auth/register';
+const AUTH_LOGIN_PATH = '/v1/auth/login';
 const AUTH_VERIFY_PATH = '/v1/auth/verify-email';
 const AUTH_RESEND_PATH = '/v1/auth/resend-verification';
 
@@ -247,6 +250,18 @@ function localAuthPathItems(
       content: { 'application/json': { schema: RegisterResponseSchema } },
     },
     ...authErrorResponses(groupedErrors, [400, 409, 429, 500, 503]),
+  };
+  const loginResponses = {
+    '200': {
+      description: 'Access token issued',
+      headers: {
+        'Cache-Control': {
+          schema: { type: 'string', enum: ['no-store'] },
+        },
+      },
+      content: { 'application/json': { schema: LoginResponseSchema } },
+    },
+    ...authErrorResponses(groupedErrors, [400, 401, 429, 500]),
   };
   const verifyResponses = {
     '204': { description: 'Email verified' },
@@ -283,6 +298,12 @@ function localAuthPathItems(
       'Register a local AIHUB account',
       RegisterRequestSchema,
       registerResponses,
+    ),
+    [AUTH_LOGIN_PATH]: operation(
+      'auth.login',
+      'Issue a User Access JWT',
+      LoginRequestSchema,
+      loginResponses,
     ),
     [AUTH_VERIFY_PATH]: operation(
       'auth.verify_email',
@@ -410,6 +431,12 @@ export function buildOpenApiDocument(version: string): unknown {
           name: 'X-API-Key',
           description:
             'Organization credential. Identifies the organization; does not identify an individual end user.',
+        },
+        BearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'User Access JWT for protected user-facing routes.',
         },
       },
       parameters: {

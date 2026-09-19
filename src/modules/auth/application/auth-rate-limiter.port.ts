@@ -3,7 +3,9 @@ export type AuthRateLimitScope =
   | 'register_email'
   | 'resend_ip'
   | 'resend_email'
-  | 'verify_ip';
+  | 'verify_ip'
+  | 'login_ip'
+  | 'login_email';
 
 export interface AuthRateLimiterPort {
   consume(input: {

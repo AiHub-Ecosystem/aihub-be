@@ -20,14 +20,23 @@ import {
 import { LOCAL_AUTH_SERVICE } from './application/local-auth-service.port';
 import { LocalAuthService } from './application/local-auth.service';
 import { PASSWORD_HASHER } from './application/password-hasher.port';
+import {
+  USER_ACCESS_TOKEN_ISSUER,
+  USER_ACCESS_TOKEN_VERIFIER,
+} from './application/user-access-token.port';
 import { VERIFICATION_TOKEN } from './application/verification-token.port';
 import { Argon2PasswordHasher } from './infrastructure/argon2-password.hasher';
 import { CryptoVerificationToken } from './infrastructure/crypto-verification-token';
+import {
+  JoseUserAccessTokenService,
+  USER_ACCESS_TOKEN_CRYPTO,
+} from './infrastructure/jose-user-access-token.service';
 import { createPostgresAuthClient } from './infrastructure/postgres-auth.client';
 import { PostgresLocalAuthRepository } from './infrastructure/postgres-local-auth.repository';
 import { RedisAuthRateLimiter } from './infrastructure/redis-auth-rate-limiter';
 import { ResendEmailSender } from './infrastructure/resend-email.sender';
 import { LocalAuthController } from './presentation/local-auth.controller';
+import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
 
 @Module({
   imports: [SecretsModule],
@@ -58,8 +67,38 @@ import { LocalAuthController } from './presentation/local-auth.controller';
       useFactory: (): AuthRateLimiterPort =>
         new RedisAuthRateLimiter(process.env.REDIS_URL ?? ''),
     },
+    {
+      provide: USER_ACCESS_TOKEN_CRYPTO,
+      useFactory: (
+        provider: RuntimeSecretProvider,
+      ): JoseUserAccessTokenService => {
+        const issuer = process.env.AIHUB_USER_ACCESS_ISSUER?.trim();
+        if (issuer === undefined || issuer.length === 0) {
+          throw new Error('AIHUB_USER_ACCESS_ISSUER is required');
+        }
+        const runtime = provider.getSnapshot().userAccessJwt;
+        return new JoseUserAccessTokenService({
+          privateKeyPem: runtime.privateKeyPem,
+          keyId: runtime.keyId,
+          issuer,
+          audience: 'aihub-user-api',
+          expiresInSeconds: 900,
+          clockSkewSeconds: 60,
+        });
+      },
+      inject: [RUNTIME_SECRET_PROVIDER],
+    },
+    {
+      provide: USER_ACCESS_TOKEN_ISSUER,
+      useExisting: USER_ACCESS_TOKEN_CRYPTO,
+    },
+    {
+      provide: USER_ACCESS_TOKEN_VERIFIER,
+      useExisting: USER_ACCESS_TOKEN_CRYPTO,
+    },
     { provide: LOCAL_AUTH_SERVICE, useClass: LocalAuthService },
+    UserAccessJwtGuard,
   ],
-  exports: [LOCAL_AUTH_SERVICE],
+  exports: [LOCAL_AUTH_SERVICE, USER_ACCESS_TOKEN_VERIFIER, UserAccessJwtGuard],
 })
 export class AuthModule {}

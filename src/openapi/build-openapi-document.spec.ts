@@ -33,11 +33,13 @@ const SANDBOX_MINT_PATH = '/v1/sandbox/assertions';
 const SANDBOX_MINT_OPERATION_ID = 'sandbox.assertions.mint';
 const AUTH_PATHS = [
   '/v1/auth/register',
+  '/v1/auth/login',
   '/v1/auth/verify-email',
   '/v1/auth/resend-verification',
 ] as const;
 const AUTH_OPERATION_IDS = [
   'auth.register',
+  'auth.login',
   'auth.verify_email',
   'auth.resend_verification',
 ] as const;
@@ -84,10 +86,15 @@ describe('buildOpenApiDocument', () => {
   it('documents local auth as unauthenticated and keeps token/password fields out of responses', () => {
     const doc = build();
     const register = doc.paths['/v1/auth/register']?.post;
+    const login = doc.paths['/v1/auth/login']?.post;
     const verify = doc.paths['/v1/auth/verify-email']?.post;
     const resend = doc.paths['/v1/auth/resend-verification']?.post;
 
     expect(register?.security).toEqual([]);
+    expect(login?.security).toEqual([]);
+    expect(login?.responses['200']).toBeDefined();
+    expect(JSON.stringify(login?.responses['200'])).toContain('no-store');
+    expect(JSON.stringify(login?.responses['200'])).not.toContain('password');
     expect(register?.responses['201']).toBeDefined();
     expect(verify?.responses['204']).toBeDefined();
     expect(resend?.responses['202']).toBeDefined();
@@ -217,6 +224,11 @@ describe('buildOpenApiDocument', () => {
       name: 'X-API-Key',
     });
     expect(doc.security).toEqual([{ ApiKeyAuth: [] }]);
+    expect(doc.components.securitySchemes.BearerAuth).toMatchObject({
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+    });
   });
 
   it('documents every error code actually reachable in the current runtime', () => {

@@ -7,10 +7,12 @@ import { PostgresLocalAuthRepository } from './postgres-local-auth.repository';
 class FakeClient implements PostgresAuthClient {
   readonly queries: Array<{ text: string; values: readonly unknown[] }> = [];
   responses: readonly Record<string, unknown>[][] = [];
+  queryResponses: Record<string, unknown>[][] = [];
   failure: unknown;
 
-  async query(): Promise<readonly Record<string, unknown>[]> {
-    return [];
+  async query(text: string, values: readonly unknown[]) {
+    this.queries.push({ text, values });
+    return this.queryResponses.shift() ?? [];
   }
 
   async transaction<T>(
@@ -110,5 +112,42 @@ describe('PostgresLocalAuthRepository', () => {
     ).resolves.toBe(true);
     expect(client.queries[0]?.text).toContain('SET consumed_at');
     expect(client.queries[1]?.text).toContain("SET status = 'active'");
+  });
+
+  it('projects the password identity without returning profile fields', async () => {
+    const client = new FakeClient();
+    client.queryResponses = [
+      [
+        {
+          id: 'usr_01J00000000000000000000000',
+          status: 'active',
+          password_hash: input.passwordHash,
+        },
+      ],
+    ];
+
+    await expect(
+      new PostgresLocalAuthRepository(client).findLoginIdentityByEmail(
+        input.email,
+      ),
+    ).resolves.toEqual({
+      userId: 'usr_01J00000000000000000000000',
+      status: 'active',
+      passwordHash: input.passwordHash,
+    });
+    expect(client.queries[0]?.text).toContain('JOIN auth_identities');
+    expect(client.queries[0]?.text).toContain("ai.provider = 'password'");
+    expect(JSON.stringify(client.queries[0])).not.toContain('username');
+  });
+
+  it('reads durable account status for bearer authorization', async () => {
+    const client = new FakeClient();
+    client.queryResponses = [[{ status: 'disabled' }]];
+
+    await expect(
+      new PostgresLocalAuthRepository(client).findUserAccountStatus(
+        'usr_01J00000000000000000000000',
+      ),
+    ).resolves.toBe('disabled');
   });
 });

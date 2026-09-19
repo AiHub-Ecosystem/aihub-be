@@ -13,9 +13,10 @@ secret/aihub/{environment}/ai-speaking
 secret/aihub/{environment}/ai-writing
 secret/aihub/{environment}/seaweedfs
 secret/aihub/{environment}/resend
+secret/aihub/{environment}/user-access-jwt
 ```
 
-All four bundles are part of the V1 runtime-secret document. The Speaking
+All five bundles are part of the V1 runtime-secret document. The Speaking
 question catalog uses the SeaweedFS bundle to create short-lived read URLs for
 the public sample-audio endpoint, and the Resend bundle supplies the
 verification-email provider credential.
@@ -33,7 +34,7 @@ vault policy write aihub-production-runtime ops/vault/policies/aihub-production-
 
 The repository also includes an explicit operator-only provisioning helper. It
 expects a mode-700 directory with `ai-speaking.json`, `ai-writing.json`,
-`seaweedfs.json`, and `resend.json` containing only the flat bundle keys. It passes file paths to
+`seaweedfs.json`, `resend.json`, and `user-access-jwt.json` containing only the flat bundle keys. It passes file paths to
 the Vault CLI, never secret values:
 
 ```powershell
@@ -44,7 +45,7 @@ pnpm vault:provision
 ```
 
 The helper writes the selected policy, creates an AppRole with a short token
-TTL and bounded maximum TTL, and writes all four KV bundles. Deliver the Role
+TTL and bounded maximum TTL, and writes all five KV bundles. Deliver the Role
 ID and one-time Secret ID to Vault Agent through the deployment secret channel;
 never commit or paste them into an issue.
 

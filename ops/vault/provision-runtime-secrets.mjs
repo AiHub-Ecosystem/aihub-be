@@ -108,6 +108,7 @@ const bundles = [
   ['ai-speaking.json', ['client_id', 'secret_key'], 'ai-speaking'],
   ['ai-writing.json', ['token'], 'ai-writing'],
   ['resend.json', ['api_key'], 'resend'],
+  ['user-access-jwt.json', ['private_key_pem', 'key_id'], 'user-access-jwt'],
   ['seaweedfs.json', ['access_key_id', 'secret_access_key'], 'seaweedfs'],
 ];
 
@@ -120,5 +121,5 @@ for (const [fileName, keys, bundleName] of bundles) {
 }
 
 console.log(
-  `Vault provisioning completed for ${environment}: policy, AppRole, and four KV bundles updated`,
+  `Vault provisioning completed for ${environment}: policy, AppRole, and five KV bundles updated`,
 );

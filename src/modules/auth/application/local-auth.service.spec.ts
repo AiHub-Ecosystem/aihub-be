@@ -5,10 +5,15 @@ import type {
 } from './email-sender.port';
 import type {
   LocalAuthRepositoryPort,
+  LoginIdentity,
   ResendVerificationTarget,
 } from './local-auth-repository.port';
 import { LocalAuthService } from './local-auth.service';
 import type { PasswordHasherPort } from './password-hasher.port';
+import type {
+  IssuedUserAccessToken,
+  UserAccessTokenIssuerPort,
+} from './user-access-token.port';
 import type {
   IssuedVerificationToken,
   VerificationTokenPort,
@@ -20,6 +25,14 @@ class FakeRepository implements LocalAuthRepositoryPort {
     email: 'person@example.com',
   };
   consumed = true;
+  loginIdentity: LoginIdentity | undefined = {
+    userId: 'usr_01J00000000000000000000000',
+    passwordHash: 'argon2:correct horse battery',
+    status: 'active' as const,
+  };
+  statusByUserId = new Map([
+    ['usr_01J00000000000000000000000', 'active' as const],
+  ]);
 
   async register(input: unknown): Promise<void> {
     this.registered.push(input);
@@ -34,15 +47,27 @@ class FakeRepository implements LocalAuthRepositoryPort {
   async consumeVerificationToken(): Promise<boolean> {
     return this.consumed;
   }
+
+  async findLoginIdentityByEmail() {
+    return this.loginIdentity;
+  }
+
+  async findUserAccountStatus(userId: string) {
+    return this.statusByUserId.get(userId);
+  }
 }
 
 class FakeHasher implements PasswordHasherPort {
+  verified: string[] = [];
+  result = true;
+
   async hash(password: string): Promise<string> {
     return `argon2:${password}`;
   }
 
-  async verify(): Promise<boolean> {
-    return true;
+  async verify(password: string): Promise<boolean> {
+    this.verified.push(password);
+    return this.result;
   }
 }
 
@@ -73,6 +98,15 @@ class FakeSender implements EmailSenderPort {
   }
 }
 
+class FakeAccessTokenIssuer implements UserAccessTokenIssuerPort {
+  async issue(userId: string): Promise<IssuedUserAccessToken> {
+    return {
+      token: `jwt-for-${userId}`,
+      expiresIn: 900,
+    };
+  }
+}
+
 class FakeLimiter implements AuthRateLimiterPort {
   calls: unknown[] = [];
   allowed = true;
@@ -87,14 +121,16 @@ function service() {
   const repository = new FakeRepository();
   const sender = new FakeSender();
   const limiter = new FakeLimiter();
+  const hasher = new FakeHasher();
   const local = new LocalAuthService(
     repository,
-    new FakeHasher(),
+    hasher,
     new FakeTokenIssuer(),
     sender,
     limiter,
+    new FakeAccessTokenIssuer(),
   );
-  return { local, repository, sender, limiter };
+  return { local, repository, sender, limiter, hasher };
 }
 
 describe('LocalAuthService', () => {
@@ -164,5 +200,91 @@ describe('LocalAuthService', () => {
     ).rejects.toMatchObject({
       code: 'AUTH_VERIFICATION_TOKEN_INVALID',
     });
+  });
+
+  it('issues an access token only for an active account and does not count success', async () => {
+    const { local, limiter, hasher } = service();
+
+    await expect(
+      local.login(
+        { email: ' Person@Example.com ', password: '  exact password  ' },
+        '203.0.113.7',
+      ),
+    ).resolves.toEqual({
+      accessToken: 'jwt-for-usr_01J00000000000000000000000',
+      expiresIn: 900,
+    });
+    expect(hasher.verified).toEqual(['  exact password  ']);
+    expect(limiter.calls).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ scope: 'login_ip' }),
+        expect.objectContaining({ scope: 'login_email' }),
+      ]),
+    );
+  });
+
+  it.each([
+    ['unknown email', undefined],
+    [
+      'pending account',
+      {
+        userId: 'usr_pending',
+        passwordHash: 'hash',
+        status: 'pending_verification' as const,
+      },
+    ],
+    [
+      'disabled account',
+      {
+        userId: 'usr_disabled',
+        passwordHash: 'hash',
+        status: 'disabled' as const,
+      },
+    ],
+  ])(
+    'returns one generic credential error for %s',
+    async (_label, identity) => {
+      const { local, repository, limiter, hasher } = service();
+      repository.loginIdentity = identity;
+      hasher.result = false;
+
+      await expect(
+        local.login(
+          { email: 'person@example.com', password: 'wrong password' },
+          '203.0.113.7',
+        ),
+      ).rejects.toMatchObject({
+        code: 'AUTH_CREDENTIALS_INVALID',
+        httpStatus: 401,
+      });
+      expect(hasher.verified).toHaveLength(1);
+      expect(limiter.calls).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            scope: 'login_ip',
+            limit: 20,
+            windowMs: 300000,
+          }),
+          expect.objectContaining({
+            scope: 'login_email',
+            limit: 5,
+            windowMs: 900000,
+          }),
+        ]),
+      );
+    },
+  );
+
+  it('returns a rate-limit error after a failed credential attempt when the limiter denies it', async () => {
+    const { local, limiter, hasher } = service();
+    limiter.allowed = false;
+    hasher.result = false;
+
+    await expect(
+      local.login(
+        { email: 'person@example.com', password: 'wrong password' },
+        '203.0.113.7',
+      ),
+    ).rejects.toMatchObject({ code: 'RATE_LIMITED', httpStatus: 429 });
   });
 });

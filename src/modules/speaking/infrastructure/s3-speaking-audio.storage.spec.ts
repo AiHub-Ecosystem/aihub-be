@@ -12,6 +12,10 @@ function provider(
       aiSpeaking: { clientId: 'client', secretKey: 'secret' },
       aiWriting: { token: 'token' },
       resend: { apiKey: 'resend-api-key' },
+      userAccessJwt: {
+        privateKeyPem: 'private-key',
+        keyId: 'key-id',
+      },
       ...(seaweedfs === undefined ? {} : { seaweedfs }),
     }),
   };

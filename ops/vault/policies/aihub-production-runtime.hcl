@@ -11,6 +11,10 @@ path "secret/data/aihub/production/resend" {
   capabilities = ["read"]
 }
 
+path "secret/data/aihub/production/user-access-jwt" {
+  capabilities = ["read"]
+}
+
 path "secret/data/aihub/production/seaweedfs" {
   capabilities = ["read"]
 }

@@ -14,7 +14,8 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **AIHUB User Account:** a credential-bearing account managed by AIHUB for user-facing access; it is distinct from an Organization and from the existing Customer User term until the Customer Web boundary is migrated.
 - **Auth Identity:** a login identity attached to an AIHUB User Account, such as the Phase 1 local email/password identity or a future Google identity; it is not itself an Organization, API key, or username.
 - **Username:** the normalized, unique account identifier owned by an AIHUB User Account; it is separate from the Auth Identity used to authenticate.
-- **User Access JWT:** a short-lived token issued by AIHUB after local credential authentication for user-facing APIs or the Customer Web BFF; it is distinct from `X-API-Key`, User Assertions, and internal downstream JWTs.
+- **User Access JWT:** a short-lived RS256 token issued by AIHUB after local credential authentication for user-facing APIs or the Customer Web BFF; it is distinct from `X-API-Key`, User Assertions, and internal downstream JWTs, carries the User Account ID as `sub`, and does not carry organization or mutable credential data.
+- **Bearer boundary:** the user-facing authentication boundary that accepts an AIHUB User Access JWT in `Authorization: Bearer`; it is separate from the `X-API-Key` and `X-User-Assertion` grading boundaries.
 - **Refresh Token:** a renewable login credential paired with a User Access JWT; it can be rotated and revoked without changing the user account or API key.
 - **Customer Organization:** the tenant concept in the Customer Web. During the invite-only sandbox MVP, all invited Customer Users belong to one Customer Organization mapped to the dedicated sandbox AIHUB Organization.
 - **Managed IdP:** the external identity provider used by the existing Customer Web sandbox; it is separate from AIHUB's local credential auth and remains a future federation source for AIHUB accounts.
@@ -25,6 +26,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Verification Token:** an opaque, single-use proof used by an Email Verification flow; only its hash is durable and the raw value is never logged or returned by an API response.
 - **Password Recovery:** a time-limited proof-of-control flow that lets a User Account replace its local password without exposing the existing password.
 - **Local Account Status:** the lifecycle state of a local User Account: pending verification, active, or disabled.
+- **Login credential failure:** the deliberately generic result for an unknown email, wrong password, pending-verification account, or disabled account; it does not reveal which account state was observed.
 - **Sandbox User ID:** an opaque deterministic identifier derived from the verified Managed IdP issuer and subject, encoded to AIHUB's `[A-Za-z0-9_-]` boundary; it is never an email address or a browser-supplied value.
 - **Server-side session:** a Customer Web session represented to the browser only by a secure, HttpOnly, same-site cookie; provider access tokens do not live in browser storage.
 - **Sandbox API key:** the single server-held API key for the dedicated sandbox AIHUB Organization; it is used by the Customer Web BFF and is never sent to a browser.
@@ -83,6 +85,15 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - The local Auth Identity owns the normalized email/password credential, while the User Account owns the normalized unique Username; login uses the normalized email and registration does not grant Organization access.
 - Local Account Status and Organization Membership status are evaluated at authorization time rather than assumed permanently from registration.
 - Login returns a User Access JWT and a Refresh Token. The local credential is one Auth Identity, and future Google sign-in must attach to the same User Account rather than silently creating duplicates.
+- The #65 login slice returns only a 15-minute User Access JWT in the shared success envelope; #66 adds the secure Refresh Token cookie and rotation without changing the access-token body contract.
+- User Access JWTs contain exactly `iss`, `aud`, `sub`, `jti`, `iat`, and `exp`; `iss` is the configured canonical AIHUB issuer, `aud` is `aihub-user-api`, and `sub` is the stable `AIHUB User Account` ID, while email, username, organization, membership, scopes, API-key data, and credential state remain outside the token.
+- User Access JWT signing material is a separate RS256 runtime-secret/configuration bundle with a required `kid`; the #65 slice does not publish a JWKS endpoint or reuse sandbox/assertion/internal-JWT keys.
+- User Access JWT verification requires RS256, a non-empty `kid`, exact issuer and audience, bounded `usr_...` subject, integer time claims, a maximum 900-second lifetime, and the shared 60-second clock-skew allowance; `jti` is not persisted for revocation in this slice.
+- A Bearer request must resolve an `active` AIHUB User Account at authorization time; disabling an account invalidates its still-signed access tokens immediately without introducing a token blacklist.
+- Missing and invalid Bearer credentials use separate safe `401` auth errors and a `WWW-Authenticate: Bearer` challenge; cryptographic failure details never enter the public response.
+- An inactive account presented with an otherwise valid User Access JWT maps to the same invalid-Bearer error; no account-state-specific public code is added.
+- The User Access JWT response is `Cache-Control: no-store`; the #65 boundary accepts one compact token from the Bearer header only, never a cookie, query parameter, or duplicate header.
+- Login reads one durable projection of Auth Identity plus its owning User Account (`userId`, status, password hash); organization membership is not part of credential authentication.
 - User Access JWTs authenticate user-facing/BFF boundaries; grading routes continue to use the organization API-key and user-assertion boundaries until a separate authorization decision changes them.
 - Refresh Tokens are renewable credentials with explicit rotation and revocation; they are not interchangeable with API keys or User Access JWTs.
 - During the sandbox MVP, one dedicated sandbox AIHUB Organization serves all invited Customer Users, each with a stable sandbox `user_id`; users cannot switch organizations.
@@ -153,5 +164,6 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - [ADR-0023: Thirteen-month usage retention](docs/adr/0023-thirteen-month-usage-retention.md)
 - [ADR-0020: Invite-only customer-web identity boundary for sandbox MVP](docs/adr/0020-customer-web-identity-boundary.md)
 - [ADR-0021: Customer Web Speaking sandbox boundary](docs/adr/0021-customer-web-speaking-sandbox-boundary.md)
+- [ADR-0022: AIHUB-owned local user authentication](docs/adr/0022-aihub-local-user-authentication.md)
 - [Agent and architecture design](docs/superpowers/specs/2026-09-07-aihub/12-agent-workflow-and-clean-architecture-design.md)
 - [Matt issue workflow](docs/agents/issue-tracker.md)

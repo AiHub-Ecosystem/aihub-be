@@ -50,6 +50,7 @@ if (policies.includes('root') || lookupData.ttl === 0) {
 const requiredPaths = [
   `secret/aihub/${environment}/ai-speaking`,
   `secret/aihub/${environment}/ai-writing`,
+  `secret/aihub/${environment}/user-access-jwt`,
 ];
 
 for (const path of requiredPaths) {

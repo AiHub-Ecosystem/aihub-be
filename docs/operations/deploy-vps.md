@@ -292,7 +292,7 @@ override from the CD command when `agent-file` is ready.
 ## Provision production Vault data (future)
 
 Use the repository helper with the production operator workflow. It writes only the
-four production KV paths and never prints secret values:
+five production KV paths and never prints secret values:
 
 ```sh
 AIHUB_VAULT_PROVISION_ALLOW=true \

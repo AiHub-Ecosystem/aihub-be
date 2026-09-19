@@ -12,6 +12,16 @@ export interface NormalizedRegistration {
   readonly password: string;
 }
 
+export interface LoginInput {
+  readonly email: string;
+  readonly password: string;
+}
+
+export interface NormalizedLogin {
+  readonly email: string;
+  readonly password: string;
+}
+
 export class LocalAuthValidationError extends Error {
   constructor(message = 'local auth input is invalid') {
     super(message);
@@ -53,6 +63,13 @@ export function normalizeRegistration(
   return {
     email: normalizeEmail(input.email),
     username: normalizeUsername(input.username),
+    password: validatePassword(input.password),
+  };
+}
+
+export function normalizeLogin(input: LoginInput): NormalizedLogin {
+  return {
+    email: normalizeEmail(input.email),
     password: validatePassword(input.password),
   };
 }

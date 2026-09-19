@@ -30,8 +30,8 @@ request.
    environment.
 2. Apply the matching policy from `ops/vault/policies/` using an operator
    session. Do not use the AIHUB machine identity for policy administration.
-3. Create the KV v2 bundles (`ai-speaking`, `ai-writing`, `seaweedfs`, and
-   `resend`) with the required keys. Keep values out of source,
+3. Create the KV v2 bundles (`ai-speaking`, `ai-writing`, `seaweedfs`, `resend`,
+   and `user-access-jwt`) with the required keys. Keep values out of source,
    issues, fixtures, CI output, and chat transcripts.
 4. Provision the environment AppRole and configure Vault Agent to render the
    template under the AIHUB service account.
