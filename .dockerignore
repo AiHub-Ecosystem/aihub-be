@@ -14,6 +14,7 @@ scripts/*
 !scripts/cli.mjs
 !scripts/cli-options.cjs
 !scripts/quota-reconcile.cjs
+!scripts/usage-prune.cjs
 !scripts/migrate.mjs
 database/*
 !database/migrations/

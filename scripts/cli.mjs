@@ -32,6 +32,7 @@ import {
   parseTargetMonth,
   runQuotaReconciliation,
 } from './quota-reconcile.cjs';
+import { runUsagePrune } from './usage-prune.cjs';
 
 if (existsSync('.env')) {
   loadEnvFile('.env');
@@ -564,6 +565,16 @@ async function reconcileQuotaCommand(options) {
   });
 }
 
+async function pruneUsageCommand(options) {
+  if (options.size > 0) {
+    usageError();
+  }
+
+  await runUsagePrune({
+    databaseUrl: process.env.DATABASE_URL ?? '',
+  });
+}
+
 async function main() {
   const [command, ...values] = process.argv.slice(2);
   const options = parseOptions(values);
@@ -590,6 +601,10 @@ async function main() {
   }
   if (command === 'quota:reconcile') {
     await reconcileQuotaCommand(options);
+    return;
+  }
+  if (command === 'usage:prune') {
+    await pruneUsageCommand(options);
     return;
   }
 

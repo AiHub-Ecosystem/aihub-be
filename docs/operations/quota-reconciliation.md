@@ -4,6 +4,10 @@ This runbook describes the nightly command that restores Redis quota counters
 from the durable `usage_records` table. Redis is only an admission heuristic;
 the usage table is the billing and audit source of truth.
 
+Usage retention is a separate 02:30 UTC maintenance job; see
+[usage retention](./usage-retention.md). It must not be folded into this
+reconciliation command.
+
 ## Schedule
 
 Run the command once per day at 02:00 UTC from the AIHUB application

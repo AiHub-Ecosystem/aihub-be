@@ -7,8 +7,15 @@ import type {
   UsageRepositoryPort,
 } from '../application/usage-repository.port';
 
+export interface PostgresTransactionClient {
+  query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
+}
+
 export interface PostgresMeteringClient {
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
+  transaction?<T>(
+    callback: (client: PostgresTransactionClient) => Promise<T>,
+  ): Promise<T>;
   close(): Promise<void>;
 }
 
@@ -40,6 +47,38 @@ export function createPostgresMeteringClient(
         ...values,
       ]);
       return result.rows;
+    },
+    async transaction<T>(
+      callback: (client: PostgresTransactionClient) => Promise<T>,
+    ): Promise<T> {
+      const client = await pool.connect();
+      const transactionClient: PostgresTransactionClient = {
+        query: async (
+          text: string,
+          values: readonly unknown[],
+        ): Promise<readonly unknown[]> => {
+          const result = await client.query<Record<string, unknown>>(text, [
+            ...values,
+          ]);
+          return result.rows;
+        },
+      };
+
+      try {
+        await client.query('BEGIN');
+        const result = await callback(transactionClient);
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          // Preserve the original database failure.
+        }
+        throw error;
+      } finally {
+        client.release();
+      }
     },
     close: async () => {
       await pool.end();
@@ -127,7 +166,7 @@ function aggregateNumber(value: unknown, field: string): number {
   return parsed;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 

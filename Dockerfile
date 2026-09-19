@@ -30,7 +30,7 @@ RUN groupadd --system --gid 10001 aihub \
 COPY --from=build --chown=10001:10001 /app/node_modules ./node_modules
 COPY --from=build --chown=10001:10001 /app/dist ./dist
 COPY --from=build --chown=10001:10001 /app/package.json ./package.json
-COPY --from=build --chown=10001:10001 /app/scripts/cli.mjs /app/scripts/cli-options.cjs /app/scripts/quota-reconcile.cjs ./scripts/
+COPY --from=build --chown=10001:10001 /app/scripts/cli.mjs /app/scripts/cli-options.cjs /app/scripts/quota-reconcile.cjs /app/scripts/usage-prune.cjs ./scripts/
 COPY --from=build --chown=10001:10001 /app/scripts/migrate.mjs ./scripts/migrate.mjs
 COPY --from=build --chown=10001:10001 /app/database/migrations ./database/migrations
 

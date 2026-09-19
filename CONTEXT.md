@@ -63,11 +63,16 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Monthly request quota:** the organization-scoped maximum number of billable requests in one UTC calendar month; `null` means unlimited and zero freezes billable work.
 - **Quota counter:** the ephemeral count of billable requests for one organization and UTC month; it gates admission heuristically and is never the durable source of truth.
 - **Quota reconciliation:** the periodic comparison that restores a quota counter from the durable billable request evidence for the same organization and UTC month; the durable evidence wins when the two disagree.
+- **Usage retention:** the rolling 13-calendar-month window for durable metering records, measured from the UTC cutoff used by an operator run; records strictly older than the cutoff are eligible for pruning.
+- **Retention cutoff:** the UTC instant captured for one usage-prune run; records at or after it remain retained, while records strictly before it are eligible.
+- **Usage prune:** the operator maintenance action that removes expired metering records in bounded transactions; it is separate from quota reconciliation and idempotency cleanup.
 - **Usage aggregate:** provider-reported input, output, and total token counts for an operation; AIHUB does not infer or estimate them.
 
 ## Ownership and invariants
 
 - AIHUB owns the control plane: organization identity, API keys, scopes, metering, quota, idempotency, and routing policy.
+- Durable metering records are retained for 13 calendar months across each deployment database; pruning applies to every outcome and never mutates Redis quota counters or idempotency records.
+- Each usage-prune run captures one UTC retention cutoff with calendar month-end clamping; only records strictly before it are eligible, and production/sandbox failures are reported independently.
 - AIHUB owns local credential authentication and User Access JWT issuance; the Customer Web may consume that identity through its BFF. External identity providers remain a future federation path, not part of the local credential flow.
 - The existing sandbox Customer Web and Clerk flow remain in parallel while AIHUB local auth is introduced; this does not silently replace the sandbox identity boundary.
 - Registration creates an AIHUB User Account only. It does not create an Organization, membership, or API key; access to an Organization is provisioned separately.
@@ -143,6 +148,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - [ADR-0014: AI Speaking D2 contract boundary and evidence](docs/adr/0014-ai-speaking-d2-contract-boundary.md)
 - [Spec index](docs/superpowers/specs/2026-09-07-aihub/README.md)
 - [ADR-0016: Durable metering boundary and billing evidence](docs/adr/0016-metering-boundary-and-billing-evidence.md)
+- [ADR-0023: Thirteen-month usage retention](docs/adr/0023-thirteen-month-usage-retention.md)
 - [ADR-0020: Invite-only customer-web identity boundary for sandbox MVP](docs/adr/0020-customer-web-identity-boundary.md)
 - [ADR-0021: Customer Web Speaking sandbox boundary](docs/adr/0021-customer-web-speaking-sandbox-boundary.md)
 - [Agent and architecture design](docs/superpowers/specs/2026-09-07-aihub/12-agent-workflow-and-clean-architecture-design.md)
