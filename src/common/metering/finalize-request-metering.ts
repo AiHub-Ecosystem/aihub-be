@@ -9,7 +9,7 @@ export async function finalizeRequestMetering(
   request: unknown,
   metering: MeteringFinalizerPort,
   input: Pick<MeteringFinalizeInput, 'outcome' | 'httpStatus' | 'totalMs'> &
-    Partial<Pick<MeteringFinalizeInput, 'errorCode' | 'meteringStatus'>>,
+    Partial<Pick<MeteringFinalizeInput, 'errorCode'>>,
 ): Promise<void> {
   const state = claimRequestMetering(request);
   const meteringInput =

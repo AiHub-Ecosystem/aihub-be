@@ -2,16 +2,21 @@ import {
   type MeteringMode,
   OPERATION_CATALOG,
 } from '../../../catalog/operation-catalog';
-import type { OperationId } from '../../../catalog/operation-id';
 import type {
   MeteringFinalizeInput,
   MeteringFinalizerPort,
 } from '../../../common/metering/metering-finalizer.port';
 import type { MeteringStatus } from '../../../common/metering/metering.types';
 import { normalizeMeteringTelemetry } from '../../../common/metering/telemetry';
+import type { DownstreamId } from '../../../downstream/downstream.types';
 import type { QuotaCounterPort } from '../../gateway/application/quota-counter.port';
 import type { MeteringFailureLoggerPort } from './metering-logger.port';
 import type { UsageRecord, UsageRepositoryPort } from './usage-repository.port';
+
+export const DOWNSTREAM_USAGE_REPORTING = {
+  'ai-writing': false,
+  'ai-speaking': false,
+} as const satisfies Record<DownstreamId, boolean>;
 
 const NOOP_LOGGER: MeteringFailureLoggerPort = {
   writeFailed: () => undefined,
@@ -37,6 +42,7 @@ function safeText(value: string | undefined): string | undefined {
 
 export function resolveMeteringStatus(input: {
   readonly mode: MeteringMode;
+  readonly usageReportingExpected: boolean;
   readonly usage?: {
     readonly inputTokens?: number;
     readonly outputTokens?: number;
@@ -63,22 +69,23 @@ export function resolveMeteringStatus(input: {
     [usage.inputTokens, usage.outputTokens, usage.totalTokens].every(
       (value) => Number.isInteger(value) && value >= 0,
     );
-  return complete ? 'complete' : 'missing_usage';
-}
-
-function operationMode(operation: OperationId): MeteringMode {
-  return OPERATION_CATALOG[operation].meteringMode;
+  if (complete) {
+    return 'complete';
+  }
+  return input.usageReportingExpected ? 'missing_usage' : 'not_applicable';
 }
 
 function usageRecord(input: MeteringFinalizeInput): UsageRecord {
   const telemetry = normalizeMeteringTelemetry(input);
-  const mode = operationMode(input.operation);
+  const operation = OPERATION_CATALOG[input.operation];
+  const mode = operation.meteringMode;
   const meteringStatus =
     input.quotaUnverified === true
       ? 'quota_unverified'
-      : (input.meteringStatus ??
-        resolveMeteringStatus({
+      : resolveMeteringStatus({
           mode,
+          usageReportingExpected:
+            DOWNSTREAM_USAGE_REPORTING[operation.downstream],
           ...(telemetry.usage === undefined ? {} : { usage: telemetry.usage }),
           ...(input.quotaUnverified === undefined
             ? {}
@@ -86,7 +93,7 @@ function usageRecord(input: MeteringFinalizeInput): UsageRecord {
           ...(input.modelCalled === undefined
             ? { modelCalled: input.outcome === 'success' }
             : { modelCalled: input.modelCalled }),
-        }));
+        });
   const billableRequests =
     input.outcome === 'success' && input.idempotentReplay !== true ? 1 : 0;
   const actorId = safeText(input.actorId);

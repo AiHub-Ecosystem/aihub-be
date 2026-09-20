@@ -3,7 +3,11 @@ import type { MeteringFinalizeInput } from '../../../common/metering/metering-fi
 import type { MeteringStatus } from '../../../common/metering/metering.types';
 import type { QuotaCounterPort } from '../../gateway/application/quota-counter.port';
 import type { MeteringFailureLoggerPort } from './metering-logger.port';
-import { MeteringService, resolveMeteringStatus } from './metering.service';
+import {
+  DOWNSTREAM_USAGE_REPORTING,
+  MeteringService,
+  resolveMeteringStatus,
+} from './metering.service';
 import type { UsageRecord, UsageRepositoryPort } from './usage-repository.port';
 
 class FakeUsageRepository implements UsageRepositoryPort {
@@ -63,6 +67,13 @@ const input: MeteringFinalizeInput = {
 };
 
 describe('MeteringService', () => {
+  it('declares the current usage policy for every catalogued downstream', () => {
+    expect(DOWNSTREAM_USAGE_REPORTING).toEqual({
+      'ai-writing': false,
+      'ai-speaking': false,
+    });
+  });
+
   it('writes a complete billable record without changing provider totals', async () => {
     const repository = new FakeUsageRepository();
     const service = new MeteringService(repository);
@@ -82,7 +93,32 @@ describe('MeteringService', () => {
     ]);
   });
 
-  it('preserves valid partial usage and never fills missing fields with zero', async () => {
+  it('keeps incomplete usage unremarkable for every current downstream', async () => {
+    const repository = new FakeUsageRepository();
+    const service = new MeteringService(repository);
+
+    for (const operation of [
+      'writing.task1.grade',
+      'writing.task2.grade',
+      'speaking.grading',
+      'speaking.grading-json',
+    ] as const) {
+      await service.finalize({
+        ...input,
+        operation,
+        usage: { inputTokens: 12 },
+      });
+    }
+
+    expect(repository.records.map((record) => record.meteringStatus)).toEqual([
+      'not_applicable',
+      'not_applicable',
+      'not_applicable',
+      'not_applicable',
+    ]);
+  });
+
+  it('preserves valid partial usage without marking a non-reporting service anomalous', async () => {
     const repository = new FakeUsageRepository();
     const service = new MeteringService(repository);
 
@@ -90,15 +126,26 @@ describe('MeteringService', () => {
       ...input,
       usage: { inputTokens: 12 },
     });
+    await service.finalize({
+      ...input,
+      usage: { inputTokens: -1, outputTokens: 8, totalTokens: 20 },
+    });
 
     expect(repository.records[0]).toEqual(
       expect.objectContaining({
-        meteringStatus: 'missing_usage',
+        meteringStatus: 'not_applicable',
         usage: { inputTokens: 12 },
       }),
     );
     expect(repository.records[0]?.usage).not.toHaveProperty('outputTokens');
     expect(repository.records[0]?.usage).not.toHaveProperty('totalTokens');
+    expect(repository.records[1]).toEqual(
+      expect.objectContaining({
+        meteringStatus: 'not_applicable',
+        usage: { outputTokens: 8, totalTokens: 20 },
+      }),
+    );
+    expect(repository.records[1]?.usage).not.toHaveProperty('inputTokens');
   });
 
   it('does not bill an idempotency replay even though it completed successfully', async () => {
@@ -178,19 +225,6 @@ describe('MeteringService', () => {
     );
   });
 
-  it('lets quota-unverified evidence override a supplied metering status', async () => {
-    const repository = new FakeUsageRepository();
-    const service = new MeteringService(repository);
-
-    await service.finalize({
-      ...input,
-      meteringStatus: 'complete',
-      quotaUnverified: true,
-    });
-
-    expect(repository.records[0]?.meteringStatus).toBe('quota_unverified');
-  });
-
   it('marks an authenticated failure before dispatch as not applicable', async () => {
     const repository = new FakeUsageRepository();
     const service = new MeteringService(repository);
@@ -218,17 +252,18 @@ describe('MeteringService', () => {
     );
   });
 
-  const meteringCases: readonly [MeteringMode, MeteringStatus][] = [
-    ['none', 'not_applicable'],
-    ['model', 'missing_usage'],
+  const meteringCases: readonly [MeteringMode, boolean, MeteringStatus][] = [
+    ['none', false, 'not_applicable'],
+    ['model', true, 'missing_usage'],
   ];
 
   it.each(meteringCases)(
     'classifies %s operations without fabricating usage',
-    (mode, expected) => {
+    (mode, usageReportingExpected, expected) => {
       expect(
         resolveMeteringStatus({
           mode,
+          usageReportingExpected,
           ...(mode === 'model' ? { modelCalled: true } : {}),
         }),
       ).toBe(expected);
@@ -239,6 +274,7 @@ describe('MeteringService', () => {
     expect(
       resolveMeteringStatus({
         mode: 'none',
+        usageReportingExpected: false,
         modelCalled: false,
         usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       }),
@@ -247,7 +283,79 @@ describe('MeteringService', () => {
 
   it('marks quota as unverified before any usage classification', () => {
     expect(
-      resolveMeteringStatus({ mode: 'model', quotaUnverified: true }),
+      resolveMeteringStatus({
+        mode: 'model',
+        usageReportingExpected: true,
+        quotaUnverified: true,
+      }),
     ).toBe('quota_unverified');
+  });
+
+  it('does not flag missing usage for a service not expected to report it', () => {
+    expect(
+      resolveMeteringStatus({
+        mode: 'model',
+        modelCalled: true,
+        usageReportingExpected: false,
+      }),
+    ).toBe('not_applicable');
+  });
+
+  it('keeps complete usage complete when reporting is enabled', () => {
+    expect(
+      resolveMeteringStatus({
+        mode: 'model',
+        modelCalled: true,
+        usageReportingExpected: true,
+        usage: { inputTokens: 12, outputTokens: 8, totalTokens: 20 },
+      }),
+    ).toBe('complete');
+  });
+
+  it('flags incomplete usage when a service is expected to report it', () => {
+    expect(
+      resolveMeteringStatus({
+        mode: 'model',
+        modelCalled: true,
+        usageReportingExpected: true,
+        usage: { inputTokens: 12 },
+      }),
+    ).toBe('missing_usage');
+  });
+
+  it('flags invalid usage when reporting is enabled', () => {
+    expect(
+      resolveMeteringStatus({
+        mode: 'model',
+        modelCalled: true,
+        usageReportingExpected: true,
+        usage: { inputTokens: -1, outputTokens: 8, totalTokens: 20 },
+      }),
+    ).toBe('missing_usage');
+  });
+
+  it('does not let AI processing time decide token completeness', async () => {
+    const repository = new FakeUsageRepository();
+    const service = new MeteringService(repository);
+
+    await service.finalize({
+      ...input,
+      usage: { inputTokens: 12 },
+      aiProcessingMs: 70,
+    });
+    await service.finalize({
+      ...input,
+      usage: { inputTokens: 12 },
+      aiProcessingMs: -1,
+    });
+
+    expect(repository.records).toEqual([
+      expect.objectContaining({
+        meteringStatus: 'not_applicable',
+        aiProcessingMs: 70,
+      }),
+      expect.objectContaining({ meteringStatus: 'not_applicable' }),
+    ]);
+    expect(repository.records[1]).not.toHaveProperty('aiProcessingMs');
   });
 });

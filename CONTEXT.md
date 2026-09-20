@@ -53,6 +53,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Secret source of truth:** Vault owns runtime secret values, while Postgres remains the durable source of truth for control-plane data such as API-key hashes.
 - **AI Service:** a downstream domain service behind AIHUB, such as AI Writing or AI Speaking.
 - **Model Provider:** an upstream foundational model service invoked by an AI Service; this term does not mean an AI Writing or AI Speaking service.
+- **Usage-reporting declaration:** the current contract expectation for one AI Service to return complete token usage; it distinguishes an unreported value that is expected from missing evidence that is an anomaly, and can change independently per service.
 - **Operation Catalog:** the typed code-owned mapping of public path, scope, identity mode, limits, timeout, and downstream operation.
 - **Downstream Adapter:** a pure mapper between a public operation and a private AI service contract; it never performs network I/O.
 - **Speaking grading proxy:** the synchronous D2 integration path used to prove the AI Speaking handoff; it is not the public async Speaking contract.
@@ -65,7 +66,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Speaking grading job:** the future durable async operation that accepts an organization-owned audio asset and returns a job result.
 - **Audio asset:** an organization-owned reference to recorded audio; downstream URLs and partner credentials never become public request fields.
 - **Metering record:** the durable internal evidence for one authenticated gateway request, used for usage, billing, and audit; it is not part of the public response.
-- **Metering status:** the internal classification of usage evidence as complete, missing, not applicable, or unverified; `quota_unverified` specifically means quota admission was allowed while the quota counter was unavailable, and it is never exposed to API clients.
+- **Metering status:** the internal classification of usage evidence as complete, missing, not applicable, or unverified; `not_applicable` covers non-model or no-model-call requests and model-backed services without a reporting declaration, `missing_usage` is anomalous only for a service with a reporting declaration, and `quota_unverified` takes precedence when quota admission could not be verified. These statuses are never exposed to API clients.
 - **Billable request:** a successfully completed operation eligible for request-based billing; recorded failures remain non-billable evidence.
 - **Monthly request quota:** the organization-scoped maximum number of billable requests in one UTC calendar month; `null` means unlimited and zero freezes billable work.
 - **Quota counter:** the ephemeral count of billable requests for one organization and UTC month; it gates admission heuristically and is never the durable source of truth.
@@ -185,7 +186,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - Resolved as a decision, not as work: AI Writing stays reachable from the internet for now, because it still serves an application that does not go through AIHUB. The boundary at this stage is the credential, not the network — AIHUB customers hold only AIHUB keys, so metering and limits still bind them. Three conditions keep that acceptable; see the security spec.
 - Resolved: Deliverable 1 is frozen as of 2026-09-07 — the OpenAPI 3.1 spec (`openapi.json`) and the Postman handover collection (`aihub.postman_collection.json`) are both generated from source, not hand-written.
 - Implemented: idempotency replay for completed successful attempts, the ErrorCode→httpStatus registry, and the public API docs page at `/docs` (with the raw spec at `/openapi.json`).
-- Implemented: durable internal metering evidence, missing-usage classification, replay-safe request/token aggregates, and safe failure breadcrumbs; AI Services report aggregate token usage and `metrics.ai_processing_ms` only, while model identity is neither required nor exposed.
+- Implemented: durable internal metering evidence, missing-usage classification, replay-safe request/token aggregates, and safe failure breadcrumbs; AI Services are expected to report aggregate token usage and `metrics.ai_processing_ms`, but current provider contracts may not yet do so, while model identity is neither required nor exposed.
 - Open, but not blocking: six fixes requested from the AI Writing team (chiefly aggregate usage and `metrics.ai_processing_ms`, which make token-based billing possible at all).
 
 ## Canonical documents

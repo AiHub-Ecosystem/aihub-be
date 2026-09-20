@@ -4,7 +4,7 @@ import type { RequestMeteringState } from './metering.types';
 export function createMeteringFinalizeInput(
   state: RequestMeteringState,
   input: Pick<MeteringFinalizeInput, 'outcome' | 'httpStatus' | 'totalMs'> &
-    Partial<Pick<MeteringFinalizeInput, 'errorCode' | 'meteringStatus'>>,
+    Partial<Pick<MeteringFinalizeInput, 'errorCode'>>,
 ): MeteringFinalizeInput | undefined {
   if (
     state.requestId.length === 0 ||
@@ -28,9 +28,6 @@ export function createMeteringFinalizeInput(
     ...(input.errorCode === undefined ? {} : { errorCode: input.errorCode }),
     ...(state.usage === undefined ? {} : { usage: state.usage }),
     ...(state.models === undefined ? {} : { models: state.models }),
-    ...(input.meteringStatus === undefined
-      ? {}
-      : { meteringStatus: input.meteringStatus }),
     totalMs: input.totalMs,
     ...(state.downstreamMs === undefined
       ? {}

@@ -2,7 +2,6 @@ import type { OperationId } from '../../catalog/operation-id';
 import type {
   MeteringModel,
   MeteringOutcome,
-  MeteringStatus,
   MeteringUsage,
 } from './metering.types';
 
@@ -18,7 +17,6 @@ export interface MeteringFinalizeInput {
   readonly errorCode?: string;
   readonly usage?: MeteringUsage;
   readonly models?: readonly MeteringModel[];
-  readonly meteringStatus?: MeteringStatus;
   readonly totalMs: number;
   readonly downstreamMs?: number;
   readonly aiProcessingMs?: number;
