@@ -103,10 +103,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-          sparse-checkout: |
-            docker-compose.production.yml
-            docker-compose.production.env.yml
-          sparse-checkout-cone-mode: false
 
       - name: Sync deployment manifests to VPS
         shell: bash
