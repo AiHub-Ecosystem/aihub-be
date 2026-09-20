@@ -1,7 +1,7 @@
 {
   "item": [
     {
-      "id": "5f5211cb-fb15-416d-87cf-98e71f597084",
+      "id": "d7f77963-ccdc-4d87-b67f-017426fa0fa4",
       "name": "writing.task1.grade",
       "request": {
         "name": "writing.task1.grade",
@@ -74,7 +74,7 @@
       }
     },
     {
-      "id": "8bf4ecbf-0e05-4570-9fe2-d1934f640f8d",
+      "id": "6d7526af-9d8c-4e36-b7d7-480cdb17718a",
       "name": "writing.task2.grade",
       "request": {
         "name": "writing.task2.grade",
@@ -147,7 +147,7 @@
       }
     },
     {
-      "id": "9db3e360-9d2a-46c3-b2fb-dbda37de3e73",
+      "id": "98990184-aa3d-42b3-96cb-00d2eba66959",
       "name": "speaking.grading",
       "request": {
         "name": "speaking.grading",
@@ -257,7 +257,7 @@
       }
     },
     {
-      "id": "4742d2e2-395e-4ac1-b107-aa2332b0e41c",
+      "id": "1c230b24-4a82-4992-b996-251fdc3abf19",
       "name": "speaking.grading-json",
       "request": {
         "name": "speaking.grading-json",
@@ -330,7 +330,7 @@
       }
     },
     {
-      "id": "924e7a2a-7aee-45d9-8b11-f7cc1b733dde",
+      "id": "02f2e689-da5a-4576-8c6f-cf66daabac07",
       "name": "Mint a sandbox user assertion",
       "request": {
         "name": "Mint a sandbox user assertion",
@@ -394,7 +394,7 @@
       }
     },
     {
-      "id": "d7387443-65dc-4b9a-b02c-d7abe7606a96",
+      "id": "664ef619-c68f-4d8f-abb2-9109a270149c",
       "name": "Register a local AIHUB account",
       "request": {
         "name": "Register a local AIHUB account",
@@ -439,7 +439,7 @@
       }
     },
     {
-      "id": "0c6ad28b-1700-4c92-af54-04e38cd4107b",
+      "id": "6da6b549-0a36-44cb-baa3-270c7c9dcbb5",
       "name": "Issue a User Access JWT",
       "request": {
         "name": "Issue a User Access JWT",
@@ -484,7 +484,7 @@
       }
     },
     {
-      "id": "a47317fe-3ed0-4137-a882-1b92d4867720",
+      "id": "c1cc1b0a-3a04-486e-9fdb-a22c66143605",
       "name": "Verify a local account email address",
       "request": {
         "name": "Verify a local account email address",
@@ -529,7 +529,7 @@
       }
     },
     {
-      "id": "e17be113-ea59-4b0c-af5c-14c6858bb755",
+      "id": "ba827059-689a-4f7b-9286-95abc532ba90",
       "name": "Request a verification email resend",
       "request": {
         "name": "Request a verification email resend",
@@ -574,7 +574,7 @@
       }
     },
     {
-      "id": "92390b8a-28f4-48ce-a07e-ded2f3cb9839",
+      "id": "a647042b-d663-46ae-97b0-062a9f77e96f",
       "name": "Rotate a refresh session and issue a User Access JWT",
       "request": {
         "name": "Rotate a refresh session and issue a User Access JWT",
@@ -602,23 +602,6 @@
           }
         ],
         "method": "POST",
-        "auth": {
-          "type": "apikey",
-          "apikey": [
-            {
-              "key": "key",
-              "value": "__Host-aihub_refresh"
-            },
-            {
-              "key": "value",
-              "value": "{{apiKey}}"
-            },
-            {
-              "key": "in",
-              "value": "header"
-            }
-          ]
-        },
         "body": {
           "mode": "raw",
           "raw": "{}",
@@ -627,7 +610,30 @@
               "language": "json"
             }
           }
-        }
+        },
+        "cookie": [
+          {
+            "key": "__Host-aihub_refresh",
+            "value": "{{refreshToken}}",
+            "path": "/",
+            "secure": true,
+            "httpOnly": true
+          }
+        ],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('refresh rotates the access token and cookie', function () {",
+                "  pm.response.to.have.status(200);",
+                "  pm.expect(pm.response.headers.get('Set-Cookie')).to.include('__Host-aihub_refresh=');",
+                "});"
+              ]
+            }
+          }
+        ]
       },
       "event": [],
       "protocolProfileBehavior": {
@@ -635,7 +641,7 @@
       }
     },
     {
-      "id": "34a9512c-0a4f-4335-a2fa-fed35d545b4e",
+      "id": "06623192-c5e3-41b9-b465-651ce1e131f7",
       "name": "Revoke the current refresh session",
       "request": {
         "name": "Revoke the current refresh session",
@@ -663,23 +669,6 @@
           }
         ],
         "method": "POST",
-        "auth": {
-          "type": "apikey",
-          "apikey": [
-            {
-              "key": "key",
-              "value": "__Host-aihub_refresh"
-            },
-            {
-              "key": "value",
-              "value": "{{apiKey}}"
-            },
-            {
-              "key": "in",
-              "value": "header"
-            }
-          ]
-        },
         "body": {
           "mode": "raw",
           "raw": "{}",
@@ -688,7 +677,31 @@
               "language": "json"
             }
           }
-        }
+        },
+        "cookie": [
+          {
+            "key": "__Host-aihub_refresh",
+            "value": "{{refreshToken}}",
+            "path": "/",
+            "secure": true,
+            "httpOnly": true
+          }
+        ],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('logout revokes the session and clears the cookie', function () {",
+                "  pm.response.to.have.status(204);",
+                "  pm.expect(pm.response.headers.get('Set-Cookie')).to.include('__Host-aihub_refresh=');",
+                "  pm.expect(pm.response.text()).to.eql(\"\");",
+                "});"
+              ]
+            }
+          }
+        ]
       },
       "event": [],
       "protocolProfileBehavior": {
@@ -1606,6 +1619,11 @@
       "value": "REPLACE_WITH_A_VALID_ORGANIZATION_API_KEY"
     },
     {
+      "key": "refreshToken",
+      "value": "REPLACE_WITH_A_REFRESH_COOKIE_VALUE",
+      "description": "Opaque refresh cookie value; Postman normally stores it from the login Set-Cookie response."
+    },
+    {
       "key": "otherEnvironmentApiKey",
       "value": "REPLACE_WITH_A_KEY_FROM_A_DIFFERENT_ENVIRONMENT"
     },
@@ -1636,7 +1654,7 @@
     ]
   },
   "info": {
-    "_postman_id": "914ffc5c-73d5-4083-96ad-374eee4803bb",
+    "_postman_id": "f759a7d6-09f9-4c0e-9a17-ef83510b2203",
     "name": "AIHUB Writing API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Generated by `pnpm generate:postman` from openapi.json — do not hand-edit. The \"D1 handover test cases\" folder is the D2 handover artifact required by docs/aihub_deliverable_1_api_contract_schema.md §G; it is not a CI regression suite.",

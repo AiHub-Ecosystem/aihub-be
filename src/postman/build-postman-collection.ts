@@ -481,6 +481,95 @@ interface PostmanCollectionShape {
   readonly [key: string]: unknown;
 }
 
+const REFRESH_COOKIE_NAME = '__Host-aihub_refresh';
+
+function isRefreshCookieAuth(auth: unknown): boolean {
+  if (auth === null || typeof auth !== 'object') {
+    return false;
+  }
+
+  const apiKey = (auth as { apikey?: unknown }).apikey;
+  if (!Array.isArray(apiKey)) {
+    return false;
+  }
+
+  const key = apiKey.find(
+    (entry): entry is { key: string; value: string } =>
+      entry !== null &&
+      typeof entry === 'object' &&
+      (entry as { key?: unknown }).key === 'key' &&
+      typeof (entry as { value?: unknown }).value === 'string',
+  );
+
+  return key?.value === REFRESH_COOKIE_NAME;
+}
+
+/**
+ * openapi-to-postmanv2 maps an OpenAPI apiKey cookie scheme to an apikey
+ * header auth entry. Keep the handover artifact faithful to the cookie-only
+ * boundary by using Postman's native cookie field instead.
+ */
+function normalizeRefreshCookieAuth(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      normalizeRefreshCookieAuth(entry);
+    }
+    return;
+  }
+
+  if (value === null || typeof value !== 'object') {
+    return;
+  }
+
+  const record = value as Record<string, unknown>;
+  const request = record.request;
+  if (request !== null && typeof request === 'object') {
+    const requestRecord = request as Record<string, unknown>;
+    if (isRefreshCookieAuth(requestRecord.auth)) {
+      requestRecord.cookie = [
+        {
+          key: REFRESH_COOKIE_NAME,
+          value: '{{refreshToken}}',
+          path: '/',
+          secure: true,
+          httpOnly: true,
+        },
+      ];
+      requestRecord.auth = undefined;
+
+      const path = (requestRecord.url as { path?: unknown } | undefined)?.path;
+      const route = Array.isArray(path) ? path.join('/') : undefined;
+      requestRecord.event = [
+        {
+          listen: 'test',
+          script: {
+            type: 'text/javascript',
+            exec:
+              route === 'v1/auth/refresh'
+                ? [
+                    "pm.test('refresh rotates the access token and cookie', function () {",
+                    '  pm.response.to.have.status(200);',
+                    "  pm.expect(pm.response.headers.get('Set-Cookie')).to.include('__Host-aihub_refresh=');",
+                    '});',
+                  ]
+                : [
+                    "pm.test('logout revokes the session and clears the cookie', function () {",
+                    '  pm.response.to.have.status(204);',
+                    "  pm.expect(pm.response.headers.get('Set-Cookie')).to.include('__Host-aihub_refresh=');",
+                    '  pm.expect(pm.response.text()).to.eql("");',
+                    '});',
+                  ],
+          },
+        },
+      ];
+    }
+  }
+
+  for (const child of Object.values(record)) {
+    normalizeRefreshCookieAuth(child);
+  }
+}
+
 function convertOpenApiToPostman(
   openApiDocument: unknown,
 ): Promise<PostmanCollectionShape> {
@@ -520,6 +609,7 @@ export async function buildPostmanCollection(
     await convertOpenApiToPostman(openApiDocument),
     'response',
   );
+  normalizeRefreshCookieAuth(base);
 
   return {
     ...base,
@@ -537,6 +627,12 @@ export async function buildPostmanCollection(
         description: 'AIHUB base URL for the environment under test.',
       },
       { key: 'apiKey', value: 'REPLACE_WITH_A_VALID_ORGANIZATION_API_KEY' },
+      {
+        key: 'refreshToken',
+        value: 'REPLACE_WITH_A_REFRESH_COOKIE_VALUE',
+        description:
+          'Opaque refresh cookie value; Postman normally stores it from the login Set-Cookie response.',
+      },
       {
         key: 'otherEnvironmentApiKey',
         value: 'REPLACE_WITH_A_KEY_FROM_A_DIFFERENT_ENVIRONMENT',

@@ -195,7 +195,12 @@ class LimiterFake implements AuthRateLimiterPort {
 }
 
 class AccessTokenIssuerFake implements UserAccessTokenIssuerPort {
+  fail = false;
+
   async issue(): Promise<{ token: string; expiresIn: number }> {
+    if (this.fail) {
+      throw new Error('access token issuer unavailable');
+    }
     return { token: 'ey.fake.access', expiresIn: 900 };
   }
 }
@@ -227,6 +232,7 @@ describe('local auth HTTP boundary', () => {
   let hasher: HasherFake;
   let limiter: LimiterFake;
   let refreshTokenIssuer: RefreshTokenIssuerFake;
+  let accessTokenIssuer: AccessTokenIssuerFake;
 
   beforeAll(async () => {
     repository = new RepositoryFake();
@@ -234,6 +240,7 @@ describe('local auth HTTP boundary', () => {
     hasher = new HasherFake();
     limiter = new LimiterFake();
     refreshTokenIssuer = new RefreshTokenIssuerFake();
+    accessTokenIssuer = new AccessTokenIssuerFake();
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -248,7 +255,7 @@ describe('local auth HTTP boundary', () => {
       .overrideProvider(AUTH_RATE_LIMITER)
       .useValue(limiter)
       .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
-      .useClass(AccessTokenIssuerFake)
+      .useValue(accessTokenIssuer)
       .overrideProvider(REFRESH_TOKEN_ISSUER)
       .useValue(refreshTokenIssuer)
       .compile();
@@ -522,7 +529,7 @@ describe('local auth HTTP boundary', () => {
   it('rejects alternate refresh sources and non-empty bodies', async () => {
     const alternate = await app.inject({
       method: 'POST',
-      url: '/v1/auth/refresh?token=alternate',
+      url: '/v1/auth/refresh?query_value=alternate',
     });
     expect(alternate.statusCode).toBe(401);
     expect(alternate.json().error.code).toBe('AUTH_REFRESH_TOKEN_INVALID');
@@ -535,5 +542,59 @@ describe('local auth HTTP boundary', () => {
     });
     expect(body.statusCode).toBe(400);
     expect(body.json().error.code).toBe('INVALID_REQUEST');
+
+    const login = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'person@example.com', password: 'correct password' },
+    });
+    const validCookie = String(login.headers['set-cookie']).split(';', 1)[0];
+    const extraCookie = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: { cookie: `${validCookie}; unrelated=value` },
+    });
+    expect(extraCookie.statusCode).toBe(401);
+    expect(extraCookie.json().error.code).toBe('AUTH_REFRESH_TOKEN_INVALID');
+
+    const authorization = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: {
+        cookie: validCookie,
+        authorization: 'Bearer alternate',
+      },
+    });
+    expect(authorization.statusCode).toBe(401);
+
+    const duplicateCookie = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: { cookie: `${validCookie}; ${validCookie}` },
+    });
+    expect(duplicateCookie.statusCode).toBe(401);
+  });
+
+  it('clears a rotated cookie when access-token issuance fails after commit', async () => {
+    const login = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'person@example.com', password: 'correct password' },
+    });
+    const loginCookie = String(login.headers['set-cookie']).split(';', 1)[0];
+
+    accessTokenIssuer.fail = true;
+    const failed = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: { cookie: loginCookie },
+    });
+    accessTokenIssuer.fail = false;
+
+    expect(failed.statusCode).toBe(500);
+    expect(String(failed.headers['set-cookie'])).toContain('Max-Age=0');
+    expect(failed.payload).not.toContain('access token issuer unavailable');
   });
 });

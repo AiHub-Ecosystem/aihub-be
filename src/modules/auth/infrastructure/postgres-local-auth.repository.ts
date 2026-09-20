@@ -289,6 +289,9 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
       }
 
       const record = this.refreshTokenRecord(row);
+      if (record === undefined) {
+        return { kind: 'invalid', reason: 'missing' };
+      }
       if (row.status !== 'active') {
         return { kind: 'invalid', reason: 'inactive' };
       }
@@ -354,7 +357,9 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
     });
   }
 
-  private refreshTokenRecord(row: Record<string, unknown>): RefreshTokenRecord {
+  private refreshTokenRecord(
+    row: Record<string, unknown>,
+  ): RefreshTokenRecord | undefined {
     if (
       typeof row.token_id !== 'string' ||
       typeof row.family_id !== 'string' ||
@@ -363,7 +368,7 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
       (row.used_at !== null && !(row.used_at instanceof Date)) ||
       (row.revoked_at !== null && !(row.revoked_at instanceof Date))
     ) {
-      throw new Error('refresh token projection is invalid');
+      return undefined;
     }
     return {
       tokenId: row.token_id,

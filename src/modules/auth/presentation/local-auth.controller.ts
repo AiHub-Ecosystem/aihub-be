@@ -27,6 +27,7 @@ import {
 import {
   LOCAL_AUTH_SERVICE,
   type LocalAuthServicePort,
+  RefreshRotationCommittedError,
 } from '../application/local-auth-service.port';
 import {
   REFRESH_COOKIE_CLEAR_OPTIONS,
@@ -162,6 +163,9 @@ export class LocalAuthController {
       };
     } catch (error) {
       if (isInvalidRefreshToken(error)) {
+        clearRefreshCookie(reply);
+      }
+      if (error instanceof RefreshRotationCommittedError) {
         clearRefreshCookie(reply);
       }
       throw error;

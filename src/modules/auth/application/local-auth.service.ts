@@ -19,6 +19,7 @@ import {
   LOCAL_AUTH_REPOSITORY,
   type LocalAuthRepositoryPort,
 } from './local-auth-repository.port';
+import { RefreshRotationCommittedError } from './local-auth-service.port';
 import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
@@ -28,6 +29,7 @@ import {
   type RefreshTokenIssuerPort,
 } from './refresh-token.port';
 import {
+  type IssuedUserAccessToken,
   USER_ACCESS_TOKEN_ISSUER,
   type UserAccessTokenIssuerPort,
 } from './user-access-token.port';
@@ -333,7 +335,12 @@ export class LocalAuthService {
       throw invalidRefreshToken();
     }
 
-    const accessToken = await this.accessTokenIssuer.issue(rotation.userId);
+    let accessToken: IssuedUserAccessToken;
+    try {
+      accessToken = await this.accessTokenIssuer.issue(rotation.userId);
+    } catch {
+      throw new RefreshRotationCommittedError();
+    }
     return {
       accessToken: accessToken.token,
       expiresIn: accessToken.expiresIn,

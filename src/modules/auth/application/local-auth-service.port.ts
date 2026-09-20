@@ -33,4 +33,11 @@ export interface LocalAuthServicePort {
   logout(rawToken: string | undefined): Promise<void>;
 }
 
+export class RefreshRotationCommittedError extends Error {
+  constructor() {
+    super('refresh rotation committed before access-token issuance');
+    this.name = 'RefreshRotationCommittedError';
+  }
+}
+
 export const LOCAL_AUTH_SERVICE = Symbol('LOCAL_AUTH_SERVICE');

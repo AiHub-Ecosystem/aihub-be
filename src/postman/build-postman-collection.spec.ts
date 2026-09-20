@@ -17,6 +17,14 @@ interface PostmanItem {
       readonly key: string;
       readonly value: string;
     }[];
+    readonly auth?: unknown;
+    readonly cookie?: readonly {
+      readonly key: string;
+      readonly value: string;
+      readonly path?: string;
+      readonly secure?: boolean;
+      readonly httpOnly?: boolean;
+    }[];
   };
   readonly event?: readonly {
     readonly script: { readonly exec: readonly string[] };
@@ -86,6 +94,33 @@ describe('buildPostmanCollection', () => {
 
     expect(names).toContain('baseUrl');
     expect(names).toContain('apiKey');
+    expect(names).toContain('refreshToken');
+  });
+
+  it('represents refresh and logout credentials as a Postman cookie, not a header', async () => {
+    const collection = await build();
+    const items = collection.item as readonly PostmanItem[];
+    const refresh = items.find(
+      (item) =>
+        item.name === 'Rotate a refresh session and issue a User Access JWT',
+    );
+    const logout = items.find(
+      (item) => item.name === 'Revoke the current refresh session',
+    );
+
+    for (const item of [refresh, logout]) {
+      expect(item?.request?.auth).toBeUndefined();
+      expect(item?.request?.header).not.toContainEqual(
+        expect.objectContaining({ key: '__Host-aihub_refresh' }),
+      );
+      expect(item?.request?.cookie).toContainEqual({
+        key: '__Host-aihub_refresh',
+        value: '{{refreshToken}}',
+        path: '/',
+        secure: true,
+        httpOnly: true,
+      });
+    }
   });
 
   it('includes unauthenticated local-auth requests from the OpenAPI contract', async () => {

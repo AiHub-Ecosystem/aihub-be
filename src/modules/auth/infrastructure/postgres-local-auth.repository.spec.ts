@@ -231,4 +231,26 @@ describe('PostgresLocalAuthRepository', () => {
     ).resolves.toBeUndefined();
     expect(unknownClient.queries).toHaveLength(1);
   });
+
+  it('maps malformed refresh projections to a safe invalid result', async () => {
+    const client = new FakeClient();
+    client.queryResponses = [
+      [
+        {
+          token_id: refreshToken.id,
+          family_id: refreshToken.familyId,
+          user_account_id: 'usr_01J00000000000000000000000',
+          expires_at: 'not-a-date',
+          used_at: null,
+          revoked_at: null,
+        },
+      ],
+    ];
+
+    await expect(
+      new PostgresLocalAuthRepository(client).findRefreshTokenByHash(
+        refreshToken.hash,
+      ),
+    ).resolves.toBeUndefined();
+  });
 });
