@@ -1,4 +1,5 @@
 import type { LocalAccountStatus } from '../domain/local-auth';
+import type { IssuedRefreshToken } from './refresh-token.port';
 
 export interface RegisterLocalAccountInput {
   readonly email: string;
@@ -20,6 +21,42 @@ export interface LoginIdentity {
   readonly status: LocalAccountStatus;
 }
 
+export interface RefreshTokenRecord {
+  readonly tokenId: string;
+  readonly familyId: string;
+  readonly userId: string;
+  readonly expiresAt: Date;
+  readonly usedAt: Date | undefined;
+  readonly revokedAt: Date | undefined;
+}
+
+export type RefreshTokenFailureReason =
+  | 'missing'
+  | 'inactive'
+  | 'expired'
+  | 'used'
+  | 'revoked';
+
+export type RefreshTokenRotationResult =
+  | { readonly kind: 'rotated'; readonly userId: string }
+  | {
+      readonly kind: 'invalid';
+      readonly reason: RefreshTokenFailureReason;
+    };
+
+export interface CreateRefreshSessionInput {
+  readonly userId: string;
+  readonly token: IssuedRefreshToken;
+  readonly issuedAt: Date;
+}
+
+export interface RotateRefreshTokenInput {
+  readonly tokenId: string;
+  readonly tokenHash: string;
+  readonly successor: IssuedRefreshToken;
+  readonly now: Date;
+}
+
 export interface LocalAuthRepositoryPort {
   register(input: RegisterLocalAccountInput): Promise<void>;
   rotateVerificationToken(input: {
@@ -37,6 +74,17 @@ export interface LocalAuthRepositoryPort {
   findUserAccountStatus(
     userId: string,
   ): Promise<LocalAccountStatus | undefined>;
+  createRefreshSession(input: CreateRefreshSessionInput): Promise<void>;
+  findRefreshTokenByHash(
+    tokenHash: string,
+  ): Promise<RefreshTokenRecord | undefined>;
+  rotateRefreshToken(
+    input: RotateRefreshTokenInput,
+  ): Promise<RefreshTokenRotationResult>;
+  revokeRefreshFamilyByTokenHash(input: {
+    readonly tokenHash: string;
+    readonly now: Date;
+  }): Promise<void>;
 }
 
 export class AuthIdentityConflictError extends Error {

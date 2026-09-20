@@ -18,14 +18,20 @@ import {
   type LocalAuthRepositoryPort,
 } from './application/local-auth-repository.port';
 import { LOCAL_AUTH_SERVICE } from './application/local-auth-service.port';
+import {
+  AUTH_CLOCK,
+  type LocalAuthServiceClock,
+} from './application/local-auth.service';
 import { LocalAuthService } from './application/local-auth.service';
 import { PASSWORD_HASHER } from './application/password-hasher.port';
+import { REFRESH_TOKEN_ISSUER } from './application/refresh-token.port';
 import {
   USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
 } from './application/user-access-token.port';
 import { VERIFICATION_TOKEN } from './application/verification-token.port';
 import { Argon2PasswordHasher } from './infrastructure/argon2-password.hasher';
+import { CryptoRefreshToken } from './infrastructure/crypto-refresh-token';
 import { CryptoVerificationToken } from './infrastructure/crypto-verification-token';
 import {
   JoseUserAccessTokenService,
@@ -50,7 +56,12 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
         ),
     },
     { provide: PASSWORD_HASHER, useClass: Argon2PasswordHasher },
+    { provide: REFRESH_TOKEN_ISSUER, useClass: CryptoRefreshToken },
     { provide: VERIFICATION_TOKEN, useClass: CryptoVerificationToken },
+    {
+      provide: AUTH_CLOCK,
+      useFactory: (): LocalAuthServiceClock => ({ now: () => new Date() }),
+    },
     {
       provide: EMAIL_SENDER,
       useFactory: (provider: RuntimeSecretProvider): EmailSenderPort => {

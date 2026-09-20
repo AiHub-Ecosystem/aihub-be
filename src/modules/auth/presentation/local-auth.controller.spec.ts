@@ -1,3 +1,4 @@
+import fastifyCookie from '@fastify/cookie';
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -18,11 +19,17 @@ import {
   LOCAL_AUTH_REPOSITORY,
   type LocalAuthRepositoryPort,
   type LoginIdentity,
+  type RefreshTokenRecord,
 } from '../application/local-auth-repository.port';
 import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
 } from '../application/password-hasher.port';
+import {
+  type IssuedRefreshToken,
+  REFRESH_TOKEN_ISSUER,
+  type RefreshTokenIssuerPort,
+} from '../application/refresh-token.port';
 import {
   USER_ACCESS_TOKEN_ISSUER,
   type UserAccessTokenIssuerPort,
@@ -42,6 +49,7 @@ class RepositoryFake implements LocalAuthRepositoryPort {
     passwordHash: '$argon2id$fake',
     status: 'active' as const,
   };
+  refreshTokens = new Map<string, RefreshTokenRecord>();
 
   async register(): Promise<void> {
     this.registered += 1;
@@ -61,6 +69,79 @@ class RepositoryFake implements LocalAuthRepositoryPort {
 
   async findUserAccountStatus() {
     return this.loginIdentity?.status;
+  }
+
+  async createRefreshSession(input: {
+    readonly userId: string;
+    readonly token: IssuedRefreshToken;
+    readonly issuedAt: Date;
+  }): Promise<void> {
+    this.refreshTokens.set(input.token.hash, {
+      tokenId: input.token.id,
+      familyId: input.token.familyId,
+      userId: input.userId,
+      expiresAt: input.token.expiresAt,
+      usedAt: undefined,
+      revokedAt: undefined,
+    });
+  }
+
+  async findRefreshTokenByHash(tokenHash: string) {
+    return this.refreshTokens.get(tokenHash);
+  }
+
+  async rotateRefreshToken(input: {
+    readonly tokenId: string;
+    readonly tokenHash: string;
+    readonly successor: IssuedRefreshToken;
+    readonly now: Date;
+  }) {
+    const current = this.refreshTokens.get(input.tokenHash);
+    if (current === undefined) {
+      return { kind: 'invalid' as const, reason: 'missing' as const };
+    }
+    if (current.usedAt !== undefined) {
+      await this.revokeRefreshFamilyByTokenHash({
+        tokenHash: input.tokenHash,
+        now: input.now,
+      });
+      return { kind: 'invalid' as const, reason: 'used' as const };
+    }
+    if (current.revokedAt !== undefined) {
+      await this.revokeRefreshFamilyByTokenHash({
+        tokenHash: input.tokenHash,
+        now: input.now,
+      });
+      return { kind: 'invalid' as const, reason: 'revoked' as const };
+    }
+    if (current.expiresAt <= input.now) {
+      return { kind: 'invalid' as const, reason: 'expired' as const };
+    }
+    this.refreshTokens.set(input.tokenHash, { ...current, usedAt: input.now });
+    this.refreshTokens.set(input.successor.hash, {
+      tokenId: input.successor.id,
+      familyId: input.successor.familyId,
+      userId: current.userId,
+      expiresAt: input.successor.expiresAt,
+      usedAt: undefined,
+      revokedAt: undefined,
+    });
+    return { kind: 'rotated' as const, userId: current.userId };
+  }
+
+  async revokeRefreshFamilyByTokenHash(input: {
+    readonly tokenHash: string;
+    readonly now: Date;
+  }): Promise<void> {
+    const current = this.refreshTokens.get(input.tokenHash);
+    if (current === undefined) {
+      return;
+    }
+    for (const [hash, token] of this.refreshTokens) {
+      if (token.familyId === current.familyId) {
+        this.refreshTokens.set(hash, { ...token, revokedAt: input.now });
+      }
+    }
   }
 }
 
@@ -119,18 +200,40 @@ class AccessTokenIssuerFake implements UserAccessTokenIssuerPort {
   }
 }
 
+class RefreshTokenIssuerFake implements RefreshTokenIssuerPort {
+  sequence = 0;
+
+  issue(now: Date, familyId?: string): IssuedRefreshToken {
+    this.sequence += 1;
+    const raw = `refresh-${this.sequence}`;
+    return {
+      id: `rft_${this.sequence}`,
+      familyId: familyId ?? `rfs_${this.sequence}`,
+      raw,
+      hash: this.hash(raw),
+      expiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+    };
+  }
+
+  hash(raw: string): string {
+    return `hash:${raw}`;
+  }
+}
+
 describe('local auth HTTP boundary', () => {
   let app: NestFastifyApplication;
   let repository: RepositoryFake;
   let sender: SenderFake;
   let hasher: HasherFake;
   let limiter: LimiterFake;
+  let refreshTokenIssuer: RefreshTokenIssuerFake;
 
   beforeAll(async () => {
     repository = new RepositoryFake();
     sender = new SenderFake();
     hasher = new HasherFake();
     limiter = new LimiterFake();
+    refreshTokenIssuer = new RefreshTokenIssuerFake();
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -146,11 +249,15 @@ describe('local auth HTTP boundary', () => {
       .useValue(limiter)
       .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
       .useClass(AccessTokenIssuerFake)
+      .overrideProvider(REFRESH_TOKEN_ISSUER)
+      .useValue(refreshTokenIssuer)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({ genReqId: () => generateRequestId() }),
     );
+    const fastify = app.getHttpAdapter().getInstance();
+    await Reflect.apply(fastify.register, fastify, [fastifyCookie]);
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });
@@ -253,6 +360,14 @@ describe('local auth HTTP boundary', () => {
       },
       meta: { request_id: expect.stringMatching(/^req_/) },
     });
+    const setCookie = response.headers['set-cookie'];
+    expect(Array.isArray(setCookie) ? setCookie : [setCookie]).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(
+          /^__Host-aihub_refresh=.+; Max-Age=2592000; Path=\/; HttpOnly; Secure; SameSite=Strict$/,
+        ),
+      ]),
+    );
   });
 
   it('keeps unknown and inactive login failures generic', async () => {
@@ -288,5 +403,137 @@ describe('local auth HTTP boundary', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('rotates the refresh cookie and revokes a reused family', async () => {
+    repository.loginIdentity = {
+      userId: 'usr_01J00000000000000000000000',
+      passwordHash: '$argon2id$fake',
+      status: 'active',
+    };
+    hasher.result = true;
+
+    const login = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'person@example.com', password: 'correct password' },
+    });
+    const loginCookie = String(login.headers['set-cookie']).split(';', 1)[0];
+
+    const refresh = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: {
+        cookie: loginCookie,
+        'content-type': 'application/json',
+      },
+      payload: {},
+    });
+
+    expect(refresh.statusCode).toBe(200);
+    expect(refresh.headers['cache-control']).toBe('no-store');
+    expect(refresh.json()).toEqual({
+      data: {
+        access_token: 'ey.fake.access',
+        token_type: 'Bearer',
+        expires_in: 900,
+      },
+      meta: { request_id: expect.stringMatching(/^req_/) },
+    });
+    const rotatedCookie = String(refresh.headers['set-cookie']).split(
+      ';',
+      1,
+    )[0];
+    expect(rotatedCookie).not.toBe(loginCookie);
+
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: { cookie: loginCookie },
+    });
+    expect(replay.statusCode).toBe(401);
+    expect(replay.json().error).toEqual(
+      expect.objectContaining({ code: 'AUTH_REFRESH_TOKEN_INVALID' }),
+    );
+    expect(String(replay.headers['set-cookie'])).toContain('Max-Age=0');
+
+    const successorAfterReuse = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: { cookie: rotatedCookie },
+    });
+    expect(successorAfterReuse.statusCode).toBe(401);
+  });
+
+  it('logs out idempotently and only revokes the selected login family', async () => {
+    repository.loginIdentity = {
+      userId: 'usr_01J00000000000000000000000',
+      passwordHash: '$argon2id$fake',
+      status: 'active',
+    };
+    const first = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'person@example.com', password: 'correct password' },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'person@example.com', password: 'correct password' },
+    });
+    const firstCookie = String(first.headers['set-cookie']).split(';', 1)[0];
+    const secondCookie = String(second.headers['set-cookie']).split(';', 1)[0];
+
+    const logout = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/logout',
+      headers: { cookie: firstCookie },
+    });
+    expect(logout.statusCode).toBe(204);
+    expect(logout.payload).toBe('');
+    expect(logout.headers['cache-control']).toBe('no-store');
+    expect(String(logout.headers['set-cookie'])).toContain('Max-Age=0');
+
+    const firstAfterLogout = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: { cookie: firstCookie },
+    });
+    expect(firstAfterLogout.statusCode).toBe(401);
+
+    const secondAfterLogout = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: { cookie: secondCookie },
+    });
+    expect(secondAfterLogout.statusCode).toBe(200);
+
+    const logoutAgain = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/logout',
+    });
+    expect(logoutAgain.statusCode).toBe(204);
+    expect(logoutAgain.payload).toBe('');
+  });
+
+  it('rejects alternate refresh sources and non-empty bodies', async () => {
+    const alternate = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh?token=alternate',
+    });
+    expect(alternate.statusCode).toBe(401);
+    expect(alternate.json().error.code).toBe('AUTH_REFRESH_TOKEN_INVALID');
+
+    const body = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: { 'content-type': 'application/json' },
+      payload: { token: 'alternate' },
+    });
+    expect(body.statusCode).toBe(400);
+    expect(body.json().error.code).toBe('INVALID_REQUEST');
   });
 });

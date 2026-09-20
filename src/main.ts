@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { loadEnvFile } from 'node:process';
 
+import fastifyCookie from '@fastify/cookie';
 import { NestFactory } from '@nestjs/core';
 import {
   FastifyAdapter,
@@ -45,6 +46,9 @@ export async function bootstrap(): Promise<void> {
   );
 
   app.enableShutdownHooks();
+
+  const fastify = app.getHttpAdapter().getInstance();
+  await Reflect.apply(fastify.register, fastify, [fastifyCookie]);
 
   registerSpeakingMultipartParser(app.getHttpAdapter().getInstance());
 

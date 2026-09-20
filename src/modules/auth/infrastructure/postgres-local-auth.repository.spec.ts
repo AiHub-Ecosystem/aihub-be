@@ -43,6 +43,14 @@ const input = {
   now: new Date('2026-09-19T00:00:00.000Z'),
 };
 
+const refreshToken = {
+  id: 'rft_01J00000000000000000000000',
+  familyId: 'rfs_01J00000000000000000000000',
+  raw: 'refresh-token',
+  hash: 'b'.repeat(64),
+  expiresAt: new Date('2026-10-19T00:00:00.000Z'),
+};
+
 describe('PostgresLocalAuthRepository', () => {
   it('persists account, local identity, and token in one transaction', async () => {
     const client = new FakeClient();
@@ -149,5 +157,78 @@ describe('PostgresLocalAuthRepository', () => {
         'usr_01J00000000000000000000000',
       ),
     ).resolves.toBe('disabled');
+  });
+
+  it('persists only the refresh hash and rotates under a row lock', async () => {
+    const client = new FakeClient();
+    const repository = new PostgresLocalAuthRepository(client);
+    await repository.createRefreshSession({
+      userId: 'usr_01J00000000000000000000000',
+      token: refreshToken,
+      issuedAt: input.now,
+    });
+    expect(client.queries[0]?.text).toContain('INSERT INTO refresh_tokens');
+    expect(client.queries[0]?.values).toContain(refreshToken.hash);
+    expect(JSON.stringify(client.queries[0])).not.toContain(refreshToken.raw);
+
+    client.responses = [
+      [
+        {
+          token_id: refreshToken.id,
+          family_id: refreshToken.familyId,
+          user_account_id: 'usr_01J00000000000000000000000',
+          expires_at: refreshToken.expiresAt,
+          used_at: null,
+          revoked_at: null,
+          status: 'active',
+        },
+      ],
+    ];
+    await expect(
+      repository.rotateRefreshToken({
+        tokenId: refreshToken.id,
+        tokenHash: refreshToken.hash,
+        successor: {
+          ...refreshToken,
+          id: 'rft_01J00000000000000000000001',
+          raw: 'successor-token',
+          hash: 'c'.repeat(64),
+          expiresAt: new Date('2026-11-18T00:00:00.000Z'),
+        },
+        now: input.now,
+      }),
+    ).resolves.toEqual({
+      kind: 'rotated',
+      userId: 'usr_01J00000000000000000000000',
+    });
+    expect(client.queries[1]?.text).toContain('FOR UPDATE');
+    expect(client.queries[2]?.text).toContain('SET used_at');
+    expect(client.queries[3]?.text).toContain('INSERT INTO refresh_tokens');
+  });
+
+  it('revokes a whole family for a known stale token and ignores unknown logout tokens', async () => {
+    const client = new FakeClient();
+    client.responses = [[{ family_id: refreshToken.familyId }]];
+    const repository = new PostgresLocalAuthRepository(client);
+
+    await repository.revokeRefreshFamilyByTokenHash({
+      tokenHash: refreshToken.hash,
+      now: input.now,
+    });
+    expect(client.queries[1]?.text).toContain(
+      'WHERE family_id = $1 AND revoked_at IS NULL',
+    );
+
+    const unknownClient = new FakeClient();
+    unknownClient.responses = [[]];
+    await expect(
+      new PostgresLocalAuthRepository(
+        unknownClient,
+      ).revokeRefreshFamilyByTokenHash({
+        tokenHash: 'd'.repeat(64),
+        now: input.now,
+      }),
+    ).resolves.toBeUndefined();
+    expect(unknownClient.queries).toHaveLength(1);
   });
 });

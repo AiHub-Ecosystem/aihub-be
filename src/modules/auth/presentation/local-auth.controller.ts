@@ -6,12 +6,15 @@ import {
   Inject,
   Post,
   Req,
+  Res,
 } from '@nestjs/common';
 import { Value } from '@sinclair/typebox/value';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { AppError } from '../../../common/errors/app-error';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
+  EmptyAuthRequestSchema,
   type LoginRequest,
   LoginRequestSchema,
   type RegisterRequest,
@@ -25,6 +28,13 @@ import {
   LOCAL_AUTH_SERVICE,
   type LocalAuthServicePort,
 } from '../application/local-auth-service.port';
+import {
+  REFRESH_COOKIE_CLEAR_OPTIONS,
+  REFRESH_COOKIE_NAME,
+  REFRESH_COOKIE_OPTIONS,
+  hasAlternateRefreshSource,
+  refreshCookieFrom,
+} from './refresh-cookie';
 
 interface RegisterEnvelope {
   readonly data: {
@@ -62,6 +72,20 @@ function requestIp(request: FastifyRequest): string {
   return request.ip || 'unknown';
 }
 
+function parseEmptyBody(body: unknown): void {
+  parseBody(EmptyAuthRequestSchema, body === undefined ? {} : body);
+}
+
+function clearRefreshCookie(reply: FastifyReply): void {
+  reply.setCookie(REFRESH_COOKIE_NAME, '', REFRESH_COOKIE_CLEAR_OPTIONS);
+}
+
+function isInvalidRefreshToken(error: unknown): boolean {
+  return (
+    error instanceof AppError && error.code === 'AUTH_REFRESH_TOKEN_INVALID'
+  );
+}
+
 @Controller('/v1/auth')
 export class LocalAuthController {
   constructor(
@@ -89,9 +113,15 @@ export class LocalAuthController {
   async login(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<LoginEnvelope> {
     const input = parseBody<LoginRequest>(LoginRequestSchema, body);
     const result = await this.service.login(input, requestIp(request));
+    reply.setCookie(
+      REFRESH_COOKIE_NAME,
+      result.refreshToken,
+      REFRESH_COOKIE_OPTIONS,
+    );
     return {
       data: {
         access_token: result.accessToken,
@@ -100,6 +130,58 @@ export class LocalAuthController {
       },
       meta: { request_id: String(request.id) },
     };
+  }
+
+  @Post('refresh')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  async refresh(
+    @Req() request: FastifyRequest,
+    @Body() body: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<LoginEnvelope> {
+    parseEmptyBody(body);
+    const rawToken = hasAlternateRefreshSource(request)
+      ? undefined
+      : refreshCookieFrom(request);
+
+    try {
+      const result = await this.service.refresh(rawToken, requestIp(request));
+      reply.setCookie(
+        REFRESH_COOKIE_NAME,
+        result.refreshToken,
+        REFRESH_COOKIE_OPTIONS,
+      );
+      return {
+        data: {
+          access_token: result.accessToken,
+          token_type: 'Bearer',
+          expires_in: result.expiresIn,
+        },
+        meta: { request_id: String(request.id) },
+      };
+    } catch (error) {
+      if (isInvalidRefreshToken(error)) {
+        clearRefreshCookie(reply);
+      }
+      throw error;
+    }
+  }
+
+  @Post('logout')
+  @HttpCode(204)
+  @Header('Cache-Control', 'no-store')
+  async logout(
+    @Req() request: FastifyRequest,
+    @Body() body: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<void> {
+    parseEmptyBody(body);
+    const rawToken = hasAlternateRefreshSource(request)
+      ? undefined
+      : refreshCookieFrom(request);
+    await this.service.logout(rawToken);
+    clearRefreshCookie(reply);
   }
 
   @Post('verify-email')

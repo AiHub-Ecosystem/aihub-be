@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 
 import { AppError } from '../../../common/errors/app-error';
 import { invalidRequest } from '../../../common/errors/invalid-request';
@@ -24,6 +24,10 @@ import {
   type PasswordHasherPort,
 } from './password-hasher.port';
 import {
+  REFRESH_TOKEN_ISSUER,
+  type RefreshTokenIssuerPort,
+} from './refresh-token.port';
+import {
   USER_ACCESS_TOKEN_ISSUER,
   type UserAccessTokenIssuerPort,
 } from './user-access-token.port';
@@ -37,6 +41,10 @@ const LOGIN_IP_LIMIT = 20;
 const LOGIN_IP_WINDOW_MS = 5 * 60 * 1000;
 const LOGIN_EMAIL_LIMIT = 5;
 const LOGIN_EMAIL_WINDOW_MS = 15 * 60 * 1000;
+const REFRESH_IP_LIMIT = 20;
+const REFRESH_IP_WINDOW_MS = 5 * 60 * 1000;
+const REFRESH_TOKEN_LIMIT = 5;
+const REFRESH_TOKEN_WINDOW_MS = 15 * 60 * 1000;
 const DUMMY_PASSWORD_HASH =
   '$argon2id$v=19$m=65536,t=3,p=1$SoHl8YUBzXgiAZ4xlgNZyg$qwZIFOa2OcIOgiHLRYImWLsza4k9/T4ZZvvhiWrD41k';
 
@@ -48,6 +56,16 @@ export interface RegisteredLocalAccount {
 
 export interface LocalAuthServiceClock {
   now(): Date;
+}
+
+export const AUTH_CLOCK = Symbol('AUTH_CLOCK');
+
+function invalidRefreshToken(): AppError {
+  return new AppError({
+    code: 'AUTH_REFRESH_TOKEN_INVALID',
+    message: 'Refresh token is invalid',
+    retryable: false,
+  });
 }
 
 @Injectable()
@@ -67,8 +85,13 @@ export class LocalAuthService {
     private readonly rateLimiter: AuthRateLimiterPort,
     @Inject(USER_ACCESS_TOKEN_ISSUER)
     private readonly accessTokenIssuer: UserAccessTokenIssuerPort,
+    @Inject(REFRESH_TOKEN_ISSUER)
+    private readonly refreshTokenIssuer: RefreshTokenIssuerPort,
+    @Optional()
+    @Inject(AUTH_CLOCK)
+    clock?: LocalAuthServiceClock,
   ) {
-    this.clock = { now: () => new Date() };
+    this.clock = clock ?? { now: () => new Date() };
   }
 
   async register(
@@ -215,7 +238,11 @@ export class LocalAuthService {
   async login(
     input: { readonly email: string; readonly password: string },
     ip: string,
-  ): Promise<{ readonly accessToken: string; readonly expiresIn: number }> {
+  ): Promise<{
+    readonly accessToken: string;
+    readonly expiresIn: number;
+    readonly refreshToken: string;
+  }> {
     let normalized: { readonly email: string; readonly password: string };
     try {
       normalized = normalizeLogin(input);
@@ -258,8 +285,71 @@ export class LocalAuthService {
       });
     }
 
-    const issued = await this.accessTokenIssuer.issue(identity.userId);
-    return { accessToken: issued.token, expiresIn: issued.expiresIn };
+    const now = this.clock.now();
+    const accessToken = await this.accessTokenIssuer.issue(identity.userId);
+    const refreshToken = this.refreshTokenIssuer.issue(now);
+    await this.repository.createRefreshSession({
+      userId: identity.userId,
+      token: refreshToken,
+      issuedAt: now,
+    });
+    return {
+      accessToken: accessToken.token,
+      expiresIn: accessToken.expiresIn,
+      refreshToken: refreshToken.raw,
+    };
+  }
+
+  async refresh(
+    rawToken: string | undefined,
+    ip: string,
+  ): Promise<{
+    readonly accessToken: string;
+    readonly expiresIn: number;
+    readonly refreshToken: string;
+  }> {
+    if (rawToken === undefined || rawToken.length === 0) {
+      await this.enforceRefreshFailureLimits(ip);
+      throw invalidRefreshToken();
+    }
+
+    const tokenHash = this.refreshTokenIssuer.hash(rawToken);
+    const current = await this.repository.findRefreshTokenByHash(tokenHash);
+    if (current === undefined) {
+      await this.enforceRefreshFailureLimits(ip, tokenHash);
+      throw invalidRefreshToken();
+    }
+
+    const now = this.clock.now();
+    const successor = this.refreshTokenIssuer.issue(now, current.familyId);
+    const rotation = await this.repository.rotateRefreshToken({
+      tokenId: current.tokenId,
+      tokenHash,
+      successor,
+      now,
+    });
+    if (rotation.kind !== 'rotated') {
+      await this.enforceRefreshFailureLimits(ip, tokenHash);
+      throw invalidRefreshToken();
+    }
+
+    const accessToken = await this.accessTokenIssuer.issue(rotation.userId);
+    return {
+      accessToken: accessToken.token,
+      expiresIn: accessToken.expiresIn,
+      refreshToken: successor.raw,
+    };
+  }
+
+  async logout(rawToken: string | undefined): Promise<void> {
+    if (rawToken === undefined || rawToken.length === 0) {
+      return;
+    }
+
+    await this.repository.revokeRefreshFamilyByTokenHash({
+      tokenHash: this.refreshTokenIssuer.hash(rawToken),
+      now: this.clock.now(),
+    });
   }
 
   private async enforceRateLimits(
@@ -283,5 +373,29 @@ export class LocalAuthService {
         });
       }
     }
+  }
+
+  private async enforceRefreshFailureLimits(
+    ip: string,
+    tokenHash?: string,
+  ): Promise<void> {
+    await this.enforceRateLimits([
+      {
+        scope: 'refresh_ip',
+        key: ip,
+        limit: REFRESH_IP_LIMIT,
+        windowMs: REFRESH_IP_WINDOW_MS,
+      },
+      ...(tokenHash === undefined
+        ? []
+        : [
+            {
+              scope: 'refresh_token' as const,
+              key: tokenHash,
+              limit: REFRESH_TOKEN_LIMIT,
+              windowMs: REFRESH_TOKEN_WINDOW_MS,
+            },
+          ]),
+    ]);
   }
 }

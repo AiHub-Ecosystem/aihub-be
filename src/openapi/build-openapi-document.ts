@@ -13,6 +13,7 @@ import {
   httpStatusForErrorCode,
 } from '../common/errors/error-registry';
 import {
+  EmptyAuthRequestSchema,
   LoginRequestSchema,
   LoginResponseSchema,
   RegisterRequestSchema,
@@ -24,6 +25,7 @@ import {
   MintSandboxAssertionRequestSchema,
   MintSandboxAssertionResponseSchema,
 } from '../contracts/sandbox/assertion';
+import { REFRESH_COOKIE_NAME } from '../modules/auth/presentation/refresh-cookie';
 
 /**
  * The error registry is the source of truth for status/code groupings. A
@@ -226,6 +228,8 @@ const AUTH_REGISTER_PATH = '/v1/auth/register';
 const AUTH_LOGIN_PATH = '/v1/auth/login';
 const AUTH_VERIFY_PATH = '/v1/auth/verify-email';
 const AUTH_RESEND_PATH = '/v1/auth/resend-verification';
+const AUTH_REFRESH_PATH = '/v1/auth/refresh';
+const AUTH_LOGOUT_PATH = '/v1/auth/logout';
 
 function authErrorResponses(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
@@ -258,6 +262,10 @@ function localAuthPathItems(
         'Cache-Control': {
           schema: { type: 'string', enum: ['no-store'] },
         },
+        'Set-Cookie': {
+          description: 'The host-only refresh cookie for the new session.',
+          schema: { type: 'string' },
+        },
       },
       content: { 'application/json': { schema: LoginResponseSchema } },
     },
@@ -271,21 +279,54 @@ function localAuthPathItems(
     '202': { description: 'Verification resend accepted' },
     ...authErrorResponses(groupedErrors, [400, 429, 500]),
   };
+  const refreshResponses = {
+    '200': {
+      description: 'Access token issued and refresh cookie rotated',
+      headers: {
+        'Cache-Control': {
+          schema: { type: 'string', enum: ['no-store'] },
+        },
+        'Set-Cookie': {
+          description: 'The rotated host-only refresh cookie.',
+          schema: { type: 'string' },
+        },
+      },
+      content: { 'application/json': { schema: LoginResponseSchema } },
+    },
+    ...authErrorResponses(groupedErrors, [400, 401, 429, 500]),
+  };
+  const logoutResponses = {
+    '204': {
+      description: 'Refresh session revoked and cookie cleared',
+      headers: {
+        'Cache-Control': {
+          schema: { type: 'string', enum: ['no-store'] },
+        },
+        'Set-Cookie': {
+          description: 'An expired host-only refresh cookie.',
+          schema: { type: 'string' },
+        },
+      },
+    },
+    ...authErrorResponses(groupedErrors, [400, 500]),
+  };
 
   const operation = (
     operationId: string,
     summary: string,
     schema: TSchema,
     responses: Record<string, unknown>,
+    security: readonly Record<string, readonly string[]>[] = [],
+    requestBodyRequired = true,
   ): Record<string, unknown> => ({
     post: {
       operationId,
       summary,
       'x-identity-scope': 'none',
-      security: [],
+      security,
       parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
       requestBody: {
-        required: true,
+        required: requestBodyRequired,
         content: { 'application/json': { schema } },
       },
       responses,
@@ -316,6 +357,22 @@ function localAuthPathItems(
       'Request a verification email resend',
       ResendVerificationRequestSchema,
       resendResponses,
+    ),
+    [AUTH_REFRESH_PATH]: operation(
+      'auth.refresh',
+      'Rotate a refresh session and issue a User Access JWT',
+      EmptyAuthRequestSchema,
+      refreshResponses,
+      [{ RefreshCookie: [] }],
+      false,
+    ),
+    [AUTH_LOGOUT_PATH]: operation(
+      'auth.logout',
+      'Revoke the current refresh session',
+      EmptyAuthRequestSchema,
+      logoutResponses,
+      [{ RefreshCookie: [] }],
+      false,
     ),
   };
 }
@@ -437,6 +494,13 @@ export function buildOpenApiDocument(version: string): unknown {
           scheme: 'bearer',
           bearerFormat: 'JWT',
           description: 'User Access JWT for protected user-facing routes.',
+        },
+        RefreshCookie: {
+          type: 'apiKey',
+          in: 'cookie',
+          name: REFRESH_COOKIE_NAME,
+          description:
+            'Host-only Secure HttpOnly cookie containing the opaque refresh credential.',
         },
       },
       parameters: {

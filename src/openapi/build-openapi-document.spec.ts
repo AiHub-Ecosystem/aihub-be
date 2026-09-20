@@ -6,6 +6,7 @@ interface OpenApiOperation {
   readonly operationId: string;
   readonly parameters: readonly Record<string, unknown>[];
   readonly requestBody: {
+    readonly required?: boolean;
     readonly content: Record<string, { readonly schema: unknown }>;
   };
   readonly responses: Record<string, unknown>;
@@ -36,12 +37,16 @@ const AUTH_PATHS = [
   '/v1/auth/login',
   '/v1/auth/verify-email',
   '/v1/auth/resend-verification',
+  '/v1/auth/refresh',
+  '/v1/auth/logout',
 ] as const;
 const AUTH_OPERATION_IDS = [
   'auth.register',
   'auth.login',
   'auth.verify_email',
   'auth.resend_verification',
+  'auth.refresh',
+  'auth.logout',
 ] as const;
 
 function build(): OpenApiDocument {
@@ -89,6 +94,8 @@ describe('buildOpenApiDocument', () => {
     const login = doc.paths['/v1/auth/login']?.post;
     const verify = doc.paths['/v1/auth/verify-email']?.post;
     const resend = doc.paths['/v1/auth/resend-verification']?.post;
+    const refresh = doc.paths['/v1/auth/refresh']?.post;
+    const logout = doc.paths['/v1/auth/logout']?.post;
 
     expect(register?.security).toEqual([]);
     expect(login?.security).toEqual([]);
@@ -98,6 +105,13 @@ describe('buildOpenApiDocument', () => {
     expect(register?.responses['201']).toBeDefined();
     expect(verify?.responses['204']).toBeDefined();
     expect(resend?.responses['202']).toBeDefined();
+    expect(refresh?.security).toEqual([{ RefreshCookie: [] }]);
+    expect(refresh?.requestBody?.required).toBe(false);
+    expect(refresh?.responses['200']).toBeDefined();
+    expect(JSON.stringify(refresh?.responses['200'])).toContain('Set-Cookie');
+    expect(logout?.security).toEqual([{ RefreshCookie: [] }]);
+    expect(logout?.requestBody?.required).toBe(false);
+    expect(logout?.responses['204']).toBeDefined();
     expect(JSON.stringify(register?.responses['201'])).not.toContain(
       'password',
     );

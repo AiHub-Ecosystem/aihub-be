@@ -1,3 +1,4 @@
+import type { LocalAccountStatus } from '../domain/local-auth';
 import type { AuthRateLimiterPort } from './auth-rate-limiter.port';
 import type {
   EmailSenderPort,
@@ -6,10 +7,15 @@ import type {
 import type {
   LocalAuthRepositoryPort,
   LoginIdentity,
+  RefreshTokenRecord,
   ResendVerificationTarget,
 } from './local-auth-repository.port';
 import { LocalAuthService } from './local-auth.service';
 import type { PasswordHasherPort } from './password-hasher.port';
+import type {
+  IssuedRefreshToken,
+  RefreshTokenIssuerPort,
+} from './refresh-token.port';
 import type {
   IssuedUserAccessToken,
   UserAccessTokenIssuerPort,
@@ -30,9 +36,11 @@ class FakeRepository implements LocalAuthRepositoryPort {
     passwordHash: 'argon2:correct horse battery',
     status: 'active' as const,
   };
-  statusByUserId = new Map([
+  statusByUserId = new Map<string, LocalAccountStatus>([
     ['usr_01J00000000000000000000000', 'active' as const],
   ]);
+  refreshTokens = new Map<string, RefreshTokenRecord>();
+  refreshLookupFailure = false;
 
   async register(input: unknown): Promise<void> {
     this.registered.push(input);
@@ -54,6 +62,77 @@ class FakeRepository implements LocalAuthRepositoryPort {
 
   async findUserAccountStatus(userId: string) {
     return this.statusByUserId.get(userId);
+  }
+
+  async createRefreshSession(input: {
+    readonly userId: string;
+    readonly token: IssuedRefreshToken;
+    readonly issuedAt: Date;
+  }): Promise<void> {
+    this.refreshTokens.set(input.token.hash, {
+      tokenId: input.token.id,
+      familyId: input.token.familyId,
+      userId: input.userId,
+      expiresAt: input.token.expiresAt,
+      usedAt: undefined,
+      revokedAt: undefined,
+    });
+  }
+
+  async findRefreshTokenByHash(tokenHash: string) {
+    if (this.refreshLookupFailure) {
+      throw new Error('durable store unavailable');
+    }
+    return this.refreshTokens.get(tokenHash);
+  }
+
+  async rotateRefreshToken(input: {
+    readonly tokenId: string;
+    readonly tokenHash: string;
+    readonly successor: IssuedRefreshToken;
+    readonly now: Date;
+  }) {
+    const current = this.refreshTokens.get(input.tokenHash);
+    if (current === undefined) {
+      return { kind: 'invalid' as const, reason: 'missing' as const };
+    }
+    if (this.statusByUserId.get(current.userId) !== 'active') {
+      return { kind: 'invalid' as const, reason: 'inactive' as const };
+    }
+    if (current.usedAt !== undefined) {
+      return { kind: 'invalid' as const, reason: 'used' as const };
+    }
+    if (current.revokedAt !== undefined) {
+      return { kind: 'invalid' as const, reason: 'revoked' as const };
+    }
+    if (current.expiresAt <= input.now) {
+      return { kind: 'invalid' as const, reason: 'expired' as const };
+    }
+    this.refreshTokens.set(input.tokenHash, { ...current, usedAt: input.now });
+    this.refreshTokens.set(input.successor.hash, {
+      tokenId: input.successor.id,
+      familyId: input.successor.familyId,
+      userId: current.userId,
+      expiresAt: input.successor.expiresAt,
+      usedAt: undefined,
+      revokedAt: undefined,
+    });
+    return { kind: 'rotated' as const, userId: current.userId };
+  }
+
+  async revokeRefreshFamilyByTokenHash(input: {
+    readonly tokenHash: string;
+    readonly now: Date;
+  }): Promise<void> {
+    const current = this.refreshTokens.get(input.tokenHash);
+    if (current === undefined) {
+      return;
+    }
+    for (const [hash, token] of this.refreshTokens) {
+      if (token.familyId === current.familyId) {
+        this.refreshTokens.set(hash, { ...token, revokedAt: input.now });
+      }
+    }
   }
 }
 
@@ -107,6 +186,26 @@ class FakeAccessTokenIssuer implements UserAccessTokenIssuerPort {
   }
 }
 
+class FakeRefreshTokenIssuer implements RefreshTokenIssuerPort {
+  sequence = 0;
+
+  issue(now: Date, familyId?: string): IssuedRefreshToken {
+    this.sequence += 1;
+    const raw = `refresh-${this.sequence}`;
+    return {
+      id: `rft_${this.sequence}`,
+      familyId: familyId ?? `rfs_${this.sequence}`,
+      raw,
+      hash: this.hash(raw),
+      expiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+    };
+  }
+
+  hash(raw: string): string {
+    return `hash:${raw}`;
+  }
+}
+
 class FakeLimiter implements AuthRateLimiterPort {
   calls: unknown[] = [];
   allowed = true;
@@ -117,11 +216,21 @@ class FakeLimiter implements AuthRateLimiterPort {
   }
 }
 
+class FakeClock {
+  value = new Date('2026-09-20T00:00:00.000Z');
+
+  now(): Date {
+    return new Date(this.value);
+  }
+}
+
 function service() {
   const repository = new FakeRepository();
   const sender = new FakeSender();
   const limiter = new FakeLimiter();
   const hasher = new FakeHasher();
+  const refreshTokenIssuer = new FakeRefreshTokenIssuer();
+  const clock = new FakeClock();
   const local = new LocalAuthService(
     repository,
     hasher,
@@ -129,8 +238,18 @@ function service() {
     sender,
     limiter,
     new FakeAccessTokenIssuer(),
+    refreshTokenIssuer,
+    clock,
   );
-  return { local, repository, sender, limiter, hasher };
+  return {
+    local,
+    repository,
+    sender,
+    limiter,
+    hasher,
+    refreshTokenIssuer,
+    clock,
+  };
 }
 
 describe('LocalAuthService', () => {
@@ -213,6 +332,7 @@ describe('LocalAuthService', () => {
     ).resolves.toEqual({
       accessToken: 'jwt-for-usr_01J00000000000000000000000',
       expiresIn: 900,
+      refreshToken: 'refresh-1',
     });
     expect(hasher.verified).toEqual(['  exact password  ']);
     expect(limiter.calls).not.toEqual(
@@ -286,5 +406,94 @@ describe('LocalAuthService', () => {
         '203.0.113.7',
       ),
     ).rejects.toMatchObject({ code: 'RATE_LIMITED', httpStatus: 429 });
+  });
+
+  it('rotates a valid refresh credential and does not count successful refreshes', async () => {
+    const { local, repository, limiter } = service();
+    const login = await local.login(
+      { email: 'person@example.com', password: 'correct horse battery' },
+      '203.0.113.7',
+    );
+
+    await expect(
+      local.refresh(login.refreshToken, '203.0.113.7'),
+    ).resolves.toEqual({
+      accessToken: 'jwt-for-usr_01J00000000000000000000000',
+      expiresIn: 900,
+      refreshToken: 'refresh-2',
+    });
+    expect(repository.refreshTokens.get('hash:refresh-1')).toMatchObject({
+      usedAt: new Date('2026-09-20T00:00:00.000Z'),
+    });
+    expect(limiter.calls).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ scope: 'refresh_ip' }),
+        expect.objectContaining({ scope: 'refresh_token' }),
+      ]),
+    );
+  });
+
+  it('uses only the IP failure limit when the cookie is missing', async () => {
+    const { local, limiter } = service();
+
+    await expect(local.refresh(undefined, '203.0.113.7')).rejects.toMatchObject(
+      {
+        code: 'AUTH_REFRESH_TOKEN_INVALID',
+      },
+    );
+    expect(limiter.calls).toEqual([
+      expect.objectContaining({
+        scope: 'refresh_ip',
+        limit: 20,
+        windowMs: 300000,
+      }),
+    ]);
+  });
+
+  it('uses the strict expiry boundary and leaves the family available for audit', async () => {
+    const { local, repository, clock } = service();
+    const login = await local.login(
+      { email: 'person@example.com', password: 'correct horse battery' },
+      '203.0.113.7',
+    );
+    clock.value = new Date('2026-10-20T00:00:00.000Z');
+
+    await expect(
+      local.refresh(login.refreshToken, '203.0.113.7'),
+    ).rejects.toMatchObject({
+      code: 'AUTH_REFRESH_TOKEN_INVALID',
+    });
+    expect(repository.refreshTokens.get('hash:refresh-1')).toMatchObject({
+      usedAt: undefined,
+      revokedAt: undefined,
+    });
+  });
+
+  it('rejects disabled accounts without consuming a failure limit for infrastructure errors', async () => {
+    const { local, repository, limiter } = service();
+    const login = await local.login(
+      { email: 'person@example.com', password: 'correct horse battery' },
+      '203.0.113.7',
+    );
+    repository.statusByUserId.set('usr_01J00000000000000000000000', 'disabled');
+
+    await expect(
+      local.refresh(login.refreshToken, '203.0.113.7'),
+    ).rejects.toMatchObject({
+      code: 'AUTH_REFRESH_TOKEN_INVALID',
+    });
+    expect(limiter.calls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ scope: 'refresh_ip' }),
+        expect.objectContaining({ scope: 'refresh_token' }),
+      ]),
+    );
+
+    const unavailable = service();
+    unavailable.repository.refreshLookupFailure = true;
+    await expect(
+      unavailable.local.refresh('refresh-unknown', '203.0.113.7'),
+    ).rejects.toThrow('durable store unavailable');
+    expect(unavailable.limiter.calls).toHaveLength(0);
   });
 });

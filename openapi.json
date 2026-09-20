@@ -22,6 +22,12 @@
         "scheme": "bearer",
         "bearerFormat": "JWT",
         "description": "User Access JWT for protected user-facing routes."
+      },
+      "RefreshCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-aihub_refresh",
+        "description": "Host-only Secure HttpOnly cookie containing the opaque refresh credential."
       }
     },
     "parameters": {
@@ -98,7 +104,7 @@
         }
       },
       "Error401": {
-        "description": "UNAUTHORIZED | USER_ASSERTION_REQUIRED | INVALID_USER_ASSERTION | AUTH_CREDENTIALS_INVALID | AUTH_USER_ACCESS_TOKEN_REQUIRED | AUTH_USER_ACCESS_TOKEN_INVALID",
+        "description": "UNAUTHORIZED | USER_ASSERTION_REQUIRED | INVALID_USER_ASSERTION | AUTH_CREDENTIALS_INVALID | AUTH_REFRESH_TOKEN_INVALID | AUTH_USER_ACCESS_TOKEN_REQUIRED | AUTH_USER_ACCESS_TOKEN_INVALID",
         "content": {
           "application/json": {
             "schema": {
@@ -127,6 +133,10 @@
                         },
                         {
                           "const": "AUTH_CREDENTIALS_INVALID",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AUTH_REFRESH_TOKEN_INVALID",
                           "type": "string"
                         },
                         {
@@ -2898,6 +2908,12 @@
                   "type": "string",
                   "enum": ["no-store"]
                 }
+              },
+              "Set-Cookie": {
+                "description": "The host-only refresh cookie for the new session.",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -3042,6 +3058,161 @@
           },
           "429": {
             "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
+    "/v1/auth/refresh": {
+      "post": {
+        "operationId": "auth.refresh",
+        "summary": "Rotate a refresh session and issue a User Access JWT",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "RefreshCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access token issued and refresh cookie rotated",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              },
+              "Set-Cookie": {
+                "description": "The rotated host-only refresh cookie.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["access_token", "token_type", "expires_in"],
+                      "properties": {
+                        "access_token": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "token_type": {
+                          "const": "Bearer",
+                          "type": "string"
+                        },
+                        "expires_in": {
+                          "const": 900,
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "operationId": "auth.logout",
+        "summary": "Revoke the current refresh session",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "RefreshCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Refresh session revoked and cookie cleared",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              },
+              "Set-Cookie": {
+                "description": "An expired host-only refresh cookie.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
           },
           "500": {
             "$ref": "#/components/responses/Error500"

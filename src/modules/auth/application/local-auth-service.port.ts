@@ -17,7 +17,20 @@ export interface LocalAuthServicePort {
   login(
     input: LoginRequest,
     ip: string,
-  ): Promise<{ readonly accessToken: string; readonly expiresIn: number }>;
+  ): Promise<{
+    readonly accessToken: string;
+    readonly expiresIn: number;
+    readonly refreshToken: string;
+  }>;
+  refresh(
+    rawToken: string | undefined,
+    ip: string,
+  ): Promise<{
+    readonly accessToken: string;
+    readonly expiresIn: number;
+    readonly refreshToken: string;
+  }>;
+  logout(rawToken: string | undefined): Promise<void>;
 }
 
 export const LOCAL_AUTH_SERVICE = Symbol('LOCAL_AUTH_SERVICE');

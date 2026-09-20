@@ -17,6 +17,8 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **User Access JWT:** a short-lived RS256 token issued by AIHUB after local credential authentication for user-facing APIs or the Customer Web BFF; it is distinct from `X-API-Key`, User Assertions, and internal downstream JWTs, carries the User Account ID as `sub`, and does not carry organization or mutable credential data.
 - **Bearer boundary:** the user-facing authentication boundary that accepts an AIHUB User Access JWT in `Authorization: Bearer`; it is separate from the `X-API-Key` and `X-User-Assertion` grading boundaries.
 - **Refresh Token:** a renewable login credential paired with a User Access JWT; it can be rotated and revoked without changing the user account or API key.
+- **Refresh Session:** the durable login session created by one successful login; it owns one Refresh Token Family and is independent from the User Account and User Access JWT.
+- **Refresh Token Family:** the ordered lineage of rotated Refresh Token versions for one Refresh Session; reusing any previous version revokes the entire family.
 - **Customer Organization:** the tenant concept in the Customer Web. During the invite-only sandbox MVP, all invited Customer Users belong to one Customer Organization mapped to the dedicated sandbox AIHUB Organization.
 - **Managed IdP:** the external identity provider used by the existing Customer Web sandbox; it is separate from AIHUB's local credential auth and remains a future federation source for AIHUB accounts.
 - **Clerk:** the selected Managed IdP for the existing Customer Web sandbox; it owns that sandbox's passwordless sign-in, invitations, organization membership, and session lifecycle.
@@ -96,6 +98,30 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - Login reads one durable projection of Auth Identity plus its owning User Account (`userId`, status, password hash); organization membership is not part of credential authentication.
 - User Access JWTs authenticate user-facing/BFF boundaries; grading routes continue to use the organization API-key and user-assertion boundaries until a separate authorization decision changes them.
 - Refresh Tokens are renewable credentials with explicit rotation and revocation; they are not interchangeable with API keys or User Access JWTs.
+- Each successful login creates a separate Refresh Session and Token Family; logout revokes only the family represented by the current cookie, so another login remains independent.
+- The #66 slice treats the refresh cookie as an AIHUB-hosted, host-only, `Secure`/`HttpOnly`/`SameSite=Strict` browser credential; cross-site BFF forwarding and its CSRF contract are deferred.
+- The refresh cookie is named `__Host-aihub_refresh`, uses `Path=/` with no `Domain`, lives for 30 days, and is cleared with the same attributes plus immediate expiry.
+- Refresh credentials are cookie-only: refresh accepts exactly one named cookie and an empty body, never an authorization header, query value, alternate cookie, or duplicate cookie name.
+- Each successful refresh issues a new opaque 32-byte CSPRNG credential with a new 30-day sliding expiry; only its SHA-256 hash is durable, and refresh credentials use a port distinct from verification tokens.
+- Durable refresh state stores one row per token version in Postgres, retaining its family lineage and used/revoked/expiry state; Redis is not a refresh-session source of truth.
+- The durable model uses one refresh-token table: `family_id` is the logical Refresh Session identifier, while each row carries its token version and lifecycle timestamps; there is no separate session-parent table until session management needs one.
+- The refresh-token migration uses `rft_` token IDs and `rfs_` family IDs, unique hash plus user/family indexes, and no `replaced_by_id` or parent session table; existing accounts are not backfilled.
+- Login fails closed when the durable Refresh Session cannot be created, so no access token or refresh cookie is returned without a persisted session.
+- Refresh rotation commits the durable session change before issuing the new access JWT; an issuer failure returns a safe `5xx` without credentials and requires a new login.
+- Refresh rotation is strict and atomic: a second use of an already-rotated token is reuse, revokes its entire family, and receives the same generic refresh failure as every other invalid refresh credential; no replay grace window exists.
+- Refresh requires an active User Account; a disabled account cannot refresh, while account status remains the live authorization gate rather than a new token blacklist or automatic family purge.
+- Refresh failures are intentionally generic `401` results, and logout is idempotent: it clears the cookie and returns bodyless `204` even when the cookie is absent or invalid.
+- Refresh failures use `refresh_ip` at 20 failures per 5 minutes and `refresh_token` at 5 failures per 15 minutes through the existing application rate-limit seam; missing cookies use only the IP dimension, successful refreshes never increment or reset counters, and no permanent account lockout exists.
+- A valid token row is locked, checked for active account and expiry, marked used, and followed by a successor row; a used or revoked token revokes its family before returning the generic refresh failure. Logout revokes a known token's whole family even when that token is already stale.
+- Login issues the access JWT before creating its Refresh Session but returns neither JWT nor cookie unless both succeed; a failed persistence step is a safe login failure.
+- Refresh returns the same `200` access-token envelope as login with `Cache-Control: no-store`; logout returns bodyless `204` with a cleared cookie and `Cache-Control: no-store`. Public refresh failures use only `AUTH_REFRESH_TOKEN_INVALID`; internal diagnostics may classify the reason without exposing it.
+- A definitive refresh credential failure clears the refresh cookie; rate-limit and infrastructure failures preserve it for retry. Refresh accepts no body or `{}`, rejects non-empty bodies and alternate credential sources, and treats duplicate cookie names as invalid.
+- Expiry uses an injectable clock and the strict boundary `expires_at > now`; lifecycle updates and successor insertion are one atomic transition, while infrastructure failures do not consume credential-failure limits.
+- Expired and revoked rows remain durable for audit and reuse decisions; bounded cleanup is a later maintenance concern, not part of #66.
+- Cookie parsing and serialization belong to the Fastify cookie boundary; manual ad-hoc cookie parsing is not part of the auth contract.
+- OpenAPI and Postman artifacts describe the cookie, `Set-Cookie`, refresh `200`, logout `204`, and generic refresh `401`; HTTP integration uses an in-memory durable seam and an injectable clock.
+- The refresh implementation extends the local-auth repository port and uses a separate refresh-token issuer port; schema changes arrive through an explicit migration before code deployment, never through bootstrap DDL.
+- The acceptance evidence covers cookie attributes, unchanged login body, successful rotation, reuse-family revocation, concurrent refresh, expiry, disabled accounts, malformed/duplicate/alternate sources, independent login families, logout idempotency, rate-limit fallback, transaction behavior, artifacts, and secret redaction.
 - During the sandbox MVP, one dedicated sandbox AIHUB Organization serves all invited Customer Users, each with a stable sandbox `user_id`; users cannot switch organizations.
 - The existing sandbox Managed IdP owns invitation and disable actions; the Customer Web checks active membership on every BFF request rather than trusting a stale session alone.
 - The existing sandbox Managed IdP directory is the membership source of truth for that sandbox; local AIHUB accounts use their own account and membership records.
@@ -165,5 +191,6 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - [ADR-0020: Invite-only customer-web identity boundary for sandbox MVP](docs/adr/0020-customer-web-identity-boundary.md)
 - [ADR-0021: Customer Web Speaking sandbox boundary](docs/adr/0021-customer-web-speaking-sandbox-boundary.md)
 - [ADR-0022: AIHUB-owned local user authentication](docs/adr/0022-aihub-local-user-authentication.md)
+- [ADR-0024: Rotating refresh-session boundary](docs/adr/0024-rotating-refresh-session-boundary.md)
 - [Agent and architecture design](docs/superpowers/specs/2026-09-07-aihub/12-agent-workflow-and-clean-architecture-design.md)
 - [Matt issue workflow](docs/agents/issue-tracker.md)

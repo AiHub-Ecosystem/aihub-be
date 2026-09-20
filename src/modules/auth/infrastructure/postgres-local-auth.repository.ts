@@ -2,10 +2,14 @@ import { ulid } from 'ulid';
 
 import {
   AuthIdentityConflictError,
+  type CreateRefreshSessionInput,
   type LocalAuthRepositoryPort,
   type LoginIdentity,
+  type RefreshTokenRecord,
+  type RefreshTokenRotationResult,
   type RegisterLocalAccountInput,
   type ResendVerificationTarget,
+  type RotateRefreshTokenInput,
 } from '../application/local-auth-repository.port';
 import type {
   PostgresAuthClient,
@@ -223,6 +227,167 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
       throw new Error('local account status projection is invalid');
     }
     return status;
+  }
+
+  async createRefreshSession(input: CreateRefreshSessionInput): Promise<void> {
+    await this.client.query(
+      `
+        INSERT INTO refresh_tokens (
+          id, family_id, user_account_id, token_hash, issued_at, expires_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `,
+      [
+        input.token.id,
+        input.token.familyId,
+        input.userId,
+        input.token.hash,
+        input.issuedAt,
+        input.token.expiresAt,
+      ],
+    );
+  }
+
+  async findRefreshTokenByHash(
+    tokenHash: string,
+  ): Promise<RefreshTokenRecord | undefined> {
+    const rows = await this.client.query(
+      `
+        SELECT id AS token_id, family_id, user_account_id,
+               expires_at, used_at, revoked_at
+        FROM refresh_tokens
+        WHERE token_hash = $1
+      `,
+      [tokenHash],
+    );
+    const row = rows[0];
+    if (row === undefined) {
+      return undefined;
+    }
+    return this.refreshTokenRecord(row);
+  }
+
+  async rotateRefreshToken(
+    input: RotateRefreshTokenInput,
+  ): Promise<RefreshTokenRotationResult> {
+    return this.client.transaction(async (transaction) => {
+      const rows = await transaction.query(
+        `
+          SELECT token.id AS token_id, token.family_id,
+                 token.user_account_id, token.expires_at,
+                 token.used_at, token.revoked_at, account.status
+          FROM refresh_tokens token
+          JOIN user_accounts account ON account.id = token.user_account_id
+          WHERE token.id = $1 AND token.token_hash = $2
+          FOR UPDATE
+        `,
+        [input.tokenId, input.tokenHash],
+      );
+      const row = rows[0];
+      if (row === undefined) {
+        return { kind: 'invalid', reason: 'missing' };
+      }
+
+      const record = this.refreshTokenRecord(row);
+      if (row.status !== 'active') {
+        return { kind: 'invalid', reason: 'inactive' };
+      }
+      if (record.revokedAt !== undefined) {
+        await this.revokeFamily(transaction, record.familyId, input.now);
+        return { kind: 'invalid', reason: 'revoked' };
+      }
+      if (record.usedAt !== undefined) {
+        await this.revokeFamily(transaction, record.familyId, input.now);
+        return { kind: 'invalid', reason: 'used' };
+      }
+      if (record.expiresAt.getTime() <= input.now.getTime()) {
+        return { kind: 'invalid', reason: 'expired' };
+      }
+
+      await transaction.query(
+        `
+          UPDATE refresh_tokens
+          SET used_at = $2
+          WHERE id = $1 AND used_at IS NULL AND revoked_at IS NULL
+        `,
+        [input.tokenId, input.now],
+      );
+      await transaction.query(
+        `
+          INSERT INTO refresh_tokens (
+            id, family_id, user_account_id, token_hash, issued_at, expires_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `,
+        [
+          input.successor.id,
+          input.successor.familyId,
+          record.userId,
+          input.successor.hash,
+          input.now,
+          input.successor.expiresAt,
+        ],
+      );
+      return { kind: 'rotated', userId: record.userId };
+    });
+  }
+
+  async revokeRefreshFamilyByTokenHash(input: {
+    readonly tokenHash: string;
+    readonly now: Date;
+  }): Promise<void> {
+    await this.client.transaction(async (transaction) => {
+      const rows = await transaction.query(
+        `
+          SELECT family_id
+          FROM refresh_tokens
+          WHERE token_hash = $1
+          FOR UPDATE
+        `,
+        [input.tokenHash],
+      );
+      const familyId = rows[0]?.family_id;
+      if (typeof familyId !== 'string') {
+        return;
+      }
+      await this.revokeFamily(transaction, familyId, input.now);
+    });
+  }
+
+  private refreshTokenRecord(row: Record<string, unknown>): RefreshTokenRecord {
+    if (
+      typeof row.token_id !== 'string' ||
+      typeof row.family_id !== 'string' ||
+      typeof row.user_account_id !== 'string' ||
+      !(row.expires_at instanceof Date) ||
+      (row.used_at !== null && !(row.used_at instanceof Date)) ||
+      (row.revoked_at !== null && !(row.revoked_at instanceof Date))
+    ) {
+      throw new Error('refresh token projection is invalid');
+    }
+    return {
+      tokenId: row.token_id,
+      familyId: row.family_id,
+      userId: row.user_account_id,
+      expiresAt: row.expires_at,
+      usedAt: row.used_at === null ? undefined : row.used_at,
+      revokedAt: row.revoked_at === null ? undefined : row.revoked_at,
+    };
+  }
+
+  private async revokeFamily(
+    transaction: PostgresAuthQueryClient,
+    familyId: string,
+    now: Date,
+  ): Promise<void> {
+    await transaction.query(
+      `
+        UPDATE refresh_tokens
+        SET revoked_at = $2
+        WHERE family_id = $1 AND revoked_at IS NULL
+      `,
+      [familyId, now],
+    );
   }
 
   async close(): Promise<void> {
