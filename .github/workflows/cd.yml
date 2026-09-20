@@ -184,7 +184,7 @@ jobs:
             exit 1
           fi
 
-          "${compose[@]}" up -d vault-agent
+          "${compose[@]}" up -d --force-recreate vault-agent
           vault_container_id="$("${compose[@]}" ps -q vault-agent)"
           test -n "$vault_container_id"
           vault_healthy=0
