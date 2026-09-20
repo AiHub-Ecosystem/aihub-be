@@ -87,8 +87,26 @@ class RepositoryFake implements LocalAuthRepositoryPort {
     return this.passwordResetTarget;
   }
 
-  async consumePasswordReset(): Promise<PasswordResetResult> {
-    return this.passwordResetResult;
+  async consumePasswordReset(input: {
+    readonly passwordHash: string;
+  }): Promise<PasswordResetResult> {
+    if (this.passwordResetResult.kind === 'invalid') {
+      return this.passwordResetResult;
+    }
+    if (this.loginIdentity !== undefined) {
+      this.loginIdentity = {
+        ...this.loginIdentity,
+        passwordHash: input.passwordHash,
+      };
+    }
+    for (const [hash, token] of this.refreshTokens) {
+      this.refreshTokens.set(hash, {
+        ...token,
+        revokedAt: new Date('2026-09-20T00:00:00.000Z'),
+      });
+    }
+    this.passwordResetResult = { kind: 'invalid', reason: 'consumed' };
+    return { kind: 'reset' };
   }
 
   async findLoginIdentityByEmail() {
@@ -181,6 +199,11 @@ class RepositoryFake implements LocalAuthRepositoryPort {
 
 class SenderFake implements EmailSenderPort {
   fail = false;
+  passwordResetEmails: Array<{
+    readonly email: string;
+    readonly token: string;
+    readonly expiresAt: Date;
+  }> = [];
 
   async sendVerificationEmail(): Promise<void> {
     if (this.fail) {
@@ -188,22 +211,30 @@ class SenderFake implements EmailSenderPort {
     }
   }
 
-  async sendPasswordResetEmail(): Promise<void> {
+  async sendPasswordResetEmail(input: {
+    readonly email: string;
+    readonly token: string;
+    readonly expiresAt: Date;
+  }): Promise<void> {
     if (this.fail) {
       throw new Error('provider failed');
     }
+    this.passwordResetEmails.push(input);
   }
 }
 
 class HasherFake implements PasswordHasherPort {
   result = true;
+  verifyByHash = false;
 
-  async hash(): Promise<string> {
-    return '$argon2id$fake';
+  async hash(password: string): Promise<string> {
+    return `$argon2id$fake:${password}`;
   }
 
-  async verify(): Promise<boolean> {
-    return this.result;
+  async verify(password: string, passwordHash: string): Promise<boolean> {
+    return this.verifyByHash
+      ? passwordHash === (await this.hash(password))
+      : this.result;
   }
 }
 
@@ -422,6 +453,31 @@ describe('local auth HTTP boundary', () => {
     expect(response.payload).not.toContain('reset-token');
   });
 
+  it('delivers reset instructions without exposing the token in the response', async () => {
+    sender.fail = false;
+    sender.passwordResetEmails = [];
+    repository.passwordResetTarget = { email: 'person@example.com' };
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/forgot-password',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: ' Person@Example.com ' },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json().data).toEqual({
+      message: 'If the account exists, reset instructions have been sent.',
+    });
+    expect(sender.passwordResetEmails).toHaveLength(1);
+    expect(sender.passwordResetEmails[0]).toEqual({
+      email: 'person@example.com',
+      token: 'reset-token',
+      expiresAt: expect.any(Date),
+    });
+    expect(response.payload).not.toContain('reset-token');
+  });
+
   it('resets the password with a bodyless no-store response and clears refresh state', async () => {
     repository.passwordResetResult = {
       kind: 'reset',
@@ -440,6 +496,89 @@ describe('local auth HTTP boundary', () => {
     expect(response.payload).toBe('');
     expect(response.headers['cache-control']).toBe('no-store');
     expect(String(response.headers['set-cookie'])).toContain('Max-Age=0');
+  });
+
+  it('changes the password and revokes every existing refresh session', async () => {
+    sender.fail = false;
+    hasher.result = true;
+    hasher.verifyByHash = true;
+    repository.loginIdentity = {
+      userId: 'usr_01J00000000000000000000000',
+      passwordHash: await hasher.hash('old password'),
+      status: 'active',
+    };
+    repository.passwordResetResult = { kind: 'reset' };
+
+    const firstLogin = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'person@example.com', password: 'old password' },
+    });
+    const secondLogin = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'person@example.com', password: 'old password' },
+    });
+    expect(firstLogin.statusCode).toBe(200);
+    expect(secondLogin.statusCode).toBe(200);
+    const firstCookie = String(firstLogin.headers['set-cookie']).split(
+      ';',
+      1,
+    )[0];
+    const secondCookie = String(secondLogin.headers['set-cookie']).split(
+      ';',
+      1,
+    )[0];
+
+    const reset = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/reset-password',
+      headers: { 'content-type': 'application/json' },
+      payload: { token: 'reset-token', password: 'new password that works' },
+    });
+    expect(reset.statusCode).toBe(204);
+
+    const oldPassword = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'person@example.com', password: 'old password' },
+    });
+    expect(oldPassword.statusCode).toBe(401);
+
+    const newPassword = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        email: 'person@example.com',
+        password: 'new password that works',
+      },
+    });
+    expect(newPassword.statusCode).toBe(200);
+
+    const firstRefresh = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: { cookie: firstCookie },
+    });
+    const secondRefresh = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: { cookie: secondCookie },
+    });
+    expect(firstRefresh.statusCode).toBe(401);
+    expect(secondRefresh.statusCode).toBe(401);
+
+    hasher.result = true;
+    hasher.verifyByHash = false;
+    repository.loginIdentity = {
+      userId: 'usr_01J00000000000000000000000',
+      passwordHash: '$argon2id$fake',
+      status: 'active',
+    };
   });
 
   it('maps replayed reset tokens to the public invalid-token error', async () => {

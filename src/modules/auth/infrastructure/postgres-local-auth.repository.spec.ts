@@ -125,10 +125,7 @@ describe('PostgresLocalAuthRepository', () => {
         tokenExpiresAt: input.tokenExpiresAt,
         now: input.now,
       }),
-    ).resolves.toEqual({
-      userId: 'usr_01J00000000000000000000000',
-      email: input.email,
-    });
+    ).resolves.toEqual({ email: input.email });
     expect(client.queries[0]?.text).toContain('FOR UPDATE');
     expect(client.queries[1]?.text).toContain('password_reset_tokens');
     expect(client.queries[1]?.text).toContain('SET consumed_at');

@@ -235,7 +235,7 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
           input.now,
         ],
       );
-      return { userId: row.id, email: row.canonical_email };
+      return { email: row.canonical_email };
     });
   }
 

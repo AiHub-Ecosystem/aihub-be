@@ -324,10 +324,9 @@ export class LocalAuthService {
     }
 
     const tokenHash = this.passwordResetTokenIssuer.hash(input.token);
-    const now = this.clock.now();
     const tokenCheck = await this.repository.checkPasswordResetToken({
       tokenHash,
-      now,
+      now: this.clock.now(),
     });
     if (tokenCheck.kind === 'invalid') {
       await this.enforceResetFailureLimits(ip, tokenHash);
@@ -338,7 +337,7 @@ export class LocalAuthService {
     const result = await this.repository.consumePasswordReset({
       tokenHash,
       passwordHash,
-      now,
+      now: this.clock.now(),
     });
 
     if (result.kind === 'invalid') {
