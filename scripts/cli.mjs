@@ -33,6 +33,7 @@ import {
   runQuotaReconciliation,
 } from './quota-reconcile.cjs';
 import { runUsagePrune } from './usage-prune.cjs';
+import { runUsageReport } from './usage-report.cjs';
 
 if (existsSync('.env')) {
   loadEnvFile('.env');
@@ -590,6 +591,20 @@ async function pruneUsageCommand(options) {
   });
 }
 
+async function reportUsageCommand(options) {
+  for (const name of options.keys()) {
+    if (name !== 'from' && name !== 'to') {
+      usageError();
+    }
+  }
+
+  await runUsageReport({
+    databaseUrl: process.env.DATABASE_URL ?? '',
+    from: requiredOption(options, 'from'),
+    to: requiredOption(options, 'to'),
+  });
+}
+
 async function main() {
   const [command, ...values] = process.argv.slice(2);
   const options = parseOptions(values);
@@ -620,6 +635,10 @@ async function main() {
   }
   if (command === 'usage:prune') {
     await pruneUsageCommand(options);
+    return;
+  }
+  if (command === 'usage:report') {
+    await reportUsageCommand(options);
     return;
   }
 
