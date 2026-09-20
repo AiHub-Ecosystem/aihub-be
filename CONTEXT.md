@@ -75,6 +75,11 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Retention cutoff:** the UTC instant captured for one usage-prune run; records at or after it remain retained, while records strictly before it are eligible.
 - **Usage prune:** the operator maintenance action that removes expired metering records in bounded transactions; it is separate from quota reconciliation and idempotency cleanup.
 - **Usage aggregate:** provider-reported input, output, and total token counts for an operation; AIHUB does not infer or estimate them.
+- **Usage completeness report:** a read-only operator view of missing usage evidence over a UTC window; it measures reporting health without changing customer requests or durable metering records.
+- **Reporting-eligible operation:** a model-backed operation whose downstream AI Service has an enabled usage-reporting declaration; only its successful attempts participate in the completeness denominator and alert.
+- **Usage report window:** the half-open UTC interval `[from, to)` selected for one completeness report; the same explicit window can be rerun deterministically.
+- **Reporting activation:** the point at which a downstream's usage-reporting declaration becomes enabled; records before activation keep their original metering meaning and are not reclassified.
+- **Incomplete usage rate:** missing-usage records divided by successful attempts for reporting-eligible operations in one report window; a zero denominator is healthy, not an alert.
 
 ## Ownership and invariants
 
@@ -196,7 +201,9 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - [ADR-0014: AI Speaking D2 contract boundary and evidence](docs/adr/0014-ai-speaking-d2-contract-boundary.md)
 - [Spec index](docs/superpowers/specs/2026-09-07-aihub/README.md)
 - [ADR-0016: Durable metering boundary and billing evidence](docs/adr/0016-metering-boundary-and-billing-evidence.md)
+- [ADR-0026: CLI boundary for usage completeness reporting](docs/adr/0026-usage-completeness-report-boundary.md)
 - [ADR-0023: Thirteen-month usage retention](docs/adr/0023-thirteen-month-usage-retention.md)
+- [Usage completeness report runbook](docs/operations/usage-completeness.md)
 - [ADR-0020: Invite-only customer-web identity boundary for sandbox MVP](docs/adr/0020-customer-web-identity-boundary.md)
 - [ADR-0021: Customer Web Speaking sandbox boundary](docs/adr/0021-customer-web-speaking-sandbox-boundary.md)
 - [ADR-0022: AIHUB-owned local user authentication](docs/adr/0022-aihub-local-user-authentication.md)
