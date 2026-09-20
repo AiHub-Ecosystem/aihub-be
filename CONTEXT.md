@@ -20,10 +20,13 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Refresh Session:** the durable login session created by one successful login; it owns one Refresh Token Family and is independent from the User Account and User Access JWT.
 - **Refresh Token Family:** the ordered lineage of rotated Refresh Token versions for one Refresh Session; reusing any previous version revokes the entire family.
 - **Customer Organization:** the tenant concept in the Customer Web. During the invite-only sandbox MVP, all invited Customer Users belong to one Customer Organization mapped to the dedicated sandbox AIHUB Organization.
-- **Managed IdP:** the external identity provider used by the existing Customer Web sandbox; it is separate from AIHUB's local credential auth and remains a future federation source for AIHUB accounts.
-- **Clerk:** the selected Managed IdP for the existing Customer Web sandbox; it owns that sandbox's passwordless sign-in, invitations, organization membership, and session lifecycle.
-- **Invite-only membership:** access granted by an operator to a known user; it remains the sandbox membership path, while local account registration does not grant Organization access.
+- **Managed IdP:** the external identity provider used by the existing Customer Web sandbox during the transition; it is separate from AIHUB's local credential auth and is not the target identity boundary for AIHUB accounts.
+- **Clerk:** the current Managed IdP for the existing Customer Web sandbox; it owns that sandbox's passwordless sign-in, invitations, organization membership, and session lifecycle until [issue #94](https://github.com/AiHub-Ecosystem/aihub-be/issues/94) supersedes it.
+- **Invite-only membership:** access granted by an operator to a known user; it remains the current sandbox membership path, while AIHUB local access uses explicit Organization Membership and local account registration does not grant Organization access.
 - **Organization Membership:** the explicit relationship that grants an AIHUB User Account access to an Organization; it is separate from account registration and API-key issuance.
+- **Membership Role:** the per-organization authority assigned to a membership: `owner`, `admin`, or `member`; it is not a User Access JWT claim.
+- **Organization Invitation:** a pending, organization-scoped invitation for one normalized email; it is separate from a membership and becomes a membership only after the invited identity accepts.
+- **Membership Status:** the lifecycle state of an Organization Membership: `active` or `disabled`; disabling preserves the durable relationship and does not physically delete it.
 - **Email Verification:** proof that a User Account controls its registered email address; an unverified local account cannot complete login. Its opaque one-time verification token is invalidated when a newer token is issued.
 - **Verification Token:** an opaque, single-use proof used by an Email Verification flow; only its hash is durable and the raw value is never logged or returned by an API response.
 - **Password Recovery:** the generic flow through which an active local Auth Identity can receive a one-time proof to replace its password without exposing account existence or the existing password; it does not activate or re-enable an account.
@@ -87,9 +90,18 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - Durable metering records are retained for 13 calendar months across each deployment database; pruning applies to every outcome and never mutates Redis quota counters or idempotency records.
 - Each usage-prune run captures one UTC retention cutoff with calendar month-end clamping; only records strictly before it are eligible, and production/sandbox failures are reported independently.
 - AIHUB owns local credential authentication and User Access JWT issuance; the Customer Web may consume that identity through its BFF. External identity providers remain a future federation path, not part of the local credential flow.
-- The existing sandbox Customer Web and Clerk flow remain in parallel while AIHUB local auth is introduced; this does not silently replace the sandbox identity boundary.
+- The existing sandbox Customer Web and Clerk flow remain in parallel while AIHUB local auth is introduced; [issue #94](https://github.com/AiHub-Ecosystem/aihub-be/issues/94) must supersede that boundary rather than silently replacing it.
 - Registration creates an AIHUB User Account only. It does not create an Organization, membership, or API key; access to an Organization is provisioned separately.
 - Organization Membership is independent of registration, and a User Access JWT does not freeze a single organization because membership can change.
+- An AIHUB User Account may belong to multiple Organizations; management inputs carry an explicit `organizationId`, and authorization evaluates the selected membership at request time.
+- Organization Membership roles are `owner`, `admin`, and `member`. Owners and admins may invite; admins cannot change or remove owners/admins; members cannot mutate membership or API keys.
+- Pending Organization Invitations are separate from memberships. One open invitation exists per organization and normalized email; resend invalidates the previous token, and acceptance uses the existing registration → verification → login path before creating or reactivating membership.
+- Inviting an active member is a conflict; resending an open invitation replaces its token; inviting a disabled membership creates a new invitation that can reactivate it. Acceptance rejects disabled accounts, suspended organizations, and revoked or replayed tokens without consuming a still-valid token, and consumes the token only with membership creation/reactivation.
+- Organization Membership uses `active`/`disabled` state without physical deletion. An organization may have multiple owners, but removal or demotion of the last owner is rejected; transfer operations are atomic.
+- A suspended Organization rejects membership and API-key mutations and invite acceptance. Organization creation and first-owner assignment remain operator-provisioned; self-service organization creation is out of scope.
+- Organization API keys are organization-owned. Owners and admins may create, list, rotate, and revoke them; lists expose metadata only, rotation immediately revokes the old key and returns the raw replacement once, and no customer-facing grace window exists.
+- Invite and API-key rotation mutations reuse the existing idempotency seam. Redis cache-purge failure can retain the existing operational cache ceiling of up to 60 seconds; this is not an intentional customer grace period.
+- Google federation is outside the membership decision and is tracked in [issue #93](https://github.com/AiHub-Ecosystem/aihub-be/issues/93); it must attach an Auth Identity to an existing User Account without creating organization access implicitly.
 - Local registration requires email, username, and password, and the account must complete email verification before login succeeds.
 - The local Auth Identity owns the normalized email/password credential, while the User Account owns the normalized unique Username; login uses the normalized email and registration does not grant Organization access.
 - Local Account Status and Organization Membership status are evaluated at authorization time rather than assumed permanently from registration.
@@ -207,6 +219,10 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - [ADR-0020: Invite-only customer-web identity boundary for sandbox MVP](docs/adr/0020-customer-web-identity-boundary.md)
 - [ADR-0021: Customer Web Speaking sandbox boundary](docs/adr/0021-customer-web-speaking-sandbox-boundary.md)
 - [ADR-0022: AIHUB-owned local user authentication](docs/adr/0022-aihub-local-user-authentication.md)
+- [ADR-0027: Organization membership, invitation, and API-key self-service boundary](docs/adr/0027-organization-membership-and-key-management.md)
 - [ADR-0024: Rotating refresh-session boundary](docs/adr/0024-rotating-refresh-session-boundary.md)
 - [Agent and architecture design](docs/superpowers/specs/2026-09-07-aihub/12-agent-workflow-and-clean-architecture-design.md)
 - [Matt issue workflow](docs/agents/issue-tracker.md)
+- [Follow-up issue #92: durable audit trail for organization membership and API-key mutations](https://github.com/AiHub-Ecosystem/aihub-be/issues/92)
+- [Follow-up issue #93: Google OIDC login for AIHUB User Accounts](https://github.com/AiHub-Ecosystem/aihub-be/issues/93)
+- [Follow-up issue #94: migrate Customer Web identity boundary off Clerk](https://github.com/AiHub-Ecosystem/aihub-be/issues/94)
