@@ -99,6 +99,29 @@ jobs:
           chmod 600 "$HOME/.ssh/aihub-deploy"
           chmod 644 "$HOME/.ssh/known_hosts"
 
+      - name: Check out deployment manifests
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          sparse-checkout: |
+            docker-compose.production.yml
+            docker-compose.production.env.yml
+          sparse-checkout-cone-mode: false
+
+      - name: Sync deployment manifests to VPS
+        shell: bash
+        run: |
+          set -eu
+          test -n "$VPS_APP_DIR"
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          scp "${ssh_opts[@]}" \
+            docker-compose.production.yml \
+            docker-compose.production.env.yml \
+            "$target:$VPS_APP_DIR/"
+          ssh "${ssh_opts[@]}" "$target" \
+            "test -s '$VPS_APP_DIR/docker-compose.production.yml' && test -s '$VPS_APP_DIR/docker-compose.production.env.yml'"
+
       - name: Log in to GHCR on VPS
         shell: bash
         env:
