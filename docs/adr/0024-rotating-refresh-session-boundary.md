@@ -12,7 +12,9 @@ logout revokes only the current family and remains an idempotent bodyless
 cookie-only and stores one row per token version in Postgres so family lineage
 and reuse state remain durable. Each successor is a fresh 32-byte CSPRNG
 credential with a new 30-day sliding expiry, persisted only as a SHA-256 hash;
-cookie parsing uses the Fastify cookie boundary. Login fails closed if its
+cookie value parsing uses the Fastify cookie boundary; the boundary may count
+duplicate names in raw header metadata because Fastify collapses them, but it
+never extracts a credential from that metadata. Login fails closed if its
 session cannot be created, and refresh commits rotation before issuing the new
 access JWT, so an issuer failure returns no credential and requires login again.
 Refresh failures collapse to one generic `401`, with `refresh_ip` limited to 20
