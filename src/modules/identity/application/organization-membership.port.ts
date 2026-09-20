@@ -1,3 +1,4 @@
+import type { RequestContext } from '../../../common/request-context/request-context';
 import type { OrganizationStatus } from './api-key-authenticator.port';
 
 export type OrganizationMembershipRole = 'owner' | 'admin' | 'member';
@@ -9,6 +10,17 @@ export interface OrganizationMembershipRecord {
   readonly organizationStatus: OrganizationStatus;
   readonly role: OrganizationMembershipRole;
   readonly status: OrganizationMembershipStatus;
+}
+
+export interface ResolveMembershipInput {
+  readonly context: RequestContext;
+  readonly userId: string;
+  readonly organizationId: string;
+}
+
+export interface ListRosterInput {
+  readonly context: RequestContext;
+  readonly userId: string;
 }
 
 export type OrganizationMembershipResolution =
@@ -36,12 +48,11 @@ export interface OrganizationRosterOrganization {
 }
 
 export interface OrganizationMembershipPort {
-  resolveMembership(input: {
-    readonly userId: string;
-    readonly organizationId: string;
-  }): Promise<OrganizationMembershipResolution>;
+  resolveMembership(
+    input: ResolveMembershipInput,
+  ): Promise<OrganizationMembershipResolution>;
   listRoster(
-    userId: string,
+    input: ListRosterInput,
   ): Promise<readonly OrganizationRosterOrganization[]>;
 }
 

@@ -1,4 +1,5 @@
 import { AppError } from '../../../common/errors/app-error';
+import { createRequestContext } from '../../../common/request-context/request-context.factory';
 import type { PostgresIdentityClient } from './postgres-api-key.repository';
 import { PostgresOrganizationMembershipRepository } from './postgres-organization-membership.repository';
 
@@ -37,6 +38,14 @@ const rosterRows = [
   },
 ];
 
+const context = createRequestContext({
+  requestId: 'req_01J00000000000000000000000',
+  receivedAt: new Date('2026-09-21T00:00:00.000Z'),
+  deadlineMs: 5_000,
+  userId: membershipRow.user_account_id,
+  scopes: [],
+});
+
 class FakePostgres implements PostgresIdentityClient {
   queries: Array<{ text: string; values: readonly unknown[] }> = [];
   result: readonly unknown[] = [membershipRow];
@@ -61,6 +70,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
 
     await expect(
       new PostgresOrganizationMembershipRepository(client).resolveMembership({
+        context,
         userId: membershipRow.user_account_id,
         organizationId: membershipRow.organization_id,
       }),
@@ -87,6 +97,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
 
     await expect(
       new PostgresOrganizationMembershipRepository(client).resolveMembership({
+        context,
         userId: membershipRow.user_account_id,
         organizationId: membershipRow.organization_id,
       }),
@@ -99,6 +110,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
 
     await expect(
       new PostgresOrganizationMembershipRepository(client).resolveMembership({
+        context,
         userId: membershipRow.user_account_id,
         organizationId: 'org_missing',
       }),
@@ -110,9 +122,10 @@ describe('PostgresOrganizationMembershipRepository', () => {
     client.result = rosterRows;
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).listRoster(
-        membershipRow.user_account_id,
-      ),
+      new PostgresOrganizationMembershipRepository(client).listRoster({
+        context,
+        userId: membershipRow.user_account_id,
+      }),
     ).resolves.toEqual([
       {
         organizationId: 'org_acme',
@@ -134,6 +147,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
     ]);
 
     expect(client.queries[0]?.values).toEqual([membershipRow.user_account_id]);
+    expect(client.queries).toHaveLength(1);
     expect(client.queries[0]?.text).toContain("caller.status = 'active'");
     expect(client.queries[0]?.text).toContain("member.status = 'active'");
     expect(client.queries[0]?.text).toContain('ORDER BY');
@@ -144,9 +158,10 @@ describe('PostgresOrganizationMembershipRepository', () => {
     client.result = [];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).listRoster(
-        membershipRow.user_account_id,
-      ),
+      new PostgresOrganizationMembershipRepository(client).listRoster({
+        context,
+        userId: membershipRow.user_account_id,
+      }),
     ).resolves.toEqual([]);
   });
 
@@ -157,7 +172,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
     const unavailable = await new PostgresOrganizationMembershipRepository(
       client,
     )
-      .listRoster(membershipRow.user_account_id)
+      .listRoster({ context, userId: membershipRow.user_account_id })
       .catch((error: unknown) => error);
 
     expect(unavailable).toBeInstanceOf(AppError);
@@ -167,6 +182,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
     client.result = [{ ...membershipRow, role: 'superuser' }];
     const malformed = await new PostgresOrganizationMembershipRepository(client)
       .resolveMembership({
+        context,
         userId: membershipRow.user_account_id,
         organizationId: membershipRow.organization_id,
       })
@@ -175,5 +191,19 @@ describe('PostgresOrganizationMembershipRepository', () => {
     expect(malformed).toBeInstanceOf(AppError);
     expect((malformed as AppError).code).toBe('INTERNAL_ERROR');
     expect((malformed as AppError).message).toBe('Identity data is invalid');
+
+    client.result = [{ ...membershipRow, user_account_id: 'usr_other' }];
+    const mismatched = await new PostgresOrganizationMembershipRepository(
+      client,
+    )
+      .resolveMembership({
+        context,
+        userId: membershipRow.user_account_id,
+        organizationId: membershipRow.organization_id,
+      })
+      .catch((error: unknown) => error);
+
+    expect(mismatched).toBeInstanceOf(AppError);
+    expect((mismatched as AppError).code).toBe('INTERNAL_ERROR');
   });
 });

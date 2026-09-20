@@ -1,12 +1,14 @@
 import { AppError } from '../../../common/errors/app-error';
 import type { OrganizationStatus } from '../application/api-key-authenticator.port';
 import type {
+  ListRosterInput,
   OrganizationMembershipPort,
   OrganizationMembershipRecord,
   OrganizationMembershipResolution,
   OrganizationMembershipRole,
   OrganizationMembershipStatus,
   OrganizationRosterOrganization,
+  ResolveMembershipInput,
 } from '../application/organization-membership.port';
 import type { PostgresIdentityClient } from './postgres-api-key.repository';
 
@@ -226,11 +228,13 @@ export class PostgresOrganizationMembershipRepository
 {
   constructor(private readonly client: PostgresIdentityClient) {}
 
-  async resolveMembership(input: {
-    readonly userId: string;
-    readonly organizationId: string;
-  }): Promise<OrganizationMembershipResolution> {
+  async resolveMembership(
+    input: ResolveMembershipInput,
+  ): Promise<OrganizationMembershipResolution> {
     if (
+      input.context.userId !== input.userId ||
+      (input.context.organizationId !== undefined &&
+        input.context.organizationId !== input.organizationId) ||
       input.userId.trim().length === 0 ||
       input.organizationId.trim().length === 0
     ) {
@@ -255,7 +259,11 @@ export class PostgresOrganizationMembershipRepository
     }
 
     const membership = mapMembershipRecord(first);
-    if (membership === undefined) {
+    if (
+      membership === undefined ||
+      membership.userId !== input.userId ||
+      membership.organizationId !== input.organizationId
+    ) {
       throw identityStoreError('Identity data is invalid');
     }
 
@@ -265,15 +273,18 @@ export class PostgresOrganizationMembershipRepository
   }
 
   async listRoster(
-    userId: string,
+    input: ListRosterInput,
   ): Promise<readonly OrganizationRosterOrganization[]> {
-    if (userId.trim().length === 0) {
+    if (
+      input.context.userId !== input.userId ||
+      input.userId.trim().length === 0
+    ) {
       throw identityStoreError('Identity user id is invalid');
     }
 
     let rows: readonly unknown[];
     try {
-      rows = await this.client.query(LIST_ROSTER_SQL, [userId]);
+      rows = await this.client.query(LIST_ROSTER_SQL, [input.userId]);
     } catch {
       throw identityStoreError('Identity store is unavailable');
     }

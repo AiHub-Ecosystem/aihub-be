@@ -9,6 +9,7 @@ import {
 import type { FastifyRequest } from 'fastify';
 
 import { AppError } from '../../../common/errors/app-error';
+import { createRequestContext } from '../../../common/request-context/request-context.factory';
 import { isRequestId } from '../../../common/request-context/request-id';
 import type { OrganizationRosterResponse } from '../../../contracts/organization/membership';
 import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
@@ -39,8 +40,15 @@ export class OrganizationMembershipController {
       });
     }
 
-    const organizations = await this.membership.listRoster(userId);
     const requestId = isRequestId(request.id) ? request.id : String(request.id);
+    const context = createRequestContext({
+      requestId,
+      receivedAt: new Date(),
+      deadlineMs: 5_000,
+      userId,
+      scopes: [],
+    });
+    const organizations = await this.membership.listRoster({ context, userId });
 
     return {
       data: {

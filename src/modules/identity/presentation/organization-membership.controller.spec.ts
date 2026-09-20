@@ -15,6 +15,7 @@ import {
   type UserAccessTokenVerifierPort,
 } from '../../auth/application/user-access-token.port';
 import {
+  type ListRosterInput,
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
   type OrganizationRosterOrganization,
@@ -51,7 +52,7 @@ describe('Organization membership HTTP flow', () => {
   beforeAll(async () => {
     membership = {
       resolveMembership: jest.fn(),
-      listRoster: jest.fn(async (_userId: string) => roster),
+      listRoster: jest.fn(async (_input: ListRosterInput) => roster),
     };
     verifier = {
       verify: async (token: string) => {
@@ -139,7 +140,12 @@ describe('Organization membership HTTP flow', () => {
     });
     expect(response.payload).not.toContain(USER_ID);
     expect(response.payload).not.toContain('@');
-    expect(membership.listRoster).toHaveBeenCalledWith(USER_ID);
+    expect(membership.listRoster).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: USER_ID,
+        context: expect.objectContaining({ userId: USER_ID }),
+      }),
+    );
   });
 
   it('returns an empty roster for an authenticated account without memberships', async () => {
