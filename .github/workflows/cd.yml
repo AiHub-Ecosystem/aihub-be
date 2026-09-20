@@ -224,6 +224,13 @@ jobs:
             if [ "$healthy" -ne 1 ]; then
               "${compose_runtime[@]}" ps
               printf '%s health status: %s\n' "$service" "$status" >&2
+              sudo -n docker inspect --format \
+                'container state={{.State.Status}} exit_code={{.State.ExitCode}} error={{.State.Error}} restart_count={{.RestartCount}}' \
+                "$container_id" >&2 || true
+              sudo -n docker inspect --format \
+                '{{range .State.Health.Log}}healthcheck exit_code={{.ExitCode}} output={{printf "%q" .Output}}\n{{end}}' \
+                "$container_id" >&2 || true
+              "${compose_runtime[@]}" logs --no-color --tail=100 "$service" >&2 || true
               exit 1
             fi
           done
