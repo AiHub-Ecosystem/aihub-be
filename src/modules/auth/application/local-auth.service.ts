@@ -324,28 +324,25 @@ export class LocalAuthService {
     }
 
     const tokenHash = this.passwordResetTokenIssuer.hash(input.token);
+    const now = this.clock.now();
+    const tokenCheck = await this.repository.checkPasswordResetToken({
+      tokenHash,
+      now,
+    });
+    if (tokenCheck.kind === 'invalid') {
+      await this.enforceResetFailureLimits(ip, tokenHash);
+      throw invalidPasswordResetToken();
+    }
+
     const passwordHash = await this.passwordHasher.hash(password);
     const result = await this.repository.consumePasswordReset({
       tokenHash,
       passwordHash,
-      now: this.clock.now(),
+      now,
     });
 
     if (result.kind === 'invalid') {
-      await this.enforceRateLimits([
-        {
-          scope: 'reset_ip',
-          key: ip,
-          limit: RESET_IP_LIMIT,
-          windowMs: RESET_IP_WINDOW_MS,
-        },
-        {
-          scope: 'reset_token',
-          key: tokenHash,
-          limit: RESET_TOKEN_LIMIT,
-          windowMs: RESET_TOKEN_WINDOW_MS,
-        },
-      ]);
+      await this.enforceResetFailureLimits(ip, tokenHash);
       throw invalidPasswordResetToken();
     }
   }
@@ -516,6 +513,26 @@ export class LocalAuthService {
               windowMs: REFRESH_TOKEN_WINDOW_MS,
             },
           ]),
+    ]);
+  }
+
+  private async enforceResetFailureLimits(
+    ip: string,
+    tokenHash: string,
+  ): Promise<void> {
+    await this.enforceRateLimits([
+      {
+        scope: 'reset_ip',
+        key: ip,
+        limit: RESET_IP_LIMIT,
+        windowMs: RESET_IP_WINDOW_MS,
+      },
+      {
+        scope: 'reset_token',
+        key: tokenHash,
+        limit: RESET_TOKEN_LIMIT,
+        windowMs: RESET_TOKEN_WINDOW_MS,
+      },
     ]);
   }
 }

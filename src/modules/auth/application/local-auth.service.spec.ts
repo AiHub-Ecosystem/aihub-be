@@ -49,12 +49,10 @@ class FakeRepository implements LocalAuthRepositoryPort {
   refreshTokens = new Map<string, RefreshTokenRecord>();
   refreshLookupFailure = false;
   passwordResetTarget: PasswordResetTarget | undefined = {
-    userId: 'usr_01J00000000000000000000000',
     email: 'person@example.com',
   };
   passwordResetResult: PasswordResetResult = {
     kind: 'reset',
-    userId: 'usr_01J00000000000000000000000',
   };
   passwordResetInputs: unknown[] = [];
 
@@ -70,6 +68,12 @@ class FakeRepository implements LocalAuthRepositoryPort {
 
   async consumeVerificationToken(): Promise<boolean> {
     return this.consumed;
+  }
+
+  async checkPasswordResetToken() {
+    return this.passwordResetResult.kind === 'reset'
+      ? { kind: 'valid' as const }
+      : this.passwordResetResult;
   }
 
   async issuePasswordResetToken(): Promise<PasswordResetTarget | undefined> {
@@ -163,9 +167,11 @@ class FakeRepository implements LocalAuthRepositoryPort {
 
 class FakeHasher implements PasswordHasherPort {
   verified: string[] = [];
+  hashed: string[] = [];
   result = true;
 
   async hash(password: string): Promise<string> {
+    this.hashed.push(password);
     return `argon2:${password}`;
   }
 
@@ -376,7 +382,7 @@ describe('LocalAuthService', () => {
   });
 
   it('maps every unusable reset token to one public error and counts only failures', async () => {
-    const { local, repository, limiter } = service();
+    const { local, repository, limiter, hasher } = service();
     repository.passwordResetResult = { kind: 'invalid', reason: 'consumed' };
 
     await expect(
@@ -388,6 +394,7 @@ describe('LocalAuthService', () => {
       code: 'AUTH_PASSWORD_RESET_TOKEN_INVALID',
       httpStatus: 400,
     });
+    expect(hasher.hashed).toHaveLength(0);
     expect(limiter.calls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -410,6 +417,7 @@ describe('LocalAuthService', () => {
         '203.0.113.7',
       ),
     ).resolves.toBeUndefined();
+    expect(successful.hasher.hashed).toEqual(['new password that works']);
     expect(successful.limiter.calls).toHaveLength(0);
   });
 

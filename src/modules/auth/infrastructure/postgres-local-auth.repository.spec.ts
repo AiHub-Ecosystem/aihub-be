@@ -164,7 +164,6 @@ describe('PostgresLocalAuthRepository', () => {
       }),
     ).resolves.toEqual({
       kind: 'reset',
-      userId: 'usr_01J00000000000000000000000',
     });
     const sql = client.queries.map((query) => query.text).join('\n');
     expect(sql).toContain('FROM password_reset_tokens token');
@@ -245,6 +244,29 @@ describe('PostgresLocalAuthRepository', () => {
     ).resolves.toBe(true);
     expect(client.queries[0]?.text).toContain('SET consumed_at');
     expect(client.queries[1]?.text).toContain("SET status = 'active'");
+  });
+
+  it('checks reset-token state without performing password work', async () => {
+    const client = new FakeClient();
+    client.queryResponses = [
+      [
+        {
+          id: 'prt_01J00000000000000000000000',
+          user_account_id: 'usr_01J00000000000000000000000',
+          expires_at: new Date('2026-09-20T01:00:00.000Z'),
+          consumed_at: null,
+          status: 'active',
+        },
+      ],
+    ];
+
+    await expect(
+      new PostgresLocalAuthRepository(client).checkPasswordResetToken({
+        tokenHash: input.tokenHash,
+        now: input.now,
+      }),
+    ).resolves.toEqual({ kind: 'valid' });
+    expect(client.queries[0]?.text).not.toContain('FOR UPDATE');
   });
 
   it('projects the password identity without returning profile fields', async () => {

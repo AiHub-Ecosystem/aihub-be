@@ -16,7 +16,6 @@ export interface ResendVerificationTarget {
 }
 
 export interface PasswordResetTarget {
-  readonly userId: string;
   readonly email: string;
 }
 
@@ -50,7 +49,14 @@ export type RefreshTokenRotationResult =
     };
 
 export type PasswordResetResult =
-  | { readonly kind: 'reset'; readonly userId: string }
+  | { readonly kind: 'reset' }
+  | {
+      readonly kind: 'invalid';
+      readonly reason: 'missing' | 'inactive' | 'expired' | 'consumed';
+    };
+
+export type PasswordResetTokenCheckResult =
+  | { readonly kind: 'valid' }
   | {
       readonly kind: 'invalid';
       readonly reason: 'missing' | 'inactive' | 'expired' | 'consumed';
@@ -89,6 +95,10 @@ export interface LocalAuthRepositoryPort {
     readonly tokenHash: string;
     readonly now: Date;
   }): Promise<boolean>;
+  checkPasswordResetToken(input: {
+    readonly tokenHash: string;
+    readonly now: Date;
+  }): Promise<PasswordResetTokenCheckResult>;
   consumePasswordReset(input: {
     readonly tokenHash: string;
     readonly passwordHash: string;

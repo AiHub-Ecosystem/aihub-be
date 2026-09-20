@@ -59,12 +59,10 @@ class RepositoryFake implements LocalAuthRepositoryPort {
   refreshTokens = new Map<string, RefreshTokenRecord>();
   failCreateRefreshSession = false;
   passwordResetTarget: PasswordResetTarget | undefined = {
-    userId: 'usr_01J00000000000000000000000',
     email: 'person@example.com',
   };
   passwordResetResult: PasswordResetResult = {
     kind: 'reset',
-    userId: 'usr_01J00000000000000000000000',
   };
 
   async register(): Promise<void> {
@@ -77,6 +75,12 @@ class RepositoryFake implements LocalAuthRepositoryPort {
 
   async consumeVerificationToken(): Promise<boolean> {
     return this.consumed;
+  }
+
+  async checkPasswordResetToken() {
+    return this.passwordResetResult.kind === 'reset'
+      ? { kind: 'valid' as const }
+      : this.passwordResetResult;
   }
 
   async issuePasswordResetToken(): Promise<PasswordResetTarget | undefined> {
@@ -421,7 +425,6 @@ describe('local auth HTTP boundary', () => {
   it('resets the password with a bodyless no-store response and clears refresh state', async () => {
     repository.passwordResetResult = {
       kind: 'reset',
-      userId: 'usr_01J00000000000000000000000',
     };
     const response = await app.inject({
       method: 'POST',
@@ -460,7 +463,6 @@ describe('local auth HTTP boundary', () => {
     );
     repository.passwordResetResult = {
       kind: 'reset',
-      userId: 'usr_01J00000000000000000000000',
     };
   });
 
