@@ -648,6 +648,11 @@ export async function buildPostmanCollection(
         key: 'userAssertion',
         value: 'REPLACE_WITH_A_VALID_SIGNED_USER_ASSERTION',
       },
+      {
+        key: 'bearerToken',
+        value: 'REPLACE_WITH_A_VALID_USER_ACCESS_JWT',
+        description: 'User Access JWT for the organization roster route.',
+      },
     ],
     item: [
       ...base.item,

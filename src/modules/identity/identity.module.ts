@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { AuthModule } from '../auth/auth.module';
 import { GatewayModule } from '../gateway/gateway.module';
 
 import { ApiKeyAuthenticator } from './application/api-key-authenticator';
@@ -22,6 +23,10 @@ import {
   ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
   type OrganizationIdentityConfigRepositoryPort,
 } from './application/organization-identity-config-repository.port';
+import {
+  ORGANIZATION_MEMBERSHIP,
+  type OrganizationMembershipPort,
+} from './application/organization-membership.port';
 import { SANDBOX_ASSERTION_MINTER } from './application/sandbox-assertion-minter.port';
 import { SANDBOX_ASSERTION_POLICY } from './application/sandbox-assertion-policy.port';
 import {
@@ -41,19 +46,21 @@ import { JwksKeyProvider } from './infrastructure/jwks-key-provider';
 import { PostgresApiKeyRepository } from './infrastructure/postgres-api-key.repository';
 import { createPostgresIdentityClient } from './infrastructure/postgres-identity.client';
 import { PostgresOrganizationIdentityConfigRepository } from './infrastructure/postgres-organization-identity-config.repository';
+import { PostgresOrganizationMembershipRepository } from './infrastructure/postgres-organization-membership.repository';
 import {
   RedisAuthFailureCounter,
   RedisIdentityStore,
 } from './infrastructure/redis-identity.store';
 import { ApiKeyGuard } from './presentation/api-key.guard';
+import { OrganizationMembershipController } from './presentation/organization-membership.controller';
 import { SandboxApiKeyGuard } from './presentation/sandbox-api-key.guard';
 import { SandboxAssertionController } from './presentation/sandbox-assertion.controller';
 import { UserAssertionGuard } from './presentation/user-assertion.guard';
 
 @Module({
   // `RateLimitGuard` on the sandbox route consumes the gateway's rate limiter.
-  imports: [GatewayModule],
-  controllers: [SandboxAssertionController],
+  imports: [AuthModule, GatewayModule],
+  controllers: [SandboxAssertionController, OrganizationMembershipController],
   providers: [
     {
       provide: API_KEY_REPOSITORY,
@@ -66,6 +73,13 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
       provide: ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
       useFactory: (): OrganizationIdentityConfigRepositoryPort =>
         new PostgresOrganizationIdentityConfigRepository(
+          createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
+        ),
+    },
+    {
+      provide: ORGANIZATION_MEMBERSHIP,
+      useFactory: (): OrganizationMembershipPort =>
+        new PostgresOrganizationMembershipRepository(
           createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
         ),
     },
@@ -145,6 +159,7 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
     ApiKeyGuard,
     UserAssertionGuard,
     ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
+    ORGANIZATION_MEMBERSHIP,
     USER_ASSERTION_VERIFIER,
   ],
 })

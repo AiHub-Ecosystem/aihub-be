@@ -24,6 +24,7 @@ import {
   ResetPasswordRequestSchema,
   VerifyEmailRequestSchema,
 } from '../contracts/auth/local-auth';
+import { OrganizationRosterResponseSchema } from '../contracts/organization/membership';
 import {
   MintSandboxAssertionRequestSchema,
   MintSandboxAssertionResponseSchema,
@@ -235,6 +236,7 @@ const AUTH_FORGOT_PASSWORD_PATH = '/v1/auth/forgot-password';
 const AUTH_RESET_PASSWORD_PATH = '/v1/auth/reset-password';
 const AUTH_REFRESH_PATH = '/v1/auth/refresh';
 const AUTH_LOGOUT_PATH = '/v1/auth/logout';
+const ORGANIZATION_ROSTER_PATH = '/v1/organizations/me/members';
 
 function authErrorResponses(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
@@ -430,6 +432,29 @@ function localAuthPathItems(
   };
 }
 
+function organizationRosterPathItem(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, unknown> {
+  return {
+    get: {
+      operationId: 'organizations.me.members.list',
+      summary: 'List the authenticated user organization roster',
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+      responses: {
+        '200': {
+          description: 'Organization roster',
+          content: {
+            'application/json': { schema: OrganizationRosterResponseSchema },
+          },
+        },
+        ...authErrorResponses(groupedErrors, [401, 403, 500]),
+      },
+    },
+  };
+}
+
 /**
  * Described by hand rather than from `OPERATION_CATALOG`, because it is not a
  * catalog operation: it has no downstream service, no downstream contract, and
@@ -514,6 +539,7 @@ export function buildOpenApiDocument(version: string): unknown {
   }
 
   paths[SANDBOX_ASSERTION_PATH] = sandboxAssertionPathItem(groupedErrors);
+  paths[ORGANIZATION_ROSTER_PATH] = organizationRosterPathItem(groupedErrors);
   Object.assign(paths, localAuthPathItems(groupedErrors));
 
   const errorResponses: Record<string, unknown> = {};

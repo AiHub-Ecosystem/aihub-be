@@ -23,10 +23,11 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Managed IdP:** the external identity provider used by the existing Customer Web sandbox during the transition; it is separate from AIHUB's local credential auth and is not the target identity boundary for AIHUB accounts.
 - **Clerk:** the current Managed IdP for the existing Customer Web sandbox; it owns that sandbox's passwordless sign-in, invitations, organization membership, and session lifecycle until [issue #94](https://github.com/AiHub-Ecosystem/aihub-be/issues/94) supersedes it.
 - **Invite-only membership:** access granted by an operator to a known user; it remains the current sandbox membership path, while AIHUB local access uses explicit Organization Membership and local account registration does not grant Organization access.
-- **Organization Membership:** the explicit relationship that grants an AIHUB User Account access to an Organization; it is separate from account registration and API-key issuance.
+- **Organization Membership:** the durable relationship that grants an AIHUB User Account access to an Organization; it is separate from account registration and API-key issuance, and one account may hold memberships in multiple Organizations.
 - **Membership Role:** the per-organization authority assigned to a membership: `owner`, `admin`, or `member`; it is not a User Access JWT claim.
 - **Organization Invitation:** a pending, organization-scoped invitation for one normalized email; it is separate from a membership and becomes a membership only after the invited identity accepts.
 - **Membership Status:** the lifecycle state of an Organization Membership: `active` or `disabled`; disabling preserves the durable relationship and does not physically delete it.
+- **Organization Roster:** the read-only list of active memberships grouped by each Organization the caller actively belongs to; disabled memberships are not part of the current roster.
 - **Email Verification:** proof that a User Account controls its registered email address; an unverified local account cannot complete login. Its opaque one-time verification token is invalidated when a newer token is issued.
 - **Verification Token:** an opaque, single-use proof used by an Email Verification flow; only its hash is durable and the raw value is never logged or returned by an API response.
 - **Password Recovery:** the generic flow through which an active local Auth Identity can receive a one-time proof to replace its password without exposing account existence or the existing password; it does not activate or re-enable an account.
@@ -98,6 +99,16 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - Pending Organization Invitations are separate from memberships. One open invitation exists per organization and normalized email; resend invalidates the previous token, and acceptance uses the existing registration → verification → login path before creating or reactivating membership.
 - Inviting an active member is a conflict; resending an open invitation replaces its token; inviting a disabled membership creates a new invitation that can reactivate it. Acceptance rejects disabled accounts, suspended organizations, and revoked or replayed tokens without consuming a still-valid token, and consumes the token only with membership creation/reactivation.
 - Organization Membership uses `active`/`disabled` state without physical deletion. An organization may have multiple owners, but removal or demotion of the last owner is rejected; transfer operations are atomic.
+- Active owners, admins, and members may read a redacted Organization Roster; membership mutations remain restricted by the role authority in ADR-0027.
+- The self-roster groups Organizations and exposes only public organization identity plus member username and role; it does not expose email addresses, auth identities, tokens, or User Account IDs. A valid account with no active memberships receives an empty roster.
+- A suspended Organization may remain visible in a caller's read-only roster, while disabled memberships are excluded; membership and API-key mutations remain blocked for suspended Organizations.
+- Membership authorization resolves the explicit User Account/Organization relationship at request time without an indefinite cache; missing or disabled membership denies access, while a durable lookup failure returns a safe internal failure without authorizing.
+- Authorization projections include the Organization lifecycle status internally; suspended Organizations remain readable through the self-roster but reject future membership and API-key mutations.
+- Invalid membership or organization projections fail the whole roster request with a safe internal error; the API never returns a partial roster or silently skips corrupt rows.
+- Membership authorization keeps internal denial reasons distinct for policy and tests but maps missing and disabled access to the same public forbidden response.
+- The initial self-roster uses one consistent database snapshot and deterministic ordering; it is intentionally unpaginated until roster size requires a follow-up contract.
+- Username is the immutable public member identifier for the MVP roster; a future rename policy must introduce a separate public handle rather than exposing a User Account ID.
+- Membership status changes use `updated_at` for the current durable state; disable actor, reason, and historical audit events remain outside this slice and belong with the durable audit follow-up.
 - A suspended Organization rejects membership and API-key mutations and invite acceptance. Organization creation and first-owner assignment remain operator-provisioned; self-service organization creation is out of scope.
 - Organization API keys are organization-owned. Owners and admins may create, list, rotate, and revoke them; lists expose metadata only, rotation immediately revokes the old key and returns the raw replacement once, and no customer-facing grace window exists.
 - Invite and API-key rotation mutations reuse the existing idempotency seam. Redis cache-purge failure can retain the existing operational cache ceiling of up to 60 seconds; this is not an intentional customer grace period.
@@ -220,6 +231,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - [ADR-0021: Customer Web Speaking sandbox boundary](docs/adr/0021-customer-web-speaking-sandbox-boundary.md)
 - [ADR-0022: AIHUB-owned local user authentication](docs/adr/0022-aihub-local-user-authentication.md)
 - [ADR-0027: Organization membership, invitation, and API-key self-service boundary](docs/adr/0027-organization-membership-and-key-management.md)
+- [ADR-0028: Organization roster read boundary](docs/adr/0028-organization-roster-read-boundary.md)
 - [ADR-0024: Rotating refresh-session boundary](docs/adr/0024-rotating-refresh-session-boundary.md)
 - [Agent and architecture design](docs/superpowers/specs/2026-09-07-aihub/12-agent-workflow-and-clean-architecture-design.md)
 - [Matt issue workflow](docs/agents/issue-tracker.md)

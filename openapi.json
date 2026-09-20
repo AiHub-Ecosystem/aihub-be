@@ -2770,6 +2770,155 @@
         }
       }
     },
+    "/v1/organizations/me/members": {
+      "get": {
+        "operationId": "organizations.me.members.list",
+        "summary": "List the authenticated user organization roster",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Organization roster",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["organizations"],
+                      "properties": {
+                        "organizations": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "organization_id",
+                              "name",
+                              "status",
+                              "membership",
+                              "members"
+                            ],
+                            "properties": {
+                              "organization_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "status": {
+                                "anyOf": [
+                                  {
+                                    "const": "active",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "suspended",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "membership": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": ["role"],
+                                "properties": {
+                                  "role": {
+                                    "anyOf": [
+                                      {
+                                        "const": "owner",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "admin",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "member",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              "members": {
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": ["username", "role"],
+                                  "properties": {
+                                    "username": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "role": {
+                                      "anyOf": [
+                                        {
+                                          "const": "owner",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "admin",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "member",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
     "/v1/auth/register": {
       "post": {
         "operationId": "auth.register",

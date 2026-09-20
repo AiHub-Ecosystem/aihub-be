@@ -113,6 +113,11 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
     { provide: LOCAL_AUTH_SERVICE, useClass: LocalAuthService },
     UserAccessJwtGuard,
   ],
-  exports: [LOCAL_AUTH_SERVICE, USER_ACCESS_TOKEN_VERIFIER, UserAccessJwtGuard],
+  exports: [
+    LOCAL_AUTH_REPOSITORY,
+    LOCAL_AUTH_SERVICE,
+    USER_ACCESS_TOKEN_VERIFIER,
+    UserAccessJwtGuard,
+  ],
 })
 export class AuthModule {}

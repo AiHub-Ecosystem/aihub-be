@@ -27,11 +27,19 @@ interface OpenApiDocument {
     readonly parameters: Record<string, unknown>;
     readonly responses: Record<string, unknown>;
   };
-  readonly paths: Record<string, { readonly post: OpenApiOperation }>;
+  readonly paths: Record<
+    string,
+    {
+      readonly get?: OpenApiOperation;
+      readonly post: OpenApiOperation;
+    }
+  >;
 }
 
 const SANDBOX_MINT_PATH = '/v1/sandbox/assertions';
 const SANDBOX_MINT_OPERATION_ID = 'sandbox.assertions.mint';
+const ORGANIZATION_ROSTER_PATH = '/v1/organizations/me/members';
+const ORGANIZATION_ROSTER_OPERATION_ID = 'organizations.me.members.list';
 const AUTH_PATHS = [
   '/v1/auth/register',
   '/v1/auth/login',
@@ -65,7 +73,9 @@ describe('buildOpenApiDocument', () => {
   it('has exactly one path entry per catalogued operation, so adding an operation without regenerating fails', () => {
     const doc = build();
     const operationIds = Object.values(doc.paths)
-      .map((item) => item.post.operationId)
+      .flatMap((item) =>
+        item.post === undefined ? [] : [item.post.operationId],
+      )
       .filter(
         (operationId) =>
           operationId !== SANDBOX_MINT_OPERATION_ID &&
@@ -86,10 +96,23 @@ describe('buildOpenApiDocument', () => {
 
     expect(
       Object.keys(doc.paths).filter((path) => !catalogued.has(path)),
-    ).toEqual([SANDBOX_MINT_PATH, ...AUTH_PATHS]);
+    ).toEqual([SANDBOX_MINT_PATH, ORGANIZATION_ROSTER_PATH, ...AUTH_PATHS]);
     expect(doc.paths[SANDBOX_MINT_PATH]?.post.operationId).toBe(
       SANDBOX_MINT_OPERATION_ID,
     );
+  });
+
+  it('documents the bearer-authenticated organization roster route', () => {
+    const operation = build().paths[ORGANIZATION_ROSTER_PATH]?.get;
+
+    expect(operation?.operationId).toBe(ORGANIZATION_ROSTER_OPERATION_ID);
+    expect(operation?.security).toEqual([{ BearerAuth: [] }]);
+    expect(operation?.parameters).toEqual([
+      { $ref: '#/components/parameters/CorrelationId' },
+    ]);
+    expect(operation?.requestBody).toBeUndefined();
+    expect(operation?.responses['200']).toBeDefined();
+    expect(JSON.stringify(operation?.responses['200'])).not.toContain('email');
   });
 
   it('documents local auth as unauthenticated and keeps token/password fields out of responses', () => {
