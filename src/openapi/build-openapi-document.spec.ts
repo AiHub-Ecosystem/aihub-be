@@ -37,6 +37,8 @@ const AUTH_PATHS = [
   '/v1/auth/login',
   '/v1/auth/verify-email',
   '/v1/auth/resend-verification',
+  '/v1/auth/forgot-password',
+  '/v1/auth/reset-password',
   '/v1/auth/refresh',
   '/v1/auth/logout',
 ] as const;
@@ -45,6 +47,8 @@ const AUTH_OPERATION_IDS = [
   'auth.login',
   'auth.verify_email',
   'auth.resend_verification',
+  'auth.forgot_password',
+  'auth.reset_password',
   'auth.refresh',
   'auth.logout',
 ] as const;
@@ -94,6 +98,8 @@ describe('buildOpenApiDocument', () => {
     const login = doc.paths['/v1/auth/login']?.post;
     const verify = doc.paths['/v1/auth/verify-email']?.post;
     const resend = doc.paths['/v1/auth/resend-verification']?.post;
+    const forgot = doc.paths['/v1/auth/forgot-password']?.post;
+    const reset = doc.paths['/v1/auth/reset-password']?.post;
     const refresh = doc.paths['/v1/auth/refresh']?.post;
     const logout = doc.paths['/v1/auth/logout']?.post;
 
@@ -105,6 +111,13 @@ describe('buildOpenApiDocument', () => {
     expect(register?.responses['201']).toBeDefined();
     expect(verify?.responses['204']).toBeDefined();
     expect(resend?.responses['202']).toBeDefined();
+    expect(forgot?.security).toEqual([]);
+    expect(forgot?.responses['202']).toBeDefined();
+    expect(JSON.stringify(forgot?.responses['202'])).toContain('message');
+    expect(reset?.security).toEqual([]);
+    expect(reset?.responses['204']).toBeDefined();
+    expect(JSON.stringify(reset?.responses['204'])).toContain('no-store');
+    expect(JSON.stringify(reset?.responses['204'])).toContain('Set-Cookie');
     expect(refresh?.security).toEqual([{ RefreshCookie: [] }]);
     expect(refresh?.requestBody?.required).toBe(false);
     expect(refresh?.responses['200']).toBeDefined();

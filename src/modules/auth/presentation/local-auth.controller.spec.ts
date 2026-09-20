@@ -19,12 +19,19 @@ import {
   LOCAL_AUTH_REPOSITORY,
   type LocalAuthRepositoryPort,
   type LoginIdentity,
+  type PasswordResetResult,
+  type PasswordResetTarget,
   type RefreshTokenRecord,
 } from '../application/local-auth-repository.port';
 import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
 } from '../application/password-hasher.port';
+import {
+  type IssuedPasswordResetToken,
+  PASSWORD_RESET_TOKEN,
+  type PasswordResetTokenPort,
+} from '../application/password-reset-token.port';
 import {
   type IssuedRefreshToken,
   REFRESH_TOKEN_ISSUER,
@@ -51,6 +58,14 @@ class RepositoryFake implements LocalAuthRepositoryPort {
   };
   refreshTokens = new Map<string, RefreshTokenRecord>();
   failCreateRefreshSession = false;
+  passwordResetTarget: PasswordResetTarget | undefined = {
+    userId: 'usr_01J00000000000000000000000',
+    email: 'person@example.com',
+  };
+  passwordResetResult: PasswordResetResult = {
+    kind: 'reset',
+    userId: 'usr_01J00000000000000000000000',
+  };
 
   async register(): Promise<void> {
     this.registered += 1;
@@ -62,6 +77,14 @@ class RepositoryFake implements LocalAuthRepositoryPort {
 
   async consumeVerificationToken(): Promise<boolean> {
     return this.consumed;
+  }
+
+  async issuePasswordResetToken(): Promise<PasswordResetTarget | undefined> {
+    return this.passwordResetTarget;
+  }
+
+  async consumePasswordReset(): Promise<PasswordResetResult> {
+    return this.passwordResetResult;
   }
 
   async findLoginIdentityByEmail() {
@@ -160,6 +183,12 @@ class SenderFake implements EmailSenderPort {
       throw new Error('provider failed');
     }
   }
+
+  async sendPasswordResetEmail(): Promise<void> {
+    if (this.fail) {
+      throw new Error('provider failed');
+    }
+  }
 }
 
 class HasherFake implements PasswordHasherPort {
@@ -186,6 +215,21 @@ class TokenFake implements VerificationTokenPort {
 
   hash(raw: string): string {
     return `hash:${raw}`;
+  }
+}
+
+class PasswordResetTokenFake implements PasswordResetTokenPort {
+  issue(now: Date): IssuedPasswordResetToken {
+    return {
+      id: 'prt_01J00000000000000000000000',
+      raw: 'reset-token',
+      hash: 'reset-hash',
+      expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+    };
+  }
+
+  hash(raw: string): string {
+    return `reset-hash:${raw}`;
   }
 }
 
@@ -259,6 +303,8 @@ describe('local auth HTTP boundary', () => {
       .useValue(hasher)
       .overrideProvider(VERIFICATION_TOKEN)
       .useClass(TokenFake)
+      .overrideProvider(PASSWORD_RESET_TOKEN)
+      .useClass(PasswordResetTokenFake)
       .overrideProvider(AUTH_RATE_LIMITER)
       .useValue(limiter)
       .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
@@ -351,6 +397,71 @@ describe('local auth HTTP boundary', () => {
 
     expect(response.statusCode).toBe(202);
     expect(response.payload).toBe('');
+  });
+
+  it('returns a generic password-recovery envelope even when delivery fails', async () => {
+    sender.fail = true;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/forgot-password',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'person@example.com' },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toEqual({
+      data: {
+        message: 'If the account exists, reset instructions have been sent.',
+      },
+      meta: { request_id: expect.stringMatching(/^req_/) },
+    });
+    expect(response.payload).not.toContain('reset-token');
+  });
+
+  it('resets the password with a bodyless no-store response and clears refresh state', async () => {
+    repository.passwordResetResult = {
+      kind: 'reset',
+      userId: 'usr_01J00000000000000000000000',
+    };
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/reset-password',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        token: 'reset-token',
+        password: 'new password that works',
+      },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.payload).toBe('');
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(String(response.headers['set-cookie'])).toContain('Max-Age=0');
+  });
+
+  it('maps replayed reset tokens to the public invalid-token error', async () => {
+    repository.passwordResetResult = {
+      kind: 'invalid',
+      reason: 'consumed',
+    };
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/reset-password',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        token: 'reset-token',
+        password: 'new password that works',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toEqual(
+      expect.objectContaining({ code: 'AUTH_PASSWORD_RESET_TOKEN_INVALID' }),
+    );
+    repository.passwordResetResult = {
+      kind: 'reset',
+      userId: 'usr_01J00000000000000000000000',
+    };
   });
 
   it('logs in through the real HTTP stack with a narrow no-store response', async () => {

@@ -15,12 +15,16 @@ import { AppError } from '../../../common/errors/app-error';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
   EmptyAuthRequestSchema,
+  type ForgotPasswordRequest,
+  ForgotPasswordRequestSchema,
   type LoginRequest,
   LoginRequestSchema,
   type RegisterRequest,
   RegisterRequestSchema,
   type ResendVerificationRequest,
   ResendVerificationRequestSchema,
+  type ResetPasswordRequest,
+  ResetPasswordRequestSchema,
   type VerifyEmailRequest,
   VerifyEmailRequestSchema,
 } from '../../../contracts/auth/local-auth';
@@ -52,6 +56,11 @@ interface LoginEnvelope {
     readonly token_type: 'Bearer';
     readonly expires_in: number;
   };
+  readonly meta: { readonly request_id: string };
+}
+
+interface ForgotPasswordEnvelope {
+  readonly data: { readonly message: string };
   readonly meta: { readonly request_id: string };
 }
 
@@ -209,5 +218,38 @@ export class LocalAuthController {
       body,
     );
     await this.service.resend(input.email, requestIp(request));
+  }
+
+  @Post('forgot-password')
+  @HttpCode(202)
+  async forgotPassword(
+    @Req() request: FastifyRequest,
+    @Body() body: unknown,
+  ): Promise<ForgotPasswordEnvelope> {
+    const input = parseBody<ForgotPasswordRequest>(
+      ForgotPasswordRequestSchema,
+      body,
+    );
+    const result = await this.service.forgotPassword(input, requestIp(request));
+    return {
+      data: result,
+      meta: { request_id: String(request.id) },
+    };
+  }
+
+  @Post('reset-password')
+  @HttpCode(204)
+  @Header('Cache-Control', 'no-store')
+  async resetPassword(
+    @Req() request: FastifyRequest,
+    @Body() body: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<void> {
+    const input = parseBody<ResetPasswordRequest>(
+      ResetPasswordRequestSchema,
+      body,
+    );
+    await this.service.resetPassword(input, requestIp(request));
+    clearRefreshCookie(reply);
   }
 }

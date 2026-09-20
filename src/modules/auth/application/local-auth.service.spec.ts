@@ -2,16 +2,23 @@ import type { LocalAccountStatus } from '../domain/local-auth';
 import type { AuthRateLimiterPort } from './auth-rate-limiter.port';
 import type {
   EmailSenderPort,
+  PasswordResetEmailInput,
   VerificationEmailInput,
 } from './email-sender.port';
 import type {
   LocalAuthRepositoryPort,
   LoginIdentity,
+  PasswordResetResult,
+  PasswordResetTarget,
   RefreshTokenRecord,
   ResendVerificationTarget,
 } from './local-auth-repository.port';
 import { LocalAuthService } from './local-auth.service';
 import type { PasswordHasherPort } from './password-hasher.port';
+import type {
+  IssuedPasswordResetToken,
+  PasswordResetTokenPort,
+} from './password-reset-token.port';
 import type {
   IssuedRefreshToken,
   RefreshTokenIssuerPort,
@@ -41,6 +48,15 @@ class FakeRepository implements LocalAuthRepositoryPort {
   ]);
   refreshTokens = new Map<string, RefreshTokenRecord>();
   refreshLookupFailure = false;
+  passwordResetTarget: PasswordResetTarget | undefined = {
+    userId: 'usr_01J00000000000000000000000',
+    email: 'person@example.com',
+  };
+  passwordResetResult: PasswordResetResult = {
+    kind: 'reset',
+    userId: 'usr_01J00000000000000000000000',
+  };
+  passwordResetInputs: unknown[] = [];
 
   async register(input: unknown): Promise<void> {
     this.registered.push(input);
@@ -54,6 +70,15 @@ class FakeRepository implements LocalAuthRepositoryPort {
 
   async consumeVerificationToken(): Promise<boolean> {
     return this.consumed;
+  }
+
+  async issuePasswordResetToken(): Promise<PasswordResetTarget | undefined> {
+    return this.passwordResetTarget;
+  }
+
+  async consumePasswordReset(input: unknown): Promise<PasswordResetResult> {
+    this.passwordResetInputs.push(input);
+    return this.passwordResetResult;
   }
 
   async findLoginIdentityByEmail() {
@@ -165,8 +190,24 @@ class FakeTokenIssuer implements VerificationTokenPort {
   }
 }
 
+class FakePasswordResetTokenIssuer implements PasswordResetTokenPort {
+  issue(now: Date): IssuedPasswordResetToken {
+    return {
+      id: 'prt_01J00000000000000000000000',
+      raw: 'reset-token',
+      hash: 'reset-hash',
+      expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+    };
+  }
+
+  hash(raw: string): string {
+    return `reset-hash:${raw}`;
+  }
+}
+
 class FakeSender implements EmailSenderPort {
   sent: VerificationEmailInput[] = [];
+  resetSent: PasswordResetEmailInput[] = [];
   fail = false;
 
   async sendVerificationEmail(input: VerificationEmailInput): Promise<void> {
@@ -174,6 +215,13 @@ class FakeSender implements EmailSenderPort {
       throw new Error('provider failure');
     }
     this.sent.push(input);
+  }
+
+  async sendPasswordResetEmail(input: PasswordResetEmailInput): Promise<void> {
+    if (this.fail) {
+      throw new Error('provider failure');
+    }
+    this.resetSent.push(input);
   }
 }
 
@@ -235,6 +283,7 @@ function service() {
     repository,
     hasher,
     new FakeTokenIssuer(),
+    new FakePasswordResetTokenIssuer(),
     sender,
     limiter,
     new FakeAccessTokenIssuer(),
@@ -291,6 +340,77 @@ describe('LocalAuthService', () => {
       local.resend('nobody@example.com', '203.0.113.7'),
     ).resolves.toBe(undefined);
     expect(sender.sent).toHaveLength(0);
+  });
+
+  it('returns one recovery message, sends only for an active target, and swallows provider failure', async () => {
+    const { local, repository, sender, limiter } = service();
+    sender.fail = true;
+
+    await expect(
+      local.forgotPassword({ email: ' Person@Example.com ' }, '203.0.113.7'),
+    ).resolves.toEqual({
+      message: 'If the account exists, reset instructions have been sent.',
+    });
+    expect(repository.passwordResetTarget).toBeDefined();
+    expect(limiter.calls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scope: 'forgot_ip',
+          limit: 3,
+          windowMs: 900000,
+        }),
+        expect.objectContaining({
+          scope: 'forgot_email',
+          limit: 3,
+          windowMs: 86400000,
+        }),
+      ]),
+    );
+
+    repository.passwordResetTarget = undefined;
+    await expect(
+      local.forgotPassword({ email: 'nobody@example.com' }, '203.0.113.7'),
+    ).resolves.toEqual({
+      message: 'If the account exists, reset instructions have been sent.',
+    });
+  });
+
+  it('maps every unusable reset token to one public error and counts only failures', async () => {
+    const { local, repository, limiter } = service();
+    repository.passwordResetResult = { kind: 'invalid', reason: 'consumed' };
+
+    await expect(
+      local.resetPassword(
+        { token: 'reset-token', password: 'new password that works' },
+        '203.0.113.7',
+      ),
+    ).rejects.toMatchObject({
+      code: 'AUTH_PASSWORD_RESET_TOKEN_INVALID',
+      httpStatus: 400,
+    });
+    expect(limiter.calls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scope: 'reset_ip',
+          limit: 10,
+          windowMs: 300000,
+        }),
+        expect.objectContaining({
+          scope: 'reset_token',
+          limit: 5,
+          windowMs: 900000,
+        }),
+      ]),
+    );
+
+    const successful = service();
+    await expect(
+      successful.local.resetPassword(
+        { token: 'reset-token', password: 'new password that works' },
+        '203.0.113.7',
+      ),
+    ).resolves.toBeUndefined();
+    expect(successful.limiter.calls).toHaveLength(0);
   });
 
   it('maps provider failure on registration without rolling back persistence', async () => {

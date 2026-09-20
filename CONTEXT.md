@@ -26,7 +26,8 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Organization Membership:** the explicit relationship that grants an AIHUB User Account access to an Organization; it is separate from account registration and API-key issuance.
 - **Email Verification:** proof that a User Account controls its registered email address; an unverified local account cannot complete login. Its opaque one-time verification token is invalidated when a newer token is issued.
 - **Verification Token:** an opaque, single-use proof used by an Email Verification flow; only its hash is durable and the raw value is never logged or returned by an API response.
-- **Password Recovery:** a time-limited proof-of-control flow that lets a User Account replace its local password without exposing the existing password.
+- **Password Recovery:** the generic flow through which an active local Auth Identity can receive a one-time proof to replace its password without exposing account existence or the existing password; it does not activate or re-enable an account.
+- **Password Reset Token:** the opaque, single-use proof issued by Password Recovery; it is valid for one hour, only its hash is durable, and issuing a newer token invalidates the previous open token.
 - **Local Account Status:** the lifecycle state of a local User Account: pending verification, active, or disabled.
 - **Login credential failure:** the deliberately generic result for an unknown email, wrong password, pending-verification account, or disabled account; it does not reveal which account state was observed.
 - **Sandbox User ID:** an opaque deterministic identifier derived from the verified Managed IdP issuer and subject, encoded to AIHUB's `[A-Za-z0-9_-]` boundary; it is never an email address or a browser-supplied value.
@@ -86,6 +87,13 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - Local registration requires email, username, and password, and the account must complete email verification before login succeeds.
 - The local Auth Identity owns the normalized email/password credential, while the User Account owns the normalized unique Username; login uses the normalized email and registration does not grant Organization access.
 - Local Account Status and Organization Membership status are evaluated at authorization time rather than assumed permanently from registration.
+- Password Recovery is eligible only for an active local password Auth Identity; pending-verification and disabled accounts receive the same generic recovery response but no reset credential, and recovery never changes account status.
+- Password Reset Tokens have a lifecycle separate from Email Verification tokens: one open token per account, one-hour expiry, hash-only durability, and invalidation when a newer token is issued.
+- A valid, rate-allowed recovery request returns the same generic `202` response for known and unknown addresses; Resend delivery failures are swallowed at the public boundary, while malformed, rate-limited, and durable-storage failures retain their respective safe errors.
+- Password reset rechecks that the account is active when the token is consumed; a later disablement makes the token unusable and does not change the account or sessions.
+- Reset success is one durable transaction: consume the presented token, replace the password hash, invalidate other open reset tokens, and revoke every Refresh Token Family. Concurrent reset attempts have one winner; losers receive the generic invalid-token result without partial changes.
+- A reset-token row remains usable when Resend reports a delivery failure so a late provider delivery can still succeed; a later recovery request replaces it. Expired and consumed reset rows remain durable until a later bounded cleanup concern.
+- Successful password reset returns bodyless `204` with `Cache-Control: no-store` and clears the current refresh cookie; all access JWTs remain limited by their existing short lifetime.
 - Login returns a User Access JWT and a Refresh Token. The local credential is one Auth Identity, and future Google sign-in must attach to the same User Account rather than silently creating duplicates.
 - The #65 login slice returns only a 15-minute User Access JWT in the shared success envelope; #66 adds the secure Refresh Token cookie and rotation without changing the access-token body contract.
 - User Access JWTs contain exactly `iss`, `aud`, `sub`, `jti`, `iat`, and `exp`; `iss` is the configured canonical AIHUB issuer, `aud` is `aihub-user-api`, and `sub` is the stable `AIHUB User Account` ID, while email, username, organization, membership, scopes, API-key data, and credential state remain outside the token.

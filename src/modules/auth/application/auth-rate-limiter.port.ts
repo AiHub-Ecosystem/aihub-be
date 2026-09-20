@@ -3,9 +3,13 @@ export type AuthRateLimitScope =
   | 'register_email'
   | 'resend_ip'
   | 'resend_email'
+  | 'forgot_ip'
+  | 'forgot_email'
   | 'verify_ip'
   | 'login_ip'
   | 'login_email'
+  | 'reset_ip'
+  | 'reset_token'
   | 'refresh_ip'
   | 'refresh_token';
 

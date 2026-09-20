@@ -5,6 +5,8 @@ import {
   type CreateRefreshSessionInput,
   type LocalAuthRepositoryPort,
   type LoginIdentity,
+  type PasswordResetResult,
+  type PasswordResetTarget,
   type RefreshTokenRecord,
   type RefreshTokenRotationResult,
   type RegisterLocalAccountInput,
@@ -141,6 +143,61 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
     }
   }
 
+  async issuePasswordResetToken(input: {
+    readonly email: string;
+    readonly tokenId: string;
+    readonly tokenHash: string;
+    readonly tokenExpiresAt: Date;
+    readonly now: Date;
+  }): Promise<PasswordResetTarget | undefined> {
+    return this.client.transaction(async (transaction) => {
+      const rows = await transaction.query(
+        `
+          SELECT ua.id, ai.canonical_email, ua.status
+          FROM user_accounts ua
+          JOIN auth_identities ai ON ai.user_account_id = ua.id
+          WHERE ai.provider = 'password' AND ai.canonical_email = $1
+          FOR UPDATE
+        `,
+        [input.email],
+      );
+      const row = rows[0];
+      if (
+        row === undefined ||
+        row.status !== 'active' ||
+        typeof row.id !== 'string' ||
+        typeof row.canonical_email !== 'string'
+      ) {
+        return undefined;
+      }
+
+      await transaction.query(
+        `
+          UPDATE password_reset_tokens
+          SET consumed_at = $2
+          WHERE user_account_id = $1 AND consumed_at IS NULL
+        `,
+        [row.id, input.now],
+      );
+      await transaction.query(
+        `
+          INSERT INTO password_reset_tokens (
+            id, user_account_id, token_hash, expires_at, created_at
+          )
+          VALUES ($1, $2, $3, $4, $5)
+        `,
+        [
+          input.tokenId,
+          row.id,
+          input.tokenHash,
+          input.tokenExpiresAt,
+          input.now,
+        ],
+      );
+      return { userId: row.id, email: row.canonical_email };
+    });
+  }
+
   async consumeVerificationToken(input: {
     readonly tokenHash: string;
     readonly now: Date;
@@ -175,6 +232,96 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
         [row.user_account_id, input.now],
       );
       return activated.length > 0;
+    });
+  }
+
+  async consumePasswordReset(input: {
+    readonly tokenHash: string;
+    readonly passwordHash: string;
+    readonly now: Date;
+  }): Promise<PasswordResetResult> {
+    return this.client.transaction(async (transaction) => {
+      const rows = await transaction.query(
+        `
+          SELECT token.id, token.user_account_id, token.expires_at,
+                 token.consumed_at, account.status
+          FROM password_reset_tokens token
+          JOIN user_accounts account ON account.id = token.user_account_id
+          WHERE token.token_hash = $1
+          FOR UPDATE
+        `,
+        [input.tokenHash],
+      );
+      const row = rows[0];
+      if (row === undefined) {
+        return { kind: 'invalid', reason: 'missing' };
+      }
+      if (
+        typeof row.id !== 'string' ||
+        typeof row.user_account_id !== 'string' ||
+        !(row.expires_at instanceof Date) ||
+        Number.isNaN(row.expires_at.getTime()) ||
+        (row.consumed_at !== null && !(row.consumed_at instanceof Date)) ||
+        (row.consumed_at instanceof Date &&
+          Number.isNaN(row.consumed_at.getTime())) ||
+        (row.status !== 'pending_verification' &&
+          row.status !== 'active' &&
+          row.status !== 'disabled')
+      ) {
+        return { kind: 'invalid', reason: 'missing' };
+      }
+      if (row.status !== 'active') {
+        return { kind: 'invalid', reason: 'inactive' };
+      }
+      if (row.consumed_at !== null) {
+        return { kind: 'invalid', reason: 'consumed' };
+      }
+      if (row.expires_at.getTime() <= input.now.getTime()) {
+        return { kind: 'invalid', reason: 'expired' };
+      }
+
+      const identity = await transaction.query(
+        `
+          UPDATE auth_identities
+          SET password_hash = $2, updated_at = $3
+          WHERE user_account_id = $1 AND provider = 'password'
+          RETURNING id
+        `,
+        [row.user_account_id, input.passwordHash, input.now],
+      );
+      if (identity.length === 0) {
+        throw new Error('local password identity is missing');
+      }
+
+      const consumed = await transaction.query(
+        `
+          UPDATE password_reset_tokens
+          SET consumed_at = $2
+          WHERE id = $1 AND consumed_at IS NULL
+          RETURNING id
+        `,
+        [row.id, input.now],
+      );
+      if (consumed.length === 0) {
+        throw new Error('password reset token was concurrently consumed');
+      }
+      await transaction.query(
+        `
+          UPDATE password_reset_tokens
+          SET consumed_at = $2
+          WHERE user_account_id = $1 AND consumed_at IS NULL
+        `,
+        [row.user_account_id, input.now],
+      );
+      await transaction.query(
+        `
+          UPDATE refresh_tokens
+          SET revoked_at = $2
+          WHERE user_account_id = $1 AND revoked_at IS NULL
+        `,
+        [row.user_account_id, input.now],
+      );
+      return { kind: 'reset', userId: row.user_account_id };
     });
   }
 

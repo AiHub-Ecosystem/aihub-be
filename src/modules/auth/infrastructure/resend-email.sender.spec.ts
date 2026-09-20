@@ -48,4 +48,31 @@ describe('ResendEmailSender', () => {
       }),
     ).rejects.toThrow('Resend email delivery failed');
   });
+
+  it('sends the reset token and expiry without constructing a frontend URL', async () => {
+    const calls: Array<{ input: string; init: RequestInit | undefined }> = [];
+    const sender = new ResendEmailSender(
+      { apiKey: 'resend-secret' },
+      'AIHUB <no-reply@example.com>',
+      async (input, init) => {
+        calls.push({ input, init });
+        return { ok: true };
+      },
+    );
+
+    await sender.sendPasswordResetEmail({
+      email: 'person@example.com',
+      token: 'reset-token',
+      expiresAt: new Date('2026-09-20T01:00:00.000Z'),
+    });
+
+    const body = String(calls[0]?.init?.body);
+    expect(JSON.parse(body)).toMatchObject({
+      subject: 'Reset your AIHUB password',
+      to: ['person@example.com'],
+    });
+    expect(body).toContain('reset-token');
+    expect(body).toContain('2026-09-20T01:00:00.000Z');
+    expect(body).not.toContain('http');
+  });
 });

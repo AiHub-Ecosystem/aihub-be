@@ -2,12 +2,14 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 
 import { AppError } from '../../../common/errors/app-error';
 import { invalidRequest } from '../../../common/errors/invalid-request';
+import type { ResetPasswordRequest } from '../../../contracts/auth/local-auth';
 import {
   type NormalizedRegistration,
   type RegistrationInput,
   normalizeEmail,
   normalizeLogin,
   normalizeRegistration,
+  validatePassword,
 } from '../domain/local-auth';
 import {
   AUTH_RATE_LIMITER,
@@ -24,6 +26,10 @@ import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
 } from './password-hasher.port';
+import {
+  PASSWORD_RESET_TOKEN,
+  type PasswordResetTokenPort,
+} from './password-reset-token.port';
 import {
   REFRESH_TOKEN_ISSUER,
   type RefreshTokenIssuerPort,
@@ -47,8 +53,18 @@ const REFRESH_IP_LIMIT = 20;
 const REFRESH_IP_WINDOW_MS = 5 * 60 * 1000;
 const REFRESH_TOKEN_LIMIT = 5;
 const REFRESH_TOKEN_WINDOW_MS = 15 * 60 * 1000;
+const FORGOT_IP_LIMIT = 3;
+const FORGOT_IP_WINDOW_MS = 15 * 60 * 1000;
+const FORGOT_EMAIL_LIMIT = 3;
+const FORGOT_EMAIL_WINDOW_MS = 24 * 60 * 60 * 1000;
+const RESET_IP_LIMIT = 10;
+const RESET_IP_WINDOW_MS = 5 * 60 * 1000;
+const RESET_TOKEN_LIMIT = 5;
+const RESET_TOKEN_WINDOW_MS = 15 * 60 * 1000;
 const DUMMY_PASSWORD_HASH =
   '$argon2id$v=19$m=65536,t=3,p=1$SoHl8YUBzXgiAZ4xlgNZyg$qwZIFOa2OcIOgiHLRYImWLsza4k9/T4ZZvvhiWrD41k';
+const PASSWORD_RECOVERY_MESSAGE =
+  'If the account exists, reset instructions have been sent.';
 
 export interface RegisteredLocalAccount {
   readonly email: string;
@@ -70,6 +86,14 @@ function invalidRefreshToken(): AppError {
   });
 }
 
+function invalidPasswordResetToken(): AppError {
+  return new AppError({
+    code: 'AUTH_PASSWORD_RESET_TOKEN_INVALID',
+    message: 'Password reset token is invalid',
+    retryable: false,
+  });
+}
+
 @Injectable()
 export class LocalAuthService {
   private readonly clock: LocalAuthServiceClock;
@@ -81,6 +105,8 @@ export class LocalAuthService {
     private readonly passwordHasher: PasswordHasherPort,
     @Inject(VERIFICATION_TOKEN)
     private readonly tokenIssuer: VerificationTokenPort,
+    @Inject(PASSWORD_RESET_TOKEN)
+    private readonly passwordResetTokenIssuer: PasswordResetTokenPort,
     @Inject(EMAIL_SENDER)
     private readonly emailSender: EmailSenderPort,
     @Inject(AUTH_RATE_LIMITER)
@@ -234,6 +260,93 @@ export class LocalAuthService {
       });
     } catch {
       // The next generic resend can recover delivery without exposing state.
+    }
+  }
+
+  async forgotPassword(
+    input: { readonly email: string },
+    ip: string,
+  ): Promise<{ readonly message: string }> {
+    let normalizedEmail: string;
+    try {
+      normalizedEmail = normalizeEmail(input.email);
+    } catch (error) {
+      throw invalidRequest(error);
+    }
+
+    await this.enforceRateLimits([
+      {
+        scope: 'forgot_ip',
+        key: ip,
+        limit: FORGOT_IP_LIMIT,
+        windowMs: FORGOT_IP_WINDOW_MS,
+      },
+      {
+        scope: 'forgot_email',
+        key: normalizedEmail,
+        limit: FORGOT_EMAIL_LIMIT,
+        windowMs: FORGOT_EMAIL_WINDOW_MS,
+      },
+    ]);
+
+    const now = this.clock.now();
+    const issued = this.passwordResetTokenIssuer.issue(now);
+    const target = await this.repository.issuePasswordResetToken({
+      email: normalizedEmail,
+      tokenId: issued.id,
+      tokenHash: issued.hash,
+      tokenExpiresAt: issued.expiresAt,
+      now,
+    });
+
+    if (target !== undefined) {
+      try {
+        await this.emailSender.sendPasswordResetEmail({
+          email: target.email,
+          token: issued.raw,
+          expiresAt: issued.expiresAt,
+        });
+      } catch {
+        // Keep the public recovery result generic. A later request supersedes
+        // this token, while a late provider delivery can still succeed.
+      }
+    }
+
+    return { message: PASSWORD_RECOVERY_MESSAGE };
+  }
+
+  async resetPassword(input: ResetPasswordRequest, ip: string): Promise<void> {
+    let password: string;
+    try {
+      password = validatePassword(input.password);
+    } catch (error) {
+      throw invalidRequest(error);
+    }
+
+    const tokenHash = this.passwordResetTokenIssuer.hash(input.token);
+    const passwordHash = await this.passwordHasher.hash(password);
+    const result = await this.repository.consumePasswordReset({
+      tokenHash,
+      passwordHash,
+      now: this.clock.now(),
+    });
+
+    if (result.kind === 'invalid') {
+      await this.enforceRateLimits([
+        {
+          scope: 'reset_ip',
+          key: ip,
+          limit: RESET_IP_LIMIT,
+          windowMs: RESET_IP_WINDOW_MS,
+        },
+        {
+          scope: 'reset_token',
+          key: tokenHash,
+          limit: RESET_TOKEN_LIMIT,
+          windowMs: RESET_TOKEN_WINDOW_MS,
+        },
+      ]);
+      throw invalidPasswordResetToken();
     }
   }
 

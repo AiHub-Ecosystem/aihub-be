@@ -24,6 +24,7 @@ import {
 } from './application/local-auth.service';
 import { LocalAuthService } from './application/local-auth.service';
 import { PASSWORD_HASHER } from './application/password-hasher.port';
+import { PASSWORD_RESET_TOKEN } from './application/password-reset-token.port';
 import { REFRESH_TOKEN_ISSUER } from './application/refresh-token.port';
 import {
   USER_ACCESS_TOKEN_ISSUER,
@@ -31,6 +32,7 @@ import {
 } from './application/user-access-token.port';
 import { VERIFICATION_TOKEN } from './application/verification-token.port';
 import { Argon2PasswordHasher } from './infrastructure/argon2-password.hasher';
+import { CryptoPasswordResetToken } from './infrastructure/crypto-password-reset-token';
 import { CryptoRefreshToken } from './infrastructure/crypto-refresh-token';
 import { CryptoVerificationToken } from './infrastructure/crypto-verification-token';
 import {
@@ -56,6 +58,7 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
         ),
     },
     { provide: PASSWORD_HASHER, useClass: Argon2PasswordHasher },
+    { provide: PASSWORD_RESET_TOKEN, useClass: CryptoPasswordResetToken },
     { provide: REFRESH_TOKEN_ISSUER, useClass: CryptoRefreshToken },
     { provide: VERIFICATION_TOKEN, useClass: CryptoVerificationToken },
     {

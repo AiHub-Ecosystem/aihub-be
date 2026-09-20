@@ -1,6 +1,8 @@
 import type {
+  ForgotPasswordRequest,
   LoginRequest,
   RegisterRequest,
+  ResetPasswordRequest,
 } from '../../../contracts/auth/local-auth';
 
 export interface LocalAuthServicePort {
@@ -14,6 +16,11 @@ export interface LocalAuthServicePort {
   }>;
   verify(token: string, ip: string): Promise<void>;
   resend(email: string, ip: string): Promise<void>;
+  forgotPassword(
+    input: ForgotPasswordRequest,
+    ip: string,
+  ): Promise<{ readonly message: string }>;
+  resetPassword(input: ResetPasswordRequest, ip: string): Promise<void>;
   login(
     input: LoginRequest,
     ip: string,

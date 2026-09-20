@@ -53,7 +53,7 @@
     },
     "responses": {
       "Error400": {
-        "description": "INVALID_REQUEST | AUTH_VERIFICATION_TOKEN_INVALID",
+        "description": "INVALID_REQUEST | AUTH_VERIFICATION_TOKEN_INVALID | AUTH_PASSWORD_RESET_TOKEN_INVALID",
         "content": {
           "application/json": {
             "schema": {
@@ -74,6 +74,10 @@
                         },
                         {
                           "const": "AUTH_VERIFICATION_TOKEN_INVALID",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AUTH_PASSWORD_RESET_TOKEN_INVALID",
                           "type": "string"
                         }
                       ]
@@ -3052,6 +3056,150 @@
         "responses": {
           "202": {
             "description": "Verification resend accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
+    "/v1/auth/forgot-password": {
+      "post": {
+        "operationId": "auth.forgot_password",
+        "summary": "Request a password reset email",
+        "x-identity-scope": "none",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["email"],
+                "properties": {
+                  "email": {
+                    "minLength": 1,
+                    "maxLength": 320,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Password recovery request accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["message"],
+                      "properties": {
+                        "message": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
+    "/v1/auth/reset-password": {
+      "post": {
+        "operationId": "auth.reset_password",
+        "summary": "Reset a local account password",
+        "x-identity-scope": "none",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["token", "password"],
+                "properties": {
+                  "token": {
+                    "minLength": 1,
+                    "maxLength": 512,
+                    "type": "string"
+                  },
+                  "password": {
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Password reset and refresh sessions revoked",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              },
+              "Set-Cookie": {
+                "description": "An expired host-only refresh cookie.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/Error400"

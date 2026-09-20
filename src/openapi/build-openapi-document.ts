@@ -14,11 +14,14 @@ import {
 } from '../common/errors/error-registry';
 import {
   EmptyAuthRequestSchema,
+  ForgotPasswordRequestSchema,
+  ForgotPasswordResponseSchema,
   LoginRequestSchema,
   LoginResponseSchema,
   RegisterRequestSchema,
   RegisterResponseSchema,
   ResendVerificationRequestSchema,
+  ResetPasswordRequestSchema,
   VerifyEmailRequestSchema,
 } from '../contracts/auth/local-auth';
 import {
@@ -228,6 +231,8 @@ const AUTH_REGISTER_PATH = '/v1/auth/register';
 const AUTH_LOGIN_PATH = '/v1/auth/login';
 const AUTH_VERIFY_PATH = '/v1/auth/verify-email';
 const AUTH_RESEND_PATH = '/v1/auth/resend-verification';
+const AUTH_FORGOT_PASSWORD_PATH = '/v1/auth/forgot-password';
+const AUTH_RESET_PASSWORD_PATH = '/v1/auth/reset-password';
 const AUTH_REFRESH_PATH = '/v1/auth/refresh';
 const AUTH_LOGOUT_PATH = '/v1/auth/logout';
 
@@ -288,6 +293,30 @@ function localAuthPathItems(
   };
   const resendResponses = {
     '202': { description: 'Verification resend accepted' },
+    ...authErrorResponses(groupedErrors, [400, 429, 500]),
+  };
+  const forgotPasswordResponses = {
+    '202': {
+      description: 'Password recovery request accepted',
+      content: {
+        'application/json': { schema: ForgotPasswordResponseSchema },
+      },
+    },
+    ...authErrorResponses(groupedErrors, [400, 429, 500]),
+  };
+  const resetPasswordResponses = {
+    '204': {
+      description: 'Password reset and refresh sessions revoked',
+      headers: {
+        'Cache-Control': {
+          schema: { type: 'string', enum: ['no-store'] },
+        },
+        'Set-Cookie': {
+          description: 'An expired host-only refresh cookie.',
+          schema: { type: 'string' },
+        },
+      },
+    },
     ...authErrorResponses(groupedErrors, [400, 429, 500]),
   };
   const refreshResponses = {
@@ -369,6 +398,18 @@ function localAuthPathItems(
       'Request a verification email resend',
       ResendVerificationRequestSchema,
       resendResponses,
+    ),
+    [AUTH_FORGOT_PASSWORD_PATH]: operation(
+      'auth.forgot_password',
+      'Request a password reset email',
+      ForgotPasswordRequestSchema,
+      forgotPasswordResponses,
+    ),
+    [AUTH_RESET_PASSWORD_PATH]: operation(
+      'auth.reset_password',
+      'Reset a local account password',
+      ResetPasswordRequestSchema,
+      resetPasswordResponses,
     ),
     [AUTH_REFRESH_PATH]: operation(
       'auth.refresh',

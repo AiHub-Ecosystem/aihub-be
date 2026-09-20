@@ -27,6 +27,23 @@ export type ResendVerificationRequest = Static<
   typeof ResendVerificationRequestSchema
 >;
 
+export const ForgotPasswordRequestSchema = Type.Object(
+  { email: Type.String({ minLength: 1, maxLength: 320 }) },
+  { additionalProperties: false },
+);
+
+export type ForgotPasswordRequest = Static<typeof ForgotPasswordRequestSchema>;
+
+export const ResetPasswordRequestSchema = Type.Object(
+  {
+    token: Type.String({ minLength: 1, maxLength: 512 }),
+    password: Type.String({ minLength: 1, maxLength: 256 }),
+  },
+  { additionalProperties: false },
+);
+
+export type ResetPasswordRequest = Static<typeof ResetPasswordRequestSchema>;
+
 export const LoginRequestSchema = Type.Object(
   {
     email: Type.String({ minLength: 1, maxLength: 320 }),
@@ -70,6 +87,20 @@ export const RegisterResponseSchema = Type.Object(
       status: Type.Literal('pending_verification'),
     }),
     meta: Type.Object({ request_id: Type.String() }),
+  },
+  { additionalProperties: false },
+);
+
+export const ForgotPasswordResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      { message: Type.String({ minLength: 1 }) },
+      { additionalProperties: false },
+    ),
+    meta: Type.Object(
+      { request_id: Type.String({ minLength: 1 }) },
+      { additionalProperties: false },
+    ),
   },
   { additionalProperties: false },
 );

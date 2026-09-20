@@ -15,6 +15,11 @@ export interface ResendVerificationTarget {
   readonly email: string;
 }
 
+export interface PasswordResetTarget {
+  readonly userId: string;
+  readonly email: string;
+}
+
 export interface LoginIdentity {
   readonly userId: string;
   readonly passwordHash: string;
@@ -44,6 +49,13 @@ export type RefreshTokenRotationResult =
       readonly reason: RefreshTokenFailureReason;
     };
 
+export type PasswordResetResult =
+  | { readonly kind: 'reset'; readonly userId: string }
+  | {
+      readonly kind: 'invalid';
+      readonly reason: 'missing' | 'inactive' | 'expired' | 'consumed';
+    };
+
 export interface CreateRefreshSessionInput {
   readonly userId: string;
   readonly token: IssuedRefreshToken;
@@ -66,10 +78,22 @@ export interface LocalAuthRepositoryPort {
     readonly tokenExpiresAt: Date;
     readonly now: Date;
   }): Promise<ResendVerificationTarget | undefined>;
+  issuePasswordResetToken(input: {
+    readonly email: string;
+    readonly tokenId: string;
+    readonly tokenHash: string;
+    readonly tokenExpiresAt: Date;
+    readonly now: Date;
+  }): Promise<PasswordResetTarget | undefined>;
   consumeVerificationToken(input: {
     readonly tokenHash: string;
     readonly now: Date;
   }): Promise<boolean>;
+  consumePasswordReset(input: {
+    readonly tokenHash: string;
+    readonly passwordHash: string;
+    readonly now: Date;
+  }): Promise<PasswordResetResult>;
   findLoginIdentityByEmail(email: string): Promise<LoginIdentity | undefined>;
   findUserAccountStatus(
     userId: string,

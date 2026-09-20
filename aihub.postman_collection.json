@@ -1,7 +1,7 @@
 {
   "item": [
     {
-      "id": "00ad8f08-d347-42ee-aa3d-12368a04532f",
+      "id": "4b1a8175-43ec-4fdb-8b47-11467059d9ed",
       "name": "writing.task1.grade",
       "request": {
         "name": "writing.task1.grade",
@@ -74,7 +74,7 @@
       }
     },
     {
-      "id": "6bb43554-f2b4-4d2d-bc47-272e011d3ec8",
+      "id": "6ca62ab2-e3e1-464a-b546-ba9d19deedf8",
       "name": "writing.task2.grade",
       "request": {
         "name": "writing.task2.grade",
@@ -147,7 +147,7 @@
       }
     },
     {
-      "id": "da4d2868-e25b-40d8-838d-834b98df3c4b",
+      "id": "850cc088-4b9c-4d63-b9bb-7167f802a7a8",
       "name": "speaking.grading",
       "request": {
         "name": "speaking.grading",
@@ -257,7 +257,7 @@
       }
     },
     {
-      "id": "35adb793-6c6e-4fff-a432-6244f8bb0e17",
+      "id": "f73b175e-7512-4c9f-ac3b-1017b063ee14",
       "name": "speaking.grading-json",
       "request": {
         "name": "speaking.grading-json",
@@ -330,7 +330,7 @@
       }
     },
     {
-      "id": "d28bae7f-efa4-4c5a-a76a-dc234ed58b85",
+      "id": "e6c7ad0e-cfc3-444c-a72d-ab6b818b5102",
       "name": "Mint a sandbox user assertion",
       "request": {
         "name": "Mint a sandbox user assertion",
@@ -394,7 +394,7 @@
       }
     },
     {
-      "id": "4f245f3f-7a38-4255-a39c-9975ea4a2285",
+      "id": "960ea5f8-5b82-46ee-ba6f-a997bcbd740a",
       "name": "Register a local AIHUB account",
       "request": {
         "name": "Register a local AIHUB account",
@@ -439,7 +439,7 @@
       }
     },
     {
-      "id": "af0e1041-4da9-404e-87bd-eeec4d48c918",
+      "id": "f366b173-92f4-4646-890a-3d297b8eb79f",
       "name": "Issue a User Access JWT",
       "request": {
         "name": "Issue a User Access JWT",
@@ -484,7 +484,7 @@
       }
     },
     {
-      "id": "cf5dfe0a-63a8-492b-a64f-69031ff98bf3",
+      "id": "ea65e4de-55c9-4fcd-8de0-86c3cd5796d9",
       "name": "Verify a local account email address",
       "request": {
         "name": "Verify a local account email address",
@@ -529,7 +529,7 @@
       }
     },
     {
-      "id": "080e9e93-b51f-470c-85f2-a3828fc8f099",
+      "id": "56a552c0-5c3b-418c-810d-b8b00c8bacc6",
       "name": "Request a verification email resend",
       "request": {
         "name": "Request a verification email resend",
@@ -574,7 +574,97 @@
       }
     },
     {
-      "id": "6e300c82-3fac-4042-adb4-4855a107fae5",
+      "id": "210720b9-2244-4936-ab39-621d2fdbabb8",
+      "name": "Request a password reset email",
+      "request": {
+        "name": "Request a password reset email",
+        "description": {},
+        "url": {
+          "path": ["v1", "auth", "forgot-password"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": null,
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"<string>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "760fb9c4-ca21-48e7-a0a7-5dfbb02f221d",
+      "name": "Reset a local account password",
+      "request": {
+        "name": "Reset a local account password",
+        "description": {},
+        "url": {
+          "path": ["v1", "auth", "reset-password"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": null,
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"<string>\",\n  \"password\": \"<string>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "e58f2a44-dedf-4b92-816e-dd857967f84c",
       "name": "Rotate a refresh session and issue a User Access JWT",
       "request": {
         "name": "Rotate a refresh session and issue a User Access JWT",
@@ -641,7 +731,7 @@
       }
     },
     {
-      "id": "d0cb9bf6-1bc9-46d4-a658-0bba6db2c168",
+      "id": "d80559dd-4fbc-4868-a22d-47e4b53cd496",
       "name": "Revoke the current refresh session",
       "request": {
         "name": "Revoke the current refresh session",
@@ -1654,7 +1744,7 @@
     ]
   },
   "info": {
-    "_postman_id": "95e55a5e-fc95-4c9a-b453-08bff67082b3",
+    "_postman_id": "fb2f22a1-f0fd-4a63-b7cf-a47389c59604",
     "name": "AIHUB Writing API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Generated by `pnpm generate:postman` from openapi.json — do not hand-edit. The \"D1 handover test cases\" folder is the D2 handover artifact required by docs/aihub_deliverable_1_api_contract_schema.md §G; it is not a CI regression suite.",

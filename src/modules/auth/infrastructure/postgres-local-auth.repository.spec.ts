@@ -105,6 +105,131 @@ describe('PostgresLocalAuthRepository', () => {
     );
   });
 
+  it('issues a reset token only for an active password identity and supersedes open tokens', async () => {
+    const client = new FakeClient();
+    client.responses = [
+      [
+        {
+          id: 'usr_01J00000000000000000000000',
+          canonical_email: input.email,
+          status: 'active',
+        },
+      ],
+    ];
+
+    await expect(
+      new PostgresLocalAuthRepository(client).issuePasswordResetToken({
+        email: input.email,
+        tokenId: 'prt_01J00000000000000000000000',
+        tokenHash: input.tokenHash,
+        tokenExpiresAt: input.tokenExpiresAt,
+        now: input.now,
+      }),
+    ).resolves.toEqual({
+      userId: 'usr_01J00000000000000000000000',
+      email: input.email,
+    });
+    expect(client.queries[0]?.text).toContain('FOR UPDATE');
+    expect(client.queries[1]?.text).toContain('password_reset_tokens');
+    expect(client.queries[1]?.text).toContain('SET consumed_at');
+    expect(client.queries[2]?.text).toContain(
+      'INSERT INTO password_reset_tokens',
+    );
+    expect(JSON.stringify(client.queries)).not.toContain('token_value');
+  });
+
+  it('atomically changes the password, consumes reset tokens, and revokes every refresh session', async () => {
+    const client = new FakeClient();
+    client.responses = [
+      [
+        {
+          id: 'prt_01J00000000000000000000000',
+          user_account_id: 'usr_01J00000000000000000000000',
+          expires_at: new Date('2026-09-20T01:00:00.000Z'),
+          consumed_at: null,
+          status: 'active',
+        },
+      ],
+      [{ id: 'auth_01J00000000000000000000000' }],
+      [{ id: 'prt_01J00000000000000000000000' }],
+      [],
+      [],
+    ];
+
+    await expect(
+      new PostgresLocalAuthRepository(client).consumePasswordReset({
+        tokenHash: input.tokenHash,
+        passwordHash: input.passwordHash,
+        now: input.now,
+      }),
+    ).resolves.toEqual({
+      kind: 'reset',
+      userId: 'usr_01J00000000000000000000000',
+    });
+    const sql = client.queries.map((query) => query.text).join('\n');
+    expect(sql).toContain('FROM password_reset_tokens token');
+    expect(sql).toContain('FOR UPDATE');
+    expect(sql).toContain('UPDATE auth_identities');
+    expect(sql).toContain('SET consumed_at');
+    expect(sql).toContain('UPDATE refresh_tokens');
+    expect(sql).toContain('revoked_at = $2');
+    expect(JSON.stringify(client.queries)).not.toContain('reset-token');
+  });
+
+  it('returns one invalid result for missing, expired, consumed, and inactive reset state', async () => {
+    const cases = [
+      { rows: [], reason: 'missing' as const },
+      {
+        rows: [
+          {
+            id: 'prt_01J00000000000000000000000',
+            user_account_id: 'usr_01J00000000000000000000000',
+            expires_at: new Date('2026-09-19T00:00:00.000Z'),
+            consumed_at: null,
+            status: 'active',
+          },
+        ],
+        reason: 'expired' as const,
+      },
+      {
+        rows: [
+          {
+            id: 'prt_01J00000000000000000000000',
+            user_account_id: 'usr_01J00000000000000000000000',
+            expires_at: new Date('2026-09-20T01:00:00.000Z'),
+            consumed_at: input.now,
+            status: 'active',
+          },
+        ],
+        reason: 'consumed' as const,
+      },
+      {
+        rows: [
+          {
+            id: 'prt_01J00000000000000000000000',
+            user_account_id: 'usr_01J00000000000000000000000',
+            expires_at: new Date('2026-09-20T01:00:00.000Z'),
+            consumed_at: null,
+            status: 'disabled',
+          },
+        ],
+        reason: 'inactive' as const,
+      },
+    ];
+
+    for (const current of cases) {
+      const client = new FakeClient();
+      client.responses = [current.rows];
+      await expect(
+        new PostgresLocalAuthRepository(client).consumePasswordReset({
+          tokenHash: input.tokenHash,
+          passwordHash: input.passwordHash,
+          now: input.now,
+        }),
+      ).resolves.toEqual({ kind: 'invalid', reason: current.reason });
+    }
+  });
+
   it('atomically consumes a valid token and activates only a pending account', async () => {
     const client = new FakeClient();
     client.responses = [

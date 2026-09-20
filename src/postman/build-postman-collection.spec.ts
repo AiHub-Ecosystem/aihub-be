@@ -133,6 +133,8 @@ describe('buildPostmanCollection', () => {
         'Register a local AIHUB account',
         'Verify a local account email address',
         'Request a verification email resend',
+        'Request a password reset email',
+        'Reset a local account password',
       ]),
     );
   });
