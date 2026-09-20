@@ -14,11 +14,16 @@ secret/aihub/{environment}/ai-writing
 secret/aihub/{environment}/seaweedfs
 secret/aihub/{environment}/resend
 secret/aihub/{environment}/user-access-jwt
+secret/aihub/{environment}/database
+secret/aihub/{environment}/redis
+secret/aihub/{environment}/sandbox-assertion
 ```
 
-All five bundles are part of the V1 runtime-secret document. The Speaking
-question catalog uses the SeaweedFS bundle to create short-lived read URLs for
-the public sample-audio endpoint, and the Resend bundle supplies the
+The first five bundles are part of the V1 runtime-secret document. The
+database, Redis, and sandbox-assertion bundles are rendered into a separate
+connection document because they are process bootstrap configuration. The
+Speaking question catalog uses the SeaweedFS bundle to create short-lived read
+URLs for the public sample-audio endpoint, and the Resend bundle supplies the
 verification-email provider credential.
 
 ## Policy bootstrap
@@ -45,7 +50,10 @@ pnpm vault:provision
 ```
 
 The helper writes the selected policy, creates an AppRole with a short token
-TTL and bounded maximum TTL, and writes all five KV bundles. Deliver the Role
+TTL and bounded maximum TTL, and writes all eight KV bundles. The credential
+directory must also contain `database.json`, `redis.json`, and
+`sandbox-assertion.json` with the flat keys used by the connection template.
+Deliver the Role
 ID and one-time Secret ID to Vault Agent through the deployment secret channel;
 never commit or paste them into an issue.
 
@@ -57,9 +65,10 @@ smoke test.
 ## Agent template
 
 `templates/runtime-secrets.json.ctmpl` renders the JSON shape consumed by the
-AIHUB runtime-secret provider. Set `AIHUB_VAULT_ENVIRONMENT` in the Agent
-process and render the file to the path configured by
-`AIHUB_RUNTIME_SECRETS_FILE`.
+AIHUB runtime-secret provider. `templates/connection-secrets.json.ctmpl`
+renders database, Redis, and sandbox bootstrap material. Set
+`AIHUB_VAULT_ENVIRONMENT` in the Agent process; both files are rendered under
+the shared runtime directory.
 
 The rendered file must be readable only by the AIHUB service account. Its
 directory must not be world-readable, and the file must not be copied into

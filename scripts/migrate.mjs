@@ -10,6 +10,21 @@ if (existsSync('.env')) {
   loadEnvFile('.env');
 }
 
+const runtimeConnectionModule = new URL(
+  '../dist/modules/secrets/infrastructure/runtime-connection.environment.js',
+  import.meta.url,
+);
+if (existsSync(runtimeConnectionModule)) {
+  const runtimeConnection = await import(runtimeConnectionModule);
+  const loadRuntimeConnectionEnvironment =
+    runtimeConnection.loadRuntimeConnectionEnvironment ??
+    runtimeConnection.default?.loadRuntimeConnectionEnvironment;
+  if (typeof loadRuntimeConnectionEnvironment !== 'function') {
+    throw new Error('runtime connection loader is unavailable');
+  }
+  loadRuntimeConnectionEnvironment();
+}
+
 const databaseUrl = process.env.DATABASE_URL;
 if (databaseUrl === undefined || databaseUrl.trim().length === 0) {
   console.error('DATABASE_URL is required');

@@ -32,6 +32,7 @@ COPY --from=build --chown=10001:10001 /app/dist ./dist
 COPY --from=build --chown=10001:10001 /app/package.json ./package.json
 COPY --from=build --chown=10001:10001 /app/scripts/cli.mjs /app/scripts/cli-options.cjs /app/scripts/quota-reconcile.cjs /app/scripts/usage-prune.cjs ./scripts/
 COPY --from=build --chown=10001:10001 /app/scripts/migrate.mjs ./scripts/migrate.mjs
+COPY --from=build --chown=10001:10001 /app/scripts/runtime-entrypoint.mjs ./scripts/runtime-entrypoint.mjs
 COPY --from=build --chown=10001:10001 /app/database/migrations ./database/migrations
 
 USER 10001:10001
@@ -40,4 +41,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3000/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
 
-ENTRYPOINT ["node", "dist/main.js"]
+ENTRYPOINT ["node", "scripts/runtime-entrypoint.mjs"]

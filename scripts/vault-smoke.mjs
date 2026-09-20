@@ -51,6 +51,11 @@ const requiredPaths = [
   `secret/aihub/${environment}/ai-speaking`,
   `secret/aihub/${environment}/ai-writing`,
   `secret/aihub/${environment}/user-access-jwt`,
+  `secret/aihub/${environment}/resend`,
+  `secret/aihub/${environment}/seaweedfs`,
+  `secret/aihub/${environment}/database`,
+  `secret/aihub/${environment}/redis`,
+  `secret/aihub/${environment}/sandbox-assertion`,
 ];
 
 for (const path of requiredPaths) {

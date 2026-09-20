@@ -38,6 +38,21 @@ if (existsSync('.env')) {
   loadEnvFile('.env');
 }
 
+const runtimeConnectionModule = new URL(
+  '../dist/modules/secrets/infrastructure/runtime-connection.environment.js',
+  import.meta.url,
+);
+if (existsSync(runtimeConnectionModule)) {
+  const runtimeConnection = await import(runtimeConnectionModule);
+  const loadRuntimeConnectionEnvironment =
+    runtimeConnection.loadRuntimeConnectionEnvironment ??
+    runtimeConnection.default?.loadRuntimeConnectionEnvironment;
+  if (typeof loadRuntimeConnectionEnvironment !== 'function') {
+    throw new Error('runtime connection loader is unavailable');
+  }
+  loadRuntimeConnectionEnvironment();
+}
+
 function parseOptions(values) {
   const options = new Map();
   for (let index = 0; index < values.length; index += 1) {

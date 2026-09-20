@@ -18,3 +18,15 @@ path "secret/data/aihub/development/user-access-jwt" {
 path "secret/data/aihub/development/seaweedfs" {
   capabilities = ["read"]
 }
+
+path "secret/data/aihub/development/database" {
+  capabilities = ["read"]
+}
+
+path "secret/data/aihub/development/redis" {
+  capabilities = ["read"]
+}
+
+path "secret/data/aihub/development/sandbox-assertion" {
+  capabilities = ["read"]
+}

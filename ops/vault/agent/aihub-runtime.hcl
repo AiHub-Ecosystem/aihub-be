@@ -18,3 +18,9 @@ template {
   destination = "/run/secrets/aihub/runtime-secrets.json"
   perms       = "0600"
 }
+
+template {
+  source      = "/etc/aihub/vault/connection-secrets.json.ctmpl"
+  destination = "/run/secrets/aihub/connection-secrets.json"
+  perms       = "0600"
+}

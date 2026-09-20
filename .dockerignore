@@ -16,6 +16,7 @@ scripts/*
 !scripts/quota-reconcile.cjs
 !scripts/usage-prune.cjs
 !scripts/migrate.mjs
+!scripts/runtime-entrypoint.mjs
 database/*
 !database/migrations/
 !database/migrations/*.sql

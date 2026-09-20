@@ -30,16 +30,14 @@ x-app-environment: &app-environment
   AIHUB_ALLOW_UNAUTHENTICATED_DEV: "false"
   AIHUB_RUNTIME_SECRET_SOURCE: agent-file
   AIHUB_RUNTIME_SECRETS_FILE: /run/secrets/aihub/runtime-secrets.json
+  AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: /run/secrets/aihub/connection-secrets.json
+  AIHUB_RUNTIME_DATABASE_SCOPE: production
   AIHUB_USER_ACCESS_ISSUER: ${AIHUB_USER_ACCESS_ISSUER:?AIHUB_USER_ACCESS_ISSUER is required}
   AIHUB_PRODUCTION_HOST: ${AIHUB_PRODUCTION_HOST:?AIHUB_PRODUCTION_HOST is required}
   AIHUB_STAGING_HOST: ${AIHUB_STAGING_HOST:-}
   AIHUB_DEVELOPMENT_HOST: ${AIHUB_DEVELOPMENT_HOST:-}
   AIHUB_SANDBOX_HOST: ${AIHUB_SANDBOX_HOST:-}
   AIHUB_SANDBOX_ORG_IDS: ${AIHUB_SANDBOX_ORG_IDS:-}
-  AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY: ${AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY:-}
-  AIHUB_SANDBOX_ASSERTION_KID: ${AIHUB_SANDBOX_ASSERTION_KID:-}
-  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
-  REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
   DOWNSTREAM_AI_WRITING_URL: ${DOWNSTREAM_AI_WRITING_URL:?DOWNSTREAM_AI_WRITING_URL is required}
   DOWNSTREAM_AI_SPEAKING_URL: ${DOWNSTREAM_AI_SPEAKING_URL:?DOWNSTREAM_AI_SPEAKING_URL is required}
   RESEND_FROM: ${RESEND_FROM:?RESEND_FROM is required}
@@ -74,11 +72,16 @@ services:
       - ${VAULT_CA_CERT_FILE:?VAULT_CA_CERT_FILE is required}:/etc/aihub/vault/ca.pem:ro
       - ./ops/vault/agent/aihub-runtime.hcl:/etc/aihub/vault/agent.hcl:ro
       - ./ops/vault/templates/runtime-secrets.json.ctmpl:/etc/aihub/vault/runtime-secrets.json.ctmpl:ro
+      - ./ops/vault/templates/connection-secrets.json.ctmpl:/etc/aihub/vault/connection-secrets.json.ctmpl:ro
       - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub
     networks:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "test -s /run/secrets/aihub/runtime-secrets.json"]
+      test:
+        [
+          "CMD-SHELL",
+          "test -s /run/secrets/aihub/runtime-secrets.json && test -s /run/secrets/aihub/connection-secrets.json",
+        ]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -87,7 +90,7 @@ services:
     <<: *app-common
     profiles:
       - migration
-    entrypoint: ["node"]
+    entrypoint: ["node", "scripts/runtime-entrypoint.mjs"]
     command: ["scripts/migrate.mjs"]
     environment: *app-environment
     networks: *app-database-networks
@@ -103,12 +106,11 @@ services:
     profiles:
       - migration
       - sandbox
-    entrypoint: ["node"]
+    entrypoint: ["node", "scripts/runtime-entrypoint.mjs"]
     command: ["scripts/migrate.mjs"]
     environment:
       <<: *app-environment
-      DATABASE_URL: ${AIHUB_SANDBOX_DATABASE_URL:-}
-      REDIS_URL: ${AIHUB_SANDBOX_REDIS_URL:-}
+      AIHUB_RUNTIME_DATABASE_SCOPE: sandbox
     networks: *app-database-networks
     volumes:
       - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro
@@ -149,8 +151,7 @@ services:
       - sandbox
     environment:
       <<: *app-environment
-      DATABASE_URL: ${AIHUB_SANDBOX_DATABASE_URL:-}
-      REDIS_URL: ${AIHUB_SANDBOX_REDIS_URL:-}
+      AIHUB_RUNTIME_DATABASE_SCOPE: sandbox
     networks: *app-database-networks
     ports:
       - "127.0.0.1:${AIHUB_SANDBOX_APP_PORT:-3022}:3000"

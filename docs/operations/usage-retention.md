@@ -12,17 +12,17 @@ one cron owner and invoke it once for each deployment database:
 
 ```sh
 docker compose --env-file .env.production \
-  -f docker-compose.production.yml -f docker-compose.production.env.yml \
+  -f docker-compose.production.yml \
   exec -T app pnpm cli usage:prune
 
 docker compose --env-file .env.production \
-  -f docker-compose.production.yml -f docker-compose.production.env.yml \
+  -f docker-compose.production.yml \
   --profile sandbox exec -T app-sandbox pnpm cli usage:prune
 ```
 
-Each invocation reads only the container's `DATABASE_URL`. Production and
-sandbox failures are independent; alert on a non-zero exit and on a missed
-run for either container.
+Each invocation loads its selected database URL from the Vault Agent connection
+snapshot. Production and sandbox failures are independent; alert on a non-zero
+exit and on a missed run for either container.
 
 ## Retention boundary
 

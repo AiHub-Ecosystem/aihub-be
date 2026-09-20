@@ -112,12 +112,20 @@ jobs:
           target="$VPS_USER@$VPS_HOST"
           ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
           scp_opts=(-i "$HOME/.ssh/aihub-deploy" -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          ssh "${ssh_opts[@]}" "$target" \
+            "mkdir -p '$VPS_APP_DIR/ops/vault/agent' '$VPS_APP_DIR/ops/vault/templates'"
           scp "${scp_opts[@]}" \
             docker-compose.production.yml \
-            docker-compose.production.env.yml \
             "$target:$VPS_APP_DIR/"
+          scp "${scp_opts[@]}" \
+            ops/vault/agent/aihub-runtime.hcl \
+            "$target:$VPS_APP_DIR/ops/vault/agent/"
+          scp "${scp_opts[@]}" \
+            ops/vault/templates/runtime-secrets.json.ctmpl \
+            ops/vault/templates/connection-secrets.json.ctmpl \
+            "$target:$VPS_APP_DIR/ops/vault/templates/"
           ssh "${ssh_opts[@]}" "$target" \
-            "test -s '$VPS_APP_DIR/docker-compose.production.yml' && test -s '$VPS_APP_DIR/docker-compose.production.env.yml'"
+            "test -s '$VPS_APP_DIR/docker-compose.production.yml' && test -s '$VPS_APP_DIR/ops/vault/agent/aihub-runtime.hcl' && test -s '$VPS_APP_DIR/ops/vault/templates/runtime-secrets.json.ctmpl' && test -s '$VPS_APP_DIR/ops/vault/templates/connection-secrets.json.ctmpl'"
 
       - name: Log in to GHCR on VPS
         shell: bash
@@ -153,57 +161,55 @@ jobs:
           chmod 600 "$env_tmp"
           mv "$env_tmp" .env.production
           trap - EXIT
-          compose=(sudo -n docker compose --env-file .env.production -f docker-compose.production.yml -f docker-compose.production.env.yml)
+          compose=(sudo -n docker compose --env-file .env.production -f docker-compose.production.yml)
 
           "${compose[@]}" config --quiet
 
-          sandbox_keys=(AIHUB_SANDBOX_HOST AIHUB_SANDBOX_DATABASE_URL AIHUB_SANDBOX_REDIS_URL)
+          sandbox_enabled="$(sed -n 's/^AIHUB_SANDBOX_ENABLED=//p' .env.production)"
+          if [ -n "$sandbox_enabled" ] && [ "$sandbox_enabled" != true ] && [ "$sandbox_enabled" != false ]; then
+            printf 'AIHUB_SANDBOX_ENABLED must be true or false\n' >&2
+            exit 1
+          fi
+          sandbox_keys=(AIHUB_SANDBOX_HOST AIHUB_SANDBOX_ORG_IDS)
           sandbox_set=0
-          for key in "${sandbox_keys[@]}"; do
-            if grep -Eq "^${key}=.+$" .env.production; then
-              sandbox_set=$((sandbox_set + 1))
-            fi
-          done
-          if [ "$sandbox_set" -ne 0 ] && [ "$sandbox_set" -ne "${#sandbox_keys[@]}" ]; then
-            printf 'sandbox configuration must set AIHUB_SANDBOX_HOST, AIHUB_SANDBOX_DATABASE_URL, and AIHUB_SANDBOX_REDIS_URL together\n' >&2
+          if [ "$sandbox_enabled" = true ]; then
+            for key in "${sandbox_keys[@]}"; do
+              if grep -Eq "^${key}=.+$" .env.production; then
+                sandbox_set=$((sandbox_set + 1))
+              fi
+            done
+          fi
+          if [ "$sandbox_enabled" = true ] && [ "$sandbox_set" -ne "${#sandbox_keys[@]}" ]; then
+            printf 'sandbox configuration must set AIHUB_SANDBOX_ENABLED=true, AIHUB_SANDBOX_HOST, and AIHUB_SANDBOX_ORG_IDS together\n' >&2
             exit 1
           fi
 
-          if [ "$sandbox_set" -eq "${#sandbox_keys[@]}" ]; then
-            production_database_url="$(sed -n 's/^DATABASE_URL=//p' .env.production)"
-            sandbox_database_url="$(sed -n 's/^AIHUB_SANDBOX_DATABASE_URL=//p' .env.production)"
-            production_redis_url="$(sed -n 's/^REDIS_URL=//p' .env.production)"
-            sandbox_redis_url="$(sed -n 's/^AIHUB_SANDBOX_REDIS_URL=//p' .env.production)"
-            production_database_path="${production_database_url%%[?#]*}"
-            sandbox_database_path="${sandbox_database_url%%[?#]*}"
-            production_redis_path="${production_redis_url%%[?#]*}"
-            sandbox_redis_path="${sandbox_redis_url%%[?#]*}"
-
-            case "$production_database_path" in
-              */aihub) ;;
-              *) printf 'DATABASE_URL must target the production database /aihub\n' >&2; exit 1 ;;
-            esac
-            case "$sandbox_database_path" in
-              */aihub_sandbox) ;;
-              *) printf 'AIHUB_SANDBOX_DATABASE_URL must target /aihub_sandbox\n' >&2; exit 1 ;;
-            esac
-            case "$production_redis_path" in
-              */0) ;;
-              *) printf 'REDIS_URL must target Redis logical database /0\n' >&2; exit 1 ;;
-            esac
-            case "$sandbox_redis_path" in
-              */1) ;;
-              *) printf 'AIHUB_SANDBOX_REDIS_URL must target Redis logical database /1\n' >&2; exit 1 ;;
-            esac
-            if [ "$sandbox_database_url" = "$production_database_url" ] || [ "$sandbox_redis_url" = "$production_redis_url" ]; then
-              printf 'sandbox database and Redis URLs must differ from production URLs\n' >&2
-              exit 1
+          "${compose[@]}" up -d vault-agent
+          vault_container_id="$("${compose[@]}" ps -q vault-agent)"
+          test -n "$vault_container_id"
+          vault_healthy=0
+          vault_status=""
+          for attempt in $(seq 1 30); do
+            vault_status="$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$vault_container_id" 2>/dev/null || true)"
+            if [ "$vault_status" = healthy ]; then
+              vault_healthy=1
+              break
             fi
+            if [ "$vault_status" = unhealthy ]; then
+              break
+            fi
+            sleep 2
+          done
+          if [ "$vault_healthy" -ne 1 ]; then
+            "${compose[@]}" ps
+            printf 'vault-agent health status: %s\n' "$vault_status" >&2
+            "${compose[@]}" logs --no-color --tail=100 vault-agent >&2 || true
+            exit 1
           fi
 
           services=(app)
           compose_runtime=("${compose[@]}")
-          if [ "$sandbox_set" -eq "${#sandbox_keys[@]}" ]; then
+          if [ "$sandbox_enabled" = true ]; then
             "${compose[@]}" --profile sandbox pull app app-sandbox
             # Host nginx terminates TLS and owns ports 80/443 on this VPS. The
             # sandbox app binds a second loopback port; nginx publishes the
@@ -219,7 +225,7 @@ jobs:
           fi
 
           "${compose[@]}" --profile migration run --rm migrate </dev/null
-          if [ "$sandbox_set" -eq "${#sandbox_keys[@]}" ]; then
+          if [ "$sandbox_enabled" = true ]; then
             "${compose[@]}" --profile migration --profile sandbox run --rm migrate-sandbox </dev/null
           fi
 

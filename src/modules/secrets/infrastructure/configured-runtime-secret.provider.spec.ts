@@ -114,37 +114,13 @@ describe('ConfiguredRuntimeSecretProvider', () => {
     );
   });
 
-  it('allows production env secrets only with an explicit opt-in', () => {
-    const provider = new ConfiguredRuntimeSecretProvider(
-      options({
-        nodeEnv: 'production',
-        source: 'env',
-        allowProductionEnvSecrets: true,
-      }),
-    );
-
-    expect(provider.getSnapshot()).toEqual({
-      aiSpeaking: {
-        clientId: speakingClient,
-        secretKey: speakingSecret,
-      },
-      aiWriting: { token: writingToken },
-      resend: { apiKey: resendApiKey },
-      userAccessJwt: {
-        privateKeyPem: userAccessPrivateKey,
-        keyId: userAccessKeyId,
-      },
-    });
-  });
-
-  it('does not extend the production opt-in to staging', () => {
+  it('rejects an environment source outside local development and tests', () => {
     expect(
       () =>
         new ConfiguredRuntimeSecretProvider(
           options({
             nodeEnv: 'staging',
             source: 'env',
-            allowProductionEnvSecrets: true,
           }),
         ),
     ).toThrow(

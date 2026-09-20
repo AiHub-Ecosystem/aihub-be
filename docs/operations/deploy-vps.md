@@ -21,18 +21,16 @@ each hostname to its matching loopback port. See
   configured. Leave an unused tier blank: a blank tier is absent from the
   application's hostname map, so no `Host` header can select it.
 - nginx uses `AIHUB_APP_PORT` (default `3021`) as its upstream.
-- An isolated sandbox also needs `AIHUB_SANDBOX_DATABASE_URL`,
-  `AIHUB_SANDBOX_REDIS_URL` (logical database `/1`), and
-  `AIHUB_SANDBOX_APP_PORT` (default `3022`). Set all three together; leave all
-  three blank when this deployment does not serve sandbox.
+- An isolated sandbox needs `AIHUB_SANDBOX_ENABLED=true`,
+  `AIHUB_SANDBOX_HOST`, `AIHUB_SANDBOX_ORG_IDS`, and
+  `AIHUB_SANDBOX_APP_PORT` (default `3022`). Its database and Redis URLs are
+  stored in the Vault connection bundles.
 - The existing Docker network `aihub_aihub-network` with a healthy `aihub-db` container.
-- A production Vault AppRole whose policy can read only
-  `secret/data/aihub/production/*` (required for the future Vault mode; the
-  temporary Stage A override below does not use it).
-- An operator Vault session that can read the existing Wispace Redis bundle at
-  `secret/wispace-bots/messenger/prd`.
-- A CA file trusted by Vault, plus the AppRole `role_id` and one-use `secret_id`
-  (Vault mode only).
+- A production Vault AppRole whose policy can read only the exact AIHUB runtime
+  paths under `secret/data/aihub/production/`.
+- A Vault operator session that can provision the AIHUB bundles, including the
+  existing Wispace Redis credential, without using the runtime identity.
+- A CA file trusted by Vault, plus the AppRole `role_id` and one-use `secret_id`.
 - A release image in the registry, or a local Docker build.
 
 Do not reuse the development AppRole or the development rendered snapshot.
@@ -53,39 +51,32 @@ cp .env.production.example .env.production
 chmod 600 .env.production
 ```
 
-Set real hostnames, database password, Vault address and file paths in
-`.env.production`. In Vault-backed mode, the template supplies
-`DOWNSTREAM_AI_WRITING_TOKEN`, Speaking credentials, and SeaweedFS credentials at
-runtime; do not put those values in `.env.production`. The temporary Stage A
-exception is documented below. The shared Redis password is the one exception
-in the Vault baseline: render only `REDIS_URL` into the mode-600 deployment file
-from the operator Vault session below.
+Set hostnames, Vault address, file paths, provider URLs, and ordinary storage
+configuration in `.env.production`. Vault Agent supplies downstream credentials,
+database/Redis URLs, the User Access JWT key, SeaweedFS credentials, and sandbox
+signing material at runtime. None of those secret values belong in
+`.env.production`.
 
 `AIHUB_PRODUCTION_HOST` is the only required host setting. Setting
-`AIHUB_SANDBOX_HOST` tells the application to recognise that hostname; it does
-not publish it. An isolated sandbox additionally requires its own database and
-Redis URLs; the Compose profile is only started when all three sandbox settings
-are present. Serving the hostname is a separate nginx change described in
-[The public edge](#the-public-edge). Leaving the sandbox settings blank keeps
-the sandbox host and container absent.
+`AIHUB_SANDBOX_ENABLED=true` and the sandbox host/organization allowlist enables
+the isolated Compose profile; the connection bundle supplies its database and
+Redis URLs. Serving the hostname is a separate nginx change described in
+[The public edge](#the-public-edge). Leaving the sandbox flag false keeps the
+sandbox host and container absent.
 
 Point the gateway at the existing production database over the shared Docker
-network. The password must be URL-encoded inside `DATABASE_URL` (for example,
-`@` becomes `%40`):
+network. Store the URL-encoded production and sandbox URLs in the operator-only
+Vault bundles:
 
-```text
-DATABASE_URL=postgresql://aihub_admin:<url-encoded-db-password>@aihub-db:5432/aihub
-AIHUB_DATABASE_NETWORK=aihub_aihub-network
+```json
+// database.json
+{"url":"postgresql://aihub_admin:<password>@aihub-db:5432/aihub","sandbox_url":"postgresql://aihub_admin:<password>@aihub-db:5432/aihub_sandbox"}
+// redis.json
+{"url":"redis://:<password>@redis.aihubproduction.com:6379/0","sandbox_url":"redis://:<password>@redis.aihubproduction.com:6379/1"}
 ```
 
-When sandbox is enabled, use the same Postgres instance and Redis host with a
-different database/logical index:
-
-```text
-AIHUB_SANDBOX_APP_PORT=3022
-AIHUB_SANDBOX_DATABASE_URL=postgresql://aihub_admin:<url-encoded-db-password>@aihub-db:5432/aihub_sandbox
-AIHUB_SANDBOX_REDIS_URL=redis://:<same-redis-password>@redis.aihubproduction.com:6379/1
-```
+The application reads the selected URL from Vault Agent at startup; neither
+URL is passed through Compose interpolation.
 
 Speaking sample audio is stored in SeaweedFS. Keep `SEAWEEDFS_ENDPOINT_URL`
 (`https://s3.wispace.app`), `SEAWEEDFS_BUCKET` (`aihub-speaking-samples`), and
@@ -108,26 +99,10 @@ docker network inspect "${AIHUB_DATABASE_NETWORK:-aihub_aihub-network}" >/dev/nu
 docker inspect --format '{{.State.Health.Status}}' aihub-db
 ```
 
-Use the existing production Wispace Redis without printing its credential:
-
-```sh
-set -eu
-redis_host="redis.aihubproduction.com"
-redis_port="6379"
-redis_password="$(vault kv get -field=REDIS_PASSWORD secret/wispace-bots/messenger/prd)"
-redis_url="redis://:${redis_password}@${redis_host}:${redis_port}/0"
-tmp_env="$(mktemp)"
-grep -v '^REDIS_URL=' .env.production > "$tmp_env"
-printf 'REDIS_URL=%s\n' "$redis_url" >> "$tmp_env"
-chmod 600 "$tmp_env"
-mv "$tmp_env" .env.production
-unset redis_host redis_port redis_password redis_url tmp_env
-```
-
 The production Redis endpoint is `redis.aihubproduction.com:6379`; verify that
 the VPS firewall permits the Redis protocol before starting the gateway. Do not
 grant the AIHUB runtime AppRole access to the `wispace-bots` path; the operator
-copies only the required password into `.env.production`. Redis `/1` is not a
+copies only the required password into the AIHUB `redis` bundle. Redis `/1` is not a
 durable isolation boundary: it keeps sandbox counters/cache keys out of the
 production logical database, while Postgres remains the durable boundary.
 
@@ -161,7 +136,7 @@ sudo -n docker exec aihub-db psql -U aihub_admin -d postgres \
   -c "SELECT 'CREATE DATABASE aihub_sandbox OWNER aihub_admin' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'aihub_sandbox')\\gexec"
 
 compose=(sudo -n docker compose --env-file .env.production \
-  -f docker-compose.production.yml -f docker-compose.production.env.yml)
+  -f docker-compose.production.yml)
 "${compose[@]}" --profile migration --profile sandbox run --rm migrate-sandbox
 ```
 
@@ -232,67 +207,10 @@ Start both containers only after the cutover. If only one database is migrated,
 the other container fails at startup or serves stale identity/schema data; never
 run one side against a schema that has not received the same migration set.
 
-## Temporary Stage A env mode
+## Provision production Vault data
 
-Until the Vault adoption trigger in issue #30 is met, use the explicit Compose
-override `docker-compose.production.env.yml`. It removes the Vault Agent
-dependency and passes the downstream credentials from the mode-600
-`.env.production` file to the app and migration containers.
-
-Set these values in `.env.production` without committing or printing them:
-
-```text
-AIHUB_RUNTIME_SECRET_SOURCE=env
-AIHUB_ALLOW_PRODUCTION_ENV_SECRETS=true
-DOWNSTREAM_AI_WRITING_TOKEN=<real-token>
-DOWNSTREAM_AI_SPEAKING_CLIENT_ID=<real-client-id>
-DOWNSTREAM_AI_SPEAKING_SECRET_KEY=<real-secret-key>
-SEAWEEDFS_ACCESS_KEY_ID=<seaweedfs-access-key>
-SEAWEEDFS_SECRET_ACCESS_KEY=<seaweedfs-secret-key>
-```
-
-Validate and start the temporary stack:
-
-```sh
-sudo -n docker compose --env-file .env.production \
-  -f docker-compose.production.yml \
-  -f docker-compose.production.env.yml config --quiet
-sudo -n docker compose --env-file .env.production \
-  -f docker-compose.production.yml \
-  -f docker-compose.production.env.yml pull app
-sudo -n docker compose --env-file .env.production \
-  -f docker-compose.production.yml \
-  -f docker-compose.production.env.yml --profile migration run --rm migrate
-sudo -n docker compose --env-file .env.production \
-  -f docker-compose.production.yml \
-  -f docker-compose.production.env.yml up -d --no-build app
-```
-
-For an isolated sandbox, set the three sandbox connection settings and run both
-migrations and both containers in the same Compose project:
-
-```sh
-compose=(sudo -n docker compose --env-file .env.production \
-  -f docker-compose.production.yml -f docker-compose.production.env.yml)
-"${compose[@]}" --profile sandbox pull app app-sandbox
-"${compose[@]}" --profile migration run --rm migrate
-"${compose[@]}" --profile migration --profile sandbox run --rm migrate-sandbox
-"${compose[@]}" --profile sandbox up -d --no-build app app-sandbox
-"${compose[@]}" --profile sandbox ps
-```
-
-The CD workflow runs the same sequence and waits for both health checks. A
-partial sandbox configuration is rejected rather than starting a hostname whose
-container has no isolated database.
-
-This is a deliberate temporary exception: keep `.env.production` at mode 600,
-rotate the long-lived provider credentials after Vault cutover, and remove the
-override from the CD command when `agent-file` is ready.
-
-## Provision production Vault data (future)
-
-Use the repository helper with the production operator workflow. It writes only the
-five production KV paths and never prints secret values:
+Use the repository helper with the production operator workflow. It writes the
+eight production KV paths and never prints secret values:
 
 ```sh
 AIHUB_VAULT_PROVISION_ALLOW=true \
@@ -300,6 +218,10 @@ AIHUB_VAULT_ENVIRONMENT=production \
 AIHUB_VAULT_CREDENTIALS_DIR=/secure/aihub/production \
   node ops/vault/provision-runtime-secrets.mjs
 ```
+
+The directory contains `ai-speaking.json`, `ai-writing.json`, `resend.json`,
+`user-access-jwt.json`, `seaweedfs.json`, `database.json`, `redis.json`, and
+`sandbox-assertion.json`. Keep it mode `0700` and remove it after provisioning.
 
 Provisioning requires a non-root operator identity. Create/rotate the AppRole
 `secret_id` after provisioning, then copy the one-use value to the host. Validate
@@ -315,7 +237,7 @@ AIHUB_VAULT_ENVIRONMENT=production \
 Run the smoke command from a Vault CLI session authenticated as the generated
 non-root AppRole, not as the provisioning operator or a root token.
 
-## Start the Vault-backed stack (future)
+## Start the Vault-backed stack
 
 Validate interpolation first; this does not start containers:
 
@@ -470,9 +392,8 @@ sudo nano /etc/nginx/conf.d/sandbox.conf
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Then remove the three sandbox deployment values from `.env.production` together:
-`AIHUB_SANDBOX_HOST`, `AIHUB_SANDBOX_DATABASE_URL`, and
-`AIHUB_SANDBOX_REDIS_URL`. The next `main` deployment removes the stale
+Then set `AIHUB_SANDBOX_ENABLED=false` and remove `AIHUB_SANDBOX_HOST` and
+`AIHUB_SANDBOX_ORG_IDS` together. The next `main` deployment removes the stale
 `app-sandbox` container. It does not drop `aihub_sandbox`; retain that database
 until its backup and disposal have been approved separately.
 
@@ -480,10 +401,10 @@ until its backup and disposal have been approved separately.
 
 ```sh
 docker compose --env-file .env.production \
-  -f docker-compose.production.yml -f docker-compose.production.env.yml \
+  -f docker-compose.production.yml \
   --profile sandbox ps
 docker compose --env-file .env.production \
-  -f docker-compose.production.yml -f docker-compose.production.env.yml \
+  -f docker-compose.production.yml \
   --profile sandbox logs --tail=100 app app-sandbox vault-agent
 ```
 
