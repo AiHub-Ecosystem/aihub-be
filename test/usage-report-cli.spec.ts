@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 
 interface CliResult {
   readonly status: number;
@@ -35,6 +36,16 @@ function recentWindow(): readonly [string, string] {
 }
 
 describe('usage report CLI', () => {
+  it('ships the CLI wrapper in the runtime image', async () => {
+    const [dockerfile, dockerignore] = await Promise.all([
+      readFile('Dockerfile', 'utf8'),
+      readFile('.dockerignore', 'utf8'),
+    ]);
+
+    expect(dockerfile).toContain('/app/scripts/usage-report.cjs');
+    expect(dockerignore).toContain('!scripts/usage-report.cjs');
+  });
+
   it('rejects malformed UTC arguments before opening infrastructure', async () => {
     const result = await runCli([
       'usage:report',
