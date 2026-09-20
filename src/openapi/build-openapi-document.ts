@@ -243,6 +243,17 @@ function authErrorResponses(
   );
 }
 
+function refreshInvalidResponse(): Record<string, unknown> {
+  return {
+    description: 'Refresh credential is missing, invalid, expired, or revoked',
+    content: {
+      'application/json': {
+        schema: errorResponseSchema(['AUTH_REFRESH_TOKEN_INVALID']),
+      },
+    },
+  };
+}
+
 function localAuthPathItems(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
 ): Record<string, Record<string, unknown>> {
@@ -293,7 +304,8 @@ function localAuthPathItems(
       },
       content: { 'application/json': { schema: LoginResponseSchema } },
     },
-    ...authErrorResponses(groupedErrors, [400, 401, 429, 500]),
+    ...authErrorResponses(groupedErrors, [400, 429, 500]),
+    '401': refreshInvalidResponse(),
   };
   const logoutResponses = {
     '204': {

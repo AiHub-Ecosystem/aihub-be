@@ -483,22 +483,23 @@ interface PostmanCollectionShape {
 
 const REFRESH_COOKIE_NAME = '__Host-aihub_refresh';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 function isRefreshCookieAuth(auth: unknown): boolean {
-  if (auth === null || typeof auth !== 'object') {
+  if (!isRecord(auth)) {
     return false;
   }
 
-  const apiKey = (auth as { apikey?: unknown }).apikey;
+  const apiKey = auth.apikey;
   if (!Array.isArray(apiKey)) {
     return false;
   }
 
   const key = apiKey.find(
-    (entry): entry is { key: string; value: string } =>
-      entry !== null &&
-      typeof entry === 'object' &&
-      (entry as { key?: unknown }).key === 'key' &&
-      typeof (entry as { value?: unknown }).value === 'string',
+    (entry): entry is Record<string, unknown> =>
+      isRecord(entry) && entry.key === 'key' && typeof entry.value === 'string',
   );
 
   return key?.value === REFRESH_COOKIE_NAME;
@@ -517,14 +518,14 @@ function normalizeRefreshCookieAuth(value: unknown): void {
     return;
   }
 
-  if (value === null || typeof value !== 'object') {
+  if (!isRecord(value)) {
     return;
   }
 
-  const record = value as Record<string, unknown>;
+  const record = value;
   const request = record.request;
-  if (request !== null && typeof request === 'object') {
-    const requestRecord = request as Record<string, unknown>;
+  if (isRecord(request)) {
+    const requestRecord = request;
     if (isRefreshCookieAuth(requestRecord.auth)) {
       requestRecord.cookie = [
         {
@@ -537,7 +538,9 @@ function normalizeRefreshCookieAuth(value: unknown): void {
       ];
       requestRecord.auth = undefined;
 
-      const path = (requestRecord.url as { path?: unknown } | undefined)?.path;
+      const path = isRecord(requestRecord.url)
+        ? requestRecord.url.path
+        : undefined;
       const route = Array.isArray(path) ? path.join('/') : undefined;
       requestRecord.event = [
         {

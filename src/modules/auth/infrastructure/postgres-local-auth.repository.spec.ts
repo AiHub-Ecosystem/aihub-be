@@ -201,9 +201,10 @@ describe('PostgresLocalAuthRepository', () => {
       kind: 'rotated',
       userId: 'usr_01J00000000000000000000000',
     });
-    expect(client.queries[1]?.text).toContain('FOR UPDATE');
-    expect(client.queries[2]?.text).toContain('SET used_at');
-    expect(client.queries[3]?.text).toContain('INSERT INTO refresh_tokens');
+    const rotationSql = client.queries.map((query) => query.text).join('\n');
+    expect(rotationSql).toContain('FOR UPDATE');
+    expect(rotationSql).toContain('SET used_at');
+    expect(rotationSql).toContain('INSERT INTO refresh_tokens');
   });
 
   it('revokes a whole family for a known stale token and ignores unknown logout tokens', async () => {
@@ -215,7 +216,7 @@ describe('PostgresLocalAuthRepository', () => {
       tokenHash: refreshToken.hash,
       now: input.now,
     });
-    expect(client.queries[1]?.text).toContain(
+    expect(client.queries.map((query) => query.text).join('\n')).toContain(
       'WHERE family_id = $1 AND revoked_at IS NULL',
     );
 

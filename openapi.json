@@ -3155,7 +3155,52 @@
             "$ref": "#/components/responses/Error400"
           },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "description": "Refresh credential is missing, invalid, expired, or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["error"],
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "const": "AUTH_REFRESH_TOKEN_INVALID",
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "retry_after_ms": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "properties": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/Error429"

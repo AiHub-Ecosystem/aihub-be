@@ -109,6 +109,12 @@ describe('buildOpenApiDocument', () => {
     expect(refresh?.requestBody?.required).toBe(false);
     expect(refresh?.responses['200']).toBeDefined();
     expect(JSON.stringify(refresh?.responses['200'])).toContain('Set-Cookie');
+    expect(JSON.stringify(refresh?.responses['401'])).toContain(
+      'AUTH_REFRESH_TOKEN_INVALID',
+    );
+    expect(JSON.stringify(refresh?.responses['401'])).not.toContain(
+      'AUTH_CREDENTIALS_INVALID',
+    );
     expect(logout?.security).toEqual([{ RefreshCookie: [] }]);
     expect(logout?.requestBody?.required).toBe(false);
     expect(logout?.responses['204']).toBeDefined();

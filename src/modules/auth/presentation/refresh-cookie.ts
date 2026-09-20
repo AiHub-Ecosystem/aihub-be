@@ -36,7 +36,7 @@ function hasDuplicateCookie(
 
   let count = 0;
   for (const part of header.split(';')) {
-    const name = part.trim().split('=', 1)[0];
+    const name = part.trim().split('=', 1)[0]?.trim();
     if (name === cookieName) {
       count += 1;
     }

@@ -50,6 +50,7 @@ class RepositoryFake implements LocalAuthRepositoryPort {
     status: 'active' as const,
   };
   refreshTokens = new Map<string, RefreshTokenRecord>();
+  failCreateRefreshSession = false;
 
   async register(): Promise<void> {
     this.registered += 1;
@@ -76,6 +77,9 @@ class RepositoryFake implements LocalAuthRepositoryPort {
     readonly token: IssuedRefreshToken;
     readonly issuedAt: Date;
   }): Promise<void> {
+    if (this.failCreateRefreshSession) {
+      throw new Error('durable store unavailable');
+    }
     this.refreshTokens.set(input.token.hash, {
       tokenId: input.token.id,
       familyId: input.token.familyId,
@@ -99,6 +103,9 @@ class RepositoryFake implements LocalAuthRepositoryPort {
     const current = this.refreshTokens.get(input.tokenHash);
     if (current === undefined) {
       return { kind: 'invalid' as const, reason: 'missing' as const };
+    }
+    if (this.loginIdentity?.status !== 'active') {
+      return { kind: 'invalid' as const, reason: 'inactive' as const };
     }
     if (current.usedAt !== undefined) {
       await this.revokeRefreshFamilyByTokenHash({
@@ -473,6 +480,103 @@ describe('local auth HTTP boundary', () => {
     expect(successorAfterReuse.statusCode).toBe(401);
   });
 
+  it('serializes concurrent refresh attempts so only one token rotates', async () => {
+    const login = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'person@example.com', password: 'correct password' },
+    });
+    const loginCookie = String(login.headers['set-cookie']).split(';', 1)[0];
+
+    const [first, second] = await Promise.all([
+      app.inject({
+        method: 'POST',
+        url: '/v1/auth/refresh',
+        headers: { cookie: loginCookie },
+      }),
+      app.inject({
+        method: 'POST',
+        url: '/v1/auth/refresh',
+        headers: { cookie: loginCookie },
+      }),
+    ]);
+
+    expect([first.statusCode, second.statusCode].sort()).toEqual([200, 401]);
+  });
+
+  it('rejects an expired or disabled refresh session over HTTP', async () => {
+    const login = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'person@example.com', password: 'correct password' },
+    });
+    const loginCookie = String(login.headers['set-cookie']).split(';', 1)[0];
+    if (loginCookie === undefined) {
+      throw new Error('login did not set a refresh cookie');
+    }
+    const rawToken = loginCookie.slice(loginCookie.indexOf('=') + 1);
+    const tokenHash = refreshTokenIssuer.hash(rawToken);
+    const stored = repository.refreshTokens.get(tokenHash);
+    if (stored === undefined) {
+      throw new Error('refresh session was not persisted');
+    }
+    repository.refreshTokens.set(tokenHash, {
+      ...stored,
+      expiresAt: new Date(0),
+    });
+
+    const expired = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: { cookie: loginCookie },
+    });
+    expect(expired.statusCode).toBe(401);
+
+    const activeLogin = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'person@example.com', password: 'correct password' },
+    });
+    const activeCookie = String(activeLogin.headers['set-cookie']).split(
+      ';',
+      1,
+    )[0];
+    repository.loginIdentity = {
+      userId: 'usr_01J00000000000000000000000',
+      passwordHash: '$argon2id$fake',
+      status: 'disabled',
+    };
+    const disabled = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: { cookie: activeCookie },
+    });
+    expect(disabled.statusCode).toBe(401);
+    repository.loginIdentity = {
+      userId: 'usr_01J00000000000000000000000',
+      passwordHash: '$argon2id$fake',
+      status: 'active',
+    };
+  });
+
+  it('fails closed without a cookie when durable session persistence fails', async () => {
+    repository.failCreateRefreshSession = true;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: 'person@example.com', password: 'correct password' },
+    });
+    repository.failCreateRefreshSession = false;
+
+    expect(response.statusCode).toBe(500);
+    expect(response.headers['set-cookie']).toBeUndefined();
+    expect(response.payload).not.toContain('ey.fake.access');
+  });
+
   it('logs out idempotently and only revokes the selected login family', async () => {
     repository.loginIdentity = {
       userId: 'usr_01J00000000000000000000000',
@@ -550,6 +654,9 @@ describe('local auth HTTP boundary', () => {
       payload: { email: 'person@example.com', password: 'correct password' },
     });
     const validCookie = String(login.headers['set-cookie']).split(';', 1)[0];
+    if (validCookie === undefined) {
+      throw new Error('login did not set a refresh cookie');
+    }
     const extraCookie = await app.inject({
       method: 'POST',
       url: '/v1/auth/refresh',
@@ -574,6 +681,15 @@ describe('local auth HTTP boundary', () => {
       headers: { cookie: `${validCookie}; ${validCookie}` },
     });
     expect(duplicateCookie.statusCode).toBe(401);
+
+    const spacedDuplicate = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: {
+        cookie: `${validCookie.replace('=', ' =')}; ${validCookie}`,
+      },
+    });
+    expect(spacedDuplicate.statusCode).toBe(401);
   });
 
   it('clears a rotated cookie when access-token issuance fails after commit', async () => {
