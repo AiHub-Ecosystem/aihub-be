@@ -4,9 +4,6 @@ const { pathToFileURL } = require('node:url');
 
 const { usageError } = require('./cli-options.cjs');
 
-const UTC_TIMESTAMP_PATTERN =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
-
 let runnerPromise;
 
 function runnerExports(module) {
@@ -55,15 +52,7 @@ function invalidWindow(error) {
   );
 }
 
-function validateTimestampShape(value) {
-  if (!UTC_TIMESTAMP_PATTERN.test(value)) {
-    usageError();
-  }
-}
-
 async function runUsageReport(input) {
-  validateTimestampShape(input.from);
-  validateTimestampShape(input.to);
   try {
     const runner = await loadRunner();
     return await runner.runUsageReportCommand(input);
