@@ -57,8 +57,8 @@ export interface OrganizationAuditEvent {
   readonly outcome: OrganizationAuditOutcome;
   readonly targetType: OrganizationAuditTargetType;
   readonly targetId: string;
-  readonly targetLabel: string | null;
-  readonly detail: Readonly<Record<string, unknown>> | null;
+  readonly targetLabel: string;
+  readonly detail: Readonly<Record<string, unknown>>;
   readonly requestId: string;
   readonly occurredAt: Date;
 }
@@ -115,6 +115,8 @@ interface ApiKeyRotatedDraft {
   /** The key withdrawn by the rotation; the replacement is named in `detail`. */
   readonly apiKeyId: string;
   readonly name: string;
+  /** The withdrawn key's own prefix: it is this event's target, not the replacement. */
+  readonly keyPrefix: string;
   readonly replacementId: string;
   readonly replacementKeyPrefix: string;
   readonly scopes: readonly string[];
@@ -145,7 +147,7 @@ interface Shape {
   readonly outcome: OrganizationAuditOutcome;
 }
 
-function denied(draft: {
+function refusal(draft: {
   readonly denial?: OrganizationAuditDenial;
 }): Pick<Shape, 'outcome'> & { readonly denial?: OrganizationAuditDenial } {
   return draft.denial === undefined
@@ -165,48 +167,57 @@ function shape(draft: OrganizationAuditDraft): Shape {
         detail: { role: draft.role },
         outcome: 'applied',
       };
+    // A refused attempt carries what was asked for, never a transition: an
+    // event that says `toRole` describes a change that did not happen.
     case 'membership.role_changed': {
-      const { outcome, denial } = denied(draft);
+      const { outcome, denial } = refusal(draft);
       return {
         targetType: 'membership',
         targetId: draft.targetUserAccountId,
         targetLabel: draft.username,
-        detail: {
-          fromRole: draft.fromRole,
-          toRole: draft.toRole,
-          ...(denial === undefined ? {} : { denial }),
-        },
+        detail:
+          denial === undefined
+            ? { fromRole: draft.fromRole, toRole: draft.toRole }
+            : {
+                fromRole: draft.fromRole,
+                requestedRole: draft.toRole,
+                denial,
+              },
         outcome,
       };
     }
     case 'membership.disabled': {
-      const { outcome, denial } = denied(draft);
+      const { outcome, denial } = refusal(draft);
       return {
         targetType: 'membership',
         targetId: draft.targetUserAccountId,
         targetLabel: draft.username,
-        detail: {
-          role: draft.role,
-          fromStatus: 'active',
-          toStatus: 'disabled',
-          ...(denial === undefined ? {} : { denial }),
-        },
+        detail:
+          denial === undefined
+            ? { role: draft.role, fromStatus: 'active', toStatus: 'disabled' }
+            : { role: draft.role, denial },
         outcome,
       };
     }
     case 'membership.owner_transferred': {
-      const { outcome, denial } = denied(draft);
+      const { outcome, denial } = refusal(draft);
       return {
         targetType: 'membership',
         targetId: draft.targetUserAccountId,
         targetLabel: draft.username,
-        detail: {
-          fromRole: draft.fromRole,
-          toRole: 'owner',
-          previousOwnerUsername: draft.previousOwnerUsername,
-          previousOwnerRole: 'admin',
-          ...(denial === undefined ? {} : { denial }),
-        },
+        detail:
+          denial === undefined
+            ? {
+                fromRole: draft.fromRole,
+                toRole: 'owner',
+                previousOwnerUsername: draft.previousOwnerUsername,
+                previousOwnerRole: 'admin',
+              }
+            : {
+                fromRole: draft.fromRole,
+                previousOwnerUsername: draft.previousOwnerUsername,
+                denial,
+              },
         outcome,
       };
     }
@@ -228,6 +239,7 @@ function shape(draft: OrganizationAuditDraft): Shape {
         targetId: draft.apiKeyId,
         targetLabel: draft.name,
         detail: {
+          keyPrefix: draft.keyPrefix,
           replacementId: draft.replacementId,
           replacementKeyPrefix: draft.replacementKeyPrefix,
           scopes: [...draft.scopes],

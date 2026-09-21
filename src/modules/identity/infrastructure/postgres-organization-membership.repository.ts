@@ -17,7 +17,6 @@ import type {
 import type {
   OrganizationAuditDenial,
   OrganizationAuditDraft,
-  OrganizationAuditStamp,
 } from '../domain/organization-audit-event';
 
 import {
@@ -29,6 +28,7 @@ import {
   stringValue,
 } from './identity-row';
 import {
+  auditStamp,
   recordOrganizationAuditDenial,
   recordOrganizationAuditEvent,
 } from './organization-audit-event.store';
@@ -518,12 +518,7 @@ export class PostgresOrganizationMembershipRepository
 
     // The request's own instant, so every event a mutation writes shares one
     // moment and none of them is settled by the database's clock.
-    const stamp: Omit<OrganizationAuditStamp, 'id'> = {
-      organizationId: input.organizationId,
-      actorUserAccountId: input.userId,
-      requestId: input.context.requestId,
-      occurredAt: input.context.receivedAt,
-    };
+    const stamp = auditStamp(input, input.userId, input.context.receivedAt);
     // A refusal is decided inside the transaction that then rolls back, so its
     // record cannot be written there. It is carried out and written after.
     let refused: OrganizationAuditDraft | undefined;
@@ -612,7 +607,14 @@ export class PostgresOrganizationMembershipRepository
           throw invalidMutation();
         }
 
+        // Both repeats that change nothing return early, before the owner
+        // count and before any record is written. A retry of an applied state
+        // is a delivery, not an act, and these boundaries invite retries.
         if (action === 'disable' && target.status === 'disabled') {
+          return mutationResult(target);
+        }
+
+        if (action === 'change_role' && target.role === requestedRole) {
           return mutationResult(target);
         }
 

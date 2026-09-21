@@ -923,7 +923,13 @@ describe('organization API key audit trail against PostgreSQL', () => {
     const [event] = await auditEvents();
     expect(event?.action).toBe('api_key.rotated');
     expect(event?.target_id).toBe(retired);
-    expect(event?.detail).toMatchObject({ replacementId: replacement.id });
+    expect(event?.detail).toMatchObject({
+      replacementId: replacement.id,
+      replacementKeyPrefix: replacement.prefix,
+    });
+    // The withdrawn key is the event's target, so its own prefix is what
+    // identifies the record.
+    expect(event?.detail).toHaveProperty('keyPrefix');
   });
 
   it('records the withdrawal once, not again on the repeat that changed nothing', async () => {

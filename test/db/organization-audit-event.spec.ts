@@ -109,6 +109,18 @@ describe('organization audit events against PostgreSQL', () => {
     }
   });
 
+  it('refuses to rewrite the target label to another value', async () => {
+    const id = await insertEvent({ targetLabel: 'invitee@example.com' });
+
+    // The one writable column removes a label; it never restates one.
+    await expect(
+      pool.query(
+        'UPDATE organization_audit_events SET target_label = $2 WHERE id = $1',
+        [id, 'someone-else@example.com'],
+      ),
+    ).rejects.toThrow(/only target_label redaction/);
+  });
+
   it('allows redaction to remove the label and leave the event standing', async () => {
     const id = await insertEvent({ targetLabel: 'invitee@example.com' });
 

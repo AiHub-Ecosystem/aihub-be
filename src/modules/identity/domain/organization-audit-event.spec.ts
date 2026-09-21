@@ -75,7 +75,25 @@ describe('organizationAuditEvent', () => {
     });
 
     expect(event.outcome).toBe('denied');
-    expect(event.detail).toMatchObject({ denial: 'owner_required' });
+    // A refusal never claims a transition: the membership stayed active.
+    expect(event.detail).toEqual({ role: 'owner', denial: 'owner_required' });
+  });
+
+  it('records what a refused role change asked for, not a change that happened', () => {
+    const event = organizationAuditEvent(STAMP, {
+      action: 'membership.role_changed',
+      targetUserAccountId: 'usr_01J00000000000000000000004',
+      username: 'bob',
+      fromRole: 'owner',
+      toRole: 'member',
+      denial: 'insufficient_authority',
+    });
+
+    expect(event.detail).toEqual({
+      fromRole: 'owner',
+      requestedRole: 'member',
+      denial: 'insufficient_authority',
+    });
   });
 
   it('treats an attempt with no denial as applied', () => {
@@ -99,6 +117,7 @@ describe('organizationAuditEvent', () => {
       action: 'api_key.rotated',
       apiKeyId: 'ak_01J00000000000000000000005',
       name: 'Prod backend',
+      keyPrefix: 'aihub_sk_Z9y8X7',
       replacementId: 'ak_01J00000000000000000000006',
       replacementKeyPrefix: 'aihub_sk_A1b2C3',
       scopes: ['writing.grade'],
@@ -107,6 +126,7 @@ describe('organizationAuditEvent', () => {
 
     expect(event.targetId).toBe('ak_01J00000000000000000000005');
     expect(event.detail).toEqual({
+      keyPrefix: 'aihub_sk_Z9y8X7',
       replacementId: 'ak_01J00000000000000000000006',
       replacementKeyPrefix: 'aihub_sk_A1b2C3',
       scopes: ['writing.grade'],

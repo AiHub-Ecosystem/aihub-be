@@ -51,6 +51,12 @@ BEGIN
     RAISE EXCEPTION 'organization_audit_events is append-only';
   END IF;
 
+  -- Redaction removes a label; it does not rewrite one. Permitting any new
+  -- value would make the single writable column a way to restate history.
+  IF NEW.target_label IS NOT NULL THEN
+    RAISE EXCEPTION 'organization_audit_events allows only target_label redaction';
+  END IF;
+
   IF NEW.id IS DISTINCT FROM OLD.id
      OR NEW.organization_id IS DISTINCT FROM OLD.organization_id
      OR NEW.actor_user_account_id IS DISTINCT FROM OLD.actor_user_account_id

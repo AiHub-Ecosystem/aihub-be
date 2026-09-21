@@ -7,8 +7,6 @@ import type {
   OrganizationInvitationPort,
 } from '../application/organization-invitation.port';
 
-import type { OrganizationAuditStamp } from '../domain/organization-audit-event';
-
 import {
   identityStoreError,
   isRecord,
@@ -16,7 +14,10 @@ import {
   organizationStatusValue,
   stringValue,
 } from './identity-row';
-import { recordOrganizationAuditEvent } from './organization-audit-event.store';
+import {
+  auditStamp,
+  recordOrganizationAuditEvent,
+} from './organization-audit-event.store';
 import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
 
 /**
@@ -180,12 +181,7 @@ export class PostgresOrganizationInvitationRepository
 
         await recordOrganizationAuditEvent(
           transaction,
-          {
-            organizationId: input.organizationId,
-            actorUserAccountId: input.invitedBy,
-            requestId: input.context.requestId,
-            occurredAt: input.now,
-          } satisfies Omit<OrganizationAuditStamp, 'id'>,
+          auditStamp(input, input.invitedBy, input.now),
           {
             action:
               superseded.length > 0 ? 'invitation.resent' : 'invitation.sent',
@@ -291,12 +287,7 @@ export class PostgresOrganizationInvitationRepository
         // keeps the authority it has, and the trail must say what was granted.
         await recordOrganizationAuditEvent(
           transaction,
-          {
-            organizationId,
-            actorUserAccountId: input.userId,
-            requestId: input.context.requestId,
-            occurredAt: input.now,
-          } satisfies Omit<OrganizationAuditStamp, 'id'>,
+          auditStamp({ ...input, organizationId }, input.userId, input.now),
           {
             action: 'invitation.accepted',
             invitationId,

@@ -11,9 +11,10 @@ import type {
   RotateOrganizationApiKeyRecordResult,
 } from '../application/organization-api-key.port';
 
-import type { OrganizationAuditStamp } from '../domain/organization-audit-event';
-
-import { recordOrganizationAuditEvent } from './organization-audit-event.store';
+import {
+  auditStamp,
+  recordOrganizationAuditEvent,
+} from './organization-audit-event.store';
 import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
 
 /**
@@ -81,6 +82,7 @@ const LOCK_API_KEY_SQL = `
   SELECT
     encode(key_hash, 'hex') AS key_hash_hex,
     name,
+    key_prefix,
     scopes,
     allowed_environments,
     status,
@@ -296,6 +298,7 @@ export class PostgresOrganizationApiKeyRepository
         }
 
         const retiredKeyHash = stringValue(key, 'key_hash_hex');
+        const retiredKeyPrefix = stringValue(key, 'key_prefix');
         const name = stringValue(key, 'name');
         const scopes = stringArrayValue(key, 'scopes');
         const allowedEnvironments = stringArrayValue(
@@ -305,6 +308,7 @@ export class PostgresOrganizationApiKeyRepository
         const expiresAt = dateValue(key, 'expires_at');
         if (
           retiredKeyHash === undefined ||
+          retiredKeyPrefix === undefined ||
           name === undefined ||
           scopes === undefined ||
           allowedEnvironments === undefined ||
@@ -342,16 +346,12 @@ export class PostgresOrganizationApiKeyRepository
 
         await recordOrganizationAuditEvent(
           transaction,
-          {
-            organizationId: input.organizationId,
-            actorUserAccountId: input.actorUserId,
-            requestId: input.context.requestId,
-            occurredAt: input.now,
-          } satisfies Omit<OrganizationAuditStamp, 'id'>,
+          auditStamp(input, input.actorUserId, input.now),
           {
             action: 'api_key.rotated',
             apiKeyId: input.apiKeyId,
             name,
+            keyPrefix: retiredKeyPrefix,
             replacementId: input.replacementId,
             replacementKeyPrefix: input.keyPrefix,
             scopes,
@@ -434,12 +434,7 @@ export class PostgresOrganizationApiKeyRepository
         if (row.status === 'active') {
           await recordOrganizationAuditEvent(
             transaction,
-            {
-              organizationId: input.organizationId,
-              actorUserAccountId: input.actorUserId,
-              requestId: input.context.requestId,
-              occurredAt: input.now,
-            } satisfies Omit<OrganizationAuditStamp, 'id'>,
+            auditStamp(input, input.actorUserId, input.now),
             {
               action: 'api_key.revoked',
               apiKeyId: key.apiKeyId,
@@ -556,12 +551,7 @@ export class PostgresOrganizationApiKeyRepository
 
         await recordOrganizationAuditEvent(
           transaction,
-          {
-            organizationId: input.organizationId,
-            actorUserAccountId: input.actorUserId,
-            requestId: input.context.requestId,
-            occurredAt: createdAt,
-          } satisfies Omit<OrganizationAuditStamp, 'id'>,
+          auditStamp(input, input.actorUserId, createdAt),
           {
             action: 'api_key.created',
             apiKeyId: input.apiKeyId,

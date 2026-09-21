@@ -9,6 +9,27 @@ import {
 
 import type { PostgresIdentityQueryClient } from './postgres-identity.client';
 
+/**
+ * The part of an event every mutation stamps the same way. `occurredAt` stays
+ * explicit because each boundary has its own instant: the clock a key mutation
+ * already decides against, or the request's own moment.
+ */
+export function auditStamp(
+  input: {
+    readonly context: { readonly requestId: string };
+    readonly organizationId: string;
+  },
+  actorUserAccountId: string,
+  occurredAt: Date,
+): Omit<OrganizationAuditStamp, 'id'> {
+  return {
+    organizationId: input.organizationId,
+    actorUserAccountId,
+    requestId: input.context.requestId,
+    occurredAt,
+  };
+}
+
 const logger = new Logger('OrganizationAuditEvent');
 
 export const INSERT_ORGANIZATION_AUDIT_EVENT_SQL = `
@@ -52,7 +73,7 @@ export async function recordOrganizationAuditEvent(
     event.targetType,
     event.targetId,
     event.targetLabel,
-    event.detail === null ? null : JSON.stringify(event.detail),
+    JSON.stringify(event.detail),
     event.requestId,
     event.occurredAt,
   ]);

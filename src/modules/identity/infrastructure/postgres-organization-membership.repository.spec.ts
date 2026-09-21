@@ -433,7 +433,7 @@ describe('PostgresOrganizationMembershipRepository audit trail', () => {
       'bob',
       JSON.stringify({
         fromRole: 'owner',
-        toRole: 'member',
+        requestedRole: 'member',
         denial: 'insufficient_authority',
       }),
       'req_01J00000000000000000000000',
@@ -488,6 +488,29 @@ describe('PostgresOrganizationMembershipRepository audit trail', () => {
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
 
     expect(auditWrites(client)).toHaveLength(0);
+  });
+
+  it('records nothing when a repeat asks for the role the target already holds', async () => {
+    const client = new FakePostgres();
+    client.result = [];
+    client.transactionRows = [
+      [organizationRow],
+      [callerOwnerRow, { ...targetMemberRow, role: 'admin' }],
+    ];
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(client).changeRole({
+        ...mutationInput(),
+        role: 'admin',
+      }),
+    ).resolves.toMatchObject({ role: 'admin' });
+
+    expect(auditWrites(client)).toHaveLength(0);
+    expect(
+      client.transactionQueries.some(({ text }) =>
+        text.includes('organization_audit_events'),
+      ),
+    ).toBe(false);
   });
 
   it('records nothing when a repeat finds the membership already disabled', async () => {

@@ -63,6 +63,8 @@ describe('organization audit event migration', () => {
     expect(migration).toContain(
       "RAISE EXCEPTION 'organization_audit_events is append-only'",
     );
+    // Redaction removes a label; it never rewrites one.
+    expect(migration).toContain('IF NEW.target_label IS NOT NULL THEN');
     expect(migration).toContain('organization_audit_events_org_time_idx');
   });
 });
