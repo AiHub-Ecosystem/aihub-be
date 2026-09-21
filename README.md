@@ -88,6 +88,23 @@ pnpm verify
 
 `pnpm verify` runs Biome, strict TypeScript, Jest, and the Clean Architecture dependency check.
 
+### Database-backed lane
+
+Durable behaviour that only a real database can settle — partial unique
+indexes, upsert guards, row locks under concurrency — runs in its own lane
+against PostgreSQL:
+
+```text
+docker compose up -d postgres
+pnpm test:db
+```
+
+The lane drops and rebuilds a disposable `aihub_db_lane` database from
+`database/migrations` on every run, so it never touches your working database.
+Point it elsewhere with `DB_LANE_ADMIN_URL`. It stays out of `pnpm verify` on
+purpose: the default lane must keep passing with no database present. CI runs
+it as a separate job.
+
 ## Source layout
 
 ```text

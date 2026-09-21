@@ -46,3 +46,49 @@ jobs:
 
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level=high
+
+  database:
+    name: Database lane
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: aihub
+          POSTGRES_PASSWORD: change-me
+          POSTGRES_DB: aihub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aihub -d aihub"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.20.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Runs apart from `pnpm verify`: the default lane must keep passing with
+      # no database present, and this one proves the SQL those tests can only
+      # describe.
+      - name: Run the database-backed lane
+        run: pnpm test:db
+        env:
+          DB_LANE_ADMIN_URL: postgres://aihub:change-me@localhost:5432/aihub
