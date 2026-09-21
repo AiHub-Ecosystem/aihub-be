@@ -9,6 +9,11 @@ import { Pool } from 'pg';
  * run.
  */
 
+/**
+ * The lane's single default, matching the `postgres` service in
+ * `docker-compose.yml` and the service credentials in the CI database job.
+ * Override it with `DB_LANE_ADMIN_URL` to point the lane elsewhere.
+ */
 const DEFAULT_ADMIN_URL = 'postgres://aihub:change-me@localhost:5432/aihub';
 const TEST_DATABASE_NAME = 'aihub_db_lane';
 

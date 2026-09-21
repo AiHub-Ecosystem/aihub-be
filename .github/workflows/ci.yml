@@ -88,7 +88,8 @@ jobs:
       # Runs apart from `pnpm verify`: the default lane must keep passing with
       # no database present, and this one proves the SQL those tests can only
       # describe.
+      # No DB_LANE_ADMIN_URL: the service credentials above deliberately match
+      # the lane's default in test/db/database.ts, so CI exercises the same path
+      # a developer does and a broken default fails here too.
       - name: Run the database-backed lane
         run: pnpm test:db
-        env:
-          DB_LANE_ADMIN_URL: postgres://aihub:change-me@localhost:5432/aihub

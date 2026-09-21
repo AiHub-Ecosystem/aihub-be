@@ -210,6 +210,51 @@ async function membershipRow(organizationId: string, userAccountId: string) {
   return result.rows[0];
 }
 
+/**
+ * Waits until PostgreSQL itself reports a backend blocked by `holderPid`.
+ *
+ * This replaces a sleep-then-assert: a timing check is only ever evidence in
+ * the green direction, and would pass for an implementation that never locked
+ * but happened to be slow.
+ */
+async function waitForBlockedBy(
+  holderPid: number | undefined,
+  timeoutMs = 5_000,
+): Promise<void> {
+  if (holderPid === undefined) {
+    throw new Error('the holding connection reported no backend pid');
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const blocked = await pool.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM pg_stat_activity
+       WHERE $1 = ANY (pg_blocking_pids(pid))`,
+      [holderPid],
+    );
+    if ((blocked.rows[0]?.count ?? 0) > 0) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+
+  throw new Error(
+    `no backend became blocked by pid ${holderPid} within ${timeoutMs}ms`,
+  );
+}
+
+async function seedInviterOwner(): Promise<string> {
+  const inviterId = await seedAccount({ email: 'owner@example.com' });
+  await seedMembership({
+    organizationId: ORGANIZATION_ID,
+    userAccountId: inviterId,
+    role: 'owner',
+    status: 'active',
+  });
+  return inviterId;
+}
+
 async function invitationByHash(tokenHash: string) {
   const result = await pool.query(
     'SELECT consumed_at FROM organization_invitations WHERE token_hash = $1',
@@ -238,13 +283,7 @@ describe('organization invitation against PostgreSQL', () => {
   let inviterId: string;
 
   beforeEach(async () => {
-    inviterId = await seedAccount({ email: 'owner@example.com' });
-    await seedMembership({
-      organizationId: ORGANIZATION_ID,
-      userAccountId: inviterId,
-      role: 'owner',
-      status: 'active',
-    });
+    inviterId = await seedInviterOwner();
   });
 
   it('invites an email with no AIHUB User Account', async () => {
@@ -382,13 +421,7 @@ describe('organization invitation acceptance against PostgreSQL', () => {
   let token: string;
 
   beforeEach(async () => {
-    inviterId = await seedAccount({ email: 'owner@example.com' });
-    await seedMembership({
-      organizationId: ORGANIZATION_ID,
-      userAccountId: inviterId,
-      role: 'owner',
-      status: 'active',
-    });
+    inviterId = await seedInviterOwner();
     token = tokenHash();
   });
 
@@ -572,13 +605,16 @@ describe('organization invitation acceptance against PostgreSQL', () => {
     expect(await membershipRow(ORGANIZATION_ID, accepterId)).toBeUndefined();
   });
 
-  it('claims the invitation row, so a redemption waits on a holder instead of reading around it', async () => {
+  it('claims the invitation row, so a redemption blocks on the holder instead of reading around it', async () => {
     await invite({ inviterId, tokenHash: token });
     const accepterId = await seedAccount({ email: INVITED_EMAIL });
 
     const holder = await pool.connect();
     try {
       await holder.query('BEGIN');
+      const holderPid = await holder
+        .query<{ pid: number }>('SELECT pg_backend_pid() AS pid')
+        .then(({ rows }) => rows[0]?.pid);
       await holder.query(
         `SELECT id FROM organization_invitations
          WHERE token_hash = $1 FOR UPDATE`,
@@ -593,9 +629,11 @@ describe('organization invitation acceptance against PostgreSQL', () => {
         },
       );
 
-      // A repository that read the row without claiming it would sail past a
-      // holder and grant the membership twice; this one has to wait.
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      // Asked of the engine rather than of the clock: some backend must be
+      // waiting on the holder. A repository that read the row without claiming
+      // it would sail past and grant a second membership, and would never
+      // appear here however slow the runner is.
+      await waitForBlockedBy(holderPid);
       expect(settled).toBe(false);
 
       await holder.query(
