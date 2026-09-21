@@ -26,6 +26,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Organization Membership:** the durable relationship that grants an AIHUB User Account access to an Organization; it is separate from account registration and API-key issuance, and one account may hold memberships in multiple Organizations.
 - **Membership Role:** the per-organization authority assigned to a membership: `owner`, `admin`, or `member`; it is not a User Access JWT claim.
 - **Organization Invitation:** a pending, organization-scoped invitation for one normalized email; it is separate from a membership and becomes a membership only after the invited identity accepts.
+- **Organization Invite Token:** the opaque, single-use proof issued with an Organization Invitation; it is valid for 24 hours, only its hash is durable, and issuing a newer token for the same organization and normalized email invalidates the previous open token.
 - **Membership Status:** the lifecycle state of an Organization Membership: `active` or `disabled`; disabling preserves the durable relationship and does not physically delete it.
 - **Organization Roster:** the read-only list of active memberships grouped by each Organization the caller actively belongs to; disabled memberships are not part of the current roster.
 - **Email Verification:** proof that a User Account controls its registered email address; an unverified local account cannot complete login. Its opaque one-time verification token is invalidated when a newer token is issued.
