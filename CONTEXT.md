@@ -50,6 +50,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **API key:** an organization credential presented with `X-API-Key`; AIHUB stores only its SHA-256 hash and metadata.
 - **Scope:** the permission an API key carries for one class of operation, written as `<entitlement>.<action>` such as `writing.grade`; the Operation Catalog owns the scope each public operation requires.
 - **Entitlement:** the capability an Organization is licensed for, such as `writing` or `speaking`; it is the leading segment of a scope and bounds which scopes that Organization's keys may carry, so a scope outside the Organization's entitlements grants nothing.
+- **API key status:** the lifecycle an API key is in — `active` while it may authenticate, `expired` once its expiry moment has passed, `revoked` once it has been withdrawn; expiry arrives on its own without anyone acting, revocation does not.
 - **Environment:** the request tier derived from its deployment hostname; an API key may be restricted to a set of allowed environments.
 - **Sandbox environment:** AIHUB's fourth, hostname-bound request tier for controlled testing; it has its own sandbox organization, request-control configuration, Postgres database, Redis logical database, and application container while sharing downstream services and the deployment secret realm with production.
 - **Deployment secret realm:** the environment scope used to select runtime credentials; `sandbox` is not a separate realm and sandbox traffic uses the enclosing deployment's credentials.
