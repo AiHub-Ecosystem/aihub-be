@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   Inject,
   Param,
@@ -19,6 +20,7 @@ import {
   type CreateOrganizationInvitationRequest,
   CreateOrganizationInvitationRequestSchema,
   type CreateOrganizationInvitationResponse,
+  type ListOpenOrganizationInvitationsResponse,
 } from '../../../contracts/organization/invitation';
 import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
 import {
@@ -29,6 +31,10 @@ import {
   INVITE_ORGANIZATION_MEMBER,
   type InviteOrganizationMemberPort,
 } from '../application/invite-organization-member.port';
+import {
+  LIST_OPEN_ORGANIZATION_INVITATIONS,
+  type ListOpenOrganizationInvitationsPort,
+} from '../application/list-open-organization-invitations.port';
 
 import { bearerRequestContext } from './bearer-request-context';
 
@@ -40,6 +46,8 @@ export class OrganizationInvitationController {
     private readonly inviteMember: InviteOrganizationMemberPort,
     @Inject(ACCEPT_ORGANIZATION_INVITATION)
     private readonly acceptInvitation: AcceptOrganizationInvitationPort,
+    @Inject(LIST_OPEN_ORGANIZATION_INVITATIONS)
+    private readonly listOpenInvitations: ListOpenOrganizationInvitationsPort,
   ) {}
 
   // The router ranks this static path above the parameterised invite route, so
@@ -106,6 +114,39 @@ export class OrganizationInvitationController {
         role: created.role,
         status: 'pending',
         expires_at: created.expiresAt.toISOString(),
+      },
+      meta: { request_id: requestId },
+    };
+  }
+
+  @Get('/v1/organizations/:organizationId/invitations')
+  @HttpCode(200)
+  async list(
+    @Req() request: FastifyRequest,
+    @Param('organizationId') organizationId: string,
+  ): Promise<ListOpenOrganizationInvitationsResponse> {
+    const { context, requestId, userId } = bearerRequestContext(
+      request,
+      organizationId,
+    );
+    const invitations = await this.listOpenInvitations.list({
+      context,
+      userId,
+      organizationId,
+      now: context.receivedAt,
+    });
+
+    return {
+      data: {
+        invitations: invitations.map((invitation) => ({
+          invitation_id: invitation.invitationId,
+          email: invitation.email,
+          role: invitation.role,
+          invited_by_username: invitation.invitedByUsername,
+          created_at: invitation.createdAt.toISOString(),
+          expires_at: invitation.expiresAt.toISOString(),
+          status: invitation.status,
+        })),
       },
       meta: { request_id: requestId },
     };

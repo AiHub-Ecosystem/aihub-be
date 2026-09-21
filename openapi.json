@@ -2932,6 +2932,133 @@
       }
     },
     "/v1/organizations/{organization_id}/invitations": {
+      "get": {
+        "operationId": "organizations.invitations.list",
+        "summary": "List an organization's open invitations",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization whose open invitations are listed.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Open organization invitations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["invitations"],
+                      "properties": {
+                        "invitations": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "invitation_id",
+                              "email",
+                              "role",
+                              "invited_by_username",
+                              "created_at",
+                              "expires_at",
+                              "status"
+                            ],
+                            "properties": {
+                              "invitation_id": {
+                                "pattern": "^oiv_[0-9A-HJKMNP-TV-Z]{26}$",
+                                "type": "string"
+                              },
+                              "email": {
+                                "minLength": 3,
+                                "maxLength": 320,
+                                "type": "string"
+                              },
+                              "role": {
+                                "anyOf": [
+                                  {
+                                    "const": "owner",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "admin",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "member",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "invited_by_username": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "created_at": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "expires_at": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "status": {
+                                "const": "pending",
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      },
       "post": {
         "operationId": "organizations.invitations.create",
         "summary": "Invite a person to an organization",

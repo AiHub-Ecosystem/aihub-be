@@ -4,6 +4,8 @@ import type {
   AcceptOrganizationInvitationResult,
   CreateOrganizationInvitationInput,
   CreateOrganizationInvitationResult,
+  ListOpenOrganizationInvitationsInput,
+  OpenOrganizationInvitationRecord,
   OrganizationInvitationPort,
 } from '../application/organization-invitation.port';
 
@@ -57,6 +59,29 @@ const INSERT_INVITATION_SQL = `
   INSERT INTO organization_invitations (
     id, organization_id, email, role, invited_by, token_hash, expires_at, created_at
   ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+`;
+
+/**
+ * The issuer is a left join on purpose: a broken identity projection must fail
+ * the whole list rather than silently dropping an actionable invitation.
+ * `consumed_at` is the durable close signal for consumed, superseded, and
+ * revoked invitations; expiry is evaluated against the application clock.
+ */
+const LIST_OPEN_INVITATIONS_SQL = `
+  SELECT
+    invitation.id,
+    invitation.email,
+    invitation.role,
+    inviter.username AS invited_by_username,
+    invitation.created_at,
+    invitation.expires_at
+  FROM organization_invitations AS invitation
+  LEFT JOIN user_accounts AS inviter
+    ON inviter.id = invitation.invited_by
+  WHERE invitation.organization_id = $1
+    AND invitation.consumed_at IS NULL
+    AND invitation.expires_at > $2
+  ORDER BY invitation.created_at DESC, invitation.id ASC
 `;
 
 /**
@@ -118,6 +143,56 @@ const CONSUME_INVITATION_SQL = `
 
 function organizationName(value: unknown): string | undefined {
   return isRecord(value) ? stringValue(value, 'name') : undefined;
+}
+
+function dateValue(
+  record: Record<string, unknown>,
+  key: string,
+): Date | undefined {
+  const value = record[key];
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(value.getTime());
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+  return undefined;
+}
+
+function mapOpenInvitation(
+  value: unknown,
+): OpenOrganizationInvitationRecord | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const invitationId = stringValue(value, 'id');
+  const email = stringValue(value, 'email');
+  const role = membershipRoleValue(value, 'role');
+  const invitedByUsername = stringValue(value, 'invited_by_username');
+  const createdAt = dateValue(value, 'created_at');
+  const expiresAt = dateValue(value, 'expires_at');
+
+  if (
+    invitationId === undefined ||
+    email === undefined ||
+    role === undefined ||
+    invitedByUsername === undefined ||
+    createdAt === undefined ||
+    expiresAt === undefined
+  ) {
+    return undefined;
+  }
+
+  return {
+    invitationId,
+    email,
+    role,
+    invitedByUsername,
+    createdAt,
+    expiresAt,
+  };
 }
 
 export class PostgresOrganizationInvitationRepository
@@ -199,6 +274,44 @@ export class PostgresOrganizationInvitationRepository
       }
       throw identityStoreError('Identity store is unavailable');
     }
+  }
+
+  async listOpenInvitations(
+    input: ListOpenOrganizationInvitationsInput,
+  ): Promise<readonly OpenOrganizationInvitationRecord[]> {
+    if (
+      input.context.userId !== input.userId ||
+      input.context.organizationId !== input.organizationId ||
+      input.userId.trim().length === 0 ||
+      input.organizationId.trim().length === 0 ||
+      !(input.now instanceof Date) ||
+      Number.isNaN(input.now.getTime())
+    ) {
+      throw identityStoreError(
+        'Identity organization invitation input is invalid',
+      );
+    }
+
+    let rows: readonly unknown[];
+    try {
+      rows = await this.client.query(LIST_OPEN_INVITATIONS_SQL, [
+        input.organizationId,
+        input.now,
+      ]);
+    } catch {
+      throw identityStoreError('Identity store is unavailable');
+    }
+
+    const invitations: OpenOrganizationInvitationRecord[] = [];
+    for (const row of rows) {
+      const invitation = mapOpenInvitation(row);
+      if (invitation === undefined) {
+        throw identityStoreError('Identity data is invalid');
+      }
+      invitations.push(invitation);
+    }
+
+    return invitations;
   }
 
   async acceptInvitation(

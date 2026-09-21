@@ -48,6 +48,8 @@ const ORGANIZATION_ROSTER_OPERATION_ID = 'organizations.me.members.list';
 const ORGANIZATION_INVITATION_PATH =
   '/v1/organizations/{organization_id}/invitations';
 const ORGANIZATION_INVITATION_OPERATION_ID = 'organizations.invitations.create';
+const ORGANIZATION_INVITATION_LIST_OPERATION_ID =
+  'organizations.invitations.list';
 const ORGANIZATION_INVITATION_ACCEPT_PATH =
   '/v1/organizations/invitations/accept';
 const ORGANIZATION_INVITATION_ACCEPT_OPERATION_ID =
@@ -193,6 +195,31 @@ describe('buildOpenApiDocument', () => {
         required: true,
       }),
     ]);
+  });
+
+  it('documents the bearer-authenticated open invitation listing route', () => {
+    const operation = build().paths[ORGANIZATION_INVITATION_PATH]?.get;
+
+    expect(operation?.operationId).toBe(
+      ORGANIZATION_INVITATION_LIST_OPERATION_ID,
+    );
+    expect(operation?.security).toEqual([{ BearerAuth: [] }]);
+    expect(operation?.parameters).toEqual([
+      { $ref: '#/components/parameters/CorrelationId' },
+      expect.objectContaining({
+        name: 'organization_id',
+        in: 'path',
+        required: true,
+      }),
+    ]);
+    expect(operation?.requestBody).toBeUndefined();
+    expect(operation?.responses['200']).toBeDefined();
+    expect(operation?.responses['401']).toBeDefined();
+    expect(operation?.responses['403']).toBeDefined();
+    expect(operation?.responses['500']).toBeDefined();
+    expect(JSON.stringify(operation?.responses['200'])).not.toContain(
+      'token_hash',
+    );
   });
 
   it('documents the bearer-authenticated organization roster route', () => {

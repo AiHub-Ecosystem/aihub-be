@@ -35,6 +35,7 @@ import {
   AcceptOrganizationInvitationResponseSchema,
   CreateOrganizationInvitationRequestSchema,
   CreateOrganizationInvitationResponseSchema,
+  ListOpenOrganizationInvitationsResponseSchema,
 } from '../contracts/organization/invitation';
 import {
   OrganizationMembershipMutationRequestSchema,
@@ -503,6 +504,33 @@ function organizationInvitationPathItem(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
 ): Record<string, unknown> {
   return {
+    get: {
+      operationId: 'organizations.invitations.list',
+      summary: "List an organization's open invitations",
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        {
+          name: 'organization_id',
+          in: 'path',
+          required: true,
+          description: 'The organization whose open invitations are listed.',
+          schema: { type: 'string', minLength: 1 },
+        },
+      ],
+      responses: {
+        '200': {
+          description: 'Open organization invitations',
+          content: {
+            'application/json': {
+              schema: ListOpenOrganizationInvitationsResponseSchema,
+            },
+          },
+        },
+        ...authErrorResponses(groupedErrors, [401, 403, 500]),
+      },
+    },
     post: {
       operationId: 'organizations.invitations.create',
       summary: 'Invite a person to an organization',

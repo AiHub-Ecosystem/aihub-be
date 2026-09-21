@@ -32,6 +32,22 @@ export interface AcceptOrganizationInvitationInput {
   readonly now: Date;
 }
 
+export interface ListOpenOrganizationInvitationsInput {
+  readonly context: RequestContext;
+  readonly userId: string;
+  readonly organizationId: string;
+  readonly now: Date;
+}
+
+export interface OpenOrganizationInvitationRecord {
+  readonly invitationId: string;
+  readonly email: string;
+  readonly role: OrganizationMembershipRole;
+  readonly invitedByUsername: string;
+  readonly createdAt: Date;
+  readonly expiresAt: Date;
+}
+
 /**
  * Every unusable token collapses into `token_invalid`, the wrong-account case
  * included: why a token failed stays inside the transaction so that holding one
@@ -50,6 +66,9 @@ export interface OrganizationInvitationPort {
   createInvitation(
     input: CreateOrganizationInvitationInput,
   ): Promise<CreateOrganizationInvitationResult>;
+  listOpenInvitations(
+    input: ListOpenOrganizationInvitationsInput,
+  ): Promise<readonly OpenOrganizationInvitationRecord[]>;
   acceptInvitation(
     input: AcceptOrganizationInvitationInput,
   ): Promise<AcceptOrganizationInvitationResult>;

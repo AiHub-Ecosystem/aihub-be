@@ -25,6 +25,7 @@ import {
 import {
   type CreateOrganizationInvitationInput,
   ORGANIZATION_INVITATION,
+  type OpenOrganizationInvitationRecord,
   type OrganizationInvitationPort,
 } from '../application/organization-invitation.port';
 import {
@@ -41,6 +42,12 @@ const REQUEST_ID = 'req_01J00000000000000000000000';
 const INVITE_URL = `/v1/organizations/${ORGANIZATION_ID}/invitations`;
 
 type OrganizationStatus = 'active' | 'suspended';
+type InvitationListOverride = {
+  readonly role?: OrganizationMembershipRole;
+  readonly membershipExists?: boolean;
+  readonly status?: OrganizationMembershipStatus;
+  readonly organization?: OrganizationStatus;
+};
 
 describe('Organization invitation HTTP flow', () => {
   let app: NestFastifyApplication;
@@ -83,6 +90,11 @@ describe('Organization invitation HTTP flow', () => {
           kind: 'created' as const,
           organizationName: 'Acme',
         }),
+      ),
+      listOpenInvitations: jest.fn(
+        async (
+          _input,
+        ): Promise<readonly OpenOrganizationInvitationRecord[]> => [],
       ),
       acceptInvitation: jest.fn(),
     };
@@ -160,6 +172,7 @@ describe('Organization invitation HTTP flow', () => {
       kind: 'created',
       organizationName: 'Acme',
     });
+    invitations.listOpenInvitations.mockResolvedValue([]);
     emailSender.sendOrganizationInviteEmail.mockResolvedValue(undefined);
   });
 
@@ -171,6 +184,15 @@ describe('Organization invitation HTTP flow', () => {
     url = INVITE_URL,
   ) {
     return app.inject({ method: 'POST', url, headers, payload });
+  }
+
+  function list(
+    headers: Record<string, string> = {
+      authorization: 'Bearer valid.token.value',
+    },
+    url = INVITE_URL,
+  ) {
+    return app.inject({ method: 'GET', url, headers });
   }
 
   function createInvitationCall(): CreateOrganizationInvitationInput {
@@ -261,6 +283,119 @@ describe('Organization invitation HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(201);
+  });
+
+  it('lists redacted actionable invitations for an owner', async () => {
+    invitations.listOpenInvitations.mockResolvedValue([
+      {
+        invitationId: 'oiv_01J00000000000000000000000',
+        email: 'invitee@example.com',
+        role: 'admin',
+        invitedByUsername: 'owner',
+        createdAt: new Date('2026-09-21T11:00:00.000Z'),
+        expiresAt: new Date('2026-09-22T11:00:00.000Z'),
+      },
+    ]);
+
+    const response = await list();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      data: {
+        invitations: [
+          {
+            invitation_id: 'oiv_01J00000000000000000000000',
+            email: 'invitee@example.com',
+            role: 'admin',
+            invited_by_username: 'owner',
+            created_at: '2026-09-21T11:00:00.000Z',
+            expires_at: '2026-09-22T11:00:00.000Z',
+            status: 'pending',
+          },
+        ],
+      },
+      meta: { request_id: REQUEST_ID },
+    });
+    expect(response.payload).not.toContain(USER_ID);
+    expect(response.payload).not.toContain('token');
+    expect(invitations.listOpenInvitations).toHaveBeenCalledWith({
+      context: expect.objectContaining({ organizationId: ORGANIZATION_ID }),
+      userId: USER_ID,
+      organizationId: ORGANIZATION_ID,
+      now: expect.any(Date),
+    });
+  });
+
+  it('lists the same invitation metadata for an admin', async () => {
+    callerRole = 'admin';
+    invitations.listOpenInvitations.mockResolvedValue([
+      {
+        invitationId: 'oiv_01J00000000000000000000000',
+        email: 'invitee@example.com',
+        role: 'member',
+        invitedByUsername: 'owner',
+        createdAt: new Date('2026-09-21T11:00:00.000Z'),
+        expiresAt: new Date('2026-09-22T11:00:00.000Z'),
+      },
+    ]);
+
+    const response = await list();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.invitations[0]).toMatchObject({
+      role: 'member',
+      status: 'pending',
+    });
+  });
+
+  it('returns an empty successful listing', async () => {
+    const response = await list();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      data: { invitations: [] },
+      meta: { request_id: REQUEST_ID },
+    });
+  });
+
+  it.each<[string, InvitationListOverride]>([
+    ['a member', { role: 'member' as const }],
+    ['a non-member', { membershipExists: false }],
+    ['a disabled membership', { status: 'disabled' as const }],
+    ['a suspended organization', { organization: 'suspended' as const }],
+  ])('denies %s without reading invitations', async (_label, override) => {
+    callerRole = override.role ?? callerRole;
+    callerMembershipExists =
+      override.membershipExists ?? callerMembershipExists;
+    callerStatus = override.status ?? callerStatus;
+    organizationStatus = override.organization ?? organizationStatus;
+
+    const response = await list();
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.code).toBe('FORBIDDEN');
+    expect(invitations.listOpenInvitations).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing or invalid Bearer credentials before reading invitations', async () => {
+    const missing = await list({});
+    const invalid = await list({ authorization: 'Bearer nope' });
+
+    expect(missing.statusCode).toBe(401);
+    expect(invalid.statusCode).toBe(401);
+    expect(invitations.listOpenInvitations).not.toHaveBeenCalled();
+  });
+
+  it('fails safely when the invitation projection cannot be read', async () => {
+    invitations.listOpenInvitations.mockRejectedValue(
+      new Error('database unavailable'),
+    );
+
+    const response = await list();
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json().error.code).toBe('INTERNAL_ERROR');
+    expect(response.payload).not.toContain('database unavailable');
   });
 
   it.each(['owner', 'admin'] as const)(

@@ -28,6 +28,8 @@ import {
   JWKS_KEY_PROVIDER,
   type JwksKeyProviderPort,
 } from './application/jwks-key-provider.port';
+import { ListOpenOrganizationInvitations } from './application/list-open-organization-invitations';
+import { LIST_OPEN_ORGANIZATION_INVITATIONS } from './application/list-open-organization-invitations.port';
 import { ListOrganizationApiKeys } from './application/list-organization-api-keys';
 import { LIST_ORGANIZATION_API_KEYS } from './application/list-organization-api-keys.port';
 import { ManageOrganizationMembership } from './application/manage-organization-membership';
@@ -214,6 +216,14 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
         tokenIssuer: OrganizationInviteTokenPort,
       ) => new AcceptOrganizationInvitation(invitations, tokenIssuer),
       inject: [ORGANIZATION_INVITATION, ORGANIZATION_INVITE_TOKEN],
+    },
+    {
+      provide: LIST_OPEN_ORGANIZATION_INVITATIONS,
+      useFactory: (
+        membership: OrganizationMembershipPort,
+        invitations: OrganizationInvitationPort,
+      ) => new ListOpenOrganizationInvitations(membership, invitations),
+      inject: [ORGANIZATION_MEMBERSHIP, ORGANIZATION_INVITATION],
     },
     {
       provide: API_KEY_CACHE,

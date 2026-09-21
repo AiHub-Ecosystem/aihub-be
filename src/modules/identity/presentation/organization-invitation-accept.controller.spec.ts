@@ -41,6 +41,7 @@ describe('Organization invitation acceptance HTTP flow', () => {
   beforeAll(async () => {
     invitations = {
       createInvitation: jest.fn(),
+      listOpenInvitations: jest.fn(),
       acceptInvitation: jest.fn(
         async (_input: AcceptOrganizationInvitationInput) => ({
           kind: 'accepted' as const,

@@ -3,6 +3,7 @@ import { createRequestContext } from '../../../common/request-context/request-co
 import type {
   AcceptOrganizationInvitationInput,
   CreateOrganizationInvitationInput,
+  ListOpenOrganizationInvitationsInput,
 } from '../application/organization-invitation.port';
 
 import type {
@@ -89,7 +90,121 @@ function input(
   };
 }
 
+function listInput(
+  overrides: Partial<ListOpenOrganizationInvitationsInput> = {},
+): ListOpenOrganizationInvitationsInput {
+  return {
+    context: createRequestContext({
+      requestId: 'req_01J00000000000000000000000',
+      receivedAt: NOW,
+      deadlineMs: 5_000,
+      organizationId: ORGANIZATION_ID,
+      userId: USER_ID,
+      scopes: [],
+    }),
+    userId: USER_ID,
+    organizationId: ORGANIZATION_ID,
+    now: NOW,
+    ...overrides,
+  };
+}
+
 describe('PostgresOrganizationInvitationRepository', () => {
+  it('lists open invitations as redacted metadata in deterministic order', async () => {
+    const recorded: RecordedQuery[] = [];
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(
+        () => [
+          {
+            id: INVITATION_ID,
+            email: 'invitee@example.com',
+            role: 'admin',
+            invited_by_username: 'owner',
+            created_at: new Date('2026-09-21T11:00:00.000Z'),
+            expires_at: new Date('2026-09-22T11:00:00.000Z'),
+          },
+        ],
+        recorded,
+      ),
+    );
+
+    await expect(repository.listOpenInvitations(listInput())).resolves.toEqual([
+      {
+        invitationId: INVITATION_ID,
+        email: 'invitee@example.com',
+        role: 'admin',
+        invitedByUsername: 'owner',
+        createdAt: new Date('2026-09-21T11:00:00.000Z'),
+        expiresAt: new Date('2026-09-22T11:00:00.000Z'),
+      },
+    ]);
+
+    const query = recorded[0];
+    expect(query?.values).toEqual([ORGANIZATION_ID, NOW]);
+    expect(query?.text).toContain('consumed_at IS NULL');
+    expect(query?.text).toContain('expires_at > $2');
+    expect(query?.text).toContain('LEFT JOIN user_accounts');
+    expect(query?.text).toContain('ORDER BY invitation.created_at DESC');
+    expect(query?.text).toContain('invitation.id ASC');
+    expect(query?.text).not.toContain('token_hash');
+    expect(query?.text).not.toContain('account.status');
+  });
+
+  it('fails the whole listing when the issuer projection is invalid', async () => {
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(() => [
+        {
+          id: INVITATION_ID,
+          email: 'invitee@example.com',
+          role: 'member',
+          invited_by_username: null,
+          created_at: NOW,
+          expires_at: EXPIRES_AT,
+        },
+      ]),
+    );
+
+    await expect(
+      repository.listOpenInvitations(listInput()),
+    ).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+    });
+  });
+
+  it('fails closed when the durable listing is unavailable', async () => {
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(() => {
+        throw new Error('connection reset');
+      }),
+    );
+
+    await expect(
+      repository.listOpenInvitations(listInput()),
+    ).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'Identity store is unavailable',
+    });
+  });
+
+  it.each([
+    ['a caller that is not the request context user', { userId: 'usr_other' }],
+    [
+      'an organization that is not in the request context',
+      { organizationId: 'org_other' },
+    ],
+    ['an invalid current time', { now: new Date(Number.NaN) }],
+  ])('rejects %s before touching the store', async (_label, overrides) => {
+    const recorded: RecordedQuery[] = [];
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(() => [], recorded),
+    );
+
+    await expect(
+      repository.listOpenInvitations(listInput(overrides)),
+    ).rejects.toBeInstanceOf(AppError);
+    expect(recorded).toHaveLength(0);
+  });
+
   it('supersedes the previous open invitation and inserts the replacement in one transaction', async () => {
     const recorded: RecordedQuery[] = [];
     const repository = new PostgresOrganizationInvitationRepository(

@@ -53,6 +53,45 @@ export type CreateOrganizationInvitationResponse = Static<
   typeof CreateOrganizationInvitationResponseSchema
 >;
 
+export const ListOpenOrganizationInvitationsResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        invitations: Type.Array(
+          Type.Object(
+            {
+              invitation_id: Type.String({
+                pattern: '^oiv_[0-9A-HJKMNP-TV-Z]{26}$',
+              }),
+              email: Type.String({ minLength: 3, maxLength: 320 }),
+              role: OrganizationMembershipRoleSchema,
+              invited_by_username: Type.String({ minLength: 1 }),
+              created_at: Type.String({ format: 'date-time' }),
+              expires_at: Type.String({ format: 'date-time' }),
+              status: Type.Literal('pending'),
+            },
+            { additionalProperties: false },
+          ),
+        ),
+      },
+      { additionalProperties: false },
+    ),
+    meta: Type.Object(
+      {
+        request_id: Type.String({
+          pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
+        }),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export type ListOpenOrganizationInvitationsResponse = Static<
+  typeof ListOpenOrganizationInvitationsResponseSchema
+>;
+
 export const AcceptOrganizationInvitationRequestSchema = Type.Object(
   {
     token: Type.String({ minLength: 1 }),
