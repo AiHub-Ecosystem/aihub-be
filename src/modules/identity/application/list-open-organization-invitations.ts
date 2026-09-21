@@ -8,6 +8,9 @@ import type {
 import { requireActiveMembership } from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
 
+const INVITATION_ACCESS_FORBIDDEN =
+  'Organization invitation access is forbidden';
+
 export interface ListOpenOrganizationInvitationsCommand {
   readonly context: RequestContext;
   readonly userId: string;
@@ -43,18 +46,22 @@ export class ListOpenOrganizationInvitations {
   async list(
     input: ListOpenOrganizationInvitationsCommand,
   ): Promise<readonly ListedOrganizationInvitation[]> {
-    const caller = await requireActiveMembership(this.membership, {
-      context: input.context,
-      userId: input.userId,
-      organizationId: input.organizationId,
-    });
+    const caller = await requireActiveMembership(
+      this.membership,
+      {
+        context: input.context,
+        userId: input.userId,
+        organizationId: input.organizationId,
+      },
+      INVITATION_ACCESS_FORBIDDEN,
+    );
 
     if (caller.organizationStatus === 'suspended') {
-      throw forbidden('Organization is suspended');
+      throw forbidden(INVITATION_ACCESS_FORBIDDEN);
     }
 
     if (caller.role === 'member') {
-      throw forbidden('Organization membership role cannot list invitations');
+      throw forbidden(INVITATION_ACCESS_FORBIDDEN);
     }
 
     const records = await this.invitations.listOpenInvitations({

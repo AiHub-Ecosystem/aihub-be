@@ -8,6 +8,7 @@ import type {
 export async function requireActiveMembership(
   membership: Pick<OrganizationMembershipPort, 'resolveMembership'>,
   input: ResolveMembershipInput,
+  forbiddenMessage = 'Organization membership is required',
 ): Promise<OrganizationMembershipRecord> {
   const resolution = await membership.resolveMembership(input);
   if (resolution.kind === 'active') {
@@ -16,7 +17,7 @@ export async function requireActiveMembership(
 
   throw new AppError({
     code: 'FORBIDDEN',
-    message: 'Organization membership is required',
+    message: forbiddenMessage,
     retryable: false,
   });
 }

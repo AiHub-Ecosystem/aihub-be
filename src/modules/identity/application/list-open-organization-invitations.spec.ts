@@ -10,6 +10,7 @@ import type { OrganizationMembershipPort } from './organization-membership.port'
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
 const NOW = new Date('2026-09-21T12:00:00.000Z');
+const FORBIDDEN_MESSAGE = 'Organization invitation access is forbidden';
 
 function context() {
   return createRequestContext({
@@ -133,7 +134,10 @@ describe('ListOpenOrganizationInvitations', () => {
           organizationId: ORGANIZATION_ID,
           now: NOW,
         }),
-      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      ).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+        message: FORBIDDEN_MESSAGE,
+      });
       expect(invitations.listOpenInvitations).not.toHaveBeenCalled();
     },
   );
@@ -152,7 +156,10 @@ describe('ListOpenOrganizationInvitations', () => {
         organizationId: ORGANIZATION_ID,
         now: NOW,
       }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    ).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      message: FORBIDDEN_MESSAGE,
+    });
     expect(invitations.listOpenInvitations).not.toHaveBeenCalled();
   });
 });
