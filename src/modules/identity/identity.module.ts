@@ -7,6 +7,8 @@ import {
 import { AuthModule } from '../auth/auth.module';
 import { GatewayModule } from '../gateway/gateway.module';
 
+import { AcceptOrganizationInvitation } from './application/accept-organization-invitation';
+import { ACCEPT_ORGANIZATION_INVITATION } from './application/accept-organization-invitation.port';
 import { ApiKeyAuthenticator } from './application/api-key-authenticator';
 import {
   API_KEY_AUTHENTICATOR,
@@ -135,6 +137,14 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
         ORGANIZATION_INVITE_TOKEN,
         EMAIL_SENDER,
       ],
+    },
+    {
+      provide: ACCEPT_ORGANIZATION_INVITATION,
+      useFactory: (
+        invitations: OrganizationInvitationPort,
+        tokenIssuer: OrganizationInviteTokenPort,
+      ) => new AcceptOrganizationInvitation(invitations, tokenIssuer),
+      inject: [ORGANIZATION_INVITATION, ORGANIZATION_INVITE_TOKEN],
     },
     {
       provide: API_KEY_CACHE,

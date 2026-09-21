@@ -53,7 +53,7 @@
     },
     "responses": {
       "Error400": {
-        "description": "INVALID_REQUEST | AUTH_VERIFICATION_TOKEN_INVALID | AUTH_PASSWORD_RESET_TOKEN_INVALID",
+        "description": "INVALID_REQUEST | AUTH_VERIFICATION_TOKEN_INVALID | AUTH_PASSWORD_RESET_TOKEN_INVALID | ORGANIZATION_INVITE_TOKEN_INVALID",
         "content": {
           "application/json": {
             "schema": {
@@ -78,6 +78,10 @@
                         },
                         {
                           "const": "AUTH_PASSWORD_RESET_TOKEN_INVALID",
+                          "type": "string"
+                        },
+                        {
+                          "const": "ORGANIZATION_INVITE_TOKEN_INVALID",
                           "type": "string"
                         }
                       ]
@@ -3077,6 +3081,111 @@
           },
           "503": {
             "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/v1/organizations/invitations/accept": {
+      "post": {
+        "operationId": "organizations.invitations.accept",
+        "summary": "Accept an organization invitation",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Organization membership granted or reactivated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["organization_id", "role", "status"],
+                      "properties": {
+                        "organization_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "role": {
+                          "anyOf": [
+                            {
+                              "const": "owner",
+                              "type": "string"
+                            },
+                            {
+                              "const": "admin",
+                              "type": "string"
+                            },
+                            {
+                              "const": "member",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "const": "active",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
           }
         }
       }

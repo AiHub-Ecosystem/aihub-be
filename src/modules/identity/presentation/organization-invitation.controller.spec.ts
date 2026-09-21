@@ -81,6 +81,7 @@ describe('Organization invitation HTTP flow', () => {
           organizationName: 'Acme',
         }),
       ),
+      acceptInvitation: jest.fn(),
     };
     emailSender = {
       sendVerificationEmail: jest.fn(

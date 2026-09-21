@@ -52,3 +52,44 @@ export const CreateOrganizationInvitationResponseSchema = Type.Object(
 export type CreateOrganizationInvitationResponse = Static<
   typeof CreateOrganizationInvitationResponseSchema
 >;
+
+export const AcceptOrganizationInvitationRequestSchema = Type.Object(
+  {
+    token: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type AcceptOrganizationInvitationRequest = Static<
+  typeof AcceptOrganizationInvitationRequestSchema
+>;
+
+/**
+ * The organization comes from the redeemed invitation, never from the request,
+ * so the response is where the caller first learns which tenant they joined.
+ */
+export const AcceptOrganizationInvitationResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        organization_id: Type.String({ minLength: 1 }),
+        role: OrganizationMembershipRoleSchema,
+        status: Type.Literal('active'),
+      },
+      { additionalProperties: false },
+    ),
+    meta: Type.Object(
+      {
+        request_id: Type.String({
+          pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
+        }),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export type AcceptOrganizationInvitationResponse = Static<
+  typeof AcceptOrganizationInvitationResponseSchema
+>;

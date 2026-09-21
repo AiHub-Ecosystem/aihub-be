@@ -1,6 +1,9 @@
 import { AppError } from '../../../common/errors/app-error';
 import { createRequestContext } from '../../../common/request-context/request-context.factory';
-import type { CreateOrganizationInvitationInput } from '../application/organization-invitation.port';
+import type {
+  AcceptOrganizationInvitationInput,
+  CreateOrganizationInvitationInput,
+} from '../application/organization-invitation.port';
 
 import type {
   PostgresIdentityQueryClient,
@@ -213,6 +216,230 @@ describe('PostgresOrganizationInvitationRepository', () => {
 
     await expect(repository.createInvitation(input())).rejects.toMatchObject({
       code: 'INTERNAL_ERROR',
+    });
+  });
+});
+
+describe('PostgresOrganizationInvitationRepository acceptance', () => {
+  function acceptRows(
+    options: {
+      readonly noInvitation?: boolean;
+      readonly organizationStatus?: string;
+      readonly callerEmail?: string;
+      readonly noCallerIdentity?: boolean;
+      readonly grantedRole?: string;
+    } = {},
+  ) {
+    const {
+      noInvitation = false,
+      organizationStatus = 'active',
+      callerEmail = 'invitee@example.com',
+      noCallerIdentity = false,
+      grantedRole = 'member',
+    } = options;
+
+    return (text: string): readonly unknown[] => {
+      if (text.includes('FROM organization_invitations')) {
+        return noInvitation
+          ? []
+          : [
+              {
+                organization_id: ORGANIZATION_ID,
+                email: 'invitee@example.com',
+                role: 'member',
+              },
+            ];
+      }
+      if (text.includes('FROM organizations')) {
+        return [
+          {
+            organization_status: organizationStatus,
+            canonical_email: noCallerIdentity ? null : callerEmail,
+          },
+        ];
+      }
+      if (text.includes('INSERT INTO organization_members')) {
+        return [{ role: grantedRole }];
+      }
+      return [];
+    };
+  }
+
+  function acceptInput(
+    overrides: Partial<AcceptOrganizationInvitationInput> = {},
+  ): AcceptOrganizationInvitationInput {
+    return {
+      context: createRequestContext({
+        requestId: 'req_01J00000000000000000000000',
+        receivedAt: NOW,
+        deadlineMs: 5_000,
+        userId: USER_ID,
+        scopes: [],
+      }),
+      userId: USER_ID,
+      tokenHash: TOKEN_HASH,
+      now: NOW,
+      ...overrides,
+    };
+  }
+
+  function statements(recorded: RecordedQuery[]): string[] {
+    return recorded.map(({ text }) => text.trim().split(/\s+/)[0] ?? '');
+  }
+
+  it('locks the invitation, grants the membership, and consumes the token in one transaction', async () => {
+    const recorded: RecordedQuery[] = [];
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(acceptRows(), recorded),
+    );
+
+    const result = await repository.acceptInvitation(acceptInput());
+
+    expect(result).toEqual({
+      kind: 'accepted',
+      organizationId: ORGANIZATION_ID,
+      role: 'member',
+    });
+    expect(statements(recorded)).toContain('INSERT');
+    expect(statements(recorded)).toContain('UPDATE');
+
+    const lock = recorded[0];
+    expect(lock?.text).toContain('FOR UPDATE');
+    expect(lock?.text).toContain('consumed_at IS NULL');
+    expect(lock?.text).toContain('expires_at > $2');
+    expect(lock?.values).toEqual([TOKEN_HASH, NOW]);
+
+    const consume = recorded[3];
+    expect(consume?.text).toContain('SET consumed_at = $2');
+    expect(consume?.values).toEqual([TOKEN_HASH, NOW]);
+  });
+
+  it('takes the invitation role only for a disabled membership', async () => {
+    const recorded: RecordedQuery[] = [];
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(acceptRows(), recorded),
+    );
+
+    await repository.acceptInvitation(acceptInput());
+
+    const upsert = recorded[2]?.text ?? '';
+    expect(upsert).toContain('ON CONFLICT (organization_id, user_account_id)');
+    expect(upsert).toContain("WHEN organization_members.status = 'disabled'");
+    expect(upsert).toContain('THEN EXCLUDED.role');
+    expect(upsert).toContain('ELSE organization_members.role');
+  });
+
+  it('returns the role the membership actually ended up with', async () => {
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(acceptRows({ grantedRole: 'owner' })),
+    );
+
+    // An already-active owner keeps owner even though the invitation named
+    // member: the database decides, and the caller is told the truth.
+    await expect(repository.acceptInvitation(acceptInput())).resolves.toEqual({
+      kind: 'accepted',
+      organizationId: ORGANIZATION_ID,
+      role: 'owner',
+    });
+  });
+
+  it('resolves the organization status and caller email in the same transaction', async () => {
+    const recorded: RecordedQuery[] = [];
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(acceptRows(), recorded),
+    );
+
+    await repository.acceptInvitation(acceptInput());
+
+    const probe = recorded[1];
+    expect(probe?.text).toContain('canonical_email');
+    expect(probe?.text).toContain("identity.provider = 'password'");
+    expect(probe?.values).toEqual([ORGANIZATION_ID, USER_ID]);
+  });
+
+  it.each([
+    [
+      'an unknown, expired, consumed, or superseded token',
+      { noInvitation: true },
+    ],
+    ['a token issued for another email', { callerEmail: 'someone@else.test' }],
+    ['an account with no password identity', { noCallerIdentity: true }],
+  ])('rejects %s without consuming anything', async (_label, overrides) => {
+    const recorded: RecordedQuery[] = [];
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(acceptRows(overrides), recorded),
+    );
+
+    const result = await repository.acceptInvitation(acceptInput());
+
+    expect(result).toEqual({ kind: 'token_invalid' });
+    expect(statements(recorded)).not.toContain('INSERT');
+    expect(statements(recorded)).not.toContain('UPDATE');
+  });
+
+  it('rejects a suspended organization without consuming anything', async () => {
+    const recorded: RecordedQuery[] = [];
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(acceptRows({ organizationStatus: 'suspended' }), recorded),
+    );
+
+    const result = await repository.acceptInvitation(acceptInput());
+
+    expect(result).toEqual({ kind: 'organization_suspended' });
+    expect(statements(recorded)).not.toContain('INSERT');
+    expect(statements(recorded)).not.toContain('UPDATE');
+  });
+
+  it.each([
+    ['a caller that is not the request context user', { userId: 'usr_other' }],
+    ['a token hash that is not sha-256 hex', { tokenHash: 'not-a-hash' }],
+  ])('rejects %s before touching the store', async (_label, overrides) => {
+    const recorded: RecordedQuery[] = [];
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(acceptRows(), recorded),
+    );
+
+    await expect(
+      repository.acceptInvitation(acceptInput(overrides)),
+    ).rejects.toBeInstanceOf(AppError);
+    expect(recorded).toHaveLength(0);
+  });
+
+  it('rejects a request context that names an organization', async () => {
+    const recorded: RecordedQuery[] = [];
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(acceptRows(), recorded),
+    );
+
+    // The organization comes from the invitation; a caller-named one has no
+    // meaning here and must not be silently ignored.
+    await expect(
+      repository.acceptInvitation(
+        acceptInput({
+          context: createRequestContext({
+            requestId: 'req_01J00000000000000000000000',
+            receivedAt: NOW,
+            deadlineMs: 5_000,
+            organizationId: ORGANIZATION_ID,
+            userId: USER_ID,
+            scopes: [],
+          }),
+        }),
+      ),
+    ).rejects.toBeInstanceOf(AppError);
+    expect(recorded).toHaveLength(0);
+  });
+
+  it('fails closed without exposing the driver failure', async () => {
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(acceptRows(), [], { failTransaction: true }),
+    );
+
+    await expect(
+      repository.acceptInvitation(acceptInput()),
+    ).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'Identity store is unavailable',
     });
   });
 });

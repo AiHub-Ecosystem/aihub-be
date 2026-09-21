@@ -25,6 +25,8 @@ import {
   VerifyEmailRequestSchema,
 } from '../contracts/auth/local-auth';
 import {
+  AcceptOrganizationInvitationRequestSchema,
+  AcceptOrganizationInvitationResponseSchema,
   CreateOrganizationInvitationRequestSchema,
   CreateOrganizationInvitationResponseSchema,
 } from '../contracts/organization/invitation';
@@ -243,6 +245,8 @@ const AUTH_LOGOUT_PATH = '/v1/auth/logout';
 const ORGANIZATION_ROSTER_PATH = '/v1/organizations/me/members';
 const ORGANIZATION_INVITATION_PATH =
   '/v1/organizations/{organization_id}/invitations';
+const ORGANIZATION_INVITATION_ACCEPT_PATH =
+  '/v1/organizations/invitations/accept';
 
 function authErrorResponses(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
@@ -438,6 +442,39 @@ function localAuthPathItems(
   };
 }
 
+function organizationInvitationAcceptPathItem(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, unknown> {
+  return {
+    post: {
+      operationId: 'organizations.invitations.accept',
+      summary: 'Accept an organization invitation',
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: AcceptOrganizationInvitationRequestSchema,
+          },
+        },
+      },
+      responses: {
+        '200': {
+          description: 'Organization membership granted or reactivated',
+          content: {
+            'application/json': {
+              schema: AcceptOrganizationInvitationResponseSchema,
+            },
+          },
+        },
+        ...authErrorResponses(groupedErrors, [400, 401, 403, 500]),
+      },
+    },
+  };
+}
+
 /**
  * Described by hand for the same reason as the roster: it is a management
  * route, not a catalogued proxy operation.
@@ -595,6 +632,8 @@ export function buildOpenApiDocument(version: string): unknown {
   paths[ORGANIZATION_ROSTER_PATH] = organizationRosterPathItem(groupedErrors);
   paths[ORGANIZATION_INVITATION_PATH] =
     organizationInvitationPathItem(groupedErrors);
+  paths[ORGANIZATION_INVITATION_ACCEPT_PATH] =
+    organizationInvitationAcceptPathItem(groupedErrors);
   Object.assign(paths, localAuthPathItems(groupedErrors));
 
   const errorResponses: Record<string, unknown> = {};

@@ -1,4 +1,3 @@
-import { AppError } from '../../../common/errors/app-error';
 import type { OrganizationStatus } from '../application/api-key-authenticator.port';
 import type {
   ListRosterInput,
@@ -10,6 +9,14 @@ import type {
   OrganizationRosterOrganization,
   ResolveMembershipInput,
 } from '../application/organization-membership.port';
+import {
+  identityStoreError,
+  isRecord,
+  membershipRoleValue,
+  membershipStatusValue,
+  organizationStatusValue,
+  stringValue,
+} from './identity-row';
 import type { PostgresIdentityClient } from './postgres-api-key.repository';
 
 const RESOLVE_MEMBERSHIP_SQL = `
@@ -47,52 +54,6 @@ const LIST_ROSTER_SQL = `
     AND caller.status = 'active'
   ORDER BY caller.organization_id ASC, member_account.username ASC
 `;
-
-function identityStoreError(message: string): AppError {
-  return new AppError({
-    code: 'INTERNAL_ERROR',
-    message,
-    retryable: false,
-  });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function stringValue(
-  record: Record<string, unknown>,
-  key: string,
-): string | undefined {
-  const value = record[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function membershipRoleValue(
-  record: Record<string, unknown>,
-  key: string,
-): OrganizationMembershipRole | undefined {
-  const value = record[key];
-  return value === 'owner' || value === 'admin' || value === 'member'
-    ? value
-    : undefined;
-}
-
-function membershipStatusValue(
-  record: Record<string, unknown>,
-  key: string,
-): OrganizationMembershipStatus | undefined {
-  const value = record[key];
-  return value === 'active' || value === 'disabled' ? value : undefined;
-}
-
-function organizationStatusValue(
-  record: Record<string, unknown>,
-  key: string,
-): OrganizationStatus | undefined {
-  const value = record[key];
-  return value === 'active' || value === 'suspended' ? value : undefined;
-}
 
 function mapMembershipRecord(
   value: unknown,

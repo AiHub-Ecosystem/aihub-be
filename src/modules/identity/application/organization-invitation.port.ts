@@ -25,10 +25,34 @@ export type CreateOrganizationInvitationResult =
     }
   | { readonly kind: 'member_exists' };
 
+export interface AcceptOrganizationInvitationInput {
+  readonly context: RequestContext;
+  readonly userId: string;
+  readonly tokenHash: string;
+  readonly now: Date;
+}
+
+/**
+ * Every unusable token collapses into `token_invalid`, the wrong-account case
+ * included: why a token failed stays inside the transaction so that holding one
+ * never confirms whose invitation it is. No rejection consumes anything.
+ */
+export type AcceptOrganizationInvitationResult =
+  | {
+      readonly kind: 'accepted';
+      readonly organizationId: string;
+      readonly role: OrganizationMembershipRole;
+    }
+  | { readonly kind: 'token_invalid' }
+  | { readonly kind: 'organization_suspended' };
+
 export interface OrganizationInvitationPort {
   createInvitation(
     input: CreateOrganizationInvitationInput,
   ): Promise<CreateOrganizationInvitationResult>;
+  acceptInvitation(
+    input: AcceptOrganizationInvitationInput,
+  ): Promise<AcceptOrganizationInvitationResult>;
 }
 
 export const ORGANIZATION_INVITATION = Symbol('ORGANIZATION_INVITATION');

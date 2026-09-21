@@ -43,6 +43,10 @@ const ORGANIZATION_ROSTER_OPERATION_ID = 'organizations.me.members.list';
 const ORGANIZATION_INVITATION_PATH =
   '/v1/organizations/{organization_id}/invitations';
 const ORGANIZATION_INVITATION_OPERATION_ID = 'organizations.invitations.create';
+const ORGANIZATION_INVITATION_ACCEPT_PATH =
+  '/v1/organizations/invitations/accept';
+const ORGANIZATION_INVITATION_ACCEPT_OPERATION_ID =
+  'organizations.invitations.accept';
 const AUTH_PATHS = [
   '/v1/auth/register',
   '/v1/auth/login',
@@ -83,6 +87,7 @@ describe('buildOpenApiDocument', () => {
         (operationId) =>
           operationId !== SANDBOX_MINT_OPERATION_ID &&
           operationId !== ORGANIZATION_INVITATION_OPERATION_ID &&
+          operationId !== ORGANIZATION_INVITATION_ACCEPT_OPERATION_ID &&
           !AUTH_OPERATION_IDS.includes(
             operationId as (typeof AUTH_OPERATION_IDS)[number],
           ),
@@ -104,11 +109,30 @@ describe('buildOpenApiDocument', () => {
       SANDBOX_MINT_PATH,
       ORGANIZATION_ROSTER_PATH,
       ORGANIZATION_INVITATION_PATH,
+      ORGANIZATION_INVITATION_ACCEPT_PATH,
       ...AUTH_PATHS,
     ]);
     expect(doc.paths[SANDBOX_MINT_PATH]?.post.operationId).toBe(
       SANDBOX_MINT_OPERATION_ID,
     );
+  });
+
+  it('documents the bearer-authenticated invitation acceptance route', () => {
+    const operation = build().paths[ORGANIZATION_INVITATION_ACCEPT_PATH]?.post;
+
+    expect(operation?.operationId).toBe(
+      ORGANIZATION_INVITATION_ACCEPT_OPERATION_ID,
+    );
+    expect(operation?.security).toEqual([{ BearerAuth: [] }]);
+    expect(operation?.requestBody).toBeDefined();
+    expect(operation?.responses['200']).toBeDefined();
+    expect(operation?.responses['400']).toBeDefined();
+    expect(operation?.responses['403']).toBeDefined();
+    // The organization is an attribute of the redeemed invitation, so the
+    // route takes no organization parameter at all.
+    expect(operation?.parameters).toEqual([
+      { $ref: '#/components/parameters/CorrelationId' },
+    ]);
   });
 
   it('documents the bearer-authenticated organization invitation route', () => {

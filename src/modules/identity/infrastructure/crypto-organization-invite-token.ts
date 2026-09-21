@@ -17,8 +17,12 @@ export class CryptoOrganizationInviteToken
     return {
       id: `oiv_${ulid(now.getTime())}`,
       raw,
-      hash: createHash('sha256').update(raw, 'utf8').digest('hex'),
+      hash: this.hash(raw),
       expiresAt: new Date(now.getTime() + TOKEN_TTL_MS),
     };
+  }
+
+  hash(raw: string): string {
+    return createHash('sha256').update(raw, 'utf8').digest('hex');
   }
 }
