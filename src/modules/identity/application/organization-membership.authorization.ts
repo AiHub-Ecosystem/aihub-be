@@ -5,6 +5,10 @@ import type {
   ResolveMembershipInput,
 } from './organization-membership.port';
 
+export function forbidden(message: string): AppError {
+  return new AppError({ code: 'FORBIDDEN', message, retryable: false });
+}
+
 export async function requireActiveMembership(
   membership: Pick<OrganizationMembershipPort, 'resolveMembership'>,
   input: ResolveMembershipInput,

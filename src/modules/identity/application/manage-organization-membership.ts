@@ -1,16 +1,14 @@
-import { AppError } from '../../../common/errors/app-error';
 import type { OrganizationMembershipMutationPort } from './organization-membership-mutation.port';
-import { requireActiveMembership } from './organization-membership.authorization';
+import {
+  forbidden,
+  requireActiveMembership,
+} from './organization-membership.authorization';
 import type {
   ChangeOrganizationMemberRoleInput,
   OrganizationMembershipMutationInput,
   OrganizationMembershipMutationResult,
   OrganizationMembershipPort,
 } from './organization-membership.port';
-
-function forbidden(message: string): AppError {
-  return new AppError({ code: 'FORBIDDEN', message, retryable: false });
-}
 
 export class ManageOrganizationMembership
   implements OrganizationMembershipMutationPort

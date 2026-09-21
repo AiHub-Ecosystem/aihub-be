@@ -4,7 +4,10 @@ import { generateApiKey } from '../domain/api-key';
 
 import type { ApiKeyCachePort } from './api-key-authenticator.port';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
-import { requireActiveMembership } from './organization-membership.authorization';
+import {
+  forbidden,
+  requireActiveMembership,
+} from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
 
 export interface RotateOrganizationApiKeyInput {
@@ -25,10 +28,6 @@ export interface RotatedOrganizationApiKey {
   readonly allowedEnvironments: readonly string[];
   readonly expiresAt: Date | null;
   readonly createdAt: Date;
-}
-
-function forbidden(message: string): AppError {
-  return new AppError({ code: 'FORBIDDEN', message, retryable: false });
 }
 
 /**

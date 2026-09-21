@@ -1,11 +1,13 @@
 import { publishedScopes } from '../../../catalog/operation-catalog';
-import { AppError } from '../../../common/errors/app-error';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import type { RequestContext } from '../../../common/request-context/request-context';
 import { generateApiKey } from '../domain/api-key';
 
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
-import { requireActiveMembership } from './organization-membership.authorization';
+import {
+  forbidden,
+  requireActiveMembership,
+} from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
 
 /** Customer-facing request tiers. AIHUB's sandbox and development are not. */
@@ -41,10 +43,6 @@ export interface CreatedOrganizationApiKey {
   readonly allowedEnvironments: readonly string[];
   readonly expiresAt: Date | null;
   readonly createdAt: Date;
-}
-
-function forbidden(message: string): AppError {
-  return new AppError({ code: 'FORBIDDEN', message, retryable: false });
 }
 
 /**

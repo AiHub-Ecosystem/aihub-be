@@ -373,7 +373,10 @@ describe('Organization invitation HTTP flow', () => {
     const response = await list();
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe('FORBIDDEN');
+    expect(response.json().error).toMatchObject({
+      code: 'FORBIDDEN',
+      message: 'Organization invitation access is forbidden',
+    });
     expect(invitations.listOpenInvitations).not.toHaveBeenCalled();
   });
 

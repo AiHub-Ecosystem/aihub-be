@@ -5,7 +5,10 @@ import { apiKeyStatus } from '../domain/api-key';
 import type { ApiKeyCachePort } from './api-key-authenticator.port';
 import type { OrganizationApiKeyView } from './organization-api-key-view';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
-import { requireActiveMembership } from './organization-membership.authorization';
+import {
+  forbidden,
+  requireActiveMembership,
+} from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
 
 export interface RevokeOrganizationApiKeyCommand {
@@ -13,10 +16,6 @@ export interface RevokeOrganizationApiKeyCommand {
   readonly userId: string;
   readonly organizationId: string;
   readonly apiKeyId: string;
-}
-
-function forbidden(message: string): AppError {
-  return new AppError({ code: 'FORBIDDEN', message, retryable: false });
 }
 
 /**

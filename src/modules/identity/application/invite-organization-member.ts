@@ -6,7 +6,10 @@ import { normalizeEmail } from '../../auth/domain/local-auth';
 
 import type { OrganizationInvitationPort } from './organization-invitation.port';
 import type { OrganizationInviteTokenPort } from './organization-invite-token.port';
-import { requireActiveMembership } from './organization-membership.authorization';
+import {
+  forbidden,
+  requireActiveMembership,
+} from './organization-membership.authorization';
 import type {
   OrganizationMembershipPort,
   OrganizationMembershipRole,
@@ -26,10 +29,6 @@ export interface InvitedOrganizationMember {
   readonly email: string;
   readonly role: OrganizationMembershipRole;
   readonly expiresAt: Date;
-}
-
-function forbidden(message: string): AppError {
-  return new AppError({ code: 'FORBIDDEN', message, retryable: false });
 }
 
 /**

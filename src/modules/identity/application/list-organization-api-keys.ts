@@ -1,21 +1,19 @@
-import { AppError } from '../../../common/errors/app-error';
 import type { RequestContext } from '../../../common/request-context/request-context';
 import { apiKeyStatus } from '../domain/api-key';
 
 import type { OrganizationApiKeyView } from './organization-api-key-view';
 
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
-import { requireActiveMembership } from './organization-membership.authorization';
+import {
+  forbidden,
+  requireActiveMembership,
+} from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
 
 export interface ListOrganizationApiKeysCommand {
   readonly context: RequestContext;
   readonly userId: string;
   readonly organizationId: string;
-}
-
-function forbidden(message: string): AppError {
-  return new AppError({ code: 'FORBIDDEN', message, retryable: false });
 }
 
 /**

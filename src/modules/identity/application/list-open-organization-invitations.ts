@@ -1,11 +1,13 @@
-import { AppError } from '../../../common/errors/app-error';
 import type { RequestContext } from '../../../common/request-context/request-context';
 
 import type {
   OpenOrganizationInvitationRecord,
   OrganizationInvitationPort,
 } from './organization-invitation.port';
-import { requireActiveMembership } from './organization-membership.authorization';
+import {
+  forbidden,
+  requireActiveMembership,
+} from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
 
 const INVITATION_ACCESS_FORBIDDEN =
@@ -21,10 +23,6 @@ export interface ListOpenOrganizationInvitationsCommand {
 export type ListedOrganizationInvitation = OpenOrganizationInvitationRecord & {
   readonly status: 'pending';
 };
-
-function forbidden(message: string): AppError {
-  return new AppError({ code: 'FORBIDDEN', message, retryable: false });
-}
 
 /**
  * Reads an Organization's actionable invitations for an authorized owner or
