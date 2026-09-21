@@ -62,3 +62,38 @@ export async function resetIdentityTables(pool: Pool): Promise<void> {
     RESTART IDENTITY CASCADE
   `);
 }
+
+/**
+ * Waits until PostgreSQL itself reports a backend blocked by `holderPid`.
+ *
+ * This replaces a sleep-then-assert: a timing check is only ever evidence in
+ * the green direction, and would pass for an implementation that never locked
+ * but happened to be slow.
+ */
+export async function waitForBlockedBy(
+  pool: Pool,
+  holderPid: number | undefined,
+  timeoutMs = 5_000,
+): Promise<void> {
+  if (holderPid === undefined) {
+    throw new Error('the holding connection reported no backend pid');
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const blocked = await pool.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM pg_stat_activity
+       WHERE $1 = ANY (pg_blocking_pids(pid))`,
+      [holderPid],
+    );
+    if ((blocked.rows[0]?.count ?? 0) > 0) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+
+  throw new Error(
+    `no backend became blocked by pid ${holderPid} within ${timeoutMs}ms`,
+  );
+}

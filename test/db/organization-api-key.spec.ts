@@ -9,7 +9,11 @@ import type { PostgresIdentityTransactionalClient } from '../../src/modules/iden
 import { createPostgresIdentityClient } from '../../src/modules/identity/infrastructure/postgres-identity.client';
 import { PostgresOrganizationApiKeyRepository } from '../../src/modules/identity/infrastructure/postgres-organization-api-key.repository';
 
-import { createTestPool, resetIdentityTables } from './database';
+import {
+  createTestPool,
+  resetIdentityTables,
+  waitForBlockedBy,
+} from './database';
 
 const ORGANIZATION_ID = 'org_acme';
 
@@ -131,21 +135,43 @@ describe('organization API key creation against PostgreSQL', () => {
     expect(found?.scopes).toEqual(['writing.grade']);
   });
 
-  it('admits exactly one racer into the last remaining key slot', async () => {
+  it('claims the organization row before counting, so a creation cannot count around a holder', async () => {
     await seedOrganization();
-    expect((await create({ activeKeyLimit: 2 })).kind).toBe('created');
+    expect((await create({ activeKeyLimit: 1 })).kind).toBe('created');
 
-    const outcomes = await Promise.all(
-      Array.from({ length: 4 }, () => create({ activeKeyLimit: 2 })),
-    );
+    const holder = await pool.connect();
+    try {
+      await holder.query('BEGIN');
+      const holderPid = await holder
+        .query<{ pid: number }>('SELECT pg_backend_pid() AS pid')
+        .then(({ rows }) => rows[0]?.pid);
+      await holder.query(
+        'SELECT id FROM organizations WHERE id = $1 FOR UPDATE',
+        [ORGANIZATION_ID],
+      );
 
-    // Without the organization row lock every racer reads the same count of
-    // one and every racer inserts, leaving the organization over its limit.
-    expect(outcomes.filter(({ kind }) => kind === 'created')).toHaveLength(1);
-    expect(
-      outcomes.filter(({ kind }) => kind === 'limit_reached'),
-    ).toHaveLength(3);
-    expect(await keyCount()).toBe(2);
+      let settled = false;
+      const pending = create({ activeKeyLimit: 1 }).then((result) => {
+        settled = true;
+        return result;
+      });
+
+      // The outcome here is `limit_reached`, so this creation never reaches
+      // its insert. A repository that counted the organization's keys without
+      // first claiming its row would therefore answer immediately and block on
+      // nothing, and no backend would ever appear here however slow the runner
+      // is. The row's own foreign key cannot stand in for the claim: it is
+      // only taken at insert time, which is after the count that decides the
+      // limit. Asked of the engine rather than of the clock.
+      await waitForBlockedBy(pool, holderPid);
+      expect(settled).toBe(false);
+
+      await holder.query('COMMIT');
+      expect((await pending).kind).toBe('limit_reached');
+      expect(await keyCount()).toBe(1);
+    } finally {
+      holder.release();
+    }
   });
 
   it('refuses a key once the organization is at its active key limit', async () => {
