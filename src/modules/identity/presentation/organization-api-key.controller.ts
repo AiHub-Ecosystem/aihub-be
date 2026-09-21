@@ -17,8 +17,8 @@ import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
   type CreateOrganizationApiKeyRequest,
   CreateOrganizationApiKeyRequestSchema,
-  type CreateOrganizationApiKeyResponse,
   type ListOrganizationApiKeysResponse,
+  type OrganizationApiKeySecretResponse,
 } from '../../../contracts/organization/api-key';
 import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
 import {
@@ -29,6 +29,10 @@ import {
   LIST_ORGANIZATION_API_KEYS,
   type ListOrganizationApiKeysPort,
 } from '../application/list-organization-api-keys.port';
+import {
+  ROTATE_ORGANIZATION_API_KEY,
+  type RotateOrganizationApiKeyPort,
+} from '../application/rotate-organization-api-key.port';
 
 import { bearerRequestContext } from './bearer-request-context';
 
@@ -40,7 +44,48 @@ export class OrganizationApiKeyController {
     private readonly apiKeys: CreateOrganizationApiKeyPort,
     @Inject(LIST_ORGANIZATION_API_KEYS)
     private readonly keyList: ListOrganizationApiKeysPort,
+    @Inject(ROTATE_ORGANIZATION_API_KEY)
+    private readonly rotation: RotateOrganizationApiKeyPort,
   ) {}
+
+  // A verb sub-resource, following the membership transfer route: rotation is
+  // one act on one key, not a partial update of it.
+  @Post('/v1/organizations/:organizationId/api-keys/:apiKeyId/rotate')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  async rotate(
+    @Req() request: FastifyRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('apiKeyId') apiKeyId: string,
+  ): Promise<OrganizationApiKeySecretResponse> {
+    const { context, requestId, userId } = bearerRequestContext(
+      request,
+      organizationId,
+    );
+
+    const rotated = await this.rotation.rotate({
+      context,
+      userId,
+      organizationId,
+      apiKeyId,
+    });
+
+    return {
+      data: {
+        api_key: rotated.apiKey,
+        id: rotated.id,
+        name: rotated.name,
+        key_prefix: rotated.keyPrefix,
+        scopes: [...rotated.scopes],
+        allowed_environments: [...rotated.allowedEnvironments],
+        status: 'active',
+        expires_at: rotated.expiresAt?.toISOString() ?? null,
+        last_used_at: null,
+        created_at: rotated.createdAt.toISOString(),
+      },
+      meta: { request_id: requestId },
+    };
+  }
 
   @Get('/v1/organizations/:organizationId/api-keys')
   @HttpCode(200)
@@ -85,7 +130,7 @@ export class OrganizationApiKeyController {
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,
     @Body() body: unknown,
-  ): Promise<CreateOrganizationApiKeyResponse> {
+  ): Promise<OrganizationApiKeySecretResponse> {
     const { context, requestId, userId } = bearerRequestContext(
       request,
       organizationId,

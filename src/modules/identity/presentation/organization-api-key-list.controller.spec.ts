@@ -92,6 +92,7 @@ describe('Organization API key listing HTTP flow', () => {
       listApiKeys: jest.fn(
         async (_input: ListOrganizationApiKeysInput) => [] as const,
       ),
+      rotateApiKey: jest.fn(),
     };
 
     const tokenIssuer: jest.Mocked<UserAccessTokenIssuerPort> = {

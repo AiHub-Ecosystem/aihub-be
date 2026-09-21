@@ -50,6 +50,38 @@ export interface OrganizationApiKeyRecord {
   readonly createdAt: Date;
 }
 
+export interface RotateOrganizationApiKeyRecordInput {
+  readonly context: RequestContext;
+  readonly organizationId: string;
+  /** The key being retired. */
+  readonly apiKeyId: string;
+  readonly replacementId: string;
+  /** Lowercase hex SHA-256 of the replacement; the raw value never arrives here. */
+  readonly keyHash: string;
+  readonly keyPrefix: string;
+  /**
+   * The application's clock. The store decides rotatability under its lock but
+   * against this moment, so the expiry rule is never settled by the database's
+   * clock; its canonical form is `apiKeyStatus` in the domain.
+   */
+  readonly now: Date;
+}
+
+export type RotateOrganizationApiKeyRecordResult =
+  | {
+      readonly kind: 'rotated';
+      /** Lowercase hex SHA-256 of the retired key, for the cache purge only. */
+      readonly retiredKeyHash: string;
+      readonly name: string;
+      readonly scopes: readonly string[];
+      readonly allowedEnvironments: readonly string[];
+      readonly expiresAt: Date | null;
+      readonly createdAt: Date;
+    }
+  | { readonly kind: 'key_not_found' }
+  | { readonly kind: 'key_not_rotatable' }
+  | { readonly kind: 'organization_unavailable' };
+
 export interface OrganizationApiKeyPort {
   createApiKey(
     input: CreateOrganizationApiKeyRecordInput,
@@ -57,6 +89,9 @@ export interface OrganizationApiKeyPort {
   listApiKeys(
     input: ListOrganizationApiKeysInput,
   ): Promise<readonly OrganizationApiKeyRecord[]>;
+  rotateApiKey(
+    input: RotateOrganizationApiKeyRecordInput,
+  ): Promise<RotateOrganizationApiKeyRecordResult>;
 }
 
 export const ORGANIZATION_API_KEY = Symbol('ORGANIZATION_API_KEY');

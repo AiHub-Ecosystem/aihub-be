@@ -3982,6 +3982,184 @@
         }
       }
     },
+    "/v1/organizations/{organization_id}/api-keys/{api_key_id}/rotate": {
+      "post": {
+        "operationId": "organizations.apiKeys.rotate",
+        "summary": "Rotate an organization API key",
+        "description": "Creates a replacement and revokes the named key in one act, with no window in which both work. The replacement inherits the name, scopes, allowed environments, and expiry, and its raw credential is returned in this response only. A revoked or expired key cannot be rotated.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization that owns the API key.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "api_key_id",
+            "in": "path",
+            "required": true,
+            "description": "The API key being retired.",
+            "schema": {
+              "type": "string",
+              "pattern": "^ak_[0-9A-HJKMNP-TV-Z]{26}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "API key rotated; the raw replacement is returned in this response only and cannot be recovered afterwards. `status` is always `active`.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "api_key",
+                        "id",
+                        "name",
+                        "key_prefix",
+                        "scopes",
+                        "allowed_environments",
+                        "status",
+                        "expires_at",
+                        "last_used_at",
+                        "created_at"
+                      ],
+                      "properties": {
+                        "api_key": {
+                          "pattern": "^aihub_sk_[A-Za-z0-9]{43}$",
+                          "type": "string"
+                        },
+                        "id": {
+                          "pattern": "^ak_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "key_prefix": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "scopes": {
+                          "type": "array",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "allowed_environments": {
+                          "type": "array",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "active",
+                              "type": "string"
+                            },
+                            {
+                              "const": "expired",
+                              "type": "string"
+                            },
+                            {
+                              "const": "revoked",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "expires_at": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "last_used_at": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "created_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
     "/v1/auth/register": {
       "post": {
         "operationId": "auth.register",

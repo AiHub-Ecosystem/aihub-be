@@ -26,8 +26,8 @@ import {
 } from '../contracts/auth/local-auth';
 import {
   CreateOrganizationApiKeyRequestSchema,
-  CreateOrganizationApiKeyResponseSchema,
   ListOrganizationApiKeysResponseSchema,
+  OrganizationApiKeySecretResponseSchema,
 } from '../contracts/organization/api-key';
 import {
   AcceptOrganizationInvitationRequestSchema,
@@ -262,6 +262,8 @@ const ORGANIZATION_MEMBER_TRANSFER_PATH =
   '/v1/organizations/{organization_id}/members/{username}/transfer';
 const ORGANIZATION_API_KEY_PATH =
   '/v1/organizations/{organization_id}/api-keys';
+const ORGANIZATION_API_KEY_ROTATE_PATH =
+  '/v1/organizations/{organization_id}/api-keys/{api_key_id}/rotate';
 
 function authErrorResponses(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
@@ -537,6 +539,55 @@ function organizationInvitationPathItem(
   };
 }
 
+function organizationApiKeyRotatePathItem(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, unknown> {
+  return {
+    post: {
+      operationId: 'organizations.apiKeys.rotate',
+      summary: 'Rotate an organization API key',
+      description:
+        'Creates a replacement and revokes the named key in one act, with no window in which both work. The replacement inherits the name, scopes, allowed environments, and expiry, and its raw credential is returned in this response only. A revoked or expired key cannot be rotated.',
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        {
+          name: 'organization_id',
+          in: 'path',
+          required: true,
+          description: 'The organization that owns the API key.',
+          schema: { type: 'string', minLength: 1 },
+        },
+        {
+          name: 'api_key_id',
+          in: 'path',
+          required: true,
+          description: 'The API key being retired.',
+          schema: { type: 'string', pattern: '^ak_[0-9A-HJKMNP-TV-Z]{26}$' },
+        },
+      ],
+      responses: {
+        '200': {
+          description:
+            'API key rotated; the raw replacement is returned in this response only and cannot be recovered afterwards. `status` is always `active`.',
+          headers: {
+            'Cache-Control': {
+              schema: { type: 'string', enum: ['no-store'] },
+            },
+          },
+          content: {
+            'application/json': {
+              schema: OrganizationApiKeySecretResponseSchema,
+            },
+          },
+        },
+        ...authErrorResponses(groupedErrors, [401, 403, 404, 500, 503]),
+      },
+    },
+  };
+}
+
 function organizationApiKeyPathItem(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
 ): Record<string, unknown> {
@@ -603,7 +654,7 @@ function organizationApiKeyPathItem(
           },
           content: {
             'application/json': {
-              schema: CreateOrganizationApiKeyResponseSchema,
+              schema: OrganizationApiKeySecretResponseSchema,
             },
           },
         },
@@ -821,6 +872,8 @@ export function buildOpenApiDocument(version: string): unknown {
   paths[ORGANIZATION_MEMBER_TRANSFER_PATH] =
     organizationMembershipTransferPathItem(groupedErrors);
   paths[ORGANIZATION_API_KEY_PATH] = organizationApiKeyPathItem(groupedErrors);
+  paths[ORGANIZATION_API_KEY_ROTATE_PATH] =
+    organizationApiKeyRotatePathItem(groupedErrors);
   Object.assign(paths, localAuthPathItems(groupedErrors));
 
   const errorResponses: Record<string, unknown> = {};

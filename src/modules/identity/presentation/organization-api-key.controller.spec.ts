@@ -6,7 +6,7 @@ import { Test } from '@nestjs/testing';
 import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '../../../app.module';
-import { CreateOrganizationApiKeyResponseSchema } from '../../../contracts/organization/api-key';
+import { OrganizationApiKeySecretResponseSchema } from '../../../contracts/organization/api-key';
 import {
   LOCAL_AUTH_REPOSITORY,
   type LocalAuthRepositoryPort,
@@ -81,6 +81,7 @@ describe('Organization API key creation HTTP flow', () => {
       listApiKeys: jest.fn(
         async (_input: ListOrganizationApiKeysInput) => [] as const,
       ),
+      rotateApiKey: jest.fn(),
     };
 
     const tokenIssuer: jest.Mocked<UserAccessTokenIssuerPort> = {
@@ -187,7 +188,7 @@ describe('Organization API key creation HTTP flow', () => {
     // The contract is what integrators generate clients from, so a response
     // the published schema rejects is a broken contract, not a passing test.
     expect(
-      Value.Check(CreateOrganizationApiKeyResponseSchema, response.json()),
+      Value.Check(OrganizationApiKeySecretResponseSchema, response.json()),
     ).toBe(true);
   });
 

@@ -80,12 +80,15 @@ export const OrganizationApiKeySchema = Type.Object(
 export type OrganizationApiKey = Static<typeof OrganizationApiKeySchema>;
 
 /**
+ * The response of every operation that mints a credential: creation and
+ * rotation both return it, which is why the name says neither.
+ *
  * `api_key` carries the raw credential, returned here and nowhere else, ever.
  * The field name matches the centralized redaction key set on purpose, so a
  * record that reaches a logger is redacted by the mechanism rather than by
  * remembering to.
  */
-export const CreateOrganizationApiKeyResponseSchema = Type.Object(
+export const OrganizationApiKeySecretResponseSchema = Type.Object(
   {
     // `Composite`, not `Intersect`: an `allOf` of two closed objects is
     // unsatisfiable, so every real response would fail the published contract.
@@ -106,8 +109,8 @@ export const CreateOrganizationApiKeyResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type CreateOrganizationApiKeyResponse = Static<
-  typeof CreateOrganizationApiKeyResponseSchema
+export type OrganizationApiKeySecretResponse = Static<
+  typeof OrganizationApiKeySecretResponseSchema
 >;
 
 /**

@@ -60,6 +60,9 @@ const ORGANIZATION_API_KEY_PATH =
   '/v1/organizations/{organization_id}/api-keys';
 const ORGANIZATION_API_KEY_OPERATION_ID = 'organizations.apiKeys.create';
 const ORGANIZATION_API_KEY_LIST_OPERATION_ID = 'organizations.apiKeys.list';
+const ORGANIZATION_API_KEY_ROTATE_PATH =
+  '/v1/organizations/{organization_id}/api-keys/{api_key_id}/rotate';
+const ORGANIZATION_API_KEY_ROTATE_OPERATION_ID = 'organizations.apiKeys.rotate';
 const ORGANIZATION_MEMBER_CHANGE_ROLE_OPERATION_ID =
   'organizations.members.change_role';
 const ORGANIZATION_MEMBER_DISABLE_OPERATION_ID =
@@ -109,6 +112,7 @@ describe('buildOpenApiDocument', () => {
           operationId !== ORGANIZATION_INVITATION_ACCEPT_OPERATION_ID &&
           operationId !== ORGANIZATION_MEMBER_TRANSFER_OPERATION_ID &&
           operationId !== ORGANIZATION_API_KEY_OPERATION_ID &&
+          operationId !== ORGANIZATION_API_KEY_ROTATE_OPERATION_ID &&
           !AUTH_OPERATION_IDS.includes(
             operationId as (typeof AUTH_OPERATION_IDS)[number],
           ),
@@ -134,6 +138,7 @@ describe('buildOpenApiDocument', () => {
       ORGANIZATION_MEMBER_PATH,
       ORGANIZATION_MEMBER_TRANSFER_PATH,
       ORGANIZATION_API_KEY_PATH,
+      ORGANIZATION_API_KEY_ROTATE_PATH,
       ...AUTH_PATHS,
     ]);
     expect(doc.paths[SANDBOX_MINT_PATH]?.post?.operationId).toBe(
@@ -226,6 +231,23 @@ describe('buildOpenApiDocument', () => {
     expect(JSON.stringify(operation?.responses['200'])).not.toContain(
       'api_key"',
     );
+  });
+
+  it('documents the bearer-authenticated API key rotation route as uncacheable', () => {
+    const operation = build().paths[ORGANIZATION_API_KEY_ROTATE_PATH]?.post;
+
+    expect(operation?.operationId).toBe(
+      ORGANIZATION_API_KEY_ROTATE_OPERATION_ID,
+    );
+    expect(operation?.security).toEqual([{ BearerAuth: [] }]);
+    // Rotation takes no body: what it does is fixed by the route.
+    expect(operation?.requestBody).toBeUndefined();
+    expect(
+      operation?.responses['200']?.headers?.['Cache-Control']?.schema,
+    ).toEqual({ type: 'string', enum: ['no-store'] });
+    // An unknown key and another tenant's key share this status on purpose.
+    expect(operation?.responses['404']).toBeDefined();
+    expect(operation?.responses['403']).toBeDefined();
   });
 
   it('documents the bearer-authenticated member mutation routes', () => {

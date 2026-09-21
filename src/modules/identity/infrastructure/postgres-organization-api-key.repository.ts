@@ -5,6 +5,8 @@ import type {
   ListOrganizationApiKeysInput,
   OrganizationApiKeyPort,
   OrganizationApiKeyRecord,
+  RotateOrganizationApiKeyRecordInput,
+  RotateOrganizationApiKeyRecordResult,
 } from '../application/organization-api-key.port';
 
 import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
@@ -59,6 +61,49 @@ const LIST_API_KEYS_SQL = `
   WHERE organization_id = $1
     AND status = 'active'
   ORDER BY created_at DESC, id DESC
+`;
+
+/**
+ * Claims the key being retired. Without this lock two concurrent rotations
+ * both read it as active, both revoke it, and both insert, leaving the
+ * Organization with two live replacements where one was asked for.
+ *
+ * The rotatability guard runs here, under the lock, but against the clock the
+ * application passes in: the canonical form of the rule is `apiKeyStatus` in
+ * the domain, and the database's own clock never decides it.
+ */
+const LOCK_API_KEY_SQL = `
+  SELECT
+    encode(key_hash, 'hex') AS key_hash_hex,
+    name,
+    scopes,
+    allowed_environments,
+    status,
+    expires_at
+  FROM api_keys
+  WHERE id = $1
+    AND organization_id = $2
+  FOR UPDATE
+`;
+
+const REVOKE_API_KEY_SQL = `
+  UPDATE api_keys
+  SET status = 'revoked', revoked_at = $2
+  WHERE id = $1
+`;
+
+/**
+ * The replacement inherits every column that describes what the key may do.
+ * Rotation is exempt from the active-key cap: it never changes how many active
+ * keys an Organization holds, and an Organization at its cap must still be
+ * able to replace a leaked credential.
+ */
+const INSERT_REPLACEMENT_SQL = `
+  INSERT INTO api_keys
+    (id, organization_id, key_hash, key_prefix, name, scopes,
+     allowed_environments, expires_at)
+  VALUES ($1, $2, decode($3, 'hex'), $4, $5, $6, $7, $8)
+  RETURNING created_at
 `;
 
 function identityStoreError(message: string): AppError {
@@ -174,6 +219,104 @@ export class PostgresOrganizationApiKeyRepository
   implements OrganizationApiKeyPort
 {
   constructor(private readonly client: PostgresIdentityTransactionalClient) {}
+
+  async rotateApiKey(
+    input: RotateOrganizationApiKeyRecordInput,
+  ): Promise<RotateOrganizationApiKeyRecordResult> {
+    if (
+      input.context.organizationId !== input.organizationId ||
+      input.organizationId.trim().length === 0 ||
+      input.apiKeyId.trim().length === 0 ||
+      input.replacementId.trim().length === 0 ||
+      !/^[0-9a-f]{64}$/.test(input.keyHash)
+    ) {
+      throw identityStoreError('Identity API key rotation input is invalid');
+    }
+
+    try {
+      return await this.client.transaction(async (transaction) => {
+        // Organization first, then key: creation takes the same order, so two
+        // key mutations cannot deadlock against each other.
+        const organizationRows = await transaction.query(
+          LOCK_ORGANIZATION_SQL,
+          [input.organizationId],
+        );
+        const organization = organizationRows[0];
+        if (!isRecord(organization) || organization.status !== 'active') {
+          return { kind: 'organization_unavailable' as const };
+        }
+
+        const keyRows = await transaction.query(LOCK_API_KEY_SQL, [
+          input.apiKeyId,
+          input.organizationId,
+        ]);
+        const key = keyRows[0];
+        if (!isRecord(key)) {
+          return { kind: 'key_not_found' as const };
+        }
+
+        const retiredKeyHash = stringValue(key, 'key_hash_hex');
+        const name = stringValue(key, 'name');
+        const scopes = stringArrayValue(key, 'scopes');
+        const allowedEnvironments = stringArrayValue(
+          key,
+          'allowed_environments',
+        );
+        const expiresAt = dateValue(key, 'expires_at');
+        if (
+          retiredKeyHash === undefined ||
+          name === undefined ||
+          scopes === undefined ||
+          allowedEnvironments === undefined ||
+          expiresAt === undefined
+        ) {
+          throw identityStoreError('Identity data is invalid');
+        }
+
+        if (
+          key.status !== 'active' ||
+          (expiresAt !== null && expiresAt.getTime() <= input.now.getTime())
+        ) {
+          return { kind: 'key_not_rotatable' as const };
+        }
+
+        await transaction.query(REVOKE_API_KEY_SQL, [
+          input.apiKeyId,
+          input.now,
+        ]);
+
+        const insertedRows = await transaction.query(INSERT_REPLACEMENT_SQL, [
+          input.replacementId,
+          input.organizationId,
+          input.keyHash,
+          input.keyPrefix,
+          name,
+          [...scopes],
+          [...allowedEnvironments],
+          expiresAt,
+        ]);
+        const createdAt = createdAtValue(insertedRows[0]);
+        if (createdAt === undefined) {
+          throw identityStoreError('Identity data is invalid');
+        }
+
+        return {
+          kind: 'rotated' as const,
+          retiredKeyHash,
+          name,
+          scopes,
+          allowedEnvironments,
+          expiresAt,
+          createdAt,
+        };
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      throw identityStoreError('Identity store is unavailable');
+    }
+  }
 
   async listApiKeys(
     input: ListOrganizationApiKeysInput,
