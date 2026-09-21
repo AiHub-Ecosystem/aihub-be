@@ -13,6 +13,7 @@ import { PostgresOrganizationInvitationRepository } from './postgres-organizatio
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
+const INVITATION_ID = 'oiv_01J00000000000000000000000';
 const TOKEN_HASH = 'a'.repeat(64);
 const NOW = new Date('2026-09-21T00:00:00.000Z');
 const EXPIRES_AT = new Date('2026-09-22T00:00:00.000Z');
@@ -44,13 +45,21 @@ function client(
   };
 }
 
-function rows(options: { readonly activeMembership: boolean }) {
+function rows(options: {
+  readonly activeMembership: boolean;
+  readonly supersededOpenInvitation?: boolean;
+}) {
   return (text: string): readonly unknown[] => {
     if (text.includes('FROM organizations')) {
       return [{ id: ORGANIZATION_ID, name: 'Acme' }];
     }
     if (text.includes('FROM organization_members')) {
       return options.activeMembership ? [{ '?column?': 1 }] : [];
+    }
+    if (text.includes('UPDATE organization_invitations')) {
+      return options.supersededOpenInvitation === true
+        ? [{ id: 'oiv_01J0000000000000000000000Z' }]
+        : [];
     }
     return [];
   };
@@ -68,7 +77,7 @@ function input(
       userId: USER_ID,
       scopes: [],
     }),
-    invitationId: 'oiv_01J00000000000000000000000',
+    invitationId: INVITATION_ID,
     organizationId: ORGANIZATION_ID,
     email: 'invitee@example.com',
     role: 'member',
@@ -92,7 +101,13 @@ describe('PostgresOrganizationInvitationRepository', () => {
     expect(result).toEqual({ kind: 'created', organizationName: 'Acme' });
 
     const statements = recorded.map(({ text }) => text.trim().split(/\s+/)[0]);
-    expect(statements).toEqual(['SELECT', 'SELECT', 'UPDATE', 'INSERT']);
+    expect(statements).toEqual([
+      'SELECT',
+      'SELECT',
+      'UPDATE',
+      'INSERT',
+      'INSERT',
+    ]);
 
     const close = recorded[2];
     expect(close?.text).toContain('consumed_at IS NULL');
@@ -105,7 +120,7 @@ describe('PostgresOrganizationInvitationRepository', () => {
     const insert = recorded[3];
     expect(insert?.text).toContain('INSERT INTO organization_invitations');
     expect(insert?.values).toEqual([
-      'oiv_01J00000000000000000000000',
+      INVITATION_ID,
       ORGANIZATION_ID,
       'invitee@example.com',
       'member',
@@ -244,6 +259,7 @@ describe('PostgresOrganizationInvitationRepository acceptance', () => {
           ? []
           : [
               {
+                id: INVITATION_ID,
                 organization_id: ORGANIZATION_ID,
                 email: 'invitee@example.com',
                 role: 'member',
@@ -441,5 +457,71 @@ describe('PostgresOrganizationInvitationRepository acceptance', () => {
       code: 'INTERNAL_ERROR',
       message: 'Identity store is unavailable',
     });
+  });
+
+  it('records an acceptance with the role the membership actually took', async () => {
+    const recorded: RecordedQuery[] = [];
+    await new PostgresOrganizationInvitationRepository(
+      client(acceptRows({ grantedRole: 'admin' }), recorded),
+    ).acceptInvitation(acceptInput());
+
+    const write = recorded.find(({ text }) =>
+      text.includes('INSERT INTO organization_audit_events'),
+    );
+    expect(write?.values[3]).toBe('invitation.accepted');
+    expect(write?.values[6]).toBe(INVITATION_ID);
+    expect(write?.values[8]).toBe(JSON.stringify({ role: 'admin' }));
+  });
+
+  it('records nothing for a token it refuses', async () => {
+    const recorded: RecordedQuery[] = [];
+    await new PostgresOrganizationInvitationRepository(
+      client(acceptRows({ noInvitation: true }), recorded),
+    ).acceptInvitation(acceptInput());
+
+    expect(
+      recorded.some(({ text }) => text.includes('organization_audit_events')),
+    ).toBe(false);
+  });
+});
+
+describe('PostgresOrganizationInvitationRepository audit trail', () => {
+  function auditWrite(recorded: RecordedQuery[]) {
+    return recorded.find(({ text }) =>
+      text.includes('INSERT INTO organization_audit_events'),
+    );
+  }
+
+  it('records a first invitation as sent, labelled by the invited email', async () => {
+    const recorded: RecordedQuery[] = [];
+    await new PostgresOrganizationInvitationRepository(
+      client(rows({ activeMembership: false }), recorded),
+    ).createInvitation(input());
+
+    expect(auditWrite(recorded)?.values).toEqual([
+      expect.stringMatching(/^oae_[0-9A-HJKMNP-TV-Z]{26}$/),
+      ORGANIZATION_ID,
+      USER_ID,
+      'invitation.sent',
+      'applied',
+      'invitation',
+      INVITATION_ID,
+      'invitee@example.com',
+      JSON.stringify({ role: 'member' }),
+      'req_01J00000000000000000000000',
+      NOW,
+    ]);
+  });
+
+  it('records a resend separately from the invitation it superseded', async () => {
+    const recorded: RecordedQuery[] = [];
+    await new PostgresOrganizationInvitationRepository(
+      client(
+        rows({ activeMembership: false, supersededOpenInvitation: true }),
+        recorded,
+      ),
+    ).createInvitation(input());
+
+    expect(auditWrite(recorded)?.values[3]).toBe('invitation.resent');
   });
 });

@@ -11,6 +11,9 @@ import type {
   RotateOrganizationApiKeyRecordResult,
 } from '../application/organization-api-key.port';
 
+import type { OrganizationAuditStamp } from '../domain/organization-audit-event';
+
+import { recordOrganizationAuditEvent } from './organization-audit-event.store';
 import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
 
 /**
@@ -337,6 +340,25 @@ export class PostgresOrganizationApiKeyRepository
           throw identityStoreError('Identity data is invalid');
         }
 
+        await recordOrganizationAuditEvent(
+          transaction,
+          {
+            organizationId: input.organizationId,
+            actorUserAccountId: input.actorUserId,
+            requestId: input.context.requestId,
+            occurredAt: input.now,
+          } satisfies Omit<OrganizationAuditStamp, 'id'>,
+          {
+            action: 'api_key.rotated',
+            apiKeyId: input.apiKeyId,
+            name,
+            replacementId: input.replacementId,
+            replacementKeyPrefix: input.keyPrefix,
+            scopes,
+            allowedEnvironments,
+          },
+        );
+
         return {
           kind: 'rotated' as const,
           retiredKeyHash,
@@ -403,6 +425,28 @@ export class PostgresOrganizationApiKeyRepository
         const key = mapListRow({ ...row, status: 'revoked' });
         if (key === undefined) {
           throw identityStoreError('Identity data is invalid');
+        }
+
+        // Only the request that actually withdrew the key is an act. The
+        // repeat that finds it already withdrawn changed nothing, and a trail
+        // that records deliveries is diluted by the retries this boundary
+        // deliberately invites.
+        if (row.status === 'active') {
+          await recordOrganizationAuditEvent(
+            transaction,
+            {
+              organizationId: input.organizationId,
+              actorUserAccountId: input.actorUserId,
+              requestId: input.context.requestId,
+              occurredAt: input.now,
+            } satisfies Omit<OrganizationAuditStamp, 'id'>,
+            {
+              action: 'api_key.revoked',
+              apiKeyId: key.apiKeyId,
+              name: key.name,
+              keyPrefix: key.keyPrefix,
+            },
+          );
         }
 
         return { kind: 'revoked' as const, keyHash, key };
@@ -509,6 +553,24 @@ export class PostgresOrganizationApiKeyRepository
         if (createdAt === undefined) {
           throw identityStoreError('Identity data is invalid');
         }
+
+        await recordOrganizationAuditEvent(
+          transaction,
+          {
+            organizationId: input.organizationId,
+            actorUserAccountId: input.actorUserId,
+            requestId: input.context.requestId,
+            occurredAt: createdAt,
+          } satisfies Omit<OrganizationAuditStamp, 'id'>,
+          {
+            action: 'api_key.created',
+            apiKeyId: input.apiKeyId,
+            name: input.name,
+            keyPrefix: input.keyPrefix,
+            scopes: input.scopes,
+            allowedEnvironments: input.allowedEnvironments,
+          },
+        );
 
         return { kind: 'created' as const, createdAt };
       });

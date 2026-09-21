@@ -60,12 +60,14 @@ class FakePostgres implements PostgresIdentityClient {
   queries: Array<{ text: string; values: readonly unknown[] }> = [];
   result: readonly unknown[] = [membershipRow];
   shouldFail = false;
+  /** Fails only the non-transactional path, which is where a denial is recorded. */
+  failDirectQuery = false;
   transactionRows: readonly (readonly unknown[])[] = [];
   transactionQueries: Array<{ text: string; values: readonly unknown[] }> = [];
 
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]> {
     this.queries.push({ text, values });
-    if (this.shouldFail) {
+    if (this.shouldFail || this.failDirectQuery) {
       return Promise.reject(new Error('database unavailable'));
     }
     return Promise.resolve(this.result);
@@ -297,7 +299,12 @@ describe('PostgresOrganizationMembershipRepository', () => {
     expect(client.transactionQueries[0]?.text).toContain('FOR UPDATE');
     expect(client.transactionQueries[1]?.text).toContain('FOR UPDATE');
     expect(client.transactionQueries[1]?.text).toContain('ORDER BY');
-    expect(client.transactionQueries.at(-1)?.text).toContain('UPDATE');
+    expect(client.transactionQueries.at(-2)?.text).toContain('UPDATE');
+    // The audit event shares the mutation's transaction, so a failure to
+    // record it takes the role change down with it.
+    expect(client.transactionQueries.at(-1)?.text).toContain(
+      'INSERT INTO organization_audit_events',
+    );
   });
 
   it('rejects demoting the last active owner with a conflict', async () => {
@@ -373,7 +380,155 @@ describe('PostgresOrganizationMembershipRepository', () => {
       role: 'owner',
       status: 'active',
     });
+    expect(client.transactionQueries.at(-3)?.text).toContain('UPDATE');
     expect(client.transactionQueries.at(-2)?.text).toContain('UPDATE');
-    expect(client.transactionQueries.at(-1)?.text).toContain('UPDATE');
+    expect(client.transactionQueries.at(-1)?.text).toContain(
+      'INSERT INTO organization_audit_events',
+    );
+  });
+});
+
+describe('PostgresOrganizationMembershipRepository audit trail', () => {
+  function auditWrites(client: FakePostgres) {
+    return client.queries.filter(({ text }) =>
+      text.includes('INSERT INTO organization_audit_events'),
+    );
+  }
+
+  it('records a refusal outside the transaction that rolled back', async () => {
+    const client = new FakePostgres();
+    client.result = [];
+    client.transactionRows = [
+      [organizationRow],
+      [
+        { ...callerOwnerRow, role: 'admin' },
+        { ...targetMemberRow, role: 'owner' },
+      ],
+    ];
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(client).changeRole({
+        ...mutationInput(),
+        role: 'member',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    // Not in the transaction: that transaction rolled back, and the record
+    // written inside it would have gone with it.
+    expect(
+      client.transactionQueries.some(({ text }) =>
+        text.includes('organization_audit_events'),
+      ),
+    ).toBe(false);
+
+    const [write] = auditWrites(client);
+    expect(write?.values).toEqual([
+      expect.stringMatching(/^oae_[0-9A-HJKMNP-TV-Z]{26}$/),
+      'org_acme',
+      membershipRow.user_account_id,
+      'membership.role_changed',
+      'denied',
+      'membership',
+      'usr_bob',
+      'bob',
+      JSON.stringify({
+        fromRole: 'owner',
+        toRole: 'member',
+        denial: 'insufficient_authority',
+      }),
+      'req_01J00000000000000000000000',
+      mutationContext.receivedAt,
+    ]);
+  });
+
+  it('records the zero-owner conflict as a refusal against a real target', async () => {
+    const client = new FakePostgres();
+    client.result = [];
+    client.transactionRows = [
+      [organizationRow],
+      [callerOwnerRow, { ...targetMemberRow, role: 'owner' }],
+      [{ owner_count: 1 }],
+    ];
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(client).changeRole({
+        ...mutationInput(),
+        role: 'member',
+      }),
+    ).rejects.toMatchObject({ code: 'ORGANIZATION_OWNER_REQUIRED' });
+
+    const [write] = auditWrites(client);
+    expect(write?.values[4]).toBe('denied');
+    expect(write?.values[8]).toContain('owner_required');
+  });
+
+  it('records nothing when the caller does not belong to the organization', async () => {
+    const client = new FakePostgres();
+    client.result = [];
+    client.transactionRows = [[organizationRow], [targetMemberRow]];
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(client).disable(
+        mutationInput(),
+      ),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    expect(auditWrites(client)).toHaveLength(0);
+  });
+
+  it('records nothing when the target is unknown', async () => {
+    const client = new FakePostgres();
+    client.result = [];
+    client.transactionRows = [[organizationRow], [callerOwnerRow]];
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(client).disable(
+        mutationInput('nobody'),
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    expect(auditWrites(client)).toHaveLength(0);
+  });
+
+  it('records nothing when a repeat finds the membership already disabled', async () => {
+    const client = new FakePostgres();
+    client.result = [];
+    client.transactionRows = [
+      [organizationRow],
+      [callerOwnerRow, { ...targetMemberRow, membership_status: 'disabled' }],
+    ];
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(client).disable(
+        mutationInput(),
+      ),
+    ).resolves.toMatchObject({ status: 'disabled' });
+
+    expect(auditWrites(client)).toHaveLength(0);
+    expect(
+      client.transactionQueries.some(({ text }) =>
+        text.includes('organization_audit_events'),
+      ),
+    ).toBe(false);
+  });
+
+  it('still returns the refusal when the refusal cannot be recorded', async () => {
+    const client = new FakePostgres();
+    client.failDirectQuery = true;
+    client.transactionRows = [
+      [organizationRow],
+      [
+        { ...callerOwnerRow, role: 'admin' },
+        { ...targetMemberRow, role: 'owner' },
+      ],
+    ];
+
+    // An audit outage must not become an authorization outage.
+    await expect(
+      new PostgresOrganizationMembershipRepository(client).changeRole({
+        ...mutationInput(),
+        role: 'member',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });

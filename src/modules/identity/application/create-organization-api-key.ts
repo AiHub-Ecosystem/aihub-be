@@ -172,6 +172,7 @@ export class CreateOrganizationApiKey {
     const result = await this.apiKeys.createApiKey({
       context: input.context,
       organizationId: input.organizationId,
+      actorUserId: input.userId,
       apiKeyId: generated.id,
       keyHash: generated.hash,
       keyPrefix: generated.prefix,
