@@ -102,10 +102,11 @@ describe('Organization membership HTTP flow', () => {
     headers: Record<string, string> = {
       authorization: 'Bearer valid.token.value',
     },
+    url = '/v1/organizations/me/members',
   ) {
     return app.inject({
       method: 'GET',
-      url: '/v1/organizations/me/members',
+      url,
       headers,
     });
   }
@@ -148,6 +149,39 @@ describe('Organization membership HTTP flow', () => {
     );
   });
 
+  it('allows an admin to read the same redacted roster shape', async () => {
+    membership.listRoster.mockResolvedValue([
+      {
+        organizationId: 'org_admin',
+        name: 'Admin Org',
+        status: 'active',
+        membershipRole: 'admin',
+        members: [
+          { username: 'alice', role: 'owner' },
+          { username: 'carol', role: 'admin' },
+        ],
+      },
+    ]);
+
+    const response = await rosterRequest();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data: {
+        organizations: [
+          {
+            organization_id: 'org_admin',
+            membership: { role: 'admin' },
+            members: [
+              { username: 'alice', role: 'owner' },
+              { username: 'carol', role: 'admin' },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
   it('returns an empty roster for an authenticated account without memberships', async () => {
     membership.listRoster.mockResolvedValue([]);
 
@@ -166,6 +200,39 @@ describe('Organization membership HTTP flow', () => {
     expect(response.statusCode).toBe(401);
     expect(response.headers['www-authenticate']).toBe('Bearer');
     expect(membership.listRoster).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed Bearer token before reading memberships', async () => {
+    const response = await rosterRequest({
+      authorization: 'Bearer malformed-token',
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.headers['www-authenticate']).toBe('Bearer');
+    expect(membership.listRoster).not.toHaveBeenCalled();
+  });
+
+  it('rejects alternate query token sources even with a valid Bearer token', async () => {
+    const response = await rosterRequest(
+      { authorization: 'Bearer valid.token.value' },
+      '/v1/organizations/me/members?access_token=alternate',
+    );
+
+    expect(response.statusCode).toBe(401);
+    expect(response.headers['www-authenticate']).toBe('Bearer');
+    expect(membership.listRoster).not.toHaveBeenCalled();
+  });
+
+  it('ignores client-supplied tenant and user selectors', async () => {
+    const response = await rosterRequest(
+      { authorization: 'Bearer valid.token.value' },
+      '/v1/organizations/me/members?organization_id=org_other&user_id=usr_other',
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(membership.listRoster).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: USER_ID }),
+    );
   });
 
   it('fails closed when the membership store is unavailable', async () => {

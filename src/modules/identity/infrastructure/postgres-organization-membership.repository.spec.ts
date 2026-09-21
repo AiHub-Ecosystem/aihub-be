@@ -89,6 +89,12 @@ describe('PostgresOrganizationMembershipRepository', () => {
       membershipRow.user_account_id,
       membershipRow.organization_id,
     ]);
+    expect(client.queries[0]?.text).toContain(
+      'membership.user_account_id = $1',
+    );
+    expect(client.queries[0]?.text).toContain(
+      'membership.organization_id = $2',
+    );
   });
 
   it('distinguishes a disabled membership internally', async () => {
@@ -117,7 +123,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
     ).resolves.toEqual({ kind: 'missing' });
   });
 
-  it('groups the active roster in deterministic query order', async () => {
+  it('uses active-only filters and preserves deterministic one-query reads', async () => {
     const client = new FakePostgres();
     client.result = rosterRows;
 
