@@ -24,6 +24,10 @@ import {
   ResetPasswordRequestSchema,
   VerifyEmailRequestSchema,
 } from '../contracts/auth/local-auth';
+import {
+  CreateOrganizationInvitationRequestSchema,
+  CreateOrganizationInvitationResponseSchema,
+} from '../contracts/organization/invitation';
 import { OrganizationRosterResponseSchema } from '../contracts/organization/membership';
 import {
   MintSandboxAssertionRequestSchema,
@@ -237,6 +241,8 @@ const AUTH_RESET_PASSWORD_PATH = '/v1/auth/reset-password';
 const AUTH_REFRESH_PATH = '/v1/auth/refresh';
 const AUTH_LOGOUT_PATH = '/v1/auth/logout';
 const ORGANIZATION_ROSTER_PATH = '/v1/organizations/me/members';
+const ORGANIZATION_INVITATION_PATH =
+  '/v1/organizations/{organization_id}/invitations';
 
 function authErrorResponses(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
@@ -432,6 +438,53 @@ function localAuthPathItems(
   };
 }
 
+/**
+ * Described by hand for the same reason as the roster: it is a management
+ * route, not a catalogued proxy operation.
+ */
+function organizationInvitationPathItem(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, unknown> {
+  return {
+    post: {
+      operationId: 'organizations.invitations.create',
+      summary: 'Invite a person to an organization',
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        {
+          name: 'organization_id',
+          in: 'path',
+          required: true,
+          description: 'The organization the invited person is invited to.',
+          schema: { type: 'string', minLength: 1 },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: CreateOrganizationInvitationRequestSchema,
+          },
+        },
+      },
+      responses: {
+        '201': {
+          description:
+            'Pending organization invitation created; the single-use invite credential reaches the invited person by email only',
+          content: {
+            'application/json': {
+              schema: CreateOrganizationInvitationResponseSchema,
+            },
+          },
+        },
+        ...authErrorResponses(groupedErrors, [400, 401, 403, 409, 500, 503]),
+      },
+    },
+  };
+}
+
 function organizationRosterPathItem(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
 ): Record<string, unknown> {
@@ -540,6 +593,8 @@ export function buildOpenApiDocument(version: string): unknown {
 
   paths[SANDBOX_ASSERTION_PATH] = sandboxAssertionPathItem(groupedErrors);
   paths[ORGANIZATION_ROSTER_PATH] = organizationRosterPathItem(groupedErrors);
+  paths[ORGANIZATION_INVITATION_PATH] =
+    organizationInvitationPathItem(groupedErrors);
   Object.assign(paths, localAuthPathItems(groupedErrors));
 
   const errorResponses: Record<string, unknown> = {};

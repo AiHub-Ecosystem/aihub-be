@@ -8,15 +8,14 @@ import {
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
-import { AppError } from '../../../common/errors/app-error';
-import { createRequestContext } from '../../../common/request-context/request-context.factory';
-import { isRequestId } from '../../../common/request-context/request-id';
 import type { OrganizationRosterResponse } from '../../../contracts/organization/membership';
 import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
 import {
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
 } from '../application/organization-membership.port';
+
+import { bearerRequestContext } from './bearer-request-context';
 
 @Controller()
 @UseGuards(UserAccessJwtGuard)
@@ -31,23 +30,7 @@ export class OrganizationMembershipController {
   async roster(
     @Req() request: FastifyRequest,
   ): Promise<OrganizationRosterResponse> {
-    const userId = request.aihubUser?.userId;
-    if (userId === undefined) {
-      throw new AppError({
-        code: 'INTERNAL_ERROR',
-        message: 'Authenticated user context is missing',
-        retryable: false,
-      });
-    }
-
-    const requestId = isRequestId(request.id) ? request.id : String(request.id);
-    const context = createRequestContext({
-      requestId,
-      receivedAt: new Date(),
-      deadlineMs: 5_000,
-      userId,
-      scopes: [],
-    });
+    const { context, requestId, userId } = bearerRequestContext(request);
     const organizations = await this.membership.listRoster({ context, userId });
 
     return {

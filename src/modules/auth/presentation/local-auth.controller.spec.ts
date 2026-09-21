@@ -205,6 +205,10 @@ class SenderFake implements EmailSenderPort {
     readonly expiresAt: Date;
   }> = [];
 
+  async sendOrganizationInviteEmail(): Promise<void> {
+    throw new Error('local auth does not send organization invitations');
+  }
+
   async sendVerificationEmail(): Promise<void> {
     if (this.fail) {
       throw new Error('provider failed');

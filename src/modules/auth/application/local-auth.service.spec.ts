@@ -223,6 +223,12 @@ class FakeSender implements EmailSenderPort {
     this.sent.push(input);
   }
 
+  // The invitation email belongs to the identity module's invite flow; local
+  // auth never sends it, so this fake only satisfies the port.
+  async sendOrganizationInviteEmail(): Promise<void> {
+    throw new Error('local auth does not send organization invitations');
+  }
+
   async sendPasswordResetEmail(input: PasswordResetEmailInput): Promise<void> {
     if (this.fail) {
       throw new Error('provider failure');

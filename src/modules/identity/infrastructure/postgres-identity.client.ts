@@ -2,12 +2,26 @@ import { Pool } from 'pg';
 
 import type { PostgresIdentityClient } from './postgres-api-key.repository';
 
+export interface PostgresIdentityQueryClient {
+  query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
+}
+
+export interface PostgresIdentityTransactionalClient
+  extends PostgresIdentityQueryClient {
+  transaction<T>(
+    callback: (client: PostgresIdentityQueryClient) => Promise<T>,
+  ): Promise<T>;
+}
+
 export function createPostgresIdentityClient(
   databaseUrl: string,
-): PostgresIdentityClient {
+): PostgresIdentityClient & PostgresIdentityTransactionalClient {
   if (databaseUrl.trim().length === 0) {
     return {
       query: async () => {
+        throw new Error('DATABASE_URL is missing');
+      },
+      transaction: async () => {
         throw new Error('DATABASE_URL is missing');
       },
       close: async () => undefined,
@@ -30,6 +44,33 @@ export function createPostgresIdentityClient(
         ...values,
       ]);
       return result.rows;
+    },
+    async transaction<T>(
+      callback: (client: PostgresIdentityQueryClient) => Promise<T>,
+    ): Promise<T> {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const result = await callback({
+          query: async (text: string, values: readonly unknown[]) => {
+            const response = await client.query<Record<string, unknown>>(text, [
+              ...values,
+            ]);
+            return response.rows;
+          },
+        });
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          // Preserve the original database failure.
+        }
+        throw error;
+      } finally {
+        client.release();
+      }
     },
     close: async () => {
       await pool.end();

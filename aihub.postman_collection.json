@@ -1,7 +1,7 @@
 {
   "item": [
     {
-      "id": "d7c95610-a4ce-405b-934a-37685fe375d0",
+      "id": "4001da43-9fcd-4c82-96d0-9c2ed30787d3",
       "name": "writing.task1.grade",
       "request": {
         "name": "writing.task1.grade",
@@ -74,7 +74,7 @@
       }
     },
     {
-      "id": "fe4cc03e-eabe-42b6-b328-ced07d97e132",
+      "id": "7e75b483-b935-4f0c-a627-e0195ef42575",
       "name": "writing.task2.grade",
       "request": {
         "name": "writing.task2.grade",
@@ -147,7 +147,7 @@
       }
     },
     {
-      "id": "3c75f7b3-b870-4cbd-a46e-8974f546f060",
+      "id": "a90d9806-6e97-402f-bb37-ab88344f19ea",
       "name": "speaking.grading",
       "request": {
         "name": "speaking.grading",
@@ -257,7 +257,7 @@
       }
     },
     {
-      "id": "adf9626f-9f2d-46cd-94fb-e9ce4a95e8f5",
+      "id": "734946d4-d7b1-4b92-8d05-58638ab0b22e",
       "name": "speaking.grading-json",
       "request": {
         "name": "speaking.grading-json",
@@ -330,7 +330,7 @@
       }
     },
     {
-      "id": "baf5f5d2-042d-4af3-8195-a1596970ff8d",
+      "id": "45bd8ed6-d049-4fd6-812d-a2b9345a25ee",
       "name": "Mint a sandbox user assertion",
       "request": {
         "name": "Mint a sandbox user assertion",
@@ -394,7 +394,7 @@
       }
     },
     {
-      "id": "7d644f7e-271a-4765-be41-52dbf9f33287",
+      "id": "d4e4b682-7e45-40f5-8b97-1bf2a87be9bb",
       "name": "List the authenticated user organization roster",
       "request": {
         "name": "List the authenticated user organization roster",
@@ -434,7 +434,68 @@
       }
     },
     {
-      "id": "4d71aa54-dc11-421f-8ecb-e139025670cc",
+      "id": "816da2c9-6f40-4633-a6a8-ad957596ed02",
+      "name": "Invite a person to an organization",
+      "request": {
+        "name": "Invite a person to an organization",
+        "description": {},
+        "url": {
+          "path": ["v1", "organizations", ":organization_id", "invitations"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": [
+            {
+              "disabled": false,
+              "type": "any",
+              "value": "<string>",
+              "key": "organization_id",
+              "description": "(Required) The organization the invited person is invited to."
+            }
+          ]
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"<string>\",\n  \"role\": \"<string>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "cd24c71f-a28d-4432-8cb2-e344e4226525",
       "name": "Register a local AIHUB account",
       "request": {
         "name": "Register a local AIHUB account",
@@ -479,7 +540,7 @@
       }
     },
     {
-      "id": "3f247d07-57cc-483a-b7ed-7d69344c9dd2",
+      "id": "b0e2a430-00b7-4a7f-a9e9-4fe084430e0f",
       "name": "Issue a User Access JWT",
       "request": {
         "name": "Issue a User Access JWT",
@@ -524,7 +585,7 @@
       }
     },
     {
-      "id": "59b19185-1a5a-460c-8cf0-c16b655b218f",
+      "id": "ac353c05-2530-41af-bb3f-997228c57673",
       "name": "Verify a local account email address",
       "request": {
         "name": "Verify a local account email address",
@@ -569,7 +630,7 @@
       }
     },
     {
-      "id": "487c9a44-9f84-4a11-bc5f-1a87173911b2",
+      "id": "81e07c4b-081d-4ef0-a928-f58788cbd1bd",
       "name": "Request a verification email resend",
       "request": {
         "name": "Request a verification email resend",
@@ -614,7 +675,7 @@
       }
     },
     {
-      "id": "0973583d-b188-4c02-9d7b-e18a5021a85a",
+      "id": "40ee3927-a035-4d1b-a0f9-b4326b85b090",
       "name": "Request a password reset email",
       "request": {
         "name": "Request a password reset email",
@@ -659,7 +720,7 @@
       }
     },
     {
-      "id": "152aeb87-e96a-461b-b7e3-25c75c099b0a",
+      "id": "8725f335-0029-4d42-afc0-dd367be23fc1",
       "name": "Reset a local account password",
       "request": {
         "name": "Reset a local account password",
@@ -704,7 +765,7 @@
       }
     },
     {
-      "id": "b42a0b46-c9e3-49dc-bdd6-5437f8c239fb",
+      "id": "343ab410-a4cb-4c80-89fe-63bbc2849ecf",
       "name": "Rotate a refresh session and issue a User Access JWT",
       "request": {
         "name": "Rotate a refresh session and issue a User Access JWT",
@@ -771,7 +832,7 @@
       }
     },
     {
-      "id": "8d76ec45-7fa3-408d-97a5-6fd678a5f517",
+      "id": "6066df79-04f6-4953-8f54-ffb9896a29a2",
       "name": "Revoke the current refresh session",
       "request": {
         "name": "Revoke the current refresh session",
@@ -1789,7 +1850,7 @@
     ]
   },
   "info": {
-    "_postman_id": "79b20a9a-c95a-4d5e-8c48-9eb5fefe92c6",
+    "_postman_id": "ee9c6d0f-a26e-4111-83b6-a092602ca4c9",
     "name": "AIHUB Writing API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Generated by `pnpm generate:postman` from openapi.json — do not hand-edit. The \"D1 handover test cases\" folder is the D2 handover artifact required by docs/aihub_deliverable_1_api_contract_schema.md §G; it is not a CI regression suite.",

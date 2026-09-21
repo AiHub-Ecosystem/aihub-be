@@ -1,6 +1,7 @@
 import type { ResendRuntimeSecrets } from '../../secrets/application/runtime-secret-provider.port';
 import type {
   EmailSenderPort,
+  OrganizationInviteEmailInput,
   PasswordResetEmailInput,
   VerificationEmailInput,
 } from '../application/email-sender.port';
@@ -72,6 +73,36 @@ export class ResendEmailSender implements EmailSenderPort {
         subject: 'Reset your AIHUB password',
         text: [
           'Use this one-time password reset token to change your AIHUB password:',
+          input.token,
+          '',
+          `This token expires at ${input.expiresAt.toISOString()}.`,
+        ].join('\n'),
+      }),
+      signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      throw new Error('Resend email delivery failed');
+    }
+  }
+
+  async sendOrganizationInviteEmail(
+    input: OrganizationInviteEmailInput,
+  ): Promise<void> {
+    const response = await this.fetch(RESEND_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${this.secrets.apiKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: this.from,
+        to: [input.email],
+        subject: `You are invited to ${input.organizationName} on AIHUB`,
+        text: [
+          `You are invited to join ${input.organizationName} on AIHUB as ${input.role}.`,
+          '',
+          'Use this one-time invitation token to accept:',
           input.token,
           '',
           `This token expires at ${input.expiresAt.toISOString()}.`,

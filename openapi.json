@@ -273,7 +273,7 @@
         }
       },
       "Error409": {
-        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE",
+        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE | ORGANIZATION_MEMBER_EXISTS",
         "content": {
           "application/json": {
             "schema": {
@@ -294,6 +294,10 @@
                         },
                         {
                           "const": "AUTH_IDENTITY_UNAVAILABLE",
+                          "type": "string"
+                        },
+                        {
+                          "const": "ORGANIZATION_MEMBER_EXISTS",
                           "type": "string"
                         }
                       ]
@@ -2915,6 +2919,164 @@
           },
           "500": {
             "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
+    "/v1/organizations/{organization_id}/invitations": {
+      "post": {
+        "operationId": "organizations.invitations.create",
+        "summary": "Invite a person to an organization",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization the invited person is invited to.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["email", "role"],
+                "properties": {
+                  "email": {
+                    "minLength": 3,
+                    "maxLength": 320,
+                    "type": "string"
+                  },
+                  "role": {
+                    "anyOf": [
+                      {
+                        "const": "owner",
+                        "type": "string"
+                      },
+                      {
+                        "const": "admin",
+                        "type": "string"
+                      },
+                      {
+                        "const": "member",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Pending organization invitation created; the single-use invite credential reaches the invited person by email only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "invitation_id",
+                        "organization_id",
+                        "email",
+                        "role",
+                        "status",
+                        "expires_at"
+                      ],
+                      "properties": {
+                        "invitation_id": {
+                          "pattern": "^oiv_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "organization_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "email": {
+                          "minLength": 3,
+                          "maxLength": 320,
+                          "type": "string"
+                        },
+                        "role": {
+                          "anyOf": [
+                            {
+                              "const": "owner",
+                              "type": "string"
+                            },
+                            {
+                              "const": "admin",
+                              "type": "string"
+                            },
+                            {
+                              "const": "member",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "const": "pending",
+                          "type": "string"
+                        },
+                        "expires_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
           }
         }
       }

@@ -75,4 +75,53 @@ describe('ResendEmailSender', () => {
     expect(body).toContain('2026-09-20T01:00:00.000Z');
     expect(body).not.toContain('http');
   });
+
+  it('sends the invite token, organization, and role without constructing a frontend URL', async () => {
+    const calls: Array<{ input: string; init: RequestInit | undefined }> = [];
+    const sender = new ResendEmailSender(
+      { apiKey: 'resend-secret' },
+      'AIHUB <no-reply@example.com>',
+      async (input, init) => {
+        calls.push({ input, init });
+        return { ok: true };
+      },
+    );
+
+    await sender.sendOrganizationInviteEmail({
+      email: 'invitee@example.com',
+      organizationName: 'Acme',
+      role: 'member',
+      token: 'invite-token',
+      expiresAt: new Date('2026-09-21T00:00:00.000Z'),
+    });
+
+    const body = String(calls[0]?.init?.body);
+    expect(JSON.parse(body)).toMatchObject({
+      subject: 'You are invited to Acme on AIHUB',
+      to: ['invitee@example.com'],
+    });
+    expect(body).toContain('invite-token');
+    expect(body).toContain('member');
+    expect(body).toContain('2026-09-21T00:00:00.000Z');
+    // The acceptance endpoint does not exist yet; no URL is guessed here.
+    expect(body).not.toContain('http');
+  });
+
+  it('fails invite delivery without exposing the provider body', async () => {
+    const sender = new ResendEmailSender(
+      { apiKey: 'resend-secret' },
+      'no-reply@example.com',
+      async () => ({ ok: false }),
+    );
+
+    await expect(
+      sender.sendOrganizationInviteEmail({
+        email: 'invitee@example.com',
+        organizationName: 'Acme',
+        role: 'member',
+        token: 'invite-token',
+        expiresAt: new Date(),
+      }),
+    ).rejects.toThrow('Resend email delivery failed');
+  });
 });

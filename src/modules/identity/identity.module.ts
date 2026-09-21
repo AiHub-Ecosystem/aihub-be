@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
 
+import {
+  EMAIL_SENDER,
+  type EmailSenderPort,
+} from '../auth/application/email-sender.port';
 import { AuthModule } from '../auth/auth.module';
 import { GatewayModule } from '../gateway/gateway.module';
 
@@ -13,6 +17,8 @@ import {
   type ApiKeyRepositoryPort,
   type AuthFailureCounterPort,
 } from './application/api-key-authenticator.port';
+import { InviteOrganizationMember } from './application/invite-organization-member';
+import { INVITE_ORGANIZATION_MEMBER } from './application/invite-organization-member.port';
 import { JWKS_CACHE, type JwksCachePort } from './application/jwks-cache.port';
 import {
   JWKS_KEY_PROVIDER,
@@ -23,6 +29,14 @@ import {
   ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
   type OrganizationIdentityConfigRepositoryPort,
 } from './application/organization-identity-config-repository.port';
+import {
+  ORGANIZATION_INVITATION,
+  type OrganizationInvitationPort,
+} from './application/organization-invitation.port';
+import {
+  ORGANIZATION_INVITE_TOKEN,
+  type OrganizationInviteTokenPort,
+} from './application/organization-invite-token.port';
 import {
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
@@ -39,6 +53,7 @@ import {
 } from './application/user-assertion-crypto.port';
 import { UserAssertionVerifier } from './application/user-assertion-verifier';
 import { USER_ASSERTION_VERIFIER } from './application/user-assertion-verifier.port';
+import { CryptoOrganizationInviteToken } from './infrastructure/crypto-organization-invite-token';
 import { EnvSandboxAssertionPolicy } from './infrastructure/env-sandbox-assertion-policy';
 import { JoseSandboxAssertionSigner } from './infrastructure/jose-sandbox-assertion-signer';
 import { JoseUserAssertionCrypto } from './infrastructure/jose-user-assertion-crypto';
@@ -46,12 +61,14 @@ import { JwksKeyProvider } from './infrastructure/jwks-key-provider';
 import { PostgresApiKeyRepository } from './infrastructure/postgres-api-key.repository';
 import { createPostgresIdentityClient } from './infrastructure/postgres-identity.client';
 import { PostgresOrganizationIdentityConfigRepository } from './infrastructure/postgres-organization-identity-config.repository';
+import { PostgresOrganizationInvitationRepository } from './infrastructure/postgres-organization-invitation.repository';
 import { PostgresOrganizationMembershipRepository } from './infrastructure/postgres-organization-membership.repository';
 import {
   RedisAuthFailureCounter,
   RedisIdentityStore,
 } from './infrastructure/redis-identity.store';
 import { ApiKeyGuard } from './presentation/api-key.guard';
+import { OrganizationInvitationController } from './presentation/organization-invitation.controller';
 import { OrganizationMembershipController } from './presentation/organization-membership.controller';
 import { SandboxApiKeyGuard } from './presentation/sandbox-api-key.guard';
 import { SandboxAssertionController } from './presentation/sandbox-assertion.controller';
@@ -60,7 +77,11 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
 @Module({
   // `RateLimitGuard` on the sandbox route consumes the gateway's rate limiter.
   imports: [AuthModule, GatewayModule],
-  controllers: [SandboxAssertionController, OrganizationMembershipController],
+  controllers: [
+    SandboxAssertionController,
+    OrganizationMembershipController,
+    OrganizationInvitationController,
+  ],
   providers: [
     {
       provide: API_KEY_REPOSITORY,
@@ -82,6 +103,38 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
         new PostgresOrganizationMembershipRepository(
           createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
         ),
+    },
+    {
+      provide: ORGANIZATION_INVITATION,
+      useFactory: (): OrganizationInvitationPort =>
+        new PostgresOrganizationInvitationRepository(
+          createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
+        ),
+    },
+    {
+      provide: ORGANIZATION_INVITE_TOKEN,
+      useClass: CryptoOrganizationInviteToken,
+    },
+    {
+      provide: INVITE_ORGANIZATION_MEMBER,
+      useFactory: (
+        membership: OrganizationMembershipPort,
+        invitations: OrganizationInvitationPort,
+        tokenIssuer: OrganizationInviteTokenPort,
+        emailSender: EmailSenderPort,
+      ) =>
+        new InviteOrganizationMember(
+          membership,
+          invitations,
+          tokenIssuer,
+          emailSender,
+        ),
+      inject: [
+        ORGANIZATION_MEMBERSHIP,
+        ORGANIZATION_INVITATION,
+        ORGANIZATION_INVITE_TOKEN,
+        EMAIL_SENDER,
+      ],
     },
     {
       provide: API_KEY_CACHE,

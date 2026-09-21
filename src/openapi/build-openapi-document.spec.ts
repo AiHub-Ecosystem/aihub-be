@@ -40,6 +40,9 @@ const SANDBOX_MINT_PATH = '/v1/sandbox/assertions';
 const SANDBOX_MINT_OPERATION_ID = 'sandbox.assertions.mint';
 const ORGANIZATION_ROSTER_PATH = '/v1/organizations/me/members';
 const ORGANIZATION_ROSTER_OPERATION_ID = 'organizations.me.members.list';
+const ORGANIZATION_INVITATION_PATH =
+  '/v1/organizations/{organization_id}/invitations';
+const ORGANIZATION_INVITATION_OPERATION_ID = 'organizations.invitations.create';
 const AUTH_PATHS = [
   '/v1/auth/register',
   '/v1/auth/login',
@@ -79,6 +82,7 @@ describe('buildOpenApiDocument', () => {
       .filter(
         (operationId) =>
           operationId !== SANDBOX_MINT_OPERATION_ID &&
+          operationId !== ORGANIZATION_INVITATION_OPERATION_ID &&
           !AUTH_OPERATION_IDS.includes(
             operationId as (typeof AUTH_OPERATION_IDS)[number],
           ),
@@ -96,10 +100,42 @@ describe('buildOpenApiDocument', () => {
 
     expect(
       Object.keys(doc.paths).filter((path) => !catalogued.has(path)),
-    ).toEqual([SANDBOX_MINT_PATH, ORGANIZATION_ROSTER_PATH, ...AUTH_PATHS]);
+    ).toEqual([
+      SANDBOX_MINT_PATH,
+      ORGANIZATION_ROSTER_PATH,
+      ORGANIZATION_INVITATION_PATH,
+      ...AUTH_PATHS,
+    ]);
     expect(doc.paths[SANDBOX_MINT_PATH]?.post.operationId).toBe(
       SANDBOX_MINT_OPERATION_ID,
     );
+  });
+
+  it('documents the bearer-authenticated organization invitation route', () => {
+    const operation = build().paths[ORGANIZATION_INVITATION_PATH]?.post;
+
+    expect(operation?.operationId).toBe(ORGANIZATION_INVITATION_OPERATION_ID);
+    expect(operation?.security).toEqual([{ BearerAuth: [] }]);
+    expect(operation?.requestBody).toBeDefined();
+    expect(operation?.responses['201']).toBeDefined();
+    expect(operation?.responses['403']).toBeDefined();
+    expect(operation?.responses['409']).toBeDefined();
+    expect(operation?.responses['503']).toBeDefined();
+    // The raw Organization Invite Token belongs to the invited person.
+    expect(JSON.stringify(operation?.responses['201'])).not.toContain('token');
+  });
+
+  it('documents the organization path parameter for the invitation route', () => {
+    const operation = build().paths[ORGANIZATION_INVITATION_PATH]?.post;
+
+    expect(operation?.parameters).toEqual([
+      { $ref: '#/components/parameters/CorrelationId' },
+      expect.objectContaining({
+        name: 'organization_id',
+        in: 'path',
+        required: true,
+      }),
+    ]);
   });
 
   it('documents the bearer-authenticated organization roster route', () => {
