@@ -6,6 +6,16 @@ const OrganizationMembershipRoleSchema = Type.Union([
   Type.Literal('member'),
 ]);
 
+const OrganizationMembershipMutationRoleSchema = Type.Union([
+  Type.Literal('admin'),
+  Type.Literal('member'),
+]);
+
+const OrganizationMembershipStatusSchema = Type.Union([
+  Type.Literal('active'),
+  Type.Literal('disabled'),
+]);
+
 const OrganizationStatusSchema = Type.Union([
   Type.Literal('active'),
   Type.Literal('suspended'),
@@ -53,4 +63,53 @@ export const OrganizationRosterResponseSchema = Type.Object(
 
 export type OrganizationRosterResponse = Static<
   typeof OrganizationRosterResponseSchema
+>;
+
+export const OrganizationMembershipMutationRequestSchema = Type.Object(
+  {
+    role: OrganizationMembershipMutationRoleSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type OrganizationMembershipMutationRequest = Static<
+  typeof OrganizationMembershipMutationRequestSchema
+>;
+
+export const EmptyOrganizationMembershipMutationRequestSchema = Type.Object(
+  {},
+  { additionalProperties: false },
+);
+
+export type EmptyOrganizationMembershipMutationRequest = Static<
+  typeof EmptyOrganizationMembershipMutationRequestSchema
+>;
+
+const OrganizationMembershipMutationDataSchema = Type.Object(
+  {
+    organization_id: Type.String({ minLength: 1 }),
+    username: Type.String({ minLength: 1 }),
+    role: OrganizationMembershipRoleSchema,
+    status: OrganizationMembershipStatusSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const OrganizationMembershipMutationResponseSchema = Type.Object(
+  {
+    data: OrganizationMembershipMutationDataSchema,
+    meta: Type.Object(
+      {
+        request_id: Type.String({
+          pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
+        }),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export type OrganizationMembershipMutationResponse = Static<
+  typeof OrganizationMembershipMutationResponseSchema
 >;

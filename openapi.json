@@ -277,7 +277,7 @@
         }
       },
       "Error409": {
-        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE | ORGANIZATION_MEMBER_EXISTS",
+        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE | ORGANIZATION_MEMBER_EXISTS | ORGANIZATION_OWNER_REQUIRED",
         "content": {
           "application/json": {
             "schema": {
@@ -302,6 +302,10 @@
                         },
                         {
                           "const": "ORGANIZATION_MEMBER_EXISTS",
+                          "type": "string"
+                        },
+                        {
+                          "const": "ORGANIZATION_OWNER_REQUIRED",
                           "type": "string"
                         }
                       ]
@@ -3183,6 +3187,420 @@
           },
           "403": {
             "$ref": "#/components/responses/Error403"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
+    "/v1/organizations/{organization_id}/members/{username}": {
+      "patch": {
+        "operationId": "organizations.members.change_role",
+        "summary": "Change an organization member role",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization whose membership is being changed.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "description": "The immutable public username of the target member.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["role"],
+                "properties": {
+                  "role": {
+                    "anyOf": [
+                      {
+                        "const": "admin",
+                        "type": "string"
+                      },
+                      {
+                        "const": "member",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The resulting organization membership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "organization_id",
+                        "username",
+                        "role",
+                        "status"
+                      ],
+                      "properties": {
+                        "organization_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "username": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "role": {
+                          "anyOf": [
+                            {
+                              "const": "owner",
+                              "type": "string"
+                            },
+                            {
+                              "const": "admin",
+                              "type": "string"
+                            },
+                            {
+                              "const": "member",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "active",
+                              "type": "string"
+                            },
+                            {
+                              "const": "disabled",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "organizations.members.disable",
+        "summary": "Disable an organization member",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization whose membership is being changed.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "description": "The immutable public username of the target member.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resulting organization membership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "organization_id",
+                        "username",
+                        "role",
+                        "status"
+                      ],
+                      "properties": {
+                        "organization_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "username": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "role": {
+                          "anyOf": [
+                            {
+                              "const": "owner",
+                              "type": "string"
+                            },
+                            {
+                              "const": "admin",
+                              "type": "string"
+                            },
+                            {
+                              "const": "member",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "active",
+                              "type": "string"
+                            },
+                            {
+                              "const": "disabled",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
+    "/v1/organizations/{organization_id}/members/{username}/transfer": {
+      "post": {
+        "operationId": "organizations.members.transfer",
+        "summary": "Transfer organization ownership",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization whose membership is being changed.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "description": "The immutable public username of the target member.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resulting organization membership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "organization_id",
+                        "username",
+                        "role",
+                        "status"
+                      ],
+                      "properties": {
+                        "organization_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "username": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "role": {
+                          "anyOf": [
+                            {
+                              "const": "owner",
+                              "type": "string"
+                            },
+                            {
+                              "const": "admin",
+                              "type": "string"
+                            },
+                            {
+                              "const": "member",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "active",
+                              "type": "string"
+                            },
+                            {
+                              "const": "disabled",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
           },
           "500": {
             "$ref": "#/components/responses/Error500"

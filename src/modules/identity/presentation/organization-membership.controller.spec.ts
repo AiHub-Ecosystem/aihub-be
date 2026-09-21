@@ -15,6 +15,10 @@ import {
   type UserAccessTokenVerifierPort,
 } from '../../auth/application/user-access-token.port';
 import {
+  ORGANIZATION_MEMBERSHIP_MUTATION,
+  type OrganizationMembershipMutationPort,
+} from '../application/organization-membership-mutation.port';
+import {
   type ListRosterInput,
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
@@ -22,6 +26,8 @@ import {
 } from '../application/organization-membership.port';
 
 const USER_ID = 'usr_01J00000000000000000000000';
+const ORGANIZATION_ID = 'org_acme';
+const MUTATION_URL = `/v1/organizations/${ORGANIZATION_ID}/members/bob`;
 
 const roster: readonly OrganizationRosterOrganization[] = [
   {
@@ -46,6 +52,7 @@ const roster: readonly OrganizationRosterOrganization[] = [
 describe('Organization membership HTTP flow', () => {
   let app: NestFastifyApplication;
   let membership: jest.Mocked<OrganizationMembershipPort>;
+  let mutation: jest.Mocked<OrganizationMembershipMutationPort>;
   let accountStatus: 'active' | 'disabled' = 'active';
   let verifier: UserAccessTokenVerifierPort;
 
@@ -53,6 +60,29 @@ describe('Organization membership HTTP flow', () => {
     membership = {
       resolveMembership: jest.fn(),
       listRoster: jest.fn(async (_input: ListRosterInput) => roster),
+      changeRole: jest.fn(),
+      disable: jest.fn(),
+      transfer: jest.fn(),
+    };
+    mutation = {
+      changeRole: jest.fn(async (input) => ({
+        organizationId: input.organizationId,
+        username: input.username,
+        role: input.role,
+        status: 'active' as const,
+      })),
+      disable: jest.fn(async (input) => ({
+        organizationId: input.organizationId,
+        username: input.username,
+        role: 'member' as const,
+        status: 'disabled' as const,
+      })),
+      transfer: jest.fn(async (input) => ({
+        organizationId: input.organizationId,
+        username: input.username,
+        role: 'owner' as const,
+        status: 'active' as const,
+      })),
     };
     verifier = {
       verify: async (token: string) => {
@@ -75,6 +105,8 @@ describe('Organization membership HTTP flow', () => {
     })
       .overrideProvider(ORGANIZATION_MEMBERSHIP)
       .useValue(membership)
+      .overrideProvider(ORGANIZATION_MEMBERSHIP_MUTATION)
+      .useValue(mutation)
       .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
       .useValue(verifier)
       .overrideProvider(LOCAL_AUTH_REPOSITORY)
@@ -95,6 +127,9 @@ describe('Organization membership HTTP flow', () => {
   beforeEach(() => {
     accountStatus = 'active';
     membership.listRoster.mockResolvedValue(roster);
+    mutation.changeRole.mockClear();
+    mutation.disable.mockClear();
+    mutation.transfer.mockClear();
     jest.clearAllMocks();
   });
 
@@ -108,6 +143,22 @@ describe('Organization membership HTTP flow', () => {
       method: 'GET',
       url,
       headers,
+    });
+  }
+
+  function mutationRequest(
+    method: 'PATCH' | 'DELETE' | 'POST',
+    url = MUTATION_URL,
+    payload?: object,
+    headers: Record<string, string> = {
+      authorization: 'Bearer valid.token.value',
+    },
+  ) {
+    return app.inject({
+      method,
+      url,
+      headers,
+      ...(payload === undefined ? {} : { payload }),
     });
   }
 
@@ -263,5 +314,115 @@ describe('Organization membership HTTP flow', () => {
       error: { code: 'AUTH_USER_ACCESS_TOKEN_INVALID' },
     });
     expect(membership.listRoster).not.toHaveBeenCalled();
+  });
+
+  it('rejects a disabled User Account before membership mutation', async () => {
+    accountStatus = 'disabled';
+
+    const response = await mutationRequest('DELETE');
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      error: { code: 'AUTH_USER_ACCESS_TOKEN_INVALID' },
+    });
+    expect(mutation.disable).not.toHaveBeenCalled();
+  });
+
+  it('changes a member role through the Bearer management boundary', async () => {
+    const response = await mutationRequest('PATCH', MUTATION_URL, {
+      role: 'admin',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      data: {
+        organization_id: ORGANIZATION_ID,
+        username: 'bob',
+        role: 'admin',
+        status: 'active',
+      },
+      meta: { request_id: 'req_01J00000000000000000000000' },
+    });
+    expect(mutation.changeRole).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: USER_ID,
+        organizationId: ORGANIZATION_ID,
+        username: 'bob',
+        role: 'admin',
+        context: expect.objectContaining({ organizationId: ORGANIZATION_ID }),
+      }),
+    );
+  });
+
+  it('disables a member through DELETE and returns the durable state', async () => {
+    const response = await mutationRequest('DELETE');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual({
+      organization_id: ORGANIZATION_ID,
+      username: 'bob',
+      role: 'member',
+      status: 'disabled',
+    });
+    expect(mutation.disable).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: USER_ID,
+        organizationId: ORGANIZATION_ID,
+        username: 'bob',
+      }),
+    );
+  });
+
+  it('transfers ownership through the dedicated command without a request body', async () => {
+    const response = await mutationRequest('POST', `${MUTATION_URL}/transfer`);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual({
+      organization_id: ORGANIZATION_ID,
+      username: 'bob',
+      role: 'owner',
+      status: 'active',
+    });
+    expect(mutation.transfer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: USER_ID,
+        organizationId: ORGANIZATION_ID,
+        username: 'bob',
+      }),
+    );
+  });
+
+  it.each([
+    ['missing role', {}],
+    ['owner promotion', { role: 'owner' }],
+    ['unexpected field', { role: 'admin', status: 'active' }],
+  ])('rejects %s before calling the mutation port', async (_label, payload) => {
+    const response = await mutationRequest('PATCH', MUTATION_URL, payload);
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expect(mutation.changeRole).not.toHaveBeenCalled();
+  });
+
+  it('rejects a transfer request body before calling the mutation port', async () => {
+    const response = await mutationRequest('POST', `${MUTATION_URL}/transfer`, {
+      role: 'owner',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expect(mutation.transfer).not.toHaveBeenCalled();
+  });
+
+  it('requires Bearer authentication before reaching membership mutations', async () => {
+    const response = await mutationRequest(
+      'DELETE',
+      MUTATION_URL,
+      undefined,
+      {},
+    );
+
+    expect(response.statusCode).toBe(401);
+    expect(mutation.disable).not.toHaveBeenCalled();
   });
 });

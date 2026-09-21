@@ -30,7 +30,11 @@ import {
   CreateOrganizationInvitationRequestSchema,
   CreateOrganizationInvitationResponseSchema,
 } from '../contracts/organization/invitation';
-import { OrganizationRosterResponseSchema } from '../contracts/organization/membership';
+import {
+  OrganizationMembershipMutationRequestSchema,
+  OrganizationMembershipMutationResponseSchema,
+  OrganizationRosterResponseSchema,
+} from '../contracts/organization/membership';
 import {
   MintSandboxAssertionRequestSchema,
   MintSandboxAssertionResponseSchema,
@@ -247,6 +251,10 @@ const ORGANIZATION_INVITATION_PATH =
   '/v1/organizations/{organization_id}/invitations';
 const ORGANIZATION_INVITATION_ACCEPT_PATH =
   '/v1/organizations/invitations/accept';
+const ORGANIZATION_MEMBER_PATH =
+  '/v1/organizations/{organization_id}/members/{username}';
+const ORGANIZATION_MEMBER_TRANSFER_PATH =
+  '/v1/organizations/{organization_id}/members/{username}/transfer';
 
 function authErrorResponses(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
@@ -545,6 +553,97 @@ function organizationRosterPathItem(
   };
 }
 
+function organizationMemberParameters(): readonly Record<string, unknown>[] {
+  return [
+    { $ref: '#/components/parameters/CorrelationId' },
+    {
+      name: 'organization_id',
+      in: 'path',
+      required: true,
+      description: 'The organization whose membership is being changed.',
+      schema: { type: 'string', minLength: 1 },
+    },
+    {
+      name: 'username',
+      in: 'path',
+      required: true,
+      description: 'The immutable public username of the target member.',
+      schema: { type: 'string', minLength: 1 },
+    },
+  ];
+}
+
+function organizationMembershipMutationPathItem(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, unknown> {
+  const success = {
+    description: 'The resulting organization membership',
+    content: {
+      'application/json': {
+        schema: OrganizationMembershipMutationResponseSchema,
+      },
+    },
+  };
+
+  return {
+    patch: {
+      operationId: 'organizations.members.change_role',
+      summary: 'Change an organization member role',
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: organizationMemberParameters(),
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: OrganizationMembershipMutationRequestSchema,
+          },
+        },
+      },
+      responses: {
+        '200': success,
+        ...authErrorResponses(groupedErrors, [400, 401, 403, 404, 409, 500]),
+      },
+    },
+    delete: {
+      operationId: 'organizations.members.disable',
+      summary: 'Disable an organization member',
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: organizationMemberParameters(),
+      responses: {
+        '200': success,
+        ...authErrorResponses(groupedErrors, [400, 401, 403, 404, 409, 500]),
+      },
+    },
+  };
+}
+
+function organizationMembershipTransferPathItem(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, unknown> {
+  return {
+    post: {
+      operationId: 'organizations.members.transfer',
+      summary: 'Transfer organization ownership',
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: organizationMemberParameters(),
+      responses: {
+        '200': {
+          description: 'The resulting organization membership',
+          content: {
+            'application/json': {
+              schema: OrganizationMembershipMutationResponseSchema,
+            },
+          },
+        },
+        ...authErrorResponses(groupedErrors, [400, 401, 403, 404, 409, 500]),
+      },
+    },
+  };
+}
+
 /**
  * Described by hand rather than from `OPERATION_CATALOG`, because it is not a
  * catalog operation: it has no downstream service, no downstream contract, and
@@ -634,6 +733,10 @@ export function buildOpenApiDocument(version: string): unknown {
     organizationInvitationPathItem(groupedErrors);
   paths[ORGANIZATION_INVITATION_ACCEPT_PATH] =
     organizationInvitationAcceptPathItem(groupedErrors);
+  paths[ORGANIZATION_MEMBER_PATH] =
+    organizationMembershipMutationPathItem(groupedErrors);
+  paths[ORGANIZATION_MEMBER_TRANSFER_PATH] =
+    organizationMembershipTransferPathItem(groupedErrors);
   Object.assign(paths, localAuthPathItems(groupedErrors));
 
   const errorResponses: Record<string, unknown> = {};

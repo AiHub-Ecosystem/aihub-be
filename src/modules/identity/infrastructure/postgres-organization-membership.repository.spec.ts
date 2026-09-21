@@ -1,6 +1,7 @@
 import { AppError } from '../../../common/errors/app-error';
 import { createRequestContext } from '../../../common/request-context/request-context.factory';
 import type { PostgresIdentityClient } from './postgres-api-key.repository';
+import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
 import { PostgresOrganizationMembershipRepository } from './postgres-organization-membership.repository';
 
 const membershipRow = {
@@ -46,10 +47,21 @@ const context = createRequestContext({
   scopes: [],
 });
 
+const mutationContext = createRequestContext({
+  requestId: 'req_01J00000000000000000000000',
+  receivedAt: new Date('2026-09-21T00:00:00.000Z'),
+  deadlineMs: 5_000,
+  userId: membershipRow.user_account_id,
+  organizationId: 'org_acme',
+  scopes: [],
+});
+
 class FakePostgres implements PostgresIdentityClient {
   queries: Array<{ text: string; values: readonly unknown[] }> = [];
   result: readonly unknown[] = [membershipRow];
   shouldFail = false;
+  transactionRows: readonly (readonly unknown[])[] = [];
+  transactionQueries: Array<{ text: string; values: readonly unknown[] }> = [];
 
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]> {
     this.queries.push({ text, values });
@@ -62,6 +74,55 @@ class FakePostgres implements PostgresIdentityClient {
   close(): Promise<void> {
     return Promise.resolve();
   }
+
+  transaction<T>(
+    callback: Parameters<PostgresIdentityTransactionalClient['transaction']>[0],
+  ): Promise<T> {
+    let index = 0;
+    return callback({
+      query: async (text, values) => {
+        this.transactionQueries.push({ text, values });
+        if (this.shouldFail) {
+          throw new Error('database unavailable');
+        }
+        const rows = this.transactionRows[index] ?? [];
+        index += 1;
+        return rows;
+      },
+    }) as Promise<T>;
+  }
+}
+
+const organizationRow = { id: 'org_acme', status: 'active' };
+const callerOwnerRow = {
+  organization_id: 'org_acme',
+  user_account_id: membershipRow.user_account_id,
+  username: 'alice',
+  role: 'owner',
+  membership_status: 'active',
+};
+const targetMemberRow = {
+  organization_id: 'org_acme',
+  user_account_id: 'usr_bob',
+  username: 'bob',
+  role: 'member',
+  membership_status: 'active',
+};
+const targetAdminResultRow = {
+  organization_id: 'org_acme',
+  user_account_id: 'usr_bob',
+  username: 'bob',
+  role: 'admin',
+  membership_status: 'active',
+};
+
+function mutationInput(username = 'bob') {
+  return {
+    context: mutationContext,
+    userId: membershipRow.user_account_id,
+    organizationId: 'org_acme',
+    username,
+  } as const;
 }
 
 describe('PostgresOrganizationMembershipRepository', () => {
@@ -211,5 +272,108 @@ describe('PostgresOrganizationMembershipRepository', () => {
 
     expect(mismatched).toBeInstanceOf(AppError);
     expect((mismatched as AppError).code).toBe('INTERNAL_ERROR');
+  });
+
+  it('changes a member role inside a transaction after locking the organization and memberships', async () => {
+    const client = new FakePostgres();
+    client.transactionRows = [
+      [organizationRow],
+      [callerOwnerRow, targetMemberRow],
+      [targetAdminResultRow],
+    ];
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(client).changeRole({
+        ...mutationInput(),
+        role: 'admin',
+      }),
+    ).resolves.toEqual({
+      organizationId: 'org_acme',
+      username: 'bob',
+      role: 'admin',
+      status: 'active',
+    });
+
+    expect(client.transactionQueries[0]?.text).toContain('FOR UPDATE');
+    expect(client.transactionQueries[1]?.text).toContain('FOR UPDATE');
+    expect(client.transactionQueries[1]?.text).toContain('ORDER BY');
+    expect(client.transactionQueries.at(-1)?.text).toContain('UPDATE');
+  });
+
+  it('rejects demoting the last active owner with a conflict', async () => {
+    const client = new FakePostgres();
+    client.transactionRows = [
+      [organizationRow],
+      [callerOwnerRow, { ...targetMemberRow, role: 'owner' }],
+      [{ owner_count: '1' }],
+    ];
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(client).changeRole({
+        ...mutationInput(),
+        role: 'member',
+      }),
+    ).rejects.toMatchObject({ code: 'ORGANIZATION_OWNER_REQUIRED' });
+  });
+
+  it('hides an unknown target from a member with not-found', async () => {
+    const client = new FakePostgres();
+    client.transactionRows = [
+      [organizationRow],
+      [{ ...callerOwnerRow, role: 'member' }],
+    ];
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(client).changeRole({
+        ...mutationInput('missing'),
+        role: 'admin',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('returns an already-disabled target without reactivating or deleting it', async () => {
+    const client = new FakePostgres();
+    const disabled = { ...targetMemberRow, membership_status: 'disabled' };
+    client.transactionRows = [[organizationRow], [callerOwnerRow, disabled]];
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(client).disable(
+        mutationInput(),
+      ),
+    ).resolves.toEqual({
+      organizationId: 'org_acme',
+      username: 'bob',
+      role: 'member',
+      status: 'disabled',
+    });
+    expect(client.transactionQueries).toHaveLength(2);
+  });
+
+  it('transfers ownership atomically and returns the promoted target', async () => {
+    const client = new FakePostgres();
+    client.transactionRows = [
+      [organizationRow],
+      [callerOwnerRow, targetMemberRow],
+      [
+        {
+          ...targetMemberRow,
+          role: 'owner',
+        },
+      ],
+      [{}],
+    ];
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(client).transfer(
+        mutationInput(),
+      ),
+    ).resolves.toEqual({
+      organizationId: 'org_acme',
+      username: 'bob',
+      role: 'owner',
+      status: 'active',
+    });
+    expect(client.transactionQueries.at(-2)?.text).toContain('UPDATE');
+    expect(client.transactionQueries.at(-1)?.text).toContain('UPDATE');
   });
 });

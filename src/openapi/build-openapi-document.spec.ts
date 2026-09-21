@@ -18,6 +18,13 @@ interface OpenApiOperation {
   readonly 'x-idempotency'?: string;
 }
 
+interface OpenApiPathItem {
+  readonly get?: OpenApiOperation;
+  readonly post?: OpenApiOperation;
+  readonly patch?: OpenApiOperation;
+  readonly delete?: OpenApiOperation;
+}
+
 interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
@@ -27,13 +34,7 @@ interface OpenApiDocument {
     readonly parameters: Record<string, unknown>;
     readonly responses: Record<string, unknown>;
   };
-  readonly paths: Record<
-    string,
-    {
-      readonly get?: OpenApiOperation;
-      readonly post: OpenApiOperation;
-    }
-  >;
+  readonly paths: Record<string, OpenApiPathItem>;
 }
 
 const SANDBOX_MINT_PATH = '/v1/sandbox/assertions';
@@ -47,6 +48,16 @@ const ORGANIZATION_INVITATION_ACCEPT_PATH =
   '/v1/organizations/invitations/accept';
 const ORGANIZATION_INVITATION_ACCEPT_OPERATION_ID =
   'organizations.invitations.accept';
+const ORGANIZATION_MEMBER_PATH =
+  '/v1/organizations/{organization_id}/members/{username}';
+const ORGANIZATION_MEMBER_TRANSFER_PATH =
+  '/v1/organizations/{organization_id}/members/{username}/transfer';
+const ORGANIZATION_MEMBER_CHANGE_ROLE_OPERATION_ID =
+  'organizations.members.change_role';
+const ORGANIZATION_MEMBER_DISABLE_OPERATION_ID =
+  'organizations.members.disable';
+const ORGANIZATION_MEMBER_TRANSFER_OPERATION_ID =
+  'organizations.members.transfer';
 const AUTH_PATHS = [
   '/v1/auth/register',
   '/v1/auth/login',
@@ -88,6 +99,7 @@ describe('buildOpenApiDocument', () => {
           operationId !== SANDBOX_MINT_OPERATION_ID &&
           operationId !== ORGANIZATION_INVITATION_OPERATION_ID &&
           operationId !== ORGANIZATION_INVITATION_ACCEPT_OPERATION_ID &&
+          operationId !== ORGANIZATION_MEMBER_TRANSFER_OPERATION_ID &&
           !AUTH_OPERATION_IDS.includes(
             operationId as (typeof AUTH_OPERATION_IDS)[number],
           ),
@@ -110,9 +122,11 @@ describe('buildOpenApiDocument', () => {
       ORGANIZATION_ROSTER_PATH,
       ORGANIZATION_INVITATION_PATH,
       ORGANIZATION_INVITATION_ACCEPT_PATH,
+      ORGANIZATION_MEMBER_PATH,
+      ORGANIZATION_MEMBER_TRANSFER_PATH,
       ...AUTH_PATHS,
     ]);
-    expect(doc.paths[SANDBOX_MINT_PATH]?.post.operationId).toBe(
+    expect(doc.paths[SANDBOX_MINT_PATH]?.post?.operationId).toBe(
       SANDBOX_MINT_OPERATION_ID,
     );
   });
@@ -173,6 +187,33 @@ describe('buildOpenApiDocument', () => {
     expect(operation?.requestBody).toBeUndefined();
     expect(operation?.responses['200']).toBeDefined();
     expect(JSON.stringify(operation?.responses['200'])).not.toContain('email');
+  });
+
+  it('documents the bearer-authenticated member mutation routes', () => {
+    const member = build().paths[ORGANIZATION_MEMBER_PATH];
+    const transfer = build().paths[ORGANIZATION_MEMBER_TRANSFER_PATH]?.post;
+
+    expect(member?.patch?.operationId).toBe(
+      ORGANIZATION_MEMBER_CHANGE_ROLE_OPERATION_ID,
+    );
+    expect(member?.delete?.operationId).toBe(
+      ORGANIZATION_MEMBER_DISABLE_OPERATION_ID,
+    );
+    expect(transfer?.operationId).toBe(
+      ORGANIZATION_MEMBER_TRANSFER_OPERATION_ID,
+    );
+    expect(member?.patch?.security).toEqual([{ BearerAuth: [] }]);
+    expect(member?.delete?.security).toEqual([{ BearerAuth: [] }]);
+    expect(transfer?.security).toEqual([{ BearerAuth: [] }]);
+    expect(member?.patch?.requestBody?.required).toBe(true);
+    expect(member?.delete?.requestBody).toBeUndefined();
+    expect(transfer?.requestBody).toBeUndefined();
+    expect(member?.patch?.responses['200']).toBeDefined();
+    expect(member?.delete?.responses['400']).toBeDefined();
+    expect(member?.delete?.responses['409']).toBeDefined();
+    expect(transfer?.responses['409']).toBeDefined();
+    expect(JSON.stringify(member?.patch?.requestBody)).toContain('admin');
+    expect(JSON.stringify(member?.patch?.requestBody)).not.toContain('owner');
   });
 
   it('documents local auth as unauthenticated and keeps token/password fields out of responses', () => {
@@ -241,7 +282,7 @@ describe('buildOpenApiDocument', () => {
       const pathItem = doc.paths[catalogued.path];
 
       expect(pathItem).toBeDefined();
-      expect(pathItem?.post.operationId).toBe(operationId);
+      expect(pathItem?.post?.operationId).toBe(operationId);
       expect(catalogued.path).toMatch(/^\/v1\//);
       expect(catalogued.path).not.toMatch(/^\/v1\/v1\//);
     }
@@ -288,10 +329,10 @@ describe('buildOpenApiDocument', () => {
     const doc = build();
     const required = doc.paths[
       '/v1/ielts/writing/task1/grade'
-    ]?.post.parameters.find(
+    ]?.post?.parameters.find(
       (parameter) => parameter.name === 'Idempotency-Key',
     );
-    const none = doc.paths['/v1/ielts/speaking/grading']?.post.parameters.find(
+    const none = doc.paths['/v1/ielts/speaking/grading']?.post?.parameters.find(
       (parameter) => parameter.name === 'Idempotency-Key',
     );
 
@@ -304,7 +345,7 @@ describe('buildOpenApiDocument', () => {
 
     for (const operationId of OPERATION_IDS) {
       const path = OPERATION_CATALOG[operationId].path;
-      const refs = doc.paths[path]?.post.parameters.map(
+      const refs = doc.paths[path]?.post?.parameters.map(
         (parameter) => parameter.$ref,
       );
 
@@ -314,9 +355,9 @@ describe('buildOpenApiDocument', () => {
 
   it('requires a user assertion only for user-scoped operations', () => {
     const userParameters =
-      build().paths['/v1/ielts/writing/task1/grade']?.post.parameters;
+      build().paths['/v1/ielts/writing/task1/grade']?.post?.parameters;
     const speakingParameters =
-      build().paths['/v1/ielts/speaking/grading']?.post.parameters;
+      build().paths['/v1/ielts/speaking/grading']?.post?.parameters;
 
     expect(userParameters).toContainEqual({
       $ref: '#/components/parameters/UserAssertion',

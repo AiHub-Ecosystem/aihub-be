@@ -26,6 +26,7 @@ import {
   JWKS_KEY_PROVIDER,
   type JwksKeyProviderPort,
 } from './application/jwks-key-provider.port';
+import { ManageOrganizationMembership } from './application/manage-organization-membership';
 import { MintSandboxAssertion } from './application/mint-sandbox-assertion';
 import {
   ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
@@ -39,6 +40,10 @@ import {
   ORGANIZATION_INVITE_TOKEN,
   type OrganizationInviteTokenPort,
 } from './application/organization-invite-token.port';
+import {
+  ORGANIZATION_MEMBERSHIP_MUTATION,
+  type OrganizationMembershipMutationPort,
+} from './application/organization-membership-mutation.port';
 import {
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
@@ -105,6 +110,14 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
         new PostgresOrganizationMembershipRepository(
           createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
         ),
+    },
+    {
+      provide: ORGANIZATION_MEMBERSHIP_MUTATION,
+      useFactory: (
+        membership: OrganizationMembershipPort,
+      ): OrganizationMembershipMutationPort =>
+        new ManageOrganizationMembership(membership),
+      inject: [ORGANIZATION_MEMBERSHIP],
     },
     {
       provide: ORGANIZATION_INVITATION,

@@ -73,6 +73,9 @@ describe('Organization invitation HTTP flow', () => {
           : { kind: 'disabled' as const, membership: record };
       }),
       listRoster: jest.fn(async (_input: ListRosterInput) => []),
+      changeRole: jest.fn(),
+      disable: jest.fn(),
+      transfer: jest.fn(),
     };
     invitations = {
       createInvitation: jest.fn(

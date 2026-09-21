@@ -1,6 +1,11 @@
+import { AppError } from '../../../common/errors/app-error';
 import type { OrganizationStatus } from '../application/api-key-authenticator.port';
+import { authorizeOrganizationMembershipMutation } from '../application/organization-membership.mutation-policy';
 import type {
+  ChangeOrganizationMemberRoleInput,
   ListRosterInput,
+  OrganizationMembershipMutationInput,
+  OrganizationMembershipMutationResult,
   OrganizationMembershipPort,
   OrganizationMembershipRecord,
   OrganizationMembershipResolution,
@@ -18,6 +23,7 @@ import {
   stringValue,
 } from './identity-row';
 import type { PostgresIdentityClient } from './postgres-api-key.repository';
+import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
 
 const RESOLVE_MEMBERSHIP_SQL = `
   SELECT
@@ -53,6 +59,76 @@ const LIST_ROSTER_SQL = `
   WHERE caller.user_account_id = $1
     AND caller.status = 'active'
   ORDER BY caller.organization_id ASC, member_account.username ASC
+`;
+
+const LOCK_ORGANIZATION_FOR_MUTATION_SQL = `
+  SELECT id, status
+  FROM organizations
+  WHERE id = $1
+  FOR UPDATE
+`;
+
+const LOCK_MEMBERSHIPS_FOR_MUTATION_SQL = `
+  SELECT
+    membership.organization_id,
+    membership.user_account_id,
+    member_account.username,
+    membership.role,
+    membership.status AS membership_status
+  FROM organization_members AS membership
+  INNER JOIN user_accounts AS member_account
+    ON member_account.id = membership.user_account_id
+  WHERE membership.organization_id = $1
+    AND (
+      membership.user_account_id = $2
+      OR member_account.username = $3
+    )
+  ORDER BY membership.user_account_id ASC
+  FOR UPDATE OF membership
+`;
+
+const COUNT_ACTIVE_OWNERS_SQL = `
+  SELECT COUNT(*)::int AS owner_count
+  FROM organization_members
+  WHERE organization_id = $1
+    AND role = 'owner'
+    AND status = 'active'
+`;
+
+const CHANGE_ROLE_SQL = `
+  UPDATE organization_members
+  SET role = $3
+  WHERE organization_id = $1
+    AND user_account_id = $2
+    AND status = 'active'
+  RETURNING role, status AS membership_status
+`;
+
+const DISABLE_MEMBERSHIP_SQL = `
+  UPDATE organization_members
+  SET status = 'disabled'
+  WHERE organization_id = $1
+    AND user_account_id = $2
+    AND status = 'active'
+  RETURNING role, status AS membership_status
+`;
+
+const PROMOTE_TRANSFER_TARGET_SQL = `
+  UPDATE organization_members
+  SET role = 'owner'
+  WHERE organization_id = $1
+    AND user_account_id = $2
+    AND status = 'active'
+  RETURNING role, status AS membership_status
+`;
+
+const DEMOTE_TRANSFER_CALLER_SQL = `
+  UPDATE organization_members
+  SET role = 'admin'
+  WHERE organization_id = $1
+    AND user_account_id = $2
+    AND role = 'owner'
+    AND status = 'active'
 `;
 
 function mapMembershipRecord(
@@ -97,6 +173,96 @@ interface RosterRow {
   readonly callerRole: OrganizationMembershipRole;
   readonly memberUsername: string;
   readonly memberRole: OrganizationMembershipRole;
+}
+
+interface MutationMembershipRow {
+  readonly organizationId: string;
+  readonly userId: string;
+  readonly username: string;
+  readonly role: OrganizationMembershipRole;
+  readonly status: OrganizationMembershipStatus;
+}
+
+function forbidden(message: string): AppError {
+  return new AppError({ code: 'FORBIDDEN', message, retryable: false });
+}
+
+function notFound(): AppError {
+  return new AppError({
+    code: 'NOT_FOUND',
+    message: 'Resource not found',
+    retryable: false,
+  });
+}
+
+function invalidMutation(): AppError {
+  return new AppError({
+    code: 'INVALID_REQUEST',
+    message: 'Request failed validation',
+    retryable: false,
+  });
+}
+
+function ownerRequired(): AppError {
+  return new AppError({
+    code: 'ORGANIZATION_OWNER_REQUIRED',
+    message: 'Organization must retain an owner',
+    retryable: false,
+  });
+}
+
+function mapMutationMembershipRow(
+  value: unknown,
+): MutationMembershipRow | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const organizationId = stringValue(value, 'organization_id');
+  const userId = stringValue(value, 'user_account_id');
+  const username = stringValue(value, 'username');
+  const role = membershipRoleValue(value, 'role');
+  const status = membershipStatusValue(value, 'membership_status');
+
+  if (
+    organizationId === undefined ||
+    userId === undefined ||
+    username === undefined ||
+    role === undefined ||
+    status === undefined
+  ) {
+    return undefined;
+  }
+
+  return { organizationId, userId, username, role, status };
+}
+
+function ownerCount(value: unknown): number | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const raw = value.owner_count;
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) {
+    return raw;
+  }
+  if (typeof raw === 'string' && /^[0-9]+$/.test(raw)) {
+    return Number(raw);
+  }
+  return undefined;
+}
+
+function mutationResult(
+  target: MutationMembershipRow,
+  role: OrganizationMembershipRole = target.role,
+  status: OrganizationMembershipStatus = target.status,
+): OrganizationMembershipMutationResult {
+  return {
+    organizationId: target.organizationId,
+    username: target.username,
+    role,
+    status,
+  };
 }
 
 function mapRosterRow(value: unknown): RosterRow | undefined {
@@ -187,7 +353,10 @@ function groupRosterRows(
 export class PostgresOrganizationMembershipRepository
   implements OrganizationMembershipPort
 {
-  constructor(private readonly client: PostgresIdentityClient) {}
+  constructor(
+    private readonly client: PostgresIdentityClient &
+      PostgresIdentityTransactionalClient,
+  ) {}
 
   async resolveMembership(
     input: ResolveMembershipInput,
@@ -251,6 +420,207 @@ export class PostgresOrganizationMembershipRepository
     }
 
     return groupRosterRows(rows);
+  }
+
+  async changeRole(
+    input: ChangeOrganizationMemberRoleInput,
+  ): Promise<OrganizationMembershipMutationResult> {
+    return this.mutate(input, 'change_role', input.role);
+  }
+
+  async disable(
+    input: OrganizationMembershipMutationInput,
+  ): Promise<OrganizationMembershipMutationResult> {
+    return this.mutate(input, 'disable');
+  }
+
+  async transfer(
+    input: OrganizationMembershipMutationInput,
+  ): Promise<OrganizationMembershipMutationResult> {
+    return this.mutate(input, 'transfer');
+  }
+
+  private async mutate(
+    input: OrganizationMembershipMutationInput,
+    action: 'change_role' | 'disable' | 'transfer',
+    requestedRole?: 'admin' | 'member',
+  ): Promise<OrganizationMembershipMutationResult> {
+    if (
+      input.context.userId !== input.userId ||
+      input.context.organizationId !== input.organizationId ||
+      input.userId.trim().length === 0 ||
+      input.organizationId.trim().length === 0 ||
+      input.username.trim().length === 0 ||
+      (action === 'change_role' && requestedRole === undefined)
+    ) {
+      throw identityStoreError(
+        'Identity organization membership input is invalid',
+      );
+    }
+
+    try {
+      return await this.client.transaction(async (transaction) => {
+        const organizationRows = await transaction.query(
+          LOCK_ORGANIZATION_FOR_MUTATION_SQL,
+          [input.organizationId],
+        );
+        const organization = organizationRows[0];
+        if (!isRecord(organization)) {
+          throw forbidden('Organization membership is required');
+        }
+
+        const organizationId = stringValue(organization, 'id');
+        const organizationStatus = organizationStatusValue(
+          organization,
+          'status',
+        );
+        if (
+          organizationId !== input.organizationId ||
+          organizationStatus === undefined
+        ) {
+          throw identityStoreError('Identity data is invalid');
+        }
+        if (organizationStatus === 'suspended') {
+          throw forbidden('Organization is suspended');
+        }
+
+        const membershipRows = await transaction.query(
+          LOCK_MEMBERSHIPS_FOR_MUTATION_SQL,
+          [input.organizationId, input.userId, input.username],
+        );
+        const lockedMemberships = membershipRows.map((value) => {
+          const membership = mapMutationMembershipRow(value);
+          if (membership === undefined) {
+            throw identityStoreError('Identity data is invalid');
+          }
+          return membership;
+        });
+        const caller = lockedMemberships.find(
+          (membership) => membership.userId === input.userId,
+        );
+        if (
+          caller === undefined ||
+          caller.organizationId !== input.organizationId ||
+          caller.userId !== input.userId ||
+          caller.status !== 'active'
+        ) {
+          throw forbidden('Organization membership is required');
+        }
+
+        const target = lockedMemberships.find(
+          (membership) => membership.username === input.username,
+        );
+        if (target === undefined) {
+          throw notFound();
+        }
+
+        const decision = authorizeOrganizationMembershipMutation({
+          action,
+          callerUserId: caller.userId,
+          callerRole: caller.role,
+          targetUserId: target.userId,
+          targetRole: target.role,
+          targetStatus: target.status,
+          ...(requestedRole === undefined ? {} : { requestedRole }),
+        });
+        if (decision.kind === 'forbidden') {
+          throw forbidden('Organization membership mutation is not allowed');
+        }
+        if (decision.kind === 'target_unavailable') {
+          throw notFound();
+        }
+        if (decision.kind === 'invalid') {
+          throw invalidMutation();
+        }
+
+        if (action === 'disable' && target.status === 'disabled') {
+          return mutationResult(target);
+        }
+
+        if (
+          (action === 'disable' && target.role === 'owner') ||
+          (action === 'change_role' && target.role === 'owner')
+        ) {
+          const ownerRows = await transaction.query(COUNT_ACTIVE_OWNERS_SQL, [
+            input.organizationId,
+          ]);
+          const count = ownerCount(ownerRows[0]);
+          if (count === undefined) {
+            throw identityStoreError('Identity data is invalid');
+          }
+          if (count <= 1) {
+            throw ownerRequired();
+          }
+        }
+
+        if (action === 'change_role') {
+          const rows = await transaction.query(CHANGE_ROLE_SQL, [
+            input.organizationId,
+            target.userId,
+            requestedRole,
+          ]);
+          const updated = rows[0];
+          const role = isRecord(updated)
+            ? membershipRoleValue(updated, 'role')
+            : undefined;
+          const status = isRecord(updated)
+            ? membershipStatusValue(updated, 'membership_status')
+            : undefined;
+          if (role === undefined || status === undefined) {
+            throw identityStoreError('Identity data is invalid');
+          }
+          return mutationResult(target, role, status);
+        }
+
+        if (action === 'disable') {
+          const rows = await transaction.query(DISABLE_MEMBERSHIP_SQL, [
+            input.organizationId,
+            target.userId,
+          ]);
+          const updated = rows[0];
+          const role = isRecord(updated)
+            ? membershipRoleValue(updated, 'role')
+            : undefined;
+          const status = isRecord(updated)
+            ? membershipStatusValue(updated, 'membership_status')
+            : undefined;
+          if (role === undefined || status !== 'disabled') {
+            throw identityStoreError('Identity data is invalid');
+          }
+          return mutationResult(target, role, status);
+        }
+
+        const promotedRows = await transaction.query(
+          PROMOTE_TRANSFER_TARGET_SQL,
+          [input.organizationId, target.userId],
+        );
+        const promoted = promotedRows[0];
+        const promotedRole = isRecord(promoted)
+          ? membershipRoleValue(promoted, 'role')
+          : undefined;
+        const promotedStatus = isRecord(promoted)
+          ? membershipStatusValue(promoted, 'membership_status')
+          : undefined;
+        if (promotedRole !== 'owner' || promotedStatus !== 'active') {
+          throw identityStoreError('Identity data is invalid');
+        }
+
+        const demotedRows = await transaction.query(
+          DEMOTE_TRANSFER_CALLER_SQL,
+          [input.organizationId, caller.userId],
+        );
+        if (demotedRows.length === 0) {
+          throw identityStoreError('Identity data is invalid');
+        }
+
+        return mutationResult(target, promotedRole, promotedStatus);
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      throw identityStoreError('Identity store is unavailable');
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

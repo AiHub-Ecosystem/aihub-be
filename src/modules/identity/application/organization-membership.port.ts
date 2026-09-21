@@ -1,6 +1,27 @@
 import type { RequestContext } from '../../../common/request-context/request-context';
 import type { OrganizationStatus } from './api-key-authenticator.port';
 
+export type OrganizationMembershipMutationRole = 'admin' | 'member';
+
+export interface OrganizationMembershipMutationInput {
+  readonly context: RequestContext;
+  readonly userId: string;
+  readonly organizationId: string;
+  readonly username: string;
+}
+
+export interface ChangeOrganizationMemberRoleInput
+  extends OrganizationMembershipMutationInput {
+  readonly role: OrganizationMembershipMutationRole;
+}
+
+export interface OrganizationMembershipMutationResult {
+  readonly organizationId: string;
+  readonly username: string;
+  readonly role: OrganizationMembershipRole;
+  readonly status: OrganizationMembershipStatus;
+}
+
 export type OrganizationMembershipRole = 'owner' | 'admin' | 'member';
 export type OrganizationMembershipStatus = 'active' | 'disabled';
 
@@ -54,6 +75,15 @@ export interface OrganizationMembershipPort {
   listRoster(
     input: ListRosterInput,
   ): Promise<readonly OrganizationRosterOrganization[]>;
+  changeRole(
+    input: ChangeOrganizationMemberRoleInput,
+  ): Promise<OrganizationMembershipMutationResult>;
+  disable(
+    input: OrganizationMembershipMutationInput,
+  ): Promise<OrganizationMembershipMutationResult>;
+  transfer(
+    input: OrganizationMembershipMutationInput,
+  ): Promise<OrganizationMembershipMutationResult>;
 }
 
 export const ORGANIZATION_MEMBERSHIP = Symbol('ORGANIZATION_MEMBERSHIP');
