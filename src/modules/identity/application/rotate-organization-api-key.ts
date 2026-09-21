@@ -72,6 +72,7 @@ export class RotateOrganizationApiKey {
     const result = await this.apiKeys.rotateApiKey({
       context: input.context,
       organizationId: input.organizationId,
+      actorUserId: input.userId,
       apiKeyId: input.apiKeyId,
       replacementId: generated.id,
       keyHash: generated.hash,

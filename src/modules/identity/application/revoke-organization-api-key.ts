@@ -59,6 +59,7 @@ export class RevokeOrganizationApiKey {
     const result = await this.apiKeys.revokeApiKey({
       context: input.context,
       organizationId: input.organizationId,
+      actorUserId: input.userId,
       apiKeyId: input.apiKeyId,
       now,
     });

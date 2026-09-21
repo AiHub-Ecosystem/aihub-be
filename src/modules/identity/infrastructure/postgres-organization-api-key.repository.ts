@@ -11,6 +11,10 @@ import type {
   RotateOrganizationApiKeyRecordResult,
 } from '../application/organization-api-key.port';
 
+import {
+  auditStamp,
+  recordOrganizationAuditEvent,
+} from './organization-audit-event.store';
 import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
 
 /**
@@ -78,6 +82,7 @@ const LOCK_API_KEY_SQL = `
   SELECT
     encode(key_hash, 'hex') AS key_hash_hex,
     name,
+    key_prefix,
     scopes,
     allowed_environments,
     status,
@@ -293,6 +298,7 @@ export class PostgresOrganizationApiKeyRepository
         }
 
         const retiredKeyHash = stringValue(key, 'key_hash_hex');
+        const retiredKeyPrefix = stringValue(key, 'key_prefix');
         const name = stringValue(key, 'name');
         const scopes = stringArrayValue(key, 'scopes');
         const allowedEnvironments = stringArrayValue(
@@ -302,6 +308,7 @@ export class PostgresOrganizationApiKeyRepository
         const expiresAt = dateValue(key, 'expires_at');
         if (
           retiredKeyHash === undefined ||
+          retiredKeyPrefix === undefined ||
           name === undefined ||
           scopes === undefined ||
           allowedEnvironments === undefined ||
@@ -336,6 +343,21 @@ export class PostgresOrganizationApiKeyRepository
         if (createdAt === undefined) {
           throw identityStoreError('Identity data is invalid');
         }
+
+        await recordOrganizationAuditEvent(
+          transaction,
+          auditStamp(input, input.actorUserId, input.now),
+          {
+            action: 'api_key.rotated',
+            apiKeyId: input.apiKeyId,
+            name,
+            keyPrefix: retiredKeyPrefix,
+            replacementId: input.replacementId,
+            replacementKeyPrefix: input.keyPrefix,
+            scopes,
+            allowedEnvironments,
+          },
+        );
 
         return {
           kind: 'rotated' as const,
@@ -403,6 +425,23 @@ export class PostgresOrganizationApiKeyRepository
         const key = mapListRow({ ...row, status: 'revoked' });
         if (key === undefined) {
           throw identityStoreError('Identity data is invalid');
+        }
+
+        // Only the request that actually withdrew the key is an act. The
+        // repeat that finds it already withdrawn changed nothing, and a trail
+        // that records deliveries is diluted by the retries this boundary
+        // deliberately invites.
+        if (row.status === 'active') {
+          await recordOrganizationAuditEvent(
+            transaction,
+            auditStamp(input, input.actorUserId, input.now),
+            {
+              action: 'api_key.revoked',
+              apiKeyId: key.apiKeyId,
+              name: key.name,
+              keyPrefix: key.keyPrefix,
+            },
+          );
         }
 
         return { kind: 'revoked' as const, keyHash, key };
@@ -509,6 +548,19 @@ export class PostgresOrganizationApiKeyRepository
         if (createdAt === undefined) {
           throw identityStoreError('Identity data is invalid');
         }
+
+        await recordOrganizationAuditEvent(
+          transaction,
+          auditStamp(input, input.actorUserId, createdAt),
+          {
+            action: 'api_key.created',
+            apiKeyId: input.apiKeyId,
+            name: input.name,
+            keyPrefix: input.keyPrefix,
+            scopes: input.scopes,
+            allowedEnvironments: input.allowedEnvironments,
+          },
+        );
 
         return { kind: 'created' as const, createdAt };
       });

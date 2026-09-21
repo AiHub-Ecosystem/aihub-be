@@ -165,8 +165,11 @@ describe('Organization membership HTTP/application/repository integration', () =
     expect(client.transactionQueries[1]?.text).toContain(
       'FOR UPDATE OF membership',
     );
-    expect(client.transactionQueries.at(-1)?.text).toContain(
+    expect(client.transactionQueries.at(-2)?.text).toContain(
       'UPDATE organization_members',
+    );
+    expect(client.transactionQueries.at(-1)?.text).toContain(
+      'INSERT INTO organization_audit_events',
     );
   });
 });

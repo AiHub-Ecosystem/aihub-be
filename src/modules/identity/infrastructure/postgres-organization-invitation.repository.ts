@@ -14,6 +14,10 @@ import {
   organizationStatusValue,
   stringValue,
 } from './identity-row';
+import {
+  auditStamp,
+  recordOrganizationAuditEvent,
+} from './organization-audit-event.store';
 import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
 
 /**
@@ -46,6 +50,7 @@ const CLOSE_OPEN_INVITATIONS_SQL = `
   WHERE organization_id = $1
     AND email = $2
     AND consumed_at IS NULL
+  RETURNING id
 `;
 
 const INSERT_INVITATION_SQL = `
@@ -59,7 +64,7 @@ const INSERT_INVITATION_SQL = `
  * requests redeeming one token, and this is the row both of them find.
  */
 const LOCK_INVITATION_SQL = `
-  SELECT organization_id, email, role
+  SELECT id, organization_id, email, role
   FROM organization_invitations
   WHERE token_hash = $1
     AND consumed_at IS NULL
@@ -156,8 +161,9 @@ export class PostgresOrganizationInvitationRepository
         }
 
         // Resend supersedes the previous open token, which is also what keeps
-        // the one-open-invitation index satisfiable.
-        await transaction.query(CLOSE_OPEN_INVITATIONS_SQL, [
+        // the one-open-invitation index satisfiable. Closing a token here is
+        // also what separates a resend from a first invitation in the trail.
+        const superseded = await transaction.query(CLOSE_OPEN_INVITATIONS_SQL, [
           input.organizationId,
           input.email,
           input.now,
@@ -172,6 +178,18 @@ export class PostgresOrganizationInvitationRepository
           input.expiresAt,
           input.now,
         ]);
+
+        await recordOrganizationAuditEvent(
+          transaction,
+          auditStamp(input, input.invitedBy, input.now),
+          {
+            action:
+              superseded.length > 0 ? 'invitation.resent' : 'invitation.sent',
+            invitationId: input.invitationId,
+            email: input.email,
+            role: input.role,
+          },
+        );
 
         return { kind: 'created', organizationName: name };
       });
@@ -207,10 +225,12 @@ export class PostgresOrganizationInvitationRepository
           return { kind: 'token_invalid' };
         }
 
+        const invitationId = stringValue(invitation, 'id');
         const organizationId = stringValue(invitation, 'organization_id');
         const invitedEmail = stringValue(invitation, 'email');
         const invitedRole = membershipRoleValue(invitation, 'role');
         if (
+          invitationId === undefined ||
           organizationId === undefined ||
           invitedEmail === undefined ||
           invitedRole === undefined
@@ -262,6 +282,19 @@ export class PostgresOrganizationInvitationRepository
           input.tokenHash,
           input.now,
         ]);
+
+        // The granted role, not the invited one: an already-active membership
+        // keeps the authority it has, and the trail must say what was granted.
+        await recordOrganizationAuditEvent(
+          transaction,
+          auditStamp({ ...input, organizationId }, input.userId, input.now),
+          {
+            action: 'invitation.accepted',
+            invitationId,
+            email: invitedEmail,
+            role: grantedRole,
+          },
+        );
 
         return { kind: 'accepted', organizationId, role: grantedRole };
       });

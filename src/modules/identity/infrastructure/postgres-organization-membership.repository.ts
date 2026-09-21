@@ -14,6 +14,11 @@ import type {
   OrganizationRosterOrganization,
   ResolveMembershipInput,
 } from '../application/organization-membership.port';
+import type {
+  OrganizationAuditDenial,
+  OrganizationAuditDraft,
+} from '../domain/organization-audit-event';
+
 import {
   identityStoreError,
   isRecord,
@@ -22,6 +27,11 @@ import {
   organizationStatusValue,
   stringValue,
 } from './identity-row';
+import {
+  auditStamp,
+  recordOrganizationAuditDenial,
+  recordOrganizationAuditEvent,
+} from './organization-audit-event.store';
 import type { PostgresIdentityClient } from './postgres-api-key.repository';
 import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
 
@@ -265,6 +275,54 @@ function mutationResult(
   };
 }
 
+/**
+ * The audit draft for one membership act. The target's role and username are
+ * read from the locked row, so the record keeps the authority the target
+ * actually held at that moment rather than the one a later read would find.
+ */
+function membershipAuditDraft(
+  action: 'change_role' | 'disable' | 'transfer',
+  target: MutationMembershipRow,
+  callerUsername: string,
+  toRole: OrganizationMembershipRole | undefined,
+  denial?: OrganizationAuditDenial,
+): OrganizationAuditDraft {
+  const refused = denial === undefined ? {} : { denial };
+
+  if (action === 'change_role') {
+    if (toRole === undefined) {
+      throw identityStoreError('Identity data is invalid');
+    }
+    return {
+      action: 'membership.role_changed',
+      targetUserAccountId: target.userId,
+      username: target.username,
+      fromRole: target.role,
+      toRole,
+      ...refused,
+    };
+  }
+
+  if (action === 'disable') {
+    return {
+      action: 'membership.disabled',
+      targetUserAccountId: target.userId,
+      username: target.username,
+      role: target.role,
+      ...refused,
+    };
+  }
+
+  return {
+    action: 'membership.owner_transferred',
+    targetUserAccountId: target.userId,
+    username: target.username,
+    fromRole: target.role,
+    previousOwnerUsername: callerUsername,
+    ...refused,
+  };
+}
+
 function mapRosterRow(value: unknown): RosterRow | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -458,6 +516,13 @@ export class PostgresOrganizationMembershipRepository
       );
     }
 
+    // The request's own instant, so every event a mutation writes shares one
+    // moment and none of them is settled by the database's clock.
+    const stamp = auditStamp(input, input.userId, input.context.receivedAt);
+    // A refusal is decided inside the transaction that then rolls back, so its
+    // record cannot be written there. It is carried out and written after.
+    let refused: OrganizationAuditDraft | undefined;
+
     try {
       return await this.client.transaction(async (transaction) => {
         const organizationRows = await transaction.query(
@@ -524,6 +589,15 @@ export class PostgresOrganizationMembershipRepository
           ...(requestedRole === undefined ? {} : { requestedRole }),
         });
         if (decision.kind === 'forbidden') {
+          // Recorded: the caller belongs to this Organization and the target is
+          // real, which is exactly the refusal a compliance reader looks for.
+          refused = membershipAuditDraft(
+            action,
+            target,
+            caller.username,
+            requestedRole,
+            'insufficient_authority',
+          );
           throw forbidden('Organization membership mutation is not allowed');
         }
         if (decision.kind === 'target_unavailable') {
@@ -533,7 +607,14 @@ export class PostgresOrganizationMembershipRepository
           throw invalidMutation();
         }
 
+        // Both repeats that change nothing return early, before the owner
+        // count and before any record is written. A retry of an applied state
+        // is a delivery, not an act, and these boundaries invite retries.
         if (action === 'disable' && target.status === 'disabled') {
+          return mutationResult(target);
+        }
+
+        if (action === 'change_role' && target.role === requestedRole) {
           return mutationResult(target);
         }
 
@@ -549,6 +630,13 @@ export class PostgresOrganizationMembershipRepository
             throw identityStoreError('Identity data is invalid');
           }
           if (count <= 1) {
+            refused = membershipAuditDraft(
+              action,
+              target,
+              caller.username,
+              requestedRole,
+              'owner_required',
+            );
             throw ownerRequired();
           }
         }
@@ -569,6 +657,11 @@ export class PostgresOrganizationMembershipRepository
           if (role === undefined || status === undefined) {
             throw identityStoreError('Identity data is invalid');
           }
+          await recordOrganizationAuditEvent(
+            transaction,
+            stamp,
+            membershipAuditDraft(action, target, caller.username, role),
+          );
           return mutationResult(target, role, status);
         }
 
@@ -587,6 +680,11 @@ export class PostgresOrganizationMembershipRepository
           if (role === undefined || status !== 'disabled') {
             throw identityStoreError('Identity data is invalid');
           }
+          await recordOrganizationAuditEvent(
+            transaction,
+            stamp,
+            membershipAuditDraft(action, target, caller.username, undefined),
+          );
           return mutationResult(target, role, status);
         }
 
@@ -613,9 +711,21 @@ export class PostgresOrganizationMembershipRepository
           throw identityStoreError('Identity data is invalid');
         }
 
+        // One event, not two role changes: ADR-0029 made transfer an atomic
+        // command, and splitting it here would invent a self-demotion nobody
+        // performed.
+        await recordOrganizationAuditEvent(
+          transaction,
+          stamp,
+          membershipAuditDraft(action, target, caller.username, undefined),
+        );
+
         return mutationResult(target, promotedRole, promotedStatus);
       });
     } catch (error) {
+      if (refused !== undefined) {
+        await recordOrganizationAuditDenial(this.client, stamp, refused);
+      }
       if (error instanceof AppError) {
         throw error;
       }

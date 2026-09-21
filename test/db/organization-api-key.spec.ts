@@ -37,9 +37,26 @@ afterAll(async () => {
   await pool.end();
 });
 
+let actorUserId: string;
+
 beforeEach(async () => {
   await resetIdentityTables(pool);
+  actorUserId = await seedActor();
 });
+
+/**
+ * Every key mutation writes an Organization Audit Event naming its actor, and
+ * that actor is a real account by foreign key, so the lane seeds one.
+ */
+async function seedActor(): Promise<string> {
+  const id = `usr_${ulid()}`;
+  await pool.query(
+    `INSERT INTO user_accounts (id, username, status, created_at, updated_at)
+     VALUES ($1, $2, 'active', now(), now())`,
+    [id, `user-${id.slice(4, 16).toLowerCase()}`],
+  );
+  return id;
+}
 
 async function seedOrganization(
   options: {
@@ -65,7 +82,7 @@ function listContext(organizationId: string) {
     receivedAt: new Date(),
     deadlineMs: 5_000,
     organizationId,
-    userId: `usr_${ulid()}`,
+    userId: actorUserId,
     scopes: [],
   });
 }
@@ -109,15 +126,9 @@ function create(
 ): Promise<CreateOrganizationApiKeyRecordResult> {
   const generated = generateApiKey();
   return repository.createApiKey({
-    context: createRequestContext({
-      requestId: `req_${ulid()}`,
-      receivedAt: new Date(),
-      deadlineMs: 5_000,
-      organizationId: ORGANIZATION_ID,
-      userId: `usr_${ulid()}`,
-      scopes: [],
-    }),
+    context: listContext(ORGANIZATION_ID),
     organizationId: ORGANIZATION_ID,
+    actorUserId,
     apiKeyId: options.apiKeyId ?? generated.id,
     keyHash: generated.hash,
     keyPrefix: generated.prefix,
@@ -153,15 +164,9 @@ describe('organization API key creation against PostgreSQL', () => {
     const generated = generateApiKey();
 
     await repository.createApiKey({
-      context: createRequestContext({
-        requestId: `req_${ulid()}`,
-        receivedAt: new Date(),
-        deadlineMs: 5_000,
-        organizationId: ORGANIZATION_ID,
-        userId: `usr_${ulid()}`,
-        scopes: [],
-      }),
+      context: listContext(ORGANIZATION_ID),
       organizationId: ORGANIZATION_ID,
+      actorUserId,
       apiKeyId: generated.id,
       keyHash: generated.hash,
       keyPrefix: generated.prefix,
@@ -421,6 +426,7 @@ describe('organization API key rotation against PostgreSQL', () => {
     return repository.rotateApiKey({
       context: listContext(organizationId),
       organizationId,
+      actorUserId,
       apiKeyId: options.apiKeyId,
       replacementId: replacement.id,
       keyHash: replacement.hash,
@@ -603,6 +609,7 @@ describe('organization API key rotation against PostgreSQL', () => {
       repository.rotateApiKey({
         context: listContext(ORGANIZATION_ID),
         organizationId: ORGANIZATION_ID,
+        actorUserId,
         apiKeyId: retired.id,
         replacementId: collision.id,
         keyHash: replacement.hash,
@@ -671,6 +678,7 @@ describe('organization API key revocation against PostgreSQL', () => {
     return repository.revokeApiKey({
       context: listContext(organizationId),
       organizationId,
+      actorUserId,
       apiKeyId: options.apiKeyId,
       now: options.now ?? new Date(),
     });
@@ -855,5 +863,117 @@ describe('organization API key revocation against PostgreSQL', () => {
     // Holding no keys is escapable, which is what separates it from the
     // zero-owner invariant.
     expect((await create({})).kind).toBe('created');
+  });
+});
+
+describe('organization API key audit trail against PostgreSQL', () => {
+  async function auditEvents(): Promise<
+    ReadonlyArray<{
+      action: string;
+      outcome: string;
+      target_id: string;
+      target_label: string | null;
+      actor_user_account_id: string;
+      detail: Record<string, unknown> | null;
+    }>
+  > {
+    const result = await pool.query(
+      `SELECT action, outcome, target_id, target_label,
+              actor_user_account_id, detail
+       FROM organization_audit_events
+       WHERE organization_id = $1
+       ORDER BY id ASC`,
+      [ORGANIZATION_ID],
+    );
+    return result.rows;
+  }
+
+  it('records a creation against the key it created', async () => {
+    await seedOrganization();
+
+    await create();
+
+    const [event] = await auditEvents();
+    expect(event?.action).toBe('api_key.created');
+    expect(event?.outcome).toBe('applied');
+    expect(event?.actor_user_account_id).toBe(actorUserId);
+    expect(event?.target_label).toBe('Prod backend');
+    expect(event?.detail).toMatchObject({ scopes: ['writing.grade'] });
+  });
+
+  it('records a rotation naming the replacement beside the key it withdrew', async () => {
+    await seedOrganization();
+    const retired = await seedKey({
+      organizationId: ORGANIZATION_ID,
+      name: 'original',
+    });
+    const replacement = generateApiKey();
+
+    await repository.rotateApiKey({
+      context: listContext(ORGANIZATION_ID),
+      organizationId: ORGANIZATION_ID,
+      actorUserId,
+      apiKeyId: retired,
+      replacementId: replacement.id,
+      keyHash: replacement.hash,
+      keyPrefix: replacement.prefix,
+      now: new Date(),
+    });
+
+    const [event] = await auditEvents();
+    expect(event?.action).toBe('api_key.rotated');
+    expect(event?.target_id).toBe(retired);
+    expect(event?.detail).toMatchObject({
+      replacementId: replacement.id,
+      replacementKeyPrefix: replacement.prefix,
+    });
+    // The withdrawn key is the event's target, so its own prefix is what
+    // identifies the record.
+    expect(event?.detail).toHaveProperty('keyPrefix');
+  });
+
+  it('records the withdrawal once, not again on the repeat that changed nothing', async () => {
+    await seedOrganization();
+    const key = await seedKey({
+      organizationId: ORGANIZATION_ID,
+      name: 'Prod backend',
+    });
+
+    await repository.revokeApiKey({
+      context: listContext(ORGANIZATION_ID),
+      organizationId: ORGANIZATION_ID,
+      actorUserId,
+      apiKeyId: key,
+      now: new Date(),
+    });
+    await repository.revokeApiKey({
+      context: listContext(ORGANIZATION_ID),
+      organizationId: ORGANIZATION_ID,
+      actorUserId,
+      apiKeyId: key,
+      now: new Date(),
+    });
+
+    const events = await auditEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.action).toBe('api_key.revoked');
+    expect(events[0]?.target_id).toBe(key);
+  });
+
+  it('records no credential material', async () => {
+    await seedOrganization();
+    await create();
+
+    const result = await pool.query<{ row: string }>(
+      `SELECT organization_audit_events::text AS row
+       FROM organization_audit_events`,
+    );
+    const rows = result.rows.map(({ row }) => row).join(' ');
+    const keys = await pool.query<{ hash: string }>(
+      "SELECT encode(key_hash, 'hex') AS hash FROM api_keys",
+    );
+    for (const { hash } of keys.rows) {
+      expect(rows).not.toContain(hash);
+    }
   });
 });

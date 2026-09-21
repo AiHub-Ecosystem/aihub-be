@@ -5,6 +5,8 @@ import type { DurableApiKeyStatus } from './api-key-authenticator.port';
 export interface CreateOrganizationApiKeyRecordInput {
   readonly context: RequestContext;
   readonly organizationId: string;
+  /** The acting AIHUB User Account, recorded as the Organization Audit Event's actor. */
+  readonly actorUserId: string;
   readonly apiKeyId: string;
   /** Lowercase hex SHA-256 of the raw credential; the raw value never arrives here. */
   readonly keyHash: string;
@@ -53,6 +55,8 @@ export interface OrganizationApiKeyRecord {
 export interface RotateOrganizationApiKeyRecordInput {
   readonly context: RequestContext;
   readonly organizationId: string;
+  /** The acting AIHUB User Account, recorded as the Organization Audit Event's actor. */
+  readonly actorUserId: string;
   /** The key being retired. */
   readonly apiKeyId: string;
   readonly replacementId: string;
@@ -85,6 +89,8 @@ export type RotateOrganizationApiKeyRecordResult =
 export interface RevokeOrganizationApiKeyRecordInput {
   readonly context: RequestContext;
   readonly organizationId: string;
+  /** The acting AIHUB User Account, recorded as the Organization Audit Event's actor. */
+  readonly actorUserId: string;
   readonly apiKeyId: string;
   /** The application's clock, so the database's never decides `revoked_at`. */
   readonly now: Date;
