@@ -59,6 +59,7 @@ const ORGANIZATION_MEMBER_TRANSFER_PATH =
 const ORGANIZATION_API_KEY_PATH =
   '/v1/organizations/{organization_id}/api-keys';
 const ORGANIZATION_API_KEY_OPERATION_ID = 'organizations.apiKeys.create';
+const ORGANIZATION_API_KEY_LIST_OPERATION_ID = 'organizations.apiKeys.list';
 const ORGANIZATION_MEMBER_CHANGE_ROLE_OPERATION_ID =
   'organizations.members.change_role';
 const ORGANIZATION_MEMBER_DISABLE_OPERATION_ID =
@@ -210,6 +211,21 @@ describe('buildOpenApiDocument', () => {
       operation?.responses['201']?.headers?.['Cache-Control']?.schema,
     ).toEqual({ type: 'string', enum: ['no-store'] });
     expect(operation?.responses['403']).toBeDefined();
+  });
+
+  it('documents the bearer-authenticated API key listing route without a cache header', () => {
+    const operation = build().paths[ORGANIZATION_API_KEY_PATH]?.get;
+
+    expect(operation?.operationId).toBe(ORGANIZATION_API_KEY_LIST_OPERATION_ID);
+    expect(operation?.security).toEqual([{ BearerAuth: [] }]);
+    expect(operation?.requestBody).toBeUndefined();
+    // Unlike creation, this response carries no credential, so it declares no
+    // no-store header.
+    expect(operation?.responses['200']?.headers).toBeUndefined();
+    expect(operation?.responses['403']).toBeDefined();
+    expect(JSON.stringify(operation?.responses['200'])).not.toContain(
+      'api_key"',
+    );
   });
 
   it('documents the bearer-authenticated member mutation routes', () => {

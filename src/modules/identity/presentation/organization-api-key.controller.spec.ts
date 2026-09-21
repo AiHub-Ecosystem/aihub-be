@@ -19,6 +19,7 @@ import {
 } from '../../auth/application/user-access-token.port';
 import {
   type CreateOrganizationApiKeyRecordInput,
+  type ListOrganizationApiKeysInput,
   ORGANIZATION_API_KEY,
   type OrganizationApiKeyPort,
 } from '../application/organization-api-key.port';
@@ -76,6 +77,9 @@ describe('Organization API key creation HTTP flow', () => {
           kind: 'created' as const,
           createdAt: CREATED_AT,
         }),
+      ),
+      listApiKeys: jest.fn(
+        async (_input: ListOrganizationApiKeysInput) => [] as const,
       ),
     };
 

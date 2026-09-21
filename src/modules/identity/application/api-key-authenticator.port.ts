@@ -16,13 +16,16 @@ export interface AuthenticatedApiKey {
 }
 
 export type OrganizationStatus = 'active' | 'suspended';
-export type ApiKeyStatus = 'active' | 'revoked';
+/** The lifecycle the `api_keys` column holds. Expiry is not one of its
+ * values: an expired key still reads `active` here, and the status the API
+ * publishes is derived from the key's expiry moment in the domain. */
+export type DurableApiKeyStatus = 'active' | 'revoked';
 
 export interface ApiKeyRecord {
   readonly organizationId: string;
   readonly apiKeyId: string;
   readonly organizationStatus: OrganizationStatus;
-  readonly status: ApiKeyStatus;
+  readonly status: DurableApiKeyStatus;
   readonly scopes: readonly string[];
   readonly entitlements: readonly string[];
   readonly allowedEnvironments: readonly string[];

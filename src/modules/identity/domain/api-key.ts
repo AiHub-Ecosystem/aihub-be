@@ -57,3 +57,29 @@ export function generateApiKey(now: Date = new Date()): GeneratedApiKey {
     prefix: apiKeyDisplayPrefix(raw),
   };
 }
+
+/** The lifecycle AIHUB publishes for a key, wider than the durable column. */
+export type ApiKeyStatus = 'active' | 'expired' | 'revoked';
+
+/**
+ * Derives the published status of a key from its durable row.
+ *
+ * Expiry is not stored: a key past its expiry still reads `active` in the
+ * column, and authentication rejects it through a separate check. This is the
+ * one place that turns the two into the single lifecycle callers see, so the
+ * application and the database cannot disagree about when a key expired.
+ */
+export function apiKeyStatus(
+  key: {
+    readonly status: 'active' | 'revoked';
+    readonly expiresAt: Date | null;
+  },
+  now: Date,
+): ApiKeyStatus {
+  if (key.status === 'revoked') {
+    return 'revoked';
+  }
+  return key.expiresAt !== null && key.expiresAt.getTime() <= now.getTime()
+    ? 'expired'
+    : 'active';
+}

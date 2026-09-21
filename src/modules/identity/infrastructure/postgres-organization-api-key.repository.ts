@@ -2,7 +2,9 @@ import { AppError } from '../../../common/errors/app-error';
 import type {
   CreateOrganizationApiKeyRecordInput,
   CreateOrganizationApiKeyRecordResult,
+  ListOrganizationApiKeysInput,
   OrganizationApiKeyPort,
+  OrganizationApiKeyRecord,
 } from '../application/organization-api-key.port';
 
 import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
@@ -33,6 +35,30 @@ const INSERT_API_KEY_SQL = `
      allowed_environments, expires_at)
   VALUES ($1, $2, decode($3, 'hex'), $4, $5, $6, $7, $8)
   RETURNING created_at
+`;
+
+/**
+ * The live-credential inventory. Revoked rows stay durable and unlisted, and
+ * the organization predicate is the only thing standing between one tenant and
+ * another's key inventory. Ordering is newest-first with the identifier as
+ * tie-break, which agrees with the primary sort because the identifier is
+ * time-ordered.
+ */
+const LIST_API_KEYS_SQL = `
+  SELECT
+    id,
+    name,
+    key_prefix,
+    scopes,
+    allowed_environments,
+    status,
+    expires_at,
+    last_used_at,
+    created_at
+  FROM api_keys
+  WHERE organization_id = $1
+    AND status = 'active'
+  ORDER BY created_at DESC, id DESC
 `;
 
 function identityStoreError(message: string): AppError {
@@ -68,10 +94,114 @@ function createdAtValue(value: unknown): Date | undefined {
   return undefined;
 }
 
+function stringValue(
+  record: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = record[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function dateValue(
+  record: Record<string, unknown>,
+  key: string,
+): Date | null | undefined {
+  const value = record[key];
+  if (value === null) {
+    return null;
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(value.getTime());
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+  return undefined;
+}
+
+function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const apiKeyId = stringValue(value, 'id');
+  const name = stringValue(value, 'name');
+  const keyPrefix = stringValue(value, 'key_prefix');
+  const scopes = stringArrayValue(value, 'scopes');
+  const allowedEnvironments = stringArrayValue(value, 'allowed_environments');
+  const expiresAt = dateValue(value, 'expires_at');
+  const lastUsedAt = dateValue(value, 'last_used_at');
+  const createdAt = dateValue(value, 'created_at');
+
+  // Mapped from the row rather than hardcoded to the value the query happens
+  // to select: the filter belongs in one place, and a mapper that contradicts
+  // a widened query would fail the request instead of reporting the row.
+  const status =
+    value.status === 'active' || value.status === 'revoked'
+      ? value.status
+      : undefined;
+
+  if (
+    apiKeyId === undefined ||
+    name === undefined ||
+    keyPrefix === undefined ||
+    scopes === undefined ||
+    allowedEnvironments === undefined ||
+    status === undefined ||
+    expiresAt === undefined ||
+    lastUsedAt === undefined ||
+    createdAt === undefined ||
+    createdAt === null
+  ) {
+    return undefined;
+  }
+
+  return {
+    apiKeyId,
+    name,
+    keyPrefix,
+    scopes,
+    allowedEnvironments,
+    status,
+    expiresAt,
+    lastUsedAt,
+    createdAt,
+  };
+}
+
 export class PostgresOrganizationApiKeyRepository
   implements OrganizationApiKeyPort
 {
   constructor(private readonly client: PostgresIdentityTransactionalClient) {}
+
+  async listApiKeys(
+    input: ListOrganizationApiKeysInput,
+  ): Promise<readonly OrganizationApiKeyRecord[]> {
+    if (
+      input.context.organizationId !== input.organizationId ||
+      input.organizationId.trim().length === 0
+    ) {
+      throw identityStoreError('Identity API key query is invalid');
+    }
+
+    let rows: readonly unknown[];
+    try {
+      rows = await this.client.query(LIST_API_KEYS_SQL, [input.organizationId]);
+    } catch {
+      throw identityStoreError('Identity store is unavailable');
+    }
+
+    // An invalid projection fails the whole request rather than quietly
+    // yielding a partial inventory.
+    return rows.map((row) => {
+      const record = mapListRow(row);
+      if (record === undefined) {
+        throw identityStoreError('Identity data is invalid');
+      }
+      return record;
+    });
+  }
 
   async createApiKey(
     input: CreateOrganizationApiKeyRecordInput,

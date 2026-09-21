@@ -27,6 +27,7 @@ import {
 import {
   CreateOrganizationApiKeyRequestSchema,
   CreateOrganizationApiKeyResponseSchema,
+  ListOrganizationApiKeysResponseSchema,
 } from '../contracts/organization/api-key';
 import {
   AcceptOrganizationInvitationRequestSchema,
@@ -540,6 +541,36 @@ function organizationApiKeyPathItem(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
 ): Record<string, unknown> {
   return {
+    get: {
+      operationId: 'organizations.apiKeys.list',
+      summary: 'List an organization API key inventory',
+      description:
+        'Returns the organization live API keys as metadata only. Revoked keys are absent; `status` is `expired` once a key expiry has passed. `last_used_at` is approximate.',
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        {
+          name: 'organization_id',
+          in: 'path',
+          required: true,
+          description: 'The organization whose API keys are listed.',
+          schema: { type: 'string', minLength: 1 },
+        },
+      ],
+      responses: {
+        '200': {
+          description:
+            'Live API key inventory; never a credential hash or raw credential',
+          content: {
+            'application/json': {
+              schema: ListOrganizationApiKeysResponseSchema,
+            },
+          },
+        },
+        ...authErrorResponses(groupedErrors, [401, 403, 500, 503]),
+      },
+    },
     post: {
       operationId: 'organizations.apiKeys.create',
       summary: 'Create an organization API key',
@@ -564,7 +595,7 @@ function organizationApiKeyPathItem(
       responses: {
         '201': {
           description:
-            'API key created; the raw credential is returned in this response only and cannot be recovered afterwards',
+            'API key created; the raw credential is returned in this response only and cannot be recovered afterwards. `status` is always `active`: a requested expiry must be in the future, so this response never carries `expired`.',
           headers: {
             'Cache-Control': {
               schema: { type: 'string', enum: ['no-store'] },

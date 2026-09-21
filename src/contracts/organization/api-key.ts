@@ -12,8 +12,15 @@ if (!FormatRegistry.Has('date-time')) {
   );
 }
 
+/**
+ * The lifecycle the API publishes, which is wider than the durable column:
+ * `expired` is derived from the key's expiry moment rather than stored. A
+ * creation response never carries it, because a requested expiry must be in
+ * the future.
+ */
 const ApiKeyStatusSchema = Type.Union([
   Type.Literal('active'),
+  Type.Literal('expired'),
   Type.Literal('revoked'),
 ]);
 
@@ -57,6 +64,10 @@ export const OrganizationApiKeySchema = Type.Object(
     allowed_environments: Type.Array(Type.String({ minLength: 1 })),
     status: ApiKeyStatusSchema,
     expires_at: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+    /**
+     * Approximate: the authenticator's touch is throttled and issued
+     * fire-and-forget, so this can lag a live key's real last use.
+     */
     last_used_at: Type.Union([
       Type.String({ format: 'date-time' }),
       Type.Null(),
@@ -97,4 +108,26 @@ export const CreateOrganizationApiKeyResponseSchema = Type.Object(
 
 export type CreateOrganizationApiKeyResponse = Static<
   typeof CreateOrganizationApiKeyResponseSchema
+>;
+
+/**
+ * The live-credential inventory: revoked keys are absent, so the response is
+ * bounded by the active-key cap and needs no pagination.
+ */
+export const ListOrganizationApiKeysResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      { api_keys: Type.Array(OrganizationApiKeySchema) },
+      { additionalProperties: false },
+    ),
+    meta: Type.Object(
+      { request_id: Type.String({ pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$' }) },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export type ListOrganizationApiKeysResponse = Static<
+  typeof ListOrganizationApiKeysResponseSchema
 >;

@@ -16,6 +16,7 @@ import {
 } from './database';
 
 const ORGANIZATION_ID = 'org_acme';
+const OTHER_ORGANIZATION_ID = 'org_other';
 
 let pool: Pool;
 let client: PostgresIdentityTransactionalClient & { close(): Promise<void> };
@@ -40,15 +41,60 @@ beforeEach(async () => {
 
 async function seedOrganization(
   options: {
+    readonly id?: string;
     readonly status?: 'active' | 'suspended';
     readonly entitlements?: readonly string[];
   } = {},
 ): Promise<void> {
-  const { status = 'active', entitlements = ['writing'] } = options;
+  const {
+    id = ORGANIZATION_ID,
+    status = 'active',
+    entitlements = ['writing'],
+  } = options;
   await pool.query(
     'INSERT INTO organizations (id, name, status, entitlements) VALUES ($1, $2, $3, $4)',
-    [ORGANIZATION_ID, 'Acme', status, [...entitlements]],
+    [id, `Organization ${id}`, status, [...entitlements]],
   );
+}
+
+function listContext(organizationId: string) {
+  return createRequestContext({
+    requestId: `req_${ulid()}`,
+    receivedAt: new Date(),
+    deadlineMs: 5_000,
+    organizationId,
+    userId: `usr_${ulid()}`,
+    scopes: [],
+  });
+}
+
+async function seedKey(options: {
+  readonly organizationId: string;
+  readonly name: string;
+  readonly status?: 'active' | 'revoked';
+  readonly createdAt?: Date;
+}): Promise<string> {
+  const generated = generateApiKey();
+  const { organizationId, name, status = 'active', createdAt } = options;
+  await pool.query(
+    `INSERT INTO api_keys
+       (id, organization_id, key_hash, key_prefix, name, scopes,
+        allowed_environments, status, created_at)
+     VALUES ($1, $2, decode($3, 'hex'), $4, $5, $6, $7, $8,
+             COALESCE($9::timestamptz, now()))`,
+    [
+      generated.id,
+      organizationId,
+      generated.hash,
+      generated.prefix,
+      name,
+      ['writing.grade'],
+      ['production'],
+      status,
+      createdAt ?? null,
+    ],
+  );
+  return generated.id;
 }
 
 function create(
@@ -184,6 +230,18 @@ describe('organization API key creation against PostgreSQL', () => {
     expect(await keyCount()).toBe(1);
   });
 
+  it('counts only the organization own keys against its active key limit', async () => {
+    await seedOrganization();
+    await seedOrganization({ id: OTHER_ORGANIZATION_ID });
+    await seedKey({ organizationId: OTHER_ORGANIZATION_ID, name: 'theirs' });
+
+    // Another tenant filling its own inventory must not consume this
+    // organization's last slot.
+    const result = await create({ activeKeyLimit: 1 });
+
+    expect(result.kind).toBe('created');
+  });
+
   it('does not count revoked keys against the active key limit', async () => {
     await seedOrganization();
     await create({ activeKeyLimit: 1 });
@@ -247,5 +305,105 @@ describe('organization API key creation against PostgreSQL', () => {
     });
 
     expect(result.kind).toBe('created');
+  });
+});
+
+describe('organization API key listing against PostgreSQL', () => {
+  it('returns only the caller organization keys when another tenant holds keys too', async () => {
+    await seedOrganization();
+    await seedOrganization({ id: OTHER_ORGANIZATION_ID });
+    await seedKey({ organizationId: ORGANIZATION_ID, name: 'ours' });
+    await seedKey({ organizationId: OTHER_ORGANIZATION_ID, name: 'theirs' });
+
+    const keys = await repository.listApiKeys({
+      context: listContext(ORGANIZATION_ID),
+      organizationId: ORGANIZATION_ID,
+    });
+
+    // The organization predicate is the whole of tenant scoping here, and a
+    // substituted repository would satisfy it by construction.
+    expect(keys.map(({ name }) => name)).toEqual(['ours']);
+  });
+
+  it('leaves revoked keys out of the live inventory', async () => {
+    await seedOrganization();
+    await seedKey({ organizationId: ORGANIZATION_ID, name: 'live' });
+    await seedKey({
+      organizationId: ORGANIZATION_ID,
+      name: 'withdrawn',
+      status: 'revoked',
+    });
+
+    const keys = await repository.listApiKeys({
+      context: listContext(ORGANIZATION_ID),
+      organizationId: ORGANIZATION_ID,
+    });
+
+    expect(keys.map(({ name }) => name)).toEqual(['live']);
+  });
+
+  it('orders the inventory newest first', async () => {
+    await seedOrganization();
+    await seedKey({
+      organizationId: ORGANIZATION_ID,
+      name: 'oldest',
+      createdAt: new Date('2026-09-01T00:00:00.000Z'),
+    });
+    await seedKey({
+      organizationId: ORGANIZATION_ID,
+      name: 'newest',
+      createdAt: new Date('2026-09-20T00:00:00.000Z'),
+    });
+    await seedKey({
+      organizationId: ORGANIZATION_ID,
+      name: 'middle',
+      createdAt: new Date('2026-09-10T00:00:00.000Z'),
+    });
+
+    const keys = await repository.listApiKeys({
+      context: listContext(ORGANIZATION_ID),
+      organizationId: ORGANIZATION_ID,
+    });
+
+    expect(keys.map(({ name }) => name)).toEqual([
+      'newest',
+      'middle',
+      'oldest',
+    ]);
+  });
+
+  it('projects the durable columns the management surface publishes', async () => {
+    await seedOrganization();
+    const id = await seedKey({
+      organizationId: ORGANIZATION_ID,
+      name: 'Prod backend',
+    });
+
+    const [key] = await repository.listApiKeys({
+      context: listContext(ORGANIZATION_ID),
+      organizationId: ORGANIZATION_ID,
+    });
+
+    expect(key?.apiKeyId).toBe(id);
+    expect(key?.name).toBe('Prod backend');
+    expect(key?.keyPrefix).toMatch(/^aihub_sk_[A-Za-z0-9]{6}$/);
+    expect(key?.scopes).toEqual(['writing.grade']);
+    expect(key?.allowedEnvironments).toEqual(['production']);
+    expect(key?.status).toBe('active');
+    expect(key?.expiresAt).toBeNull();
+    expect(key?.lastUsedAt).toBeNull();
+    expect(key?.createdAt).toBeInstanceOf(Date);
+    expect(JSON.stringify(key)).not.toContain('key_hash');
+  });
+
+  it('returns an empty inventory for an organization with no keys', async () => {
+    await seedOrganization();
+
+    const keys = await repository.listApiKeys({
+      context: listContext(ORGANIZATION_ID),
+      organizationId: ORGANIZATION_ID,
+    });
+
+    expect(keys).toEqual([]);
   });
 });

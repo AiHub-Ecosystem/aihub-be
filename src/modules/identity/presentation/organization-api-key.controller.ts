@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Header,
   HttpCode,
   Inject,
@@ -17,12 +18,17 @@ import {
   type CreateOrganizationApiKeyRequest,
   CreateOrganizationApiKeyRequestSchema,
   type CreateOrganizationApiKeyResponse,
+  type ListOrganizationApiKeysResponse,
 } from '../../../contracts/organization/api-key';
 import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
 import {
   CREATE_ORGANIZATION_API_KEY,
   type CreateOrganizationApiKeyPort,
 } from '../application/create-organization-api-key.port';
+import {
+  LIST_ORGANIZATION_API_KEYS,
+  type ListOrganizationApiKeysPort,
+} from '../application/list-organization-api-keys.port';
 
 import { bearerRequestContext } from './bearer-request-context';
 
@@ -32,7 +38,43 @@ export class OrganizationApiKeyController {
   constructor(
     @Inject(CREATE_ORGANIZATION_API_KEY)
     private readonly apiKeys: CreateOrganizationApiKeyPort,
+    @Inject(LIST_ORGANIZATION_API_KEYS)
+    private readonly keyList: ListOrganizationApiKeysPort,
   ) {}
+
+  @Get('/v1/organizations/:organizationId/api-keys')
+  @HttpCode(200)
+  // No `Cache-Control` here, unlike creation: this response carries no
+  // credential, and reserving `no-store` for the ones that do keeps it
+  // meaningful.
+  async list(
+    @Req() request: FastifyRequest,
+    @Param('organizationId') organizationId: string,
+  ): Promise<ListOrganizationApiKeysResponse> {
+    const { context, requestId, userId } = bearerRequestContext(
+      request,
+      organizationId,
+    );
+
+    const keys = await this.keyList.list({ context, userId, organizationId });
+
+    return {
+      data: {
+        api_keys: keys.map((key) => ({
+          id: key.id,
+          name: key.name,
+          key_prefix: key.keyPrefix,
+          scopes: [...key.scopes],
+          allowed_environments: [...key.allowedEnvironments],
+          status: key.status,
+          expires_at: key.expiresAt?.toISOString() ?? null,
+          last_used_at: key.lastUsedAt?.toISOString() ?? null,
+          created_at: key.createdAt.toISOString(),
+        })),
+      },
+      meta: { request_id: requestId },
+    };
+  }
 
   @Post('/v1/organizations/:organizationId/api-keys')
   @HttpCode(201)

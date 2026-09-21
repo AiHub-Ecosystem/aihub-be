@@ -1,5 +1,7 @@
 import type { RequestContext } from '../../../common/request-context/request-context';
 
+import type { DurableApiKeyStatus } from './api-key-authenticator.port';
+
 export interface CreateOrganizationApiKeyRecordInput {
   readonly context: RequestContext;
   readonly organizationId: string;
@@ -26,10 +28,35 @@ export type CreateOrganizationApiKeyRecordResult =
   | { readonly kind: 'limit_reached' }
   | { readonly kind: 'organization_unavailable' };
 
+export interface ListOrganizationApiKeysInput {
+  readonly context: RequestContext;
+  readonly organizationId: string;
+}
+
+/**
+ * One durable key as the management surface reads it. `status` is the column,
+ * not the status the API publishes: an expired key still reads `active` here,
+ * and the published lifecycle is derived from `expiresAt` in the domain.
+ */
+export interface OrganizationApiKeyRecord {
+  readonly apiKeyId: string;
+  readonly name: string;
+  readonly keyPrefix: string;
+  readonly scopes: readonly string[];
+  readonly allowedEnvironments: readonly string[];
+  readonly status: DurableApiKeyStatus;
+  readonly expiresAt: Date | null;
+  readonly lastUsedAt: Date | null;
+  readonly createdAt: Date;
+}
+
 export interface OrganizationApiKeyPort {
   createApiKey(
     input: CreateOrganizationApiKeyRecordInput,
   ): Promise<CreateOrganizationApiKeyRecordResult>;
+  listApiKeys(
+    input: ListOrganizationApiKeysInput,
+  ): Promise<readonly OrganizationApiKeyRecord[]>;
 }
 
 export const ORGANIZATION_API_KEY = Symbol('ORGANIZATION_API_KEY');

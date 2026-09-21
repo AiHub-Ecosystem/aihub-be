@@ -28,6 +28,8 @@ import {
   JWKS_KEY_PROVIDER,
   type JwksKeyProviderPort,
 } from './application/jwks-key-provider.port';
+import { ListOrganizationApiKeys } from './application/list-organization-api-keys';
+import { LIST_ORGANIZATION_API_KEYS } from './application/list-organization-api-keys.port';
 import { ManageOrganizationMembership } from './application/manage-organization-membership';
 import { MintSandboxAssertion } from './application/mint-sandbox-assertion';
 import {
@@ -141,6 +143,14 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
         membership: OrganizationMembershipPort,
         apiKeys: OrganizationApiKeyPort,
       ) => new CreateOrganizationApiKey(membership, apiKeys),
+      inject: [ORGANIZATION_MEMBERSHIP, ORGANIZATION_API_KEY],
+    },
+    {
+      provide: LIST_ORGANIZATION_API_KEYS,
+      useFactory: (
+        membership: OrganizationMembershipPort,
+        apiKeys: OrganizationApiKeyPort,
+      ) => new ListOrganizationApiKeys(membership, apiKeys),
       inject: [ORGANIZATION_MEMBERSHIP, ORGANIZATION_API_KEY],
     },
     {

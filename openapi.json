@@ -3609,6 +3609,166 @@
       }
     },
     "/v1/organizations/{organization_id}/api-keys": {
+      "get": {
+        "operationId": "organizations.apiKeys.list",
+        "summary": "List an organization API key inventory",
+        "description": "Returns the organization live API keys as metadata only. Revoked keys are absent; `status` is `expired` once a key expiry has passed. `last_used_at` is approximate.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization whose API keys are listed.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Live API key inventory; never a credential hash or raw credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["api_keys"],
+                      "properties": {
+                        "api_keys": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "name",
+                              "key_prefix",
+                              "scopes",
+                              "allowed_environments",
+                              "status",
+                              "expires_at",
+                              "last_used_at",
+                              "created_at"
+                            ],
+                            "properties": {
+                              "id": {
+                                "pattern": "^ak_[0-9A-HJKMNP-TV-Z]{26}$",
+                                "type": "string"
+                              },
+                              "name": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "key_prefix": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "scopes": {
+                                "type": "array",
+                                "items": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "allowed_environments": {
+                                "type": "array",
+                                "items": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "status": {
+                                "anyOf": [
+                                  {
+                                    "const": "active",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "expired",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "revoked",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "expires_at": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "last_used_at": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "created_at": {
+                                "format": "date-time",
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
       "post": {
         "operationId": "organizations.apiKeys.create",
         "summary": "Create an organization API key",
@@ -3682,7 +3842,7 @@
         },
         "responses": {
           "201": {
-            "description": "API key created; the raw credential is returned in this response only and cannot be recovered afterwards",
+            "description": "API key created; the raw credential is returned in this response only and cannot be recovered afterwards. `status` is always `active`: a requested expiry must be in the future, so this response never carries `expired`.",
             "headers": {
               "Cache-Control": {
                 "schema": {
@@ -3748,6 +3908,10 @@
                           "anyOf": [
                             {
                               "const": "active",
+                              "type": "string"
+                            },
+                            {
+                              "const": "expired",
                               "type": "string"
                             },
                             {

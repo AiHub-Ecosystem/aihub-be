@@ -2,7 +2,7 @@ import { AppError } from '../../../common/errors/app-error';
 import type {
   ApiKeyRecord,
   ApiKeyRepositoryPort,
-  ApiKeyStatus,
+  DurableApiKeyStatus,
   OrganizationStatus,
 } from '../application/api-key-authenticator.port';
 
@@ -140,7 +140,7 @@ function mapRecord(value: unknown): ApiKeyRecord | undefined {
     'organization_status',
     ['active', 'suspended'],
   );
-  const status = statusValue<ApiKeyStatus>(value, 'api_key_status', [
+  const status = statusValue<DurableApiKeyStatus>(value, 'api_key_status', [
     'active',
     'revoked',
   ]);
