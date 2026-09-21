@@ -1,7 +1,7 @@
 {
   "item": [
     {
-      "id": "7da473ce-a97b-4994-98ae-2666fba6b2da",
+      "id": "6520248c-06cd-437d-b645-7b34ac0df9f7",
       "name": "writing.task1.grade",
       "request": {
         "name": "writing.task1.grade",
@@ -74,7 +74,7 @@
       }
     },
     {
-      "id": "3953c87e-ef32-4fe9-9966-d9c0bbbb4106",
+      "id": "60583a29-25f8-4235-8fb8-2f78104ccf9f",
       "name": "writing.task2.grade",
       "request": {
         "name": "writing.task2.grade",
@@ -147,7 +147,7 @@
       }
     },
     {
-      "id": "488c2bb9-0225-41a1-81bd-bbfe7c06cc0d",
+      "id": "c64bf047-f27e-47d5-8ea4-b6ad2f93867f",
       "name": "speaking.grading",
       "request": {
         "name": "speaking.grading",
@@ -257,7 +257,7 @@
       }
     },
     {
-      "id": "2c47040a-e346-4b45-9218-be28dca7e010",
+      "id": "d814d2e5-71cf-4207-9507-d8e383316daa",
       "name": "speaking.grading-json",
       "request": {
         "name": "speaking.grading-json",
@@ -330,7 +330,7 @@
       }
     },
     {
-      "id": "a4ae4717-f6f7-45b2-8644-06f1808eb956",
+      "id": "27749fc0-6db3-40be-a48d-101800409ad7",
       "name": "Mint a sandbox user assertion",
       "request": {
         "name": "Mint a sandbox user assertion",
@@ -394,7 +394,7 @@
       }
     },
     {
-      "id": "6507df98-2bd1-4743-8e78-577b3c911ff5",
+      "id": "99bb64d0-806d-4a3b-8366-a99bf70b9bfa",
       "name": "List the authenticated user organization roster",
       "request": {
         "name": "List the authenticated user organization roster",
@@ -434,7 +434,7 @@
       }
     },
     {
-      "id": "924d53bc-c22e-4ab0-933e-be57b56a58fe",
+      "id": "466dac13-1881-468e-9722-9526ff707ad7",
       "name": "Invite a person to an organization",
       "request": {
         "name": "Invite a person to an organization",
@@ -495,7 +495,7 @@
       }
     },
     {
-      "id": "ae809ab9-f1ac-4228-a02d-5a1988aa2db1",
+      "id": "e73a25df-c775-4300-a605-52afa5cf77da",
       "name": "Accept an organization invitation",
       "request": {
         "name": "Accept an organization invitation",
@@ -548,7 +548,7 @@
       }
     },
     {
-      "id": "088b4f30-debf-4934-86d7-0352e7caa04d",
+      "id": "d38368df-fe09-4ec4-9415-bb77122ad27a",
       "name": "Change an organization member role",
       "request": {
         "name": "Change an organization member role",
@@ -622,7 +622,7 @@
       }
     },
     {
-      "id": "043979eb-6af6-4887-a074-9ccde8abac25",
+      "id": "9aee18be-844c-49f9-a75f-483ca4dc7c48",
       "name": "Disable an organization member",
       "request": {
         "name": "Disable an organization member",
@@ -683,7 +683,7 @@
       }
     },
     {
-      "id": "fdea3086-c8f8-4d02-a960-aaf23fc58b7c",
+      "id": "4f6f4096-67eb-466e-b260-8e9ebe1af821",
       "name": "Transfer organization ownership",
       "request": {
         "name": "Transfer organization ownership",
@@ -745,7 +745,68 @@
       }
     },
     {
-      "id": "239c9723-fb65-45f3-a4ef-cfc05b57ef41",
+      "id": "829eb4c9-c5af-4cdc-95b3-1087a4652754",
+      "name": "Create an organization API key",
+      "request": {
+        "name": "Create an organization API key",
+        "description": {},
+        "url": {
+          "path": ["v1", "organizations", ":organization_id", "api-keys"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": [
+            {
+              "disabled": false,
+              "type": "any",
+              "value": "<string>",
+              "key": "organization_id",
+              "description": "(Required) The organization that will own the API key."
+            }
+          ]
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"<string>\",\n  \"scopes\": [\n    \"<string>\"\n  ],\n  \"allowed_environments\": [\n    \"<string>\"\n  ],\n  \"expires_at\": \"<dateTime>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "6e10a14a-38cf-4c2b-b59f-950a73c6f1e4",
       "name": "Register a local AIHUB account",
       "request": {
         "name": "Register a local AIHUB account",
@@ -790,7 +851,7 @@
       }
     },
     {
-      "id": "244eef83-47cb-4cef-a9cd-1b4ebf242912",
+      "id": "7765695b-86df-4975-9c0b-502e86c58f3c",
       "name": "Issue a User Access JWT",
       "request": {
         "name": "Issue a User Access JWT",
@@ -835,7 +896,7 @@
       }
     },
     {
-      "id": "b1bf68ce-6c62-480c-82eb-1598b718cfa8",
+      "id": "e81aceab-2404-4000-bb5d-d2ce94d28172",
       "name": "Verify a local account email address",
       "request": {
         "name": "Verify a local account email address",
@@ -880,7 +941,7 @@
       }
     },
     {
-      "id": "e546d1bb-9ec8-4041-befa-4d5f3abf976a",
+      "id": "aa19d25c-c842-4b72-95a9-b803fb82cb83",
       "name": "Request a verification email resend",
       "request": {
         "name": "Request a verification email resend",
@@ -925,7 +986,7 @@
       }
     },
     {
-      "id": "79e7d426-04f9-4fbd-b505-36bc028f166c",
+      "id": "ffa4803e-6275-47c1-a68c-d42b2d5d12fb",
       "name": "Request a password reset email",
       "request": {
         "name": "Request a password reset email",
@@ -970,7 +1031,7 @@
       }
     },
     {
-      "id": "0bc4c1a9-47dd-4c4e-b88d-cb72c6d66c8e",
+      "id": "ea8541aa-67d9-40c9-bc07-9bd2314c55ff",
       "name": "Reset a local account password",
       "request": {
         "name": "Reset a local account password",
@@ -1015,7 +1076,7 @@
       }
     },
     {
-      "id": "8fd91d82-8bff-428f-9a30-06ac09914c04",
+      "id": "117231a5-6c46-4ba2-b85e-f08e273d7ca0",
       "name": "Rotate a refresh session and issue a User Access JWT",
       "request": {
         "name": "Rotate a refresh session and issue a User Access JWT",
@@ -1082,7 +1143,7 @@
       }
     },
     {
-      "id": "9628cb20-3d90-4317-85d6-8982b5ebb79f",
+      "id": "d18b580e-fcda-4c80-92fd-ec65a62863c3",
       "name": "Revoke the current refresh session",
       "request": {
         "name": "Revoke the current refresh session",
@@ -2100,7 +2161,7 @@
     ]
   },
   "info": {
-    "_postman_id": "619e269e-4940-4b65-8d4c-c77f14887e1d",
+    "_postman_id": "161eb8fa-3314-498c-939a-13b550caffea",
     "name": "AIHUB Writing API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Generated by `pnpm generate:postman` from openapi.json — do not hand-edit. The \"D1 handover test cases\" folder is the D2 handover artifact required by docs/aihub_deliverable_1_api_contract_schema.md §G; it is not a CI regression suite.",

@@ -1,12 +1,31 @@
-import { createHash, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { loadEnvFile } from 'node:process';
 
 import { ulid } from 'ulid';
 
-const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-const API_KEY_PREFIX = 'aihub_sk_';
+// The credential format is owned by the identity domain so that this CLI and
+// the self-service endpoint cannot drift apart in prefix, entropy, or hashing.
+const apiKeyModule = new URL(
+  '../dist/modules/identity/domain/api-key.js',
+  import.meta.url,
+);
+
+async function loadApiKeyGenerator() {
+  if (!existsSync(apiKeyModule)) {
+    throw new Error(
+      'The API key generator is unavailable. Run "pnpm build" before "key:create".',
+    );
+  }
+
+  const module = await import(apiKeyModule);
+  const generateApiKey =
+    module.generateApiKey ?? module.default?.generateApiKey;
+  if (typeof generateApiKey !== 'function') {
+    throw new Error('The API key generator is unavailable.');
+  }
+  return generateApiKey;
+}
 const IDENTITY_CONFIG_ALGORITHMS = new Set(['RS256', 'ES256']);
 const DEFAULT_ASSERTION_TTL_SECONDS = 300;
 const MAX_ASSERTION_TTL_SECONDS = 3600;
@@ -308,21 +327,6 @@ function existingIdentityTtl(row) {
   return row.max_assertion_ttl_seconds;
 }
 
-function createApiKey() {
-  let value = BigInt(`0x${randomBytes(32).toString('hex')}`);
-  let secret = '';
-  while (value > 0n) {
-    const index = Number(value % 62n);
-    const character = BASE62[index];
-    if (character === undefined) {
-      usageError();
-    }
-    secret = character + secret;
-    value /= 62n;
-  }
-  return `${API_KEY_PREFIX}${secret.padStart(43, '0')}`;
-}
-
 async function databasePool() {
   const databaseUrl = process.env.DATABASE_URL;
   if (databaseUrl === undefined || databaseUrl.trim().length === 0) {
@@ -361,6 +365,7 @@ async function createOrganization(options) {
 }
 
 async function createKey(options) {
+  const generateApiKey = await loadApiKeyGenerator();
   const pool = await databasePool();
   try {
     const organizationId = requiredOption(options, 'org');
@@ -372,17 +377,16 @@ async function createKey(options) {
       usageError();
     }
 
-    const rawKey = createApiKey();
-    const keyHash = createHash('sha256').update(rawKey, 'utf8').digest();
+    const generated = generateApiKey();
     await pool.query(
       `INSERT INTO api_keys
          (id, organization_id, key_hash, key_prefix, name, scopes, allowed_environments)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+       VALUES ($1, $2, decode($3, 'hex'), $4, $5, $6, $7)`,
       [
-        `ak_${ulid()}`,
+        generated.id,
         organizationId,
-        keyHash,
-        rawKey.slice(0, 15),
+        generated.hash,
+        generated.prefix,
         requiredOption(options, 'name'),
         listOption(options, 'scopes', 'writing.grade'),
         environmentListOption(options, 'envs', 'production'),
@@ -390,7 +394,7 @@ async function createKey(options) {
     );
 
     // The raw credential is intentionally printed once and never persisted.
-    console.log(rawKey);
+    console.log(generated.raw);
   } finally {
     await pool.end();
   }

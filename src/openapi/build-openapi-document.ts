@@ -25,6 +25,10 @@ import {
   VerifyEmailRequestSchema,
 } from '../contracts/auth/local-auth';
 import {
+  CreateOrganizationApiKeyRequestSchema,
+  CreateOrganizationApiKeyResponseSchema,
+} from '../contracts/organization/api-key';
+import {
   AcceptOrganizationInvitationRequestSchema,
   AcceptOrganizationInvitationResponseSchema,
   CreateOrganizationInvitationRequestSchema,
@@ -255,6 +259,8 @@ const ORGANIZATION_MEMBER_PATH =
   '/v1/organizations/{organization_id}/members/{username}';
 const ORGANIZATION_MEMBER_TRANSFER_PATH =
   '/v1/organizations/{organization_id}/members/{username}/transfer';
+const ORGANIZATION_API_KEY_PATH =
+  '/v1/organizations/{organization_id}/api-keys';
 
 function authErrorResponses(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
@@ -530,6 +536,52 @@ function organizationInvitationPathItem(
   };
 }
 
+function organizationApiKeyPathItem(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, unknown> {
+  return {
+    post: {
+      operationId: 'organizations.apiKeys.create',
+      summary: 'Create an organization API key',
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        {
+          name: 'organization_id',
+          in: 'path',
+          required: true,
+          description: 'The organization that will own the API key.',
+          schema: { type: 'string', minLength: 1 },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': { schema: CreateOrganizationApiKeyRequestSchema },
+        },
+      },
+      responses: {
+        '201': {
+          description:
+            'API key created; the raw credential is returned in this response only and cannot be recovered afterwards',
+          headers: {
+            'Cache-Control': {
+              schema: { type: 'string', enum: ['no-store'] },
+            },
+          },
+          content: {
+            'application/json': {
+              schema: CreateOrganizationApiKeyResponseSchema,
+            },
+          },
+        },
+        ...authErrorResponses(groupedErrors, [400, 401, 403, 500, 503]),
+      },
+    },
+  };
+}
+
 function organizationRosterPathItem(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
 ): Record<string, unknown> {
@@ -737,6 +789,7 @@ export function buildOpenApiDocument(version: string): unknown {
     organizationMembershipMutationPathItem(groupedErrors);
   paths[ORGANIZATION_MEMBER_TRANSFER_PATH] =
     organizationMembershipTransferPathItem(groupedErrors);
+  paths[ORGANIZATION_API_KEY_PATH] = organizationApiKeyPathItem(groupedErrors);
   Object.assign(paths, localAuthPathItems(groupedErrors));
 
   const errorResponses: Record<string, unknown> = {};

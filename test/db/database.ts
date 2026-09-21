@@ -53,6 +53,7 @@ export function createTestPool(): Pool {
 export async function resetIdentityTables(pool: Pool): Promise<void> {
   await pool.query(`
     TRUNCATE TABLE
+      api_keys,
       organization_invitations,
       organization_members,
       auth_identities,

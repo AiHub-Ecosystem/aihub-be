@@ -2,6 +2,10 @@ import { OPERATION_CATALOG } from '../catalog/operation-catalog';
 import { OPERATION_IDS } from '../catalog/operation-id';
 import { buildOpenApiDocument } from './build-openapi-document';
 
+interface OpenApiResponse {
+  readonly headers?: Record<string, { readonly schema?: unknown }>;
+}
+
 interface OpenApiOperation {
   readonly operationId: string;
   readonly parameters: readonly Record<string, unknown>[];
@@ -9,7 +13,7 @@ interface OpenApiOperation {
     readonly required?: boolean;
     readonly content: Record<string, { readonly schema: unknown }>;
   };
-  readonly responses: Record<string, unknown>;
+  readonly responses: Record<string, OpenApiResponse | undefined>;
   readonly security?: readonly Record<string, readonly string[]>[];
   // Optional because the sandbox mint route carries no scope: it is not a
   // catalogued operation and has nothing to authorize against.
@@ -52,6 +56,9 @@ const ORGANIZATION_MEMBER_PATH =
   '/v1/organizations/{organization_id}/members/{username}';
 const ORGANIZATION_MEMBER_TRANSFER_PATH =
   '/v1/organizations/{organization_id}/members/{username}/transfer';
+const ORGANIZATION_API_KEY_PATH =
+  '/v1/organizations/{organization_id}/api-keys';
+const ORGANIZATION_API_KEY_OPERATION_ID = 'organizations.apiKeys.create';
 const ORGANIZATION_MEMBER_CHANGE_ROLE_OPERATION_ID =
   'organizations.members.change_role';
 const ORGANIZATION_MEMBER_DISABLE_OPERATION_ID =
@@ -100,6 +107,7 @@ describe('buildOpenApiDocument', () => {
           operationId !== ORGANIZATION_INVITATION_OPERATION_ID &&
           operationId !== ORGANIZATION_INVITATION_ACCEPT_OPERATION_ID &&
           operationId !== ORGANIZATION_MEMBER_TRANSFER_OPERATION_ID &&
+          operationId !== ORGANIZATION_API_KEY_OPERATION_ID &&
           !AUTH_OPERATION_IDS.includes(
             operationId as (typeof AUTH_OPERATION_IDS)[number],
           ),
@@ -124,6 +132,7 @@ describe('buildOpenApiDocument', () => {
       ORGANIZATION_INVITATION_ACCEPT_PATH,
       ORGANIZATION_MEMBER_PATH,
       ORGANIZATION_MEMBER_TRANSFER_PATH,
+      ORGANIZATION_API_KEY_PATH,
       ...AUTH_PATHS,
     ]);
     expect(doc.paths[SANDBOX_MINT_PATH]?.post?.operationId).toBe(
@@ -187,6 +196,20 @@ describe('buildOpenApiDocument', () => {
     expect(operation?.requestBody).toBeUndefined();
     expect(operation?.responses['200']).toBeDefined();
     expect(JSON.stringify(operation?.responses['200'])).not.toContain('email');
+  });
+
+  it('documents the bearer-authenticated API key creation route as uncacheable', () => {
+    const operation = build().paths[ORGANIZATION_API_KEY_PATH]?.post;
+
+    expect(operation?.operationId).toBe(ORGANIZATION_API_KEY_OPERATION_ID);
+    expect(operation?.security).toEqual([{ BearerAuth: [] }]);
+    expect(operation?.requestBody?.required).toBe(true);
+    // The response carries a credential disclosed exactly once, so the
+    // published contract has to say no cache may keep a copy of it.
+    expect(
+      operation?.responses['201']?.headers?.['Cache-Control']?.schema,
+    ).toEqual({ type: 'string', enum: ['no-store'] });
+    expect(operation?.responses['403']).toBeDefined();
   });
 
   it('documents the bearer-authenticated member mutation routes', () => {

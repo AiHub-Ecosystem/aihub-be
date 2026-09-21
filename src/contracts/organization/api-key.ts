@@ -1,0 +1,100 @@
+import { FormatRegistry, type Static, Type } from '@sinclair/typebox';
+
+// TypeBox rejects an unregistered format outright, so `date-time` has to be
+// taught once before any boundary can validate a timestamp against it.
+if (!FormatRegistry.Has('date-time')) {
+  FormatRegistry.Set(
+    'date-time',
+    (value) =>
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(
+        value,
+      ) && !Number.isNaN(Date.parse(value)),
+  );
+}
+
+const ApiKeyStatusSchema = Type.Union([
+  Type.Literal('active'),
+  Type.Literal('revoked'),
+]);
+
+/**
+ * The Environments a customer may bind a key to. AIHUB's own sandbox and
+ * development tiers are deliberately absent: they are not customer tiers.
+ */
+export const CustomerEnvironmentSchema = Type.Union([
+  Type.Literal('production'),
+  Type.Literal('staging'),
+]);
+
+export type CustomerEnvironment = Static<typeof CustomerEnvironmentSchema>;
+
+export const CreateOrganizationApiKeyRequestSchema = Type.Object(
+  {
+    name: Type.String({ minLength: 1, maxLength: 100 }),
+    scopes: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+    allowed_environments: Type.Optional(
+      Type.Array(CustomerEnvironmentSchema, { minItems: 1 }),
+    ),
+    expires_at: Type.Optional(Type.String({ format: 'date-time' })),
+  },
+  { additionalProperties: false },
+);
+
+export type CreateOrganizationApiKeyRequest = Static<
+  typeof CreateOrganizationApiKeyRequestSchema
+>;
+
+/**
+ * The safe metadata view of an organization API key. Listing reuses this shape,
+ * so the two endpoints cannot describe the same key differently.
+ */
+export const OrganizationApiKeySchema = Type.Object(
+  {
+    id: Type.String({ pattern: '^ak_[0-9A-HJKMNP-TV-Z]{26}$' }),
+    name: Type.String({ minLength: 1 }),
+    key_prefix: Type.String({ minLength: 1 }),
+    scopes: Type.Array(Type.String({ minLength: 1 })),
+    allowed_environments: Type.Array(Type.String({ minLength: 1 })),
+    status: ApiKeyStatusSchema,
+    expires_at: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+    last_used_at: Type.Union([
+      Type.String({ format: 'date-time' }),
+      Type.Null(),
+    ]),
+    created_at: Type.String({ format: 'date-time' }),
+  },
+  { additionalProperties: false },
+);
+
+export type OrganizationApiKey = Static<typeof OrganizationApiKeySchema>;
+
+/**
+ * `api_key` carries the raw credential, returned here and nowhere else, ever.
+ * The field name matches the centralized redaction key set on purpose, so a
+ * record that reaches a logger is redacted by the mechanism rather than by
+ * remembering to.
+ */
+export const CreateOrganizationApiKeyResponseSchema = Type.Object(
+  {
+    // `Composite`, not `Intersect`: an `allOf` of two closed objects is
+    // unsatisfiable, so every real response would fail the published contract.
+    data: Type.Composite(
+      [
+        Type.Object({
+          api_key: Type.String({ pattern: '^aihub_sk_[A-Za-z0-9]{43}$' }),
+        }),
+        OrganizationApiKeySchema,
+      ],
+      { additionalProperties: false },
+    ),
+    meta: Type.Object(
+      { request_id: Type.String({ pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$' }) },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export type CreateOrganizationApiKeyResponse = Static<
+  typeof CreateOrganizationApiKeyResponseSchema
+>;

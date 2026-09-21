@@ -106,3 +106,18 @@ export const OPERATION_CATALOG = {
     responseContract: SpeakingGradeResponseSchema,
   },
 } as const satisfies Record<OperationId, OperationDef>;
+
+/**
+ * The Scope vocabulary AIHUB publishes. Key creation validates against this so
+ * a Scope no operation requires is rejected where the caller can still fix it,
+ * rather than becoming a credential that silently grants nothing.
+ */
+export function publishedScopes(): readonly string[] {
+  return [
+    ...new Set(
+      Object.values(OPERATION_CATALOG).map(
+        (operation) => operation.requiredScope,
+      ),
+    ),
+  ];
+}

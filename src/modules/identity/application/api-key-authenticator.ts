@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto';
-
 import { AppError } from '../../../common/errors/app-error';
+import { hashApiKey, isApiKeyFormat } from '../domain/api-key';
+
 import type {
   ApiKeyAuthenticatorPort,
   ApiKeyCachePort,
@@ -11,20 +11,12 @@ import type {
   AuthenticatedApiKey,
 } from './api-key-authenticator.port';
 
-export const API_KEY_PREFIX = 'aihub_sk_';
-const API_KEY_SECRET_LENGTH = 43;
+// The credential format lives in the domain so that the self-service endpoint,
+// this authenticator, and the operator CLI share one definition.
+export { API_KEY_PREFIX, hashApiKey, isApiKeyFormat } from '../domain/api-key';
+
 export const AUTH_FAILURE_LIMIT = 20;
 const AUTH_FAILURE_WINDOW_MS = 5 * 60 * 1_000;
-
-export function isApiKeyFormat(value: string): boolean {
-  return new RegExp(
-    `^${API_KEY_PREFIX}[A-Za-z0-9]{${API_KEY_SECRET_LENGTH}}$`,
-  ).test(value);
-}
-
-export function hashApiKey(value: string): string {
-  return createHash('sha256').update(value, 'utf8').digest('hex');
-}
 
 export function effectiveScopes(record: ApiKeyRecord): readonly string[] {
   return record.scopes.filter((scope) => {
