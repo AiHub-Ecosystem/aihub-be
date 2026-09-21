@@ -95,7 +95,7 @@ const result = spawnSync(
     '--config',
     '.dependency-cruiser.cjs',
     '--output-type',
-    'err',
+    'err-long',
     'src',
   ],
   { cwd: root, shell: process.platform === 'win32', stdio: 'inherit' },

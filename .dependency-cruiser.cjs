@@ -1,5 +1,23 @@
 module.exports = {
+  // no-orphans is intentionally omitted; orphan/liveness analysis belongs to
+  // dedicated tooling and may overlap with Knip.
   forbidden: [
+    {
+      name: 'no-circular',
+      severity: 'error',
+      comment:
+        'Circular imports can evaluate modules in an order that leaves dependencies undefined at runtime.',
+      from: {},
+      to: { circular: true },
+    },
+    {
+      name: 'not-to-unresolvable',
+      severity: 'error',
+      comment:
+        'Unresolvable imports make the composition graph incomplete and fail outside narrow unit-test paths.',
+      from: {},
+      to: { couldNotResolve: true },
+    },
     {
       name: 'domain-no-outer-layers',
       severity: 'error',
