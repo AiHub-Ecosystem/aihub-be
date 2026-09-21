@@ -134,3 +134,25 @@ export const ListOrganizationApiKeysResponseSchema = Type.Object(
 export type ListOrganizationApiKeysResponse = Static<
   typeof ListOrganizationApiKeysResponseSchema
 >;
+
+/**
+ * The withdrawn key. This is the only response from which the published
+ * `revoked` status is reachable: listing omits revoked keys, and creation and
+ * rotation return only active ones. `revoked_at` is deliberately absent — it
+ * would be null in every other response carrying this shape, and when a key
+ * was revoked belongs to the durable audit follow-up.
+ */
+export const RevokeOrganizationApiKeyResponseSchema = Type.Object(
+  {
+    data: OrganizationApiKeySchema,
+    meta: Type.Object(
+      { request_id: Type.String({ pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$' }) },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export type RevokeOrganizationApiKeyResponse = Static<
+  typeof RevokeOrganizationApiKeyResponseSchema
+>;

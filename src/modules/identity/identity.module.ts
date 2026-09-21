@@ -56,6 +56,8 @@ import {
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
 } from './application/organization-membership.port';
+import { RevokeOrganizationApiKey } from './application/revoke-organization-api-key';
+import { REVOKE_ORGANIZATION_API_KEY } from './application/revoke-organization-api-key.port';
 import { RotateOrganizationApiKey } from './application/rotate-organization-api-key';
 import { ROTATE_ORGANIZATION_API_KEY } from './application/rotate-organization-api-key.port';
 import { SANDBOX_ASSERTION_MINTER } from './application/sandbox-assertion-minter.port';
@@ -162,6 +164,15 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
         apiKeys: OrganizationApiKeyPort,
         cache: ApiKeyCachePort,
       ) => new RotateOrganizationApiKey(membership, apiKeys, cache),
+      inject: [ORGANIZATION_MEMBERSHIP, ORGANIZATION_API_KEY, API_KEY_CACHE],
+    },
+    {
+      provide: REVOKE_ORGANIZATION_API_KEY,
+      useFactory: (
+        membership: OrganizationMembershipPort,
+        apiKeys: OrganizationApiKeyPort,
+        cache: ApiKeyCachePort,
+      ) => new RevokeOrganizationApiKey(membership, apiKeys, cache),
       inject: [ORGANIZATION_MEMBERSHIP, ORGANIZATION_API_KEY, API_KEY_CACHE],
     },
     {

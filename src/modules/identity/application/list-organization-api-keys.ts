@@ -1,6 +1,8 @@
 import { AppError } from '../../../common/errors/app-error';
 import type { RequestContext } from '../../../common/request-context/request-context';
-import { type ApiKeyStatus, apiKeyStatus } from '../domain/api-key';
+import { apiKeyStatus } from '../domain/api-key';
+
+import type { OrganizationApiKeyView } from './organization-api-key-view';
 
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
 import { requireActiveMembership } from './organization-membership.authorization';
@@ -10,18 +12,6 @@ export interface ListOrganizationApiKeysCommand {
   readonly context: RequestContext;
   readonly userId: string;
   readonly organizationId: string;
-}
-
-export interface ListedOrganizationApiKey {
-  readonly id: string;
-  readonly name: string;
-  readonly keyPrefix: string;
-  readonly scopes: readonly string[];
-  readonly allowedEnvironments: readonly string[];
-  readonly status: ApiKeyStatus;
-  readonly expiresAt: Date | null;
-  readonly lastUsedAt: Date | null;
-  readonly createdAt: Date;
 }
 
 function forbidden(message: string): AppError {
@@ -49,7 +39,7 @@ export class ListOrganizationApiKeys {
 
   async list(
     input: ListOrganizationApiKeysCommand,
-  ): Promise<readonly ListedOrganizationApiKey[]> {
+  ): Promise<readonly OrganizationApiKeyView[]> {
     const caller = await requireActiveMembership(this.membership, {
       context: input.context,
       userId: input.userId,

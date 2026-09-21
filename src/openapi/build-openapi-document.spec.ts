@@ -60,6 +60,9 @@ const ORGANIZATION_API_KEY_PATH =
   '/v1/organizations/{organization_id}/api-keys';
 const ORGANIZATION_API_KEY_OPERATION_ID = 'organizations.apiKeys.create';
 const ORGANIZATION_API_KEY_LIST_OPERATION_ID = 'organizations.apiKeys.list';
+const ORGANIZATION_API_KEY_ITEM_PATH =
+  '/v1/organizations/{organization_id}/api-keys/{api_key_id}';
+const ORGANIZATION_API_KEY_REVOKE_OPERATION_ID = 'organizations.apiKeys.revoke';
 const ORGANIZATION_API_KEY_ROTATE_PATH =
   '/v1/organizations/{organization_id}/api-keys/{api_key_id}/rotate';
 const ORGANIZATION_API_KEY_ROTATE_OPERATION_ID = 'organizations.apiKeys.rotate';
@@ -138,6 +141,7 @@ describe('buildOpenApiDocument', () => {
       ORGANIZATION_MEMBER_PATH,
       ORGANIZATION_MEMBER_TRANSFER_PATH,
       ORGANIZATION_API_KEY_PATH,
+      ORGANIZATION_API_KEY_ITEM_PATH,
       ORGANIZATION_API_KEY_ROTATE_PATH,
       ...AUTH_PATHS,
     ]);
@@ -248,6 +252,22 @@ describe('buildOpenApiDocument', () => {
     // An unknown key and another tenant's key share this status on purpose.
     expect(operation?.responses['404']).toBeDefined();
     expect(operation?.responses['403']).toBeDefined();
+  });
+
+  it('documents the bearer-authenticated API key revocation route', () => {
+    const operation = build().paths[ORGANIZATION_API_KEY_ITEM_PATH]?.delete;
+
+    expect(operation?.operationId).toBe(
+      ORGANIZATION_API_KEY_REVOKE_OPERATION_ID,
+    );
+    expect(operation?.security).toEqual([{ BearerAuth: [] }]);
+    expect(operation?.requestBody).toBeUndefined();
+    // No credential in the body, so no no-store, unlike creation and rotation.
+    expect(operation?.responses['200']?.headers).toBeUndefined();
+    expect(operation?.responses['404']).toBeDefined();
+    expect(JSON.stringify(operation?.responses['200'])).not.toContain(
+      'api_key"',
+    );
   });
 
   it('documents the bearer-authenticated member mutation routes', () => {

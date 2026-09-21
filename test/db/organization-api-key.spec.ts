@@ -660,3 +660,200 @@ describe('organization API key rotation against PostgreSQL', () => {
     }
   });
 });
+
+describe('organization API key revocation against PostgreSQL', () => {
+  function revoke(options: {
+    readonly apiKeyId: string;
+    readonly organizationId?: string;
+    readonly now?: Date;
+  }) {
+    const organizationId = options.organizationId ?? ORGANIZATION_ID;
+    return repository.revokeApiKey({
+      context: listContext(organizationId),
+      organizationId,
+      apiKeyId: options.apiKeyId,
+      now: options.now ?? new Date(),
+    });
+  }
+
+  async function revokedAt(apiKeyId: string): Promise<Date | null> {
+    const result = await pool.query<{ revoked_at: Date | null }>(
+      'SELECT revoked_at FROM api_keys WHERE id = $1',
+      [apiKeyId],
+    );
+    return result.rows[0]?.revoked_at ?? null;
+  }
+
+  it('leaves the withdrawn key refused by a real authenticator', async () => {
+    await seedOrganization();
+    const key = generateApiKey();
+    await pool.query(
+      `INSERT INTO api_keys
+         (id, organization_id, key_hash, key_prefix, name, scopes,
+          allowed_environments)
+       VALUES ($1, $2, decode($3, 'hex'), $4, 'Prod backend',
+               ARRAY['writing.grade'], ARRAY['production'])`,
+      [key.id, ORGANIZATION_ID, key.hash, key.prefix],
+    );
+
+    expect((await revoke({ apiKeyId: key.id })).kind).toBe('revoked');
+
+    // The criterion is about authentication, not about a column: the two
+    // coincide only while the authenticator reads that column as assumed.
+    const authenticator = new ApiKeyAuthenticator(
+      new PostgresApiKeyRepository(client),
+      {
+        get: async () => undefined,
+        set: async () => undefined,
+        setMiss: async () => undefined,
+        delete: async () => undefined,
+      },
+      { get: async () => 0, recordFailure: async () => 1 },
+    );
+    await expect(
+      authenticator.authenticate({
+        value: key.raw,
+        environment: 'production',
+        clientIp: '198.51.100.9',
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('records the moment the credential stopped working', async () => {
+    await seedOrganization();
+    const id = await seedKey({
+      organizationId: ORGANIZATION_ID,
+      name: 'Prod backend',
+    });
+    const now = new Date('2026-09-21T11:22:33.000Z');
+
+    await revoke({ apiKeyId: id, now });
+
+    // Nothing observable consults revoked_at — authentication reads only the
+    // status — so the column is the only evidence this criterion has.
+    expect(await revokedAt(id)).toEqual(now);
+  });
+
+  it('keeps the recorded moment when the same key is withdrawn again', async () => {
+    await seedOrganization();
+    const id = await seedKey({
+      organizationId: ORGANIZATION_ID,
+      name: 'Prod backend',
+    });
+    const first = new Date('2026-09-21T11:22:33.000Z');
+    await revoke({ apiKeyId: id, now: first });
+
+    const repeat = await revoke({
+      apiKeyId: id,
+      now: new Date('2026-09-21T23:59:59.000Z'),
+    });
+
+    // The record should say when the credential actually stopped working, not
+    // when somebody last asked for it again.
+    expect(repeat.kind).toBe('revoked');
+    expect(await revokedAt(id)).toEqual(first);
+  });
+
+  it('reports a key already withdrawn as withdrawn, with its hash for the purge', async () => {
+    await seedOrganization();
+    const id = await seedKey({
+      organizationId: ORGANIZATION_ID,
+      name: 'withdrawn',
+      status: 'revoked',
+    });
+
+    const result = await revoke({ apiKeyId: id });
+
+    // The hash has to come back on the repeat too: purging again is the only
+    // remedy for a first purge that failed without telling anyone.
+    expect(result).toMatchObject({ kind: 'revoked' });
+    if (result.kind === 'revoked') {
+      expect(result.keyHash).toMatch(/^[0-9a-f]{64}$/);
+      expect(result.key.status).toBe('revoked');
+    }
+  });
+
+  it('refuses a key that belongs to another organization, and leaves it alone', async () => {
+    await seedOrganization();
+    await seedOrganization({ id: OTHER_ORGANIZATION_ID });
+    const theirs = await seedKey({
+      organizationId: OTHER_ORGANIZATION_ID,
+      name: 'theirs',
+    });
+
+    expect((await revoke({ apiKeyId: theirs })).kind).toBe('key_not_found');
+
+    const survivor = await pool.query<{ status: string }>(
+      'SELECT status FROM api_keys WHERE id = $1',
+      [theirs],
+    );
+    expect(survivor.rows[0]?.status).toBe('active');
+  });
+
+  it('refuses an unknown key', async () => {
+    await seedOrganization();
+
+    expect((await revoke({ apiKeyId: 'ak_missing' })).kind).toBe(
+      'key_not_found',
+    );
+  });
+
+  it('refuses withdrawal for a suspended organization', async () => {
+    await seedOrganization({ status: 'suspended' });
+    const id = await seedKey({
+      organizationId: ORGANIZATION_ID,
+      name: 'frozen',
+    });
+
+    expect((await revoke({ apiKeyId: id })).kind).toBe(
+      'organization_unavailable',
+    );
+    expect(await revokedAt(id)).toBeNull();
+  });
+
+  it('withdraws an expired key and frees the cap slot it was holding', async () => {
+    await seedOrganization();
+    const expired = generateApiKey();
+    await pool.query(
+      `INSERT INTO api_keys
+         (id, organization_id, key_hash, key_prefix, name, scopes,
+          allowed_environments, expires_at)
+       VALUES ($1, $2, decode($3, 'hex'), $4, 'Stale', ARRAY['writing.grade'],
+               ARRAY['production'], $5)`,
+      [
+        expired.id,
+        ORGANIZATION_ID,
+        expired.hash,
+        expired.prefix,
+        new Date('2026-01-01T00:00:00.000Z'),
+      ],
+    );
+
+    expect((await revoke({ apiKeyId: expired.id })).kind).toBe('revoked');
+
+    // An expired key still holds the durable status the cap counts, so an
+    // organization that could not withdraw one could be held at its limit by
+    // credentials that no longer work.
+    const result = await create({ activeKeyLimit: 1 });
+    expect(result.kind).toBe('created');
+  });
+
+  it('withdraws the last remaining key', async () => {
+    await seedOrganization();
+    const only = await seedKey({
+      organizationId: ORGANIZATION_ID,
+      name: 'the only one',
+    });
+
+    expect((await revoke({ apiKeyId: only })).kind).toBe('revoked');
+
+    const remaining = await repository.listApiKeys({
+      context: listContext(ORGANIZATION_ID),
+      organizationId: ORGANIZATION_ID,
+    });
+    expect(remaining).toEqual([]);
+    // Holding no keys is escapable, which is what separates it from the
+    // zero-owner invariant.
+    expect((await create({})).kind).toBe('created');
+  });
+});

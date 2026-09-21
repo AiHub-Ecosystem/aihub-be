@@ -28,6 +28,7 @@ import {
   CreateOrganizationApiKeyRequestSchema,
   ListOrganizationApiKeysResponseSchema,
   OrganizationApiKeySecretResponseSchema,
+  RevokeOrganizationApiKeyResponseSchema,
 } from '../contracts/organization/api-key';
 import {
   AcceptOrganizationInvitationRequestSchema,
@@ -262,6 +263,8 @@ const ORGANIZATION_MEMBER_TRANSFER_PATH =
   '/v1/organizations/{organization_id}/members/{username}/transfer';
 const ORGANIZATION_API_KEY_PATH =
   '/v1/organizations/{organization_id}/api-keys';
+const ORGANIZATION_API_KEY_ITEM_PATH =
+  '/v1/organizations/{organization_id}/api-keys/{api_key_id}';
 const ORGANIZATION_API_KEY_ROTATE_PATH =
   '/v1/organizations/{organization_id}/api-keys/{api_key_id}/rotate';
 
@@ -534,6 +537,49 @@ function organizationInvitationPathItem(
           },
         },
         ...authErrorResponses(groupedErrors, [400, 401, 403, 409, 500, 503]),
+      },
+    },
+  };
+}
+
+function organizationApiKeyItemPathItem(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, unknown> {
+  return {
+    delete: {
+      operationId: 'organizations.apiKeys.revoke',
+      summary: 'Revoke an organization API key',
+      description:
+        'Withdraws the key and keeps its durable row, purging the identity cache so the change takes effect inside the existing cache ceiling. State-idempotent: withdrawing an already withdrawn key succeeds and leaves the recorded moment unchanged. This is the only response from which `revoked` is reachable.',
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        {
+          name: 'organization_id',
+          in: 'path',
+          required: true,
+          description: 'The organization that owns the API key.',
+          schema: { type: 'string', minLength: 1 },
+        },
+        {
+          name: 'api_key_id',
+          in: 'path',
+          required: true,
+          description: 'The API key being withdrawn.',
+          schema: { type: 'string', pattern: '^ak_[0-9A-HJKMNP-TV-Z]{26}$' },
+        },
+      ],
+      responses: {
+        '200': {
+          description: 'API key withdrawn; its durable row is kept',
+          content: {
+            'application/json': {
+              schema: RevokeOrganizationApiKeyResponseSchema,
+            },
+          },
+        },
+        ...authErrorResponses(groupedErrors, [401, 403, 404, 500, 503]),
       },
     },
   };
@@ -872,6 +918,8 @@ export function buildOpenApiDocument(version: string): unknown {
   paths[ORGANIZATION_MEMBER_TRANSFER_PATH] =
     organizationMembershipTransferPathItem(groupedErrors);
   paths[ORGANIZATION_API_KEY_PATH] = organizationApiKeyPathItem(groupedErrors);
+  paths[ORGANIZATION_API_KEY_ITEM_PATH] =
+    organizationApiKeyItemPathItem(groupedErrors);
   paths[ORGANIZATION_API_KEY_ROTATE_PATH] =
     organizationApiKeyRotatePathItem(groupedErrors);
   Object.assign(paths, localAuthPathItems(groupedErrors));

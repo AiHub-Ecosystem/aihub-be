@@ -82,6 +82,29 @@ export type RotateOrganizationApiKeyRecordResult =
   | { readonly kind: 'key_not_rotatable' }
   | { readonly kind: 'organization_unavailable' };
 
+export interface RevokeOrganizationApiKeyRecordInput {
+  readonly context: RequestContext;
+  readonly organizationId: string;
+  readonly apiKeyId: string;
+  /** The application's clock, so the database's never decides `revoked_at`. */
+  readonly now: Date;
+}
+
+/**
+ * `revoked` covers both the request that withdrew the key and the repeat that
+ * found it already withdrawn: revocation is state-idempotent, and the hash
+ * comes back either way so the repeat can still purge a cache entry an earlier
+ * purge may have failed to remove.
+ */
+export type RevokeOrganizationApiKeyRecordResult =
+  | {
+      readonly kind: 'revoked';
+      readonly keyHash: string;
+      readonly key: OrganizationApiKeyRecord;
+    }
+  | { readonly kind: 'key_not_found' }
+  | { readonly kind: 'organization_unavailable' };
+
 export interface OrganizationApiKeyPort {
   createApiKey(
     input: CreateOrganizationApiKeyRecordInput,
@@ -92,6 +115,9 @@ export interface OrganizationApiKeyPort {
   rotateApiKey(
     input: RotateOrganizationApiKeyRecordInput,
   ): Promise<RotateOrganizationApiKeyRecordResult>;
+  revokeApiKey(
+    input: RevokeOrganizationApiKeyRecordInput,
+  ): Promise<RevokeOrganizationApiKeyRecordResult>;
 }
 
 export const ORGANIZATION_API_KEY = Symbol('ORGANIZATION_API_KEY');

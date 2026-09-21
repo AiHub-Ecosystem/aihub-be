@@ -6,7 +6,7 @@ import { Test } from '@nestjs/testing';
 import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '../../../app.module';
-import { OrganizationApiKeySecretResponseSchema } from '../../../contracts/organization/api-key';
+import { RevokeOrganizationApiKeyResponseSchema } from '../../../contracts/organization/api-key';
 import {
   LOCAL_AUTH_REPOSITORY,
   type LocalAuthRepositoryPort,
@@ -25,7 +25,7 @@ import {
   type ListOrganizationApiKeysInput,
   ORGANIZATION_API_KEY,
   type OrganizationApiKeyPort,
-  type RotateOrganizationApiKeyRecordInput,
+  type RevokeOrganizationApiKeyRecordInput,
 } from '../application/organization-api-key.port';
 import {
   type ListRosterInput,
@@ -38,27 +38,32 @@ import {
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
 const REQUEST_ID = 'req_01J00000000000000000000000';
-const RETIRED_KEY_ID = 'ak_01J00000000000000000000001';
-const ROTATE_URL = `/v1/organizations/${ORGANIZATION_ID}/api-keys/${RETIRED_KEY_ID}/rotate`;
-const CREATED_AT = new Date('2026-09-21T10:00:00.000Z');
-const INHERITED_EXPIRY = new Date('2027-01-01T00:00:00.000Z');
-const RETIRED_HASH = 'a'.repeat(64);
+const KEY_ID = 'ak_01J00000000000000000000001';
+const REVOKE_URL = `/v1/organizations/${ORGANIZATION_ID}/api-keys/${KEY_ID}`;
+const CREATED_AT = new Date('2026-09-20T10:00:00.000Z');
+const KEY_HASH = 'b'.repeat(64);
 
 type OrganizationStatus = 'active' | 'suspended';
 
-function rotated() {
+function revoked() {
   return {
-    kind: 'rotated' as const,
-    retiredKeyHash: RETIRED_HASH,
-    name: 'Prod backend',
-    scopes: ['writing.grade'] as readonly string[],
-    allowedEnvironments: ['production'] as readonly string[],
-    expiresAt: INHERITED_EXPIRY,
-    createdAt: CREATED_AT,
+    kind: 'revoked' as const,
+    keyHash: KEY_HASH,
+    key: {
+      apiKeyId: KEY_ID,
+      name: 'Prod backend',
+      keyPrefix: 'aihub_sk_A1b2C3',
+      scopes: ['writing.grade'] as readonly string[],
+      allowedEnvironments: ['production'] as readonly string[],
+      status: 'revoked' as const,
+      expiresAt: null,
+      lastUsedAt: null,
+      createdAt: CREATED_AT,
+    },
   };
 }
 
-describe('Organization API key rotation HTTP flow', () => {
+describe('Organization API key revocation HTTP flow', () => {
   let app: NestFastifyApplication;
   let apiKeys: jest.Mocked<OrganizationApiKeyPort>;
   let membership: jest.Mocked<OrganizationMembershipPort>;
@@ -96,10 +101,10 @@ describe('Organization API key rotation HTTP flow', () => {
       listApiKeys: jest.fn(
         async (_input: ListOrganizationApiKeysInput) => [] as const,
       ),
-      rotateApiKey: jest.fn(
-        async (_input: RotateOrganizationApiKeyRecordInput) => rotated(),
+      rotateApiKey: jest.fn(),
+      revokeApiKey: jest.fn(
+        async (_input: RevokeOrganizationApiKeyRecordInput) => revoked(),
       ),
-      revokeApiKey: jest.fn(),
     };
     cache = {
       get: jest.fn(),
@@ -163,41 +168,40 @@ describe('Organization API key rotation HTTP flow', () => {
     callerMembershipExists = true;
     organizationStatus = 'active';
     jest.clearAllMocks();
-    apiKeys.rotateApiKey.mockResolvedValue(rotated());
+    apiKeys.revokeApiKey.mockResolvedValue(revoked());
     cache.delete.mockResolvedValue(undefined);
   });
 
-  function rotate(
+  function revoke(
     headers: Record<string, string> = {
       authorization: 'Bearer valid.token.value',
     },
-    url = ROTATE_URL,
+    url = REVOKE_URL,
   ) {
-    return app.inject({ method: 'POST', url, headers });
+    return app.inject({ method: 'DELETE', url, headers });
   }
 
-  function rotateCall(): RotateOrganizationApiKeyRecordInput {
-    const call = apiKeys.rotateApiKey.mock.calls[0];
+  function revokeCall(): RevokeOrganizationApiKeyRecordInput {
+    const call = apiKeys.revokeApiKey.mock.calls[0];
     if (call === undefined) {
-      throw new Error('rotateApiKey was not called');
+      throw new Error('revokeApiKey was not called');
     }
     return call[0];
   }
 
-  it('returns the raw replacement once with the inherited key metadata', async () => {
-    const response = await rotate();
+  it('returns the withdrawn key metadata with the published revoked status', async () => {
+    const response = await revoke();
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       data: {
-        api_key: expect.stringMatching(/^aihub_sk_[A-Za-z0-9]{43}$/),
-        id: expect.stringMatching(/^ak_[0-9A-HJKMNP-TV-Z]{26}$/),
+        id: KEY_ID,
         name: 'Prod backend',
-        key_prefix: expect.stringMatching(/^aihub_sk_[A-Za-z0-9]{6}$/),
+        key_prefix: 'aihub_sk_A1b2C3',
         scopes: ['writing.grade'],
         allowed_environments: ['production'],
-        status: 'active',
-        expires_at: INHERITED_EXPIRY.toISOString(),
+        status: 'revoked',
+        expires_at: null,
         last_used_at: null,
         created_at: CREATED_AT.toISOString(),
       },
@@ -206,66 +210,69 @@ describe('Organization API key rotation HTTP flow', () => {
   });
 
   it('returns a body the published response contract accepts', async () => {
-    const response = await rotate();
+    const response = await revoke();
 
     expect(
-      Value.Check(OrganizationApiKeySecretResponseSchema, response.json()),
+      Value.Check(RevokeOrganizationApiKeyResponseSchema, response.json()),
     ).toBe(true);
   });
 
-  it('gives the replacement its own identifier, not the retired one', async () => {
-    const response = await rotate();
+  it('scopes the withdrawal to the organization and key named in the path', async () => {
+    await revoke();
 
-    expect(response.json().data.id).not.toBe(RETIRED_KEY_ID);
-    expect(rotateCall().apiKeyId).toBe(RETIRED_KEY_ID);
-    expect(rotateCall().replacementId).toBe(response.json().data.id);
+    expect(revokeCall().organizationId).toBe(ORGANIZATION_ID);
+    expect(revokeCall().apiKeyId).toBe(KEY_ID);
+    expect(revokeCall().context.organizationId).toBe(ORGANIZATION_ID);
   });
 
-  it('marks the credential response uncacheable', async () => {
-    const response = await rotate();
+  it('purges the identity cache entry of the withdrawn key', async () => {
+    await revoke();
 
-    expect(response.headers['cache-control']).toBe('no-store');
+    expect(cache.delete).toHaveBeenCalledWith(KEY_HASH);
   });
 
-  it('purges the identity cache entry of the retired key', async () => {
-    await rotate();
+  it('purges again on a repeated withdrawal, so a retry closes a window a failed purge left open', async () => {
+    await revoke();
+    await revoke();
 
-    expect(cache.delete).toHaveBeenCalledWith(RETIRED_HASH);
+    expect(cache.delete).toHaveBeenCalledTimes(2);
+    expect(cache.delete).toHaveBeenLastCalledWith(KEY_HASH);
   });
 
-  it('still returns the replacement when the cache purge fails', async () => {
+  it('succeeds on a repeated withdrawal rather than reporting a conflict', async () => {
+    await revoke();
+    const second = await revoke();
+
+    expect(second.statusCode).toBe(200);
+    expect(second.json().data.status).toBe('revoked');
+  });
+
+  it('still succeeds when the cache purge fails', async () => {
     cache.delete.mockRejectedValue(new Error('redis is unreachable'));
 
-    const response = await rotate();
+    const response = await revoke();
 
-    // The durable rotation is already committed. Failing the request here
-    // would withhold the only copy of a credential the caller now has to use,
-    // while the old one is already revoked.
+    // The withdrawal is committed by then; failing here would report work
+    // that already happened as if it had not.
     expect(response.statusCode).toBe(200);
-    expect(response.json().data.api_key).toMatch(/^aihub_sk_[A-Za-z0-9]{43}$/);
   });
 
-  it('never discloses the retired key hash', async () => {
-    const response = await rotate();
+  it('never discloses the key hash', async () => {
+    const response = await revoke();
 
-    expect(response.body).not.toContain(RETIRED_HASH);
+    expect(response.body).not.toContain(KEY_HASH);
   });
 
-  it('persists only the replacement hash, never its raw credential', async () => {
-    const response = await rotate();
+  it('sets no cache-control header, unlike the credential-bearing routes', async () => {
+    const response = await revoke();
 
-    const persisted = rotateCall();
-    const rawKey: string = response.json().data.api_key;
-    expect(persisted.keyHash).toMatch(/^[0-9a-f]{64}$/);
-    expect(JSON.stringify(persisted)).not.toContain(rawKey);
-    expect(persisted.keyPrefix).toBe(rawKey.slice(0, 15));
-    expect(persisted.organizationId).toBe(ORGANIZATION_ID);
+    expect(response.headers['cache-control']).toBeUndefined();
   });
 
-  it('rotates for an organization admin', async () => {
+  it('withdraws for an organization admin', async () => {
     callerRole = 'admin';
 
-    const response = await rotate();
+    const response = await revoke();
 
     expect(response.statusCode).toBe(200);
   });
@@ -273,83 +280,65 @@ describe('Organization API key rotation HTTP flow', () => {
   it('denies an ordinary member', async () => {
     callerRole = 'member';
 
-    const response = await rotate();
+    const response = await revoke();
 
     expect(response.statusCode).toBe(403);
     expect(response.json().error.code).toBe('FORBIDDEN');
-    expect(apiKeys.rotateApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.revokeApiKey).not.toHaveBeenCalled();
   });
 
   it('denies a caller with no membership in the organization', async () => {
     callerMembershipExists = false;
 
-    const response = await rotate();
+    const response = await revoke();
 
     expect(response.statusCode).toBe(403);
-    expect(apiKeys.rotateApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.revokeApiKey).not.toHaveBeenCalled();
   });
 
   it('denies a caller whose membership is disabled', async () => {
     callerStatus = 'disabled';
 
-    const response = await rotate();
+    const response = await revoke();
 
     expect(response.statusCode).toBe(403);
-    expect(apiKeys.rotateApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.revokeApiKey).not.toHaveBeenCalled();
   });
 
-  it('denies rotation for a suspended organization', async () => {
+  it('denies withdrawal for a suspended organization', async () => {
     organizationStatus = 'suspended';
 
-    const response = await rotate();
+    const response = await revoke();
 
     expect(response.statusCode).toBe(403);
-    expect(apiKeys.rotateApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.revokeApiKey).not.toHaveBeenCalled();
   });
 
   it('rejects an unauthenticated request', async () => {
-    const response = await rotate({});
+    const response = await revoke({});
 
     expect(response.statusCode).toBe(401);
-    expect(apiKeys.rotateApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.revokeApiKey).not.toHaveBeenCalled();
   });
 
   it('reports an unknown key as not found', async () => {
-    apiKeys.rotateApiKey.mockResolvedValue({ kind: 'key_not_found' });
+    apiKeys.revokeApiKey.mockResolvedValue({ kind: 'key_not_found' });
 
-    const response = await rotate();
+    const response = await revoke();
 
     expect(response.statusCode).toBe(404);
     expect(response.json().error.code).toBe('NOT_FOUND');
     expect(cache.delete).not.toHaveBeenCalled();
   });
 
-  it('reports a revoked or expired key as forbidden', async () => {
-    apiKeys.rotateApiKey.mockResolvedValue({ kind: 'key_not_rotatable' });
-
-    const response = await rotate();
-
-    expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe('FORBIDDEN');
-    expect(cache.delete).not.toHaveBeenCalled();
-  });
-
-  it('denies rotation when the organization is suspended inside the transaction', async () => {
-    apiKeys.rotateApiKey.mockResolvedValue({
+  it('denies withdrawal when the organization is suspended inside the transaction', async () => {
+    apiKeys.revokeApiKey.mockResolvedValue({
       kind: 'organization_unavailable',
     });
 
-    const response = await rotate();
+    const response = await revoke();
 
     expect(response.statusCode).toBe(403);
     expect(cache.delete).not.toHaveBeenCalled();
-  });
-
-  it('issues a distinct replacement on every rotation', async () => {
-    const first = await rotate();
-    const second = await rotate();
-
-    expect(first.json().data.api_key).not.toBe(second.json().data.api_key);
-    expect(first.json().data.id).not.toBe(second.json().data.id);
   });
 });

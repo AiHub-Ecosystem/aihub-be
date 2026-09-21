@@ -5,6 +5,8 @@ import type {
   ListOrganizationApiKeysInput,
   OrganizationApiKeyPort,
   OrganizationApiKeyRecord,
+  RevokeOrganizationApiKeyRecordInput,
+  RevokeOrganizationApiKeyRecordResult,
   RotateOrganizationApiKeyRecordInput,
   RotateOrganizationApiKeyRecordResult,
 } from '../application/organization-api-key.port';
@@ -104,6 +106,41 @@ const INSERT_REPLACEMENT_SQL = `
      allowed_environments, expires_at)
   VALUES ($1, $2, decode($3, 'hex'), $4, $5, $6, $7, $8)
   RETURNING created_at
+`;
+
+/**
+ * Claims the key so a withdrawal cannot read a row that rotation is in the
+ * middle of replacing. Two concurrent withdrawals need no protection — they
+ * agree — so this lock is here for the race against rotation, not for itself.
+ */
+const LOCK_API_KEY_FOR_REVOKE_SQL = `
+  SELECT
+    encode(key_hash, 'hex') AS key_hash_hex,
+    id,
+    name,
+    key_prefix,
+    scopes,
+    allowed_environments,
+    status,
+    expires_at,
+    last_used_at,
+    created_at
+  FROM api_keys
+  WHERE id = $1
+    AND organization_id = $2
+  FOR UPDATE
+`;
+
+/**
+ * Only an active key is changed. A key already withdrawn keeps the moment it
+ * was withdrawn at: the record should say when the credential actually stopped
+ * working, not when somebody last asked for it again.
+ */
+const REVOKE_ACTIVE_API_KEY_SQL = `
+  UPDATE api_keys
+  SET status = 'revoked', revoked_at = $2
+  WHERE id = $1
+    AND status = 'active'
 `;
 
 function identityStoreError(message: string): AppError {
@@ -309,6 +346,66 @@ export class PostgresOrganizationApiKeyRepository
           expiresAt,
           createdAt,
         };
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      throw identityStoreError('Identity store is unavailable');
+    }
+  }
+
+  async revokeApiKey(
+    input: RevokeOrganizationApiKeyRecordInput,
+  ): Promise<RevokeOrganizationApiKeyRecordResult> {
+    if (
+      input.context.organizationId !== input.organizationId ||
+      input.organizationId.trim().length === 0 ||
+      input.apiKeyId.trim().length === 0
+    ) {
+      throw identityStoreError('Identity API key revocation input is invalid');
+    }
+
+    try {
+      return await this.client.transaction(async (transaction) => {
+        // Organization first, then key: the order creation and rotation use,
+        // so key mutations cannot deadlock against each other.
+        const organizationRows = await transaction.query(
+          LOCK_ORGANIZATION_SQL,
+          [input.organizationId],
+        );
+        const organization = organizationRows[0];
+        if (!isRecord(organization) || organization.status !== 'active') {
+          return { kind: 'organization_unavailable' as const };
+        }
+
+        const keyRows = await transaction.query(LOCK_API_KEY_FOR_REVOKE_SQL, [
+          input.apiKeyId,
+          input.organizationId,
+        ]);
+        const row = keyRows[0];
+        if (!isRecord(row)) {
+          return { kind: 'key_not_found' as const };
+        }
+
+        const keyHash = stringValue(row, 'key_hash_hex');
+        if (keyHash === undefined) {
+          throw identityStoreError('Identity data is invalid');
+        }
+
+        await transaction.query(REVOKE_ACTIVE_API_KEY_SQL, [
+          input.apiKeyId,
+          input.now,
+        ]);
+
+        // Reported as withdrawn whether this request changed it or a previous
+        // one did: revocation is state-idempotent.
+        const key = mapListRow({ ...row, status: 'revoked' });
+        if (key === undefined) {
+          throw identityStoreError('Identity data is invalid');
+        }
+
+        return { kind: 'revoked' as const, keyHash, key };
       });
     } catch (error) {
       if (error instanceof AppError) {

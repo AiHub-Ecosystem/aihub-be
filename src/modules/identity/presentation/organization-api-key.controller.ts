@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Header,
   HttpCode,
@@ -19,6 +20,7 @@ import {
   CreateOrganizationApiKeyRequestSchema,
   type ListOrganizationApiKeysResponse,
   type OrganizationApiKeySecretResponse,
+  type RevokeOrganizationApiKeyResponse,
 } from '../../../contracts/organization/api-key';
 import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
 import {
@@ -29,6 +31,10 @@ import {
   LIST_ORGANIZATION_API_KEYS,
   type ListOrganizationApiKeysPort,
 } from '../application/list-organization-api-keys.port';
+import {
+  REVOKE_ORGANIZATION_API_KEY,
+  type RevokeOrganizationApiKeyPort,
+} from '../application/revoke-organization-api-key.port';
 import {
   ROTATE_ORGANIZATION_API_KEY,
   type RotateOrganizationApiKeyPort,
@@ -46,7 +52,46 @@ export class OrganizationApiKeyController {
     private readonly keyList: ListOrganizationApiKeysPort,
     @Inject(ROTATE_ORGANIZATION_API_KEY)
     private readonly rotation: RotateOrganizationApiKeyPort,
+    @Inject(REVOKE_ORGANIZATION_API_KEY)
+    private readonly revocation: RevokeOrganizationApiKeyPort,
   ) {}
+
+  // `DELETE`, following the route that disables a member: a withdrawal that
+  // keeps the durable row rather than erasing it.
+  @Delete('/v1/organizations/:organizationId/api-keys/:apiKeyId')
+  @HttpCode(200)
+  async revoke(
+    @Req() request: FastifyRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('apiKeyId') apiKeyId: string,
+  ): Promise<RevokeOrganizationApiKeyResponse> {
+    const { context, requestId, userId } = bearerRequestContext(
+      request,
+      organizationId,
+    );
+
+    const key = await this.revocation.revoke({
+      context,
+      userId,
+      organizationId,
+      apiKeyId,
+    });
+
+    return {
+      data: {
+        id: key.id,
+        name: key.name,
+        key_prefix: key.keyPrefix,
+        scopes: [...key.scopes],
+        allowed_environments: [...key.allowedEnvironments],
+        status: key.status,
+        expires_at: key.expiresAt?.toISOString() ?? null,
+        last_used_at: key.lastUsedAt?.toISOString() ?? null,
+        created_at: key.createdAt.toISOString(),
+      },
+      meta: { request_id: requestId },
+    };
+  }
 
   // A verb sub-resource, following the membership transfer route: rotation is
   // one act on one key, not a partial update of it.
