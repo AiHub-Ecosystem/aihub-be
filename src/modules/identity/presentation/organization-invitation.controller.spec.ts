@@ -17,7 +17,9 @@ import {
   type LocalAuthRepositoryPort,
 } from '../../auth/application/local-auth-repository.port';
 import {
+  USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
+  type UserAccessTokenIssuerPort,
   type UserAccessTokenVerifierPort,
 } from '../../auth/application/user-access-token.port';
 import {
@@ -45,6 +47,8 @@ describe('Organization invitation HTTP flow', () => {
   let invitations: jest.Mocked<OrganizationInvitationPort>;
   let membership: jest.Mocked<OrganizationMembershipPort>;
   let emailSender: jest.Mocked<EmailSenderPort>;
+  let tokenIssuer: jest.Mocked<UserAccessTokenIssuerPort>;
+  let verifiedTokens: string[];
 
   let callerRole: OrganizationMembershipRole = 'owner';
   let callerStatus: OrganizationMembershipStatus = 'active';
@@ -90,8 +94,16 @@ describe('Organization invitation HTTP flow', () => {
       ),
     };
 
+    tokenIssuer = {
+      issue: jest.fn(async (_userId: string) => ({
+        token: 'reissued.token.value',
+        expiresIn: 900,
+      })),
+    };
+    verifiedTokens = [];
     const verifier: UserAccessTokenVerifierPort = {
       verify: async (token: string) => {
+        verifiedTokens.push(token);
         if (token !== 'valid.token.value') {
           throw new Error('invalid token');
         }
@@ -116,6 +128,8 @@ describe('Organization invitation HTTP flow', () => {
       .useValue(emailSender)
       .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
       .useValue(verifier)
+      .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
+      .useValue(tokenIssuer)
       .overrideProvider(LOCAL_AUTH_REPOSITORY)
       .useValue(localAuthRepository)
       .compile();
@@ -137,6 +151,7 @@ describe('Organization invitation HTTP flow', () => {
     callerMembershipExists = true;
     organizationStatus = 'active';
     jest.clearAllMocks();
+    verifiedTokens = [];
     invitations.createInvitation.mockResolvedValue({
       kind: 'created',
       organizationName: 'Acme',
@@ -448,5 +463,28 @@ describe('Organization invitation HTTP flow', () => {
       emailSender.sendOrganizationInviteEmail.mock.calls[0]?.[0].token;
     expect(rawToken).toBeDefined();
     expect(written.join('')).not.toContain(rawToken);
+  });
+
+  it('keeps the conflict outcome unreachable for a non-member', async () => {
+    callerMembershipExists = false;
+    invitations.createInvitation.mockResolvedValue({ kind: 'member_exists' });
+
+    const response = await invite();
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.code).toBe('FORBIDDEN');
+    expect(invitations.createInvitation).not.toHaveBeenCalled();
+  });
+
+  it('leaves User Access JWT issuance untouched', async () => {
+    const response = await invite();
+
+    expect(response.statusCode).toBe(201);
+    // Inviting authorizes against durable membership; it never mints, rotates,
+    // or re-scopes the caller's own credential.
+    expect(tokenIssuer.issue).not.toHaveBeenCalled();
+    expect(response.headers['set-cookie']).toBeUndefined();
+    expect(response.body).not.toContain('access_token');
+    expect(verifiedTokens).toEqual(['valid.token.value']);
   });
 });
