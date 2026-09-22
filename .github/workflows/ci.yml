@@ -1,10 +1,26 @@
 name: CI
 
 on:
+  # Deliberately unfiltered: a pull request always reports a check, whatever it
+  # touches. Filtering here would skip the workflow instead of passing it, and
+  # a required check that never runs blocks the pull request forever.
   pull_request:
     branches: [main]
+
+  # Filtered, because CD triggers on this workflow completing and would
+  # otherwise rebuild and redeploy production for a change that cannot reach
+  # the image. These paths are the ones `.dockerignore` already excludes, plus
+  # git's own checkout configuration. A push that touches any other path still
+  # runs: `paths-ignore` skips only when every changed file matches.
   push:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".claude/**"
+      - ".gitattributes"
+      - ".gitignore"
+
   workflow_dispatch:
 
 permissions:
