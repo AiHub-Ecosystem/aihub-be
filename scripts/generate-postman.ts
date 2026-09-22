@@ -10,16 +10,22 @@ const openApiDocument = JSON.parse(
   readFileSync(join(__dirname, '../openapi.json'), 'utf8'),
 ) as unknown;
 
-buildPostmanCollection(openApiDocument, packageJson.version)
-  .then((collection) => {
-    // Trailing newline so the committed file diffs cleanly.
-    writeFileSync(
-      'aihub.postman_collection.json',
-      `${JSON.stringify(collection, null, 2)}\n`,
-    );
-    console.log('Wrote aihub.postman_collection.json');
-  })
-  .catch((err: unknown) => {
-    console.error(err);
-    process.exitCode = 1;
-  });
+async function main(): Promise<void> {
+  const collection = await buildPostmanCollection(
+    openApiDocument,
+    packageJson.version,
+  );
+
+  // Trailing newline so the committed file diffs cleanly.
+  writeFileSync(
+    'aihub.postman_collection.json',
+    `${JSON.stringify(collection, null, 2)}\n`,
+  );
+
+  console.log('Wrote aihub.postman_collection.json');
+}
+
+main().catch((err: unknown) => {
+  console.error(err);
+  process.exitCode = 1;
+});

@@ -774,11 +774,12 @@ describe('organization API key revocation against PostgreSQL', () => {
 
     // The hash has to come back on the repeat too: purging again is the only
     // remedy for a first purge that failed without telling anyone.
-    expect(result).toMatchObject({ kind: 'revoked' });
-    if (result.kind === 'revoked') {
-      expect(result.keyHash).toMatch(/^[0-9a-f]{64}$/);
-      expect(result.key.status).toBe('revoked');
+    if (result.kind !== 'revoked') {
+      throw new Error(`expected a revoked result, got ${result.kind}`);
     }
+
+    expect(result.keyHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.key.status).toBe('revoked');
   });
 
   it('refuses a key that belongs to another organization, and leaves it alone', async () => {

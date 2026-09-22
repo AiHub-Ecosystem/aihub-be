@@ -1,0 +1,40 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // `correctness` only. Every other category was measured against this
+  // codebase before being left off; the numbers and the reasoning are in
+  // https://github.com/AiHub-Ecosystem/aihub-be/issues/106#issuecomment-5770026510
+  //
+  // Severity lives here rather than in a `--deny-warnings` flag: oxlint exits
+  // 0 on warnings, so `pnpm lint` would report findings and still pass. Keeping
+  // it in the config stops `pnpm lint` and `.husky/pre-commit` from drifting.
+  "categories": {
+    "correctness": "error"
+  },
+  // `typescript`, `unicorn` and `oxc` are on by default. The other four are the
+  // reason for adopting oxlint at all: Biome's `recommended` set has no import,
+  // promise, Node or Jest rules. `jest` accounts for 18 of the 23 findings;
+  // `import`, `promise` and `node` contribute nothing at `correctness` today and
+  // are enabled for #110, which turns on the type-aware rules once the repo is
+  // on a TypeScript 7 compiler.
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc",
+    "import",
+    "promise",
+    "node",
+    "jest"
+  ],
+  "rules": {
+    // Both rules below belong to `suspicious`. That category measures 69
+    // findings here, of which only these two are real: 10 are NestJS `@Module()`
+    // classes, 24 are `.sort()` calls on freshly built arrays, and the rest are
+    // spec-file idiom. Enabling the two by name keeps this a positive list —
+    // nothing is switched off to make the run green.
+    "promise/always-return": "error",
+    "import/no-named-as-default-member": "error"
+  },
+  // Mirrors `files.ignore` in biome.json. `test/fixtures` holds captured
+  // downstream responses, which are data rather than source.
+  "ignorePatterns": ["dist", "coverage", "node_modules", "test/fixtures"]
+}

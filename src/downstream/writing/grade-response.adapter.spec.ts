@@ -95,16 +95,18 @@ describe('parseGradeResponse', () => {
   });
 
   it('reports a contract violation rather than leaking the reason to the client', () => {
+    let caught: unknown;
     try {
       parseGradeResponse({ data: { overall_band: 'seven' } });
-      throw new Error('expected a contract violation');
     } catch (error) {
-      expect(error).toBeInstanceOf(AppError);
-      const appError = error as AppError;
-      expect(appError.code).toBe('AI_SERVICE_CONTRACT_VIOLATION');
-      expect(appError.httpStatus).toBe(502);
-      expect(appError.retryable).toBe(false);
-      expect(appError.message).not.toContain('overall_band');
+      caught = error;
     }
+
+    expect(caught).toBeInstanceOf(AppError);
+    const appError = caught as AppError;
+    expect(appError.code).toBe('AI_SERVICE_CONTRACT_VIOLATION');
+    expect(appError.httpStatus).toBe(502);
+    expect(appError.retryable).toBe(false);
+    expect(appError.message).not.toContain('overall_band');
   });
 });
