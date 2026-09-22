@@ -1,2 +1,13 @@
-*.ts text eol=lf
-*.cjs text eol=lf
+# Every tracked blob in this repository is stored with LF, and `biome.json`
+# pins `lineEnding: "lf"`. Without this, a Windows checkout rewrites anything
+# not listed here with CRLF, and `pnpm lint` then fails on files nobody
+# touched — `biome check` reports a format diff for the line endings git just
+# introduced. It surfaces after any operation that rewrites the working tree:
+# a rebase, a stash pop, a branch switch.
+#
+# `text=auto` leaves git to detect binary content and skip it, so this is a
+# default rather than a list that has to be extended for each new extension.
+* text=auto eol=lf
+
+# The hook is executed by sh; CRLF would break the shebang line.
+.husky/pre-commit text eol=lf
