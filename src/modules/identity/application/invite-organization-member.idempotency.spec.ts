@@ -1,5 +1,9 @@
 import type { RequestContext } from '../../../common/request-context/request-context';
 import type {
+  AuthRateLimitScope,
+  AuthRateLimiterPort,
+} from '../../auth/application/auth-rate-limiter.port';
+import type {
   EmailSenderPort,
   OrganizationInviteEmailInput,
 } from '../../auth/application/email-sender.port';
@@ -205,6 +209,22 @@ function context(organizationId: string, requestId: string): RequestContext {
   };
 }
 
+class RateLimiterFake implements AuthRateLimiterPort {
+  private readonly counts = new Map<string, number>();
+  rejectScope: AuthRateLimitScope | undefined;
+
+  async consume(
+    input: Parameters<AuthRateLimiterPort['consume']>[0],
+  ): Promise<{ readonly allowed: boolean; readonly retryAfterMs?: number }> {
+    const counterKey = `${input.scope}:${input.key}`;
+    const count = (this.counts.get(counterKey) ?? 0) + 1;
+    this.counts.set(counterKey, count);
+    return input.scope === this.rejectScope || count > input.limit
+      ? { allowed: false, retryAfterMs: 12_345 }
+      : { allowed: true };
+  }
+}
+
 describe('organization invitation management idempotency seam', () => {
   let repository: ManagementRepository;
   let service: IdempotencyService;
@@ -217,11 +237,13 @@ describe('organization invitation management idempotency seam', () => {
   let emailSender: jest.Mocked<
     Pick<EmailSenderPort, 'sendOrganizationInviteEmail'>
   >;
+  let rateLimiter: RateLimiterFake;
   let issuedTokenCount: number;
 
   beforeEach(() => {
     repository = new ManagementRepository();
     service = new IdempotencyService(repository);
+    rateLimiter = new RateLimiterFake();
     issuedTokenCount = 0;
     membership = {
       resolveMembership: jest.fn(
@@ -276,6 +298,7 @@ describe('organization invitation management idempotency seam', () => {
       invitations,
       tokenIssuer,
       emailSender,
+      rateLimiter,
     );
   });
 
@@ -290,7 +313,8 @@ describe('organization invitation management idempotency seam', () => {
     const organizationId = input.organizationId ?? ORGANIZATION_ID;
     const userId = input.userId ?? USER_ID;
     const requestId = input.requestId ?? REQUEST_ID;
-    const email = (input.email ?? 'invitee@example.com').trim().toLowerCase();
+    const email = input.email ?? 'invitee@example.com';
+    const normalizedEmail = email.trim().toLowerCase();
     const role = input.role ?? 'member';
     const requestContext = context(organizationId, requestId);
     const command = {
@@ -305,7 +329,7 @@ describe('organization invitation management idempotency seam', () => {
       operation: ORGANIZATION_INVITATION_CREATE_OPERATION,
       scope: 'management' as const,
       actorId: userId,
-      requestBody: { email, role },
+      requestBody: { email: normalizedEmail, role },
       requestId,
       timeoutMs: 5_000,
       responseStatus: 201,
@@ -343,6 +367,55 @@ describe('organization invitation management idempotency seam', () => {
     expect(issuedTokenCount).toBe(1);
     expect(invitations.createInvitation).toHaveBeenCalledTimes(1);
     expect(emailSender.sendOrganizationInviteEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'organization_invitation_user',
+    'organization_invitation_organization',
+    'organization_invitation_email',
+  ] as const)(
+    'rejects before mutation when the %s limit is exceeded',
+    async (scope) => {
+      rateLimiter.rejectScope = scope;
+
+      await expect(
+        execute({ idempotencyKey: 'invite-1' }),
+      ).rejects.toMatchObject({
+        code: 'RATE_LIMITED',
+        httpStatus: 429,
+        retryAfterMs: 12_345,
+      });
+
+      expect(issuedTokenCount).toBe(0);
+      expect(invitations.createInvitation).not.toHaveBeenCalled();
+      expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+    },
+  );
+
+  it('shares the normalized email allowance across callers and Organizations', async () => {
+    await execute({
+      idempotencyKey: 'invite-1',
+      email: ' Invitee@Example.COM ',
+    });
+    await execute({
+      idempotencyKey: 'invite-2',
+      organizationId: OTHER_ORGANIZATION_ID,
+      userId: OTHER_USER_ID,
+    });
+    await execute({
+      idempotencyKey: 'invite-3',
+      organizationId: 'org_third',
+      userId: 'usr_third',
+    });
+
+    await expect(
+      execute({
+        idempotencyKey: 'invite-4',
+        organizationId: 'org_fourth',
+        userId: 'usr_fourth',
+      }),
+    ).rejects.toMatchObject({ code: 'RATE_LIMITED', httpStatus: 429 });
+    expect(emailSender.sendOrganizationInviteEmail).toHaveBeenCalledTimes(3);
   });
 
   it('rejects a different role with the same scoped key', async () => {
@@ -448,5 +521,23 @@ describe('organization invitation management idempotency seam', () => {
     ).resolves.toMatchObject({ replay: false });
     expect(issuedTokenCount).toBe(2);
     expect(emailSender.sendOrganizationInviteEmail).toHaveBeenCalledTimes(2);
+  });
+
+  it('consumes the email allowance when delivery fails', async () => {
+    emailSender.sendOrganizationInviteEmail.mockRejectedValue(
+      new Error('email unavailable'),
+    );
+
+    for (const idempotencyKey of ['invite-1', 'invite-2', 'invite-3']) {
+      await expect(execute({ idempotencyKey })).rejects.toMatchObject({
+        code: 'AUTH_EMAIL_DELIVERY_UNAVAILABLE',
+        httpStatus: 503,
+      });
+    }
+
+    await expect(execute({ idempotencyKey: 'invite-4' })).rejects.toMatchObject(
+      { code: 'RATE_LIMITED', httpStatus: 429 },
+    );
+    expect(emailSender.sendOrganizationInviteEmail).toHaveBeenCalledTimes(3);
   });
 });

@@ -184,6 +184,7 @@ describe('buildOpenApiDocument', () => {
     expect(operation?.responses['201']).toBeDefined();
     expect(operation?.responses['403']).toBeDefined();
     expect(operation?.responses['409']).toBeDefined();
+    expect(operation?.responses['429']).toBeDefined();
     expect(operation?.responses['503']).toBeDefined();
     expect(operation?.['x-idempotency']).toBe('optional');
     expect(operation?.parameters).toEqual([

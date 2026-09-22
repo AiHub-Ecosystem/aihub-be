@@ -1,6 +1,7 @@
 import { AppError } from '../../../common/errors/app-error';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import type { RequestContext } from '../../../common/request-context/request-context';
+import { type AuthRateLimiterPort } from '../../auth/application/auth-rate-limiter.port';
 import type { EmailSenderPort } from '../../auth/application/email-sender.port';
 import { normalizeEmail } from '../../auth/domain/local-auth';
 
@@ -31,6 +32,33 @@ export interface InvitedOrganizationMember {
   readonly expiresAt: Date;
 }
 
+export const ORGANIZATION_INVITATION_RATE_LIMITS = {
+  user: {
+    scope: 'organization_invitation_user',
+    limit: 5,
+    windowMs: 15 * 60 * 1000,
+  },
+  organization: {
+    scope: 'organization_invitation_organization',
+    limit: 20,
+    windowMs: 15 * 60 * 1000,
+  },
+  email: {
+    scope: 'organization_invitation_email',
+    limit: 3,
+    windowMs: 24 * 60 * 60 * 1000,
+  },
+} as const;
+
+function rateLimited(retryAfterMs: number | undefined): AppError {
+  return new AppError({
+    code: 'RATE_LIMITED',
+    message: 'Too many requests',
+    retryable: true,
+    ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+  });
+}
+
 /**
  * Invites one normalized email to an Organization as an Organization
  * Invitation: no membership row exists until the invitation is accepted.
@@ -51,6 +79,7 @@ export class InviteOrganizationMember {
       EmailSenderPort,
       'sendOrganizationInviteEmail'
     >,
+    private readonly rateLimiter: AuthRateLimiterPort,
   ) {}
 
   async authorize(input: InviteOrganizationMemberInput): Promise<void> {
@@ -68,6 +97,8 @@ export class InviteOrganizationMember {
     } catch (error) {
       throw invalidRequest(error);
     }
+
+    await this.enforceRateLimits(input, email);
 
     const now = new Date();
     const issued = this.tokenIssuer.issue(now);
@@ -138,6 +169,27 @@ export class InviteOrganizationMember {
 
     if (caller.role === 'admin' && input.role !== 'member') {
       throw forbidden('Organization admins can only invite members');
+    }
+  }
+
+  private async enforceRateLimits(
+    input: InviteOrganizationMemberInput,
+    email: string,
+  ): Promise<void> {
+    const requests = [
+      { ...ORGANIZATION_INVITATION_RATE_LIMITS.user, key: input.userId },
+      {
+        ...ORGANIZATION_INVITATION_RATE_LIMITS.organization,
+        key: input.organizationId,
+      },
+      { ...ORGANIZATION_INVITATION_RATE_LIMITS.email, key: email },
+    ];
+
+    for (const request of requests) {
+      const decision = await this.rateLimiter.consume(request);
+      if (!decision.allowed) {
+        throw rateLimited(decision.retryAfterMs);
+      }
     }
   }
 }

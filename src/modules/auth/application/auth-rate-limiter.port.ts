@@ -11,7 +11,10 @@ export type AuthRateLimitScope =
   | 'reset_ip'
   | 'reset_token'
   | 'refresh_ip'
-  | 'refresh_token';
+  | 'refresh_token'
+  | 'organization_invitation_user'
+  | 'organization_invitation_organization'
+  | 'organization_invitation_email';
 
 export interface AuthRateLimiterPort {
   consume(input: {

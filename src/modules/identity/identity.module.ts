@@ -1,6 +1,10 @@
 import { Module } from '@nestjs/common';
 
 import {
+  AUTH_RATE_LIMITER,
+  type AuthRateLimiterPort,
+} from '../auth/application/auth-rate-limiter.port';
+import {
   EMAIL_SENDER,
   type EmailSenderPort,
 } from '../auth/application/email-sender.port';
@@ -198,18 +202,21 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
         invitations: OrganizationInvitationPort,
         tokenIssuer: OrganizationInviteTokenPort,
         emailSender: EmailSenderPort,
+        rateLimiter: AuthRateLimiterPort,
       ) =>
         new InviteOrganizationMember(
           membership,
           invitations,
           tokenIssuer,
           emailSender,
+          rateLimiter,
         ),
       inject: [
         ORGANIZATION_MEMBERSHIP,
         ORGANIZATION_INVITATION,
         ORGANIZATION_INVITE_TOKEN,
         EMAIL_SENDER,
+        AUTH_RATE_LIMITER,
       ],
     },
     {

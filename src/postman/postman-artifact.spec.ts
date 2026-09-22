@@ -56,4 +56,17 @@ describe('committed aihub.postman_collection.json', () => {
       () => new Collection(committedCollection() as CollectionDefinition),
     ).not.toThrow();
   });
+
+  it('keeps the organization invitation rate-limit handover scenario', async () => {
+    const generated = JSON.stringify(
+      await buildPostmanCollection(
+        committedOpenApiDocument(),
+        packageVersion(),
+      ),
+    );
+
+    expect(generated).toContain('Organization invitation send rate limit');
+    expect(generated).toContain('responds with HTTP 429');
+    expect(generated).toContain('RATE_LIMITED');
+  });
 });

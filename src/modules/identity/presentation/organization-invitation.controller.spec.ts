@@ -7,6 +7,10 @@ import { Test } from '@nestjs/testing';
 import { AppModule } from '../../../app.module';
 import { AppError } from '../../../common/errors/app-error';
 import {
+  AUTH_RATE_LIMITER,
+  type AuthRateLimiterPort,
+} from '../../auth/application/auth-rate-limiter.port';
+import {
   EMAIL_SENDER,
   type EmailSenderPort,
   type OrganizationInviteEmailInput,
@@ -60,6 +64,18 @@ type InvitationListOverride = {
   readonly organization?: OrganizationStatus;
 };
 
+class RateLimiterFake implements AuthRateLimiterPort {
+  allowed = true;
+
+  async consume(
+    _input: Parameters<AuthRateLimiterPort['consume']>[0],
+  ): Promise<{ readonly allowed: boolean; readonly retryAfterMs?: number }> {
+    return this.allowed
+      ? { allowed: true }
+      : { allowed: false, retryAfterMs: 12_345 };
+  }
+}
+
 describe('Organization invitation HTTP flow', () => {
   let app: NestFastifyApplication;
   let invitations: jest.Mocked<OrganizationInvitationPort>;
@@ -67,6 +83,7 @@ describe('Organization invitation HTTP flow', () => {
   let emailSender: jest.Mocked<EmailSenderPort>;
   let tokenIssuer: jest.Mocked<UserAccessTokenIssuerPort>;
   let idempotency: jest.Mocked<IdempotencyServicePort>;
+  let rateLimiter: RateLimiterFake;
   let verifiedTokens: string[];
 
   let callerRole: OrganizationMembershipRole = 'owner';
@@ -136,6 +153,7 @@ describe('Organization invitation HTTP flow', () => {
     idempotency = {
       execute: jest.fn(),
     } as jest.Mocked<IdempotencyServicePort>;
+    rateLimiter = new RateLimiterFake();
     verifiedTokens = [];
     const verifier: UserAccessTokenVerifierPort = {
       verify: async (token: string) => {
@@ -162,6 +180,8 @@ describe('Organization invitation HTTP flow', () => {
       .useValue(membership)
       .overrideProvider(EMAIL_SENDER)
       .useValue(emailSender)
+      .overrideProvider(AUTH_RATE_LIMITER)
+      .useValue(rateLimiter)
       .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
       .useValue(verifier)
       .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
@@ -189,6 +209,7 @@ describe('Organization invitation HTTP flow', () => {
     callerMembershipExists = true;
     organizationStatus = 'active';
     jest.clearAllMocks();
+    rateLimiter.allowed = true;
     verifiedTokens = [];
     invitations.createInvitation.mockResolvedValue({
       kind: 'created',
@@ -266,6 +287,23 @@ describe('Organization invitation HTTP flow', () => {
       meta: { request_id: REQUEST_ID },
     });
     expect(response.body).not.toContain('token');
+  });
+
+  it('returns the generic rate-limited error without creating or sending an invitation', async () => {
+    rateLimiter.allowed = false;
+
+    const response = await invite();
+
+    expect(response.statusCode).toBe(429);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'RATE_LIMITED',
+        retry_after_ms: 12_345,
+      },
+    });
+    expect(response.body).not.toContain('invitee@example.com');
+    expect(invitations.createInvitation).not.toHaveBeenCalled();
+    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
   });
 
   it('passes a canonical management scope and normalized payload to idempotency', async () => {

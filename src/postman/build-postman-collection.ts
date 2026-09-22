@@ -30,6 +30,8 @@ const USER_ASSERTION_HEADER = {
 
 const TASK1_GRADE_PATH = '/v1/ielts/writing/task1/grade';
 const TASK2_GRADE_PATH = '/v1/ielts/writing/task2/grade';
+const ORGANIZATION_INVITATION_PATH =
+  '/v1/organizations/{{organizationId}}/invitations';
 
 const TASK1_GRADE_BODY = {
   question:
@@ -46,6 +48,11 @@ const TASK2_GRADE_BODY = {
   topic: 'education',
   essay:
     'The proliferation of online learning platforms has led some observers to claim that conventional classroom instruction is no longer relevant. While I acknowledge the considerable advantages of digital education, I disagree that it renders traditional teaching obsolete.',
+};
+
+const ORGANIZATION_INVITATION_BODY = {
+  email: 'invitee@example.com',
+  role: 'member',
 };
 
 function assertStatus(status: number): string {
@@ -427,6 +434,32 @@ const CONCURRENCY_SCENARIOS: readonly Scenario[] = [
   },
 ];
 
+const INVITATION_SCENARIOS: readonly Scenario[] = [
+  {
+    name: 'Organization invitation send rate limit',
+    description:
+      'After the inviter, organization, or normalized email invitation bucket is exhausted, this valid invitation attempt returns the same generic 429 RATE_LIMITED response with a retry hint and creates no invitation.',
+    path: ORGANIZATION_INVITATION_PATH,
+    headers: [
+      JSON_HEADER,
+      {
+        key: 'Authorization',
+        value: 'Bearer {{bearerToken}}',
+      },
+      IDEMPOTENCY_HEADER,
+    ],
+    body: ORGANIZATION_INVITATION_BODY,
+    testScript: [
+      assertStatus(429),
+      ...assertErrorCode(['RATE_LIMITED']),
+      "pm.test('rate limit includes a retry hint', function () {",
+      '  const body = pm.response.json();',
+      '  pm.expect(body.error.retry_after_ms).to.be.at.least(0);',
+      '});',
+    ],
+  },
+];
+
 /**
  * Deep-removes every property named `key`. Used to drop the `response`
  * arrays openapi-to-postmanv2 attaches to each auto-converted operation —
@@ -653,6 +686,12 @@ export async function buildPostmanCollection(
         value: 'REPLACE_WITH_A_VALID_USER_ACCESS_JWT',
         description: 'User Access JWT for the organization roster route.',
       },
+      {
+        key: 'organizationId',
+        value: 'REPLACE_WITH_AN_ORGANIZATION_ID',
+        description:
+          'Organization targeted by the management invitation route.',
+      },
     ],
     item: [
       ...base.item,
@@ -667,6 +706,10 @@ export async function buildPostmanCollection(
       {
         name: 'Concurrency limit examples',
         item: CONCURRENCY_SCENARIOS.map(scenarioToItem),
+      },
+      {
+        name: 'Organization invitation examples',
+        item: INVITATION_SCENARIOS.map(scenarioToItem),
       },
     ],
   };

@@ -575,7 +575,10 @@ function organizationInvitationPathItem(
             },
           },
         },
-        ...authErrorResponses(groupedErrors, [400, 401, 403, 409, 500, 503]),
+        ...authErrorResponses(
+          groupedErrors,
+          [400, 401, 403, 409, 429, 500, 503],
+        ),
       },
     },
   };

@@ -115,6 +115,7 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
   ],
   exports: [
     EMAIL_SENDER,
+    AUTH_RATE_LIMITER,
     LOCAL_AUTH_REPOSITORY,
     LOCAL_AUTH_SERVICE,
     USER_ACCESS_TOKEN_VERIFIER,

@@ -3228,6 +3228,9 @@
           "409": {
             "$ref": "#/components/responses/Error409"
           },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
           "500": {
             "$ref": "#/components/responses/Error500"
           },
