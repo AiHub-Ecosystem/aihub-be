@@ -11,7 +11,6 @@
         "stripLeadingPaths": true,
         "ignore": ["**/*.spec.ts"]
       }
-    },
-    "typeCheck": true
+    }
   }
 }
