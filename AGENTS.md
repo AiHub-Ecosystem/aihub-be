@@ -52,4 +52,6 @@ pnpm arch-check
 pnpm verify
 ```
 
+`pnpm build` is a pure SWC transform; type ownership lives in `type-check` (via `pnpm verify`).
+
 Read `.claude/agents/` for role ownership before changing a path owned by another role. Keep `CLAUDE.md` Claude-specific; shared rules belong here and in `.claude/`.
