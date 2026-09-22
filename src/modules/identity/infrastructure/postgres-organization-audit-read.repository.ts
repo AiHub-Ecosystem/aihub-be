@@ -16,7 +16,12 @@ import type {
 import { identityStoreError, isRecord, stringValue } from './identity-row';
 import type { PostgresIdentityQueryClient } from './postgres-identity.client';
 
-const TARGET_TYPES = ['membership', 'invitation', 'api_key'] as const;
+const TARGET_TYPES = [
+  'organization',
+  'membership',
+  'invitation',
+  'api_key',
+] as const;
 
 /**
  * Keyset rather than offset: the trail grows while a reader pages through it,

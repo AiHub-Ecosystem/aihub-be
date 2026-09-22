@@ -8,6 +8,17 @@ import type {
 } from '../application/idempotency-repository.port';
 import type { PostgresIdempotencyClient } from './postgres-idempotency.client';
 
+/**
+ * The Organization predicate serves an Organization-scoped key and an Account
+ * Idempotency Scope, whose Organization is null, in one statement. It is spelt
+ * as an `OR` rather than `IS NOT DISTINCT FROM` because the driver plans each
+ * call with its parameters bound, and the planner folds this form to either
+ * `= $1` or `IS NULL`, both index conditions; `IS NOT DISTINCT FROM` is only
+ * ever a filter over every Organization's rows for the key.
+ */
+const ORGANIZATION_MATCHES =
+  '(organization_id = $1 OR ($1::text IS NULL AND organization_id IS NULL))';
+
 const INSERT_SQL = `
   INSERT INTO idempotency_records (
     organization_id,
@@ -34,7 +45,7 @@ const CLAIM_SQL = `
       created_at = now(),
       completed_at = NULL,
       expires_at = $7
-  WHERE organization_id = $1
+  WHERE ${ORGANIZATION_MATCHES}
     AND operation = $2
     AND actor_scope = $3
     AND idempotency_key = $4
@@ -53,7 +64,7 @@ const SELECT_SQL = `
     response_status,
     response_body
   FROM idempotency_records
-  WHERE organization_id = $1
+  WHERE ${ORGANIZATION_MATCHES}
     AND operation = $2
     AND actor_scope = $3
     AND idempotency_key = $4
@@ -66,7 +77,7 @@ const COMPLETE_SQL = `
       response_status = $6,
       response_body = $7,
       completed_at = now()
-  WHERE organization_id = $1
+  WHERE ${ORGANIZATION_MATCHES}
     AND operation = $2
     AND actor_scope = $3
     AND idempotency_key = $4
@@ -81,7 +92,7 @@ const FAILED_SQL = `
       response_status = NULL,
       response_body = NULL,
       completed_at = NULL
-  WHERE organization_id = $1
+  WHERE ${ORGANIZATION_MATCHES}
     AND operation = $2
     AND actor_scope = $3
     AND idempotency_key = $4
@@ -92,7 +103,7 @@ const FAILED_SQL = `
 
 const DELETE_SQL = `
   DELETE FROM idempotency_records
-  WHERE organization_id = $1
+  WHERE ${ORGANIZATION_MATCHES}
     AND operation = $2
     AND actor_scope = $3
     AND idempotency_key = $4

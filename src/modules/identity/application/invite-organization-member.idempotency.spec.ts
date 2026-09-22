@@ -146,7 +146,7 @@ class ManagementRepository implements IdempotencyRepositoryPort {
   }
 
   private key(input: {
-    readonly organizationId: string;
+    readonly organizationId: string | null;
     readonly operation: string;
     readonly actorScope?: string;
     readonly idempotencyKey: string;

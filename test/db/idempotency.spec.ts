@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 
+import { ORGANIZATION_CREATE_OPERATION } from '../../src/modules/idempotency/application/idempotency-operation';
 import type {
   CompleteIdempotencyInput,
   ReserveIdempotencyInput,
@@ -89,23 +90,18 @@ describe('Postgres idempotency management scope', () => {
     await pool.end();
   });
 
-  it('installs the management composite primary key', async () => {
-    const result = await pool.query<{ column_name: string }>(`
-      SELECT kcu.column_name
-      FROM information_schema.table_constraints AS tc
-      JOIN information_schema.key_column_usage AS kcu
-        ON kcu.constraint_name = tc.constraint_name
-       AND kcu.table_schema = tc.table_schema
-      WHERE tc.table_name = 'idempotency_records'
-        AND tc.constraint_type = 'PRIMARY KEY'
-      ORDER BY kcu.ordinal_position
+  it('keys records by Organization, operation, actor scope, and key with null Organizations distinct from none', async () => {
+    const result = await pool.query<{ definition: string }>(`
+      SELECT pg_get_indexdef(indexrelid) AS definition
+      FROM pg_index
+      WHERE indrelid = 'idempotency_records'::regclass
+        AND indisunique
     `);
 
-    expect(result.rows.map((row) => row.column_name)).toEqual([
-      'organization_id',
-      'operation',
-      'actor_scope',
-      'idempotency_key',
+    expect(result.rows.map((row) => row.definition)).toEqual([
+      expect.stringContaining(
+        '(organization_id, operation, actor_scope, idempotency_key) NULLS NOT DISTINCT',
+      ),
     ]);
   });
 
@@ -143,5 +139,43 @@ describe('Postgres idempotency management scope', () => {
       1,
     );
     expect(results).toContainEqual({ kind: 'conflict', reason: 'pending' });
+  });
+
+  it('replays an Account-scoped record that names no Organization', async () => {
+    const accountScoped = {
+      ...reserveInput('usr_owner', 'req_create'),
+      organizationId: null,
+      operation: ORGANIZATION_CREATE_OPERATION,
+    };
+
+    await expect(repository.reserve(accountScoped)).resolves.toEqual({
+      kind: 'claimed',
+      requestId: 'req_create',
+    });
+    await expect(
+      repository.reserve({ ...accountScoped, requestId: 'req_race' }),
+    ).resolves.toEqual({ kind: 'conflict', reason: 'pending' });
+    await expect(
+      repository.reserve({
+        ...accountScoped,
+        actorScope: 'usr_other',
+        requestId: 'req_other_caller',
+      }),
+    ).resolves.toEqual({ kind: 'claimed', requestId: 'req_other_caller' });
+
+    await repository.complete({
+      ...completeInput('usr_owner', 'req_create'),
+      organizationId: null,
+      operation: ORGANIZATION_CREATE_OPERATION,
+      responseBody: { organizationId: 'org_new' },
+    });
+
+    await expect(
+      repository.reserve({ ...accountScoped, requestId: 'req_replay' }),
+    ).resolves.toEqual({
+      kind: 'replay',
+      responseStatus: 201,
+      responseBody: { organizationId: 'org_new' },
+    });
   });
 });

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { IdempotencyOperation } from './idempotency-operation';
 
 export interface IdempotencyFingerprintInput {
-  readonly organizationId: string;
+  readonly organizationId: string | null;
   readonly operation: IdempotencyOperation;
   readonly actorId: string;
   readonly requestBody: unknown;

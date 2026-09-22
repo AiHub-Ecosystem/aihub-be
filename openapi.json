@@ -277,7 +277,7 @@
         }
       },
       "Error409": {
-        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE | ORGANIZATION_MEMBER_EXISTS | ORGANIZATION_OWNER_REQUIRED",
+        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE | ORGANIZATION_MEMBER_EXISTS | ORGANIZATION_OWNER_REQUIRED | ORGANIZATION_CREATION_LIMIT_REACHED",
         "content": {
           "application/json": {
             "schema": {
@@ -306,6 +306,10 @@
                         },
                         {
                           "const": "ORGANIZATION_OWNER_REQUIRED",
+                          "type": "string"
+                        },
+                        {
+                          "const": "ORGANIZATION_CREATION_LIMIT_REACHED",
                           "type": "string"
                         }
                       ]
@@ -2782,6 +2786,134 @@
         }
       }
     },
+    "/v1/organizations": {
+      "post": {
+        "operationId": "organizations.create",
+        "summary": "Create a Self-serve Organization and become its first owner",
+        "description": "Commercial terms are operator-controlled defaults and cannot be set by the request. Each account may create a limited number of Organizations over its lifetime.",
+        "x-identity-scope": "user",
+        "x-idempotency": "optional",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "description": "Optional. When supplied, the key replays the completed result for a repeat call."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": {
+                    "minLength": 1,
+                    "description": "Trimmed, then 1–100 characters; not unique.",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Organization created with the caller as its active owner",
+            "headers": {
+              "Idempotent-Replay": {
+                "description": "Present with value true when the completed creation result was replayed for this key.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["true"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["organization", "role"],
+                      "properties": {
+                        "organization": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": ["organization_id", "name", "status"],
+                          "properties": {
+                            "organization_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": "active",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "role": {
+                          "const": "owner",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
     "/v1/organizations/me/members": {
       "get": {
         "operationId": "organizations.me.members.list",
@@ -4568,6 +4700,7 @@
               "items": {
                 "type": "string",
                 "enum": [
+                  "organization.created",
                   "invitation.sent",
                   "invitation.resent",
                   "invitation.accepted",
@@ -4674,6 +4807,10 @@
                               "action": {
                                 "anyOf": [
                                   {
+                                    "const": "organization.created",
+                                    "type": "string"
+                                  },
+                                  {
                                     "const": "invitation.sent",
                                     "type": "string"
                                   },
@@ -4729,6 +4866,10 @@
                               },
                               "target_type": {
                                 "anyOf": [
+                                  {
+                                    "const": "organization",
+                                    "type": "string"
+                                  },
                                   {
                                     "const": "membership",
                                     "type": "string"

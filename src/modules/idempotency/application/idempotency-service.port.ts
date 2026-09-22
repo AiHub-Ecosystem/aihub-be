@@ -3,7 +3,8 @@ import type { IdempotencyOperation } from './idempotency-operation';
 export type IdempotencyScope = 'gateway' | 'management';
 
 export interface IdempotencyExecutionInput {
-  readonly organizationId: string;
+  /** Null for an Account Idempotency Scope, which names no Organization. */
+  readonly organizationId: string | null;
   readonly operation: IdempotencyOperation;
   readonly idempotencyKey?: string;
   readonly actorId: string;

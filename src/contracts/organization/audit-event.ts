@@ -6,6 +6,7 @@ import { type Static, Type } from '@sinclair/typebox';
  * list through the migration that adds it, never ahead of it.
  */
 export const ORGANIZATION_AUDIT_ACTIONS = [
+  'organization.created',
   'invitation.sent',
   'invitation.resent',
   'invitation.accepted',
@@ -39,6 +40,7 @@ const OrganizationAuditOutcomeSchema = Type.Union(
 );
 
 const OrganizationAuditTargetTypeSchema = Type.Union([
+  Type.Literal('organization'),
   Type.Literal('membership'),
   Type.Literal('invitation'),
   Type.Literal('api_key'),

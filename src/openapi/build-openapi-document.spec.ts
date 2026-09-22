@@ -43,6 +43,8 @@ interface OpenApiDocument {
 
 const SANDBOX_MINT_PATH = '/v1/sandbox/assertions';
 const SANDBOX_MINT_OPERATION_ID = 'sandbox.assertions.mint';
+const ORGANIZATION_PATH = '/v1/organizations';
+const ORGANIZATION_CREATE_OPERATION_ID = 'organizations.create';
 const ORGANIZATION_ROSTER_PATH = '/v1/organizations/me/members';
 const ORGANIZATION_ROSTER_OPERATION_ID = 'organizations.me.members.list';
 const ORGANIZATION_INVITATION_PATH =
@@ -120,6 +122,7 @@ describe('buildOpenApiDocument', () => {
       .filter(
         (operationId) =>
           operationId !== SANDBOX_MINT_OPERATION_ID &&
+          operationId !== ORGANIZATION_CREATE_OPERATION_ID &&
           operationId !== ORGANIZATION_INVITATION_OPERATION_ID &&
           operationId !== ORGANIZATION_INVITATION_ACCEPT_OPERATION_ID &&
           operationId !== ORGANIZATION_MEMBER_TRANSFER_OPERATION_ID &&
@@ -144,6 +147,7 @@ describe('buildOpenApiDocument', () => {
       Object.keys(doc.paths).filter((path) => !catalogued.has(path)),
     ).toEqual([
       SANDBOX_MINT_PATH,
+      ORGANIZATION_PATH,
       ORGANIZATION_ROSTER_PATH,
       ORGANIZATION_INVITATION_PATH,
       ORGANIZATION_INVITATION_ITEM_PATH,

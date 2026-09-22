@@ -24,8 +24,10 @@ import {
   type ApiKeyRepositoryPort,
   type AuthFailureCounterPort,
 } from './application/api-key-authenticator.port';
+import { CreateOrganization } from './application/create-organization';
 import { CreateOrganizationApiKey } from './application/create-organization-api-key';
 import { CREATE_ORGANIZATION_API_KEY } from './application/create-organization-api-key.port';
+import { CREATE_ORGANIZATION } from './application/create-organization.port';
 import { InviteOrganizationMember } from './application/invite-organization-member';
 import { INVITE_ORGANIZATION_MEMBER } from './application/invite-organization-member.port';
 import { JWKS_CACHE, type JwksCachePort } from './application/jwks-cache.port';
@@ -47,6 +49,10 @@ import {
   ORGANIZATION_AUDIT_EVENT_READ,
   type OrganizationAuditEventReadPort,
 } from './application/organization-audit-event-read.port';
+import {
+  ORGANIZATION_CREATION,
+  type OrganizationCreationPort,
+} from './application/organization-creation.port';
 import {
   ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
   type OrganizationIdentityConfigRepositoryPort,
@@ -96,6 +102,7 @@ import { PostgresApiKeyRepository } from './infrastructure/postgres-api-key.repo
 import { createPostgresIdentityClient } from './infrastructure/postgres-identity.client';
 import { PostgresOrganizationApiKeyRepository } from './infrastructure/postgres-organization-api-key.repository';
 import { PostgresOrganizationAuditReadRepository } from './infrastructure/postgres-organization-audit-read.repository';
+import { PostgresOrganizationCreationRepository } from './infrastructure/postgres-organization-creation.repository';
 import { PostgresOrganizationIdentityConfigRepository } from './infrastructure/postgres-organization-identity-config.repository';
 import { PostgresOrganizationInvitationRepository } from './infrastructure/postgres-organization-invitation.repository';
 import { PostgresOrganizationMembershipRepository } from './infrastructure/postgres-organization-membership.repository';
@@ -108,6 +115,7 @@ import { OrganizationApiKeyController } from './presentation/organization-api-ke
 import { OrganizationAuditEventController } from './presentation/organization-audit-event.controller';
 import { OrganizationInvitationController } from './presentation/organization-invitation.controller';
 import { OrganizationMembershipController } from './presentation/organization-membership.controller';
+import { OrganizationController } from './presentation/organization.controller';
 import { SandboxApiKeyGuard } from './presentation/sandbox-api-key.guard';
 import { SandboxAssertionController } from './presentation/sandbox-assertion.controller';
 import { UserAssertionGuard } from './presentation/user-assertion.guard';
@@ -117,6 +125,7 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
   imports: [AuthModule, GatewayModule, IdempotencyModule],
   controllers: [
     SandboxAssertionController,
+    OrganizationController,
     OrganizationMembershipController,
     OrganizationInvitationController,
     OrganizationApiKeyController,
@@ -151,6 +160,19 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
       ): OrganizationMembershipMutationPort =>
         new ManageOrganizationMembership(membership),
       inject: [ORGANIZATION_MEMBERSHIP],
+    },
+    {
+      provide: ORGANIZATION_CREATION,
+      useFactory: (): OrganizationCreationPort =>
+        new PostgresOrganizationCreationRepository(
+          createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
+        ),
+    },
+    {
+      provide: CREATE_ORGANIZATION,
+      useFactory: (organizations: OrganizationCreationPort) =>
+        new CreateOrganization(organizations),
+      inject: [ORGANIZATION_CREATION],
     },
     {
       provide: ORGANIZATION_API_KEY,

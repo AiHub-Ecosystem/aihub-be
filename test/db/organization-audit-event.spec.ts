@@ -165,9 +165,35 @@ describe('organization audit events against PostgreSQL', () => {
     await expect(insertEvent({ outcome: 'replayed' })).rejects.toThrow(
       /check constraint/,
     );
-    await expect(insertEvent({ targetType: 'organization' })).rejects.toThrow(
+    await expect(insertEvent({ targetType: 'user_account' })).rejects.toThrow(
       /check constraint/,
     );
+  });
+
+  it('names Organization creation alongside every action and target type it already named', async () => {
+    await expect(
+      insertEvent({
+        action: 'organization.created',
+        targetType: 'organization',
+      }),
+    ).resolves.toMatch(/^oae_/);
+    for (const action of [
+      'invitation.sent',
+      'invitation.resent',
+      'invitation.accepted',
+      'invitation.revoked',
+      'membership.role_changed',
+      'membership.disabled',
+      'membership.owner_transferred',
+      'api_key.created',
+      'api_key.rotated',
+      'api_key.revoked',
+    ]) {
+      await expect(insertEvent({ action })).resolves.toMatch(/^oae_/);
+    }
+    for (const targetType of ['membership', 'invitation', 'api_key']) {
+      await expect(insertEvent({ targetType })).resolves.toMatch(/^oae_/);
+    }
   });
 
   it('accepts the invitation revocation action added by its migration', async () => {

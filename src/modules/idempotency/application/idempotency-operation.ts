@@ -7,9 +7,12 @@ import { type OperationId, isOperationId } from '../../../catalog/operation-id';
 export const ORGANIZATION_INVITATION_CREATE_OPERATION =
   'organizations.invitations.create' as const;
 
+export const ORGANIZATION_CREATE_OPERATION = 'organizations.create' as const;
+
 export type IdempotencyOperation =
   | OperationId
-  | typeof ORGANIZATION_INVITATION_CREATE_OPERATION;
+  | typeof ORGANIZATION_INVITATION_CREATE_OPERATION
+  | typeof ORGANIZATION_CREATE_OPERATION;
 
 export function idempotencyMode(
   operation: IdempotencyOperation,
@@ -18,7 +21,10 @@ export function idempotencyMode(
     return OPERATION_CATALOG[operation].idempotency;
   }
 
-  if (operation === ORGANIZATION_INVITATION_CREATE_OPERATION) {
+  if (
+    operation === ORGANIZATION_INVITATION_CREATE_OPERATION ||
+    operation === ORGANIZATION_CREATE_OPERATION
+  ) {
     return 'optional';
   }
 

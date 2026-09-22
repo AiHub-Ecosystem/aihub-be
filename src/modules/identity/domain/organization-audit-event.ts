@@ -9,6 +9,7 @@
  */
 
 export type OrganizationAuditAction =
+  | 'organization.created'
   | 'invitation.sent'
   | 'invitation.resent'
   | 'invitation.accepted'
@@ -23,6 +24,7 @@ export type OrganizationAuditAction =
 export type OrganizationAuditOutcome = 'applied' | 'denied';
 
 export type OrganizationAuditTargetType =
+  | 'organization'
   | 'membership'
   | 'invitation'
   | 'api_key';
@@ -62,6 +64,13 @@ export interface OrganizationAuditEvent {
   readonly detail: Readonly<Record<string, unknown>>;
   readonly requestId: string;
   readonly occurredAt: Date;
+}
+
+interface OrganizationCreatedDraft {
+  readonly action: 'organization.created';
+  readonly organizationId: string;
+  /** The name as created, removable by Audit redaction. */
+  readonly name: string;
 }
 
 interface InvitationDraft {
@@ -141,6 +150,7 @@ interface ApiKeyRevokedDraft {
 }
 
 export type OrganizationAuditDraft =
+  | OrganizationCreatedDraft
   | InvitationDraft
   | InvitationRevokedDraft
   | RoleChangedDraft
@@ -168,6 +178,16 @@ function refusal(draft: {
 
 function shape(draft: OrganizationAuditDraft): Shape {
   switch (draft.action) {
+    // Commercial terms stay out of `detail`: they are an operator's to state,
+    // and the Organization row already holds them.
+    case 'organization.created':
+      return {
+        targetType: 'organization',
+        targetId: draft.organizationId,
+        targetLabel: draft.name,
+        detail: {},
+        outcome: 'applied',
+      };
     case 'invitation.sent':
     case 'invitation.resent':
     case 'invitation.accepted':

@@ -1,7 +1,8 @@
 import type { IdempotencyOperation } from './idempotency-operation';
 
 export interface ReserveIdempotencyInput {
-  readonly organizationId: string;
+  /** Null for an Account Idempotency Scope, which names no Organization. */
+  readonly organizationId: string | null;
   readonly operation: IdempotencyOperation;
   readonly actorScope?: string;
   readonly idempotencyKey: string;
@@ -20,7 +21,8 @@ export type IdempotencyReservation =
   | { readonly kind: 'conflict'; readonly reason: 'fingerprint' | 'pending' };
 
 export interface CompleteIdempotencyInput {
-  readonly organizationId: string;
+  /** Null for an Account Idempotency Scope, which names no Organization. */
+  readonly organizationId: string | null;
   readonly operation: IdempotencyOperation;
   readonly actorScope?: string;
   readonly idempotencyKey: string;
@@ -30,7 +32,8 @@ export interface CompleteIdempotencyInput {
 }
 
 export interface IdempotencyAttemptInput {
-  readonly organizationId: string;
+  /** Null for an Account Idempotency Scope, which names no Organization. */
+  readonly organizationId: string | null;
   readonly operation: IdempotencyOperation;
   readonly actorScope?: string;
   readonly idempotencyKey: string;

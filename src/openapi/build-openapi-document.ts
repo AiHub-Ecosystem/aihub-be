@@ -50,6 +50,10 @@ import {
   OrganizationRosterResponseSchema,
 } from '../contracts/organization/membership';
 import {
+  CreateOrganizationRequestSchema,
+  CreateOrganizationResponseSchema,
+} from '../contracts/organization/organization';
+import {
   MintSandboxAssertionRequestSchema,
   MintSandboxAssertionResponseSchema,
 } from '../contracts/sandbox/assertion';
@@ -260,6 +264,7 @@ const AUTH_FORGOT_PASSWORD_PATH = '/v1/auth/forgot-password';
 const AUTH_RESET_PASSWORD_PATH = '/v1/auth/reset-password';
 const AUTH_REFRESH_PATH = '/v1/auth/refresh';
 const AUTH_LOGOUT_PATH = '/v1/auth/logout';
+const ORGANIZATION_PATH = '/v1/organizations';
 const ORGANIZATION_ROSTER_PATH = '/v1/organizations/me/members';
 const ORGANIZATION_INVITATION_PATH =
   '/v1/organizations/{organization_id}/invitations';
@@ -502,6 +507,49 @@ function organizationInvitationAcceptPathItem(
           },
         },
         ...authErrorResponses(groupedErrors, [400, 401, 403, 500]),
+      },
+    },
+  };
+}
+
+function organizationPathItem(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, unknown> {
+  return {
+    post: {
+      operationId: 'organizations.create',
+      summary: 'Create a Self-serve Organization and become its first owner',
+      description:
+        'Commercial terms are operator-controlled defaults and cannot be set by the request. Each account may create a limited number of Organizations over its lifetime.',
+      'x-identity-scope': 'user',
+      'x-idempotency': 'optional',
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        idempotencyKeyParameter('optional'),
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': { schema: CreateOrganizationRequestSchema },
+        },
+      },
+      responses: {
+        '201': {
+          description:
+            'Organization created with the caller as its active owner',
+          headers: {
+            'Idempotent-Replay': {
+              description:
+                'Present with value true when the completed creation result was replayed for this key.',
+              schema: { type: 'string', enum: ['true'] },
+            },
+          },
+          content: {
+            'application/json': { schema: CreateOrganizationResponseSchema },
+          },
+        },
+        ...authErrorResponses(groupedErrors, [400, 401, 409, 500]),
       },
     },
   };
@@ -1102,6 +1150,7 @@ export function buildOpenApiDocument(version: string): unknown {
   }
 
   paths[SANDBOX_ASSERTION_PATH] = sandboxAssertionPathItem(groupedErrors);
+  paths[ORGANIZATION_PATH] = organizationPathItem(groupedErrors);
   paths[ORGANIZATION_ROSTER_PATH] = organizationRosterPathItem(groupedErrors);
   paths[ORGANIZATION_INVITATION_PATH] =
     organizationInvitationPathItem(groupedErrors);
