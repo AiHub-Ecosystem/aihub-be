@@ -416,6 +416,34 @@ describe('organization invitation revocation against PostgreSQL', () => {
     inviterId = await seedInviterOwner();
   });
 
+  /**
+   * Every revocation test invites first, and `createInvitation` writes its own
+   * `invitation.sent` event against the same target. Reading these ordered and
+   * whole is what keeps the setup event from being mistaken for the revocation
+   * one, and it lets a test assert that a no-op revocation appended nothing.
+   * Audit ids are ULIDs, so `ORDER BY id` is chronological.
+   */
+  async function invitationAuditEvents(
+    ...targetIds: readonly string[]
+  ): Promise<
+    ReadonlyArray<{
+      action: string;
+      outcome: string;
+      target_id: string;
+      target_label: string;
+      detail: Record<string, unknown> | null;
+    }>
+  > {
+    const result = await pool.query(
+      `SELECT action, outcome, target_id, target_label, detail
+       FROM organization_audit_events
+       WHERE target_type = 'invitation' AND target_id = ANY($1)
+       ORDER BY id ASC`,
+      [[...targetIds]],
+    );
+    return result.rows;
+  }
+
   it('closes an open invitation and records the applied audit event', async () => {
     const id = invitationId();
     const token = tokenHash();
@@ -426,25 +454,24 @@ describe('organization invitation revocation against PostgreSQL', () => {
     ).resolves.toEqual({ kind: 'closed' });
 
     expect((await invitationByHash(token))?.consumed_at).not.toBeNull();
-    const audit = await pool.query<{
-      action: string;
-      outcome: string;
-      target_id: string;
-      target_label: string;
-      detail: { role: string };
-    }>(
-      `SELECT action, outcome, target_id, target_label, detail
-       FROM organization_audit_events
-       WHERE target_type = 'invitation' AND target_id = $1`,
-      [id],
-    );
-    expect(audit.rows[0]).toEqual({
-      action: 'invitation.revoked',
-      outcome: 'applied',
-      target_id: id,
-      target_label: INVITED_EMAIL,
-      detail: { role: 'member' },
-    });
+    // The whole sequence, not just the last row: the revocation has to append
+    // to the invitation's history rather than stand in for the invite.
+    expect(await invitationAuditEvents(id)).toEqual([
+      {
+        action: 'invitation.sent',
+        outcome: 'applied',
+        target_id: id,
+        target_label: INVITED_EMAIL,
+        detail: { role: 'member' },
+      },
+      {
+        action: 'invitation.revoked',
+        outcome: 'applied',
+        target_id: id,
+        target_label: INVITED_EMAIL,
+        detail: { role: 'member' },
+      },
+    ]);
   });
 
   it('returns a retry-safe no-op for an already closed or expired invitation', async () => {
@@ -484,12 +511,13 @@ describe('organization invitation revocation against PostgreSQL', () => {
       }),
     ).resolves.toEqual({ kind: 'closed' });
 
-    const audit = await pool.query(
-      `SELECT id FROM organization_audit_events
-       WHERE target_type = 'invitation' AND target_id IN ($1, $2)`,
-      [closedId, expiredId],
-    );
-    expect(audit.rows).toHaveLength(0);
+    // Neither retry-safe no-op writes anything, so the only event standing is
+    // the one the closed invitation's own invite left behind. The expired one
+    // was inserted directly and never had an event at all.
+    const audit = await invitationAuditEvents(closedId, expiredId);
+    expect(
+      audit.map(({ action, target_id }) => ({ action, target_id })),
+    ).toEqual([{ action: 'invitation.sent', target_id: closedId }]);
   });
 
   it('hides unknown and foreign invitation identifiers as not_found', async () => {
@@ -544,18 +572,14 @@ describe('organization invitation revocation against PostgreSQL', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect((await openInvitations())[0]?.id).toBe(id);
 
-    const audit = await pool.query<{
-      outcome: string;
-      detail: { role: string; denial: string };
-    }>(
-      `SELECT outcome, detail FROM organization_audit_events
-       WHERE target_type = 'invitation' AND target_id = $1`,
-      [id],
-    );
-    expect(audit.rows[0]).toEqual({
-      outcome: 'denied',
-      detail: { role: 'admin', denial: 'insufficient_authority' },
-    });
+    const audit = await invitationAuditEvents(id);
+    expect(audit.map(({ outcome, detail }) => ({ outcome, detail }))).toEqual([
+      { outcome: 'applied', detail: { role: 'admin' } },
+      {
+        outcome: 'denied',
+        detail: { role: 'admin', denial: 'insufficient_authority' },
+      },
+    ]);
   });
 
   it('denies a member on a real target without changing the invitation', async () => {

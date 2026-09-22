@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { ulid } from 'ulid';
+import { monotonicFactory } from 'ulid';
 
 import {
   type OrganizationAuditDraft,
@@ -42,9 +42,20 @@ export const INSERT_ORGANIZATION_AUDIT_EVENT_SQL = `
 /**
  * Time-ordered by construction, so it doubles as the tie-break for events that
  * share an instant and reads need no second sort column.
+ *
+ * The factory is what makes that true. A plain `ulid(t)` randomises everything
+ * after the millisecond prefix, so two events stamped with one instant — a
+ * denial recorded beside the mutation that refused it, or any pair written
+ * inside a single request — would sort against each other at random. The
+ * monotonic factory increments instead, which is the guarantee the sentence
+ * above claims. It holds within a process; two instances writing in the same
+ * millisecond still tie, and nothing in the read path depends on ordering
+ * events that did not come from the same request.
  */
+const nextUlid = monotonicFactory();
+
 export function organizationAuditEventId(occurredAt: Date): string {
-  return `oae_${ulid(occurredAt.getTime())}`;
+  return `oae_${nextUlid(occurredAt.getTime())}`;
 }
 
 /**
