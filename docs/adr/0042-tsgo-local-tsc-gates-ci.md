@@ -1,0 +1,5 @@
+# tsgo is local fast path, tsc gates CI
+
+`pnpm type-check` (tsc 5.9.3) is 11.7s and the second-largest cost in `pnpm verify`; `@typescript/native-preview` (tsgo 7.0.0-dev, Go port) type-checks this repo in 2.4s with zero errors, measured locally. tsgo is pre-release and TypeScript 7 removes `moduleResolution: node` (node10); migrating off node10 is required for a future compiler. tsc remains the CI gate (`pnpm type-check` → `pnpm verify`), tsgo is the local fast path (`pnpm type-check:tsgo` → `tsgo --noEmit`), so a pre-release compiler is never the only thing standing between a type error and `main`.
+
+`tsconfig.json` stays `module: preserve` (from #104, SWC owns emit) and moves `moduleResolution: node` → `bundler`; `bundler` is not `node10`, so it survives the TS7 removal, and with `verbatimModuleSyntax: true` it is the only off-node10 resolution that still type-checks clean (node16/nodenext require `type: module` or `.mts` and fail with TS1295 under verbatim). The change is type-check-only: `pnpm build` (SWC via `.swcrc`) still emits CommonJS and boots, both Jest lanes still pass.
