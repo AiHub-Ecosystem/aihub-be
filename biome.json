@@ -26,7 +26,7 @@
   },
   "overrides": [
     {
-      "include": [".oxlintrc.json"],
+      "include": [".oxlintrc.json", "knip.json"],
       "json": {
         "parser": {
           "allowComments": true

@@ -9,7 +9,7 @@ import { createPostgresQuotaReconciliationRepository } from '../modules/metering
 
 export { parseTargetMonth } from '../modules/metering/application/quota-reconciliation';
 
-export interface QuotaReconciliationCliInput {
+interface QuotaReconciliationCliInput {
   readonly databaseUrl: string;
   readonly redisUrl: string;
   readonly requestedMonth?: string;

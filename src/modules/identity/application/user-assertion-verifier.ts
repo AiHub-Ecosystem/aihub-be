@@ -267,5 +267,3 @@ export class UserAssertionVerifier implements UserAssertionVerifierPort {
     }
   }
 }
-
-export const USER_ASSERTION_VERIFIER = Symbol('USER_ASSERTION_VERIFIER');

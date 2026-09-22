@@ -1,0 +1,60 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // House style: comments stay in the JSONC config (same idea as .oxlintrc.json).
+  // Every ignore below carries the reason it exists. Prefer adding entry
+  // evidence over an ignore; ignores are last, never to hide real dead code.
+  //
+  // Seven plugins required by the knip adoption spec (#142), enabled explicitly
+  // rather than left to auto-detection:
+  "nest": true,
+  "jest": true,
+  "biome": true,
+  "prettier": true,
+  "husky": true,
+  "lint-staged": true,
+  "github-actions": true,
+  // Shell operator scripts (scripts/*.sh) are outside knip scope entirely:
+  // knip does not parse shell, and they are referenced only from operator
+  // docs. No ignore entries are spent on them; audit separately if desired.
+  // Entry evidence below is the union the spec requires: package script
+  // targets are picked up from package.json automatically, the Jest plugin
+  // covers both jest configs plus every spec, and only the roots no script
+  // or test edge reaches are listed by hand.
+  // Constants and helpers that are used only beside their definition should
+  // lose the `export` keyword, not show up as dead code. Symbols nothing
+  // outside the defining module references remain reportable.
+  "ignoreExportsUsedInFile": true,
+  "entry": [
+    // Nest bootstrap: package `start` points at dist/main.js; the nest plugin
+    // does not always map that back to the TypeScript entry on its own.
+    "src/main.ts",
+    // Operator CLI surfaces, loaded dynamically by their `.cjs` wrappers
+    // (tsx in dev, dist in prod), which knip cannot follow statically. Entry
+    // status also treats their exports as public surface.
+    "src/cli/quota-reconcile.ts",
+    "src/cli/usage-report.ts",
+    "src/cli/usage-prune.ts",
+    // Container runtime evidence that package.json scripts do not name:
+    // Dockerfile ENTRYPOINT; compose uses the same bootstrap as entrypoint.
+    "scripts/runtime-entrypoint.mjs",
+    // Operator CLI invoked by a documented host path (docs/operations), not by
+    // package scripts, tests, or the container image; live runbook command.
+    "scripts/upload-speaking-audio.mjs",
+    // Hand-written types for scripts/cli-options.cjs (plain CJS); the spec
+    // and cli.mjs reach the .cjs through TypeScript, so without this knip
+    // reports a live file as unused.
+    "scripts/cli-options.d.cts"
+  ],
+  "ignoreBinaries": [
+    // HashiCorp Vault CLI — operator workstation/image binary, not an npm package.
+    "vault"
+  ],
+  "ignoreDependencies": [
+    // Invoked as the `depcruise` binary from the architecture-check script
+    // (spawned, not imported); knip cannot follow that edge from package scripts.
+    "dependency-cruiser",
+    // Referenced by nest-cli.json `collection`; shipped for Nest schematics,
+    // not imported by application code.
+    "@nestjs/schematics"
+  ]
+}

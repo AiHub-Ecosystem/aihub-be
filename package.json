@@ -27,7 +27,8 @@
     "format": "biome format --write .",
     "lint": "oxlint . && biome check .",
     "arch-check": "node scripts/check-architecture.mjs",
-    "verify": "pnpm lint && pnpm type-check && pnpm test && pnpm arch-check && pnpm validate:openapi",
+    "knip": "node scripts/knip.mjs",
+    "verify": "pnpm knip && pnpm lint && pnpm type-check && pnpm test && pnpm arch-check && pnpm validate:openapi",
     "prepare": "husky"
   },
   "dependencies": {
@@ -64,6 +65,7 @@
     "dependency-cruiser": "^17.3.7",
     "husky": "^9.1.7",
     "jest": "^29.7.0",
+    "knip": "^6.37.0",
     "lint-staged": "^17.5.0",
     "openapi-to-postmanv2": "^6.3.3",
     "oxlint": "^1.83.0",

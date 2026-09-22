@@ -12,8 +12,9 @@ import type {
 } from './api-key-authenticator.port';
 
 // The credential format lives in the domain so that the self-service endpoint,
-// this authenticator, and the operator CLI share one definition.
-export { API_KEY_PREFIX, hashApiKey, isApiKeyFormat } from '../domain/api-key';
+// this authenticator, and the operator CLI share one definition. Only
+// `isApiKeyFormat` is re-exported: the spec suite asserts through this module.
+export { isApiKeyFormat } from '../domain/api-key';
 
 export const AUTH_FAILURE_LIMIT = 20;
 const AUTH_FAILURE_WINDOW_MS = 5 * 60 * 1_000;

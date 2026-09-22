@@ -33,8 +33,6 @@ export const CustomerEnvironmentSchema = Type.Union([
   Type.Literal('staging'),
 ]);
 
-export type CustomerEnvironment = Static<typeof CustomerEnvironmentSchema>;
-
 export const CreateOrganizationApiKeyRequestSchema = Type.Object(
   {
     name: Type.String({ minLength: 1, maxLength: 100 }),
@@ -76,8 +74,6 @@ export const OrganizationApiKeySchema = Type.Object(
   },
   { additionalProperties: false },
 );
-
-export type OrganizationApiKey = Static<typeof OrganizationApiKeySchema>;
 
 /**
  * The response of every operation that mints a credential: creation and

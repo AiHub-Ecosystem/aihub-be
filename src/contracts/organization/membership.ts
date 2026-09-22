@@ -81,10 +81,6 @@ export const EmptyOrganizationMembershipMutationRequestSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type EmptyOrganizationMembershipMutationRequest = Static<
-  typeof EmptyOrganizationMembershipMutationRequestSchema
->;
-
 const OrganizationMembershipMutationDataSchema = Type.Object(
   {
     organization_id: Type.String({ minLength: 1 }),

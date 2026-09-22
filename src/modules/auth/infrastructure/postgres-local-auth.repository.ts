@@ -586,5 +586,3 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
     await this.close();
   }
 }
-
-export type AuthQueryClient = PostgresAuthQueryClient;

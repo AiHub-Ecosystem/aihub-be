@@ -3,9 +3,6 @@ export const IDENTITY_CONFIG_ALGORITHMS = ['RS256', 'ES256'] as const;
 export type IdentityConfigAlgorithm =
   (typeof IDENTITY_CONFIG_ALGORITHMS)[number];
 
-export const DEFAULT_ASSERTION_TTL_SECONDS = 300;
-export const MAX_ASSERTION_TTL_SECONDS = 3_600;
-
 export type IdentityConfigStatus = 'active' | 'disabled';
 
 export interface PublicJsonWebKey {

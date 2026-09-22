@@ -128,6 +128,4 @@ export class AuthIdentityConflictError extends Error {
   }
 }
 
-export type PersistedLocalAccountStatus = LocalAccountStatus;
-
 export const LOCAL_AUTH_REPOSITORY = Symbol('LOCAL_AUTH_REPOSITORY');

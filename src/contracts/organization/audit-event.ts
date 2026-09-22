@@ -18,13 +18,7 @@ export const ORGANIZATION_AUDIT_ACTIONS = [
   'api_key.revoked',
 ] as const;
 
-export type OrganizationAuditActionName =
-  (typeof ORGANIZATION_AUDIT_ACTIONS)[number];
-
 export const ORGANIZATION_AUDIT_OUTCOMES = ['applied', 'denied'] as const;
-
-export type OrganizationAuditOutcomeName =
-  (typeof ORGANIZATION_AUDIT_OUTCOMES)[number];
 
 /**
  * The page bounds live here rather than beside the use case because three
@@ -81,10 +75,6 @@ export const OrganizationAuditEventSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-
-export type OrganizationAuditEventView = Static<
-  typeof OrganizationAuditEventSchema
->;
 
 export const ListOrganizationAuditEventsResponseSchema = Type.Object(
   {

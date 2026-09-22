@@ -27,10 +27,6 @@ export const SpeakingGradeRequestSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type SpeakingGradeRequestContract = Static<
-  typeof SpeakingGradeRequestSchema
->;
-
 export const SpeakingGradeJsonRequestSchema = Type.Object(
   {
     audio_url: Type.String({
@@ -58,10 +54,6 @@ export const SpeakingGradeJsonRequestSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-
-export type SpeakingGradeJsonRequestContract = Static<
-  typeof SpeakingGradeJsonRequestSchema
->;
 
 export interface SpeakingAudio {
   readonly bytes: Uint8Array;

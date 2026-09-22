@@ -13,10 +13,10 @@ import {
 import type { DownstreamId } from '../downstream/downstream.types';
 import type { OperationId } from './operation-id';
 
-export type IdentityScope = 'organization' | 'user';
+type IdentityScope = 'organization' | 'user';
 export type IdempotencyMode = 'none' | 'optional' | 'required';
 export type MeteringMode = 'model' | 'none';
-export type ResponseContract = TSchema | 'unresolved';
+type ResponseContract = TSchema | 'unresolved';
 
 export interface OperationDef {
   readonly method: 'POST';

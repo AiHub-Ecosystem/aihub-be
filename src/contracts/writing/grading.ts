@@ -2,19 +2,11 @@ import { type Static, Type } from '@sinclair/typebox';
 
 import { ChartTypeSchema } from './task1';
 
-export {
-  CHART_TYPES,
-  ChartTypeSchema,
-} from './task1';
-export type { ChartType } from './task1';
-
 /**
  * Downstream only produces Vietnamese feedback today. Widening this later is a
  * non-breaking change; narrowing would not be, so it starts closed.
  */
 export const LANGUAGES = ['vi'] as const;
-
-export type Language = (typeof LANGUAGES)[number];
 
 const LanguageSchema = Type.Union(
   LANGUAGES.map((value) => Type.Literal(value)),

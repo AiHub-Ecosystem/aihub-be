@@ -23,16 +23,4 @@ export const SpeakingQuestionSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const SpeakingQuestionsDataSchema = Type.Object(
-  {
-    part: Type.Union([SpeakingPartSchema, Type.Null()]),
-    questions: Type.Array(SpeakingQuestionSchema),
-  },
-  { additionalProperties: false },
-);
-
-export type SpeakingQuestionsQuery = Static<
-  typeof SpeakingQuestionsQuerySchema
->;
 export type SpeakingQuestionContract = Static<typeof SpeakingQuestionSchema>;
-export type SpeakingQuestionsData = Static<typeof SpeakingQuestionsDataSchema>;

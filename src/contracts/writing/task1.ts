@@ -26,8 +26,6 @@ export const CHART_TYPES = [
   'Multiple Graphs',
 ] as const;
 
-export type ChartType = (typeof CHART_TYPES)[number];
-
 const ChartTypeSchema = Type.Union(
   CHART_TYPES.map((value) => Type.Literal(value)),
 );
