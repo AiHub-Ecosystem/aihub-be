@@ -161,6 +161,16 @@ describe('organization audit events against PostgreSQL', () => {
     );
   });
 
+  it('accepts the invitation revocation action added by its migration', async () => {
+    await expect(
+      insertEvent({
+        action: 'invitation.revoked',
+        targetType: 'invitation',
+        targetLabel: 'invitee@example.com',
+      }),
+    ).resolves.toMatch(/^oae_/);
+  });
+
   it('refuses an actor that is not a durable account', async () => {
     await expect(
       pool.query(

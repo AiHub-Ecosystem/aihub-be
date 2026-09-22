@@ -32,6 +32,41 @@ describe('organizationAuditEvent', () => {
     });
   });
 
+  it('records an applied invitation revocation without token material', () => {
+    const event = organizationAuditEvent(STAMP, {
+      action: 'invitation.revoked',
+      invitationId: 'oiv_01J00000000000000000000003',
+      email: 'invitee@example.com',
+      role: 'member',
+    });
+
+    expect(event).toEqual({
+      ...STAMP,
+      action: 'invitation.revoked',
+      outcome: 'applied',
+      targetType: 'invitation',
+      targetId: 'oiv_01J00000000000000000000003',
+      targetLabel: 'invitee@example.com',
+      detail: { role: 'member' },
+    });
+  });
+
+  it('records an invitation revocation denial against a real target', () => {
+    const event = organizationAuditEvent(STAMP, {
+      action: 'invitation.revoked',
+      invitationId: 'oiv_01J00000000000000000000003',
+      email: 'invitee@example.com',
+      role: 'admin',
+      denial: 'insufficient_authority',
+    });
+
+    expect(event.outcome).toBe('denied');
+    expect(event.detail).toEqual({
+      role: 'admin',
+      denial: 'insufficient_authority',
+    });
+  });
+
   it('keeps the role a membership held before the change, not only the one it gained', () => {
     const event = organizationAuditEvent(STAMP, {
       action: 'membership.role_changed',

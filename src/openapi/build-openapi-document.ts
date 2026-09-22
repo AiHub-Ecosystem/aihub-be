@@ -256,6 +256,8 @@ const AUTH_LOGOUT_PATH = '/v1/auth/logout';
 const ORGANIZATION_ROSTER_PATH = '/v1/organizations/me/members';
 const ORGANIZATION_INVITATION_PATH =
   '/v1/organizations/{organization_id}/invitations';
+const ORGANIZATION_INVITATION_ITEM_PATH =
+  '/v1/organizations/{organization_id}/invitations/{invitation_id}';
 const ORGANIZATION_INVITATION_ACCEPT_PATH =
   '/v1/organizations/invitations/accept';
 const ORGANIZATION_MEMBER_PATH =
@@ -565,6 +567,48 @@ function organizationInvitationPathItem(
           },
         },
         ...authErrorResponses(groupedErrors, [400, 401, 403, 409, 500, 503]),
+      },
+    },
+  };
+}
+
+function organizationInvitationItemPathItem(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, unknown> {
+  return {
+    delete: {
+      operationId: 'organizations.invitations.revoke',
+      summary: 'Revoke an organization invitation',
+      description:
+        'Closes an open invitation using the durable invitation close signal. An already closed or expired invitation is a retry-safe no-op and still returns bodyless 204.',
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        {
+          name: 'organization_id',
+          in: 'path',
+          required: true,
+          description: 'The organization that owns the invitation.',
+          schema: { type: 'string', minLength: 1 },
+        },
+        {
+          name: 'invitation_id',
+          in: 'path',
+          required: true,
+          description: 'The invitation being revoked.',
+          schema: {
+            type: 'string',
+            pattern: '^oiv_[0-9A-HJKMNP-TV-Z]{26}$',
+          },
+        },
+      ],
+      responses: {
+        '204': {
+          description:
+            'Invitation closed, or already closed/expired; the response has no body',
+        },
+        ...authErrorResponses(groupedErrors, [401, 403, 404, 500]),
       },
     },
   };
@@ -939,6 +983,8 @@ export function buildOpenApiDocument(version: string): unknown {
   paths[ORGANIZATION_ROSTER_PATH] = organizationRosterPathItem(groupedErrors);
   paths[ORGANIZATION_INVITATION_PATH] =
     organizationInvitationPathItem(groupedErrors);
+  paths[ORGANIZATION_INVITATION_ITEM_PATH] =
+    organizationInvitationItemPathItem(groupedErrors);
   paths[ORGANIZATION_INVITATION_ACCEPT_PATH] =
     organizationInvitationAcceptPathItem(groupedErrors);
   paths[ORGANIZATION_MEMBER_PATH] =

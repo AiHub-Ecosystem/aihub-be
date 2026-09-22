@@ -5,6 +5,7 @@ import {
 import { Test } from '@nestjs/testing';
 
 import { AppModule } from '../../../app.module';
+import { AppError } from '../../../common/errors/app-error';
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
@@ -27,6 +28,7 @@ import {
   ORGANIZATION_INVITATION,
   type OpenOrganizationInvitationRecord,
   type OrganizationInvitationPort,
+  type RevokeOrganizationInvitationInput,
 } from '../application/organization-invitation.port';
 import {
   type ListRosterInput,
@@ -40,6 +42,8 @@ const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
 const REQUEST_ID = 'req_01J00000000000000000000000';
 const INVITE_URL = `/v1/organizations/${ORGANIZATION_ID}/invitations`;
+const INVITATION_ID = 'oiv_01J00000000000000000000000';
+const REVOKE_URL = `${INVITE_URL}/${INVITATION_ID}`;
 
 type OrganizationStatus = 'active' | 'suspended';
 type InvitationListOverride = {
@@ -97,6 +101,11 @@ describe('Organization invitation HTTP flow', () => {
         ): Promise<readonly OpenOrganizationInvitationRecord[]> => [],
       ),
       acceptInvitation: jest.fn(),
+      revokeInvitation: jest.fn(
+        async (_input: RevokeOrganizationInvitationInput) => ({
+          kind: 'closed' as const,
+        }),
+      ),
     };
     emailSender = {
       sendVerificationEmail: jest.fn(
@@ -173,6 +182,7 @@ describe('Organization invitation HTTP flow', () => {
       organizationName: 'Acme',
     });
     invitations.listOpenInvitations.mockResolvedValue([]);
+    invitations.revokeInvitation.mockResolvedValue({ kind: 'closed' });
     emailSender.sendOrganizationInviteEmail.mockResolvedValue(undefined);
   });
 
@@ -193,6 +203,15 @@ describe('Organization invitation HTTP flow', () => {
     url = INVITE_URL,
   ) {
     return app.inject({ method: 'GET', url, headers });
+  }
+
+  function revoke(
+    headers: Record<string, string> = {
+      authorization: 'Bearer valid.token.value',
+    },
+    url = REVOKE_URL,
+  ) {
+    return app.inject({ method: 'DELETE', url, headers });
   }
 
   function createInvitationCall(): CreateOrganizationInvitationInput {
@@ -356,6 +375,88 @@ describe('Organization invitation HTTP flow', () => {
       data: { invitations: [] },
       meta: { request_id: REQUEST_ID },
     });
+  });
+
+  it('returns bodyless 204 when an owner revokes an invitation', async () => {
+    const response = await revoke();
+
+    expect(response.statusCode).toBe(204);
+    expect(response.payload).toBe('');
+    expect(invitations.revokeInvitation).toHaveBeenCalledWith({
+      context: expect.objectContaining({ organizationId: ORGANIZATION_ID }),
+      actorUserId: USER_ID,
+      actorRole: 'owner',
+      organizationId: ORGANIZATION_ID,
+      invitationId: INVITATION_ID,
+      now: expect.any(Date),
+    });
+  });
+
+  it('keeps revocation available to an admin', async () => {
+    callerRole = 'admin';
+
+    const response = await revoke();
+
+    expect(response.statusCode).toBe(204);
+  });
+
+  it.each<[string, InvitationListOverride]>([
+    ['a non-member', { membershipExists: false }],
+    ['a disabled membership', { status: 'disabled' as const }],
+    ['a suspended organization', { organization: 'suspended' as const }],
+  ])(
+    'denies revocation for %s before reading the invitation',
+    async (_label, override) => {
+      callerRole = override.role ?? callerRole;
+      callerMembershipExists =
+        override.membershipExists ?? callerMembershipExists;
+      callerStatus = override.status ?? callerStatus;
+      organizationStatus = override.organization ?? organizationStatus;
+
+      const response = await revoke();
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error).toMatchObject({
+        code: 'FORBIDDEN',
+        message: 'Organization invitation revocation is forbidden',
+      });
+      expect(invitations.revokeInvitation).not.toHaveBeenCalled();
+    },
+  );
+
+  it('returns the safe policy denial when a member target is refused', async () => {
+    callerRole = 'member';
+    invitations.revokeInvitation.mockRejectedValue(
+      new AppError({
+        code: 'FORBIDDEN',
+        message: 'Organization invitation revocation is forbidden',
+        retryable: false,
+      }),
+    );
+
+    const response = await revoke();
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.code).toBe('FORBIDDEN');
+    expect(invitations.revokeInvitation).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects missing or invalid Bearer credentials before revocation', async () => {
+    const missing = await revoke({});
+    const invalid = await revoke({ authorization: 'Bearer nope' });
+
+    expect(missing.statusCode).toBe(401);
+    expect(invalid.statusCode).toBe(401);
+    expect(invitations.revokeInvitation).not.toHaveBeenCalled();
+  });
+
+  it('maps an unknown invitation to not found', async () => {
+    invitations.revokeInvitation.mockResolvedValue({ kind: 'not_found' });
+
+    const response = await revoke();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe('NOT_FOUND');
   });
 
   it.each<[string, InvitationListOverride]>([

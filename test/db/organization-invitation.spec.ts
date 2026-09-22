@@ -7,6 +7,7 @@ import { createRequestContext } from '../../src/common/request-context/request-c
 import type {
   AcceptOrganizationInvitationResult,
   CreateOrganizationInvitationResult,
+  RevokeOrganizationInvitationResult,
 } from '../../src/modules/identity/application/organization-invitation.port';
 import type { OrganizationMembershipRole } from '../../src/modules/identity/application/organization-membership.port';
 import type { PostgresIdentityTransactionalClient } from '../../src/modules/identity/infrastructure/postgres-identity.client';
@@ -159,6 +160,31 @@ async function accept(options: {
     context: acceptContext(options.accepterId),
     userId: options.accepterId,
     tokenHash: options.tokenHash,
+    now: options.now ?? NOW,
+  });
+}
+
+async function revoke(options: {
+  readonly actorId: string;
+  readonly actorRole: OrganizationMembershipRole;
+  readonly invitationId: string;
+  readonly organizationId?: string;
+  readonly now?: Date;
+}): Promise<RevokeOrganizationInvitationResult> {
+  const organizationId = options.organizationId ?? ORGANIZATION_ID;
+  return repository.revokeInvitation({
+    context: createRequestContext({
+      requestId: `req_${ulid()}`,
+      receivedAt: options.now ?? NOW,
+      deadlineMs: 5_000,
+      organizationId,
+      userId: options.actorId,
+      scopes: [],
+    }),
+    actorUserId: options.actorId,
+    actorRole: options.actorRole,
+    organizationId,
+    invitationId: options.invitationId,
     now: options.now ?? NOW,
   });
 }
@@ -380,6 +406,232 @@ describe('organization invitation against PostgreSQL', () => {
         createdAt: row.created_at,
       }),
     ).rejects.toMatchObject({ code: '23514' });
+  });
+});
+
+describe('organization invitation revocation against PostgreSQL', () => {
+  let inviterId: string;
+
+  beforeEach(async () => {
+    inviterId = await seedInviterOwner();
+  });
+
+  it('closes an open invitation and records the applied audit event', async () => {
+    const id = invitationId();
+    const token = tokenHash();
+    await invite({ inviterId, invitationId: id, tokenHash: token });
+
+    await expect(
+      revoke({ actorId: inviterId, actorRole: 'owner', invitationId: id }),
+    ).resolves.toEqual({ kind: 'closed' });
+
+    expect((await invitationByHash(token))?.consumed_at).not.toBeNull();
+    const audit = await pool.query<{
+      action: string;
+      outcome: string;
+      target_id: string;
+      target_label: string;
+      detail: { role: string };
+    }>(
+      `SELECT action, outcome, target_id, target_label, detail
+       FROM organization_audit_events
+       WHERE target_type = 'invitation' AND target_id = $1`,
+      [id],
+    );
+    expect(audit.rows[0]).toEqual({
+      action: 'invitation.revoked',
+      outcome: 'applied',
+      target_id: id,
+      target_label: INVITED_EMAIL,
+      detail: { role: 'member' },
+    });
+  });
+
+  it('returns a retry-safe no-op for an already closed or expired invitation', async () => {
+    const closedId = invitationId();
+    const closedToken = tokenHash();
+    await invite({ inviterId, invitationId: closedId, tokenHash: closedToken });
+    await pool.query(
+      'UPDATE organization_invitations SET consumed_at = $2 WHERE id = $1',
+      [closedId, NOW],
+    );
+
+    const expiredId = invitationId();
+    const expiredToken = tokenHash();
+    await insertInvitationRow({
+      id: expiredId,
+      organizationId: ORGANIZATION_ID,
+      email: 'expired@example.com',
+      role: 'member',
+      invitedBy: inviterId,
+      tokenHash: expiredToken,
+      expiresAt: new Date(NOW.getTime() - 1_000),
+      createdAt: new Date(NOW.getTime() - 2_000),
+    });
+
+    await expect(
+      revoke({
+        actorId: inviterId,
+        actorRole: 'owner',
+        invitationId: closedId,
+      }),
+    ).resolves.toEqual({ kind: 'closed' });
+    await expect(
+      revoke({
+        actorId: inviterId,
+        actorRole: 'owner',
+        invitationId: expiredId,
+      }),
+    ).resolves.toEqual({ kind: 'closed' });
+
+    const audit = await pool.query(
+      `SELECT id FROM organization_audit_events
+       WHERE target_type = 'invitation' AND target_id IN ($1, $2)`,
+      [closedId, expiredId],
+    );
+    expect(audit.rows).toHaveLength(0);
+  });
+
+  it('hides unknown and foreign invitation identifiers as not_found', async () => {
+    await expect(
+      revoke({
+        actorId: inviterId,
+        actorRole: 'owner',
+        invitationId: invitationId(),
+      }),
+    ).resolves.toEqual({ kind: 'not_found' });
+
+    await seedOrganization(OTHER_ORGANIZATION_ID);
+    const otherInviter = await seedAccount({
+      email: 'other-owner@example.com',
+    });
+    await seedMembership({
+      organizationId: OTHER_ORGANIZATION_ID,
+      userAccountId: otherInviter,
+      role: 'owner',
+      status: 'active',
+    });
+    const foreignId = invitationId();
+    await invite({
+      inviterId: otherInviter,
+      organizationId: OTHER_ORGANIZATION_ID,
+      invitationId: foreignId,
+      email: 'foreign@example.com',
+    });
+
+    await expect(
+      revoke({
+        actorId: inviterId,
+        actorRole: 'owner',
+        invitationId: foreignId,
+      }),
+    ).resolves.toEqual({ kind: 'not_found' });
+  });
+
+  it('denies an admin from revoking a higher-role invitation and records the denial', async () => {
+    const adminId = await seedAccount({ email: 'admin@example.com' });
+    await seedMembership({
+      organizationId: ORGANIZATION_ID,
+      userAccountId: adminId,
+      role: 'admin',
+      status: 'active',
+    });
+    const id = invitationId();
+    await invite({ inviterId, invitationId: id, role: 'admin' });
+
+    await expect(
+      revoke({ actorId: adminId, actorRole: 'admin', invitationId: id }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect((await openInvitations())[0]?.id).toBe(id);
+
+    const audit = await pool.query<{
+      outcome: string;
+      detail: { role: string; denial: string };
+    }>(
+      `SELECT outcome, detail FROM organization_audit_events
+       WHERE target_type = 'invitation' AND target_id = $1`,
+      [id],
+    );
+    expect(audit.rows[0]).toEqual({
+      outcome: 'denied',
+      detail: { role: 'admin', denial: 'insufficient_authority' },
+    });
+  });
+
+  it('denies a member on a real target without changing the invitation', async () => {
+    const memberId = await seedAccount({ email: 'member@example.com' });
+    await seedMembership({
+      organizationId: ORGANIZATION_ID,
+      userAccountId: memberId,
+      role: 'member',
+      status: 'active',
+    });
+    const id = invitationId();
+    const token = tokenHash();
+    await invite({ inviterId, invitationId: id, tokenHash: token });
+
+    await expect(
+      revoke({ actorId: memberId, actorRole: 'member', invitationId: id }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect((await invitationByHash(token))?.consumed_at).toBeNull();
+  });
+
+  it('rejects a suspended organization before reading its invitation', async () => {
+    const id = invitationId();
+    const token = tokenHash();
+    await invite({ inviterId, invitationId: id, tokenHash: token });
+    await pool.query(
+      `UPDATE organizations SET status = 'suspended' WHERE id = $1`,
+      [ORGANIZATION_ID],
+    );
+
+    await expect(
+      revoke({ actorId: inviterId, actorRole: 'owner', invitationId: id }),
+    ).resolves.toEqual({ kind: 'organization_suspended' });
+    expect((await invitationByHash(token))?.consumed_at).toBeNull();
+  });
+
+  it('waits for a concurrent invitation close before returning the retry-safe result', async () => {
+    const id = invitationId();
+    const token = tokenHash();
+    await invite({ inviterId, invitationId: id, tokenHash: token });
+
+    const holder = await pool.connect();
+    try {
+      await holder.query('BEGIN');
+      const holderPid = await holder
+        .query<{ pid: number }>('SELECT pg_backend_pid() AS pid')
+        .then(({ rows }) => rows[0]?.pid);
+      await holder.query(
+        'SELECT id FROM organization_invitations WHERE id = $1 FOR UPDATE',
+        [id],
+      );
+
+      let settled = false;
+      const revocation = revoke({
+        actorId: inviterId,
+        actorRole: 'owner',
+        invitationId: id,
+      }).then((result) => {
+        settled = true;
+        return result;
+      });
+
+      await waitForBlockedBy(pool, holderPid);
+      expect(settled).toBe(false);
+
+      await holder.query(
+        `UPDATE organization_invitations SET consumed_at = $2
+         WHERE id = $1 AND consumed_at IS NULL`,
+        [id, NOW],
+      );
+      await holder.query('COMMIT');
+
+      await expect(revocation).resolves.toEqual({ kind: 'closed' });
+      expect((await invitationByHash(token))?.consumed_at).not.toBeNull();
+    } finally {
+      holder.release(true);
+    }
   });
 });
 

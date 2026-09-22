@@ -12,6 +12,7 @@ export type OrganizationAuditAction =
   | 'invitation.sent'
   | 'invitation.resent'
   | 'invitation.accepted'
+  | 'invitation.revoked'
   | 'membership.role_changed'
   | 'membership.disabled'
   | 'membership.owner_transferred'
@@ -74,6 +75,15 @@ interface InvitationDraft {
   readonly role: OrganizationAuditRole;
 }
 
+interface InvitationRevokedDraft {
+  readonly action: 'invitation.revoked';
+  readonly invitationId: string;
+  /** The normalized email, kept plaintext and removable by Audit redaction. */
+  readonly email: string;
+  readonly role: OrganizationAuditRole;
+  readonly denial?: OrganizationAuditDenial;
+}
+
 interface RoleChangedDraft {
   readonly action: 'membership.role_changed';
   readonly targetUserAccountId: string;
@@ -132,6 +142,7 @@ interface ApiKeyRevokedDraft {
 
 export type OrganizationAuditDraft =
   | InvitationDraft
+  | InvitationRevokedDraft
   | RoleChangedDraft
   | DisabledDraft
   | OwnerTransferredDraft
@@ -167,6 +178,19 @@ function shape(draft: OrganizationAuditDraft): Shape {
         detail: { role: draft.role },
         outcome: 'applied',
       };
+    case 'invitation.revoked': {
+      const { outcome, denial } = refusal(draft);
+      return {
+        targetType: 'invitation',
+        targetId: draft.invitationId,
+        targetLabel: draft.email,
+        detail:
+          denial === undefined
+            ? { role: draft.role }
+            : { role: draft.role, denial },
+        outcome,
+      };
+    }
     // A refused attempt carries what was asked for, never a transition: an
     // event that says `toRole` describes a change that did not happen.
     case 'membership.role_changed': {

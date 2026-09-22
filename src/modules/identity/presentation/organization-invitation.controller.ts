@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Inject,
@@ -35,6 +36,10 @@ import {
   LIST_OPEN_ORGANIZATION_INVITATIONS,
   type ListOpenOrganizationInvitationsPort,
 } from '../application/list-open-organization-invitations.port';
+import {
+  REVOKE_ORGANIZATION_INVITATION,
+  type RevokeOrganizationInvitationPort,
+} from '../application/revoke-organization-invitation.port';
 
 import { bearerRequestContext } from './bearer-request-context';
 
@@ -48,6 +53,8 @@ export class OrganizationInvitationController {
     private readonly acceptInvitation: AcceptOrganizationInvitationPort,
     @Inject(LIST_OPEN_ORGANIZATION_INVITATIONS)
     private readonly listOpenInvitations: ListOpenOrganizationInvitationsPort,
+    @Inject(REVOKE_ORGANIZATION_INVITATION)
+    private readonly revokeInvitation: RevokeOrganizationInvitationPort,
   ) {}
 
   // The router ranks this static path above the parameterised invite route, so
@@ -150,5 +157,22 @@ export class OrganizationInvitationController {
       },
       meta: { request_id: requestId },
     };
+  }
+
+  @Delete('/v1/organizations/:organizationId/invitations/:invitationId')
+  @HttpCode(204)
+  async revoke(
+    @Req() request: FastifyRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('invitationId') invitationId: string,
+  ): Promise<void> {
+    const { context, userId } = bearerRequestContext(request, organizationId);
+
+    await this.revokeInvitation.revoke({
+      context,
+      userId,
+      organizationId,
+      invitationId,
+    });
   }
 }

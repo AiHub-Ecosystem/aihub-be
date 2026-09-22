@@ -47,9 +47,13 @@ const ORGANIZATION_ROSTER_PATH = '/v1/organizations/me/members';
 const ORGANIZATION_ROSTER_OPERATION_ID = 'organizations.me.members.list';
 const ORGANIZATION_INVITATION_PATH =
   '/v1/organizations/{organization_id}/invitations';
+const ORGANIZATION_INVITATION_ITEM_PATH =
+  '/v1/organizations/{organization_id}/invitations/{invitation_id}';
 const ORGANIZATION_INVITATION_OPERATION_ID = 'organizations.invitations.create';
 const ORGANIZATION_INVITATION_LIST_OPERATION_ID =
   'organizations.invitations.list';
+const ORGANIZATION_INVITATION_REVOKE_OPERATION_ID =
+  'organizations.invitations.revoke';
 const ORGANIZATION_INVITATION_ACCEPT_PATH =
   '/v1/organizations/invitations/accept';
 const ORGANIZATION_INVITATION_ACCEPT_OPERATION_ID =
@@ -139,6 +143,7 @@ describe('buildOpenApiDocument', () => {
       SANDBOX_MINT_PATH,
       ORGANIZATION_ROSTER_PATH,
       ORGANIZATION_INVITATION_PATH,
+      ORGANIZATION_INVITATION_ITEM_PATH,
       ORGANIZATION_INVITATION_ACCEPT_PATH,
       ORGANIZATION_MEMBER_PATH,
       ORGANIZATION_MEMBER_TRANSFER_PATH,
@@ -182,6 +187,34 @@ describe('buildOpenApiDocument', () => {
     expect(operation?.responses['503']).toBeDefined();
     // The raw Organization Invite Token belongs to the invited person.
     expect(JSON.stringify(operation?.responses['201'])).not.toContain('token');
+  });
+
+  it('documents bodyless bearer-authenticated invitation revocation', () => {
+    const operation = build().paths[ORGANIZATION_INVITATION_ITEM_PATH]?.delete;
+
+    expect(operation?.operationId).toBe(
+      ORGANIZATION_INVITATION_REVOKE_OPERATION_ID,
+    );
+    expect(operation?.security).toEqual([{ BearerAuth: [] }]);
+    expect(operation?.responses['204']).toBeDefined();
+    expect(operation?.responses['401']).toBeDefined();
+    expect(operation?.responses['403']).toBeDefined();
+    expect(operation?.responses['404']).toBeDefined();
+    expect(operation?.responses['500']).toBeDefined();
+    expect(operation?.responses['204']).not.toHaveProperty('content');
+    expect(operation?.parameters).toEqual([
+      { $ref: '#/components/parameters/CorrelationId' },
+      expect.objectContaining({
+        name: 'organization_id',
+        in: 'path',
+        required: true,
+      }),
+      expect.objectContaining({
+        name: 'invitation_id',
+        in: 'path',
+        required: true,
+      }),
+    ]);
   });
 
   it('documents the organization path parameter for the invitation route', () => {

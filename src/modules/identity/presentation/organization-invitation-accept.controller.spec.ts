@@ -49,6 +49,7 @@ describe('Organization invitation acceptance HTTP flow', () => {
           role: 'member' as const,
         }),
       ),
+      revokeInvitation: jest.fn(),
     };
     tokenIssuer = {
       issue: jest.fn(async (_userId: string) => ({

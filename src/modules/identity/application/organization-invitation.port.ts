@@ -39,6 +39,20 @@ export interface ListOpenOrganizationInvitationsInput {
   readonly now: Date;
 }
 
+export interface RevokeOrganizationInvitationInput {
+  readonly context: RequestContext;
+  readonly actorUserId: string;
+  readonly actorRole: OrganizationMembershipRole;
+  readonly organizationId: string;
+  readonly invitationId: string;
+  readonly now: Date;
+}
+
+export type RevokeOrganizationInvitationResult =
+  | { readonly kind: 'closed' }
+  | { readonly kind: 'not_found' }
+  | { readonly kind: 'organization_suspended' };
+
 export interface OpenOrganizationInvitationRecord {
   readonly invitationId: string;
   readonly email: string;
@@ -69,6 +83,9 @@ export interface OrganizationInvitationPort {
   listOpenInvitations(
     input: ListOpenOrganizationInvitationsInput,
   ): Promise<readonly OpenOrganizationInvitationRecord[]>;
+  revokeInvitation(
+    input: RevokeOrganizationInvitationInput,
+  ): Promise<RevokeOrganizationInvitationResult>;
   acceptInvitation(
     input: AcceptOrganizationInvitationInput,
   ): Promise<AcceptOrganizationInvitationResult>;

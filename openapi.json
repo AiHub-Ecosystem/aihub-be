@@ -3216,6 +3216,61 @@
         }
       }
     },
+    "/v1/organizations/{organization_id}/invitations/{invitation_id}": {
+      "delete": {
+        "operationId": "organizations.invitations.revoke",
+        "summary": "Revoke an organization invitation",
+        "description": "Closes an open invitation using the durable invitation close signal. An already closed or expired invitation is a retry-safe no-op and still returns bodyless 204.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization that owns the invitation.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "invitation_id",
+            "in": "path",
+            "required": true,
+            "description": "The invitation being revoked.",
+            "schema": {
+              "type": "string",
+              "pattern": "^oiv_[0-9A-HJKMNP-TV-Z]{26}$"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Invitation closed, or already closed/expired; the response has no body"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
     "/v1/organizations/invitations/accept": {
       "post": {
         "operationId": "organizations.invitations.accept",

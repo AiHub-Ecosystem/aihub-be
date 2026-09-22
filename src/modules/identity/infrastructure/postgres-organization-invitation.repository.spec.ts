@@ -4,6 +4,7 @@ import type {
   AcceptOrganizationInvitationInput,
   CreateOrganizationInvitationInput,
   ListOpenOrganizationInvitationsInput,
+  RevokeOrganizationInvitationInput,
 } from '../application/organization-invitation.port';
 
 import type {
@@ -104,6 +105,27 @@ function listInput(
     }),
     userId: USER_ID,
     organizationId: ORGANIZATION_ID,
+    now: NOW,
+    ...overrides,
+  };
+}
+
+function revokeInput(
+  overrides: Partial<RevokeOrganizationInvitationInput> = {},
+): RevokeOrganizationInvitationInput {
+  return {
+    context: createRequestContext({
+      requestId: 'req_01J00000000000000000000000',
+      receivedAt: NOW,
+      deadlineMs: 5_000,
+      organizationId: ORGANIZATION_ID,
+      userId: USER_ID,
+      scopes: [],
+    }),
+    actorUserId: USER_ID,
+    actorRole: 'owner',
+    organizationId: ORGANIZATION_ID,
+    invitationId: INVITATION_ID,
     now: NOW,
     ...overrides,
   };
@@ -597,6 +619,252 @@ describe('PostgresOrganizationInvitationRepository acceptance', () => {
     expect(
       recorded.some(({ text }) => text.includes('organization_audit_events')),
     ).toBe(false);
+  });
+});
+
+describe('PostgresOrganizationInvitationRepository revocation', () => {
+  function revokeRows(
+    options: {
+      readonly organizationStatus?: string;
+      readonly invitation?: {
+        readonly role?: string;
+        readonly consumedAt?: Date | null;
+        readonly expiresAt?: Date;
+      } | null;
+      readonly updateRows?: boolean;
+    } = {},
+  ) {
+    const {
+      organizationStatus = 'active',
+      invitation = {
+        role: 'member',
+        consumedAt: null,
+        expiresAt: EXPIRES_AT,
+      },
+      updateRows = true,
+    } = options;
+
+    return (text: string): readonly unknown[] => {
+      if (text.includes('FROM organizations')) {
+        return [{ id: ORGANIZATION_ID, status: organizationStatus }];
+      }
+      if (text.includes('FROM organization_invitations')) {
+        if (invitation === null) {
+          return [];
+        }
+        const values = {
+          role: 'member',
+          consumedAt: null,
+          expiresAt: EXPIRES_AT,
+          ...invitation,
+        };
+        return [
+          {
+            id: INVITATION_ID,
+            organization_id: ORGANIZATION_ID,
+            email: 'invitee@example.com',
+            role: values.role,
+            consumed_at: values.consumedAt,
+            expires_at: values.expiresAt,
+          },
+        ];
+      }
+      if (text.includes('UPDATE organization_invitations')) {
+        return updateRows ? [{ id: INVITATION_ID }] : [];
+      }
+      return [];
+    };
+  }
+
+  function statements(recorded: RecordedQuery[]): string[] {
+    return recorded.map(({ text }) => text.trim().split(/\s+/)[0] ?? '');
+  }
+
+  function auditWrite(recorded: RecordedQuery) {
+    return recorded.text.includes('INSERT INTO organization_audit_events');
+  }
+
+  it('locks the organization before the invitation and closes an open row', async () => {
+    const recorded: RecordedQuery[] = [];
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(revokeRows(), recorded),
+    );
+
+    await expect(repository.revokeInvitation(revokeInput())).resolves.toEqual({
+      kind: 'closed',
+    });
+
+    expect(statements(recorded)).toEqual([
+      'SELECT',
+      'SELECT',
+      'UPDATE',
+      'INSERT',
+    ]);
+    expect(recorded[0]?.text).toContain('FROM organizations');
+    expect(recorded[0]?.text).toContain('FOR UPDATE');
+    expect(recorded[1]?.text).toContain('FROM organization_invitations');
+    expect(recorded[1]?.text).toContain('FOR UPDATE');
+    expect(recorded[1]?.values).toEqual([INVITATION_ID, ORGANIZATION_ID]);
+    expect(recorded[2]?.text).toContain('consumed_at IS NULL');
+    expect(recorded[2]?.text).toContain('expires_at > $3');
+    expect(recorded[2]?.values).toEqual([INVITATION_ID, ORGANIZATION_ID, NOW]);
+    expect(recorded.find(auditWrite)?.values).toEqual([
+      expect.stringMatching(/^oae_[0-9A-HJKMNP-TV-Z]{26}$/),
+      ORGANIZATION_ID,
+      USER_ID,
+      'invitation.revoked',
+      'applied',
+      'invitation',
+      INVITATION_ID,
+      'invitee@example.com',
+      JSON.stringify({ role: 'member' }),
+      'req_01J00000000000000000000000',
+      NOW,
+    ]);
+  });
+
+  it.each([
+    ['an unknown invitation', { invitation: null }],
+    ['an invitation from another organization', { invitation: null }],
+  ])('returns not_found for %s without writing', async (_label, options) => {
+    const recorded: RecordedQuery[] = [];
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(revokeRows(options), recorded),
+    );
+
+    await expect(repository.revokeInvitation(revokeInput())).resolves.toEqual({
+      kind: 'not_found',
+    });
+    expect(statements(recorded)).toEqual(['SELECT', 'SELECT']);
+    expect(recorded.some(auditWrite)).toBe(false);
+  });
+
+  it.each([
+    ['already consumed', { consumedAt: NOW }],
+    ['expired', { expiresAt: new Date(NOW.getTime() - 1_000) }],
+  ])(
+    'returns a closed no-op for %s without auditing',
+    async (_label, options) => {
+      const recorded: RecordedQuery[] = [];
+      const repository = new PostgresOrganizationInvitationRepository(
+        client(
+          revokeRows({ invitation: { role: 'member', ...options } }),
+          recorded,
+        ),
+      );
+
+      await expect(repository.revokeInvitation(revokeInput())).resolves.toEqual(
+        {
+          kind: 'closed',
+        },
+      );
+      expect(statements(recorded)).toEqual(['SELECT', 'SELECT']);
+      expect(recorded.some(auditWrite)).toBe(false);
+    },
+  );
+
+  it('denies an admin targeting an owner invitation and records the real target', async () => {
+    const recorded: RecordedQuery[] = [];
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(
+        revokeRows({
+          invitation: {
+            role: 'owner',
+            consumedAt: null,
+            expiresAt: EXPIRES_AT,
+          },
+        }),
+        recorded,
+      ),
+    );
+
+    await expect(
+      repository.revokeInvitation(revokeInput({ actorRole: 'admin' })),
+    ).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      message: 'Organization invitation revocation is forbidden',
+    });
+    expect(recorded.find(auditWrite)?.values).toEqual([
+      expect.stringMatching(/^oae_[0-9A-HJKMNP-TV-Z]{26}$/),
+      ORGANIZATION_ID,
+      USER_ID,
+      'invitation.revoked',
+      'denied',
+      'invitation',
+      INVITATION_ID,
+      'invitee@example.com',
+      JSON.stringify({ role: 'owner', denial: 'insufficient_authority' }),
+      'req_01J00000000000000000000000',
+      NOW,
+    ]);
+  });
+
+  it('denies a member targeting a real invitation and records the real target', async () => {
+    const recorded: RecordedQuery[] = [];
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(revokeRows(), recorded),
+    );
+
+    await expect(
+      repository.revokeInvitation(revokeInput({ actorRole: 'member' })),
+    ).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      message: 'Organization invitation revocation is forbidden',
+    });
+    expect(recorded.find(auditWrite)?.values[3]).toBe('invitation.revoked');
+    expect(recorded.find(auditWrite)?.values[4]).toBe('denied');
+    expect(recorded.find(auditWrite)?.values[8]).toBe(
+      JSON.stringify({ role: 'member', denial: 'insufficient_authority' }),
+    );
+  });
+
+  it('stops at a suspended organization before reading the invitation', async () => {
+    const recorded: RecordedQuery[] = [];
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(revokeRows({ organizationStatus: 'suspended' }), recorded),
+    );
+
+    await expect(repository.revokeInvitation(revokeInput())).resolves.toEqual({
+      kind: 'organization_suspended',
+    });
+    expect(statements(recorded)).toEqual(['SELECT']);
+    expect(recorded.some(auditWrite)).toBe(false);
+  });
+
+  it.each([
+    [
+      'a caller that is not the request context user',
+      { actorUserId: 'usr_other' },
+    ],
+    [
+      'an organization that is not in the request context',
+      { organizationId: 'org_other' },
+    ],
+    ['an empty invitation id', { invitationId: '   ' }],
+    ['an invalid current time', { now: new Date(Number.NaN) }],
+  ])('rejects %s before touching the store', async (_label, overrides) => {
+    const recorded: RecordedQuery[] = [];
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(revokeRows(), recorded),
+    );
+
+    await expect(
+      repository.revokeInvitation(revokeInput(overrides)),
+    ).rejects.toBeInstanceOf(AppError);
+    expect(recorded).toHaveLength(0);
+  });
+
+  it('fails closed without exposing a transaction failure', async () => {
+    const repository = new PostgresOrganizationInvitationRepository(
+      client(revokeRows(), [], { failTransaction: true }),
+    );
+
+    await expect(
+      repository.revokeInvitation(revokeInput()),
+    ).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'Identity store is unavailable',
+    });
   });
 });
 

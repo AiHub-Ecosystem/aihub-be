@@ -7,7 +7,11 @@ import type {
   ListOpenOrganizationInvitationsInput,
   OpenOrganizationInvitationRecord,
   OrganizationInvitationPort,
+  RevokeOrganizationInvitationInput,
+  RevokeOrganizationInvitationResult,
 } from '../application/organization-invitation.port';
+import { forbidden } from '../application/organization-membership.authorization';
+import type { OrganizationAuditDraft } from '../domain/organization-audit-event';
 
 import {
   identityStoreError,
@@ -18,6 +22,7 @@ import {
 } from './identity-row';
 import {
   auditStamp,
+  recordOrganizationAuditDenial,
   recordOrganizationAuditEvent,
 } from './organization-audit-event.store';
 import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
@@ -52,6 +57,31 @@ const CLOSE_OPEN_INVITATIONS_SQL = `
   WHERE organization_id = $1
     AND email = $2
     AND consumed_at IS NULL
+  RETURNING id
+`;
+
+const LOCK_ORGANIZATION_FOR_REVOKE_SQL = `
+  SELECT id, status
+  FROM organizations
+  WHERE id = $1
+  FOR UPDATE
+`;
+
+const LOCK_INVITATION_FOR_REVOKE_SQL = `
+  SELECT id, organization_id, email, role, consumed_at, expires_at
+  FROM organization_invitations
+  WHERE id = $1
+    AND organization_id = $2
+  FOR UPDATE
+`;
+
+const REVOKE_OPEN_INVITATION_SQL = `
+  UPDATE organization_invitations
+  SET consumed_at = $3
+  WHERE id = $1
+    AND organization_id = $2
+    AND consumed_at IS NULL
+    AND expires_at > $3
   RETURNING id
 `;
 
@@ -312,6 +342,131 @@ export class PostgresOrganizationInvitationRepository
     }
 
     return invitations;
+  }
+
+  async revokeInvitation(
+    input: RevokeOrganizationInvitationInput,
+  ): Promise<RevokeOrganizationInvitationResult> {
+    if (
+      input.context.userId !== input.actorUserId ||
+      input.context.organizationId !== input.organizationId ||
+      input.actorUserId.trim().length === 0 ||
+      input.organizationId.trim().length === 0 ||
+      input.invitationId.trim().length === 0 ||
+      !(input.now instanceof Date) ||
+      Number.isNaN(input.now.getTime())
+    ) {
+      throw identityStoreError(
+        'Identity organization invitation input is invalid',
+      );
+    }
+
+    const stamp = auditStamp(input, input.actorUserId, input.now);
+    let refused: OrganizationAuditDraft | undefined;
+
+    try {
+      return await this.client.transaction(async (transaction) => {
+        const organizationRows = await transaction.query(
+          LOCK_ORGANIZATION_FOR_REVOKE_SQL,
+          [input.organizationId],
+        );
+        const organization = organizationRows[0];
+        if (!isRecord(organization)) {
+          return { kind: 'not_found' };
+        }
+
+        const organizationId = stringValue(organization, 'id');
+        const organizationStatus = organizationStatusValue(
+          organization,
+          'status',
+        );
+        if (
+          organizationId !== input.organizationId ||
+          organizationStatus === undefined
+        ) {
+          throw identityStoreError('Identity data is invalid');
+        }
+        if (organizationStatus === 'suspended') {
+          return { kind: 'organization_suspended' };
+        }
+
+        const invitationRows = await transaction.query(
+          LOCK_INVITATION_FOR_REVOKE_SQL,
+          [input.invitationId, input.organizationId],
+        );
+        const invitation = invitationRows[0];
+        if (!isRecord(invitation)) {
+          return { kind: 'not_found' };
+        }
+
+        const invitationId = stringValue(invitation, 'id');
+        const invitationOrganizationId = stringValue(
+          invitation,
+          'organization_id',
+        );
+        const email = stringValue(invitation, 'email');
+        const role = membershipRoleValue(invitation, 'role');
+        const expiresAt = dateValue(invitation, 'expires_at');
+        const consumedAt =
+          invitation.consumed_at === null
+            ? null
+            : dateValue(invitation, 'consumed_at');
+        if (
+          invitationId === undefined ||
+          invitationOrganizationId !== input.organizationId ||
+          email === undefined ||
+          role === undefined ||
+          expiresAt === undefined ||
+          (invitation.consumed_at !== null && consumedAt === undefined)
+        ) {
+          throw identityStoreError('Identity data is invalid');
+        }
+
+        if (
+          input.actorRole === 'member' ||
+          (input.actorRole === 'admin' && role !== 'member')
+        ) {
+          refused = {
+            action: 'invitation.revoked',
+            invitationId,
+            email,
+            role,
+            denial: 'insufficient_authority',
+          };
+          throw forbidden('Organization invitation revocation is forbidden');
+        }
+
+        if (consumedAt !== null || expiresAt.getTime() <= input.now.getTime()) {
+          return { kind: 'closed' };
+        }
+
+        const updated = await transaction.query(REVOKE_OPEN_INVITATION_SQL, [
+          input.invitationId,
+          input.organizationId,
+          input.now,
+        ]);
+        if (updated.length === 0) {
+          return { kind: 'closed' };
+        }
+
+        await recordOrganizationAuditEvent(transaction, stamp, {
+          action: 'invitation.revoked',
+          invitationId,
+          email,
+          role,
+        });
+
+        return { kind: 'closed' };
+      });
+    } catch (error) {
+      if (refused !== undefined) {
+        await recordOrganizationAuditDenial(this.client, stamp, refused);
+      }
+      if (error instanceof AppError) {
+        throw error;
+      }
+      throw identityStoreError('Identity store is unavailable');
+    }
   }
 
   async acceptInvitation(

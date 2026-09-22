@@ -67,4 +67,22 @@ describe('organization audit event migration', () => {
     expect(migration).toContain('IF NEW.target_label IS NOT NULL THEN');
     expect(migration).toContain('organization_audit_events_org_time_idx');
   });
+
+  it('extends the action constraint for invitation revocation', async () => {
+    const migration = await readFile(
+      join(
+        __dirname,
+        '../../../../database/migrations/0012_organization_invitation_revocation.sql',
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain(
+      'DROP CONSTRAINT IF EXISTS organization_audit_events_action_check',
+    );
+    expect(migration).toContain(
+      'ADD CONSTRAINT organization_audit_events_action_check CHECK',
+    );
+    expect(migration).toContain("'invitation.revoked'");
+  });
 });
