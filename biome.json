@@ -22,9 +22,16 @@
     "enabled": true
   },
   "linter": {
-    "enabled": true,
-    "rules": {
-      "recommended": true
+    "enabled": false
+  },
+  "overrides": [
+    {
+      "include": [".oxlintrc.json"],
+      "json": {
+        "parser": {
+          "allowComments": true
+        }
+      }
     }
-  }
+  ]
 }

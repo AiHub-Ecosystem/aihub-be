@@ -95,7 +95,7 @@ describe('RedisQuotaCounter', () => {
 
       await expect(
         counter.read({ organizationId: 'org_acme' }),
-      ).rejects.toThrow();
+      ).rejects.toThrow('Redis quota counter value is invalid');
     },
   );
 
@@ -157,7 +157,7 @@ describe('RedisQuotaCounter', () => {
 
     await expect(
       counter.increment({ organizationId: 'org_acme' }),
-    ).rejects.toThrow();
+    ).rejects.toThrow('Redis quota counter TTL was not set');
 
     expect(redis.values.get('aihub:v1:quota:org_acme:2026-09')).toBe('1');
     expect(logger.warnings).toHaveLength(1);
@@ -179,12 +179,12 @@ describe('RedisQuotaCounter', () => {
       logger,
     );
 
-    await expect(
-      counter.read({ organizationId: 'org_acme' }),
-    ).rejects.toThrow();
-    await expect(
-      counter.read({ organizationId: 'org_acme' }),
-    ).rejects.toThrow();
+    await expect(counter.read({ organizationId: 'org_acme' })).rejects.toThrow(
+      'redis down',
+    );
+    await expect(counter.read({ organizationId: 'org_acme' })).rejects.toThrow(
+      'redis down',
+    );
     expect(logger.warnings).toHaveLength(1);
 
     current = healthy;
@@ -194,18 +194,18 @@ describe('RedisQuotaCounter', () => {
     current = failing;
     await expect(
       counter.increment({ organizationId: 'org_acme' }),
-    ).rejects.toThrow();
+    ).rejects.toThrow('redis down');
     expect(logger.warnings).toHaveLength(2);
   });
 
   it('treats an absent Redis client as unavailable', async () => {
     const counter = new RedisQuotaCounter(undefined, now);
 
-    await expect(
-      counter.read({ organizationId: 'org_acme' }),
-    ).rejects.toThrow();
+    await expect(counter.read({ organizationId: 'org_acme' })).rejects.toThrow(
+      'Redis quota counter is unavailable',
+    );
     await expect(
       counter.increment({ organizationId: 'org_acme' }),
-    ).rejects.toThrow();
+    ).rejects.toThrow('Redis quota counter is unavailable');
   });
 });

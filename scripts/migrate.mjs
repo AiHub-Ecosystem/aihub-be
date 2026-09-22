@@ -2,9 +2,7 @@ import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { loadEnvFile } from 'node:process';
 
-import pg from 'pg';
-
-const { Pool } = pg;
+import { Pool } from 'pg';
 
 if (existsSync('.env')) {
   loadEnvFile('.env');

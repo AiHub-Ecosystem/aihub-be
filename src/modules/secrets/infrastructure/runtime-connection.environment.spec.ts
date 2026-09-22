@@ -73,18 +73,7 @@ describe('loadRuntimeConnectionEnvironment', () => {
       AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connections.json',
     };
 
-    expect(() =>
-      loadRuntimeConnectionEnvironment({
-        env,
-        readFile: () =>
-          JSON.stringify({
-            database: { url: marker },
-            redis: {},
-          }),
-      }),
-    ).toThrow(RuntimeConnectionConfigurationError);
-
-    try {
+    const load = () =>
       loadRuntimeConnectionEnvironment({
         env,
         readFile: () =>
@@ -93,8 +82,10 @@ describe('loadRuntimeConnectionEnvironment', () => {
             redis: {},
           }),
       });
-    } catch (error) {
-      expect(String(error)).not.toContain(marker);
-    }
+
+    expect(load).toThrow(RuntimeConnectionConfigurationError);
+    // The marker is a connection URL carrying a password; it must not reach
+    // the error text.
+    expect(load).not.toThrow(marker);
   });
 });

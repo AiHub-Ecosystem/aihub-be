@@ -150,7 +150,9 @@ describe('assertAuthBypassFlagIsSafe', () => {
     Reflect.deleteProperty(process.env, 'NODE_ENV');
     process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'true';
 
-    expect(() => assertAuthBypassFlagIsSafe()).toThrow();
+    expect(() => assertAuthBypassFlagIsSafe()).toThrow(
+      'has no effect outside development or test',
+    );
   });
 
   it('allows the bypass flag in development', () => {

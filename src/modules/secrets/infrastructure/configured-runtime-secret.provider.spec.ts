@@ -173,19 +173,7 @@ describe('ConfiguredRuntimeSecretProvider', () => {
   it('rejects a missing required credential without exposing its value', () => {
     const marker = 'super-private-speaking-secret';
 
-    expect(
-      () =>
-        new ConfiguredRuntimeSecretProvider(
-          options({
-            values: {
-              DOWNSTREAM_AI_SPEAKING_CLIENT_ID: speakingClient,
-              DOWNSTREAM_AI_SPEAKING_SECRET_KEY: marker,
-            },
-          }),
-        ),
-    ).toThrow(RuntimeSecretConfigurationError);
-
-    try {
+    const construct = (): ConfiguredRuntimeSecretProvider =>
       new ConfiguredRuntimeSecretProvider(
         options({
           values: {
@@ -194,9 +182,10 @@ describe('ConfiguredRuntimeSecretProvider', () => {
           },
         }),
       );
-    } catch (error) {
-      expect(String(error)).not.toContain(marker);
-    }
+
+    expect(construct).toThrow(RuntimeSecretConfigurationError);
+    // The marker is the secret itself; it must not reach the error text.
+    expect(construct).not.toThrow(marker);
   });
 
   it('does not invent placeholder credentials in test mode', () => {
@@ -214,18 +203,7 @@ describe('ConfiguredRuntimeSecretProvider', () => {
   it('rejects malformed Agent-rendered data without exposing raw JSON', () => {
     const marker = 'private-json-secret';
 
-    expect(
-      () =>
-        new ConfiguredRuntimeSecretProvider(
-          options({
-            source: 'agent-file',
-            secretsFile: 'runtime-secrets.json',
-            readFile: () => `{"ai-speaking":{"secret_key":"${marker}"}`,
-          }),
-        ),
-    ).toThrow(RuntimeSecretConfigurationError);
-
-    try {
+    const construct = (): ConfiguredRuntimeSecretProvider =>
       new ConfiguredRuntimeSecretProvider(
         options({
           source: 'agent-file',
@@ -233,9 +211,10 @@ describe('ConfiguredRuntimeSecretProvider', () => {
           readFile: () => `{"ai-speaking":{"secret_key":"${marker}"}`,
         }),
       );
-    } catch (error) {
-      expect(String(error)).not.toContain(marker);
-    }
+
+    expect(construct).toThrow(RuntimeSecretConfigurationError);
+    // The marker is the raw JSON payload; it must not reach the error text.
+    expect(construct).not.toThrow(marker);
   });
 
   it('fails closed when the Agent-rendered file is unavailable', () => {

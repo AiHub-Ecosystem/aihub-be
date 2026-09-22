@@ -146,7 +146,7 @@ export class DownstreamHttpClient {
         path: `${url.pathname}${url.search}`,
         method: request.method,
         headers: {
-          ...(this.configuredHeaders[downstream] ?? {}),
+          ...this.configuredHeaders[downstream],
           ...(options.authorization === undefined
             ? {}
             : { authorization: options.authorization }),
@@ -241,7 +241,7 @@ export class DownstreamHttpClient {
     let url: URL;
     try {
       url = new URL(baseUrl);
-    } catch (error) {
+    } catch {
       throw configurationError(`URL for ${downstream} is invalid`);
     }
 

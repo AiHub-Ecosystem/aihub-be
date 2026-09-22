@@ -8,10 +8,7 @@ import type {
   GradeTask1Request,
 } from '../../../contracts/writing/grading';
 import type { DownstreamAdapter } from '../../../downstream/downstream-adapter';
-import type {
-  DownstreamRequest,
-  InternalAIServiceResponse,
-} from '../../../downstream/downstream.types';
+import type { DownstreamRequest } from '../../../downstream/downstream.types';
 import type { InternalTokenIssuerPort } from '../application/internal-token-issuer.port';
 import { DownstreamHttpClient } from './downstream-http.client';
 import { HttpOperationDispatcher } from './http-operation-dispatcher';
