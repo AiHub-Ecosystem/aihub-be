@@ -1,3 +1,4 @@
+import { parseUtcTimestamp } from '../common/time/parse-utc-timestamp';
 import {
   type UsageCompletenessReport,
   UsageCompletenessReportService,
@@ -12,9 +13,6 @@ import {
   calculateUsageRetentionCutoff,
 } from '../modules/metering/application/usage-retention';
 import { createPostgresUsageCompletenessReportRepository } from '../modules/metering/infrastructure/postgres-usage-completeness-report.repository';
-
-const UTC_TIMESTAMP_PATTERN =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?Z$/;
 
 export interface UsageReportCliInput {
   readonly databaseUrl: string;
@@ -35,19 +33,8 @@ function invalidWindow(): never {
 }
 
 export function parseUsageReportTimestamp(raw: string): Date {
-  const match = UTC_TIMESTAMP_PATTERN.exec(raw);
-  if (match === null) {
-    return invalidWindow();
-  }
-
-  const value = new Date(raw);
-  if (Number.isNaN(value.getTime())) {
-    return invalidWindow();
-  }
-
-  const milliseconds = (match[7] ?? '').padEnd(3, '0');
-  const canonical = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}.${milliseconds || '000'}Z`;
-  if (value.toISOString() !== canonical) {
+  const value = parseUtcTimestamp(raw);
+  if (value === undefined) {
     return invalidWindow();
   }
   return value;
