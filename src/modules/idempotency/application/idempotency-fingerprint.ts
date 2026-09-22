@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 
-import type { OperationId } from '../../../catalog/operation-id';
+import type { IdempotencyOperation } from './idempotency-operation';
 
 export interface IdempotencyFingerprintInput {
   readonly organizationId: string;
-  readonly operation: OperationId;
+  readonly operation: IdempotencyOperation;
   readonly actorId: string;
   readonly requestBody: unknown;
 }

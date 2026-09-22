@@ -185,6 +185,23 @@ describe('buildOpenApiDocument', () => {
     expect(operation?.responses['403']).toBeDefined();
     expect(operation?.responses['409']).toBeDefined();
     expect(operation?.responses['503']).toBeDefined();
+    expect(operation?.['x-idempotency']).toBe('optional');
+    expect(operation?.parameters).toEqual([
+      { $ref: '#/components/parameters/CorrelationId' },
+      expect.objectContaining({
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: false,
+      }),
+      expect.objectContaining({
+        name: 'organization_id',
+        in: 'path',
+        required: true,
+      }),
+    ]);
+    expect(operation?.responses['201']).toHaveProperty(
+      'headers.Idempotent-Replay',
+    );
     // The raw Organization Invite Token belongs to the invited person.
     expect(JSON.stringify(operation?.responses['201'])).not.toContain('token');
   });
@@ -222,6 +239,11 @@ describe('buildOpenApiDocument', () => {
 
     expect(operation?.parameters).toEqual([
       { $ref: '#/components/parameters/CorrelationId' },
+      expect.objectContaining({
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: false,
+      }),
       expect.objectContaining({
         name: 'organization_id',
         in: 'path',

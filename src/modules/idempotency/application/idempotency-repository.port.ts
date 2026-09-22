@@ -1,8 +1,9 @@
-import type { OperationId } from '../../../catalog/operation-id';
+import type { IdempotencyOperation } from './idempotency-operation';
 
 export interface ReserveIdempotencyInput {
   readonly organizationId: string;
-  readonly operation: OperationId;
+  readonly operation: IdempotencyOperation;
+  readonly actorScope?: string;
   readonly idempotencyKey: string;
   readonly fingerprintHex: string;
   readonly requestId: string;
@@ -20,7 +21,8 @@ export type IdempotencyReservation =
 
 export interface CompleteIdempotencyInput {
   readonly organizationId: string;
-  readonly operation: OperationId;
+  readonly operation: IdempotencyOperation;
+  readonly actorScope?: string;
   readonly idempotencyKey: string;
   readonly requestId: string;
   readonly responseStatus: number;
@@ -29,7 +31,8 @@ export interface CompleteIdempotencyInput {
 
 export interface IdempotencyAttemptInput {
   readonly organizationId: string;
-  readonly operation: OperationId;
+  readonly operation: IdempotencyOperation;
+  readonly actorScope?: string;
   readonly idempotencyKey: string;
   readonly requestId: string;
 }

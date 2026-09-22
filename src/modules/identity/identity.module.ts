@@ -6,6 +6,7 @@ import {
 } from '../auth/application/email-sender.port';
 import { AuthModule } from '../auth/auth.module';
 import { GatewayModule } from '../gateway/gateway.module';
+import { IdempotencyModule } from '../idempotency/idempotency.module';
 
 import { AcceptOrganizationInvitation } from './application/accept-organization-invitation';
 import { ACCEPT_ORGANIZATION_INVITATION } from './application/accept-organization-invitation.port';
@@ -101,7 +102,7 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
 
 @Module({
   // `RateLimitGuard` on the sandbox route consumes the gateway's rate limiter.
-  imports: [AuthModule, GatewayModule],
+  imports: [AuthModule, GatewayModule, IdempotencyModule],
   controllers: [
     SandboxAssertionController,
     OrganizationMembershipController,

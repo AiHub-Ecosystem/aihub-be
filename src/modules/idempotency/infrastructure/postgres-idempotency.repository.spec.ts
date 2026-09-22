@@ -22,6 +22,7 @@ class QueueClient implements PostgresIdempotencyClient {
 const baseInput = {
   organizationId: 'org_acme',
   operation: 'writing.task1.grade' as const,
+  actorScope: '',
   idempotencyKey: 'grade-1',
   fingerprintHex: 'a'.repeat(64),
   requestId: 'req_1',
@@ -31,6 +32,7 @@ const baseInput = {
 const completeInput = {
   organizationId: baseInput.organizationId,
   operation: baseInput.operation,
+  actorScope: baseInput.actorScope,
   idempotencyKey: baseInput.idempotencyKey,
   requestId: baseInput.requestId,
   responseStatus: 200,
@@ -40,6 +42,7 @@ const completeInput = {
 const attemptInput = {
   organizationId: baseInput.organizationId,
   operation: baseInput.operation,
+  actorScope: baseInput.actorScope,
   idempotencyKey: baseInput.idempotencyKey,
   requestId: baseInput.requestId,
 };
@@ -66,6 +69,8 @@ describe('PostgresIdempotencyRepository', () => {
     expect(client.queries).toHaveLength(1);
     expect(client.queries[0]?.text).toContain('ON CONFLICT');
     expect(client.queries[0]?.text).toContain("'pending'");
+    expect(client.queries[0]?.text).toContain('actor_scope');
+    expect(client.queries[0]?.values[2]).toBe('');
   });
 
   it('atomically reclaims failed rows and uses the fingerprint for completed replay', async () => {

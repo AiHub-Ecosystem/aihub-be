@@ -8,10 +8,11 @@ import {
   Param,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { Value } from '@sinclair/typebox/value';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
@@ -23,11 +24,19 @@ import {
   type CreateOrganizationInvitationResponse,
   type ListOpenOrganizationInvitationsResponse,
 } from '../../../contracts/organization/invitation';
+import { normalizeEmail } from '../../auth/domain/local-auth';
 import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
+import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '../../idempotency/application/idempotency-operation';
+import {
+  IDEMPOTENCY_SERVICE,
+  type IdempotencyServicePort,
+} from '../../idempotency/application/idempotency-service.port';
+import { resolveIdempotencyKey } from '../../idempotency/presentation/idempotency-key';
 import {
   ACCEPT_ORGANIZATION_INVITATION,
   type AcceptOrganizationInvitationPort,
 } from '../application/accept-organization-invitation.port';
+import type { InvitedOrganizationMember } from '../application/invite-organization-member';
 import {
   INVITE_ORGANIZATION_MEMBER,
   type InviteOrganizationMemberPort,
@@ -43,12 +52,52 @@ import {
 
 import { bearerRequestContext } from './bearer-request-context';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function decodeInvitationReplay(value: unknown): InvitedOrganizationMember {
+  if (!isRecord(value)) {
+    throw new Error('stored invitation replay is invalid');
+  }
+
+  const invitationId = value.invitationId;
+  const organizationId = value.organizationId;
+  const email = value.email;
+  const role = value.role;
+  const expiresAt = value.expiresAt;
+  if (
+    typeof invitationId !== 'string' ||
+    typeof organizationId !== 'string' ||
+    typeof email !== 'string' ||
+    (role !== 'owner' && role !== 'admin' && role !== 'member') ||
+    typeof expiresAt !== 'string'
+  ) {
+    throw new Error('stored invitation replay is invalid');
+  }
+
+  const parsedExpiresAt = new Date(expiresAt);
+  if (Number.isNaN(parsedExpiresAt.getTime())) {
+    throw new Error('stored invitation replay is invalid');
+  }
+
+  return {
+    invitationId,
+    organizationId,
+    email,
+    role,
+    expiresAt: parsedExpiresAt,
+  };
+}
+
 @Controller()
 @UseGuards(UserAccessJwtGuard)
 export class OrganizationInvitationController {
   constructor(
     @Inject(INVITE_ORGANIZATION_MEMBER)
     private readonly inviteMember: InviteOrganizationMemberPort,
+    @Inject(IDEMPOTENCY_SERVICE)
+    private readonly idempotency: IdempotencyServicePort,
     @Inject(ACCEPT_ORGANIZATION_INVITATION)
     private readonly acceptInvitation: AcceptOrganizationInvitationPort,
     @Inject(LIST_OPEN_ORGANIZATION_INVITATIONS)
@@ -94,6 +143,7 @@ export class OrganizationInvitationController {
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,
     @Body() body: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<CreateOrganizationInvitationResponse> {
     const { context, requestId, userId } = bearerRequestContext(
       request,
@@ -104,14 +154,57 @@ export class OrganizationInvitationController {
       throw invalidRequest();
     }
     const invitation: CreateOrganizationInvitationRequest = body;
+    let email: string;
+    try {
+      email = normalizeEmail(invitation.email);
+    } catch (error) {
+      throw invalidRequest(error);
+    }
 
-    const created = await this.inviteMember.invite({
+    const command = {
       context,
       userId,
       organizationId,
-      email: invitation.email,
+      email,
       role: invitation.role,
-    });
+    };
+    await this.inviteMember.authorize(command);
+
+    const idempotencyKey = resolveIdempotencyKey(
+      ORGANIZATION_INVITATION_CREATE_OPERATION,
+      request.headers['idempotency-key'],
+    );
+    const execution = await this.idempotency.execute(
+      {
+        organizationId,
+        operation: ORGANIZATION_INVITATION_CREATE_OPERATION,
+        scope: 'management',
+        actorId: userId,
+        ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
+        requestBody: { email, role: invitation.role },
+        requestId,
+        timeoutMs: 5_000,
+        responseStatus: 201,
+        signal: context.signal,
+        deadlineAt: context.deadlineAt,
+      },
+      (workContext) =>
+        this.inviteMember.invite({
+          ...command,
+          context: {
+            ...context,
+            signal: workContext.signal,
+            deadlineAt: workContext.deadlineAt,
+          },
+        }),
+      decodeInvitationReplay,
+    );
+
+    if (execution.replay) {
+      reply.header('Idempotent-Replay', 'true');
+    }
+
+    const created = execution.result;
 
     return {
       data: {

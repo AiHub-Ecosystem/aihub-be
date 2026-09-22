@@ -1,13 +1,18 @@
-import type { OperationId } from '../../../catalog/operation-id';
+import type { IdempotencyOperation } from './idempotency-operation';
+
+export type IdempotencyScope = 'gateway' | 'management';
 
 export interface IdempotencyExecutionInput {
   readonly organizationId: string;
-  readonly operation: OperationId;
+  readonly operation: IdempotencyOperation;
   readonly idempotencyKey?: string;
   readonly actorId: string;
+  readonly scope?: IdempotencyScope;
   readonly requestBody: unknown;
   readonly requestId: string;
   readonly timeoutMs: number;
+  readonly responseStatus?: number;
+  readonly beforeReplay?: () => Promise<void>;
   readonly signal: AbortSignal;
   readonly deadlineAt: Date;
   readonly backgroundLifecycle?: IdempotencyBackgroundLifecycle;

@@ -22,4 +22,21 @@ describe('idempotency records migration', () => {
     expect(migration).toContain('octet_length(idempotency_key) <= 255');
     expect(migration).toContain('idempotency_records_expires_idx');
   });
+
+  it('adds the management scope without changing the existing migration history', async () => {
+    const migration = await readFile(
+      join(
+        __dirname,
+        '../../../../database/migrations/0013_idempotency_management_scope.sql',
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain(
+      'ADD COLUMN IF NOT EXISTS actor_scope text NOT NULL DEFAULT',
+    );
+    expect(migration).toContain(
+      'PRIMARY KEY (organization_id, operation, actor_scope, idempotency_key)',
+    );
+  });
 });

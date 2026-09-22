@@ -53,29 +53,15 @@ export class InviteOrganizationMember {
     >,
   ) {}
 
+  async authorize(input: InviteOrganizationMemberInput): Promise<void> {
+    await this.resolveCaller(input);
+  }
+
   async invite(
     input: InviteOrganizationMemberInput,
   ): Promise<InvitedOrganizationMember> {
-    const caller = await requireActiveMembership(this.membership, {
-      context: input.context,
-      userId: input.userId,
-      organizationId: input.organizationId,
-    });
+    await this.resolveCaller(input);
 
-    if (caller.organizationStatus === 'suspended') {
-      throw forbidden('Organization is suspended');
-    }
-
-    if (caller.role === 'member') {
-      throw forbidden('Organization membership role cannot invite');
-    }
-
-    if (caller.role === 'admin' && input.role !== 'member') {
-      throw forbidden('Organization admins can only invite members');
-    }
-
-    // Invitation, registration, and login must agree on one identity, so the
-    // invited email is normalized by the same rule login uses.
     let email: string;
     try {
       email = normalizeEmail(input.email);
@@ -131,5 +117,27 @@ export class InviteOrganizationMember {
       role: input.role,
       expiresAt: issued.expiresAt,
     };
+  }
+
+  private async resolveCaller(
+    input: InviteOrganizationMemberInput,
+  ): Promise<void> {
+    const caller = await requireActiveMembership(this.membership, {
+      context: input.context,
+      userId: input.userId,
+      organizationId: input.organizationId,
+    });
+
+    if (caller.organizationStatus === 'suspended') {
+      throw forbidden('Organization is suspended');
+    }
+
+    if (caller.role === 'member') {
+      throw forbidden('Organization membership role cannot invite');
+    }
+
+    if (caller.role === 'admin' && input.role !== 'member') {
+      throw forbidden('Organization admins can only invite members');
+    }
   }
 }

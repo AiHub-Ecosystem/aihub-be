@@ -1,12 +1,9 @@
-import {
-  type IdempotencyMode,
-  OPERATION_CATALOG,
-} from '../../../catalog/operation-catalog';
 import { AppError } from '../../../common/errors/app-error';
 import {
   type IdempotencyFingerprintInput,
   createIdempotencyFingerprint,
 } from './idempotency-fingerprint';
+import { idempotencyMode } from './idempotency-operation';
 import type {
   CompleteIdempotencyInput,
   IdempotencyAttemptInput,
@@ -16,6 +13,7 @@ import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,
   IdempotencyReplayDecoder,
+  IdempotencyScope,
   IdempotencyServicePort,
   IdempotencyWork,
   IdempotencyWorkContext,
@@ -23,14 +21,22 @@ import type {
 
 type KeyedIdempotencyExecutionInput = IdempotencyExecutionInput & {
   readonly idempotencyKey: string;
+  readonly actorScope: string;
 };
 
 export const IDEMPOTENCY_RETENTION_MS = 24 * 60 * 60 * 1_000;
 
 class ResponseDeadlineReached extends Error {}
 class HardDeadlineReached extends Error {}
+class CompletionStorageError extends Error {
+  constructor(readonly publicError: AppError) {
+    super(publicError.message);
+  }
+}
 
-function isOptionalIdempotency(mode: IdempotencyMode): boolean {
+function isOptionalIdempotency(
+  mode: ReturnType<typeof idempotencyMode>,
+): boolean {
   return mode === 'optional';
 }
 
@@ -104,8 +110,7 @@ export class IdempotencyService implements IdempotencyServicePort {
     work: IdempotencyWork<T>,
     decodeReplay: IdempotencyReplayDecoder<T>,
   ): Promise<IdempotencyExecution<T>> {
-    const mode: IdempotencyMode =
-      OPERATION_CATALOG[input.operation].idempotency;
+    const mode = idempotencyMode(input.operation);
     if (
       mode === 'none' ||
       (isOptionalIdempotency(mode) && input.idempotencyKey === undefined)
@@ -125,6 +130,7 @@ export class IdempotencyService implements IdempotencyServicePort {
     const keyedInput: KeyedIdempotencyExecutionInput = {
       ...input,
       idempotencyKey: input.idempotencyKey,
+      actorScope: actorScope(input.scope, input.actorId),
     };
     const fingerprintInput: IdempotencyFingerprintInput = {
       organizationId: keyedInput.organizationId,
@@ -135,6 +141,7 @@ export class IdempotencyService implements IdempotencyServicePort {
     const reservation = await this.reserve({
       organizationId: keyedInput.organizationId,
       operation: keyedInput.operation,
+      actorScope: keyedInput.actorScope,
       idempotencyKey: keyedInput.idempotencyKey,
       fingerprintHex: createIdempotencyFingerprint(fingerprintInput),
       requestId: keyedInput.requestId,
@@ -146,6 +153,7 @@ export class IdempotencyService implements IdempotencyServicePort {
     }
 
     if (reservation.kind === 'replay') {
+      await input.beforeReplay?.();
       if (
         reservation.responseStatus < 200 ||
         reservation.responseStatus >= 300
@@ -233,6 +241,9 @@ export class IdempotencyService implements IdempotencyServicePort {
       }
       clearTimer(hardTimer);
       controller.abort();
+      if (error instanceof CompletionStorageError) {
+        throw error.publicError;
+      }
       await this.releaseAfterFailure(input, requestId, error);
       throw error;
     } finally {
@@ -257,7 +268,9 @@ export class IdempotencyService implements IdempotencyServicePort {
       const result = await Promise.race([workPromise, hardDeadline]);
       await this.complete(input, requestId, result);
     } catch (error) {
-      await this.releaseAfterFailure(input, requestId, error);
+      if (!(error instanceof CompletionStorageError)) {
+        await this.releaseAfterFailure(input, requestId, error);
+      }
     } finally {
       input.backgroundLifecycle?.settled();
       clearTimer(hardTimer);
@@ -273,14 +286,18 @@ export class IdempotencyService implements IdempotencyServicePort {
     const completeInput: CompleteIdempotencyInput = {
       organizationId: input.organizationId,
       operation: input.operation,
+      actorScope: input.actorScope,
       idempotencyKey: input.idempotencyKey,
       requestId,
-      responseStatus: 200,
+      responseStatus: input.responseStatus ?? 200,
       responseBody: result,
     };
     try {
       await this.repository.complete(completeInput);
     } catch (error) {
+      if (input.scope === 'management') {
+        throw new CompletionStorageError(storageError(error));
+      }
       try {
         await this.repository.markFailed(completeInput);
       } catch {
@@ -298,6 +315,7 @@ export class IdempotencyService implements IdempotencyServicePort {
     const attempt: IdempotencyAttemptInput = {
       organizationId: input.organizationId,
       operation: input.operation,
+      actorScope: input.actorScope,
       idempotencyKey: input.idempotencyKey,
       requestId,
     };
@@ -311,4 +329,11 @@ export class IdempotencyService implements IdempotencyServicePort {
       // Keep the original downstream/client error; expiry makes the attempt reclaimable.
     }
   }
+}
+
+function actorScope(
+  scope: IdempotencyScope | undefined,
+  actorId: string,
+): string {
+  return scope === 'management' ? actorId : '';
 }

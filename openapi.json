@@ -3063,6 +3063,7 @@
         "operationId": "organizations.invitations.create",
         "summary": "Invite a person to an organization",
         "x-identity-scope": "user",
+        "x-idempotency": "optional",
         "security": [
           {
             "BearerAuth": []
@@ -3071,6 +3072,17 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "description": "Optional. When supplied, the key replays the completed result for a repeat call."
           },
           {
             "name": "organization_id",
@@ -3121,6 +3133,15 @@
         "responses": {
           "201": {
             "description": "Pending organization invitation created; the single-use invite credential reaches the invited person by email only",
+            "headers": {
+              "Idempotent-Replay": {
+                "description": "Present with value true when the completed invitation result was replayed for this key.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["true"]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {

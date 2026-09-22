@@ -1,9 +1,8 @@
-import {
-  type IdempotencyMode,
-  OPERATION_CATALOG,
-} from '../../../catalog/operation-catalog';
-import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
+import {
+  type IdempotencyOperation,
+  idempotencyMode,
+} from '../application/idempotency-operation';
 
 function invalidIdempotencyKey(): AppError {
   return new AppError({
@@ -13,7 +12,9 @@ function invalidIdempotencyKey(): AppError {
   });
 }
 
-function isOptionalIdempotency(mode: IdempotencyMode): boolean {
+function isOptionalIdempotency(
+  mode: ReturnType<typeof idempotencyMode>,
+): boolean {
   return mode === 'optional';
 }
 
@@ -33,10 +34,10 @@ export function requireIdempotencyKey(
 }
 
 export function resolveIdempotencyKey(
-  operation: OperationId,
+  operation: IdempotencyOperation,
   header: string | readonly string[] | undefined,
 ): string | undefined {
-  const mode: IdempotencyMode = OPERATION_CATALOG[operation].idempotency;
+  const mode = idempotencyMode(operation);
   if (
     mode === 'none' ||
     (isOptionalIdempotency(mode) && header === undefined)

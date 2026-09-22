@@ -4,6 +4,7 @@ import type {
 } from './invite-organization-member';
 
 export interface InviteOrganizationMemberPort {
+  authorize(input: InviteOrganizationMemberInput): Promise<void>;
   invite(
     input: InviteOrganizationMemberInput,
   ): Promise<InvitedOrganizationMember>;

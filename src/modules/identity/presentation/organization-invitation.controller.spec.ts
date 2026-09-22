@@ -24,6 +24,13 @@ import {
   type UserAccessTokenVerifierPort,
 } from '../../auth/application/user-access-token.port';
 import {
+  IDEMPOTENCY_SERVICE,
+  type IdempotencyExecutionInput,
+  type IdempotencyReplayDecoder,
+  type IdempotencyServicePort,
+  type IdempotencyWork,
+} from '../../idempotency/application/idempotency-service.port';
+import {
   type CreateOrganizationInvitationInput,
   ORGANIZATION_INVITATION,
   type OpenOrganizationInvitationRecord,
@@ -59,6 +66,7 @@ describe('Organization invitation HTTP flow', () => {
   let membership: jest.Mocked<OrganizationMembershipPort>;
   let emailSender: jest.Mocked<EmailSenderPort>;
   let tokenIssuer: jest.Mocked<UserAccessTokenIssuerPort>;
+  let idempotency: jest.Mocked<IdempotencyServicePort>;
   let verifiedTokens: string[];
 
   let callerRole: OrganizationMembershipRole = 'owner';
@@ -125,6 +133,9 @@ describe('Organization invitation HTTP flow', () => {
         expiresIn: 900,
       })),
     };
+    idempotency = {
+      execute: jest.fn(),
+    } as jest.Mocked<IdempotencyServicePort>;
     verifiedTokens = [];
     const verifier: UserAccessTokenVerifierPort = {
       verify: async (token: string) => {
@@ -155,6 +166,8 @@ describe('Organization invitation HTTP flow', () => {
       .useValue(verifier)
       .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
       .useValue(tokenIssuer)
+      .overrideProvider(IDEMPOTENCY_SERVICE)
+      .useValue(idempotency)
       .overrideProvider(LOCAL_AUTH_REPOSITORY)
       .useValue(localAuthRepository)
       .compile();
@@ -184,6 +197,19 @@ describe('Organization invitation HTTP flow', () => {
     invitations.listOpenInvitations.mockResolvedValue([]);
     invitations.revokeInvitation.mockResolvedValue({ kind: 'closed' });
     emailSender.sendOrganizationInviteEmail.mockResolvedValue(undefined);
+    idempotency.execute.mockImplementation(
+      async <T>(
+        input: IdempotencyExecutionInput,
+        work: IdempotencyWork<T>,
+        _decodeReplay: IdempotencyReplayDecoder<T>,
+      ) => ({
+        result: await work({
+          signal: input.signal,
+          deadlineAt: input.deadlineAt,
+        }),
+        replay: false,
+      }),
+    );
   });
 
   function invite(
@@ -240,6 +266,77 @@ describe('Organization invitation HTTP flow', () => {
       meta: { request_id: REQUEST_ID },
     });
     expect(response.body).not.toContain('token');
+  });
+
+  it('passes a canonical management scope and normalized payload to idempotency', async () => {
+    await invite(
+      { email: '  Invitee@Example.COM  ', role: 'member' },
+      {
+        authorization: 'Bearer valid.token.value',
+        'idempotency-key': 'invite-1',
+      },
+    );
+
+    expect(idempotency.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: ORGANIZATION_ID,
+        operation: 'organizations.invitations.create',
+        scope: 'management',
+        actorId: USER_ID,
+        idempotencyKey: 'invite-1',
+        requestBody: { email: 'invitee@example.com', role: 'member' },
+        responseStatus: 201,
+      }),
+      expect.any(Function),
+      expect.any(Function),
+    );
+  });
+
+  it('replays invitation data without invoking the invitation mutation twice', async () => {
+    const replayed = {
+      invitationId: INVITATION_ID,
+      organizationId: ORGANIZATION_ID,
+      email: 'invitee@example.com',
+      role: 'member' as const,
+      expiresAt: new Date('2026-09-22T12:00:00.000Z'),
+    };
+    idempotency.execute.mockResolvedValueOnce({
+      result: replayed,
+      replay: true,
+    });
+
+    const response = await invite(undefined, {
+      authorization: 'Bearer valid.token.value',
+      'idempotency-key': 'invite-1',
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.headers['idempotent-replay']).toBe('true');
+    expect(response.json()).toEqual({
+      data: {
+        invitation_id: INVITATION_ID,
+        organization_id: ORGANIZATION_ID,
+        email: 'invitee@example.com',
+        role: 'member',
+        status: 'pending',
+        expires_at: '2026-09-22T12:00:00.000Z',
+      },
+      meta: { request_id: REQUEST_ID },
+    });
+    expect(invitations.createInvitation).not.toHaveBeenCalled();
+    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+  });
+
+  it('rechecks current authorization before replay', async () => {
+    callerStatus = 'disabled';
+
+    const response = await invite(undefined, {
+      authorization: 'Bearer valid.token.value',
+      'idempotency-key': 'invite-1',
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(idempotency.execute).not.toHaveBeenCalled();
   });
 
   it('persists only the token hash and hands the raw token to the email sender', async () => {

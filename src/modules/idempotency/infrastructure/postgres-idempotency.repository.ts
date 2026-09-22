@@ -12,33 +12,35 @@ const INSERT_SQL = `
   INSERT INTO idempotency_records (
     organization_id,
     operation,
+    actor_scope,
     idempotency_key,
     request_fingerprint,
     state,
     request_id,
     expires_at
   )
-  VALUES ($1, $2, $3, decode($4, 'hex'), 'pending', $5, $6)
-  ON CONFLICT (organization_id, operation, idempotency_key) DO NOTHING
+  VALUES ($1, $2, $3, $4, decode($5, 'hex'), 'pending', $6, $7)
+  ON CONFLICT (organization_id, operation, actor_scope, idempotency_key) DO NOTHING
   RETURNING request_id
 `;
 
 const CLAIM_SQL = `
   UPDATE idempotency_records
-  SET request_fingerprint = decode($4, 'hex'),
+  SET request_fingerprint = decode($5, 'hex'),
       state = 'pending',
-      request_id = $5,
+      request_id = $6,
       response_status = NULL,
       response_body = NULL,
       created_at = now(),
       completed_at = NULL,
-      expires_at = $6
+      expires_at = $7
   WHERE organization_id = $1
     AND operation = $2
-    AND idempotency_key = $3
+    AND actor_scope = $3
+    AND idempotency_key = $4
     AND (
       expires_at <= now()
-      OR (state = 'failed' AND request_fingerprint = decode($4, 'hex'))
+      OR (state = 'failed' AND request_fingerprint = decode($5, 'hex'))
     )
   RETURNING request_id
 `;
@@ -53,20 +55,22 @@ const SELECT_SQL = `
   FROM idempotency_records
   WHERE organization_id = $1
     AND operation = $2
-    AND idempotency_key = $3
+    AND actor_scope = $3
+    AND idempotency_key = $4
   LIMIT 1
 `;
 
 const COMPLETE_SQL = `
   UPDATE idempotency_records
   SET state = 'completed',
-      response_status = $5,
-      response_body = $6,
+      response_status = $6,
+      response_body = $7,
       completed_at = now()
   WHERE organization_id = $1
     AND operation = $2
-    AND idempotency_key = $3
-    AND request_id = $4
+    AND actor_scope = $3
+    AND idempotency_key = $4
+    AND request_id = $5
     AND state = 'pending'
   RETURNING request_id
 `;
@@ -79,8 +83,9 @@ const FAILED_SQL = `
       completed_at = NULL
   WHERE organization_id = $1
     AND operation = $2
-    AND idempotency_key = $3
-    AND request_id = $4
+    AND actor_scope = $3
+    AND idempotency_key = $4
+    AND request_id = $5
     AND state = 'pending'
   RETURNING request_id
 `;
@@ -89,8 +94,9 @@ const DELETE_SQL = `
   DELETE FROM idempotency_records
   WHERE organization_id = $1
     AND operation = $2
-    AND idempotency_key = $3
-    AND request_id = $4
+    AND actor_scope = $3
+    AND idempotency_key = $4
+    AND request_id = $5
     AND state = 'pending'
   RETURNING request_id
 `;
@@ -192,6 +198,7 @@ export class PostgresIdempotencyRepository
     const inserted = await this.client.query(INSERT_SQL, [
       input.organizationId,
       input.operation,
+      input.actorScope ?? '',
       input.idempotencyKey,
       input.fingerprintHex,
       input.requestId,
@@ -205,6 +212,7 @@ export class PostgresIdempotencyRepository
     const claimed = await this.client.query(CLAIM_SQL, [
       input.organizationId,
       input.operation,
+      input.actorScope ?? '',
       input.idempotencyKey,
       input.fingerprintHex,
       input.requestId,
@@ -218,6 +226,7 @@ export class PostgresIdempotencyRepository
     const existing = await this.client.query(SELECT_SQL, [
       input.organizationId,
       input.operation,
+      input.actorScope ?? '',
       input.idempotencyKey,
     ]);
     const existingRow = existing[0];
@@ -242,6 +251,7 @@ export class PostgresIdempotencyRepository
     const rows = await this.client.query(COMPLETE_SQL, [
       input.organizationId,
       input.operation,
+      input.actorScope ?? '',
       input.idempotencyKey,
       input.requestId,
       input.responseStatus,
@@ -254,6 +264,7 @@ export class PostgresIdempotencyRepository
     const rows = await this.client.query(FAILED_SQL, [
       input.organizationId,
       input.operation,
+      input.actorScope ?? '',
       input.idempotencyKey,
       input.requestId,
     ]);
@@ -264,6 +275,7 @@ export class PostgresIdempotencyRepository
     const rows = await this.client.query(DELETE_SQL, [
       input.organizationId,
       input.operation,
+      input.actorScope ?? '',
       input.idempotencyKey,
       input.requestId,
     ]);

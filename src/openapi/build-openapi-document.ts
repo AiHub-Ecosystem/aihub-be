@@ -139,7 +139,7 @@ function idempotencyKeyParameter(
       mode === 'required'
         ? 'Required. Trimmed and limited to 1–255 UTF-8 bytes. Scoped to (organization, operation, key); replays the stored result for a repeat call.'
         : mode === 'optional'
-          ? 'Optional. This operation may call a model, so a client that wants replay safety should send one.'
+          ? 'Optional. When supplied, the key replays the completed result for a repeat call.'
           : 'Ignored. This operation never stores or replays an idempotency record.',
   };
 }
@@ -537,9 +537,11 @@ function organizationInvitationPathItem(
       operationId: 'organizations.invitations.create',
       summary: 'Invite a person to an organization',
       'x-identity-scope': 'user',
+      'x-idempotency': 'optional',
       security: [{ BearerAuth: [] }],
       parameters: [
         { $ref: '#/components/parameters/CorrelationId' },
+        idempotencyKeyParameter('optional'),
         {
           name: 'organization_id',
           in: 'path',
@@ -560,6 +562,13 @@ function organizationInvitationPathItem(
         '201': {
           description:
             'Pending organization invitation created; the single-use invite credential reaches the invited person by email only',
+          headers: {
+            'Idempotent-Replay': {
+              description:
+                'Present with value true when the completed invitation result was replayed for this key.',
+              schema: { type: 'string', enum: ['true'] },
+            },
+          },
           content: {
             'application/json': {
               schema: CreateOrganizationInvitationResponseSchema,

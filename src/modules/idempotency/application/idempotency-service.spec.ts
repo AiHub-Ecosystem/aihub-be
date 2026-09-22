@@ -393,4 +393,117 @@ describe('IdempotencyService', () => {
       ),
     ).rejects.toMatchObject({ code: 'INVALID_REQUEST', httpStatus: 400 });
   });
+
+  it('allows optional management operations without a key', async () => {
+    const repository = new FakeRepository();
+    const service = new IdempotencyService(repository);
+    const { idempotencyKey: _idempotencyKey, ...withoutKey } = input();
+
+    const result = await service.execute(
+      {
+        ...withoutKey,
+        operation: 'organizations.invitations.create',
+        scope: 'management',
+        responseStatus: 201,
+      },
+      async () => ({ invitationId: 'oiv_1' }),
+      () => ({ invitationId: 'oiv_1' }),
+    );
+
+    expect(result).toEqual({
+      result: { invitationId: 'oiv_1' },
+      replay: false,
+    });
+    expect(repository.reserved).toHaveLength(0);
+  });
+
+  it('stores the management success status and actor scope', async () => {
+    const repository = new FakeRepository();
+    const service = new IdempotencyService(repository);
+
+    await service.execute(
+      {
+        ...input(),
+        operation: 'organizations.invitations.create',
+        scope: 'management',
+        responseStatus: 201,
+      },
+      async () => ({ invitationId: 'oiv_1' }),
+      () => ({ invitationId: 'oiv_1' }),
+    );
+
+    expect(repository.completed[0]).toMatchObject({
+      actorScope: 'user_1',
+      responseStatus: 201,
+    });
+    expect(repository.reserved[0]?.actorScope).toBe('user_1');
+  });
+
+  it('runs current management authorization before replaying a completed result', async () => {
+    const repository = new FakeRepository();
+    repository.nextReservations.push({
+      kind: 'replay',
+      responseStatus: 201,
+      responseBody: { invitationId: 'oiv_1' },
+    });
+    const service = new IdempotencyService(repository);
+    const authorize = jest.fn(async () => undefined);
+    const work = jest.fn(async () => ({ invitationId: 'unexpected' }));
+
+    const result = await service.execute(
+      {
+        ...input(),
+        operation: 'organizations.invitations.create',
+        scope: 'management',
+        responseStatus: 201,
+        beforeReplay: authorize,
+      },
+      work,
+      (value) => {
+        if (
+          typeof value !== 'object' ||
+          value === null ||
+          !('invitationId' in value) ||
+          typeof value.invitationId !== 'string'
+        ) {
+          throw new Error('invalid replay');
+        }
+        return { invitationId: value.invitationId };
+      },
+    );
+
+    expect(result).toEqual({
+      result: { invitationId: 'oiv_1' },
+      replay: true,
+    });
+    expect(authorize).toHaveBeenCalledTimes(1);
+    expect(work).not.toHaveBeenCalled();
+  });
+
+  it('keeps a management claim pending when completion storage fails', async () => {
+    class CompletionFailureRepository extends FakeRepository {
+      override complete(_input: CompleteIdempotencyInput): Promise<void> {
+        return Promise.reject(new Error('database unavailable'));
+      }
+    }
+
+    const repository = new CompletionFailureRepository();
+    const service = new IdempotencyService(repository);
+
+    await expect(
+      service.execute(
+        {
+          ...input(),
+          operation: 'organizations.invitations.create',
+          scope: 'management',
+          responseStatus: 201,
+        },
+        async () => ({ invitationId: 'oiv_1' }),
+        () => ({ invitationId: 'oiv_1' }),
+      ),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR', httpStatus: 500 });
+
+    expect(repository.failed).toHaveLength(0);
+    expect(repository.completed).toHaveLength(0);
+  });
 });
