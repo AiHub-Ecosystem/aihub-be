@@ -1,7 +1,7 @@
 {
   "item": [
     {
-      "id": "cc0a01af-66e5-46ef-b913-e5641bb263a4",
+      "id": "e06b7d9e-ea99-43f8-8f0d-a5de6cd5b554",
       "name": "writing.task1.grade",
       "request": {
         "name": "writing.task1.grade",
@@ -74,7 +74,7 @@
       }
     },
     {
-      "id": "151af6b6-ade4-449a-8554-5ee0a2696a5a",
+      "id": "6d46a56f-98df-44d3-bda9-26cce2a42f32",
       "name": "writing.task2.grade",
       "request": {
         "name": "writing.task2.grade",
@@ -147,7 +147,7 @@
       }
     },
     {
-      "id": "43030086-dc9a-48fc-b5f8-9000bb6edbef",
+      "id": "945d4c30-f4bd-4730-bc4e-72537ffadf48",
       "name": "speaking.grading",
       "request": {
         "name": "speaking.grading",
@@ -257,7 +257,7 @@
       }
     },
     {
-      "id": "941b9275-a630-4bde-8777-33a483201e6f",
+      "id": "64095b72-ae2f-47f0-b0d9-ba239fae5a11",
       "name": "speaking.grading-json",
       "request": {
         "name": "speaking.grading-json",
@@ -330,7 +330,7 @@
       }
     },
     {
-      "id": "87cec4ab-38f4-4924-a00e-86015df50c7d",
+      "id": "28ff936a-7666-46bf-8621-408257e0f4d1",
       "name": "Mint a sandbox user assertion",
       "request": {
         "name": "Mint a sandbox user assertion",
@@ -394,7 +394,7 @@
       }
     },
     {
-      "id": "25bf7490-58b1-4983-b01f-a6ca0bde447c",
+      "id": "b5394d91-bfb3-452f-b069-3b869aa39e54",
       "name": "List the authenticated user organization roster",
       "request": {
         "name": "List the authenticated user organization roster",
@@ -434,7 +434,7 @@
       }
     },
     {
-      "id": "69b26b05-9ae3-4adc-b899-7659d344cbcb",
+      "id": "135276a5-5e46-4bf6-81c2-2bb551eeca81",
       "name": "List an organization's open invitations",
       "request": {
         "name": "List an organization's open invitations",
@@ -482,7 +482,7 @@
       }
     },
     {
-      "id": "438ba362-248e-4063-94e2-749ce83a3d65",
+      "id": "3f53abfe-9fd1-4f03-892a-660c9fa1c6bd",
       "name": "Invite a person to an organization",
       "request": {
         "name": "Invite a person to an organization",
@@ -549,7 +549,7 @@
       }
     },
     {
-      "id": "87c0e17a-5300-4eaf-b795-f525565f113b",
+      "id": "2ff529ab-6946-42fb-9b5e-132b6393b4da",
       "name": "Revoke an organization invitation",
       "request": {
         "name": "Revoke an organization invitation",
@@ -613,7 +613,7 @@
       }
     },
     {
-      "id": "1f4b1a51-bddc-4db6-81fd-3826e145b6cd",
+      "id": "06563708-56c3-4bc9-9fe4-d27677fc042a",
       "name": "Accept an organization invitation",
       "request": {
         "name": "Accept an organization invitation",
@@ -666,7 +666,7 @@
       }
     },
     {
-      "id": "f16c0c1d-67d5-4812-a56b-911aec605e77",
+      "id": "ab34dc64-b493-4d77-8d70-6c361dc1985d",
       "name": "Change an organization member role",
       "request": {
         "name": "Change an organization member role",
@@ -740,7 +740,7 @@
       }
     },
     {
-      "id": "4ef0eeda-f3ab-4b28-a953-34f80091881b",
+      "id": "b26c4bcb-c000-4c19-ad6a-317414737311",
       "name": "Disable an organization member",
       "request": {
         "name": "Disable an organization member",
@@ -801,7 +801,7 @@
       }
     },
     {
-      "id": "182e7b6c-149f-4c21-bf66-616914ae78eb",
+      "id": "02ad7810-800d-4191-89e1-6222e145e46d",
       "name": "Transfer organization ownership",
       "request": {
         "name": "Transfer organization ownership",
@@ -863,7 +863,7 @@
       }
     },
     {
-      "id": "bbce82fc-aa5a-4600-bb66-d0a684dc55d7",
+      "id": "9fa80110-d274-4a6e-9f34-9ad9e0b7b91b",
       "name": "List an organization API key inventory",
       "request": {
         "name": "List an organization API key inventory",
@@ -914,7 +914,7 @@
       }
     },
     {
-      "id": "e12c6c4a-372c-4481-95e9-6ca360771a51",
+      "id": "cc93bba6-97ca-4b6f-b164-196de18e0844",
       "name": "Create an organization API key",
       "request": {
         "name": "Create an organization API key",
@@ -975,7 +975,7 @@
       }
     },
     {
-      "id": "55012a16-eb08-4f86-9063-0c43dabf4117",
+      "id": "d01d7c4e-1eee-410e-846d-77f9bbb322ad",
       "name": "Revoke an organization API key",
       "request": {
         "name": "Revoke an organization API key",
@@ -1039,7 +1039,7 @@
       }
     },
     {
-      "id": "f279045e-3460-4f96-afd5-589b9cd51a16",
+      "id": "911ad9dc-0cf3-45cc-807b-383dca7456b6",
       "name": "Rotate an organization API key",
       "request": {
         "name": "Rotate an organization API key",
@@ -1104,7 +1104,101 @@
       }
     },
     {
-      "id": "6b85b7ae-eecb-4fc1-b8c6-07539ee4fa68",
+      "id": "e8799cd9-ce4c-42bc-b34e-0b7d86c88eb8",
+      "name": "Read an organization audit trail",
+      "request": {
+        "name": "Read an organization audit trail",
+        "description": {
+          "content": "Returns the organization recorded control-plane acts, newest first, paginated by an opaque cursor. Active owners and admins may read; members, non-members, and disabled memberships receive one indistinguishable denial. A suspended organization stays readable, because the trail is evidence rather than a management surface. The actor is named by immutable username: no user account id, target id, key hash, or token hash appears. An event whose label has been removed by audit redaction is returned with `target_label` null rather than hidden.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "organizations", ":organization_id", "audit-events"],
+          "host": ["{{baseUrl}}"],
+          "query": [
+            {
+              "disabled": false,
+              "key": "action",
+              "value": "<string>",
+              "description": "Restrict the trail to these audit actions. Repeat the key for several values; an unrecognized value is rejected rather than treated as an empty filter."
+            },
+            {
+              "disabled": false,
+              "key": "action",
+              "value": "<string>",
+              "description": "Restrict the trail to these audit actions. Repeat the key for several values; an unrecognized value is rejected rather than treated as an empty filter."
+            },
+            {
+              "disabled": false,
+              "key": "outcome",
+              "value": "<string>",
+              "description": "Restrict the trail to acts that took effect, or to refused attempts against a real target."
+            },
+            {
+              "disabled": false,
+              "key": "from",
+              "value": "<dateTime>",
+              "description": "Inclusive start of a half-open UTC window. Independent of `to`."
+            },
+            {
+              "disabled": false,
+              "key": "to",
+              "value": "<dateTime>",
+              "description": "Exclusive end of a half-open UTC window, so adjacent windows tile without counting an event twice."
+            },
+            {
+              "disabled": false,
+              "key": "limit",
+              "value": "50",
+              "description": "Events per page. A value outside the range is rejected rather than clamped, because a silently shortened page is indistinguishable from the end of the trail."
+            },
+            {
+              "disabled": false,
+              "key": "cursor",
+              "value": "<string>",
+              "description": "Opaque position from a previous `next_cursor`. Bound to the filters it was issued under: replaying it with different filters is rejected."
+            }
+          ],
+          "variable": [
+            {
+              "disabled": false,
+              "type": "any",
+              "value": "<string>",
+              "key": "organization_id",
+              "description": "(Required) The organization whose audit trail is read."
+            }
+          ]
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "66230a2a-a41d-44cd-b016-7ff5d13f2ade",
       "name": "Register a local AIHUB account",
       "request": {
         "name": "Register a local AIHUB account",
@@ -1149,7 +1243,7 @@
       }
     },
     {
-      "id": "15fea298-4de0-494c-a273-ece30f8a6f48",
+      "id": "4391e60b-74b8-448e-8132-5c663fd67bf1",
       "name": "Issue a User Access JWT",
       "request": {
         "name": "Issue a User Access JWT",
@@ -1194,7 +1288,7 @@
       }
     },
     {
-      "id": "a3916502-f347-4ed7-950f-062520dfbef3",
+      "id": "d955441c-d0c3-4315-96ee-8aaea29ca8ab",
       "name": "Verify a local account email address",
       "request": {
         "name": "Verify a local account email address",
@@ -1239,7 +1333,7 @@
       }
     },
     {
-      "id": "d28cf647-bdf7-4c02-b755-7403f9ebef6f",
+      "id": "05465936-11eb-405f-bfab-a4be166e0bbe",
       "name": "Request a verification email resend",
       "request": {
         "name": "Request a verification email resend",
@@ -1284,7 +1378,7 @@
       }
     },
     {
-      "id": "37d18eca-4134-4ef5-8d2e-53ebfcfb2f5f",
+      "id": "84e5035b-9422-43d2-a7f8-b94f205d5e7e",
       "name": "Request a password reset email",
       "request": {
         "name": "Request a password reset email",
@@ -1329,7 +1423,7 @@
       }
     },
     {
-      "id": "3481d5d5-0f88-4cd5-a204-01e6ac299bf5",
+      "id": "e5870fb8-5e28-4d0b-97ad-43c8abe00b48",
       "name": "Reset a local account password",
       "request": {
         "name": "Reset a local account password",
@@ -1374,7 +1468,7 @@
       }
     },
     {
-      "id": "aa743ea2-717f-4715-8deb-441b3f724b1e",
+      "id": "4eeba133-0d47-40f8-94a7-4619f28abce8",
       "name": "Rotate a refresh session and issue a User Access JWT",
       "request": {
         "name": "Rotate a refresh session and issue a User Access JWT",
@@ -1441,7 +1535,7 @@
       }
     },
     {
-      "id": "c5ae8c74-642e-4e30-8bb4-2e46ee0ddcd0",
+      "id": "30e590e8-e480-4117-adeb-abb1b3dff253",
       "name": "Revoke the current refresh session",
       "request": {
         "name": "Revoke the current refresh session",
@@ -2514,7 +2608,7 @@
     ]
   },
   "info": {
-    "_postman_id": "aea93df5-1b4b-4c73-9d48-54346e908384",
+    "_postman_id": "6b8e7336-852b-4fa5-b89d-ceb2241f47df",
     "name": "AIHUB Writing API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Generated by `pnpm generate:postman` from openapi.json — do not hand-edit. The \"D1 handover test cases\" folder is the D2 handover artifact required by docs/aihub_deliverable_1_api_contract_schema.md §G; it is not a CI regression suite.",

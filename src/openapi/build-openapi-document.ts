@@ -31,6 +31,13 @@ import {
   RevokeOrganizationApiKeyResponseSchema,
 } from '../contracts/organization/api-key';
 import {
+  DEFAULT_ORGANIZATION_AUDIT_PAGE_SIZE,
+  ListOrganizationAuditEventsResponseSchema,
+  MAX_ORGANIZATION_AUDIT_PAGE_SIZE,
+  ORGANIZATION_AUDIT_ACTIONS,
+  ORGANIZATION_AUDIT_OUTCOMES,
+} from '../contracts/organization/audit-event';
+import {
   AcceptOrganizationInvitationRequestSchema,
   AcceptOrganizationInvitationResponseSchema,
   CreateOrganizationInvitationRequestSchema,
@@ -270,6 +277,8 @@ const ORGANIZATION_API_KEY_ITEM_PATH =
   '/v1/organizations/{organization_id}/api-keys/{api_key_id}';
 const ORGANIZATION_API_KEY_ROTATE_PATH =
   '/v1/organizations/{organization_id}/api-keys/{api_key_id}/rotate';
+const ORGANIZATION_AUDIT_EVENT_PATH =
+  '/v1/organizations/{organization_id}/audit-events';
 
 function authErrorResponses(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
@@ -794,6 +803,107 @@ function organizationApiKeyPathItem(
   };
 }
 
+/**
+ * The first path in this document to carry query parameters. `action` is
+ * declared `explode: true` on purpose: the server reads a repeated key, so a
+ * generated client that comma-joined its values would send something no
+ * parameter here accepts.
+ */
+function organizationAuditEventPathItem(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, unknown> {
+  return {
+    get: {
+      operationId: 'organizations.auditEvents.list',
+      summary: 'Read an organization audit trail',
+      description:
+        'Returns the organization recorded control-plane acts, newest first, paginated by an opaque cursor. Active owners and admins may read; members, non-members, and disabled memberships receive one indistinguishable denial. A suspended organization stays readable, because the trail is evidence rather than a management surface. The actor is named by immutable username: no user account id, target id, key hash, or token hash appears. An event whose label has been removed by audit redaction is returned with `target_label` null rather than hidden.',
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        {
+          name: 'organization_id',
+          in: 'path',
+          required: true,
+          description: 'The organization whose audit trail is read.',
+          schema: { type: 'string', minLength: 1 },
+        },
+        {
+          name: 'action',
+          in: 'query',
+          required: false,
+          description:
+            'Restrict the trail to these audit actions. Repeat the key for several values; an unrecognized value is rejected rather than treated as an empty filter.',
+          style: 'form',
+          explode: true,
+          schema: {
+            type: 'array',
+            items: { type: 'string', enum: [...ORGANIZATION_AUDIT_ACTIONS] },
+          },
+        },
+        {
+          name: 'outcome',
+          in: 'query',
+          required: false,
+          description:
+            'Restrict the trail to acts that took effect, or to refused attempts against a real target.',
+          schema: { type: 'string', enum: [...ORGANIZATION_AUDIT_OUTCOMES] },
+        },
+        {
+          name: 'from',
+          in: 'query',
+          required: false,
+          description:
+            'Inclusive start of a half-open UTC window. Independent of `to`.',
+          schema: { type: 'string', format: 'date-time' },
+        },
+        {
+          name: 'to',
+          in: 'query',
+          required: false,
+          description:
+            'Exclusive end of a half-open UTC window, so adjacent windows tile without counting an event twice.',
+          schema: { type: 'string', format: 'date-time' },
+        },
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          description:
+            'Events per page. A value outside the range is rejected rather than clamped, because a silently shortened page is indistinguishable from the end of the trail.',
+          schema: {
+            type: 'integer',
+            minimum: 1,
+            maximum: MAX_ORGANIZATION_AUDIT_PAGE_SIZE,
+            default: DEFAULT_ORGANIZATION_AUDIT_PAGE_SIZE,
+          },
+        },
+        {
+          name: 'cursor',
+          in: 'query',
+          required: false,
+          description:
+            'Opaque position from a previous `next_cursor`. Bound to the filters it was issued under: replaying it with different filters is rejected.',
+          schema: { type: 'string', minLength: 1 },
+        },
+      ],
+      responses: {
+        '200': {
+          description:
+            'One page of recorded acts, newest first. `next_cursor` is null at the end of the trail.',
+          content: {
+            'application/json': {
+              schema: ListOrganizationAuditEventsResponseSchema,
+            },
+          },
+        },
+        ...authErrorResponses(groupedErrors, [400, 401, 403, 500, 503]),
+      },
+    },
+  };
+}
+
 function organizationRosterPathItem(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
 ): Record<string, unknown> {
@@ -1008,6 +1118,8 @@ export function buildOpenApiDocument(version: string): unknown {
     organizationApiKeyItemPathItem(groupedErrors);
   paths[ORGANIZATION_API_KEY_ROTATE_PATH] =
     organizationApiKeyRotatePathItem(groupedErrors);
+  paths[ORGANIZATION_AUDIT_EVENT_PATH] =
+    organizationAuditEventPathItem(groupedErrors);
   Object.assign(paths, localAuthPathItems(groupedErrors));
 
   const errorResponses: Record<string, unknown> = {};

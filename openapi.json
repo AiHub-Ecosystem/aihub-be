@@ -4531,6 +4531,297 @@
         }
       }
     },
+    "/v1/organizations/{organization_id}/audit-events": {
+      "get": {
+        "operationId": "organizations.auditEvents.list",
+        "summary": "Read an organization audit trail",
+        "description": "Returns the organization recorded control-plane acts, newest first, paginated by an opaque cursor. Active owners and admins may read; members, non-members, and disabled memberships receive one indistinguishable denial. A suspended organization stays readable, because the trail is evidence rather than a management surface. The actor is named by immutable username: no user account id, target id, key hash, or token hash appears. An event whose label has been removed by audit redaction is returned with `target_label` null rather than hidden.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization whose audit trail is read.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "description": "Restrict the trail to these audit actions. Repeat the key for several values; an unrecognized value is rejected rather than treated as an empty filter.",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "invitation.sent",
+                  "invitation.resent",
+                  "invitation.accepted",
+                  "invitation.revoked",
+                  "membership.role_changed",
+                  "membership.disabled",
+                  "membership.owner_transferred",
+                  "api_key.created",
+                  "api_key.rotated",
+                  "api_key.revoked"
+                ]
+              }
+            }
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "required": false,
+            "description": "Restrict the trail to acts that took effect, or to refused attempts against a real target.",
+            "schema": {
+              "type": "string",
+              "enum": ["applied", "denied"]
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive start of a half-open UTC window. Independent of `to`.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Exclusive end of a half-open UTC window, so adjacent windows tile without counting an event twice.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Events per page. A value outside the range is rejected rather than clamped, because a silently shortened page is indistinguishable from the end of the trail.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque position from a previous `next_cursor`. Bound to the filters it was issued under: replaying it with different filters is rejected.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of recorded acts, newest first. `next_cursor` is null at the end of the trail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["events", "next_cursor"],
+                      "properties": {
+                        "events": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "event_id",
+                              "action",
+                              "outcome",
+                              "target_type",
+                              "target_label",
+                              "detail",
+                              "actor_username",
+                              "originating_request_id",
+                              "occurred_at"
+                            ],
+                            "properties": {
+                              "event_id": {
+                                "pattern": "^oae_[0-9A-HJKMNP-TV-Z]{26}$",
+                                "type": "string"
+                              },
+                              "action": {
+                                "anyOf": [
+                                  {
+                                    "const": "invitation.sent",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "invitation.resent",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "invitation.accepted",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "invitation.revoked",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "membership.role_changed",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "membership.disabled",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "membership.owner_transferred",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "api_key.created",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "api_key.rotated",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "api_key.revoked",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "outcome": {
+                                "anyOf": [
+                                  {
+                                    "const": "applied",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "denied",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "target_type": {
+                                "anyOf": [
+                                  {
+                                    "const": "membership",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "invitation",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "api_key",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "target_label": {
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "detail": {
+                                "type": "object",
+                                "patternProperties": {
+                                  "^(.*)$": {}
+                                }
+                              },
+                              "actor_username": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "originating_request_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "occurred_at": {
+                                "format": "date-time",
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "next_cursor": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
     "/v1/auth/register": {
       "post": {
         "operationId": "auth.register",

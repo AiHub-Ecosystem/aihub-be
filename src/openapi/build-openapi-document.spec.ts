@@ -72,6 +72,9 @@ const ORGANIZATION_API_KEY_REVOKE_OPERATION_ID = 'organizations.apiKeys.revoke';
 const ORGANIZATION_API_KEY_ROTATE_PATH =
   '/v1/organizations/{organization_id}/api-keys/{api_key_id}/rotate';
 const ORGANIZATION_API_KEY_ROTATE_OPERATION_ID = 'organizations.apiKeys.rotate';
+const ORGANIZATION_AUDIT_EVENT_PATH =
+  '/v1/organizations/{organization_id}/audit-events';
+const ORGANIZATION_AUDIT_EVENT_OPERATION_ID = 'organizations.auditEvents.list';
 const ORGANIZATION_MEMBER_CHANGE_ROLE_OPERATION_ID =
   'organizations.members.change_role';
 const ORGANIZATION_MEMBER_DISABLE_OPERATION_ID =
@@ -150,6 +153,7 @@ describe('buildOpenApiDocument', () => {
       ORGANIZATION_API_KEY_PATH,
       ORGANIZATION_API_KEY_ITEM_PATH,
       ORGANIZATION_API_KEY_ROTATE_PATH,
+      ORGANIZATION_AUDIT_EVENT_PATH,
       ...AUTH_PATHS,
     ]);
     expect(doc.paths[SANDBOX_MINT_PATH]?.post?.operationId).toBe(
@@ -318,6 +322,47 @@ describe('buildOpenApiDocument', () => {
     expect(JSON.stringify(operation?.responses['200'])).not.toContain(
       'api_key"',
     );
+  });
+
+  it('documents the audit trail read, the first route here to carry query parameters', () => {
+    const operation = build().paths[ORGANIZATION_AUDIT_EVENT_PATH]?.get;
+    const parameters = operation?.parameters ?? [];
+    const named = (name: string) =>
+      parameters.find((parameter) => parameter?.name === name);
+
+    expect(operation?.operationId).toBe(ORGANIZATION_AUDIT_EVENT_OPERATION_ID);
+    expect(operation?.security).toEqual([{ BearerAuth: [] }]);
+    expect(operation?.requestBody).toBeUndefined();
+
+    // The server reads a repeated key, so a client that comma-joined these
+    // would send something no parameter here accepts.
+    expect(named('action')?.explode).toBe(true);
+    expect(named('action')?.style).toBe('form');
+    expect(named('action')?.schema).toEqual({
+      type: 'array',
+      items: {
+        type: 'string',
+        enum: expect.arrayContaining(['api_key.revoked']),
+      },
+    });
+    expect(named('outcome')?.schema).toEqual({
+      type: 'string',
+      enum: ['applied', 'denied'],
+    });
+    expect(named('limit')?.schema).toEqual({
+      type: 'integer',
+      minimum: 1,
+      maximum: 200,
+      default: 50,
+    });
+    for (const name of ['from', 'to', 'cursor']) {
+      expect(named(name)?.in).toBe('query');
+    }
+
+    // A rejected cursor, window, action, or page size is a client error, so
+    // this is the only organization read that documents a 400.
+    expect(operation?.responses['400']).toBeDefined();
+    expect(operation?.responses['403']).toBeDefined();
   });
 
   it('documents the bearer-authenticated API key rotation route as uncacheable', () => {
