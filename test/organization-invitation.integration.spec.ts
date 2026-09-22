@@ -1,0 +1,204 @@
+import {
+  FastifyAdapter,
+  type NestFastifyApplication,
+} from '@nestjs/platform-fastify';
+import { Test } from '@nestjs/testing';
+
+import { AppModule } from '../src/app.module';
+import {
+  AUTH_RATE_LIMITER,
+  type AuthRateLimiterPort,
+} from '../src/modules/auth/application/auth-rate-limiter.port';
+import {
+  EMAIL_SENDER,
+  type EmailSenderPort,
+  type OrganizationInviteEmailInput,
+} from '../src/modules/auth/application/email-sender.port';
+import {
+  LOCAL_AUTH_REPOSITORY,
+  type LocalAuthRepositoryPort,
+} from '../src/modules/auth/application/local-auth-repository.port';
+import {
+  USER_ACCESS_TOKEN_VERIFIER,
+  type UserAccessTokenVerifierPort,
+} from '../src/modules/auth/application/user-access-token.port';
+import {
+  ORGANIZATION_INVITATION,
+  type OrganizationInvitationPort,
+} from '../src/modules/identity/application/organization-invitation.port';
+import {
+  ORGANIZATION_MEMBERSHIP,
+  type OrganizationMembershipPort,
+} from '../src/modules/identity/application/organization-membership.port';
+import type { PostgresIdentityTransactionalClient } from '../src/modules/identity/infrastructure/postgres-identity.client';
+import { PostgresOrganizationInvitationRepository } from '../src/modules/identity/infrastructure/postgres-organization-invitation.repository';
+
+const USER_ID = 'usr_01J00000000000000000000000';
+const ORGANIZATION_ID = 'org_acme';
+const REQUEST_ID = 'req_01J00000000000000000000000';
+const INVITE_URL = `/v1/organizations/${ORGANIZATION_ID}/invitations`;
+
+class FakeIdentityDatabase implements PostgresIdentityTransactionalClient {
+  transactionCalls = 0;
+  invitationRows = 0;
+  auditEvents = 0;
+
+  async query(
+    _text: string,
+    _values: readonly unknown[],
+  ): Promise<readonly unknown[]> {
+    return [];
+  }
+
+  async transaction<T>(
+    callback: Parameters<PostgresIdentityTransactionalClient['transaction']>[0],
+  ): Promise<T> {
+    this.transactionCalls += 1;
+    return callback({
+      query: async (text: string, _values: readonly unknown[]) => {
+        if (text.includes('FROM organizations')) {
+          return [{ id: ORGANIZATION_ID, name: 'Acme' }];
+        }
+        if (text.includes('INSERT INTO organization_invitations')) {
+          this.invitationRows += 1;
+        }
+        if (text.includes('INSERT INTO organization_audit_events')) {
+          this.auditEvents += 1;
+        }
+        return [];
+      },
+    }) as Promise<T>;
+  }
+}
+
+class RateLimiterFake implements AuthRateLimiterPort {
+  allowed = true;
+
+  async consume(
+    _input: Parameters<AuthRateLimiterPort['consume']>[0],
+  ): Promise<{ readonly allowed: boolean; readonly retryAfterMs?: number }> {
+    return this.allowed
+      ? { allowed: true }
+      : { allowed: false, retryAfterMs: 12_345 };
+  }
+}
+
+describe('organization invitation HTTP/application/repository integration', () => {
+  let app: NestFastifyApplication;
+  let database: FakeIdentityDatabase;
+  let rateLimiter: RateLimiterFake;
+  let emailSender: jest.Mocked<
+    Pick<EmailSenderPort, 'sendOrganizationInviteEmail'>
+  >;
+
+  beforeAll(async () => {
+    database = new FakeIdentityDatabase();
+    rateLimiter = new RateLimiterFake();
+    emailSender = {
+      sendOrganizationInviteEmail: jest.fn(
+        async (_input: OrganizationInviteEmailInput) => undefined,
+      ),
+    };
+
+    const membership: Pick<OrganizationMembershipPort, 'resolveMembership'> = {
+      resolveMembership: async ({ organizationId, userId }) => ({
+        kind: 'active',
+        membership: {
+          organizationId,
+          userId,
+          organizationStatus: 'active',
+          role: 'owner',
+          status: 'active',
+        },
+      }),
+    };
+    const verifier: UserAccessTokenVerifierPort = {
+      verify: async (token: string) => {
+        if (token !== 'valid.token.value') {
+          throw new Error('invalid token');
+        }
+        return { userId: USER_ID, jti: 'jti_01' };
+      },
+    };
+    const localAuthRepository: Pick<
+      LocalAuthRepositoryPort,
+      'findUserAccountStatus'
+    > = {
+      findUserAccountStatus: async () => 'active',
+    };
+    const invitations: OrganizationInvitationPort =
+      new PostgresOrganizationInvitationRepository(database);
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(ORGANIZATION_INVITATION)
+      .useValue(invitations)
+      .overrideProvider(AUTH_RATE_LIMITER)
+      .useValue(rateLimiter)
+      .overrideProvider(EMAIL_SENDER)
+      .useValue(emailSender)
+      .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
+      .useValue(verifier)
+      .overrideProvider(LOCAL_AUTH_REPOSITORY)
+      .useValue(localAuthRepository)
+      .overrideProvider(ORGANIZATION_MEMBERSHIP)
+      .useValue(membership)
+      .compile();
+
+    app = moduleRef.createNestApplication<NestFastifyApplication>(
+      new FastifyAdapter({ genReqId: () => REQUEST_ID }),
+    );
+    await app.init();
+    await app.getHttpAdapter().getInstance().ready();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  beforeEach(() => {
+    database.transactionCalls = 0;
+    database.invitationRows = 0;
+    database.auditEvents = 0;
+    rateLimiter.allowed = true;
+    emailSender.sendOrganizationInviteEmail.mockClear();
+  });
+
+  function invite() {
+    return app.inject({
+      method: 'POST',
+      url: INVITE_URL,
+      headers: { authorization: 'Bearer valid.token.value' },
+      payload: { email: 'invitee@example.com', role: 'member' },
+    });
+  }
+
+  it('persists an allowed invitation and its audit event through the repository', async () => {
+    const response = await invite();
+
+    expect(response.statusCode).toBe(201);
+    expect(database.transactionCalls).toBe(1);
+    expect(database.invitationRows).toBe(1);
+    expect(database.auditEvents).toBe(1);
+    expect(emailSender.sendOrganizationInviteEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a rate-limited invitation before durable or email side effects', async () => {
+    rateLimiter.allowed = false;
+
+    const response = await invite();
+
+    expect(response.statusCode).toBe(429);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'RATE_LIMITED',
+        retry_after_ms: 12_345,
+      },
+    });
+    expect(database.transactionCalls).toBe(0);
+    expect(database.invitationRows).toBe(0);
+    expect(database.auditEvents).toBe(0);
+    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+  });
+});
