@@ -73,6 +73,22 @@ describe('PostgresIdempotencyRepository', () => {
     expect(client.queries[0]?.values[2]).toBe('');
   });
 
+  it('binds management reservations to the authenticated caller scope', async () => {
+    const client = new QueueClient([[{ request_id: 'req_management' }]]);
+    const repository = new PostgresIdempotencyRepository(client);
+
+    await expect(
+      repository.reserve({ ...baseInput, actorScope: 'usr_owner' }),
+    ).resolves.toEqual({
+      kind: 'claimed',
+      requestId: 'req_management',
+    });
+    expect(client.queries[0]?.values[2]).toBe('usr_owner');
+    expect(client.queries[0]?.text).toContain(
+      'organization_id, operation, actor_scope, idempotency_key',
+    );
+  });
+
   it('atomically reclaims failed rows and uses the fingerprint for completed replay', async () => {
     const failedClient = new QueueClient([[], [{ request_id: 'req_2' }]]);
     const failedRepository = new PostgresIdempotencyRepository(failedClient);
