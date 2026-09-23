@@ -28,7 +28,7 @@ For memberships the operator designates at least one owner before the flip (the 
 
 ## Email links and auth UI
 
-A new optional backend configuration names the Customer Web base URL. Unset, emails keep the current token-only contract exactly; set, verification, password-reset, and invitation emails gain deep links into the Customer Web. The Customer Web UI ships sign-in, forgot/reset password, and an invitation-accept landing page that chains the ADR-0027 register → verify → login → accept flow; registration remains available to complete that chain but is not advertised as a public sign-up entry, preserving the invite-only character of the sandbox.
+A backend configuration names the Customer Web base URL. It remains optional outside production, where an unset value keeps the current token-only email behavior. Production requires an absolute HTTPS URL; the production app and isolated sandbox app receive their respective Customer Web URLs, with the sandbox URL required when that service is enabled. URLs may include a path prefix but not credentials, a query, or a fragment. When configured, verification, password-reset, and invitation emails gain deep links; issue #153 makes only the verification email link-first and removes its standalone token wording. The Customer Web UI ships sign-in, forgot/reset password, and an invitation-accept landing page that chains the ADR-0027 register → verify → login → accept flow; registration remains available to complete that chain but is not advertised as a public sign-up entry, preserving the invite-only character of the sandbox.
 
 ## Google login handoff
 

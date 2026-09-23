@@ -41,6 +41,7 @@ x-app-environment: &app-environment
   DOWNSTREAM_AI_WRITING_URL: ${DOWNSTREAM_AI_WRITING_URL:?DOWNSTREAM_AI_WRITING_URL is required}
   DOWNSTREAM_AI_SPEAKING_URL: ${DOWNSTREAM_AI_SPEAKING_URL:?DOWNSTREAM_AI_SPEAKING_URL is required}
   RESEND_FROM: ${RESEND_FROM:?RESEND_FROM is required}
+  CUSTOMER_WEB_BASE_URL: ${CUSTOMER_WEB_BASE_URL:?CUSTOMER_WEB_BASE_URL is required}
 
 services:
   vault-agent:
@@ -152,6 +153,7 @@ services:
     environment:
       <<: *app-environment
       AIHUB_RUNTIME_DATABASE_SCOPE: sandbox
+      CUSTOMER_WEB_BASE_URL: ${CUSTOMER_WEB_SANDBOX_BASE_URL:-}
     networks: *app-database-networks
     ports:
       - "127.0.0.1:${AIHUB_SANDBOX_APP_PORT:-3022}:3000"

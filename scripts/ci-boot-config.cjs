@@ -78,6 +78,7 @@ const BOOT_ENVIRONMENT = {
   DOWNSTREAM_AI_WRITING_URL: 'http://writing.ci-boot.invalid',
   DOWNSTREAM_AI_SPEAKING_URL: 'http://speaking.ci-boot.invalid',
   RESEND_FROM: 'AIHUB <no-reply@ci-boot.invalid>',
+  CUSTOMER_WEB_BASE_URL: 'https://customer.ci-boot.invalid',
 };
 
 function writeBootConfig(directory) {

@@ -126,7 +126,7 @@ describe('ResendEmailSender', () => {
   });
 
   describe('with a configured Customer Web base URL', () => {
-    function senderWithBase(base: string | undefined) {
+    function senderWithBase(base: string | undefined, requireHttps = false) {
       const calls: Array<{ input: string; init: RequestInit | undefined }> = [];
       const sender = new ResendEmailSender(
         { apiKey: 'resend-secret' },
@@ -136,24 +136,37 @@ describe('ResendEmailSender', () => {
           return { ok: true };
         },
         base,
+        requireHttps,
       );
       return { sender, calls };
     }
 
-    it('appends the verification deep link alongside the opaque token', async () => {
-      const { sender, calls } = senderWithBase('https://customer.example.com');
+    it('sends a link-first multipart verification email with an encoded token', async () => {
+      const { sender, calls } = senderWithBase(
+        'https://customer.example.com/web&more/',
+      );
 
       await sender.sendVerificationEmail({
         email: 'person@example.com',
-        token: 'opaque-token',
+        token: 'a+b/c=d',
         expiresAt: new Date('2026-09-20T00:00:00.000Z'),
       });
 
       const body = String(calls[0]?.init?.body);
-      expect(body).toContain('opaque-token');
-      expect(body).toContain(
-        'https://customer.example.com/verify-email?token=opaque-token',
-      );
+      const payload = JSON.parse(body) as { html?: string; text?: string };
+      const link =
+        'https://customer.example.com/web&more/verify-email?token=a%2Bb%2Fc%3Dd';
+      const htmlLink =
+        'https://customer.example.com/web&amp;more/verify-email?token=a%2Bb%2Fc%3Dd';
+
+      expect(payload.html).toContain(`<a href="${htmlLink}"`);
+      expect(payload.html).toContain('Verify email');
+      expect(payload.html).toContain('2026-09-20T00:00:00.000Z');
+      expect(payload.html).toContain('This link can be used once.');
+      expect(payload.text).toContain(link);
+      expect(payload.text).toContain('2026-09-20T00:00:00.000Z');
+      expect(payload.text).not.toContain('one-time verification token');
+      expect(body).not.toContain('a+b/c=d');
     });
 
     it('appends the password-reset deep link', async () => {
@@ -228,6 +241,28 @@ describe('ResendEmailSender', () => {
             'javascript:alert(1)',
           ),
       ).toThrow('CUSTOMER_WEB_BASE_URL must be an absolute http(s) URL');
+    });
+
+    it('requires an HTTPS base URL in production', () => {
+      expect(() => senderWithBase(undefined, true)).toThrow(
+        'CUSTOMER_WEB_BASE_URL is required in production',
+      );
+      expect(() => senderWithBase('http://customer.example.com', true)).toThrow(
+        'HTTPS',
+      );
+      expect(() =>
+        senderWithBase('https://customer.example.com/customer/', true),
+      ).not.toThrow();
+    });
+
+    it.each([
+      'https://user:password@customer.example.com',
+      'https://customer.example.com?campaign=welcome',
+      'https://customer.example.com#verify',
+    ])('rejects ambiguous Customer Web URL %s', (base) => {
+      expect(() => senderWithBase(base)).toThrow(
+        'CUSTOMER_WEB_BASE_URL must be an absolute http(s) URL',
+      );
     });
   });
 });
