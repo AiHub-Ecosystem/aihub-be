@@ -340,7 +340,10 @@ function localAuthPathItems(
     ...authErrorResponses(groupedErrors, [400, 401, 429, 500]),
   };
   const verifyResponses = {
-    '204': { description: 'Email verified' },
+    '204': {
+      description:
+        'Email verified; re-submitting the same unexpired token that activated the still-active account succeeds',
+    },
     ...authErrorResponses(groupedErrors, [400, 429, 500]),
   };
   const resendResponses = {

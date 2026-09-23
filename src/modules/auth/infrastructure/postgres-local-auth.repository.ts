@@ -154,7 +154,7 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
         await transaction.query(
           `
             UPDATE email_verification_tokens
-            SET consumed_at = $2
+            SET consumed_at = $2, consumed_reason = 'superseded'
             WHERE user_account_id = $1 AND consumed_at IS NULL
           `,
           [row.id, input.now],
@@ -244,22 +244,74 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
     readonly now: Date;
   }): Promise<boolean> {
     return this.client.transaction(async (transaction) => {
-      const rows = await transaction.query(
+      const accounts = await transaction.query(
         `
-          UPDATE email_verification_tokens token
-          SET consumed_at = $2
+          SELECT account.id, account.status
           FROM user_accounts account
-          WHERE token.user_account_id = account.id
-            AND token.token_hash = $1
-            AND token.consumed_at IS NULL
-            AND token.expires_at > $2
-            AND account.status = 'pending_verification'
-          RETURNING token.user_account_id
+          JOIN email_verification_tokens token
+            ON token.user_account_id = account.id
+          WHERE token.token_hash = $1
+          FOR UPDATE OF account
         `,
-        [input.tokenHash, input.now],
+        [input.tokenHash],
       );
-      const row = rows[0];
-      if (row === undefined || typeof row.user_account_id !== 'string') {
+      const account = accounts[0];
+      if (
+        account === undefined ||
+        typeof account.id !== 'string' ||
+        (account.status !== 'pending_verification' &&
+          account.status !== 'active')
+      ) {
+        return false;
+      }
+
+      const tokens = await transaction.query(
+        `
+          SELECT id, expires_at, consumed_at, consumed_reason
+          FROM email_verification_tokens
+          WHERE user_account_id = $1 AND token_hash = $2
+          FOR UPDATE
+        `,
+        [account.id, input.tokenHash],
+      );
+      const token = tokens[0];
+      if (
+        token === undefined ||
+        typeof token.id !== 'string' ||
+        !(token.expires_at instanceof Date) ||
+        Number.isNaN(token.expires_at.getTime()) ||
+        (token.consumed_at !== null &&
+          (!(token.consumed_at instanceof Date) ||
+            Number.isNaN(token.consumed_at.getTime()))) ||
+        (token.consumed_reason !== null &&
+          token.consumed_reason !== 'verified' &&
+          token.consumed_reason !== 'superseded') ||
+        token.expires_at.getTime() <= input.now.getTime()
+      ) {
+        return false;
+      }
+
+      if (account.status === 'active') {
+        return (
+          token.consumed_at instanceof Date &&
+          token.consumed_reason === 'verified'
+        );
+      }
+
+      if (token.consumed_at !== null || token.consumed_reason !== null) {
+        return false;
+      }
+
+      const consumed = await transaction.query(
+        `
+          UPDATE email_verification_tokens
+          SET consumed_at = $2, consumed_reason = 'verified'
+          WHERE id = $1 AND consumed_at IS NULL
+          RETURNING id
+        `,
+        [token.id, input.now],
+      );
+      if (consumed.length === 0) {
         return false;
       }
 
@@ -270,7 +322,7 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
           WHERE id = $1 AND status = 'pending_verification'
           RETURNING id
         `,
-        [row.user_account_id, input.now],
+        [account.id, input.now],
       );
       return activated.length > 0;
     });

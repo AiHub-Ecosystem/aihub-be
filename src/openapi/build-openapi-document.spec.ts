@@ -463,6 +463,9 @@ describe('buildOpenApiDocument', () => {
     expect(JSON.stringify(login?.responses['200'])).not.toContain('password');
     expect(register?.responses['201']).toBeDefined();
     expect(verify?.responses['204']).toBeDefined();
+    expect(JSON.stringify(verify?.responses['204'])).toContain(
+      'same unexpired token that activated',
+    );
     expect(resend?.responses['202']).toBeDefined();
     expect(forgot?.security).toEqual([]);
     expect(forgot?.responses['202']).toBeDefined();

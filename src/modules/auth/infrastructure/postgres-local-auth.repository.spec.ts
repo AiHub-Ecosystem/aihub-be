@@ -226,23 +226,6 @@ describe('PostgresLocalAuthRepository', () => {
     }
   });
 
-  it('atomically consumes a valid token and activates only a pending account', async () => {
-    const client = new FakeClient();
-    client.responses = [
-      [{ user_account_id: 'usr_01J00000000000000000000000' }],
-      [{ id: 'usr_01J00000000000000000000000' }],
-    ];
-
-    await expect(
-      new PostgresLocalAuthRepository(client).consumeVerificationToken({
-        tokenHash: input.tokenHash,
-        now: input.now,
-      }),
-    ).resolves.toBe(true);
-    expect(client.queries[0]?.text).toContain('SET consumed_at');
-    expect(client.queries[1]?.text).toContain("SET status = 'active'");
-  });
-
   it('checks reset-token state without performing password work', async () => {
     const client = new FakeClient();
     client.queryResponses = [

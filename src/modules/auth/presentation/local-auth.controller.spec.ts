@@ -365,7 +365,7 @@ describe('local auth HTTP boundary', () => {
     await app.close();
   });
 
-  it('registers with a safe projection and verifies through the real HTTP stack', async () => {
+  it('registers and acknowledges first and repeated verification through HTTP', async () => {
     const register = await app.inject({
       method: 'POST',
       url: '/v1/auth/register',
@@ -396,6 +396,15 @@ describe('local auth HTTP boundary', () => {
     });
     expect(verify.statusCode).toBe(204);
     expect(verify.payload).toBe('');
+
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      headers: { 'content-type': 'application/json' },
+      payload: { token: 'opaque-token' },
+    });
+    expect(replay.statusCode).toBe(204);
+    expect(replay.payload).toBe('');
   });
 
   it('keeps malformed input generic and provider failures non-sensitive', async () => {
@@ -424,6 +433,23 @@ describe('local auth HTTP boundary', () => {
       expect.objectContaining({ code: 'AUTH_EMAIL_DELIVERY_UNAVAILABLE' }),
     );
     expect(failed.payload).not.toContain('provider failed');
+  });
+
+  it('returns the generic invalid-token error over HTTP', async () => {
+    repository.consumed = false;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      headers: { 'content-type': 'application/json' },
+      payload: { token: 'invalid-token' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toMatchObject({
+      code: 'AUTH_VERIFICATION_TOKEN_INVALID',
+      message: 'Verification token is invalid',
+    });
   });
 
   it('returns a bodyless generic 202 for resend', async () => {

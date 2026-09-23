@@ -162,9 +162,14 @@ describe('ResendEmailSender', () => {
       expect(payload.html).toContain(`<a href="${htmlLink}"`);
       expect(payload.html).toContain('Verify email');
       expect(payload.html).toContain('2026-09-20T00:00:00.000Z');
-      expect(payload.html).toContain('This link can be used once.');
+      expect(payload.html).toContain(
+        'This link activates your account once. If your email is already verified, opening this link again will still show success.',
+      );
       expect(payload.text).toContain(link);
       expect(payload.text).toContain('2026-09-20T00:00:00.000Z');
+      expect(payload.text).toContain(
+        'This link activates your account once. If your email is already verified, opening this link again will still show success.',
+      );
       expect(payload.text).not.toContain('one-time verification token');
       expect(body).not.toContain('a+b/c=d');
     });

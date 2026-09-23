@@ -108,6 +108,8 @@ export class ResendEmailSender implements EmailSenderPort {
   async sendVerificationEmail(input: VerificationEmailInput): Promise<void> {
     const url = this.deepLinkUrl('/verify-email', input.token);
     const expiresAt = input.expiresAt.toISOString();
+    const repeatVerificationCopy =
+      'This link activates your account once. If your email is already verified, opening this link again will still show success.';
     const text =
       url === undefined
         ? [
@@ -121,6 +123,8 @@ export class ResendEmailSender implements EmailSenderPort {
             url,
             '',
             `This link expires at ${expiresAt}.`,
+            '',
+            repeatVerificationCopy,
           ].join('\n');
     const html =
       url === undefined
@@ -130,7 +134,7 @@ export class ResendEmailSender implements EmailSenderPort {
             '<p>Verify your AIHUB email address:</p>',
             `<p><a href="${escapeHtmlAttribute(url)}" style="display:inline-block;padding:12px 20px;background-color:#0057b8;color:#ffffff;text-decoration:none;border-radius:4px">Verify email</a></p>`,
             `<p>This link expires at ${expiresAt}.</p>`,
-            '<p>This link can be used once.</p>',
+            `<p>${repeatVerificationCopy}</p>`,
             '</body></html>',
           ].join('');
 

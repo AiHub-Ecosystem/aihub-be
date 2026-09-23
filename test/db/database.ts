@@ -65,7 +65,8 @@ export async function resetIdentityTables(pool: Pool): Promise<void> {
 }
 
 /**
- * Waits until PostgreSQL itself reports a backend blocked by `holderPid`.
+ * Waits until PostgreSQL reports a backend blocked by `holderPid` and returns
+ * that waiting backend's pid.
  *
  * This replaces a sleep-then-assert: a timing check is only ever evidence in
  * the green direction, and would pass for an implementation that never locked
@@ -75,21 +76,23 @@ export async function waitForBlockedBy(
   pool: Pool,
   holderPid: number | undefined,
   timeoutMs = 5_000,
-): Promise<void> {
+): Promise<number> {
   if (holderPid === undefined) {
     throw new Error('the holding connection reported no backend pid');
   }
 
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const blocked = await pool.query<{ count: number }>(
-      `SELECT count(*)::int AS count
+    const blocked = await pool.query<{ pid: number }>(
+      `SELECT pid
        FROM pg_stat_activity
-       WHERE $1 = ANY (pg_blocking_pids(pid))`,
+       WHERE $1 = ANY (pg_blocking_pids(pid))
+       LIMIT 1`,
       [holderPid],
     );
-    if ((blocked.rows[0]?.count ?? 0) > 0) {
-      return;
+    const waitingPid = blocked.rows[0]?.pid;
+    if (waitingPid !== undefined) {
+      return waitingPid;
     }
     await new Promise((resolve) => setTimeout(resolve, 25));
   }

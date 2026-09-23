@@ -5335,7 +5335,7 @@
         },
         "responses": {
           "204": {
-            "description": "Email verified"
+            "description": "Email verified; re-submitting the same unexpired token that activated the still-active account succeeds"
           },
           "400": {
             "$ref": "#/components/responses/Error400"
