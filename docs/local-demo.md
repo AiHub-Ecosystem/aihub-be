@@ -17,7 +17,7 @@ flow. There is no customer app or customer backend in this repository. The
 
 ## What you need
 
-- Node.js 22 or newer
+- Node.js 22.12 or newer (NestJS 12 is loaded through `require()` of ESM; see ADR-0047)
 - pnpm 11 (the repository pins `pnpm@11.20.0`)
 - Docker Desktop or another Docker Compose implementation
 - A valid AI Writing bearer token from the AI Writing team (for Writing calls)
