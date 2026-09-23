@@ -17,6 +17,7 @@ export const ORGANIZATION_AUDIT_ACTIONS = [
   'membership.role_changed',
   'membership.disabled',
   'membership.owner_transferred',
+  'membership.owner_attached',
   'api_key.created',
   'api_key.rotated',
   'api_key.revoked',

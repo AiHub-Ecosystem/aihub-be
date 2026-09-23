@@ -20,6 +20,7 @@ export type OrganizationAuditAction =
   | 'membership.role_changed'
   | 'membership.disabled'
   | 'membership.owner_transferred'
+  | 'membership.owner_attached'
   | 'api_key.created'
   | 'api_key.rotated'
   | 'api_key.revoked';
@@ -155,6 +156,17 @@ interface OwnerTransferredDraft {
   readonly denial?: OrganizationAuditDenial;
 }
 
+/**
+ * First Owner Attachment, an operator act (ADR-0045). The owner's membership is
+ * the target and the operator the actor; `detail` carries the role, as an
+ * accepted invitation's does.
+ */
+interface OwnerAttachedDraft {
+  readonly action: 'membership.owner_attached';
+  readonly targetUserAccountId: string;
+  readonly username: string;
+}
+
 interface ApiKeyCreatedDraft {
   readonly action: 'api_key.created';
   readonly apiKeyId: string;
@@ -193,6 +205,7 @@ export type OrganizationAuditDraft =
   | RoleChangedDraft
   | DisabledDraft
   | OwnerTransferredDraft
+  | OwnerAttachedDraft
   | ApiKeyCreatedDraft
   | ApiKeyRotatedDraft
   | ApiKeyRevokedDraft;
@@ -315,6 +328,14 @@ function shape(draft: OrganizationAuditDraft): Shape {
         outcome,
       };
     }
+    case 'membership.owner_attached':
+      return {
+        targetType: 'membership',
+        targetId: draft.targetUserAccountId,
+        targetLabel: draft.username,
+        detail: { role: 'owner' },
+        outcome: 'applied',
+      };
     case 'api_key.created':
       return {
         targetType: 'api_key',

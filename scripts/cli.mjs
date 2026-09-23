@@ -47,6 +47,7 @@ import {
   quotaOption,
   usageError,
 } from './cli-options.cjs';
+import { runAttachFirstOwner } from './organization-first-owner.cjs';
 import { runOrganizationStatus } from './organization-status.cjs';
 import {
   parseTargetMonth,
@@ -609,6 +610,27 @@ async function organizationStatusCommand(options, status) {
   }
 }
 
+// First Owner Attachment (ADR-0045): the bootstrap for an Organization
+// `org:create` provisioned, which starts with no members. Every refusal is a
+// usage error, named by the command before it exits.
+async function attachFirstOwnerCommand(options) {
+  for (const name of options.keys()) {
+    if (name !== 'org' && name !== 'owner' && name !== 'actor') {
+      usageError();
+    }
+  }
+
+  const outcome = await runAttachFirstOwner({
+    databaseUrl: process.env.DATABASE_URL ?? '',
+    organizationId: requiredOption(options, 'org'),
+    ownerUsername: requiredOption(options, 'owner'),
+    actorUsername: requiredOption(options, 'actor'),
+  });
+  if (outcome !== 'attached' && outcome !== 'unchanged') {
+    usageError();
+  }
+}
+
 async function pruneUsageCommand(options) {
   if (options.size > 0) {
     usageError();
@@ -659,6 +681,10 @@ async function main() {
   }
   if (command === 'quota:reconcile') {
     await reconcileQuotaCommand(options);
+    return;
+  }
+  if (command === 'org:attach-owner') {
+    await attachFirstOwnerCommand(options);
     return;
   }
   if (command === 'org:suspend') {

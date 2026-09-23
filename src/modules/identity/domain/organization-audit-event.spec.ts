@@ -13,6 +13,24 @@ const STAMP: OrganizationAuditStamp = {
 };
 
 describe('organizationAuditEvent', () => {
+  it('records a first owner attachment against the membership, labelled by the owner username', () => {
+    const event = organizationAuditEvent(STAMP, {
+      action: 'membership.owner_attached',
+      targetUserAccountId: 'usr_01J00000000000000000000004',
+      username: 'acme-owner',
+    });
+
+    expect(event).toEqual({
+      ...STAMP,
+      action: 'membership.owner_attached',
+      outcome: 'applied',
+      targetType: 'membership',
+      targetId: 'usr_01J00000000000000000000004',
+      targetLabel: 'acme-owner',
+      detail: { role: 'owner' },
+    });
+  });
+
   it.each(['organization.suspended', 'organization.restored'] as const)(
     'records %s against the Organization under its current name with no detail',
     (action) => {

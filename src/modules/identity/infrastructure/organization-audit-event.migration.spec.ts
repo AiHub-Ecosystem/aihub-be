@@ -134,4 +134,27 @@ describe('organization audit event migration', () => {
       expect(migration).toContain(`'${action}'`);
     }
   });
+
+  it('extends the action constraint for first owner attachment', async () => {
+    const migration = await readFile(
+      join(
+        __dirname,
+        '../../../../database/migrations/0017_first_owner_attachment.sql',
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain(
+      'ADD CONSTRAINT organization_audit_events_action_check CHECK',
+    );
+    for (const action of [
+      'organization.created',
+      'organization.suspended',
+      'membership.owner_transferred',
+      'membership.owner_attached',
+      'api_key.revoked',
+    ]) {
+      expect(migration).toContain(`'${action}'`);
+    }
+  });
 });
