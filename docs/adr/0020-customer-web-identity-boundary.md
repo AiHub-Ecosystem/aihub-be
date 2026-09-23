@@ -1,6 +1,6 @@
 # ADR-0020: Invite-only customer-web identity boundary for sandbox MVP
 
-- Status: Accepted
+- Status: Superseded by ADR-0046 (the Clerk boundary remains operational until the #94 cutover completes)
 - Related issue: #60
 
 The separate Next.js Customer Web, not AIHUB, owns end-user login and sessions. For the first demo, it uses Clerk as the Managed IdP with invite-only passwordless email links; invitations and disables use Clerk's operator tooling, and each Customer User belongs to one Customer Organization with no self-service signup or organization switching. The UI and BFF share one origin. The browser receives only a secure, HttpOnly, same-site session cookie; the BFF evaluates active membership on every request, with a cache no longer than five minutes.

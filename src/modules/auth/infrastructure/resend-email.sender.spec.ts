@@ -124,4 +124,110 @@ describe('ResendEmailSender', () => {
       }),
     ).rejects.toThrow('Resend email delivery failed');
   });
+
+  describe('with a configured Customer Web base URL', () => {
+    function senderWithBase(base: string | undefined) {
+      const calls: Array<{ input: string; init: RequestInit | undefined }> = [];
+      const sender = new ResendEmailSender(
+        { apiKey: 'resend-secret' },
+        'AIHUB <no-reply@example.com>',
+        async (input, init) => {
+          calls.push({ input, init });
+          return { ok: true };
+        },
+        base,
+      );
+      return { sender, calls };
+    }
+
+    it('appends the verification deep link alongside the opaque token', async () => {
+      const { sender, calls } = senderWithBase('https://customer.example.com');
+
+      await sender.sendVerificationEmail({
+        email: 'person@example.com',
+        token: 'opaque-token',
+        expiresAt: new Date('2026-09-20T00:00:00.000Z'),
+      });
+
+      const body = String(calls[0]?.init?.body);
+      expect(body).toContain('opaque-token');
+      expect(body).toContain(
+        'https://customer.example.com/verify-email?token=opaque-token',
+      );
+    });
+
+    it('appends the password-reset deep link', async () => {
+      const { sender, calls } = senderWithBase('https://customer.example.com/');
+
+      await sender.sendPasswordResetEmail({
+        email: 'person@example.com',
+        token: 'reset-token',
+        expiresAt: new Date('2026-09-20T01:00:00.000Z'),
+      });
+
+      const body = String(calls[0]?.init?.body);
+      expect(body).toContain('reset-token');
+      expect(body).toContain(
+        'https://customer.example.com/reset-password?token=reset-token',
+      );
+    });
+
+    it('appends the invitation deep link', async () => {
+      const { sender, calls } = senderWithBase('https://customer.example.com');
+
+      await sender.sendOrganizationInviteEmail({
+        email: 'invitee@example.com',
+        organizationName: 'Acme',
+        role: 'member',
+        token: 'invite-token',
+        expiresAt: new Date('2026-09-21T00:00:00.000Z'),
+      });
+
+      const body = String(calls[0]?.init?.body);
+      expect(body).toContain('invite-token');
+      expect(body).toContain(
+        'https://customer.example.com/invite?token=invite-token',
+      );
+    });
+
+    it('percent-encodes the token inside the deep link', async () => {
+      const { sender, calls } = senderWithBase('https://customer.example.com');
+
+      await sender.sendPasswordResetEmail({
+        email: 'person@example.com',
+        token: 'a+b/c=d',
+        expiresAt: new Date('2026-09-20T01:00:00.000Z'),
+      });
+
+      const body = String(calls[0]?.init?.body);
+      expect(body).toContain('token=a%2Bb%2Fc%3Dd');
+      expect(body).not.toContain('token=a+b/c=d');
+    });
+
+    it('keeps emails token-only when the base URL is blank', async () => {
+      const { sender, calls } = senderWithBase('   ');
+
+      await sender.sendPasswordResetEmail({
+        email: 'person@example.com',
+        token: 'reset-token',
+        expiresAt: new Date('2026-09-20T01:00:00.000Z'),
+      });
+
+      const body = String(calls[0]?.init?.body);
+      expect(body).toContain('reset-token');
+      expect(body).not.toContain('http');
+    });
+
+    it('fails closed at construction for a non-http base URL', () => {
+      expect(
+        () =>
+          new ResendEmailSender(
+            { apiKey: 'resend-secret' },
+            'no-reply@example.com',
+            async () => ({ ok: true }),
+            'javascript:alert(1)',
+          ),
+      ).toThrow('CUSTOMER_WEB_BASE_URL must be an absolute http(s) URL');
+    });
+  });
 });

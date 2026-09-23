@@ -195,7 +195,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - OpenAPI and Postman artifacts describe the cookie, `Set-Cookie`, refresh `200`, logout `204`, and generic refresh `401`; HTTP integration uses an in-memory durable seam and an injectable clock.
 - The refresh implementation extends the local-auth repository port and uses a separate refresh-token issuer port; schema changes arrive through an explicit migration before code deployment, never through bootstrap DDL.
 - The acceptance evidence covers cookie attributes, unchanged login body, successful rotation, reuse-family revocation, concurrent refresh, expiry, disabled accounts, malformed/duplicate/alternate sources, independent login families, logout idempotency, rate-limit fallback, transaction behavior, artifacts, and secret redaction.
-- During the sandbox MVP, one dedicated sandbox AIHUB Organization serves all invited Customer Users, each with a stable sandbox `user_id`; users cannot switch organizations.
+- During the sandbox MVP, one dedicated sandbox AIHUB Organization serves all invited Customer Users, each with a sandbox `user_id` that is stable within one identity era — a documented migration with reviewed evidence (ADR-0046) may re-key it exactly once; users cannot switch organizations.
 - The existing sandbox Managed IdP owns invitation and disable actions; the Customer Web checks active membership on every BFF request rather than trusting a stale session alone.
 - The existing sandbox Managed IdP directory is the membership source of truth for that sandbox; local AIHUB accounts use their own account and membership records.
 - The Customer Web derives the Sandbox User ID from the verified IdP identity; clients cannot choose the assertion subject or sandbox `user_id`.
@@ -263,7 +263,8 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - [ADR-0026: CLI boundary for usage completeness reporting](docs/adr/0026-usage-completeness-report-boundary.md)
 - [ADR-0023: Thirteen-month usage retention](docs/adr/0023-thirteen-month-usage-retention.md)
 - [Usage completeness report runbook](docs/operations/usage-completeness.md)
-- [ADR-0020: Invite-only customer-web identity boundary for sandbox MVP](docs/adr/0020-customer-web-identity-boundary.md)
+- [ADR-0020: Invite-only customer-web identity boundary for sandbox MVP](docs/adr/0020-customer-web-identity-boundary.md) — superseded by ADR-0046 at the #94 cutover
+- [ADR-0046: Customer Web identity boundary on AIHUB auth and Organization Membership](docs/adr/0046-customer-web-aihub-auth-identity-boundary.md)
 - [ADR-0021: Customer Web Speaking sandbox boundary](docs/adr/0021-customer-web-speaking-sandbox-boundary.md)
 - [ADR-0022: AIHUB-owned local user authentication](docs/adr/0022-aihub-local-user-authentication.md)
 - [ADR-0027: Organization membership, invitation, and API-key self-service boundary](docs/adr/0027-organization-membership-and-key-management.md)

@@ -72,6 +72,8 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
         return new ResendEmailSender(
           snapshot.resend,
           process.env.RESEND_FROM ?? '',
+          fetch,
+          process.env.CUSTOMER_WEB_BASE_URL,
         );
       },
       inject: [RUNTIME_SECRET_PROVIDER],
