@@ -23,9 +23,15 @@ import {
 const OWNER_TOKEN = 'owner.token.value';
 const ADMIN_TOKEN = 'admin.token.value';
 const OUTSIDER_TOKEN = 'outsider.token.value';
+const MEMBER_TOKEN = 'member.token.value';
+const DISABLED_TOKEN = 'disabled.token.value';
+const SUSPENDED_OWNER_TOKEN = 'suspended-owner.token.value';
 const OWNER_ID = 'usr_01J00000000000000000000001';
 const ADMIN_ID = 'usr_01J00000000000000000000002';
 const OUTSIDER_ID = 'usr_01J00000000000000000000003';
+const MEMBER_ID = 'usr_01J00000000000000000000004';
+const DISABLED_ID = 'usr_01J00000000000000000000005';
+const SUSPENDED_OWNER_ID = 'usr_01J00000000000000000000006';
 const ORGANIZATION_ID = 'org_01J00000000000000000000009';
 const REQUEST_ID = 'req_01J00000000000000000000000';
 
@@ -73,6 +79,9 @@ describe('Organization rename over HTTP', () => {
           [OWNER_TOKEN]: OWNER_ID,
           [ADMIN_TOKEN]: ADMIN_ID,
           [OUTSIDER_TOKEN]: OUTSIDER_ID,
+          [MEMBER_TOKEN]: MEMBER_ID,
+          [DISABLED_TOKEN]: DISABLED_ID,
+          [SUSPENDED_OWNER_TOKEN]: SUSPENDED_OWNER_ID,
         }[token];
         if (userId === undefined) {
           throw new Error('invalid token');
@@ -188,16 +197,24 @@ describe('Organization rename over HTTP', () => {
     expect(response.statusCode).toBe(200);
   });
 
-  it('gives an admin and an outsider one indistinguishable denial', async () => {
-    const admin = await patch({ name: 'Mine now' }, { token: ADMIN_TOKEN });
-    const outsider = await patch(
-      { name: 'Mine now' },
-      { token: OUTSIDER_TOKEN },
-    );
+  it('gives admin, member, outsider, disabled, and suspended callers one indistinguishable denial', async () => {
+    const bodies = [];
+    for (const token of [
+      ADMIN_TOKEN,
+      MEMBER_TOKEN,
+      OUTSIDER_TOKEN,
+      DISABLED_TOKEN,
+      SUSPENDED_OWNER_TOKEN,
+    ]) {
+      const response = await patch({ name: 'Mine now' }, { token });
+      expect(response.statusCode).toBe(403);
+      bodies.push(response.json());
+    }
 
-    expect(admin.statusCode).toBe(403);
-    expect(admin.json()).toEqual(outsider.json());
-    expect(admin.json().error.code).toBe('FORBIDDEN');
+    expect(bodies[0].error.code).toBe('FORBIDDEN');
+    for (const body of bodies) {
+      expect(body).toEqual(bodies[0]);
+    }
     expect(rename.name).toBe('Acme');
   });
 

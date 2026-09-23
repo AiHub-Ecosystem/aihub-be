@@ -7,6 +7,7 @@ import {
   type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,
 } from '../../src/modules/identity/infrastructure/postgres-identity.client';
+import { PostgresOrganizationMembershipRepository } from '../../src/modules/identity/infrastructure/postgres-organization-membership.repository';
 import { PostgresOrganizationRenameRepository } from '../../src/modules/identity/infrastructure/postgres-organization-rename.repository';
 
 import {
@@ -142,6 +143,18 @@ describe('Organization rename against PostgreSQL', () => {
         target_label: 'Acme Learning',
         detail: { previousName: 'Acme' },
       }),
+    ]);
+  });
+
+  it('shows the new name in the Organization Roster on the next read', async () => {
+    await repository.renameOrganization(input());
+
+    const roster = await new PostgresOrganizationMembershipRepository(
+      client,
+    ).listRoster({ context: input().context, userId: ownerId });
+
+    expect(roster).toEqual([
+      expect.objectContaining({ organizationId, name: 'Acme Learning' }),
     ]);
   });
 
