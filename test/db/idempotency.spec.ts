@@ -42,7 +42,9 @@ function reserveInput(
     idempotencyKey,
     fingerprintHex: FINGERPRINT,
     requestId,
-    expiresAt: new Date('2026-09-23T00:00:00.000Z'),
+    // Relative to now: a fixed instant expires the record once the calendar
+    // passes it, and an expired record is reclaimable rather than replayed.
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
   };
 }
 
