@@ -4,10 +4,7 @@ import { apiKeyStatus } from '../domain/api-key';
 import type { OrganizationApiKeyView } from './organization-api-key-view';
 
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
-import {
-  forbidden,
-  requireActiveMembership,
-} from './organization-membership.authorization';
+import { requireOrganizationManager } from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
 
 const API_KEY_ACCESS_FORBIDDEN = 'Organization API key access is forbidden';
@@ -40,7 +37,7 @@ export class ListOrganizationApiKeys {
   async list(
     input: ListOrganizationApiKeysCommand,
   ): Promise<readonly OrganizationApiKeyView[]> {
-    const caller = await requireActiveMembership(
+    await requireOrganizationManager(
       this.membership,
       {
         context: input.context,
@@ -49,14 +46,6 @@ export class ListOrganizationApiKeys {
       },
       API_KEY_ACCESS_FORBIDDEN,
     );
-
-    if (caller.organizationStatus === 'suspended') {
-      throw forbidden(API_KEY_ACCESS_FORBIDDEN);
-    }
-
-    if (caller.role === 'member') {
-      throw forbidden(API_KEY_ACCESS_FORBIDDEN);
-    }
 
     const now = this.now();
     const keys = await this.apiKeys.listApiKeys({

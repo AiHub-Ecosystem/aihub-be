@@ -218,88 +218,54 @@ describe('Organization API key listing HTTP flow', () => {
     expect(response.statusCode).toBe(200);
   });
 
-  it('denies an ordinary member', async () => {
-    callerRole = 'member';
-
-    const response = await list();
-
-    expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe('FORBIDDEN');
-    expect(apiKeys.listApiKeys).not.toHaveBeenCalled();
-  });
-
-  it('denies a caller with no membership in the organization', async () => {
-    callerMembershipExists = false;
-
-    const response = await list();
-
-    expect(response.statusCode).toBe(403);
-    expect(apiKeys.listApiKeys).not.toHaveBeenCalled();
-  });
-
-  it('denies a caller whose membership is disabled', async () => {
-    callerStatus = 'disabled';
-
-    const response = await list();
-
-    expect(response.statusCode).toBe(403);
-    expect(apiKeys.listApiKeys).not.toHaveBeenCalled();
-  });
-
-  it('denies listing for a suspended organization, matching the invitation listing', async () => {
-    organizationStatus = 'suspended';
-
-    const response = await list();
-
-    expect(response.statusCode).toBe(403);
-    expect(apiKeys.listApiKeys).not.toHaveBeenCalled();
-  });
-
-  it('gives every refused caller the same denial, so none learns why', async () => {
-    const refusals: Record<string, () => void> = {
-      'no membership': () => {
+  // One literal for every refused caller: each case equals it, so no two
+  // refusals can differ by status, code, or message.
+  it.each<[string, () => void]>([
+    [
+      'no membership in the organization',
+      () => {
         callerMembershipExists = false;
       },
-      'a disabled membership': () => {
+    ],
+    [
+      'a disabled membership',
+      () => {
         callerStatus = 'disabled';
       },
-      'a member of an active organization': () => {
+    ],
+    [
+      'an ordinary member of an active organization',
+      () => {
         callerRole = 'member';
       },
-      'an owner of a suspended organization': () => {
+    ],
+    [
+      'an owner of a suspended organization',
+      () => {
         organizationStatus = 'suspended';
       },
-    };
-
-    const bodies: Record<string, unknown> = {};
-    for (const [label, arrange] of Object.entries(refusals)) {
-      callerRole = 'owner';
-      callerStatus = 'active';
-      callerMembershipExists = true;
-      organizationStatus = 'active';
+    ],
+  ])(
+    'gives %s the same denial without reading keys',
+    async (_label, arrange) => {
       arrange();
-      const response = await list();
-      bodies[label] = { status: response.statusCode, body: response.json() };
-    }
 
-    const denial = {
-      status: 403,
-      body: {
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Organization API key access is forbidden',
-          request_id: REQUEST_ID,
-          retryable: false,
+      const response = await list();
+
+      expect({ status: response.statusCode, body: response.json() }).toEqual({
+        status: 403,
+        body: {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Organization API key access is forbidden',
+            request_id: REQUEST_ID,
+            retryable: false,
+          },
         },
-      },
-    };
-    expect(bodies).toEqual({
-      'no membership': denial,
-      'a disabled membership': denial,
-      'a member of an active organization': denial,
-      'an owner of a suspended organization': denial,
-    });
-  });
+      });
+      expect(apiKeys.listApiKeys).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects an unauthenticated request', async () => {
     const response = await list({});

@@ -25,3 +25,24 @@ export async function requireActiveMembership(
     retryable: false,
   });
 }
+
+/**
+ * Admits an active owner or admin of an active Organization. Every other
+ * caller receives the same Safe Authorization Denial, so the refusal reveals
+ * neither the Organization's status nor which condition refused.
+ */
+export async function requireOrganizationManager(
+  membership: Pick<OrganizationMembershipPort, 'resolveMembership'>,
+  input: ResolveMembershipInput,
+  forbiddenMessage: string,
+): Promise<OrganizationMembershipRecord> {
+  const caller = await requireActiveMembership(
+    membership,
+    input,
+    forbiddenMessage,
+  );
+  if (caller.organizationStatus === 'suspended' || caller.role === 'member') {
+    throw forbidden(forbiddenMessage);
+  }
+  return caller;
+}
