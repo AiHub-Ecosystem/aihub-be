@@ -3,6 +3,8 @@ import {
   Controller,
   HttpCode,
   Inject,
+  Param,
+  Patch,
   Post,
   Req,
   Res,
@@ -16,6 +18,9 @@ import {
   type CreateOrganizationRequest,
   CreateOrganizationRequestSchema,
   type CreateOrganizationResponse,
+  type RenameOrganizationRequest,
+  RenameOrganizationRequestSchema,
+  type RenameOrganizationResponse,
 } from '../../../contracts/organization/organization';
 import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
 import { ORGANIZATION_CREATE_OPERATION } from '../../idempotency/application/idempotency-operation';
@@ -29,6 +34,10 @@ import {
   CREATE_ORGANIZATION,
   type CreateOrganizationPort,
 } from '../application/create-organization.port';
+import {
+  RENAME_ORGANIZATION,
+  type RenameOrganizationPort,
+} from '../application/rename-organization.port';
 
 import { bearerRequestContext } from './bearer-request-context';
 
@@ -60,6 +69,8 @@ export class OrganizationController {
     private readonly createOrganization: CreateOrganizationPort,
     @Inject(IDEMPOTENCY_SERVICE)
     private readonly idempotency: IdempotencyServicePort,
+    @Inject(RENAME_ORGANIZATION)
+    private readonly renameOrganization: RenameOrganizationPort,
   ) {}
 
   @Post('/v1/organizations')
@@ -122,6 +133,45 @@ export class OrganizationController {
           status: created.status,
         },
         role: created.role,
+      },
+      meta: { request_id: requestId },
+    };
+  }
+
+  /**
+   * State-idempotent by construction, so no Idempotency-Key is read: a retry
+   * after success finds the name already applied and changes nothing.
+   */
+  @Patch('/v1/organizations/:organizationId')
+  @HttpCode(200)
+  async rename(
+    @Req() request: FastifyRequest,
+    @Param('organizationId') organizationId: string,
+    @Body() body: unknown,
+  ): Promise<RenameOrganizationResponse> {
+    const { context, requestId, userId } = bearerRequestContext(
+      request,
+      organizationId,
+    );
+
+    if (!Value.Check(RenameOrganizationRequestSchema, body)) {
+      throw invalidRequest();
+    }
+    const requested: RenameOrganizationRequest = body;
+    const renamed = await this.renameOrganization.rename({
+      context,
+      userId,
+      organizationId,
+      name: requested.name,
+    });
+
+    return {
+      data: {
+        organization: {
+          organization_id: renamed.organizationId,
+          name: renamed.name,
+          status: renamed.status,
+        },
       },
       meta: { request_id: requestId },
     };

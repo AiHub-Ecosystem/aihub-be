@@ -73,8 +73,14 @@ import {
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
 } from './application/organization-membership.port';
+import {
+  ORGANIZATION_RENAME,
+  type OrganizationRenamePort,
+} from './application/organization-rename.port';
 import { ReadOrganizationAuditEvents } from './application/read-organization-audit-events';
 import { READ_ORGANIZATION_AUDIT_EVENTS } from './application/read-organization-audit-events.port';
+import { RenameOrganization } from './application/rename-organization';
+import { RENAME_ORGANIZATION } from './application/rename-organization.port';
 import { RevokeOrganizationApiKey } from './application/revoke-organization-api-key';
 import { REVOKE_ORGANIZATION_API_KEY } from './application/revoke-organization-api-key.port';
 import { RevokeOrganizationInvitation } from './application/revoke-organization-invitation';
@@ -106,6 +112,7 @@ import { PostgresOrganizationCreationRepository } from './infrastructure/postgre
 import { PostgresOrganizationIdentityConfigRepository } from './infrastructure/postgres-organization-identity-config.repository';
 import { PostgresOrganizationInvitationRepository } from './infrastructure/postgres-organization-invitation.repository';
 import { PostgresOrganizationMembershipRepository } from './infrastructure/postgres-organization-membership.repository';
+import { PostgresOrganizationRenameRepository } from './infrastructure/postgres-organization-rename.repository';
 import {
   RedisAuthFailureCounter,
   RedisIdentityStore,
@@ -173,6 +180,19 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
       useFactory: (organizations: OrganizationCreationPort) =>
         new CreateOrganization(organizations),
       inject: [ORGANIZATION_CREATION],
+    },
+    {
+      provide: ORGANIZATION_RENAME,
+      useFactory: (): OrganizationRenamePort =>
+        new PostgresOrganizationRenameRepository(
+          createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
+        ),
+    },
+    {
+      provide: RENAME_ORGANIZATION,
+      useFactory: (organizations: OrganizationRenamePort) =>
+        new RenameOrganization(organizations),
+      inject: [ORGANIZATION_RENAME],
     },
     {
       provide: ORGANIZATION_API_KEY,

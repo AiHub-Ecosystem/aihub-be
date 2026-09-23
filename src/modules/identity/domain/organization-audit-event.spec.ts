@@ -13,6 +13,38 @@ const STAMP: OrganizationAuditStamp = {
 };
 
 describe('organizationAuditEvent', () => {
+  it('records a rename against the Organization, labelled by the new name and keeping the previous one', () => {
+    const event = organizationAuditEvent(STAMP, {
+      action: 'organization.renamed',
+      organizationId: 'org_acme',
+      name: 'Acme Learning',
+      previousName: 'Acme',
+    });
+
+    expect(event).toEqual({
+      ...STAMP,
+      action: 'organization.renamed',
+      outcome: 'applied',
+      targetType: 'organization',
+      targetId: 'org_acme',
+      targetLabel: 'Acme Learning',
+      detail: { previousName: 'Acme' },
+    });
+  });
+
+  it('records a refused rename under the current name and never the requested one', () => {
+    const event = organizationAuditEvent(STAMP, {
+      action: 'organization.renamed',
+      organizationId: 'org_acme',
+      name: 'Acme',
+      denial: 'insufficient_authority',
+    });
+
+    expect(event.outcome).toBe('denied');
+    expect(event.targetLabel).toBe('Acme');
+    expect(event.detail).toEqual({ denial: 'insufficient_authority' });
+  });
+
   it('records an invitation against the invitation, labelled by the invited email', () => {
     const event = organizationAuditEvent(STAMP, {
       action: 'invitation.sent',

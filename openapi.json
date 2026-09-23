@@ -2914,6 +2914,119 @@
         }
       }
     },
+    "/v1/organizations/{organization_id}": {
+      "patch": {
+        "operationId": "organizations.rename",
+        "summary": "Rename an organization",
+        "description": "Only an active owner of an active organization may rename it. Every other caller, and a suspended organization, receives the same denial. Commercial terms and status cannot be changed by this request.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization to rename.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": {
+                    "minLength": 1,
+                    "description": "Trimmed, then 1–100 characters; not unique.",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The organization under its current name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["organization"],
+                      "properties": {
+                        "organization": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": ["organization_id", "name", "status"],
+                          "properties": {
+                            "organization_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": "active",
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
     "/v1/organizations/me/members": {
       "get": {
         "operationId": "organizations.me.members.list",
@@ -4701,6 +4814,7 @@
                 "type": "string",
                 "enum": [
                   "organization.created",
+                  "organization.renamed",
                   "invitation.sent",
                   "invitation.resent",
                   "invitation.accepted",
@@ -4808,6 +4922,10 @@
                                 "anyOf": [
                                   {
                                     "const": "organization.created",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "organization.renamed",
                                     "type": "string"
                                   },
                                   {

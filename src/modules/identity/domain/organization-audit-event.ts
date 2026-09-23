@@ -10,6 +10,7 @@
 
 export type OrganizationAuditAction =
   | 'organization.created'
+  | 'organization.renamed'
   | 'invitation.sent'
   | 'invitation.resent'
   | 'invitation.accepted'
@@ -72,6 +73,27 @@ interface OrganizationCreatedDraft {
   /** The name as created, removable by Audit redaction. */
   readonly name: string;
 }
+
+/**
+ * A rename is labelled by the name it produced; the name it replaced travels
+ * in `detail` and is removed with the label by Audit redaction (ADR-0043). A
+ * refusal is labelled by the name the Organization kept, and the requested
+ * name is left out: it is free text from a caller without authority.
+ */
+type OrganizationRenamedDraft =
+  | {
+      readonly action: 'organization.renamed';
+      readonly organizationId: string;
+      readonly name: string;
+      readonly previousName: string;
+      readonly denial?: undefined;
+    }
+  | {
+      readonly action: 'organization.renamed';
+      readonly organizationId: string;
+      readonly name: string;
+      readonly denial: OrganizationAuditDenial;
+    };
 
 interface InvitationDraft {
   readonly action:
@@ -151,6 +173,7 @@ interface ApiKeyRevokedDraft {
 
 export type OrganizationAuditDraft =
   | OrganizationCreatedDraft
+  | OrganizationRenamedDraft
   | InvitationDraft
   | InvitationRevokedDraft
   | RoleChangedDraft
@@ -187,6 +210,17 @@ function shape(draft: OrganizationAuditDraft): Shape {
         targetLabel: draft.name,
         detail: {},
         outcome: 'applied',
+      };
+    case 'organization.renamed':
+      return {
+        targetType: 'organization',
+        targetId: draft.organizationId,
+        targetLabel: draft.name,
+        detail:
+          draft.denial === undefined
+            ? { previousName: draft.previousName }
+            : { denial: draft.denial },
+        outcome: draft.denial === undefined ? 'applied' : 'denied',
       };
     case 'invitation.sent':
     case 'invitation.resent':

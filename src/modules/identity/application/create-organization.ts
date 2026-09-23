@@ -1,6 +1,7 @@
 import { AppError } from '../../../common/errors/app-error';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import type { RequestContext } from '../../../common/request-context/request-context';
+import { organizationName } from '../domain/organization-name';
 
 import type {
   OrganizationCreationPort,
@@ -36,8 +37,6 @@ export const SELF_SERVE_ORGANIZATION_TERMS: SelfServeOrganizationTerms = {
 /** Lifetime Self-serve Organization creations per AIHUB User Account. */
 export const ORGANIZATION_CREATION_LIMIT = 3;
 
-const MAX_ORGANIZATION_NAME_LENGTH = 100;
-
 /**
  * Creates a Self-serve Organization and makes its caller the first active
  * owner. No membership is consulted first: the caller is not yet a member of
@@ -47,8 +46,8 @@ export class CreateOrganization {
   constructor(private readonly organizations: OrganizationCreationPort) {}
 
   async create(input: CreateOrganizationInput): Promise<CreatedOrganization> {
-    const name = input.name.trim();
-    if (name.length === 0 || name.length > MAX_ORGANIZATION_NAME_LENGTH) {
+    const name = organizationName(input.name);
+    if (name === undefined) {
       throw invalidRequest();
     }
 

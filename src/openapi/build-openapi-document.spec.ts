@@ -45,6 +45,7 @@ const SANDBOX_MINT_PATH = '/v1/sandbox/assertions';
 const SANDBOX_MINT_OPERATION_ID = 'sandbox.assertions.mint';
 const ORGANIZATION_PATH = '/v1/organizations';
 const ORGANIZATION_CREATE_OPERATION_ID = 'organizations.create';
+const ORGANIZATION_ITEM_PATH = '/v1/organizations/{organization_id}';
 const ORGANIZATION_ROSTER_PATH = '/v1/organizations/me/members';
 const ORGANIZATION_ROSTER_OPERATION_ID = 'organizations.me.members.list';
 const ORGANIZATION_INVITATION_PATH =
@@ -148,6 +149,7 @@ describe('buildOpenApiDocument', () => {
     ).toEqual([
       SANDBOX_MINT_PATH,
       ORGANIZATION_PATH,
+      ORGANIZATION_ITEM_PATH,
       ORGANIZATION_ROSTER_PATH,
       ORGANIZATION_INVITATION_PATH,
       ORGANIZATION_INVITATION_ITEM_PATH,
@@ -400,6 +402,20 @@ describe('buildOpenApiDocument', () => {
     expect(JSON.stringify(operation?.responses['200'])).not.toContain(
       'api_key"',
     );
+  });
+
+  it('documents the owner-only rename route as a name-only PATCH', () => {
+    const rename = build().paths[ORGANIZATION_ITEM_PATH]?.patch;
+
+    expect(rename?.operationId).toBe('organizations.rename');
+    expect(rename?.security).toEqual([{ BearerAuth: [] }]);
+    expect(rename?.requestBody?.required).toBe(true);
+    expect(rename?.responses['200']).toBeDefined();
+    expect(rename?.responses['403']).toBeDefined();
+    const body = JSON.stringify(rename?.requestBody);
+    expect(body).toContain('"additionalProperties":false');
+    expect(body).not.toContain('quota');
+    expect(JSON.stringify(rename)).not.toContain('Idempotency-Key');
   });
 
   it('documents the bearer-authenticated member mutation routes', () => {

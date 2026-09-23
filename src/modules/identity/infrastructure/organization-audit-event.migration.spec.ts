@@ -85,4 +85,30 @@ describe('organization audit event migration', () => {
     );
     expect(migration).toContain("'invitation.revoked'");
   });
+
+  it('extends the action constraint and redaction for organization rename', async () => {
+    const migration = await readFile(
+      join(
+        __dirname,
+        '../../../../database/migrations/0015_organization_rename.sql',
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain(
+      'ADD CONSTRAINT organization_audit_events_action_check CHECK',
+    );
+    expect(migration).toContain("'organization.renamed'");
+    // Every shipped action is restated, so the extension cannot drop one.
+    expect(migration).toContain("'organization.created'");
+    expect(migration).toContain("'api_key.revoked'");
+    // The previous name leaves only with the label, and only on a rename.
+    expect(migration).toContain("OLD.action = 'organization.renamed'");
+    expect(migration).toContain(
+      "NEW.detail IS DISTINCT FROM OLD.detail - 'previousName'",
+    );
+    expect(migration).toContain(
+      "RAISE EXCEPTION 'organization_audit_events is append-only'",
+    );
+  });
 });
