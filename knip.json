@@ -43,7 +43,9 @@
     // Hand-written types for scripts/cli-options.cjs (plain CJS); the spec
     // and cli.mjs reach the .cjs through TypeScript, so without this knip
     // reports a live file as unused.
-    "scripts/cli-options.d.cts"
+    "scripts/cli-options.d.cts",
+    // Hand-written types for scripts/check-migrations.cjs — same reason.
+    "scripts/check-migrations.d.cts"
   ],
   "ignoreBinaries": [
     // HashiCorp Vault CLI — operator workstation/image binary, not an npm package.

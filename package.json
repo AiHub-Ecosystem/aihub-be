@@ -28,8 +28,9 @@
     "format": "biome format --write .",
     "lint": "oxlint . && biome check .",
     "arch-check": "node scripts/check-architecture.mjs",
+    "check:migrations": "node scripts/check-migrations.mjs",
     "knip": "node scripts/knip.mjs",
-    "verify": "pnpm knip && pnpm lint && pnpm type-check && pnpm test && pnpm arch-check && pnpm validate:openapi",
+    "verify": "pnpm knip && pnpm lint && pnpm type-check && pnpm test && pnpm check:migrations && pnpm arch-check && pnpm validate:openapi",
     "prepare": "husky"
   },
   "dependencies": {
