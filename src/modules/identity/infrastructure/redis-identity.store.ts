@@ -221,6 +221,15 @@ function missKey(hashHex: string): string {
   return `aihub:v1:key:miss:${hashHex}`;
 }
 
+/**
+ * Both entries one key can occupy. Exported for the operator commands that
+ * purge them from outside the gateway, so they cannot drift from the names the
+ * gateway writes.
+ */
+export function apiKeyCacheKeys(hashHex: string): readonly string[] {
+  return [cacheKey(hashHex), missKey(hashHex)];
+}
+
 function jwksKey(organizationId: string): string {
   return `aihub:v1:jwks:${organizationId}`;
 }

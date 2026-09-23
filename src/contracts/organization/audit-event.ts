@@ -8,6 +8,8 @@ import { type Static, Type } from '@sinclair/typebox';
 export const ORGANIZATION_AUDIT_ACTIONS = [
   'organization.created',
   'organization.renamed',
+  'organization.suspended',
+  'organization.restored',
   'invitation.sent',
   'invitation.resent',
   'invitation.accepted',

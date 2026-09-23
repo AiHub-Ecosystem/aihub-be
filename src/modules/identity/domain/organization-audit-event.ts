@@ -11,6 +11,8 @@
 export type OrganizationAuditAction =
   | 'organization.created'
   | 'organization.renamed'
+  | 'organization.suspended'
+  | 'organization.restored'
   | 'invitation.sent'
   | 'invitation.resent'
   | 'invitation.accepted'
@@ -95,6 +97,17 @@ type OrganizationRenamedDraft =
       readonly denial: OrganizationAuditDenial;
     };
 
+/**
+ * An operator act (ADR-0044). No reason travels with it: tenant owners read
+ * `detail`, and redaction cannot reach it.
+ */
+interface OrganizationStatusDraft {
+  readonly action: 'organization.suspended' | 'organization.restored';
+  readonly organizationId: string;
+  /** The current name, removable by Audit redaction. */
+  readonly name: string;
+}
+
 interface InvitationDraft {
   readonly action:
     | 'invitation.sent'
@@ -174,6 +187,7 @@ interface ApiKeyRevokedDraft {
 export type OrganizationAuditDraft =
   | OrganizationCreatedDraft
   | OrganizationRenamedDraft
+  | OrganizationStatusDraft
   | InvitationDraft
   | InvitationRevokedDraft
   | RoleChangedDraft
@@ -204,6 +218,8 @@ function shape(draft: OrganizationAuditDraft): Shape {
     // Commercial terms stay out of `detail`: they are an operator's to state,
     // and the Organization row already holds them.
     case 'organization.created':
+    case 'organization.suspended':
+    case 'organization.restored':
       return {
         targetType: 'organization',
         targetId: draft.organizationId,

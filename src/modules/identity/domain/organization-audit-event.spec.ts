@@ -13,6 +13,27 @@ const STAMP: OrganizationAuditStamp = {
 };
 
 describe('organizationAuditEvent', () => {
+  it.each(['organization.suspended', 'organization.restored'] as const)(
+    'records %s against the Organization under its current name with no detail',
+    (action) => {
+      const event = organizationAuditEvent(STAMP, {
+        action,
+        organizationId: 'org_acme',
+        name: 'Acme',
+      });
+
+      expect(event).toEqual({
+        ...STAMP,
+        action,
+        outcome: 'applied',
+        targetType: 'organization',
+        targetId: 'org_acme',
+        targetLabel: 'Acme',
+        detail: {},
+      });
+    },
+  );
+
   it('records a rename against the Organization, labelled by the new name and keeping the previous one', () => {
     const event = organizationAuditEvent(STAMP, {
       action: 'organization.renamed',

@@ -47,6 +47,7 @@ import {
   quotaOption,
   usageError,
 } from './cli-options.cjs';
+import { runOrganizationStatus } from './organization-status.cjs';
 import {
   parseTargetMonth,
   runQuotaReconciliation,
@@ -585,6 +586,29 @@ async function reconcileQuotaCommand(options) {
   });
 }
 
+// Suspension and restoration are operator acts with no Bearer route
+// (ADR-0044). `--actor` names the operator's own AIHUB User Account, which the
+// audit event records; an unknown Organization or actor is a usage error, so
+// scripts can tell a bad command from an operational failure.
+async function organizationStatusCommand(options, status) {
+  for (const name of options.keys()) {
+    if (name !== 'org' && name !== 'actor') {
+      usageError();
+    }
+  }
+
+  const outcome = await runOrganizationStatus({
+    databaseUrl: process.env.DATABASE_URL ?? '',
+    redisUrl: process.env.REDIS_URL,
+    organizationId: requiredOption(options, 'org'),
+    actorUsername: requiredOption(options, 'actor'),
+    status,
+  });
+  if (outcome === 'organization_not_found' || outcome === 'actor_invalid') {
+    usageError();
+  }
+}
+
 async function pruneUsageCommand(options) {
   if (options.size > 0) {
     usageError();
@@ -635,6 +659,14 @@ async function main() {
   }
   if (command === 'quota:reconcile') {
     await reconcileQuotaCommand(options);
+    return;
+  }
+  if (command === 'org:suspend') {
+    await organizationStatusCommand(options, 'suspended');
+    return;
+  }
+  if (command === 'org:restore') {
+    await organizationStatusCommand(options, 'active');
     return;
   }
   if (command === 'usage:prune') {

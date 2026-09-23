@@ -4815,6 +4815,8 @@
                 "enum": [
                   "organization.created",
                   "organization.renamed",
+                  "organization.suspended",
+                  "organization.restored",
                   "invitation.sent",
                   "invitation.resent",
                   "invitation.accepted",
@@ -4926,6 +4928,14 @@
                                   },
                                   {
                                     "const": "organization.renamed",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "organization.suspended",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "organization.restored",
                                     "type": "string"
                                   },
                                   {

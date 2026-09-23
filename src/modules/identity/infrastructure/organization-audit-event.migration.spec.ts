@@ -111,4 +111,27 @@ describe('organization audit event migration', () => {
       "RAISE EXCEPTION 'organization_audit_events is append-only'",
     );
   });
+
+  it('extends the action constraint for organization suspension and restoration', async () => {
+    const migration = await readFile(
+      join(
+        __dirname,
+        '../../../../database/migrations/0016_organization_suspension.sql',
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain(
+      'ADD CONSTRAINT organization_audit_events_action_check CHECK',
+    );
+    for (const action of [
+      'organization.created',
+      'organization.renamed',
+      'organization.suspended',
+      'organization.restored',
+      'api_key.revoked',
+    ]) {
+      expect(migration).toContain(`'${action}'`);
+    }
+  });
 });
