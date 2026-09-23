@@ -255,6 +255,52 @@ describe('Organization API key listing HTTP flow', () => {
     expect(apiKeys.listApiKeys).not.toHaveBeenCalled();
   });
 
+  it('gives every refused caller the same denial, so none learns why', async () => {
+    const refusals: Record<string, () => void> = {
+      'no membership': () => {
+        callerMembershipExists = false;
+      },
+      'a disabled membership': () => {
+        callerStatus = 'disabled';
+      },
+      'a member of an active organization': () => {
+        callerRole = 'member';
+      },
+      'an owner of a suspended organization': () => {
+        organizationStatus = 'suspended';
+      },
+    };
+
+    const bodies: Record<string, unknown> = {};
+    for (const [label, arrange] of Object.entries(refusals)) {
+      callerRole = 'owner';
+      callerStatus = 'active';
+      callerMembershipExists = true;
+      organizationStatus = 'active';
+      arrange();
+      const response = await list();
+      bodies[label] = { status: response.statusCode, body: response.json() };
+    }
+
+    const denial = {
+      status: 403,
+      body: {
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Organization API key access is forbidden',
+          request_id: REQUEST_ID,
+          retryable: false,
+        },
+      },
+    };
+    expect(bodies).toEqual({
+      'no membership': denial,
+      'a disabled membership': denial,
+      'a member of an active organization': denial,
+      'an owner of a suspended organization': denial,
+    });
+  });
+
   it('rejects an unauthenticated request', async () => {
     const response = await list({});
 
