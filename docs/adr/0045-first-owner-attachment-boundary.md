@@ -1,0 +1,17 @@
+# First Owner Attachment boundary
+
+Status: accepted
+
+Date: 2026-09-23; related issue: [#135](https://github.com/AiHub-Ecosystem/aihub-be/issues/135). Applies the operator-actor amendment of [ADR-0044](0044-organization-suspension-boundary.md) to a second operator act.
+
+The operator CLI's `org:create` writes only the `organizations` row, so an operator-provisioned Organization starts with no members. It cannot gain one either: inviting needs an active owner or admin, and acceptance needs an invitation. The only way in was a hand-written `INSERT`, which is how a tenant boundary gets crossed by accident. The new operator command `org:attach-owner --org <id> --owner <username> --actor <username>` makes an existing AIHUB User Account the Organization's first active `owner`.
+
+`org:create` keeps provisioning in two steps and does not take an owner. A sales-led Organization is provisioned with negotiated terms before anyone at the customer has access, and the customer's account may not exist yet. Requiring an owner at creation would block exactly that flow. The ownerless state is therefore a legitimate waiting state, closed by attachment, rather than one to make unreachable.
+
+This is a bootstrap, not a membership tool. It is refused once the Organization has any active membership; from then on the invitation flow is the path in. Under [ADR-0029](0029-organization-membership-mutation-boundary.md)'s zero-owner invariant, an Organization with an active member always has an active owner, so "no active member" means "never had an owner" unless someone edited the database by hand. In that hand-edited case, a disabled membership for the named account is reactivated as `owner` by upsert on the Organization and account, so the command still ends with exactly one active owner. Repeating the command for the account that is already the sole active owner succeeds and records nothing, as the other operator commands do. A suspended Organization is not refused: the new owner reaches only the surfaces suspension leaves open, and every mutation stays closed.
+
+The target is named by immutable username and must be an active account; email verification is not required, because an unverified account cannot sign in yet and attaching it early harms nothing. The actor is the operator's own active AIHUB User Account, as ADR-0044 decided, and may not be the same account as the owner. An operator attaching themselves to a customer's Organization is the tenant-boundary crossing this command exists to make deliberate, and refusing it costs one other operator's name.
+
+One transaction resolves both accounts, locks the Organization row `FOR UPDATE`, checks memberships, upserts the owner, and writes one `membership.owner_attached` event: `target_type` `membership`, the owner's account id as target, their username as the redactable label, and `detail: { role: 'owner' }`, the shape `invitation.accepted` already uses. The Organization lock serializes two concurrent attachments so only one succeeds. Every refusal — unknown Organization, inactive or unknown owner or actor, actor equal to owner, an Organization that already has an active member — is named in the output and exits as a usage error, and writes nothing.
+
+`org:create` and `key:revoke` still write no Organization Audit Event; that stays out of scope, as ADR-0044 recorded.
