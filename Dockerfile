@@ -1,4 +1,4 @@
-FROM node:22.14.0-bookworm-slim AS dependencies
+FROM node:22.23.2-bookworm-slim AS dependencies
 
 WORKDIR /app
 ENV COREPACK_HOME=/tmp/corepack
@@ -15,7 +15,7 @@ COPY . .
 RUN pnpm build
 RUN pnpm prune --prod --ignore-scripts
 
-FROM node:22.14.0-bookworm-slim AS runtime
+FROM node:22.23.2-bookworm-slim AS runtime
 
 LABEL org.opencontainers.image.source="https://github.com/AiHub-Ecosystem/aihub-be"
 
