@@ -1,0 +1,105 @@
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { parseEnv } from 'node:util';
+
+import { ConfiguredRuntimeSecretProvider } from '../src/modules/secrets/infrastructure/configured-runtime-secret.provider';
+import { loadRuntimeConnectionEnvironment } from '../src/modules/secrets/infrastructure/runtime-connection.environment';
+import { writeBootConfig } from './ci-boot-config.cjs';
+
+function readBootEnv(directory: string): NodeJS.Dict<string> {
+  return parseEnv(readFileSync(join(directory, 'boot.env'), 'utf8'));
+}
+
+// The variable names under the production compose file's app environment
+// anchor, read line by line: the anchor is flat `NAME: value` pairs.
+function productionAppEnvironmentNames(): string[] {
+  const lines = readFileSync('docker-compose.production.yml', 'utf8').split(
+    /\r?\n/,
+  );
+  const start = lines.findIndex((line) => line.includes('&app-environment'));
+  const names: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    const match = /^ {2}([A-Z][A-Z0-9_]*):/.exec(line);
+    if (match?.[1] === undefined) {
+      break;
+    }
+    names.push(match[1]);
+  }
+  return names;
+}
+
+describe('CI boot configuration', () => {
+  let directory: string;
+
+  beforeEach(() => {
+    directory = mkdtempSync(join(tmpdir(), 'aihub-boot-'));
+  });
+
+  afterEach(() => {
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  // The files are only worth generating if the application's own loaders
+  // accept them the way the production image reads them: agent-file source,
+  // production node environment.
+  it('writes secrets the runtime secret provider accepts in production', () => {
+    writeBootConfig(directory);
+    const env = readBootEnv(directory);
+
+    const provider = new ConfiguredRuntimeSecretProvider({
+      nodeEnv: env.NODE_ENV,
+      source: env.AIHUB_RUNTIME_SECRET_SOURCE,
+      secretsFile: join(directory, 'runtime-secrets.json'),
+      values: {},
+    });
+
+    expect(env.NODE_ENV).toBe('production');
+    expect(provider.getSnapshot().userAccessJwt.privateKeyPem).toContain(
+      'BEGIN PRIVATE KEY',
+    );
+  });
+
+  it('writes connections the runtime connection loader accepts', () => {
+    writeBootConfig(directory);
+    const env: NodeJS.ProcessEnv = {
+      ...readBootEnv(directory),
+      AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: join(
+        directory,
+        'connection-secrets.json',
+      ),
+    };
+
+    loadRuntimeConnectionEnvironment({ env });
+
+    expect(env.DATABASE_URL).toMatch(/^postgres:\/\//);
+    expect(env.REDIS_URL).toMatch(/^redis:\/\//);
+    expect(env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY).toContain(
+      'BEGIN PRIVATE KEY',
+    );
+  });
+
+  // The secret loaders above cannot see the non-secret variables; this keeps
+  // them in step with what production actually sets.
+  it('sets exactly the variables production sets for the app', () => {
+    writeBootConfig(directory);
+
+    expect(Object.keys(readBootEnv(directory)).sort()).toEqual(
+      productionAppEnvironmentNames().sort(),
+    );
+  });
+
+  it('mints fresh keys on every run, so none is ever committed', () => {
+    const keys = (): string[] => [
+      readFileSync(join(directory, 'runtime-secrets.json'), 'utf8'),
+      readFileSync(join(directory, 'connection-secrets.json'), 'utf8'),
+    ];
+    writeBootConfig(directory);
+    const [firstRuntime, firstConnection] = keys();
+    writeBootConfig(directory);
+    const [secondRuntime, secondConnection] = keys();
+
+    expect(secondRuntime).not.toBe(firstRuntime);
+    expect(secondConnection).not.toBe(firstConnection);
+  });
+});

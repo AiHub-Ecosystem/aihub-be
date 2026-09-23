@@ -45,7 +45,9 @@
     // reports a live file as unused.
     "scripts/cli-options.d.cts",
     // Hand-written types for scripts/check-migrations.cjs — same reason.
-    "scripts/check-migrations.d.cts"
+    "scripts/check-migrations.d.cts",
+    // Hand-written types for scripts/ci-boot-config.cjs — same reason.
+    "scripts/ci-boot-config.d.cts"
   ],
   "ignoreBinaries": [
     // HashiCorp Vault CLI — operator workstation/image binary, not an npm package.
