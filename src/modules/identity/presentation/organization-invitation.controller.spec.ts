@@ -57,7 +57,7 @@ const INVITATION_ID = 'oiv_01J00000000000000000000000';
 const REVOKE_URL = `${INVITE_URL}/${INVITATION_ID}`;
 
 type OrganizationStatus = 'active' | 'suspended';
-type InvitationListOverride = {
+type CallerOverride = {
   readonly role?: OrganizationMembershipRole;
   readonly membershipExists?: boolean;
   readonly status?: OrganizationMembershipStatus;
@@ -535,7 +535,7 @@ describe('Organization invitation HTTP flow', () => {
     expect(response.statusCode).toBe(204);
   });
 
-  it.each<[string, InvitationListOverride]>([
+  it.each<[string, CallerOverride]>([
     ['a non-member', { membershipExists: false }],
     ['a disabled membership', { status: 'disabled' as const }],
     ['a suspended organization', { organization: 'suspended' as const }],
@@ -594,7 +594,7 @@ describe('Organization invitation HTTP flow', () => {
     expect(response.json().error.code).toBe('NOT_FOUND');
   });
 
-  it.each<[string, InvitationListOverride]>([
+  it.each<[string, CallerOverride]>([
     ['a member', { role: 'member' as const }],
     ['a non-member', { membershipExists: false }],
     ['a disabled membership', { status: 'disabled' as const }],
@@ -645,46 +645,42 @@ describe('Organization invitation HTTP flow', () => {
       const response = await invite({ email: 'invitee@example.com', role });
 
       expect(response.statusCode).toBe(403);
-      expect(response.json().error.code).toBe('FORBIDDEN');
+      expect(response.json().error).toMatchObject({
+        code: 'FORBIDDEN',
+        message: 'Organization admins can only invite members',
+      });
       expect(invitations.createInvitation).not.toHaveBeenCalled();
       expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
     },
   );
 
-  it('forbids a member from inviting anyone', async () => {
-    callerRole = 'member';
+  it.each<[string, CallerOverride]>([
+    ['a member', { role: 'member' as const }],
+    ['a non-member', { membershipExists: false }],
+    ['a disabled membership', { status: 'disabled' as const }],
+    ['a suspended organization', { organization: 'suspended' as const }],
+  ])('gives %s the same invite denial', async (_label, override) => {
+    callerRole = override.role ?? callerRole;
+    callerMembershipExists =
+      override.membershipExists ?? callerMembershipExists;
+    callerStatus = override.status ?? callerStatus;
+    organizationStatus = override.organization ?? organizationStatus;
 
     const response = await invite();
 
-    expect(response.statusCode).toBe(403);
+    expect({ status: response.statusCode, body: response.json() }).toEqual({
+      status: 403,
+      body: {
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Organization invitation sending is forbidden',
+          request_id: REQUEST_ID,
+          retryable: false,
+        },
+      },
+    });
     expect(invitations.createInvitation).not.toHaveBeenCalled();
-  });
-
-  it('forbids a non-member', async () => {
-    callerMembershipExists = false;
-
-    const response = await invite();
-
-    expect(response.statusCode).toBe(403);
-    expect(invitations.createInvitation).not.toHaveBeenCalled();
-  });
-
-  it('forbids a caller whose membership is disabled', async () => {
-    callerStatus = 'disabled';
-
-    const response = await invite();
-
-    expect(response.statusCode).toBe(403);
-    expect(invitations.createInvitation).not.toHaveBeenCalled();
-  });
-
-  it('forbids inviting into a suspended organization', async () => {
-    organizationStatus = 'suspended';
-
-    const response = await invite();
-
-    expect(response.statusCode).toBe(403);
-    expect(invitations.createInvitation).not.toHaveBeenCalled();
+    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
   });
 
   it('rejects a missing Bearer credential', async () => {

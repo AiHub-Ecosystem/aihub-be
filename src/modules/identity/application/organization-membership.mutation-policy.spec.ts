@@ -1,4 +1,7 @@
-import { authorizeOrganizationMembershipMutation } from './organization-membership.mutation-policy';
+import {
+  authorizeOrganizationMembershipMutation,
+  hasOrganizationMembershipRouteAuthority,
+} from './organization-membership.mutation-policy';
 
 const base = {
   callerUserId: 'usr_caller',
@@ -91,4 +94,34 @@ describe('authorizeOrganizationMembershipMutation', () => {
       }),
     ).toEqual({ kind: 'target_unavailable' });
   });
+});
+
+describe('hasOrganizationMembershipRouteAuthority', () => {
+  // Decided before the target is looked up, so a caller without authority on
+  // the route learns nothing about which usernames exist.
+  it.each([
+    ['change_role', 'owner', false, true],
+    ['change_role', 'admin', false, true],
+    ['change_role', 'member', false, false],
+    ['change_role', 'member', true, false],
+    ['disable', 'owner', false, true],
+    ['disable', 'admin', false, true],
+    ['disable', 'member', false, false],
+    ['disable', 'member', true, true],
+    ['transfer', 'owner', false, true],
+    ['transfer', 'owner', true, true],
+    ['transfer', 'admin', false, false],
+    ['transfer', 'member', false, false],
+  ] as const)(
+    '%s by %s (acting on own membership: %s) has authority: %s',
+    (action, callerRole, targetIsCaller, expected) => {
+      expect(
+        hasOrganizationMembershipRouteAuthority({
+          action,
+          callerRole,
+          targetIsCaller,
+        }),
+      ).toBe(expected);
+    },
+  );
 });

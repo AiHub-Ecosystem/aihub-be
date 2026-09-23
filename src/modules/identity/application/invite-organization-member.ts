@@ -9,12 +9,15 @@ import type { OrganizationInvitationPort } from './organization-invitation.port'
 import type { OrganizationInviteTokenPort } from './organization-invite-token.port';
 import {
   forbidden,
-  requireActiveMembership,
+  requireOrganizationManager,
 } from './organization-membership.authorization';
 import type {
   OrganizationMembershipPort,
   OrganizationMembershipRole,
 } from './organization-membership.port';
+
+const INVITATION_SENDING_FORBIDDEN =
+  'Organization invitation sending is forbidden';
 
 export interface InviteOrganizationMemberInput {
   readonly context: RequestContext;
@@ -153,20 +156,18 @@ export class InviteOrganizationMember {
   private async resolveCaller(
     input: InviteOrganizationMemberInput,
   ): Promise<void> {
-    const caller = await requireActiveMembership(this.membership, {
-      context: input.context,
-      userId: input.userId,
-      organizationId: input.organizationId,
-    });
+    const caller = await requireOrganizationManager(
+      this.membership,
+      {
+        context: input.context,
+        userId: input.userId,
+        organizationId: input.organizationId,
+      },
+      INVITATION_SENDING_FORBIDDEN,
+    );
 
-    if (caller.organizationStatus === 'suspended') {
-      throw forbidden('Organization is suspended');
-    }
-
-    if (caller.role === 'member') {
-      throw forbidden('Organization membership role cannot invite');
-    }
-
+    // An admin has proved authority to invite, so the limit on what they may
+    // grant is a reason about the request and keeps its own message.
     if (caller.role === 'admin' && input.role !== 'member') {
       throw forbidden('Organization admins can only invite members');
     }

@@ -226,41 +226,63 @@ describe('Organization API key creation HTTP flow', () => {
     expect(response.statusCode).toBe(201);
   });
 
-  it('denies an ordinary member', async () => {
-    callerRole = 'member';
+  // One literal for every caller outside this route's authority: each case
+  // equals it, so no two refusals can differ by status, code, or message.
+  it.each<[string, () => void, boolean]>([
+    [
+      'no membership in the organization',
+      () => {
+        callerMembershipExists = false;
+      },
+      false,
+    ],
+    [
+      'a disabled membership',
+      () => {
+        callerStatus = 'disabled';
+      },
+      false,
+    ],
+    [
+      'an ordinary member of an active organization',
+      () => {
+        callerRole = 'member';
+      },
+      false,
+    ],
+    [
+      'an owner of a suspended organization',
+      () => {
+        organizationStatus = 'suspended';
+      },
+      false,
+    ],
+    [
+      'an organization suspended inside the transaction',
+      () => {
+        apiKeys.createApiKey.mockResolvedValue({
+          kind: 'organization_unavailable',
+        });
+      },
+      true,
+    ],
+  ])('gives %s the same denial', async (_label, arrange, storeReached) => {
+    arrange();
 
     const response = await create();
 
-    expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe('FORBIDDEN');
-    expect(apiKeys.createApiKey).not.toHaveBeenCalled();
-  });
-
-  it('denies a caller with no membership in the organization', async () => {
-    callerMembershipExists = false;
-
-    const response = await create();
-
-    expect(response.statusCode).toBe(403);
-    expect(apiKeys.createApiKey).not.toHaveBeenCalled();
-  });
-
-  it('denies a caller whose membership is disabled', async () => {
-    callerStatus = 'disabled';
-
-    const response = await create();
-
-    expect(response.statusCode).toBe(403);
-    expect(apiKeys.createApiKey).not.toHaveBeenCalled();
-  });
-
-  it('denies creation for a suspended organization', async () => {
-    organizationStatus = 'suspended';
-
-    const response = await create();
-
-    expect(response.statusCode).toBe(403);
-    expect(apiKeys.createApiKey).not.toHaveBeenCalled();
+    expect({ status: response.statusCode, body: response.json() }).toEqual({
+      status: 403,
+      body: {
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Organization API key creation is forbidden',
+          request_id: REQUEST_ID,
+          retryable: false,
+        },
+      },
+    });
+    expect(apiKeys.createApiKey.mock.calls.length > 0).toBe(storeReached);
   });
 
   it('rejects a scope no operation requires', async () => {
@@ -309,16 +331,6 @@ describe('Organization API key creation HTTP flow', () => {
 
     expect(response.statusCode).toBe(403);
     expect(response.json().error.code).toBe('FORBIDDEN');
-  });
-
-  it('denies creation when the organization is suspended inside the transaction', async () => {
-    apiKeys.createApiKey.mockResolvedValue({
-      kind: 'organization_unavailable',
-    });
-
-    const response = await create();
-
-    expect(response.statusCode).toBe(403);
   });
 
   it('binds the key to the requested customer environments', async () => {

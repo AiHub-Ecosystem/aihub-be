@@ -6,9 +6,11 @@ import { generateApiKey } from '../domain/api-key';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
 import {
   forbidden,
-  requireActiveMembership,
+  requireOrganizationManager,
 } from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
+
+const API_KEY_CREATION_FORBIDDEN = 'Organization API key creation is forbidden';
 
 /** Customer-facing request tiers. AIHUB's sandbox and development are not. */
 const CUSTOMER_ENVIRONMENTS: readonly string[] = ['production', 'staging'];
@@ -133,19 +135,15 @@ export class CreateOrganizationApiKey {
   async create(
     input: CreateOrganizationApiKeyInput,
   ): Promise<CreatedOrganizationApiKey> {
-    const caller = await requireActiveMembership(this.membership, {
-      context: input.context,
-      userId: input.userId,
-      organizationId: input.organizationId,
-    });
-
-    if (caller.organizationStatus === 'suspended') {
-      throw forbidden('Organization is suspended');
-    }
-
-    if (caller.role === 'member') {
-      throw forbidden('Organization membership role cannot create API keys');
-    }
+    await requireOrganizationManager(
+      this.membership,
+      {
+        context: input.context,
+        userId: input.userId,
+        organizationId: input.organizationId,
+      },
+      API_KEY_CREATION_FORBIDDEN,
+    );
 
     const now = this.now();
     const scopes = validatedScopes(input.scopes);
@@ -189,7 +187,7 @@ export class CreateOrganizationApiKey {
       throw forbidden('Organization has reached its active API key limit');
     }
     if (result.kind === 'organization_unavailable') {
-      throw forbidden('Organization is not active');
+      throw forbidden(API_KEY_CREATION_FORBIDDEN);
     }
 
     return {

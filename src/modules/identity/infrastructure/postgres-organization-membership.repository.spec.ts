@@ -323,7 +323,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     ).rejects.toMatchObject({ code: 'ORGANIZATION_OWNER_REQUIRED' });
   });
 
-  it('hides an unknown target from a member with not-found', async () => {
+  // A member holds no authority on the route, so an unknown target gets the
+  // route's denial rather than not-found, which would confirm it (ADR-0048).
+  it('refuses a member naming an unknown target with the route denial', async () => {
     const client = new FakePostgres();
     client.transactionRows = [
       [organizationRow],
@@ -335,7 +337,10 @@ describe('PostgresOrganizationMembershipRepository', () => {
         ...mutationInput('missing'),
         role: 'admin',
       }),
-    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    ).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      message: 'Organization membership role change is forbidden',
+    });
   });
 
   it('returns an already-disabled target without reactivating or deleting it', async () => {

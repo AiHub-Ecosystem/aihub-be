@@ -1,6 +1,11 @@
 import { AppError } from '../../../common/errors/app-error';
 import type { OrganizationStatus } from '../application/api-key-authenticator.port';
-import { authorizeOrganizationMembershipMutation } from '../application/organization-membership.mutation-policy';
+import {
+  ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL,
+  ORGANIZATION_MEMBERSHIP_TARGET_REFUSAL,
+  authorizeOrganizationMembershipMutation,
+  hasOrganizationMembershipRouteAuthority,
+} from '../application/organization-membership.mutation-policy';
 import type {
   ChangeOrganizationMemberRoleInput,
   ListRosterInput,
@@ -523,6 +528,11 @@ export class PostgresOrganizationMembershipRepository
     // record cannot be written there. It is carried out and written after.
     let refused: OrganizationAuditDraft | undefined;
 
+    // Every refusal of a caller outside the route's authority, including
+    // one only these locks reveal, carries the route's Safe Authorization
+    // Denial.
+    const denial = ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL[action];
+
     try {
       return await this.client.transaction(async (transaction) => {
         const organizationRows = await transaction.query(
@@ -531,7 +541,7 @@ export class PostgresOrganizationMembershipRepository
         );
         const organization = organizationRows[0];
         if (!isRecord(organization)) {
-          throw forbidden('Organization membership is required');
+          throw forbidden(denial);
         }
 
         const organizationId = stringValue(organization, 'id');
@@ -546,7 +556,7 @@ export class PostgresOrganizationMembershipRepository
           throw identityStoreError('Identity data is invalid');
         }
         if (organizationStatus === 'suspended') {
-          throw forbidden('Organization is suspended');
+          throw forbidden(denial);
         }
 
         const membershipRows = await transaction.query(
@@ -569,28 +579,28 @@ export class PostgresOrganizationMembershipRepository
           caller.userId !== input.userId ||
           caller.status !== 'active'
         ) {
-          throw forbidden('Organization membership is required');
+          throw forbidden(denial);
         }
 
         const target = lockedMemberships.find(
           (membership) => membership.username === input.username,
         );
-        if (target === undefined) {
-          throw notFound();
-        }
-
-        const decision = authorizeOrganizationMembershipMutation({
-          action,
-          callerUserId: caller.userId,
-          callerRole: caller.role,
-          targetUserId: target.userId,
-          targetRole: target.role,
-          targetStatus: target.status,
-          ...(requestedRole === undefined ? {} : { requestedRole }),
-        });
-        if (decision.kind === 'forbidden') {
-          // Recorded: the caller belongs to this Organization and the target is
-          // real, which is exactly the refusal a compliance reader looks for.
+        const decision =
+          target &&
+          authorizeOrganizationMembershipMutation({
+            action,
+            callerUserId: caller.userId,
+            callerRole: caller.role,
+            targetUserId: target.userId,
+            targetRole: target.role,
+            targetStatus: target.status,
+            ...(requestedRole === undefined ? {} : { requestedRole }),
+          });
+        if (target && decision?.kind === 'forbidden') {
+          // Recorded exactly when the target-level policy refuses, as before
+          // route authority existed: the caller belongs to this Organization
+          // and the target is real, which is the refusal a compliance reader
+          // looks for.
           refused = membershipAuditDraft(
             action,
             target,
@@ -598,7 +608,26 @@ export class PostgresOrganizationMembershipRepository
             requestedRole,
             'insufficient_authority',
           );
-          throw forbidden('Organization membership mutation is not allowed');
+        }
+
+        // Answered before the target's existence can show: a caller without
+        // authority on the route gets the same answer for a real username and
+        // an unknown one (ADR-0048).
+        if (
+          !hasOrganizationMembershipRouteAuthority({
+            action,
+            callerRole: caller.role,
+            targetIsCaller: target?.userId === caller.userId,
+          })
+        ) {
+          throw forbidden(denial);
+        }
+
+        if (!target || !decision) {
+          throw notFound();
+        }
+        if (decision.kind === 'forbidden') {
+          throw forbidden(ORGANIZATION_MEMBERSHIP_TARGET_REFUSAL[action]);
         }
         if (decision.kind === 'target_unavailable') {
           throw notFound();

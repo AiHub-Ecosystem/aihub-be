@@ -6,9 +6,11 @@ import type { ApiKeyCachePort } from './api-key-authenticator.port';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
 import {
   forbidden,
-  requireActiveMembership,
+  requireOrganizationManager,
 } from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
+
+const API_KEY_ROTATION_FORBIDDEN = 'Organization API key rotation is forbidden';
 
 export interface RotateOrganizationApiKeyInput {
   readonly context: RequestContext;
@@ -52,19 +54,15 @@ export class RotateOrganizationApiKey {
   async rotate(
     input: RotateOrganizationApiKeyInput,
   ): Promise<RotatedOrganizationApiKey> {
-    const caller = await requireActiveMembership(this.membership, {
-      context: input.context,
-      userId: input.userId,
-      organizationId: input.organizationId,
-    });
-
-    if (caller.organizationStatus === 'suspended') {
-      throw forbidden('Organization is suspended');
-    }
-
-    if (caller.role === 'member') {
-      throw forbidden('Organization membership role cannot rotate API keys');
-    }
+    await requireOrganizationManager(
+      this.membership,
+      {
+        context: input.context,
+        userId: input.userId,
+        organizationId: input.organizationId,
+      },
+      API_KEY_ROTATION_FORBIDDEN,
+    );
 
     const now = this.now();
     const generated = generateApiKey(now);
@@ -92,7 +90,7 @@ export class RotateOrganizationApiKey {
       throw forbidden('API key cannot be rotated');
     }
     if (result.kind === 'organization_unavailable') {
-      throw forbidden('Organization is not active');
+      throw forbidden(API_KEY_ROTATION_FORBIDDEN);
     }
 
     // The durable change is committed by this point. Purging only closes the

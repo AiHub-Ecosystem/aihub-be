@@ -7,9 +7,12 @@ import type { OrganizationApiKeyView } from './organization-api-key-view';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
 import {
   forbidden,
-  requireActiveMembership,
+  requireOrganizationManager,
 } from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
+
+const API_KEY_REVOCATION_FORBIDDEN =
+  'Organization API key revocation is forbidden';
 
 export interface RevokeOrganizationApiKeyCommand {
   readonly context: RequestContext;
@@ -40,19 +43,15 @@ export class RevokeOrganizationApiKey {
   async revoke(
     input: RevokeOrganizationApiKeyCommand,
   ): Promise<OrganizationApiKeyView> {
-    const caller = await requireActiveMembership(this.membership, {
-      context: input.context,
-      userId: input.userId,
-      organizationId: input.organizationId,
-    });
-
-    if (caller.organizationStatus === 'suspended') {
-      throw forbidden('Organization is suspended');
-    }
-
-    if (caller.role === 'member') {
-      throw forbidden('Organization membership role cannot revoke API keys');
-    }
+    await requireOrganizationManager(
+      this.membership,
+      {
+        context: input.context,
+        userId: input.userId,
+        organizationId: input.organizationId,
+      },
+      API_KEY_REVOCATION_FORBIDDEN,
+    );
 
     const now = this.now();
     const result = await this.apiKeys.revokeApiKey({
@@ -72,7 +71,7 @@ export class RevokeOrganizationApiKey {
       });
     }
     if (result.kind === 'organization_unavailable') {
-      throw forbidden('Organization is not active');
+      throw forbidden(API_KEY_REVOCATION_FORBIDDEN);
     }
 
     // Purged on the repeat request too, not only when this call changed

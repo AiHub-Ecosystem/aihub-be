@@ -277,41 +277,65 @@ describe('Organization API key revocation HTTP flow', () => {
     expect(response.statusCode).toBe(200);
   });
 
-  it('denies an ordinary member', async () => {
-    callerRole = 'member';
+  // One literal for every caller outside this route's authority: each case
+  // equals it, so no two refusals can differ by status, code, or message.
+  it.each<[string, () => void, boolean]>([
+    [
+      'no membership in the organization',
+      () => {
+        callerMembershipExists = false;
+      },
+      false,
+    ],
+    [
+      'a disabled membership',
+      () => {
+        callerStatus = 'disabled';
+      },
+      false,
+    ],
+    [
+      'an ordinary member of an active organization',
+      () => {
+        callerRole = 'member';
+      },
+      false,
+    ],
+    [
+      'an owner of a suspended organization',
+      () => {
+        organizationStatus = 'suspended';
+      },
+      false,
+    ],
+    [
+      'an organization suspended inside the transaction',
+      () => {
+        apiKeys.revokeApiKey.mockResolvedValue({
+          kind: 'organization_unavailable',
+        });
+      },
+      true,
+    ],
+  ])('gives %s the same denial', async (_label, arrange, storeReached) => {
+    arrange();
 
     const response = await revoke();
 
-    expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe('FORBIDDEN');
-    expect(apiKeys.revokeApiKey).not.toHaveBeenCalled();
-  });
-
-  it('denies a caller with no membership in the organization', async () => {
-    callerMembershipExists = false;
-
-    const response = await revoke();
-
-    expect(response.statusCode).toBe(403);
-    expect(apiKeys.revokeApiKey).not.toHaveBeenCalled();
-  });
-
-  it('denies a caller whose membership is disabled', async () => {
-    callerStatus = 'disabled';
-
-    const response = await revoke();
-
-    expect(response.statusCode).toBe(403);
-    expect(apiKeys.revokeApiKey).not.toHaveBeenCalled();
-  });
-
-  it('denies withdrawal for a suspended organization', async () => {
-    organizationStatus = 'suspended';
-
-    const response = await revoke();
-
-    expect(response.statusCode).toBe(403);
-    expect(apiKeys.revokeApiKey).not.toHaveBeenCalled();
+    expect({ status: response.statusCode, body: response.json() }).toEqual({
+      status: 403,
+      body: {
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Organization API key revocation is forbidden',
+          request_id: REQUEST_ID,
+          retryable: false,
+        },
+      },
+    });
+    expect(apiKeys.revokeApiKey.mock.calls.length > 0).toBe(storeReached);
+    // No refusal purges a cache entry: nothing was withdrawn.
+    expect(cache.delete).not.toHaveBeenCalled();
   });
 
   it('rejects an unauthenticated request', async () => {
@@ -328,17 +352,6 @@ describe('Organization API key revocation HTTP flow', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json().error.code).toBe('NOT_FOUND');
-    expect(cache.delete).not.toHaveBeenCalled();
-  });
-
-  it('denies withdrawal when the organization is suspended inside the transaction', async () => {
-    apiKeys.revokeApiKey.mockResolvedValue({
-      kind: 'organization_unavailable',
-    });
-
-    const response = await revoke();
-
-    expect(response.statusCode).toBe(403);
     expect(cache.delete).not.toHaveBeenCalled();
   });
 });
