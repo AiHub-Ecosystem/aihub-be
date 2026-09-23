@@ -7,6 +7,9 @@
   // Severity lives here rather than in a `--deny-warnings` flag: oxlint exits
   // 0 on warnings, so `pnpm lint` would report findings and still pass. Keeping
   // it in the config stops `pnpm lint` and `.husky/pre-commit` from drifting.
+  "options": {
+    "typeAware": true
+  },
   "categories": {
     "correctness": "error"
   },
@@ -32,7 +35,38 @@
     // spec-file idiom. Enabling the two by name keeps this a positive list —
     // nothing is switched off to make the run green.
     "promise/always-return": "error",
-    "import/no-named-as-default-member": "error"
+    "import/no-named-as-default-member": "error",
+    // Type-aware rules for #110 — gateway defect class. `no-floating-promises`,
+    // `no-misused-promises`, `await-thenable` are the direct gateway failure modes
+    // (dropped await on usage/quota, misused await). They are `error` and currently
+    // 0 findings — the gateway boundary is clean. The remaining type-aware rules
+    // are correct but their backlog is measured below; they are not left off to
+    // keep green silently — each `off` carries its reason and will be re-enabled
+    // in follow-ups once the `any` surface (scripts/test, untyped DB rows, mocks)
+    // is narrowed. Runtime measured with `--debug timings` at 2.6s (<8s) so this
+    // set stays in `pnpm verify` rather than a separate lane.
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+    // Backlog 665 `no-unsafe-*` (351 member-access, 142 assignment, 67 call, 63 return, 42 argument)
+    // across src/scripts/test/ops — mostly `any` from CJS interop, Prisma `any` rows, and Jest `any` mocks.
+    // Not gateway promise defects; disabled with reason, not silently. Follow-up: narrow `any` at
+    // ports/adapters and add typed fixtures, then re-enable one rule at a time.
+    "typescript/no-unsafe-assignment": "off",
+    "typescript/no-unsafe-member-access": "off",
+    "typescript/no-unsafe-call": "off",
+    "typescript/no-unsafe-return": "off",
+    "typescript/no-unsafe-argument": "off",
+    // `unbound-method` 112 findings: `this` scoping on method refs (Fastify hooks, `Array.sort` callbacks).
+    // Not a floating-promise defect; disabled with reason. Fix is `this: void` annotation or arrow
+    // function — re-enable after codemod in dedicated cleanup.
+    "typescript/unbound-method": "off",
+    // `no-base-to-string` 4, `restrict-template-expressions` 3, `no-misused-spread` 1, `require-array-sort-compare` 1
+    // — not gateway promise defects; disabled with reason, keep `correctness` syntax-only set clean.
+    "typescript/no-base-to-string": "off",
+    "typescript/restrict-template-expressions": "off",
+    "typescript/no-misused-spread": "off",
+    "typescript/require-array-sort-compare": "off"
   },
   // Mirrors `files.ignore` in biome.json. `test/fixtures` holds captured
   // downstream responses, which are data rather than source.
