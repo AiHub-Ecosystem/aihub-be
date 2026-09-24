@@ -27,9 +27,12 @@ describe('ResendEmailSender', () => {
     expect(JSON.parse(String(calls[0]?.init?.body))).toMatchObject({
       from: 'AIHUB <no-reply@example.com>',
       to: ['person@example.com'],
-      subject: 'Verify your AIHUB email address',
+      subject: 'Xác minh địa chỉ email AIHUB',
     });
-    expect(String(calls[0]?.init?.body)).toContain('opaque-token');
+    const body = String(calls[0]?.init?.body);
+    expect(body).toContain('opaque-token');
+    expect(body).toContain('lúc 07:00 20 tháng 9, 2026 (giờ Việt Nam)');
+    expect(body).not.toContain('2026-09-20T00:00:00.000Z');
     expect(calls[0]?.init?.signal).toBeInstanceOf(AbortSignal);
   });
 
@@ -160,15 +163,19 @@ describe('ResendEmailSender', () => {
         'https://customer.example.com/web&amp;more/verify-email?token=a%2Bb%2Fc%3Dd';
 
       expect(payload.html).toContain(`<a href="${htmlLink}"`);
-      expect(payload.html).toContain('Verify email');
-      expect(payload.html).toContain('2026-09-20T00:00:00.000Z');
+      expect(payload.html).toContain('<html lang="vi">');
+      expect(payload.html).toContain('Xác nhận email');
+      expect(payload.html).toContain('lúc 07:00 20 tháng 9, 2026');
+      expect(payload.html).toContain('(giờ Việt Nam)');
       expect(payload.html).toContain(
-        'This link activates your account once. If your email is already verified, opening this link again will still show success.',
+        'Liên kết này chỉ dùng để kích hoạt tài khoản một lần. Nếu email đã được xác minh, mở lại liên kết vẫn sẽ hiển thị xác nhận thành công.',
       );
       expect(payload.text).toContain(link);
-      expect(payload.text).toContain('2026-09-20T00:00:00.000Z');
       expect(payload.text).toContain(
-        'This link activates your account once. If your email is already verified, opening this link again will still show success.',
+        'lúc 07:00 20 tháng 9, 2026 (giờ Việt Nam)',
+      );
+      expect(payload.text).toContain(
+        'Liên kết này chỉ dùng để kích hoạt tài khoản một lần. Nếu email đã được xác minh, mở lại liên kết vẫn sẽ hiển thị xác nhận thành công.',
       );
       expect(payload.text).not.toContain('one-time verification token');
       expect(body).not.toContain('a+b/c=d');

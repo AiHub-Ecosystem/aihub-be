@@ -10,7 +10,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 
 - **Organization:** the tenant that owns API keys, identity configuration, quotas, usage, and downstream policy.
 - **Organization Identity Configuration:** the Organization-owned settings AIHUB uses to verify User Assertions: issuer, a JWKS URL or inline public JWKS, allowed algorithms, maximum assertion TTL, and active/disabled status.
-- **Customer Web:** the separate Next.js application through which invited people access the AIHUB demo; the existing sandbox uses Clerk, while future user-facing surfaces may consume AIHUB User Access JWTs through its BFF.
+- **Customer Web:** the user-facing AIHUB console in the `AiHub-Frontend` repository, served at `aihubproduction.com`, which advertises public account registration and Self-serve Organization creation. Its existing Clerk-backed sandbox flow remains transitional until [issue #94](https://github.com/AiHub-Ecosystem/aihub-be/issues/94) cuts over; the separate sandbox demo keeps its own server-held Sandbox API key.
 - **Customer User:** a person authenticated by the Customer Web; this is not an AIHUB account.
 - **AIHUB User Account:** a credential-bearing account managed by AIHUB for user-facing access; it is distinct from an Organization and from the existing Customer User term until the Customer Web boundary is migrated.
 - **Auth Identity:** a login identity attached to an AIHUB User Account, such as the Phase 1 local email/password identity or a future Google identity; it is not itself an Organization, API key, or username.
@@ -63,7 +63,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Public grading result:** the normalized `{ data, meta }` envelope safe for the Customer Web; provider-only identifiers, timing, credentials, assertions, audio, and raw downstream detail are excluded.
 - **API key:** an organization credential presented with `X-API-Key`; AIHUB stores only its SHA-256 hash and metadata.
 - **Scope:** the permission an API key carries for one class of operation, written as `<entitlement>.<action>` such as `writing.grade`; the Operation Catalog owns the scope each public operation requires.
-- **Entitlement:** the capability an Organization is licensed for, such as `writing` or `speaking`; it is the leading segment of a scope and bounds which scopes that Organization's keys may carry, so a scope outside the Organization's entitlements grants nothing.
+- **Entitlement:** a service capability configured for an Organization, such as `writing` or `speaking`, which bounds the scopes its API keys may carry. Effective use also requires an active Organization and a matching API key scope.
 - **API key status:** the lifecycle an API key is in — `active` while it may authenticate, `expired` once its expiry moment has passed, `revoked` once it has been withdrawn; expiry arrives on its own without anyone acting, revocation does not.
 - **API key rotation:** replacing an API key's credential while preserving the authority it carried; the replacement is a new key, the old one is withdrawn in the same act, and no window exists in which both work.
 - **Environment:** the request tier derived from its deployment hostname; an API key may be restricted to a set of allowed environments.

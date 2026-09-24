@@ -58,10 +58,29 @@ function normalizeCustomerWebBaseUrl(
   return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}`;
 }
 
-function escapeHtmlAttribute(value: string): string {
-  return value.replace(/[&"]/g, (character) =>
-    character === '&' ? '&amp;' : '&quot;',
-  );
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => {
+    switch (character) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      default:
+        return '&#39;';
+    }
+  });
+}
+
+function formatVietnameseDateTime(value: Date): string {
+  return new Intl.DateTimeFormat('vi-VN', {
+    dateStyle: 'long',
+    timeStyle: 'short',
+    timeZone: 'Asia/Ho_Chi_Minh',
+  }).format(value);
 }
 
 export class ResendEmailSender implements EmailSenderPort {
@@ -107,34 +126,48 @@ export class ResendEmailSender implements EmailSenderPort {
 
   async sendVerificationEmail(input: VerificationEmailInput): Promise<void> {
     const url = this.deepLinkUrl('/verify-email', input.token);
-    const expiresAt = input.expiresAt.toISOString();
+    const expiresAt = formatVietnameseDateTime(input.expiresAt);
     const repeatVerificationCopy =
-      'This link activates your account once. If your email is already verified, opening this link again will still show success.';
+      'Liên kết này chỉ dùng để kích hoạt tài khoản một lần. Nếu email đã được xác minh, mở lại liên kết vẫn sẽ hiển thị xác nhận thành công.';
     const text =
       url === undefined
         ? [
-            'Use this one-time verification token to activate your AIHUB account:',
+            'Dùng mã xác minh một lần này để kích hoạt tài khoản AIHUB:',
             input.token,
             '',
-            `This token expires at ${expiresAt}.`,
+            `Mã xác minh hết hạn ${expiresAt} (giờ Việt Nam).`,
           ].join('\n')
         : [
-            'Verify your AIHUB email address using this link:',
+            'Chào bạn,',
+            '',
+            'Cảm ơn bạn đã đăng ký AIHUB. Nhấn vào liên kết bên dưới để xác minh địa chỉ email và kích hoạt tài khoản:',
+            '',
             url,
             '',
-            `This link expires at ${expiresAt}.`,
+            `Liên kết có hiệu lực đến ${expiresAt} (giờ Việt Nam).`,
             '',
             repeatVerificationCopy,
+            '',
+            'Nếu bạn không tạo tài khoản AIHUB, hãy bỏ qua email này.',
           ].join('\n');
     const html =
       url === undefined
         ? undefined
         : [
-            '<!doctype html><html><body>',
-            '<p>Verify your AIHUB email address:</p>',
-            `<p><a href="${escapeHtmlAttribute(url)}" style="display:inline-block;padding:12px 20px;background-color:#0057b8;color:#ffffff;text-decoration:none;border-radius:4px">Verify email</a></p>`,
-            `<p>This link expires at ${expiresAt}.</p>`,
-            `<p>${repeatVerificationCopy}</p>`,
+            '<!doctype html><html lang="vi"><body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#1d2838">',
+            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9"><tr><td align="center" style="padding:32px 16px">',
+            '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;border:1px solid #e4e7ec;border-radius:16px;background-color:#ffffff"><tr><td style="padding:36px">',
+            '<p style="margin:0 0 12px;color:#3a64fa;font-size:12px;font-weight:700;letter-spacing:2px">AIHUB CONSOLE</p>',
+            '<h1 style="margin:0 0 20px;color:#1d2838;font-size:28px;line-height:1.25">Xác minh email</h1>',
+            '<p style="margin:0 0 12px;font-size:16px;line-height:1.6">Chào bạn,</p>',
+            '<p style="margin:0 0 24px;color:#475467;font-size:16px;line-height:1.6">Cảm ơn bạn đã đăng ký AIHUB. Nhấn nút bên dưới để xác minh địa chỉ email và kích hoạt tài khoản.</p>',
+            `<p style="margin:0 0 24px"><a href="${escapeHtml(url)}" style="display:inline-block;padding:14px 24px;border-radius:8px;background-color:#3a64fa;color:#ffffff;font-size:16px;font-weight:700;line-height:1.4;text-align:center;text-decoration:none">Xác nhận email</a></p>`,
+            `<p style="margin:0 0 16px;color:#475467;font-size:14px;line-height:1.6">Liên kết có hiệu lực đến <strong style="color:#1d2838">${escapeHtml(expiresAt)}</strong> (giờ Việt Nam).</p>`,
+            `<p style="margin:0 0 12px;color:#475467;font-size:14px;line-height:1.6">${escapeHtml(repeatVerificationCopy)}</p>`,
+            '<p style="margin:0;color:#475467;font-size:14px;line-height:1.6">Nếu bạn không tạo tài khoản AIHUB, hãy bỏ qua email này.</p>',
+            '<hr style="height:1px;margin:28px 0 16px;border:0;background-color:#e4e7ec">',
+            '<p style="margin:0;color:#667084;font-size:12px">AIHUB Console</p>',
+            '</td></tr></table></td></tr></table>',
             '</body></html>',
           ].join('');
 
@@ -147,7 +180,7 @@ export class ResendEmailSender implements EmailSenderPort {
       body: JSON.stringify({
         from: this.from,
         to: [input.email],
-        subject: 'Verify your AIHUB email address',
+        subject: 'Xác minh địa chỉ email AIHUB',
         text,
         ...(html === undefined ? {} : { html }),
       }),
