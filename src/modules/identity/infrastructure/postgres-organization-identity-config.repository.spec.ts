@@ -21,6 +21,17 @@ class FakePostgres implements PostgresIdentityClient {
 
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]> {
     this.queries.push({ text, values });
+    if (text.includes("status = 'active'")) {
+      return Promise.resolve(
+        this.result.filter(
+          (candidate) =>
+            typeof candidate === 'object' &&
+            candidate !== null &&
+            'status' in candidate &&
+            candidate.status === 'active',
+        ),
+      );
+    }
     return Promise.resolve(this.result);
   }
 
@@ -59,14 +70,14 @@ describe('PostgresOrganizationIdentityConfigRepository', () => {
     expect(client.queries[0]?.text).toContain("status = 'active'");
   });
 
-  it('filters disabled configs from the active lookup at the SQL boundary', async () => {
+  it('excludes disabled configs from the active lookup', async () => {
     const client = new FakePostgres();
-    client.result = [];
+    client.result = [{ ...row, status: 'disabled' }];
 
     await expect(
       new PostgresOrganizationIdentityConfigRepository(
         client,
-      ).findActiveByOrganizationId('org_missing'),
+      ).findActiveByOrganizationId('org_acme'),
     ).resolves.toBeNull();
     expect(client.queries[0]?.text).toContain("status = 'active'");
   });
