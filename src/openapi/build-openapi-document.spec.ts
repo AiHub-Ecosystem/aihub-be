@@ -670,6 +670,9 @@ describe('buildOpenApiDocument', () => {
     expect(JSON.stringify(doc.components.responses.Error429)).toContain(
       'CONCURRENCY_LIMIT',
     );
+    expect(JSON.stringify(doc.components.responses.Error403)).toContain(
+      'IDENTITY_CONFIG_REQUIRED',
+    );
   });
 
   it('documents stable retry fields on every error response', () => {

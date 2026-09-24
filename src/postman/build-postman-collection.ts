@@ -84,6 +84,7 @@ function assertEnvelope(operationId: string): readonly string[] {
  * §G "D2 Postman tests tối thiểu" in order. Items 13 and 14
  * cannot pass yet — each names the slice it is waiting on, per that issue's
  * acceptance criteria, instead of silently asserting today's (wrong) result.
+ * Item 16 is the post-freeze issue #156 addition.
  */
 const D1_SCENARIOS: readonly Scenario[] = [
   {
@@ -349,6 +350,26 @@ const D1_SCENARIOS: readonly Scenario[] = [
       '    pm.expect(response.json().data).to.eql(pm.response.json().data);',
       '  });',
       '});',
+    ],
+  },
+  {
+    name: '16. Missing or disabled identity configuration',
+    description:
+      'Fill {{identityConfigRequiredApiKey}} with a valid API key for an Organization without active identity configuration. Send a valid User Assertion; grading must fail before dispatch.',
+    path: TASK1_GRADE_PATH,
+    headers: [
+      JSON_HEADER,
+      {
+        key: 'X-API-Key',
+        value: '{{identityConfigRequiredApiKey}}',
+      },
+      USER_ASSERTION_HEADER,
+      IDEMPOTENCY_HEADER,
+    ],
+    body: TASK1_GRADE_BODY,
+    testScript: [
+      assertStatus(403),
+      ...assertErrorCode(['IDENTITY_CONFIG_REQUIRED']),
     ],
   },
 ];
@@ -676,6 +697,13 @@ export async function buildPostmanCollection(
       {
         key: 'wrongScopeApiKey',
         value: 'REPLACE_WITH_A_KEY_WITHOUT_WRITING_GRADE_SCOPE',
+      },
+      {
+        key: 'identityConfigRequiredApiKey',
+        value:
+          'REPLACE_WITH_A_KEY_FOR_AN_ORGANIZATION_WITHOUT_ACTIVE_IDENTITY_CONFIG',
+        description:
+          'Valid Writing API key for an Organization with missing or disabled user identity configuration.',
       },
       {
         key: 'userAssertion',

@@ -58,12 +58,14 @@ describe('Writing user assertion HTTP flow', () => {
   let publicJwk: Record<string, unknown>;
   let capturedContext: RequestContext | undefined;
   let identityConfig: OrganizationIdentityConfig;
+  let identityConfigMissing = false;
   let providerUnavailable = false;
   const originalNodeEnv = process.env.NODE_ENV;
   const originalBypass = process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV;
 
   const configRepository = {
-    findActiveByOrganizationId: async () => identityConfig,
+    findActiveByOrganizationId: async () =>
+      identityConfigMissing ? null : identityConfig,
   };
   const keyProvider: JwksKeyProviderPort = {
     validateRemote: async () => undefined,
@@ -167,6 +169,7 @@ describe('Writing user assertion HTTP flow', () => {
 
   beforeEach(() => {
     capturedContext = undefined;
+    identityConfigMissing = false;
     providerUnavailable = false;
     identityConfig = {
       ...identityConfig,
@@ -220,6 +223,31 @@ describe('Writing user assertion HTTP flow', () => {
       expect(response.json().error.code).toBe('USER_ASSERTION_REQUIRED');
       expect(capturedContext).toBeUndefined();
     }
+  });
+
+  it('reports missing active identity configuration without dispatch or detail leakage', async () => {
+    const signed = await assertion();
+    identityConfigMissing = true;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/grade',
+      headers: apiKeyHeaders(signed),
+      payload: gradePayload,
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error).toMatchObject({
+      code: 'IDENTITY_CONFIG_REQUIRED',
+      message:
+        'Grading requires an active user identity configuration for your Organization. Ask an Organization owner to complete setup; if it is already configured, contact AIHUB support.',
+      request_id: expect.stringMatching(/^req_/),
+      retryable: false,
+    });
+    expect(response.payload).not.toContain(signed);
+    expect(response.payload).not.toContain('test-api-key');
+    expect(response.payload).not.toContain(identityConfig.issuer);
+    expect(capturedContext).toBeUndefined();
   });
 
   it('verifies a valid assertion, binds its actor, and keeps it out of the dispatch body', async () => {

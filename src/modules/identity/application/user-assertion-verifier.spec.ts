@@ -305,6 +305,32 @@ describe('UserAssertionVerifier', () => {
     expect(provider.calls).toEqual([]);
   });
 
+  it('reports a missing active identity configuration before assertion validation', async () => {
+    const fixture = await rsaFixture();
+    const assertion = await token(fixture.privateKey, { jti: 'jti-1' });
+    const provider = new FakeKeyProvider(fixture.jwks);
+    const repository: Pick<
+      OrganizationIdentityConfigRepositoryPort,
+      'findActiveByOrganizationId'
+    > = {
+      findActiveByOrganizationId: () => Promise.resolve(null),
+    };
+
+    await expect(
+      verifier(provider, repository).verify({
+        signedAssertion: assertion,
+        organizationId: 'org_acme',
+      }),
+    ).rejects.toMatchObject({
+      code: 'IDENTITY_CONFIG_REQUIRED',
+      httpStatus: 403,
+      message:
+        'Grading requires an active user identity configuration for your Organization. Ask an Organization owner to complete setup; if it is already configured, contact AIHUB support.',
+      retryable: false,
+    });
+    expect(provider.calls).toEqual([]);
+  });
+
   it('maps an unavailable identity configuration to the public provider error', async () => {
     const repository: Pick<
       OrganizationIdentityConfigRepositoryPort,

@@ -59,7 +59,7 @@ describe('PostgresOrganizationIdentityConfigRepository', () => {
     expect(client.queries[0]?.text).toContain("status = 'active'");
   });
 
-  it('returns null when the organization has no active identity config', async () => {
+  it('filters disabled configs from the active lookup at the SQL boundary', async () => {
     const client = new FakePostgres();
     client.result = [];
 
@@ -68,6 +68,7 @@ describe('PostgresOrganizationIdentityConfigRepository', () => {
         client,
       ).findActiveByOrganizationId('org_missing'),
     ).resolves.toBeNull();
+    expect(client.queries[0]?.text).toContain("status = 'active'");
   });
 
   it('reads disabled config rows and preserves their update time', async () => {

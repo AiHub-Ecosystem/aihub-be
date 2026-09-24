@@ -2572,6 +2572,51 @@
               }
             }
           ]
+        },
+        {
+          "name": "16. Missing or disabled identity configuration",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{identityConfigRequiredApiKey}}"
+              },
+              {
+                "key": "X-User-Assertion",
+                "value": "{{userAssertion}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
+            },
+            "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
+            "description": "Fill {{identityConfigRequiredApiKey}} with a valid API key for an Organization without active identity configuration. Send a valid User Assertion; grading must fail before dispatch."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 403', function () { pm.response.to.have.status(403); });",
+                  "pm.test('error.code is one of IDENTITY_CONFIG_REQUIRED', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect([\"IDENTITY_CONFIG_REQUIRED\"]).to.include(body.error.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -2825,6 +2870,11 @@
     {
       "key": "wrongScopeApiKey",
       "value": "REPLACE_WITH_A_KEY_WITHOUT_WRITING_GRADE_SCOPE"
+    },
+    {
+      "key": "identityConfigRequiredApiKey",
+      "value": "REPLACE_WITH_A_KEY_FOR_AN_ORGANIZATION_WITHOUT_ACTIVE_IDENTITY_CONFIG",
+      "description": "Valid Writing API key for an Organization with missing or disabled user identity configuration."
     },
     {
       "key": "userAssertion",

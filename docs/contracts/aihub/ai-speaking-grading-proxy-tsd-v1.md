@@ -276,6 +276,7 @@ that a retry is safe. Speaking has no idempotent replay.
 | Missing/unknown/expired AIHUB API key                        |  401 | UNAUTHORIZED                  | No                         |
 | Missing user assertion                                       |  401 | USER_ASSERTION_REQUIRED       | No                         |
 | Invalid user assertion                                       |  401 | INVALID_USER_ASSERTION        | No                         |
+| Organization has no active identity configuration            |  403 | IDENTITY_CONFIG_REQUIRED      | No                         |
 | Key lacks speaking.grade                                     |  403 | FORBIDDEN                     | No                         |
 | Key not valid for environment                                |  403 | ENVIRONMENT_NOT_ALLOWED       | No                         |
 | Route not found                                              |  404 | NOT_FOUND                     | No                         |

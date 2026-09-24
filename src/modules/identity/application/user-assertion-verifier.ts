@@ -241,7 +241,12 @@ export class UserAssertionVerifier implements UserAssertionVerifierPort {
     }
 
     if (config === null) {
-      throw invalidUserAssertion();
+      throw new AppError({
+        code: 'IDENTITY_CONFIG_REQUIRED',
+        message:
+          'Grading requires an active user identity configuration for your Organization. Ask an Organization owner to complete setup; if it is already configured, contact AIHUB support.',
+        retryable: false,
+      });
     }
 
     return config;

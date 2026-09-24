@@ -139,11 +139,39 @@ describe('buildPostmanCollection', () => {
     );
   });
 
-  it('has exactly 16 D1 handover test cases (2 happy-path sub-cases + items 2-15)', async () => {
+  it('has 17 D1 handover test cases including the post-freeze issue #156 case', async () => {
     const collection = await build();
     const folder = findD1Folder(collection);
 
-    expect(folder.item).toHaveLength(16); // 2 happy-path sub-cases for item 1 + items 2-15
+    expect(folder.item).toHaveLength(17); // 2 happy-path sub-cases + items 2-16
+  });
+
+  it('documents the 403 response when organization identity config is missing or disabled', async () => {
+    const collection = await build();
+    const folder = findD1Folder(collection);
+    const scenario = folder.item?.find(
+      (item) => item.name === '16. Missing or disabled identity configuration',
+    );
+    const headers = scenario?.request?.header ?? [];
+    const script = scenario?.event?.[0]?.script.exec.join('\n') ?? '';
+    const variables = collection.variable as readonly { key: string }[];
+
+    expect(variables.map((variable) => variable.key)).toContain(
+      'identityConfigRequiredApiKey',
+    );
+    expect(scenario?.request?.url).toBe(
+      '{{baseUrl}}/v1/ielts/writing/task1/grade',
+    );
+    expect(headers).toContainEqual({
+      key: 'X-API-Key',
+      value: '{{identityConfigRequiredApiKey}}',
+    });
+    expect(headers).toContainEqual({
+      key: 'X-User-Assertion',
+      value: '{{userAssertion}}',
+    });
+    expect(script).toContain('responds with HTTP 403');
+    expect(script).toContain('IDENTITY_CONFIG_REQUIRED');
   });
 
   it('names internal metering on every deferred telemetry case', async () => {
