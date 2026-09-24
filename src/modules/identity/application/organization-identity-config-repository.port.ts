@@ -20,10 +20,18 @@ export interface OrganizationIdentityConfig {
   readonly status: IdentityConfigStatus;
 }
 
+export interface StoredOrganizationIdentityConfig
+  extends OrganizationIdentityConfig {
+  readonly updatedAt: Date;
+}
+
 export interface OrganizationIdentityConfigRepositoryPort {
   findActiveByOrganizationId(
     organizationId: string,
   ): Promise<OrganizationIdentityConfig | null>;
+  findByOrganizationId(
+    organizationId: string,
+  ): Promise<StoredOrganizationIdentityConfig | null>;
 }
 
 export const ORGANIZATION_IDENTITY_CONFIG_REPOSITORY = Symbol(

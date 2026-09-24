@@ -46,7 +46,10 @@ function identityProviderUnavailable(cause?: unknown): AppError {
  */
 export class MintSandboxAssertion implements SandboxAssertionMinterPort {
   constructor(
-    private readonly configRepository: OrganizationIdentityConfigRepositoryPort,
+    private readonly configRepository: Pick<
+      OrganizationIdentityConfigRepositoryPort,
+      'findActiveByOrganizationId'
+    >,
     private readonly signer: SandboxAssertionSignerPort,
     private readonly now: () => number = () => Math.floor(Date.now() / 1_000),
     private readonly newJti: () => string = randomUUID,

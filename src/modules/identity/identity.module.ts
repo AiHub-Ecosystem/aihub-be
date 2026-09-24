@@ -79,6 +79,8 @@ import {
 } from './application/organization-rename.port';
 import { ReadOrganizationAuditEvents } from './application/read-organization-audit-events';
 import { READ_ORGANIZATION_AUDIT_EVENTS } from './application/read-organization-audit-events.port';
+import { ReadOrganizationIdentityConfig } from './application/read-organization-identity-config';
+import { READ_ORGANIZATION_IDENTITY_CONFIG } from './application/read-organization-identity-config.port';
 import { RenameOrganization } from './application/rename-organization';
 import { RENAME_ORGANIZATION } from './application/rename-organization.port';
 import { RevokeOrganizationApiKey } from './application/revoke-organization-api-key';
@@ -120,6 +122,7 @@ import {
 import { ApiKeyGuard } from './presentation/api-key.guard';
 import { OrganizationApiKeyController } from './presentation/organization-api-key.controller';
 import { OrganizationAuditEventController } from './presentation/organization-audit-event.controller';
+import { OrganizationIdentityConfigController } from './presentation/organization-identity-config.controller';
 import { OrganizationInvitationController } from './presentation/organization-invitation.controller';
 import { OrganizationMembershipController } from './presentation/organization-membership.controller';
 import { OrganizationController } from './presentation/organization.controller';
@@ -137,6 +140,7 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
     OrganizationInvitationController,
     OrganizationApiKeyController,
     OrganizationAuditEventController,
+    OrganizationIdentityConfigController,
   ],
   providers: [
     {
@@ -223,6 +227,17 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
         auditEvents: OrganizationAuditEventReadPort,
       ) => new ReadOrganizationAuditEvents(membership, auditEvents),
       inject: [ORGANIZATION_MEMBERSHIP, ORGANIZATION_AUDIT_EVENT_READ],
+    },
+    {
+      provide: READ_ORGANIZATION_IDENTITY_CONFIG,
+      useFactory: (
+        membership: OrganizationMembershipPort,
+        configs: OrganizationIdentityConfigRepositoryPort,
+      ) => new ReadOrganizationIdentityConfig(membership, configs),
+      inject: [
+        ORGANIZATION_MEMBERSHIP,
+        ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
+      ],
     },
     {
       provide: LIST_ORGANIZATION_API_KEYS,

@@ -173,7 +173,10 @@ function validateClaims(
 
 export class UserAssertionVerifier implements UserAssertionVerifierPort {
   constructor(
-    private readonly configRepository: OrganizationIdentityConfigRepositoryPort,
+    private readonly configRepository: Pick<
+      OrganizationIdentityConfigRepositoryPort,
+      'findActiveByOrganizationId'
+    >,
     private readonly keyProvider: JwksKeyProviderPort,
     private readonly crypto: UserAssertionCryptoPort,
     private readonly now: () => number = () => Math.floor(Date.now() / 1_000),

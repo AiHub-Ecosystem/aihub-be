@@ -74,6 +74,8 @@ const ORGANIZATION_API_KEY_ITEM_PATH =
 const ORGANIZATION_API_KEY_REVOKE_OPERATION_ID = 'organizations.apiKeys.revoke';
 const ORGANIZATION_API_KEY_ROTATE_PATH =
   '/v1/organizations/{organization_id}/api-keys/{api_key_id}/rotate';
+const ORGANIZATION_IDENTITY_CONFIG_PATH =
+  '/v1/organizations/{organization_id}/identity-config';
 const ORGANIZATION_API_KEY_ROTATE_OPERATION_ID = 'organizations.apiKeys.rotate';
 const ORGANIZATION_AUDIT_EVENT_PATH =
   '/v1/organizations/{organization_id}/audit-events';
@@ -159,6 +161,7 @@ describe('buildOpenApiDocument', () => {
       ORGANIZATION_API_KEY_PATH,
       ORGANIZATION_API_KEY_ITEM_PATH,
       ORGANIZATION_API_KEY_ROTATE_PATH,
+      ORGANIZATION_IDENTITY_CONFIG_PATH,
       ORGANIZATION_AUDIT_EVENT_PATH,
       ...AUTH_PATHS,
     ]);

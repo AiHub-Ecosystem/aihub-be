@@ -9,6 +9,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 ## Vocabulary
 
 - **Organization:** the tenant that owns API keys, identity configuration, quotas, usage, and downstream policy.
+- **Organization Identity Configuration:** the Organization-owned settings AIHUB uses to verify User Assertions: issuer, a JWKS URL or inline public JWKS, allowed algorithms, maximum assertion TTL, and active/disabled status.
 - **Customer Web:** the separate Next.js application through which invited people access the AIHUB demo; the existing sandbox uses Clerk, while future user-facing surfaces may consume AIHUB User Access JWTs through its BFF.
 - **Customer User:** a person authenticated by the Customer Web; this is not an AIHUB account.
 - **AIHUB User Account:** a credential-bearing account managed by AIHUB for user-facing access; it is distinct from an Organization and from the existing Customer User term until the Customer Web boundary is migrated.

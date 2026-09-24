@@ -2,6 +2,7 @@ import { AppError } from '../../../common/errors/app-error';
 import type {
   OrganizationIdentityConfig,
   OrganizationIdentityConfigRepositoryPort,
+  StoredOrganizationIdentityConfig,
 } from '../application/organization-identity-config-repository.port';
 import {
   IDENTITY_CONFIG_ALGORITHMS,
@@ -23,6 +24,21 @@ const LOOKUP_SQL = `
   FROM organization_identity_configs
   WHERE organization_id = $1
     AND status = 'active'
+  LIMIT 1
+`;
+
+const READ_SQL = `
+  SELECT
+    organization_id,
+    issuer,
+    jwks_url,
+    public_keys_jwks,
+    allowed_algorithms,
+    max_assertion_ttl_seconds,
+    status,
+    updated_at
+  FROM organization_identity_configs
+  WHERE organization_id = $1
   LIMIT 1
 `;
 
@@ -89,6 +105,16 @@ function statusValue(
 ): IdentityConfigStatus | undefined {
   const value = record[key];
   return value === 'active' || value === 'disabled' ? value : undefined;
+}
+
+function dateValue(
+  record: Record<string, unknown>,
+  key: string,
+): Date | undefined {
+  const value = record[key];
+  return value instanceof Date && !Number.isNaN(value.getTime())
+    ? value
+    : undefined;
 }
 
 function positiveTtlValue(
@@ -160,6 +186,20 @@ function mapRecord(value: unknown): OrganizationIdentityConfig | undefined {
   };
 }
 
+function mapStoredRecord(
+  value: unknown,
+): StoredOrganizationIdentityConfig | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const config = mapRecord(value);
+  const updatedAt = dateValue(value, 'updated_at');
+  return config === undefined || updatedAt === undefined
+    ? undefined
+    : { ...config, updatedAt };
+}
+
 export class PostgresOrganizationIdentityConfigRepository
   implements OrganizationIdentityConfigRepositoryPort
 {
@@ -168,18 +208,7 @@ export class PostgresOrganizationIdentityConfigRepository
   async findActiveByOrganizationId(
     organizationId: string,
   ): Promise<OrganizationIdentityConfig | null> {
-    if (organizationId.trim().length === 0) {
-      throw identityStoreError('Identity organization id is invalid');
-    }
-
-    let rows: readonly unknown[];
-    try {
-      rows = await this.client.query(LOOKUP_SQL, [organizationId]);
-    } catch {
-      throw identityStoreError('Identity store is unavailable');
-    }
-
-    const first = rows[0];
+    const first = await this.firstRow(LOOKUP_SQL, organizationId);
     if (first === undefined) {
       return null;
     }
@@ -190,6 +219,39 @@ export class PostgresOrganizationIdentityConfigRepository
     }
 
     return record;
+  }
+
+  async findByOrganizationId(
+    organizationId: string,
+  ): Promise<StoredOrganizationIdentityConfig | null> {
+    const first = await this.firstRow(READ_SQL, organizationId);
+    if (first === undefined) {
+      return null;
+    }
+
+    const record = mapStoredRecord(first);
+    if (record === undefined) {
+      throw identityStoreError('Identity data is invalid');
+    }
+
+    return record;
+  }
+
+  private async firstRow(
+    sql: string,
+    organizationId: string,
+  ): Promise<unknown> {
+    if (organizationId.trim().length === 0) {
+      throw identityStoreError('Identity organization id is invalid');
+    }
+
+    let rows: readonly unknown[];
+    try {
+      rows = await this.client.query(sql, [organizationId]);
+    } catch {
+      throw identityStoreError('Identity store is unavailable');
+    }
+    return rows[0];
   }
 
   async onModuleDestroy(): Promise<void> {

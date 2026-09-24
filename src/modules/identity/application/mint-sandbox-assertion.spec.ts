@@ -31,7 +31,10 @@ class RecordingSigner implements SandboxAssertionSignerPort {
 
 function repository(
   config: OrganizationIdentityConfig | null = CONFIG,
-): OrganizationIdentityConfigRepositoryPort {
+): Pick<
+  OrganizationIdentityConfigRepositoryPort,
+  'findActiveByOrganizationId'
+> {
   return { findActiveByOrganizationId: async () => config };
 }
 
@@ -138,7 +141,7 @@ describe('MintSandboxAssertion', () => {
   it('surfaces a repository outage as an identity provider failure', async () => {
     const service = new MintSandboxAssertion(
       {
-        findActiveByOrganizationId: async () => {
+        findActiveByOrganizationId: async (_organizationId: string) => {
           throw new Error('connection refused');
         },
       },

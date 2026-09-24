@@ -37,6 +37,7 @@ import {
   ORGANIZATION_AUDIT_ACTIONS,
   ORGANIZATION_AUDIT_OUTCOMES,
 } from '../contracts/organization/audit-event';
+import { ReadOrganizationIdentityConfigResponseSchema } from '../contracts/organization/identity-config';
 import {
   AcceptOrganizationInvitationRequestSchema,
   AcceptOrganizationInvitationResponseSchema,
@@ -285,6 +286,8 @@ const ORGANIZATION_API_KEY_ITEM_PATH =
   '/v1/organizations/{organization_id}/api-keys/{api_key_id}';
 const ORGANIZATION_API_KEY_ROTATE_PATH =
   '/v1/organizations/{organization_id}/api-keys/{api_key_id}/rotate';
+const ORGANIZATION_IDENTITY_CONFIG_PATH =
+  '/v1/organizations/{organization_id}/identity-config';
 const ORGANIZATION_AUDIT_EVENT_PATH =
   '/v1/organizations/{organization_id}/audit-events';
 
@@ -1002,6 +1005,43 @@ function organizationAuditEventPathItem(
   };
 }
 
+function organizationIdentityConfigPathItem(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, unknown> {
+  return {
+    get: {
+      operationId: 'organizations.identityConfig.read',
+      summary: 'Read an organization identity configuration',
+      description:
+        'Returns the stored public User Assertion identity configuration to an active owner of an active Organization. Admins, members, disabled memberships, non-members, and owners of suspended Organizations receive the same Safe Authorization Denial. `configured` indicates whether a row exists, including disabled rows; `status` indicates whether that configuration is active. Private JWK members are never returned.',
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        {
+          name: 'organization_id',
+          in: 'path',
+          required: true,
+          description: 'The organization whose identity configuration is read.',
+          schema: { type: 'string', minLength: 1 },
+        },
+      ],
+      responses: {
+        '200': {
+          description:
+            'Stored public identity configuration, or `configured: false` when no row exists.',
+          content: {
+            'application/json': {
+              schema: ReadOrganizationIdentityConfigResponseSchema,
+            },
+          },
+        },
+        ...authErrorResponses(groupedErrors, [401, 403, 500, 503]),
+      },
+    },
+  };
+}
+
 function organizationRosterPathItem(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
 ): Record<string, unknown> {
@@ -1218,6 +1258,8 @@ export function buildOpenApiDocument(version: string): unknown {
     organizationApiKeyItemPathItem(groupedErrors);
   paths[ORGANIZATION_API_KEY_ROTATE_PATH] =
     organizationApiKeyRotatePathItem(groupedErrors);
+  paths[ORGANIZATION_IDENTITY_CONFIG_PATH] =
+    organizationIdentityConfigPathItem(groupedErrors);
   paths[ORGANIZATION_AUDIT_EVENT_PATH] =
     organizationAuditEventPathItem(groupedErrors);
   Object.assign(paths, localAuthPathItems(groupedErrors));

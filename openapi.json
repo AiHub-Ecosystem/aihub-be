@@ -4776,6 +4776,261 @@
         }
       }
     },
+    "/v1/organizations/{organization_id}/identity-config": {
+      "get": {
+        "operationId": "organizations.identityConfig.read",
+        "summary": "Read an organization identity configuration",
+        "description": "Returns the stored public User Assertion identity configuration to an active owner of an active Organization. Admins, members, disabled memberships, non-members, and owners of suspended Organizations receive the same Safe Authorization Denial. `configured` indicates whether a row exists, including disabled rows; `status` indicates whether that configuration is active. Private JWK members are never returned.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization whose identity configuration is read.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stored public identity configuration, or `configured: false` when no row exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "configured",
+                            "issuer",
+                            "jwks_url",
+                            "public_keys_jwks",
+                            "allowed_algorithms",
+                            "max_assertion_ttl_seconds",
+                            "status",
+                            "updated_at"
+                          ],
+                          "properties": {
+                            "configured": {
+                              "const": true,
+                              "type": "boolean"
+                            },
+                            "issuer": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "jwks_url": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "format": "uri",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "public_keys_jwks": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": ["keys"],
+                                  "properties": {
+                                    "keys": {
+                                      "minItems": 1,
+                                      "type": "array",
+                                      "items": {
+                                        "allOf": [
+                                          {
+                                            "type": "object",
+                                            "patternProperties": {
+                                              "^(.*)$": {}
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["d"],
+                                              "properties": {
+                                                "d": {}
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["p"],
+                                              "properties": {
+                                                "p": {}
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["q"],
+                                              "properties": {
+                                                "q": {}
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["dp"],
+                                              "properties": {
+                                                "dp": {}
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["dq"],
+                                              "properties": {
+                                                "dq": {}
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["qi"],
+                                              "properties": {
+                                                "qi": {}
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["oth"],
+                                              "properties": {
+                                                "oth": {}
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["k"],
+                                              "properties": {
+                                                "k": {}
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "allowed_algorithms": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "const": "RS256",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "ES256",
+                                    "type": "string"
+                                  }
+                                ]
+                              }
+                            },
+                            "max_assertion_ttl_seconds": {
+                              "minimum": 1,
+                              "maximum": 3600,
+                              "type": "integer"
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "const": "active",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "disabled",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "updated_at": {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": ["configured"],
+                          "properties": {
+                            "configured": {
+                              "const": false,
+                              "type": "boolean"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
     "/v1/organizations/{organization_id}/audit-events": {
       "get": {
         "operationId": "organizations.auditEvents.list",

@@ -54,7 +54,10 @@ async function organization(
 
 function repository(
   organizations: ReadonlyMap<string, Organization>,
-): OrganizationIdentityConfigRepositoryPort {
+): Pick<
+  OrganizationIdentityConfigRepositoryPort,
+  'findActiveByOrganizationId'
+> {
   return {
     findActiveByOrganizationId: async (organizationId) =>
       organizations.get(organizationId)?.config ?? null,

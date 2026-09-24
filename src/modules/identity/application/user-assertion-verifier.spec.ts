@@ -75,7 +75,10 @@ const config: OrganizationIdentityConfig = {
   status: 'active' as const,
 };
 
-class FakeConfigRepository implements OrganizationIdentityConfigRepositoryPort {
+class FakeConfigRepository
+  implements
+    Pick<OrganizationIdentityConfigRepositoryPort, 'findActiveByOrganizationId'>
+{
   constructor(
     private readonly result = {
       ...config,
@@ -144,7 +147,10 @@ async function token(
 
 function verifier(
   provider: JwksKeyProviderPort,
-  repository: OrganizationIdentityConfigRepositoryPort = new FakeConfigRepository(),
+  repository: Pick<
+    OrganizationIdentityConfigRepositoryPort,
+    'findActiveByOrganizationId'
+  > = new FakeConfigRepository(),
 ) {
   return new UserAssertionVerifier(
     repository,
@@ -296,7 +302,10 @@ describe('UserAssertionVerifier', () => {
   });
 
   it('maps an unavailable identity configuration to the public provider error', async () => {
-    const repository: OrganizationIdentityConfigRepositoryPort = {
+    const repository: Pick<
+      OrganizationIdentityConfigRepositoryPort,
+      'findActiveByOrganizationId'
+    > = {
       findActiveByOrganizationId: () =>
         Promise.reject(new Error('database down')),
     };
