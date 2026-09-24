@@ -314,21 +314,26 @@ describe('Organization identity configuration HTTP flow', () => {
     );
   });
 
-  it('rejects private JWK members in the published response schema', async () => {
-    const response = await read();
-    const body = response.json();
-    const unsafeBody = {
-      ...body,
-      data: {
-        ...body.data,
-        public_keys_jwks: {
-          keys: [{ ...body.data.public_keys_jwks.keys[0], d: 'private' }],
+  it.each(['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'])(
+    'rejects private JWK member %s in the published response schema',
+    async (member) => {
+      const response = await read();
+      const body = response.json();
+      const unsafeBody = {
+        ...body,
+        data: {
+          ...body.data,
+          public_keys_jwks: {
+            keys: [
+              { ...body.data.public_keys_jwks.keys[0], [member]: 'private' },
+            ],
+          },
         },
-      },
-    };
+      };
 
-    expect(
-      Value.Check(ReadOrganizationIdentityConfigResponseSchema, unsafeBody),
-    ).toBe(false);
-  });
+      expect(
+        Value.Check(ReadOrganizationIdentityConfigResponseSchema, unsafeBody),
+      ).toBe(false);
+    },
+  );
 });

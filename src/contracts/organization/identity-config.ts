@@ -1,19 +1,12 @@
 import { type Static, Type } from '@sinclair/typebox';
 
-const PrivateJwkMembers = [
-  Type.Not(Type.Object({ d: Type.Unknown() })),
-  Type.Not(Type.Object({ p: Type.Unknown() })),
-  Type.Not(Type.Object({ q: Type.Unknown() })),
-  Type.Not(Type.Object({ dp: Type.Unknown() })),
-  Type.Not(Type.Object({ dq: Type.Unknown() })),
-  Type.Not(Type.Object({ qi: Type.Unknown() })),
-  Type.Not(Type.Object({ oth: Type.Unknown() })),
-  Type.Not(Type.Object({ k: Type.Unknown() })),
-];
+const PRIVATE_JWK_MEMBERS = ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'];
 
 const PublicJsonWebKeySchema = Type.Intersect([
   Type.Record(Type.String(), Type.Unknown()),
-  ...PrivateJwkMembers,
+  ...PRIVATE_JWK_MEMBERS.map((member) =>
+    Type.Not(Type.Object({ [member]: Type.Unknown() })),
+  ),
 ]);
 
 const PublicJsonWebKeySetSchema = Type.Object(
