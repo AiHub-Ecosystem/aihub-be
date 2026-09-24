@@ -290,6 +290,7 @@ describe('Self-serve Organization creation against PostgreSQL', () => {
         organizationId,
         name: 'Acme Learning',
         status: 'active',
+        entitlements: ['writing'],
         membershipRole: 'owner',
         members: [
           {
