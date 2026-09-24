@@ -27,13 +27,14 @@ export type ResendFetch = (
 function normalizeCustomerWebBaseUrl(
   value: string | undefined,
   requireHttps: boolean,
+  requireCustomerWebUrl: boolean,
 ): string | undefined {
   const invalidMessage = requireHttps
     ? 'CUSTOMER_WEB_BASE_URL must be an absolute HTTPS URL without credentials, query, or fragment in production'
     : 'CUSTOMER_WEB_BASE_URL must be an absolute http(s) URL without credentials, query, or fragment';
   const trimmed = value?.trim();
   if (trimmed === undefined || trimmed.length === 0) {
-    if (requireHttps) {
+    if (requireCustomerWebUrl) {
       throw new Error('CUSTOMER_WEB_BASE_URL is required in production');
     }
     return undefined;
@@ -94,6 +95,7 @@ export class ResendEmailSender implements EmailSenderPort {
     fetcher: ResendFetch = fetch,
     customerWebBaseUrl?: string,
     requireHttps = false,
+    requireCustomerWebUrl = requireHttps,
   ) {
     if (from.trim().length === 0) {
       throw new Error('RESEND_FROM is required');
@@ -103,6 +105,7 @@ export class ResendEmailSender implements EmailSenderPort {
     this.customerWebBaseUrl = normalizeCustomerWebBaseUrl(
       customerWebBaseUrl,
       requireHttps,
+      requireCustomerWebUrl,
     );
   }
 

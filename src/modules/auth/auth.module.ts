@@ -69,12 +69,15 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
       provide: EMAIL_SENDER,
       useFactory: (provider: RuntimeSecretProvider): EmailSenderPort => {
         const snapshot = provider.getSnapshot();
+        const isProduction = process.env.NODE_ENV === 'production';
         return new ResendEmailSender(
           snapshot.resend,
           process.env.RESEND_FROM ?? '',
           fetch,
           process.env.CUSTOMER_WEB_BASE_URL,
-          process.env.NODE_ENV === 'production',
+          isProduction,
+          isProduction &&
+            process.env.AIHUB_RUNTIME_DATABASE_SCOPE !== 'sandbox',
         );
       },
       inject: [RUNTIME_SECRET_PROVIDER],

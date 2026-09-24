@@ -129,7 +129,11 @@ describe('ResendEmailSender', () => {
   });
 
   describe('with a configured Customer Web base URL', () => {
-    function senderWithBase(base: string | undefined, requireHttps = false) {
+    function senderWithBase(
+      base: string | undefined,
+      requireHttps = false,
+      requireCustomerWebUrl = requireHttps,
+    ) {
       const calls: Array<{ input: string; init: RequestInit | undefined }> = [];
       const sender = new ResendEmailSender(
         { apiKey: 'resend-secret' },
@@ -140,6 +144,7 @@ describe('ResendEmailSender', () => {
         },
         base,
         requireHttps,
+        requireCustomerWebUrl,
       );
       return { sender, calls };
     }
@@ -265,6 +270,23 @@ describe('ResendEmailSender', () => {
       expect(() =>
         senderWithBase('https://customer.example.com/customer/', true),
       ).not.toThrow();
+    });
+
+    it('allows token-only email in the production sandbox while keeping configured links HTTPS', async () => {
+      const { sender, calls } = senderWithBase(undefined, true, false);
+
+      await sender.sendVerificationEmail({
+        email: 'person@example.com',
+        token: 'sandbox-token',
+        expiresAt: new Date('2026-09-20T01:00:00.000Z'),
+      });
+
+      const body = String(calls[0]?.init?.body);
+      expect(body).toContain('sandbox-token');
+      expect(body).not.toContain('http');
+      expect(() =>
+        senderWithBase('http://sandbox.example.com', true, false),
+      ).toThrow('HTTPS');
     });
 
     it.each([

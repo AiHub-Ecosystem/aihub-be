@@ -58,9 +58,10 @@ signing material at runtime. None of those secret values belong in
 `.env.production`.
 
 Set `CUSTOMER_WEB_BASE_URL` to the production Customer Web HTTPS URL. Set the
-separate `CUSTOMER_WEB_SANDBOX_BASE_URL` when enabling the sandbox profile; it
-must point to the sandbox Customer Web deployment. Both may include a path
-prefix, but must not include credentials, a query, or a fragment.
+separate `CUSTOMER_WEB_SANDBOX_BASE_URL` only when a sandbox Customer Web is
+deployed. Until then, the API-only sandbox may leave it blank and keeps
+token-only emails. Both URLs may include a path prefix, but must not include
+credentials, a query, or a fragment.
 
 `AIHUB_PRODUCTION_HOST` is the only required host setting. Setting
 `AIHUB_SANDBOX_ENABLED=true` and the sandbox host/organization allowlist enables
