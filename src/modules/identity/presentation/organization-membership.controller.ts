@@ -17,6 +17,7 @@ import type { FastifyRequest } from 'fastify';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
   EmptyOrganizationMembershipMutationRequestSchema,
+  ORGANIZATION_ROSTER_PATH,
   type OrganizationMembershipMutationRequest,
   OrganizationMembershipMutationRequestSchema,
   type OrganizationMembershipMutationResponse,
@@ -44,7 +45,7 @@ export class OrganizationMembershipController {
     private readonly mutation: OrganizationMembershipMutationPort,
   ) {}
 
-  @Get('/v1/organizations/me/members')
+  @Get(ORGANIZATION_ROSTER_PATH)
   @HttpCode(200)
   async roster(
     @Req() request: FastifyRequest,

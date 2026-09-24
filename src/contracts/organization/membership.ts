@@ -1,5 +1,7 @@
 import { type Static, Type } from '@sinclair/typebox';
 
+export const ORGANIZATION_ROSTER_PATH = '/v1/organizations/me/members';
+
 const OrganizationMembershipRoleSchema = Type.Union([
   Type.Literal('owner'),
   Type.Literal('admin'),

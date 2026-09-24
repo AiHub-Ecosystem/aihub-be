@@ -1,5 +1,7 @@
 import { convert } from 'openapi-to-postmanv2';
 
+import { ORGANIZATION_ROSTER_PATH } from '../contracts/organization/membership';
+
 /**
  * D2 handover artifact, not a regression suite (see issue #6): every request
  * below is meant to be run by a human against a real or deliberately-broken
@@ -637,7 +639,7 @@ function addOrganizationRosterCheck(items: unknown[]): void {
     const path = isRecord(url) ? url.path : undefined;
     if (
       !Array.isArray(path) ||
-      path.join('/') !== 'v1/organizations/me/members'
+      path.join('/') !== ORGANIZATION_ROSTER_PATH.slice(1)
     ) {
       continue;
     }

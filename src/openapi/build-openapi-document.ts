@@ -49,6 +49,7 @@ import {
   ListOpenOrganizationInvitationsResponseSchema,
 } from '../contracts/organization/invitation';
 import {
+  ORGANIZATION_ROSTER_PATH,
   OrganizationMembershipMutationRequestSchema,
   OrganizationMembershipMutationResponseSchema,
   OrganizationRosterResponseSchema,
@@ -272,7 +273,6 @@ const AUTH_REFRESH_PATH = '/v1/auth/refresh';
 const AUTH_LOGOUT_PATH = '/v1/auth/logout';
 const ORGANIZATION_PATH = '/v1/organizations';
 const ORGANIZATION_ITEM_PATH = '/v1/organizations/{organization_id}';
-const ORGANIZATION_ROSTER_PATH = '/v1/organizations/me/members';
 const ORGANIZATION_INVITATION_PATH =
   '/v1/organizations/{organization_id}/invitations';
 const ORGANIZATION_INVITATION_ITEM_PATH =

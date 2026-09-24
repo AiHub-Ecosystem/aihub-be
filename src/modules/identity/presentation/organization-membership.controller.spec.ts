@@ -6,6 +6,7 @@ import { Test } from '@nestjs/testing';
 
 import { AppModule } from '../../../app.module';
 import { AppError } from '../../../common/errors/app-error';
+import { ORGANIZATION_ROSTER_PATH } from '../../../contracts/organization/membership';
 import {
   LOCAL_AUTH_REPOSITORY,
   type LocalAuthRepositoryPort,
@@ -139,7 +140,7 @@ describe('Organization membership HTTP flow', () => {
     headers: Record<string, string> = {
       authorization: 'Bearer valid.token.value',
     },
-    url = '/v1/organizations/me/members',
+    url = ORGANIZATION_ROSTER_PATH,
   ) {
     return app.inject({
       method: 'GET',
@@ -272,7 +273,7 @@ describe('Organization membership HTTP flow', () => {
   it('rejects alternate query token sources even with a valid Bearer token', async () => {
     const response = await rosterRequest(
       { authorization: 'Bearer valid.token.value' },
-      '/v1/organizations/me/members?access_token=alternate',
+      `${ORGANIZATION_ROSTER_PATH}?access_token=alternate`,
     );
 
     expect(response.statusCode).toBe(401);
@@ -283,7 +284,7 @@ describe('Organization membership HTTP flow', () => {
   it('ignores client-supplied tenant and user selectors', async () => {
     const response = await rosterRequest(
       { authorization: 'Bearer valid.token.value' },
-      '/v1/organizations/me/members?organization_id=org_other&user_id=usr_other',
+      `${ORGANIZATION_ROSTER_PATH}?organization_id=org_other&user_id=usr_other`,
     );
 
     expect(response.statusCode).toBe(200);

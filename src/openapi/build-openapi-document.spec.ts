@@ -1,5 +1,6 @@
 import { OPERATION_CATALOG } from '../catalog/operation-catalog';
 import { OPERATION_IDS } from '../catalog/operation-id';
+import { ORGANIZATION_ROSTER_PATH } from '../contracts/organization/membership';
 import { buildOpenApiDocument } from './build-openapi-document';
 
 interface OpenApiResponse {
@@ -47,7 +48,6 @@ const SANDBOX_MINT_OPERATION_ID = 'sandbox.assertions.mint';
 const ORGANIZATION_PATH = '/v1/organizations';
 const ORGANIZATION_CREATE_OPERATION_ID = 'organizations.create';
 const ORGANIZATION_ITEM_PATH = '/v1/organizations/{organization_id}';
-const ORGANIZATION_ROSTER_PATH = '/v1/organizations/me/members';
 const ORGANIZATION_ROSTER_OPERATION_ID = 'organizations.me.members.list';
 const ORGANIZATION_INVITATION_PATH =
   '/v1/organizations/{organization_id}/invitations';
