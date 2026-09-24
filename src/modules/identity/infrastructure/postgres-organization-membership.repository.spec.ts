@@ -17,6 +17,7 @@ const rosterRows = [
     organization_id: 'org_acme',
     organization_name: 'Acme',
     organization_status: 'active',
+    organization_entitlements: ['writing'],
     caller_role: 'owner',
     member_username: 'alice',
     member_role: 'owner',
@@ -25,6 +26,7 @@ const rosterRows = [
     organization_id: 'org_acme',
     organization_name: 'Acme',
     organization_status: 'active',
+    organization_entitlements: ['writing'],
     caller_role: 'owner',
     member_username: 'bob',
     member_role: 'member',
@@ -33,6 +35,7 @@ const rosterRows = [
     organization_id: 'org_suspended',
     organization_name: 'Suspended',
     organization_status: 'suspended',
+    organization_entitlements: ['writing', 'speaking'],
     caller_role: 'member',
     member_username: 'alice',
     member_role: 'member',
@@ -200,6 +203,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
         organizationId: 'org_acme',
         name: 'Acme',
         status: 'active',
+        entitlements: ['writing'],
         membershipRole: 'owner',
         members: [
           { username: 'alice', role: 'owner' },
@@ -210,6 +214,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
         organizationId: 'org_suspended',
         name: 'Suspended',
         status: 'suspended',
+        entitlements: ['writing', 'speaking'],
         membershipRole: 'member',
         members: [{ username: 'alice', role: 'member' }],
       },
@@ -219,6 +224,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     expect(client.queries).toHaveLength(1);
     expect(client.queries[0]?.text).toContain("caller.status = 'active'");
     expect(client.queries[0]?.text).toContain("member.status = 'active'");
+    expect(client.queries[0]?.text).toContain(
+      'organization.entitlements AS organization_entitlements',
+    );
     expect(client.queries[0]?.text).toContain('ORDER BY');
   });
 

@@ -627,6 +627,44 @@ function normalizeRefreshCookieAuth(value: unknown): void {
   }
 }
 
+function addOrganizationRosterCheck(items: unknown[]): void {
+  for (const item of items) {
+    if (!isRecord(item) || !isRecord(item.request)) {
+      continue;
+    }
+
+    const url = item.request.url;
+    const path = isRecord(url) ? url.path : undefined;
+    if (
+      !Array.isArray(path) ||
+      path.join('/') !== 'v1/organizations/me/members'
+    ) {
+      continue;
+    }
+
+    item.request.description =
+      'Lists the active Organization Roster, including each Organization as an open array of configured entitlement names.';
+    item.event = [
+      {
+        listen: 'test',
+        script: {
+          type: 'text/javascript',
+          exec: [
+            "pm.test('each organization exposes configured entitlement names', function () {",
+            '  const organizations = pm.response.json().data.organizations;',
+            "  pm.expect(organizations).to.be.an('array');",
+            '  for (const organization of organizations) {',
+            "    pm.expect(organization.entitlements).to.be.an('array');",
+            "    pm.expect(organization.entitlements.every((value) => typeof value === 'string')).to.be.true;",
+            '  }',
+            '});',
+          ],
+        },
+      },
+    ];
+  }
+}
+
 function convertOpenApiToPostman(
   openApiDocument: unknown,
 ): Promise<PostmanCollectionShape> {
@@ -667,6 +705,7 @@ export async function buildPostmanCollection(
     'response',
   );
   normalizeRefreshCookieAuth(base);
+  addOrganizationRosterCheck(base.item);
 
   return {
     ...base,

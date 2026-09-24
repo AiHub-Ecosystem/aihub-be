@@ -3078,6 +3078,7 @@
                               "organization_id",
                               "name",
                               "status",
+                              "entitlements",
                               "membership",
                               "members"
                             ],
@@ -3101,6 +3102,13 @@
                                     "type": "string"
                                   }
                                 ]
+                              },
+                              "entitlements": {
+                                "type": "array",
+                                "items": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
                               },
                               "membership": {
                                 "additionalProperties": false,

@@ -34,6 +34,7 @@ const roster: readonly OrganizationRosterOrganization[] = [
     organizationId: 'org_acme',
     name: 'Acme',
     status: 'active',
+    entitlements: ['writing'],
     membershipRole: 'owner',
     members: [
       { username: 'alice', role: 'owner' },
@@ -44,6 +45,7 @@ const roster: readonly OrganizationRosterOrganization[] = [
     organizationId: 'org_suspended',
     name: 'Suspended',
     status: 'suspended',
+    entitlements: ['writing', 'speaking'],
     membershipRole: 'member',
     members: [{ username: 'alice', role: 'member' }],
   },
@@ -173,6 +175,7 @@ describe('Organization membership HTTP flow', () => {
             organization_id: 'org_acme',
             name: 'Acme',
             status: 'active',
+            entitlements: ['writing'],
             membership: { role: 'owner' },
             members: [
               { username: 'alice', role: 'owner' },
@@ -183,6 +186,7 @@ describe('Organization membership HTTP flow', () => {
             organization_id: 'org_suspended',
             name: 'Suspended',
             status: 'suspended',
+            entitlements: ['writing', 'speaking'],
             membership: { role: 'member' },
             members: [{ username: 'alice', role: 'member' }],
           },
@@ -206,6 +210,7 @@ describe('Organization membership HTTP flow', () => {
         organizationId: 'org_admin',
         name: 'Admin Org',
         status: 'active',
+        entitlements: ['writing'],
         membershipRole: 'admin',
         members: [
           { username: 'alice', role: 'owner' },
@@ -222,6 +227,7 @@ describe('Organization membership HTTP flow', () => {
         organizations: [
           {
             organization_id: 'org_admin',
+            entitlements: ['writing'],
             membership: { role: 'admin' },
             members: [
               { username: 'alice', role: 'owner' },

@@ -58,6 +58,7 @@ export class OrganizationMembershipController {
           organization_id: organization.organizationId,
           name: organization.name,
           status: organization.status,
+          entitlements: [...organization.entitlements],
           membership: { role: organization.membershipRole },
           members: organization.members.map((member) => ({
             username: member.username,

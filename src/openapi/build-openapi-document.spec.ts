@@ -302,6 +302,9 @@ describe('buildOpenApiDocument', () => {
     ]);
     expect(operation?.requestBody).toBeUndefined();
     expect(operation?.responses['200']).toBeDefined();
+    expect(JSON.stringify(operation?.responses['200'])).toContain(
+      '"entitlements":{"type":"array","items":{"minLength":1,"type":"string"}}',
+    );
     expect(JSON.stringify(operation?.responses['200'])).not.toContain('email');
   });
 

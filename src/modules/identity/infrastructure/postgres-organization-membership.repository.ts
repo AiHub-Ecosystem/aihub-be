@@ -60,6 +60,7 @@ const LIST_ROSTER_SQL = `
     caller.organization_id,
     organization.name AS organization_name,
     organization.status AS organization_status,
+    organization.entitlements AS organization_entitlements,
     caller.role AS caller_role,
     member_account.username AS member_username,
     member.role AS member_role
@@ -185,6 +186,7 @@ interface RosterRow {
   readonly organizationId: string;
   readonly organizationName: string;
   readonly organizationStatus: OrganizationStatus;
+  readonly organizationEntitlements: readonly string[];
   readonly callerRole: OrganizationMembershipRole;
   readonly memberUsername: string;
   readonly memberRole: OrganizationMembershipRole;
@@ -339,6 +341,7 @@ function mapRosterRow(value: unknown): RosterRow | undefined {
     value,
     'organization_status',
   );
+  const organizationEntitlements = value.organization_entitlements;
   const callerRole = membershipRoleValue(value, 'caller_role');
   const memberUsername = stringValue(value, 'member_username');
   const memberRole = membershipRoleValue(value, 'member_role');
@@ -347,6 +350,11 @@ function mapRosterRow(value: unknown): RosterRow | undefined {
     organizationId === undefined ||
     organizationName === undefined ||
     organizationStatus === undefined ||
+    !Array.isArray(organizationEntitlements) ||
+    !organizationEntitlements.every(
+      (entitlement) =>
+        typeof entitlement === 'string' && entitlement.length > 0,
+    ) ||
     callerRole === undefined ||
     memberUsername === undefined ||
     memberRole === undefined
@@ -358,6 +366,7 @@ function mapRosterRow(value: unknown): RosterRow | undefined {
     organizationId,
     organizationName,
     organizationStatus,
+    organizationEntitlements,
     callerRole,
     memberUsername,
     memberRole,
@@ -373,6 +382,7 @@ function groupRosterRows(
       readonly organizationId: string;
       readonly name: string;
       readonly status: OrganizationStatus;
+      readonly entitlements: readonly string[];
       readonly membershipRole: OrganizationMembershipRole;
       readonly members: OrganizationRosterOrganization['members'][number][];
     }
@@ -390,6 +400,7 @@ function groupRosterRows(
         organizationId: row.organizationId,
         name: row.organizationName,
         status: row.organizationStatus,
+        entitlements: row.organizationEntitlements,
         membershipRole: row.callerRole,
         members: [{ username: row.memberUsername, role: row.memberRole }],
       });
@@ -399,6 +410,11 @@ function groupRosterRows(
     if (
       existing.name !== row.organizationName ||
       existing.status !== row.organizationStatus ||
+      existing.entitlements.length !== row.organizationEntitlements.length ||
+      existing.entitlements.some(
+        (entitlement, index) =>
+          entitlement !== row.organizationEntitlements[index],
+      ) ||
       existing.membershipRole !== row.callerRole
     ) {
       throw identityStoreError('Identity data is invalid');

@@ -13,6 +13,7 @@ interface PostmanItem {
   readonly name: string;
   readonly request?: {
     readonly url: unknown;
+    readonly description?: string;
     readonly header?: readonly {
       readonly key: string;
       readonly value: string;
@@ -137,6 +138,19 @@ describe('buildPostmanCollection', () => {
         'Reset a local account password',
       ]),
     );
+  });
+
+  it('documents the roster entitlement field for the Customer Web', async () => {
+    const collection = await build();
+    const items = collection.item as readonly PostmanItem[];
+    const roster = items.find(
+      (item) => item.name === 'List the authenticated user organization roster',
+    );
+    const script = roster?.event?.[0]?.script.exec.join('\n') ?? '';
+
+    expect(roster?.request?.description).toContain('entitlement names');
+    expect(script).toContain('organization.entitlements');
+    expect(script).toContain("typeof value === 'string'");
   });
 
   it('has 17 D1 handover test cases including the post-freeze issue #156 case', async () => {
