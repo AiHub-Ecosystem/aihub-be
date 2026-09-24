@@ -1,7 +1,7 @@
 {
   "item": [
     {
-      "id": "2ab373b4-761e-40ab-84e9-98aedf11be1c",
+      "id": "8f0a4041-3679-4acf-9dae-e3caa351675a",
       "name": "writing.task1.grade",
       "request": {
         "name": "writing.task1.grade",
@@ -74,7 +74,7 @@
       }
     },
     {
-      "id": "535d6139-ffb5-423e-bdd5-ac8e0a7b946c",
+      "id": "be65b69a-76ac-4c30-8da5-b37ab1875f24",
       "name": "writing.task2.grade",
       "request": {
         "name": "writing.task2.grade",
@@ -147,7 +147,7 @@
       }
     },
     {
-      "id": "e0dfeb6d-b6e1-4ea5-b078-038324caedc0",
+      "id": "e51e95f3-30d5-4b81-ae0c-8f0b31f0420c",
       "name": "speaking.grading",
       "request": {
         "name": "speaking.grading",
@@ -257,7 +257,7 @@
       }
     },
     {
-      "id": "b0519f71-f7a2-4b43-bb36-b28d21b3c38b",
+      "id": "35ae3ab8-d4aa-4430-8d25-e1f9ee75589b",
       "name": "speaking.grading-json",
       "request": {
         "name": "speaking.grading-json",
@@ -330,7 +330,7 @@
       }
     },
     {
-      "id": "66110e54-7945-43f0-8b49-168e3dec2753",
+      "id": "f5ded65d-e4e4-4b87-98d9-786e9d381a4b",
       "name": "Mint a sandbox user assertion",
       "request": {
         "name": "Mint a sandbox user assertion",
@@ -394,7 +394,7 @@
       }
     },
     {
-      "id": "946747a9-6a7f-40c4-9509-159da3baf7f1",
+      "id": "8cd75512-9ad3-416b-91da-739d3056c77f",
       "name": "Create a Self-serve Organization and become its first owner",
       "request": {
         "name": "Create a Self-serve Organization and become its first owner",
@@ -456,7 +456,7 @@
       }
     },
     {
-      "id": "1450a79e-3a32-46f8-bc6b-312d926d6ad5",
+      "id": "6982fa7e-b956-4f6f-b51f-d4e954d974ca",
       "name": "Rename an organization",
       "request": {
         "name": "Rename an organization",
@@ -520,7 +520,7 @@
       }
     },
     {
-      "id": "c06cf5af-5abb-43b0-b78f-fff1e1038209",
+      "id": "0a7b331c-ff1f-4a04-b195-7281b0e757d9",
       "name": "List the authenticated user organization roster",
       "request": {
         "name": "List the authenticated user organization roster",
@@ -635,7 +635,7 @@
       }
     },
     {
-      "id": "7cfc74de-b4c9-4240-a9d5-4db8e34ad757",
+      "id": "2bcec0e2-e560-445a-85e5-6a5e8a107107",
       "name": "List an organization's open invitations",
       "request": {
         "name": "List an organization's open invitations",
@@ -683,7 +683,7 @@
       }
     },
     {
-      "id": "d582b7d3-7b17-41f7-b1c3-a660bd0cc3b2",
+      "id": "11b3db5b-004f-46c6-82c5-8b2bb4ffdeee",
       "name": "Invite a person to an organization",
       "request": {
         "name": "Invite a person to an organization",
@@ -750,7 +750,7 @@
       }
     },
     {
-      "id": "31b9d927-01e7-442a-9c18-8a5de3037825",
+      "id": "1a1a92d2-4e6f-49b5-a354-fa137a2c9ae0",
       "name": "Revoke an organization invitation",
       "request": {
         "name": "Revoke an organization invitation",
@@ -814,7 +814,7 @@
       }
     },
     {
-      "id": "2bb9bf89-fc0f-45e0-89c5-58ab4ccda157",
+      "id": "f94071e0-e8dd-4e85-a144-4b502c642338",
       "name": "Accept an organization invitation",
       "request": {
         "name": "Accept an organization invitation",
@@ -867,7 +867,7 @@
       }
     },
     {
-      "id": "37968707-5a80-4bb7-b3bc-303307c1958b",
+      "id": "68bcf4c1-7143-491b-b4cb-62ec4c9541df",
       "name": "Change an organization member role",
       "request": {
         "name": "Change an organization member role",
@@ -941,7 +941,7 @@
       }
     },
     {
-      "id": "e9d38614-d83e-4908-928a-257dd724be34",
+      "id": "52c3c39d-a318-41f1-b982-9bcc2c82985f",
       "name": "Disable an organization member",
       "request": {
         "name": "Disable an organization member",
@@ -1002,7 +1002,7 @@
       }
     },
     {
-      "id": "f3980476-8c26-4b76-a6d7-f6ae2784217a",
+      "id": "b1b9f2a7-c2bc-48a0-9bbb-16c8573d8ef5",
       "name": "Transfer organization ownership",
       "request": {
         "name": "Transfer organization ownership",
@@ -1064,7 +1064,7 @@
       }
     },
     {
-      "id": "a61a10c8-bd66-4802-b8a5-b4d1c851e47d",
+      "id": "90df7b73-63cf-40f5-9ee6-ff6c9f4a6ec3",
       "name": "List an organization API key inventory",
       "request": {
         "name": "List an organization API key inventory",
@@ -1115,7 +1115,7 @@
       }
     },
     {
-      "id": "bb7a4885-92fb-4cc8-aaaa-fd67e4c61e0f",
+      "id": "b422619f-1ecc-414f-b228-7b4d036ef0b9",
       "name": "Create an organization API key",
       "request": {
         "name": "Create an organization API key",
@@ -1176,7 +1176,7 @@
       }
     },
     {
-      "id": "dd46e509-56de-4151-9e31-5813a567195a",
+      "id": "c8e799ee-39a0-43dc-9b4d-ebd72e5372cb",
       "name": "Revoke an organization API key",
       "request": {
         "name": "Revoke an organization API key",
@@ -1240,7 +1240,7 @@
       }
     },
     {
-      "id": "dc082602-fb4d-4069-b36f-79eedb923822",
+      "id": "9e398d52-2190-411f-87a9-f51f1ff788a2",
       "name": "Rotate an organization API key",
       "request": {
         "name": "Rotate an organization API key",
@@ -1305,7 +1305,7 @@
       }
     },
     {
-      "id": "2d52df70-dc3e-475b-bb6e-58b0bccbbcfd",
+      "id": "caef3577-9779-43f9-a28d-eca440cafe88",
       "name": "Set an organization identity configuration",
       "request": {
         "name": "Set an organization identity configuration",
@@ -1374,7 +1374,7 @@
       }
     },
     {
-      "id": "269e0a1f-f2d1-40fa-bd4b-d4f1bdffca42",
+      "id": "96d4c82b-c2ff-496b-a4f0-cc248562c61a",
       "name": "Read an organization identity configuration",
       "request": {
         "name": "Read an organization identity configuration",
@@ -1430,7 +1430,7 @@
       }
     },
     {
-      "id": "83bfafac-0f96-4bbf-b785-00221342442b",
+      "id": "3db7e90f-abe9-454e-9394-babaa566a6fc",
       "name": "Read an organization audit trail",
       "request": {
         "name": "Read an organization audit trail",
@@ -1524,7 +1524,7 @@
       }
     },
     {
-      "id": "a2615b2c-6447-4518-ba3d-3449240ffee0",
+      "id": "fe3f3e97-e8e3-4918-a8c9-22338aab7715",
       "name": "Register a local AIHUB account",
       "request": {
         "name": "Register a local AIHUB account",
@@ -1569,7 +1569,7 @@
       }
     },
     {
-      "id": "eb7d9f08-d00d-40e6-8966-029cf4106241",
+      "id": "6a2762c1-3edc-4ec1-a2d0-decae99927b6",
       "name": "Issue a User Access JWT",
       "request": {
         "name": "Issue a User Access JWT",
@@ -1614,7 +1614,7 @@
       }
     },
     {
-      "id": "2385bb27-ec2f-4d30-9895-6bf9ed32956e",
+      "id": "2b150217-4ab9-40e8-baea-6ad177fb8c3a",
       "name": "Verify a local account email address",
       "request": {
         "name": "Verify a local account email address",
@@ -1659,7 +1659,7 @@
       }
     },
     {
-      "id": "ab3e0335-f27e-49a3-9470-d3ed405dae83",
+      "id": "18820c41-f7a9-4cc1-83d0-2f36dcdd2a41",
       "name": "Request a verification email resend",
       "request": {
         "name": "Request a verification email resend",
@@ -1704,7 +1704,7 @@
       }
     },
     {
-      "id": "0a003f67-3629-401b-b806-66fdde6ead7b",
+      "id": "2c129e60-73b1-4f7f-b001-86af8bc9c432",
       "name": "Request a password reset email",
       "request": {
         "name": "Request a password reset email",
@@ -1749,7 +1749,7 @@
       }
     },
     {
-      "id": "e044a4ae-a6ab-499c-8f09-6a21784d55c2",
+      "id": "3a872d21-a288-42e1-ac19-c330366e6fed",
       "name": "Reset a local account password",
       "request": {
         "name": "Reset a local account password",
@@ -1794,7 +1794,7 @@
       }
     },
     {
-      "id": "6f1ffdd0-350c-418c-9b4d-a635a977442c",
+      "id": "e6cc4055-ec8f-413a-8ce1-11c8ca819ce1",
       "name": "Rotate a refresh session and issue a User Access JWT",
       "request": {
         "name": "Rotate a refresh session and issue a User Access JWT",
@@ -1861,7 +1861,7 @@
       }
     },
     {
-      "id": "a7b858b6-a52a-40fe-a298-26bdaa1c4eca",
+      "id": "4fb53ec9-673c-480d-9125-c2ba31648bc0",
       "name": "Revoke the current refresh session",
       "request": {
         "name": "Revoke the current refresh session",
@@ -2984,7 +2984,7 @@
     ]
   },
   "info": {
-    "_postman_id": "c759a7b0-6c56-4109-b5cf-23a63d1d155e",
+    "_postman_id": "15233f38-0bf2-4d85-b774-5a1b12f6821f",
     "name": "AIHUB Writing API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Generated by `pnpm generate:postman` from openapi.json — do not hand-edit. The \"D1 handover test cases\" folder is the D2 handover artifact required by docs/aihub_deliverable_1_api_contract_schema.md §G; it is not a CI regression suite.",

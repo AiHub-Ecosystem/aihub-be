@@ -2,7 +2,10 @@ import type { CollectionDefinition } from 'postman-collection';
 import { Collection } from 'postman-collection';
 
 import { buildOpenApiDocument } from '../openapi/build-openapi-document';
-import { buildPostmanCollection } from './build-postman-collection';
+import {
+  buildPostmanCollection,
+  preservePostmanIds,
+} from './build-postman-collection';
 
 interface PostmanItemGroup {
   readonly name: string;
@@ -249,5 +252,69 @@ describe('buildPostmanCollection', () => {
     expect(folder.item?.[0]?.event?.[0]?.script.exec.join('\n')).toContain(
       'CONCURRENCY_LIMIT',
     );
+  });
+});
+
+describe('preservePostmanIds', () => {
+  it('keeps IDs for existing collection items and leaves new item IDs intact', () => {
+    const previous = {
+      info: { _postman_id: 'existing-collection-id' },
+      item: [
+        {
+          id: 'existing-folder-id',
+          name: 'Organizations',
+          item: [
+            {
+              id: 'existing-request-id',
+              name: 'List members',
+              request: {
+                method: 'GET',
+                url: {
+                  path: ['v1', 'organizations', ':organizationId', 'members'],
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const generated = {
+      info: { _postman_id: 'new-collection-id' },
+      item: [
+        {
+          id: 'new-folder-id',
+          name: 'Organizations',
+          item: [
+            {
+              id: 'new-request-id',
+              name: 'List members',
+              request: {
+                method: 'GET',
+                url: {
+                  path: ['v1', 'organizations', ':organizationId', 'members'],
+                },
+              },
+            },
+            {
+              id: 'generated-new-request-id',
+              name: 'Create member',
+              request: {
+                method: 'POST',
+                url: {
+                  path: ['v1', 'organizations', ':organizationId', 'members'],
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = preservePostmanIds(generated, previous) as typeof generated;
+
+    expect(result.info._postman_id).toBe('existing-collection-id');
+    expect(result.item[0]?.id).toBe('existing-folder-id');
+    expect(result.item[0]?.item[0]?.id).toBe('existing-request-id');
+    expect(result.item[0]?.item[1]?.id).toBe('generated-new-request-id');
   });
 });

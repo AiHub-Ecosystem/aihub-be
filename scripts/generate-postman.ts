@@ -1,7 +1,10 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { buildPostmanCollection } from '../src/postman/build-postman-collection';
+import {
+  buildPostmanCollection,
+  preservePostmanIds,
+} from '../src/postman/build-postman-collection';
 
 const packageJson = JSON.parse(
   readFileSync(join(__dirname, '../package.json'), 'utf8'),
@@ -9,18 +12,22 @@ const packageJson = JSON.parse(
 const openApiDocument = JSON.parse(
   readFileSync(join(__dirname, '../openapi.json'), 'utf8'),
 ) as unknown;
+const collectionPath = join(__dirname, '../aihub.postman_collection.json');
 
 async function main(): Promise<void> {
-  const collection = await buildPostmanCollection(
+  const generated = await buildPostmanCollection(
     openApiDocument,
     packageJson.version,
   );
+  const collection = existsSync(collectionPath)
+    ? preservePostmanIds(
+        generated,
+        JSON.parse(readFileSync(collectionPath, 'utf8')) as unknown,
+      )
+    : generated;
 
   // Trailing newline so the committed file diffs cleanly.
-  writeFileSync(
-    'aihub.postman_collection.json',
-    `${JSON.stringify(collection, null, 2)}\n`,
-  );
+  writeFileSync(collectionPath, `${JSON.stringify(collection, null, 2)}\n`);
 
   console.log('Wrote aihub.postman_collection.json');
 }

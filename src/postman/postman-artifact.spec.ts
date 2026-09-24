@@ -4,7 +4,10 @@ import { join } from 'node:path';
 import type { CollectionDefinition } from 'postman-collection';
 import { Collection } from 'postman-collection';
 
-import { buildPostmanCollection, stripKey } from './build-postman-collection';
+import {
+  buildPostmanCollection,
+  preservePostmanIds,
+} from './build-postman-collection';
 
 const REPO_ROOT = join(__dirname, '../..');
 const COLLECTION_PATH = join(REPO_ROOT, 'aihub.postman_collection.json');
@@ -28,25 +31,13 @@ function packageVersion(): string {
 }
 
 describe('committed aihub.postman_collection.json', () => {
-  it('matches what the generator produces from the committed openapi.json right now — catches "changed a schema, forgot to regenerate"', async () => {
-    // `id` / `_postman_id` are stripped before comparing: openapi-to-postmanv2
-    // assigns each item and the collection itself a fresh random UUID on
-    // every run (harmless — Postman only needs uniqueness within one
-    // document), so they can never match bit-for-bit across two independent
-    // generations.
-    const normalize = (value: unknown): unknown =>
-      stripKey(stripKey(value, 'id'), '_postman_id');
-    const committed = normalize(committedCollection());
-    const fresh = normalize(
-      JSON.parse(
-        JSON.stringify(
-          await buildPostmanCollection(
-            committedOpenApiDocument(),
-            packageVersion(),
-          ),
-        ),
-      ),
+  it('matches generated OpenAPI content and preserves existing Postman IDs', async () => {
+    const committed = committedCollection();
+    const generated = await buildPostmanCollection(
+      committedOpenApiDocument(),
+      packageVersion(),
     );
+    const fresh = preservePostmanIds(generated, committed);
 
     expect(committed).toEqual(fresh);
   });
