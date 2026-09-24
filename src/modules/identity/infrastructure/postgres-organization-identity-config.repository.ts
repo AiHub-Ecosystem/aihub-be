@@ -70,15 +70,6 @@ const UPSERT_SQL = `
             jwks_cache_version
 `;
 
-const BUMP_CACHE_VERSION_SQL = `
-  UPDATE organization_identity_configs
-  SET jwks_cache_version = jwks_cache_version + 1
-  WHERE organization_id = $1
-  RETURNING organization_id, issuer, jwks_url, public_keys_jwks,
-            allowed_algorithms, max_assertion_ttl_seconds, status, updated_at,
-            jwks_cache_version
-`;
-
 const LOOKUP_SQL = `
   SELECT
     organization_id,
@@ -348,11 +339,7 @@ export class PostgresOrganizationIdentityConfigRepository
         const changed = writtenRows.length > 0;
         const row =
           writtenRows[0] ??
-          (
-            await transaction.query(BUMP_CACHE_VERSION_SQL, [
-              input.organizationId,
-            ])
-          )[0];
+          (await transaction.query(READ_SQL, [input.organizationId]))[0];
         const config = mapStoredRecord(row);
         if (config === undefined) {
           throw identityStoreError('Identity data is invalid');

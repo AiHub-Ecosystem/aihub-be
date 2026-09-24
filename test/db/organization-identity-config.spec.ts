@@ -137,9 +137,8 @@ describe('Organization identity configuration against PostgreSQL', () => {
     if (first.kind === 'forbidden' || retried.kind === 'forbidden') {
       throw new Error('Owner config saves unexpectedly forbidden');
     }
-    expect(BigInt(retried.config.jwksCacheVersion ?? '0')).toBe(
-      BigInt(first.config.jwksCacheVersion ?? '0') + 1n,
-    );
+    expect(retried.config.jwksCacheVersion).toBe(first.config.jwksCacheVersion);
+    expect(retried.config.updatedAt).toEqual(first.config.updatedAt);
     expect(await auditEvents()).toHaveLength(1);
   });
 

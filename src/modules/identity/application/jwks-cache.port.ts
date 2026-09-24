@@ -11,17 +11,23 @@ export interface JwksRefreshLock {
   readonly available: boolean;
 }
 
+export interface JwksCacheSnapshot {
+  readonly generation: string;
+  readonly entry?: JwksCacheEntry;
+}
+
 export interface JwksCachePort {
   getJwks(
     organizationId: string,
-    version: string,
-  ): Promise<JwksCacheEntry | undefined>;
+    configVersion: string,
+  ): Promise<JwksCacheSnapshot>;
   setJwks(
     organizationId: string,
-    version: string,
+    configVersion: string,
+    generation: string,
     entry: JwksCacheEntry,
   ): Promise<void>;
-  deleteJwks(organizationId: string, currentVersion: string): Promise<void>;
+  deleteJwks(organizationId: string, configVersion: string): Promise<void>;
   tryAcquireRefresh(organizationId: string): Promise<JwksRefreshLock>;
 }
 

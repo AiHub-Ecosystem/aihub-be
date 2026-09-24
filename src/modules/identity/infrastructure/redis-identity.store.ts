@@ -8,6 +8,7 @@ import type {
 import type {
   JwksCacheEntry,
   JwksCachePort,
+  JwksCacheSnapshot,
   JwksRefreshLock,
 } from '../application/jwks-cache.port';
 import { parsePublicJsonWebKeySet } from '../domain/organization-identity-config';
@@ -230,8 +231,16 @@ export function apiKeyCacheKeys(hashHex: string): readonly string[] {
   return [cacheKey(hashHex), missKey(hashHex)];
 }
 
-function jwksKey(organizationId: string, version: string): string {
-  return `aihub:v1:jwks:${organizationId}:${version}`;
+function jwksKey(
+  organizationId: string,
+  configVersion: string,
+  generation: string,
+): string {
+  return `aihub:v1:jwks:${organizationId}:${configVersion}:${generation}`;
+}
+
+function jwksGenerationKey(organizationId: string): string {
+  return `aihub:v1:jwks-generation:${organizationId}`;
 }
 
 function jwksRefreshKey(organizationId: string): string {
@@ -332,33 +341,40 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
 
   async getJwks(
     organizationId: string,
-    version: string,
-  ): Promise<JwksCacheEntry | undefined> {
+    configVersion: string,
+  ): Promise<JwksCacheSnapshot> {
     if (this.client === undefined) {
-      return undefined;
+      return { generation: '0' };
     }
 
     try {
+      const currentGeneration = await this.client.get(
+        jwksGenerationKey(organizationId),
+      );
+      const generation = currentGeneration ?? '0';
       const serialized = await this.client.get(
-        jwksKey(organizationId, version),
+        jwksKey(organizationId, configVersion, generation),
       );
       if (serialized === null) {
-        return undefined;
+        return { generation };
       }
 
       const entry = parseJwksCacheEntry(serialized);
       if (entry === undefined) {
-        await this.client.del(jwksKey(organizationId, version));
+        await this.client.del(
+          jwksKey(organizationId, configVersion, generation),
+        );
       }
-      return entry;
+      return entry === undefined ? { generation } : { generation, entry };
     } catch {
-      return undefined;
+      return { generation: '0' };
     }
   }
 
   async setJwks(
     organizationId: string,
-    version: string,
+    configVersion: string,
+    generation: string,
     entry: JwksCacheEntry,
   ): Promise<void> {
     if (this.client === undefined) {
@@ -371,7 +387,7 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
     );
     await this.client
       .set(
-        jwksKey(organizationId, version),
+        jwksKey(organizationId, configVersion, generation),
         JSON.stringify(entry),
         'EX',
         ttlSeconds,
@@ -381,18 +397,16 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
 
   async deleteJwks(
     organizationId: string,
-    currentVersion: string,
+    configVersion: string,
   ): Promise<void> {
     if (this.client === undefined) {
       throw new Error('Redis is unavailable');
     }
 
-    const version = BigInt(currentVersion);
-    const keys = [jwksKey(organizationId, currentVersion)];
-    if (version > 1n) {
-      keys.push(jwksKey(organizationId, (version - 1n).toString()));
-    }
-    await this.client.del(...keys);
+    const generationKey = jwksGenerationKey(organizationId);
+    const generation = (await this.client.get(generationKey)) ?? '0';
+    await this.client.incr(generationKey);
+    await this.client.del(jwksKey(organizationId, configVersion, generation));
   }
 
   async tryAcquireRefresh(organizationId: string): Promise<JwksRefreshLock> {

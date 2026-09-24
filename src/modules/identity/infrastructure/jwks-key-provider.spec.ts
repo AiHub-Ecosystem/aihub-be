@@ -1,6 +1,7 @@
 import type {
   JwksCacheEntry,
   JwksCachePort,
+  JwksCacheSnapshot,
   JwksRefreshLock,
 } from '../application/jwks-cache.port';
 import type { OrganizationIdentityConfig } from '../application/organization-identity-config-repository.port';
@@ -30,6 +31,7 @@ const remoteConfig: OrganizationIdentityConfig = {
 
 class FakeCache implements JwksCachePort {
   entry: JwksCacheEntry | undefined;
+  generation = '0';
   readonly versions = new Map<string, JwksCacheEntry>();
   lock: JwksRefreshLock = { acquired: true, available: true };
   setCount = 0;
@@ -37,22 +39,30 @@ class FakeCache implements JwksCachePort {
 
   getJwks(
     _organizationId: string,
-    version: string,
-  ): Promise<JwksCacheEntry | undefined> {
+    configVersion: string,
+  ): Promise<JwksCacheSnapshot> {
+    const entry =
+      this.versions.get(`${configVersion}:${this.generation}`) ??
+      (this.generation === '0' && configVersion === '1'
+        ? this.entry
+        : undefined);
     return Promise.resolve(
-      this.versions.get(version) ?? (version === '1' ? this.entry : undefined),
+      entry === undefined
+        ? { generation: this.generation }
+        : { generation: this.generation, entry },
     );
   }
 
   setJwks(
     _organizationId: string,
-    version: string,
+    configVersion: string,
+    generation: string,
     entry: JwksCacheEntry,
   ): Promise<void> {
     if (this.failSet) {
       return Promise.reject(new Error('cache unavailable'));
     }
-    this.versions.set(version, entry);
+    this.versions.set(`${configVersion}:${generation}`, entry);
     this.entry = entry;
     this.setCount += 1;
     return Promise.resolve();
@@ -62,12 +72,9 @@ class FakeCache implements JwksCachePort {
     return Promise.resolve(this.lock);
   }
 
-  deleteJwks(_organizationId: string, currentVersion: string): Promise<void> {
-    const version = BigInt(currentVersion);
-    this.versions.delete(currentVersion);
-    if (version > 1n) {
-      this.versions.delete((version - 1n).toString());
-    }
+  deleteJwks(_organizationId: string, configVersion: string): Promise<void> {
+    this.versions.delete(`${configVersion}:${this.generation}`);
+    this.generation = (BigInt(this.generation) + 1n).toString();
     this.entry = undefined;
     return Promise.resolve();
   }
@@ -137,7 +144,7 @@ describe('JwksKeyProvider', () => {
       config: { ...remoteConfig, jwksCacheVersion: '1' },
     });
     await oldFetchStarted;
-    await cache.deleteJwks('org_acme', '2');
+    await cache.deleteJwks('org_acme', '1');
     finishOldFetch?.(new Response(JSON.stringify(jwks)));
     await oldResolution;
 
@@ -145,6 +152,48 @@ describe('JwksKeyProvider', () => {
       provider.resolve({
         organizationId: 'org_acme',
         config: { ...remoteConfig, jwksCacheVersion: '2' },
+      }),
+    ).resolves.toEqual(jwks);
+    expect(fetchCount).toBe(2);
+  });
+
+  it('does not let an in-flight fetch survive a retry purge for an unchanged config', async () => {
+    const cache = new FakeCache();
+    let finishOldFetch: ((response: Response) => void) | undefined;
+    let markOldFetchStarted: (() => void) | undefined;
+    const oldFetchStarted = new Promise<void>((resolve) => {
+      markOldFetchStarted = resolve;
+    });
+    let fetchCount = 0;
+    const provider = new JwksKeyProvider(
+      cache,
+      async () => {
+        fetchCount += 1;
+        if (fetchCount === 1) {
+          markOldFetchStarted?.();
+          return new Promise<Response>((resolve) => {
+            finishOldFetch = resolve;
+          });
+        }
+        return new Response(JSON.stringify(jwks));
+      },
+      publicLookup(),
+    );
+    const unchangedConfig = { ...remoteConfig, jwksCacheVersion: '1' };
+
+    const oldResolution = provider.resolve({
+      organizationId: 'org_acme',
+      config: unchangedConfig,
+    });
+    await oldFetchStarted;
+    await cache.deleteJwks('org_acme', '1');
+    finishOldFetch?.(new Response(JSON.stringify(jwks)));
+    await oldResolution;
+
+    await expect(
+      provider.resolve({
+        organizationId: 'org_acme',
+        config: unchangedConfig,
       }),
     ).resolves.toEqual(jwks);
     expect(fetchCount).toBe(2);

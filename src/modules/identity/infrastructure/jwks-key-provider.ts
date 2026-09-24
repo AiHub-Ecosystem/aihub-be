@@ -360,8 +360,13 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       return input.config.publicKeysJwks;
     }
 
-    const cacheVersion = input.config.jwksCacheVersion ?? '1';
-    const cached = await this.cache.getJwks(input.organizationId, cacheVersion);
+    const configVersion = input.config.jwksCacheVersion ?? '1';
+    const snapshot = await this.cache.getJwks(
+      input.organizationId,
+      configVersion,
+    );
+    const cacheGeneration = snapshot.generation;
+    const cached = snapshot.entry;
     const now = this.now();
 
     if (
@@ -388,9 +393,11 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       } else if (!lock.acquired) {
         const reread = await this.cache.getJwks(
           input.organizationId,
-          cacheVersion,
+          configVersion,
         );
-        return reread?.jwks ?? cached?.jwks ?? { keys: [] };
+        return reread.generation === cacheGeneration
+          ? (reread.entry?.jwks ?? cached?.jwks ?? { keys: [] })
+          : { keys: [] };
       }
     }
 
@@ -402,7 +409,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
         staleUntil: now + JWKS_STALE_TTL_MS,
       };
       await this.cache
-        .setJwks(input.organizationId, cacheVersion, entry)
+        .setJwks(input.organizationId, configVersion, cacheGeneration, entry)
         .catch(() => undefined);
       return jwks;
     } catch (error) {

@@ -2,6 +2,7 @@ import { createRequestContext } from '../../../common/request-context/request-co
 import type {
   JwksCacheEntry,
   JwksCachePort,
+  JwksCacheSnapshot,
   JwksRefreshLock,
 } from '../application/jwks-cache.port';
 import type {
@@ -34,34 +35,38 @@ class Cache implements JwksCachePort {
   };
 
   readonly versions = new Map<string, JwksCacheEntry>();
+  generation = '0';
 
   async getJwks(
     _organizationId: string,
-    version: string,
-  ): Promise<JwksCacheEntry | undefined> {
-    return (
-      this.versions.get(version) ?? (version === '1' ? this.entry : undefined)
-    );
+    configVersion: string,
+  ): Promise<JwksCacheSnapshot> {
+    const entry =
+      this.versions.get(`${configVersion}:${this.generation}`) ??
+      (this.generation === '0' && configVersion === '1'
+        ? this.entry
+        : undefined);
+    return entry === undefined
+      ? { generation: this.generation }
+      : { generation: this.generation, entry };
   }
 
   async setJwks(
     _organizationId: string,
-    _version: string,
+    configVersion: string,
+    generation: string,
     entry: JwksCacheEntry,
   ): Promise<void> {
-    this.versions.set(_version, entry);
+    this.versions.set(`${configVersion}:${generation}`, entry);
     this.entry = entry;
   }
 
   async deleteJwks(
     _organizationId: string,
-    currentVersion: string,
+    configVersion: string,
   ): Promise<void> {
-    const version = BigInt(currentVersion);
-    this.versions.delete(currentVersion);
-    if (version > 1n) {
-      this.versions.delete((version - 1n).toString());
-    }
+    this.versions.delete(`${configVersion}:${this.generation}`);
+    this.generation = (BigInt(this.generation) + 1n).toString();
     this.entry = undefined;
   }
 
