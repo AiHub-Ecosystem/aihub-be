@@ -86,7 +86,7 @@ pnpm arch-check
 pnpm verify
 ```
 
-`pnpm verify` runs Biome, strict TypeScript, Jest, and the Clean Architecture dependency check.
+`pnpm verify` runs knip, oxlint and Biome, Prettier checks, strict TypeScript, Jest, the SWC build, migration checks, the Clean Architecture dependency check, and OpenAPI validation. It does not require PostgreSQL; database-backed tests run through `pnpm test:db` in their separate lane. The production dependency audit and image boot check also remain CI-only lanes.
 
 ### Database-backed lane
 
