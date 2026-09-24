@@ -50,6 +50,7 @@ import {
 } from '../contracts/organization/invitation';
 import {
   ORGANIZATION_ROSTER_PATH,
+  OrganizationMembershipListResponseSchema,
   OrganizationMembershipMutationRequestSchema,
   OrganizationMembershipMutationResponseSchema,
   OrganizationRosterResponseSchema,
@@ -273,6 +274,8 @@ const AUTH_REFRESH_PATH = '/v1/auth/refresh';
 const AUTH_LOGOUT_PATH = '/v1/auth/logout';
 const ORGANIZATION_PATH = '/v1/organizations';
 const ORGANIZATION_ITEM_PATH = '/v1/organizations/{organization_id}';
+const ORGANIZATION_MEMBERSHIP_LIST_OPENAPI_PATH =
+  '/v1/organizations/{organization_id}/members';
 const ORGANIZATION_INVITATION_PATH =
   '/v1/organizations/{organization_id}/invitations';
 const ORGANIZATION_INVITATION_ITEM_PATH =
@@ -1106,6 +1109,53 @@ function organizationRosterPathItem(
   };
 }
 
+function organizationMembershipListPathItem(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, unknown> {
+  return {
+    get: {
+      operationId: 'organizations.members.list',
+      summary: "List an organization's memberships",
+      description:
+        'Active owners and admins may list active or disabled memberships for one active Organization. The filter defaults to active membership and does not depend on the member account status. Results are ordered by immutable username and omit account IDs and email addresses.',
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        {
+          name: 'organization_id',
+          in: 'path',
+          required: true,
+          description: 'The organization whose memberships are listed.',
+          schema: { type: 'string', minLength: 1 },
+        },
+        {
+          name: 'status',
+          in: 'query',
+          required: false,
+          description: 'Membership status to list. Defaults to active.',
+          schema: {
+            type: 'string',
+            enum: ['active', 'disabled'],
+            default: 'active',
+          },
+        },
+      ],
+      responses: {
+        '200': {
+          description: 'Organization memberships',
+          content: {
+            'application/json': {
+              schema: OrganizationMembershipListResponseSchema,
+            },
+          },
+        },
+        ...authErrorResponses(groupedErrors, [400, 401, 403, 500]),
+      },
+    },
+  };
+}
+
 function organizationMemberParameters(): readonly Record<string, unknown>[] {
   return [
     { $ref: '#/components/parameters/CorrelationId' },
@@ -1284,6 +1334,8 @@ export function buildOpenApiDocument(version: string): unknown {
   paths[ORGANIZATION_PATH] = organizationPathItem(groupedErrors);
   paths[ORGANIZATION_ITEM_PATH] = organizationItemPathItem(groupedErrors);
   paths[ORGANIZATION_ROSTER_PATH] = organizationRosterPathItem(groupedErrors);
+  paths[ORGANIZATION_MEMBERSHIP_LIST_OPENAPI_PATH] =
+    organizationMembershipListPathItem(groupedErrors);
   paths[ORGANIZATION_INVITATION_PATH] =
     organizationInvitationPathItem(groupedErrors);
   paths[ORGANIZATION_INVITATION_ITEM_PATH] =

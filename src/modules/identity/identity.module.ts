@@ -39,6 +39,7 @@ import { ListOpenOrganizationInvitations } from './application/list-open-organiz
 import { LIST_OPEN_ORGANIZATION_INVITATIONS } from './application/list-open-organization-invitations.port';
 import { ListOrganizationApiKeys } from './application/list-organization-api-keys';
 import { LIST_ORGANIZATION_API_KEYS } from './application/list-organization-api-keys.port';
+import { ListOrganizationMemberships } from './application/list-organization-memberships';
 import { ManageOrganizationMembership } from './application/manage-organization-membership';
 import { MintSandboxAssertion } from './application/mint-sandbox-assertion';
 import {
@@ -65,6 +66,10 @@ import {
   ORGANIZATION_INVITE_TOKEN,
   type OrganizationInviteTokenPort,
 } from './application/organization-invite-token.port';
+import {
+  ORGANIZATION_MEMBERSHIP_LIST,
+  type OrganizationMembershipListPort,
+} from './application/organization-membership-list.port';
 import {
   ORGANIZATION_MEMBERSHIP_MUTATION,
   type OrganizationMembershipMutationPort,
@@ -165,6 +170,16 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
         new PostgresOrganizationMembershipRepository(
           createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
         ),
+    },
+    {
+      provide: ORGANIZATION_MEMBERSHIP_LIST,
+      useExisting: ORGANIZATION_MEMBERSHIP,
+    },
+    {
+      provide: ListOrganizationMemberships,
+      useFactory: (membership: OrganizationMembershipListPort) =>
+        new ListOrganizationMemberships(membership),
+      inject: [ORGANIZATION_MEMBERSHIP_LIST],
     },
     {
       provide: ORGANIZATION_MEMBERSHIP_MUTATION,

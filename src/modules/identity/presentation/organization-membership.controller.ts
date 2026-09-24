@@ -17,13 +17,18 @@ import type { FastifyRequest } from 'fastify';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
   EmptyOrganizationMembershipMutationRequestSchema,
+  ORGANIZATION_MEMBERSHIP_LIST_PATH,
   ORGANIZATION_ROSTER_PATH,
+  type OrganizationMembershipListQuery,
+  OrganizationMembershipListQuerySchema,
+  type OrganizationMembershipListResponse,
   type OrganizationMembershipMutationRequest,
   OrganizationMembershipMutationRequestSchema,
   type OrganizationMembershipMutationResponse,
   type OrganizationRosterResponse,
 } from '../../../contracts/organization/membership';
 import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
+import { ListOrganizationMemberships } from '../application/list-organization-memberships';
 import {
   ORGANIZATION_MEMBERSHIP_MUTATION,
   type OrganizationMembershipMutationPort,
@@ -43,7 +48,43 @@ export class OrganizationMembershipController {
     private readonly membership: OrganizationMembershipPort,
     @Inject(ORGANIZATION_MEMBERSHIP_MUTATION)
     private readonly mutation: OrganizationMembershipMutationPort,
+    private readonly membershipList: ListOrganizationMemberships,
   ) {}
+
+  @Get(ORGANIZATION_MEMBERSHIP_LIST_PATH)
+  @HttpCode(200)
+  async listOrganizationMembers(
+    @Req() request: FastifyRequest,
+    @Param('organizationId') organizationId: string,
+  ): Promise<OrganizationMembershipListResponse> {
+    const { context, requestId, userId } = bearerRequestContext(
+      request,
+      organizationId,
+    );
+    const rawQuery: unknown = request.query;
+    if (!Value.Check(OrganizationMembershipListQuerySchema, rawQuery)) {
+      throw invalidRequest();
+    }
+
+    const query: OrganizationMembershipListQuery = rawQuery;
+    const members = await this.membershipList.list({
+      context,
+      userId,
+      organizationId,
+      status: query.status ?? 'active',
+    });
+
+    return {
+      data: {
+        members: members.map((member) => ({
+          username: member.username,
+          role: member.role,
+          status: member.status,
+        })),
+      },
+      meta: { request_id: requestId },
+    };
+  }
 
   @Get(ORGANIZATION_ROSTER_PATH)
   @HttpCode(200)

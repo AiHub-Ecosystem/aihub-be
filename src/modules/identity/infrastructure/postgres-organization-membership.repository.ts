@@ -1,5 +1,11 @@
 import { AppError } from '../../../common/errors/app-error';
 import type { OrganizationStatus } from '../application/api-key-authenticator.port';
+import type {
+  ListOrganizationMembersInput,
+  ListedOrganizationMember,
+  OrganizationMembershipListPort,
+  OrganizationMembershipListResult,
+} from '../application/organization-membership-list.port';
 import {
   ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL,
   ORGANIZATION_MEMBERSHIP_TARGET_REFUSAL,
@@ -75,6 +81,34 @@ const LIST_ROSTER_SQL = `
   WHERE caller.user_account_id = $1
     AND caller.status = 'active'
   ORDER BY caller.organization_id ASC, member_account.username ASC
+`;
+
+const LIST_ORGANIZATION_MEMBERS_SQL = `
+  SELECT
+    authority.allowed AS authorized,
+    member_account.username AS member_username,
+    membership.role AS member_role,
+    membership.status AS member_status
+  FROM (
+    SELECT EXISTS (
+      SELECT 1
+      FROM organization_members AS caller
+      INNER JOIN organizations AS organization
+        ON organization.id = caller.organization_id
+      WHERE caller.organization_id = $1
+        AND caller.user_account_id = $2
+        AND caller.status = 'active'
+        AND caller.role IN ('owner', 'admin')
+        AND organization.status = 'active'
+    ) AS allowed
+  ) AS authority
+  LEFT JOIN organization_members AS membership
+    ON authority.allowed
+   AND membership.organization_id = $1
+   AND membership.status = $3
+  LEFT JOIN user_accounts AS member_account
+    ON member_account.id = membership.user_account_id
+  ORDER BY member_account.username ASC
 `;
 
 const LOCK_ORGANIZATION_FOR_MUTATION_SQL = `
@@ -429,8 +463,69 @@ function groupRosterRows(
   return [...organizations.values()];
 }
 
+function mapOrganizationMembershipListRows(
+  rows: readonly unknown[],
+  requestedStatus: OrganizationMembershipStatus,
+): OrganizationMembershipListResult {
+  if (rows.length === 0) {
+    throw identityStoreError('Identity data is invalid');
+  }
+
+  const first = rows[0];
+  if (!isRecord(first) || typeof first.authorized !== 'boolean') {
+    throw identityStoreError('Identity data is invalid');
+  }
+
+  const authorized = first.authorized;
+  const members: ListedOrganizationMember[] = [];
+  let emptyProjectionCount = 0;
+
+  for (const value of rows) {
+    if (!isRecord(value) || value.authorized !== authorized) {
+      throw identityStoreError('Identity data is invalid');
+    }
+
+    if (
+      value.member_username === null &&
+      value.member_role === null &&
+      value.member_status === null
+    ) {
+      emptyProjectionCount += 1;
+      continue;
+    }
+
+    const username = stringValue(value, 'member_username');
+    const role = membershipRoleValue(value, 'member_role');
+    const status = membershipStatusValue(value, 'member_status');
+    if (
+      username === undefined ||
+      role === undefined ||
+      status !== requestedStatus
+    ) {
+      throw identityStoreError('Identity data is invalid');
+    }
+
+    members.push({ username, role, status });
+  }
+
+  if (
+    emptyProjectionCount > 1 ||
+    (emptyProjectionCount === 1 && members.length !== 0)
+  ) {
+    throw identityStoreError('Identity data is invalid');
+  }
+  if (!authorized) {
+    if (rows.length !== 1 || emptyProjectionCount !== 1) {
+      throw identityStoreError('Identity data is invalid');
+    }
+    return { kind: 'denied' };
+  }
+
+  return { kind: 'authorized', members };
+}
+
 export class PostgresOrganizationMembershipRepository
-  implements OrganizationMembershipPort
+  implements OrganizationMembershipPort, OrganizationMembershipListPort
 {
   constructor(
     private readonly client: PostgresIdentityClient &
@@ -499,6 +594,35 @@ export class PostgresOrganizationMembershipRepository
     }
 
     return groupRosterRows(rows);
+  }
+
+  async listOrganizationMembers(
+    input: ListOrganizationMembersInput,
+  ): Promise<OrganizationMembershipListResult> {
+    if (
+      input.context.userId !== input.userId ||
+      input.context.organizationId !== input.organizationId ||
+      input.userId.trim().length === 0 ||
+      input.organizationId.trim().length === 0 ||
+      (input.status !== 'active' && input.status !== 'disabled')
+    ) {
+      throw identityStoreError(
+        'Identity organization membership input is invalid',
+      );
+    }
+
+    let rows: readonly unknown[];
+    try {
+      rows = await this.client.query(LIST_ORGANIZATION_MEMBERS_SQL, [
+        input.organizationId,
+        input.userId,
+        input.status,
+      ]);
+    } catch {
+      throw identityStoreError('Identity store is unavailable');
+    }
+
+    return mapOrganizationMembershipListRows(rows, input.status);
   }
 
   async changeRole(

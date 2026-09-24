@@ -49,6 +49,9 @@ const ORGANIZATION_PATH = '/v1/organizations';
 const ORGANIZATION_CREATE_OPERATION_ID = 'organizations.create';
 const ORGANIZATION_ITEM_PATH = '/v1/organizations/{organization_id}';
 const ORGANIZATION_ROSTER_OPERATION_ID = 'organizations.me.members.list';
+const ORGANIZATION_MEMBERSHIP_LIST_PATH =
+  '/v1/organizations/{organization_id}/members';
+const ORGANIZATION_MEMBERSHIP_LIST_OPERATION_ID = 'organizations.members.list';
 const ORGANIZATION_INVITATION_PATH =
   '/v1/organizations/{organization_id}/invitations';
 const ORGANIZATION_INVITATION_ITEM_PATH =
@@ -154,6 +157,7 @@ describe('buildOpenApiDocument', () => {
       ORGANIZATION_PATH,
       ORGANIZATION_ITEM_PATH,
       ORGANIZATION_ROSTER_PATH,
+      ORGANIZATION_MEMBERSHIP_LIST_PATH,
       ORGANIZATION_INVITATION_PATH,
       ORGANIZATION_INVITATION_ITEM_PATH,
       ORGANIZATION_INVITATION_ACCEPT_PATH,
@@ -306,6 +310,41 @@ describe('buildOpenApiDocument', () => {
       '"entitlements":{"type":"array","items":{"minLength":1,"type":"string"}}',
     );
     expect(JSON.stringify(operation?.responses['200'])).not.toContain('email');
+  });
+
+  it('documents the organization membership list contract and filter', () => {
+    const operation = build().paths[ORGANIZATION_MEMBERSHIP_LIST_PATH]?.get;
+
+    expect(operation?.operationId).toBe(
+      ORGANIZATION_MEMBERSHIP_LIST_OPERATION_ID,
+    );
+    expect(operation?.security).toEqual([{ BearerAuth: [] }]);
+    expect(operation?.parameters).toEqual([
+      { $ref: '#/components/parameters/CorrelationId' },
+      expect.objectContaining({
+        name: 'organization_id',
+        in: 'path',
+        required: true,
+      }),
+      expect.objectContaining({
+        name: 'status',
+        in: 'query',
+        required: false,
+        schema: {
+          type: 'string',
+          enum: ['active', 'disabled'],
+          default: 'active',
+        },
+      }),
+    ]);
+    expect(operation?.responses['200']).toBeDefined();
+    expect(operation?.responses['400']).toBeDefined();
+    expect(operation?.responses['403']).toBeDefined();
+    expect(JSON.stringify(operation?.responses['200'])).toContain('username');
+    expect(JSON.stringify(operation?.responses['200'])).not.toContain('email');
+    expect(JSON.stringify(operation?.responses['200'])).not.toContain(
+      'user_account_id',
+    );
   });
 
   it('documents the owner-only identity configuration save contract and errors', () => {

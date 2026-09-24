@@ -1,6 +1,8 @@
 import { type Static, Type } from '@sinclair/typebox';
 
 export const ORGANIZATION_ROSTER_PATH = '/v1/organizations/me/members';
+export const ORGANIZATION_MEMBERSHIP_LIST_PATH =
+  '/v1/organizations/:organizationId/members';
 
 const OrganizationMembershipRoleSchema = Type.Union([
   Type.Literal('owner'),
@@ -17,6 +19,17 @@ const OrganizationMembershipStatusSchema = Type.Union([
   Type.Literal('active'),
   Type.Literal('disabled'),
 ]);
+
+export const OrganizationMembershipListQuerySchema = Type.Object(
+  {
+    status: Type.Optional(OrganizationMembershipStatusSchema),
+  },
+  { additionalProperties: false },
+);
+
+export type OrganizationMembershipListQuery = Static<
+  typeof OrganizationMembershipListQuerySchema
+>;
 
 const OrganizationStatusSchema = Type.Union([
   Type.Literal('active'),
@@ -66,6 +79,37 @@ export const OrganizationRosterResponseSchema = Type.Object(
 
 export type OrganizationRosterResponse = Static<
   typeof OrganizationRosterResponseSchema
+>;
+
+const OrganizationMembershipListMemberSchema = Type.Object(
+  {
+    username: Type.String({ minLength: 1 }),
+    role: OrganizationMembershipRoleSchema,
+    status: OrganizationMembershipStatusSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const OrganizationMembershipListResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      { members: Type.Array(OrganizationMembershipListMemberSchema) },
+      { additionalProperties: false },
+    ),
+    meta: Type.Object(
+      {
+        request_id: Type.String({
+          pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
+        }),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export type OrganizationMembershipListResponse = Static<
+  typeof OrganizationMembershipListResponseSchema
 >;
 
 export const OrganizationMembershipMutationRequestSchema = Type.Object(
