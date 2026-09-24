@@ -13,6 +13,10 @@ module.exports = {
     '^.+.(t|j)s?$': ['@swc/jest'],
   },
   testMatch: ['<rootDir>/test/db/**/*.spec.ts'],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '<rootDir>/test/db/tenant-isolation/',
+  ],
   // Same reason as the unit lane: NestJS 12 is ESM only (ADR-0047).
   transformIgnorePatterns: ['/node_modules/(?!\\.pnpm/@nestjs\\+|@nestjs/)'],
   testTimeout: 30_000,

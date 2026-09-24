@@ -105,6 +105,20 @@ Point it elsewhere with `DB_LANE_ADMIN_URL`. It stays out of `pnpm verify` on
 purpose: the default lane must keep passing with no database present. CI runs
 it as a separate job.
 
+### Cross-tenant isolation lane
+
+The cross-tenant isolation lane uses real PostgreSQL and Redis services. It
+creates a disposable `aihub_tenant_isolation_lane` database and uses Redis
+logical database 15, so it does not share state with the default database lane.
+
+```text
+docker compose up -d postgres redis
+pnpm test:tenant-isolation
+```
+
+The command fails when either service is unavailable. It is CI-only and is not
+part of `pnpm verify`.
+
 ## Source layout
 
 ```text

@@ -5,8 +5,8 @@ import { Pool } from 'pg';
  *
  * The lane runs against a disposable database created by its global setup, so
  * nothing here ever points at a developer's working database: the name is
- * fixed, dropped, and rebuilt from the repository's own migrations on every
- * run.
+ * configurable, dropped, and rebuilt from the repository's own migrations on
+ * every run.
  */
 
 /**
@@ -15,7 +15,22 @@ import { Pool } from 'pg';
  * Override it with `DB_LANE_ADMIN_URL` to point the lane elsewhere.
  */
 const DEFAULT_ADMIN_URL = 'postgres://aihub:change-me@localhost:5432/aihub';
-const TEST_DATABASE_NAME = 'aihub_db_lane';
+const DEFAULT_TEST_DATABASE_NAME = 'aihub_db_lane';
+const configuredTestDatabaseName = process.env.DB_LANE_DATABASE_NAME?.trim();
+const TEST_DATABASE_NAME =
+  configuredTestDatabaseName !== undefined &&
+  configuredTestDatabaseName.length > 0
+    ? configuredTestDatabaseName
+    : DEFAULT_TEST_DATABASE_NAME;
+
+if (
+  TEST_DATABASE_NAME !== DEFAULT_TEST_DATABASE_NAME &&
+  TEST_DATABASE_NAME !== 'aihub_tenant_isolation_lane'
+) {
+  throw new Error(
+    'DB_LANE_DATABASE_NAME must be aihub_db_lane or aihub_tenant_isolation_lane',
+  );
+}
 
 export function adminDatabaseUrl(): string {
   const configured = process.env.DB_LANE_ADMIN_URL?.trim();

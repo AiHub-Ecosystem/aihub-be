@@ -23,6 +23,7 @@
     "vault:smoke": "node scripts/vault-smoke.mjs",
     "test": "jest",
     "test:db": "jest --config jest.config.db.cjs --runInBand",
+    "test:tenant-isolation": "jest --config jest.config.tenant-isolation.cjs --runInBand",
     "test:watch": "jest --watch",
     "type-check": "tsc --noEmit",
     "type-check:tsgo": "tsgo --noEmit",

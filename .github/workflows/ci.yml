@@ -198,6 +198,60 @@ jobs:
       - name: Run the database-backed lane
         run: pnpm test:db
 
+  tenant-isolation:
+    name: Tenant isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DB_LANE_ADMIN_URL: postgres://aihub:change-me@localhost:5432/aihub
+      DB_LANE_DATABASE_NAME: aihub_tenant_isolation_lane
+      TENANT_ISOLATION_REDIS_URL: redis://localhost:6379/15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: aihub
+          POSTGRES_PASSWORD: change-me
+          POSTGRES_DB: aihub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aihub -d aihub"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.20.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run the cross-tenant isolation lane
+        run: pnpm test:tenant-isolation
+
   # The only job that runs the artifact CD deploys. The build lane builds `dist` with
   # the host's Node and the unit and database lanes each assemble a slice of
   # the application; none of them builds the image or boots the whole
@@ -250,6 +304,7 @@ jobs:
       - build
       - audit
       - database
+      - tenant-isolation
       - image
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -262,6 +317,7 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           AUDIT_RESULT: ${{ needs.audit.result }}
           DATABASE_RESULT: ${{ needs.database.result }}
+          TENANT_ISOLATION_RESULT: ${{ needs.tenant-isolation.result }}
           IMAGE_RESULT: ${{ needs.image.result }}
         run: |
           test "$STATIC_RESULT" = success
@@ -269,4 +325,5 @@ jobs:
           test "$BUILD_RESULT" = success
           test "$AUDIT_RESULT" = success
           test "$DATABASE_RESULT" = success
+          test "$TENANT_ISOLATION_RESULT" = success
           test "$IMAGE_RESULT" = success
