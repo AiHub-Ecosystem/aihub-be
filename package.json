@@ -21,7 +21,7 @@
     "canary:ai-writing": "tsx scripts/canary-ai-writing.ts",
     "vault:provision": "node ops/vault/provision-runtime-secrets.mjs",
     "vault:smoke": "node scripts/vault-smoke.mjs",
-    "test": "jest --runInBand",
+    "test": "jest",
     "test:db": "jest --config jest.config.db.cjs --runInBand",
     "test:watch": "jest --watch",
     "type-check": "tsc --noEmit",

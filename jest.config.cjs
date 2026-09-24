@@ -1,6 +1,7 @@
 /** @type {import('jest').Config} */
 module.exports = {
   testEnvironment: 'node',
+  maxWorkers: 2,
   rootDir: '.',
   setupFiles: ['<rootDir>/test/runtime-secret-env.ts'],
   transform: {

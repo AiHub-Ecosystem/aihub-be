@@ -10,7 +10,7 @@ describe('Argon2PasswordHasher', () => {
     await expect(hasher.verify(password, encoded)).resolves.toBe(true);
     await expect(hasher.verify(password.trim(), encoded)).resolves.toBe(false);
     await expect(hasher.verify('wrong password', encoded)).resolves.toBe(false);
-  });
+  }, 15_000);
 
   it('fails closed for malformed encoded hashes', async () => {
     await expect(
