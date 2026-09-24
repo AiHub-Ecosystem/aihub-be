@@ -66,6 +66,7 @@ describe('Writing user assertion HTTP flow', () => {
     findActiveByOrganizationId: async () => identityConfig,
   };
   const keyProvider: JwksKeyProviderPort = {
+    validateRemote: async () => undefined,
     resolve: async () => {
       if (providerUnavailable) {
         throw new AppError({

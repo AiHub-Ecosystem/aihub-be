@@ -1,5 +1,6 @@
 import { AppError } from '../../../common/errors/app-error';
 import type { PostgresIdentityClient } from './postgres-api-key.repository';
+import type { PostgresIdentityQueryClient } from './postgres-identity.client';
 import { PostgresOrganizationIdentityConfigRepository } from './postgres-organization-identity-config.repository';
 
 const row = {
@@ -10,6 +11,7 @@ const row = {
   allowed_algorithms: ['RS256', 'ES256'],
   max_assertion_ttl_seconds: 300,
   status: 'active',
+  jwks_cache_version: '1',
   updated_at: new Date('2026-09-22T12:34:56.000Z'),
 };
 
@@ -20,6 +22,12 @@ class FakePostgres implements PostgresIdentityClient {
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]> {
     this.queries.push({ text, values });
     return Promise.resolve(this.result);
+  }
+
+  transaction<T>(
+    callback: (client: PostgresIdentityQueryClient) => Promise<T>,
+  ): Promise<T> {
+    return callback(this);
   }
 
   close(): Promise<void> {
@@ -37,6 +45,7 @@ describe('PostgresOrganizationIdentityConfigRepository', () => {
       ).findActiveByOrganizationId('org_acme'),
     ).resolves.toEqual({
       organizationId: 'org_acme',
+      jwksCacheVersion: '1',
       issuer: 'https://acme.edu',
       jwksUrl: 'https://acme.edu/.well-known/jwks.json',
       publicKeysJwks: null,
@@ -71,6 +80,7 @@ describe('PostgresOrganizationIdentityConfigRepository', () => {
       ).findByOrganizationId('org_acme'),
     ).resolves.toEqual({
       organizationId: 'org_acme',
+      jwksCacheVersion: '1',
       issuer: 'https://acme.edu',
       jwksUrl: 'https://acme.edu/.well-known/jwks.json',
       publicKeysJwks: null,

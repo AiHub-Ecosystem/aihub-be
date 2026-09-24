@@ -230,8 +230,8 @@ export function apiKeyCacheKeys(hashHex: string): readonly string[] {
   return [cacheKey(hashHex), missKey(hashHex)];
 }
 
-function jwksKey(organizationId: string): string {
-  return `aihub:v1:jwks:${organizationId}`;
+function jwksKey(organizationId: string, version: string): string {
+  return `aihub:v1:jwks:${organizationId}:${version}`;
 }
 
 function jwksRefreshKey(organizationId: string): string {
@@ -330,20 +330,25 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
     await this.client.del(cacheKey(hashHex), missKey(hashHex)).catch(() => 0);
   }
 
-  async getJwks(organizationId: string): Promise<JwksCacheEntry | undefined> {
+  async getJwks(
+    organizationId: string,
+    version: string,
+  ): Promise<JwksCacheEntry | undefined> {
     if (this.client === undefined) {
       return undefined;
     }
 
     try {
-      const serialized = await this.client.get(jwksKey(organizationId));
+      const serialized = await this.client.get(
+        jwksKey(organizationId, version),
+      );
       if (serialized === null) {
         return undefined;
       }
 
       const entry = parseJwksCacheEntry(serialized);
       if (entry === undefined) {
-        await this.client.del(jwksKey(organizationId));
+        await this.client.del(jwksKey(organizationId, version));
       }
       return entry;
     } catch {
@@ -351,7 +356,11 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
     }
   }
 
-  async setJwks(organizationId: string, entry: JwksCacheEntry): Promise<void> {
+  async setJwks(
+    organizationId: string,
+    version: string,
+    entry: JwksCacheEntry,
+  ): Promise<void> {
     if (this.client === undefined) {
       return;
     }
@@ -361,8 +370,29 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
       Math.ceil((entry.staleUntil - Date.now()) / 1_000),
     );
     await this.client
-      .set(jwksKey(organizationId), JSON.stringify(entry), 'EX', ttlSeconds)
+      .set(
+        jwksKey(organizationId, version),
+        JSON.stringify(entry),
+        'EX',
+        ttlSeconds,
+      )
       .catch(() => undefined);
+  }
+
+  async deleteJwks(
+    organizationId: string,
+    currentVersion: string,
+  ): Promise<void> {
+    if (this.client === undefined) {
+      throw new Error('Redis is unavailable');
+    }
+
+    const version = BigInt(currentVersion);
+    const keys = [jwksKey(organizationId, currentVersion)];
+    if (version > 1n) {
+      keys.push(jwksKey(organizationId, (version - 1n).toString()));
+    }
+    await this.client.del(...keys);
   }
 
   async tryAcquireRefresh(organizationId: string): Promise<JwksRefreshLock> {

@@ -113,8 +113,13 @@ function isUnsafeIpv4(address: string): boolean {
     ['169.254.0.0', '169.254.255.255'],
     ['172.16.0.0', '172.31.255.255'],
     ['192.0.0.0', '192.0.0.255'],
+    ['192.0.2.0', '192.0.2.255'],
+    ['192.88.99.0', '192.88.99.255'],
     ['192.168.0.0', '192.168.255.255'],
     ['198.18.0.0', '198.19.255.255'],
+    ['198.51.100.0', '198.51.100.255'],
+    ['203.0.113.0', '203.0.113.255'],
+    ['224.0.0.0', '239.255.255.255'],
     ['240.0.0.0', '255.255.255.255'],
   ].some(([start, end]) => inRange(start ?? '', end ?? ''));
 }
@@ -171,37 +176,20 @@ function isUnsafeIpv6(address: string): boolean {
   }
 
   const first = parts[0] ?? 0;
-  const isUnspecified = parts.every((part) => part === 0);
-  const isLoopback =
-    parts.slice(0, 7).every((part) => part === 0) && parts[7] === 1;
-  const isUniqueLocal = (first & 0xfe00) === 0xfc00;
-  const isLinkLocal = (first & 0xffc0) === 0xfe80;
-  const isMulticast = (first & 0xff00) === 0xff00;
-  const isMappedIpv4 =
-    parts[0] === 0 &&
-    parts[1] === 0 &&
-    parts[2] === 0 &&
-    parts[3] === 0 &&
-    parts[4] === 0 &&
-    parts[5] === 0xffff;
+  const isIetfProtocolAssignment =
+    first === 0x2001 && (parts[1] ?? 0) <= 0x01ff;
+  const isDocumentation =
+    (first === 0x2001 && parts[1] === 0x0db8) ||
+    (first === 0x3fff && (parts[1] ?? 0) <= 0x0fff);
+  const isSixToFour = first === 0x2002;
+  const isNotGlobalUnicast = first < 0x2000 || first > 0x3fff;
 
-  if (
-    isUnspecified ||
-    isLoopback ||
-    isUniqueLocal ||
-    isLinkLocal ||
-    isMulticast
-  ) {
-    return true;
-  }
-
-  return isMappedIpv4
-    ? isUnsafeIpv4(
-        `${(parts[6] ?? 0) >>> 8}.${(parts[6] ?? 0) & 0xff}.${
-          (parts[7] ?? 0) >>> 8
-        }.${(parts[7] ?? 0) & 0xff}`,
-      )
-    : false;
+  return (
+    isNotGlobalUnicast ||
+    isIetfProtocolAssignment ||
+    isDocumentation ||
+    isSixToFour
+  );
 }
 
 function isUnsafeAddress(address: string): boolean {
@@ -356,6 +344,10 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     private readonly now: () => number = () => Date.now(),
   ) {}
 
+  async validateRemote(url: string): Promise<void> {
+    await this.fetchRemote(url);
+  }
+
   async resolve(input: {
     readonly organizationId: string;
     readonly config: OrganizationIdentityConfig;
@@ -368,7 +360,8 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       return input.config.publicKeysJwks;
     }
 
-    const cached = await this.cache.getJwks(input.organizationId);
+    const cacheVersion = input.config.jwksCacheVersion ?? '1';
+    const cached = await this.cache.getJwks(input.organizationId, cacheVersion);
     const now = this.now();
 
     if (
@@ -393,7 +386,10 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
           now + JWKS_REFRESH_COOLDOWN_MS,
         );
       } else if (!lock.acquired) {
-        const reread = await this.cache.getJwks(input.organizationId);
+        const reread = await this.cache.getJwks(
+          input.organizationId,
+          cacheVersion,
+        );
         return reread?.jwks ?? cached?.jwks ?? { keys: [] };
       }
     }
@@ -406,7 +402,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
         staleUntil: now + JWKS_STALE_TTL_MS,
       };
       await this.cache
-        .setJwks(input.organizationId, entry)
+        .setJwks(input.organizationId, cacheVersion, entry)
         .catch(() => undefined);
       return jwks;
     } catch (error) {

@@ -277,7 +277,7 @@
         }
       },
       "Error409": {
-        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE | ORGANIZATION_MEMBER_EXISTS | ORGANIZATION_OWNER_REQUIRED | ORGANIZATION_CREATION_LIMIT_REACHED",
+        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE | ORGANIZATION_MEMBER_EXISTS | ORGANIZATION_OWNER_REQUIRED | ORGANIZATION_IDENTITY_ISSUER_CONFLICT | ORGANIZATION_CREATION_LIMIT_REACHED",
         "content": {
           "application/json": {
             "schema": {
@@ -306,6 +306,10 @@
                         },
                         {
                           "const": "ORGANIZATION_OWNER_REQUIRED",
+                          "type": "string"
+                        },
+                        {
+                          "const": "ORGANIZATION_IDENTITY_ISSUER_CONFLICT",
                           "type": "string"
                         },
                         {
@@ -532,7 +536,7 @@
         }
       },
       "Error503": {
-        "description": "IDENTITY_PROVIDER_UNAVAILABLE | AUTH_EMAIL_DELIVERY_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
+        "description": "IDENTITY_PROVIDER_UNAVAILABLE | IDENTITY_CONFIG_CACHE_UNAVAILABLE | AUTH_EMAIL_DELIVERY_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
         "content": {
           "application/json": {
             "schema": {
@@ -549,6 +553,10 @@
                       "anyOf": [
                         {
                           "const": "IDENTITY_PROVIDER_UNAVAILABLE",
+                          "type": "string"
+                        },
+                        {
+                          "const": "IDENTITY_CONFIG_CACHE_UNAVAILABLE",
                           "type": "string"
                         },
                         {
@@ -4777,6 +4785,448 @@
       }
     },
     "/v1/organizations/{organization_id}/identity-config": {
+      "put": {
+        "operationId": "organizations.identityConfig.set",
+        "summary": "Set an organization identity configuration",
+        "description": "Creates or replaces the public User Assertion identity configuration for an active owner of an active Organization. Submit exactly one JWKS source. URL sources are fetched through the SSRF-protected JWKS path before saving. Existing status is preserved. A retryable cache error may mean the durable save succeeded; retrying the same request safely retries cache purge.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization whose identity configuration is set.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": ["issuer", "jwks_url"],
+                    "properties": {
+                      "issuer": {
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "allowed_algorithms": {
+                        "minItems": 1,
+                        "uniqueItems": true,
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "const": "RS256",
+                              "type": "string"
+                            },
+                            {
+                              "const": "ES256",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "max_assertion_ttl_seconds": {
+                        "minimum": 1,
+                        "maximum": 3600,
+                        "type": "integer"
+                      },
+                      "jwks_url": {
+                        "minLength": 1,
+                        "format": "uri",
+                        "type": "string"
+                      },
+                      "public_keys_jwks": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": ["issuer", "public_keys_jwks"],
+                    "properties": {
+                      "issuer": {
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "allowed_algorithms": {
+                        "minItems": 1,
+                        "uniqueItems": true,
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "const": "RS256",
+                              "type": "string"
+                            },
+                            {
+                              "const": "ES256",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "max_assertion_ttl_seconds": {
+                        "minimum": 1,
+                        "maximum": 3600,
+                        "type": "integer"
+                      },
+                      "jwks_url": {
+                        "type": "null"
+                      },
+                      "public_keys_jwks": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": ["keys"],
+                        "properties": {
+                          "keys": {
+                            "minItems": 1,
+                            "type": "array",
+                            "items": {
+                              "allOf": [
+                                {
+                                  "type": "object",
+                                  "patternProperties": {
+                                    "^(.*)$": {}
+                                  }
+                                },
+                                {
+                                  "not": {
+                                    "type": "object",
+                                    "required": ["d"],
+                                    "properties": {
+                                      "d": {}
+                                    }
+                                  }
+                                },
+                                {
+                                  "not": {
+                                    "type": "object",
+                                    "required": ["p"],
+                                    "properties": {
+                                      "p": {}
+                                    }
+                                  }
+                                },
+                                {
+                                  "not": {
+                                    "type": "object",
+                                    "required": ["q"],
+                                    "properties": {
+                                      "q": {}
+                                    }
+                                  }
+                                },
+                                {
+                                  "not": {
+                                    "type": "object",
+                                    "required": ["dp"],
+                                    "properties": {
+                                      "dp": {}
+                                    }
+                                  }
+                                },
+                                {
+                                  "not": {
+                                    "type": "object",
+                                    "required": ["dq"],
+                                    "properties": {
+                                      "dq": {}
+                                    }
+                                  }
+                                },
+                                {
+                                  "not": {
+                                    "type": "object",
+                                    "required": ["qi"],
+                                    "properties": {
+                                      "qi": {}
+                                    }
+                                  }
+                                },
+                                {
+                                  "not": {
+                                    "type": "object",
+                                    "required": ["oth"],
+                                    "properties": {
+                                      "oth": {}
+                                    }
+                                  }
+                                },
+                                {
+                                  "not": {
+                                    "type": "object",
+                                    "required": ["k"],
+                                    "properties": {
+                                      "k": {}
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The stored public identity configuration, including its preserved status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "configured",
+                            "issuer",
+                            "jwks_url",
+                            "public_keys_jwks",
+                            "allowed_algorithms",
+                            "max_assertion_ttl_seconds",
+                            "status",
+                            "updated_at"
+                          ],
+                          "properties": {
+                            "configured": {
+                              "const": true,
+                              "type": "boolean"
+                            },
+                            "issuer": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "jwks_url": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "format": "uri",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "public_keys_jwks": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": ["keys"],
+                                  "properties": {
+                                    "keys": {
+                                      "minItems": 1,
+                                      "type": "array",
+                                      "items": {
+                                        "allOf": [
+                                          {
+                                            "type": "object",
+                                            "patternProperties": {
+                                              "^(.*)$": {}
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["d"],
+                                              "properties": {
+                                                "d": {}
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["p"],
+                                              "properties": {
+                                                "p": {}
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["q"],
+                                              "properties": {
+                                                "q": {}
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["dp"],
+                                              "properties": {
+                                                "dp": {}
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["dq"],
+                                              "properties": {
+                                                "dq": {}
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["qi"],
+                                              "properties": {
+                                                "qi": {}
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["oth"],
+                                              "properties": {
+                                                "oth": {}
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "type": "object",
+                                              "required": ["k"],
+                                              "properties": {
+                                                "k": {}
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "allowed_algorithms": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "const": "RS256",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "ES256",
+                                    "type": "string"
+                                  }
+                                ]
+                              }
+                            },
+                            "max_assertion_ttl_seconds": {
+                              "minimum": 1,
+                              "maximum": 3600,
+                              "type": "integer"
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "const": "active",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "disabled",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "updated_at": {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": ["configured"],
+                          "properties": {
+                            "configured": {
+                              "const": false,
+                              "type": "boolean"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
       "get": {
         "operationId": "organizations.identityConfig.read",
         "summary": "Read an organization identity configuration",
@@ -5072,6 +5522,7 @@
                   "organization.renamed",
                   "organization.suspended",
                   "organization.restored",
+                  "organization.identity_config_set",
                   "invitation.sent",
                   "invitation.resent",
                   "invitation.accepted",
@@ -5192,6 +5643,10 @@
                                   },
                                   {
                                     "const": "organization.restored",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "organization.identity_config_set",
                                     "type": "string"
                                   },
                                   {

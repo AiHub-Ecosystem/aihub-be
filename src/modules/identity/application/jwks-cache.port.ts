@@ -12,8 +12,16 @@ export interface JwksRefreshLock {
 }
 
 export interface JwksCachePort {
-  getJwks(organizationId: string): Promise<JwksCacheEntry | undefined>;
-  setJwks(organizationId: string, entry: JwksCacheEntry): Promise<void>;
+  getJwks(
+    organizationId: string,
+    version: string,
+  ): Promise<JwksCacheEntry | undefined>;
+  setJwks(
+    organizationId: string,
+    version: string,
+    entry: JwksCacheEntry,
+  ): Promise<void>;
+  deleteJwks(organizationId: string, currentVersion: string): Promise<void>;
   tryAcquireRefresh(organizationId: string): Promise<JwksRefreshLock>;
 }
 

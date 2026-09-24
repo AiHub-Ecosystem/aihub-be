@@ -95,6 +95,8 @@ import {
   SANDBOX_ASSERTION_SIGNER,
   type SandboxAssertionSignerPort,
 } from './application/sandbox-assertion-signer.port';
+import { SetOrganizationIdentityConfig } from './application/set-organization-identity-config';
+import { SET_ORGANIZATION_IDENTITY_CONFIG } from './application/set-organization-identity-config.port';
 import {
   USER_ASSERTION_CRYPTO,
   type UserAssertionCryptoPort,
@@ -237,6 +239,21 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
       inject: [
         ORGANIZATION_MEMBERSHIP,
         ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
+      ],
+    },
+    {
+      provide: SET_ORGANIZATION_IDENTITY_CONFIG,
+      useFactory: (
+        membership: OrganizationMembershipPort,
+        configs: OrganizationIdentityConfigRepositoryPort,
+        keys: JwksKeyProviderPort,
+        cache: JwksCachePort,
+      ) => new SetOrganizationIdentityConfig(membership, configs, keys, cache),
+      inject: [
+        ORGANIZATION_MEMBERSHIP,
+        ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
+        JWKS_KEY_PROVIDER,
+        JWKS_CACHE,
       ],
     },
     {

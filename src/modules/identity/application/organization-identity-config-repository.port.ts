@@ -1,3 +1,4 @@
+import type { RequestContext } from '../../../common/request-context/request-context';
 import type {
   IdentityConfigAlgorithm,
   IdentityConfigStatus,
@@ -12,6 +13,7 @@ export type {
 
 export interface OrganizationIdentityConfig {
   readonly organizationId: string;
+  readonly jwksCacheVersion?: string;
   readonly issuer: string;
   readonly jwksUrl: string | null;
   readonly publicKeysJwks: PublicJsonWebKeySet | null;
@@ -25,6 +27,25 @@ export interface StoredOrganizationIdentityConfig
   readonly updatedAt: Date;
 }
 
+export interface SaveOrganizationIdentityConfigInput {
+  readonly context: RequestContext;
+  readonly userId: string;
+  readonly organizationId: string;
+  readonly issuer: string;
+  readonly jwksUrl: string | null;
+  readonly publicKeysJwks: PublicJsonWebKeySet | null;
+  readonly allowedAlgorithms: readonly IdentityConfigAlgorithm[];
+  readonly maxAssertionTtlSeconds: number;
+  readonly sourceKind: 'url' | 'inline';
+}
+
+export type SaveOrganizationIdentityConfigResult =
+  | {
+      readonly kind: 'saved' | 'unchanged';
+      readonly config: StoredOrganizationIdentityConfig;
+    }
+  | { readonly kind: 'forbidden' };
+
 export interface OrganizationIdentityConfigRepositoryPort {
   findActiveByOrganizationId(
     organizationId: string,
@@ -32,6 +53,9 @@ export interface OrganizationIdentityConfigRepositoryPort {
   findByOrganizationId(
     organizationId: string,
   ): Promise<StoredOrganizationIdentityConfig | null>;
+  saveForOwner(
+    input: SaveOrganizationIdentityConfigInput,
+  ): Promise<SaveOrganizationIdentityConfigResult>;
 }
 
 export const ORGANIZATION_IDENTITY_CONFIG_REPOSITORY = Symbol(

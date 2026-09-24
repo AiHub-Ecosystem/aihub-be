@@ -39,6 +39,42 @@ const UnconfiguredOrganizationIdentityConfigSchema = Type.Object(
   { additionalProperties: false },
 );
 
+const IdentityConfigRequestFields = {
+  issuer: Type.String({ minLength: 1, maxLength: 2_048 }),
+  allowed_algorithms: Type.Optional(
+    Type.Array(Type.Union([Type.Literal('RS256'), Type.Literal('ES256')]), {
+      minItems: 1,
+      uniqueItems: true,
+    }),
+  ),
+  max_assertion_ttl_seconds: Type.Optional(
+    Type.Integer({ minimum: 1, maximum: 3_600 }),
+  ),
+};
+
+export const SetOrganizationIdentityConfigRequestSchema = Type.Union([
+  Type.Object(
+    {
+      ...IdentityConfigRequestFields,
+      jwks_url: Type.String({ minLength: 1, format: 'uri' }),
+      public_keys_jwks: Type.Optional(Type.Null()),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...IdentityConfigRequestFields,
+      jwks_url: Type.Optional(Type.Null()),
+      public_keys_jwks: PublicJsonWebKeySetSchema,
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+export type SetOrganizationIdentityConfigRequest = Static<
+  typeof SetOrganizationIdentityConfigRequestSchema
+>;
+
 export const ReadOrganizationIdentityConfigResponseSchema = Type.Object(
   {
     data: Type.Union([

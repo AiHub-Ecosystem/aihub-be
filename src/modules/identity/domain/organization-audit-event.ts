@@ -13,6 +13,7 @@ export type OrganizationAuditAction =
   | 'organization.renamed'
   | 'organization.suspended'
   | 'organization.restored'
+  | 'organization.identity_config_set'
   | 'invitation.sent'
   | 'invitation.resent'
   | 'invitation.accepted'
@@ -109,6 +110,13 @@ interface OrganizationStatusDraft {
   readonly name: string;
 }
 
+interface OrganizationIdentityConfigSetDraft {
+  readonly action: 'organization.identity_config_set';
+  readonly organizationId: string;
+  readonly issuer: string;
+  readonly sourceKind: 'url' | 'inline';
+}
+
 interface InvitationDraft {
   readonly action:
     | 'invitation.sent'
@@ -200,6 +208,7 @@ export type OrganizationAuditDraft =
   | OrganizationCreatedDraft
   | OrganizationRenamedDraft
   | OrganizationStatusDraft
+  | OrganizationIdentityConfigSetDraft
   | InvitationDraft
   | InvitationRevokedDraft
   | RoleChangedDraft
@@ -238,6 +247,14 @@ function shape(draft: OrganizationAuditDraft): Shape {
         targetId: draft.organizationId,
         targetLabel: draft.name,
         detail: {},
+        outcome: 'applied',
+      };
+    case 'organization.identity_config_set':
+      return {
+        targetType: 'organization',
+        targetId: draft.organizationId,
+        targetLabel: 'Identity configuration',
+        detail: { issuer: draft.issuer, sourceKind: draft.sourceKind },
         outcome: 'applied',
       };
     case 'organization.renamed':

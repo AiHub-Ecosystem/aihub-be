@@ -53,6 +53,30 @@ describe('committed openapi.json', () => {
     expect(successResponse).toContain('"const":false');
   });
 
+  it('publishes the owner identity configuration PUT and safe retry errors', () => {
+    const document = committedDocument() as {
+      paths: Record<string, unknown>;
+    };
+    const path = document.paths[
+      '/v1/organizations/{organization_id}/identity-config'
+    ] as {
+      put?: {
+        operationId?: string;
+        security?: unknown[];
+        requestBody?: unknown;
+        responses?: Record<string, unknown>;
+      };
+    };
+
+    expect(path.put).toMatchObject({
+      operationId: 'organizations.identityConfig.set',
+      security: [{ BearerAuth: [] }],
+    });
+    expect(JSON.stringify(path.put?.requestBody)).toContain('jwks_url');
+    expect(path.put?.responses?.['409']).toBeDefined();
+    expect(path.put?.responses?.['503']).toBeDefined();
+  });
+
   // OpenAPI 3.1 validity itself is checked by `scripts/validate-openapi.mjs`
   // (wired into `pnpm verify`), not here: the validator package is ESM-only
   // and Jest's CommonJS transform pipeline cannot load it, even via a

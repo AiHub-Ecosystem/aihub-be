@@ -113,10 +113,10 @@ describe('RedisIdentityStore', () => {
       staleUntil: Date.now() + 24 * 60 * 60 * 1_000,
     };
 
-    await store.setJwks('org_acme', entry);
+    await store.setJwks('org_acme', '1', entry);
 
-    await expect(store.getJwks('org_acme')).resolves.toEqual(entry);
-    expect(redis.expirations.get('aihub:v1:jwks:org_acme')).toBeGreaterThan(
+    await expect(store.getJwks('org_acme', '1')).resolves.toEqual(entry);
+    expect(redis.expirations.get('aihub:v1:jwks:org_acme:1')).toBeGreaterThan(
       86_390,
     );
     await expect(store.tryAcquireRefresh('org_acme')).resolves.toEqual({
@@ -128,6 +128,21 @@ describe('RedisIdentityStore', () => {
       available: true,
     });
     expect(redis.expirations.get('aihub:v1:jwks-refresh:org_acme')).toBe(300);
+  });
+
+  it('confirms JWKS cache deletion for an Organization', async () => {
+    const redis = new FakeRedis();
+    const store = new RedisIdentityStore('', redis);
+    await store.setJwks('org_acme', '2', {
+      jwks: { keys: [{ kty: 'RSA', n: 'modulus', e: 'AQAB' }] },
+      freshUntil: Date.now() + 1_000,
+      staleUntil: Date.now() + 2_000,
+    });
+
+    await store.deleteJwks('org_acme', '2');
+
+    await expect(store.getJwks('org_acme', '2')).resolves.toBeUndefined();
+    await expect(store.getJwks('org_acme', '1')).resolves.toBeUndefined();
   });
 
   it('fails open for cache and brute-force protection when Redis is unavailable', async () => {
@@ -143,6 +158,9 @@ describe('RedisIdentityStore', () => {
     const failures = new RedisAuthFailureCounter('', redis);
 
     await expect(store.get('a'.repeat(64))).resolves.toBeUndefined();
+    await expect(store.deleteJwks('org_acme', '1')).rejects.toThrow(
+      'redis down',
+    );
     await expect(failures.get('203.0.113.10')).resolves.toBe(0);
     await expect(failures.recordFailure('203.0.113.10')).resolves.toBe(0);
   });

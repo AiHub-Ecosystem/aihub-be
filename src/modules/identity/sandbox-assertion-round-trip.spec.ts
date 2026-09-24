@@ -68,6 +68,7 @@ function keyProvider(
   organizations: ReadonlyMap<string, Organization>,
 ): JwksKeyProviderPort {
   return {
+    validateRemote: async () => undefined,
     resolve: async ({ organizationId }) => {
       const found = organizations.get(organizationId);
       if (found === undefined) {

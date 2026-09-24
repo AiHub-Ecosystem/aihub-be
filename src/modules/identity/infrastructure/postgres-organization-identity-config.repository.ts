@@ -2,6 +2,8 @@ import { AppError } from '../../../common/errors/app-error';
 import type {
   OrganizationIdentityConfig,
   OrganizationIdentityConfigRepositoryPort,
+  SaveOrganizationIdentityConfigInput,
+  SaveOrganizationIdentityConfigResult,
   StoredOrganizationIdentityConfig,
 } from '../application/organization-identity-config-repository.port';
 import {
@@ -10,7 +12,72 @@ import {
   type IdentityConfigStatus,
   parsePublicJsonWebKeySet,
 } from '../domain/organization-identity-config';
+import {
+  identityStoreError,
+  isRecord,
+  membershipRoleValue,
+  membershipStatusValue,
+  organizationStatusValue,
+  stringValue,
+} from './identity-row';
+import {
+  auditStamp,
+  recordOrganizationAuditEvent,
+} from './organization-audit-event.store';
 import type { PostgresIdentityClient } from './postgres-api-key.repository';
+import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
+
+const LOCK_ORGANIZATION_SQL = `
+  SELECT status
+  FROM organizations
+  WHERE id = $1
+  FOR UPDATE
+`;
+
+const LOCK_CALLER_MEMBERSHIP_SQL = `
+  SELECT role, status
+  FROM organization_members
+  WHERE organization_id = $1
+    AND user_account_id = $2
+  FOR UPDATE
+`;
+
+const UPSERT_SQL = `
+  INSERT INTO organization_identity_configs (
+    organization_id, issuer, jwks_url, public_keys_jwks,
+    allowed_algorithms, max_assertion_ttl_seconds, status
+  ) VALUES ($1, $2, $3, $4::jsonb, $5, $6, 'active')
+  ON CONFLICT (organization_id) DO UPDATE SET
+    issuer = EXCLUDED.issuer,
+    jwks_url = EXCLUDED.jwks_url,
+    public_keys_jwks = EXCLUDED.public_keys_jwks,
+    allowed_algorithms = EXCLUDED.allowed_algorithms,
+    max_assertion_ttl_seconds = EXCLUDED.max_assertion_ttl_seconds,
+    jwks_cache_version = organization_identity_configs.jwks_cache_version + 1
+  WHERE (organization_identity_configs.issuer,
+         organization_identity_configs.jwks_url,
+         organization_identity_configs.public_keys_jwks,
+         organization_identity_configs.allowed_algorithms,
+         organization_identity_configs.max_assertion_ttl_seconds)
+    IS DISTINCT FROM
+        (EXCLUDED.issuer,
+         EXCLUDED.jwks_url,
+         EXCLUDED.public_keys_jwks,
+         EXCLUDED.allowed_algorithms,
+         EXCLUDED.max_assertion_ttl_seconds)
+  RETURNING organization_id, issuer, jwks_url, public_keys_jwks,
+            allowed_algorithms, max_assertion_ttl_seconds, status, updated_at,
+            jwks_cache_version
+`;
+
+const BUMP_CACHE_VERSION_SQL = `
+  UPDATE organization_identity_configs
+  SET jwks_cache_version = jwks_cache_version + 1
+  WHERE organization_id = $1
+  RETURNING organization_id, issuer, jwks_url, public_keys_jwks,
+            allowed_algorithms, max_assertion_ttl_seconds, status, updated_at,
+            jwks_cache_version
+`;
 
 const LOOKUP_SQL = `
   SELECT
@@ -20,7 +87,8 @@ const LOOKUP_SQL = `
     public_keys_jwks,
     allowed_algorithms,
     max_assertion_ttl_seconds,
-    status
+    status,
+    jwks_cache_version
   FROM organization_identity_configs
   WHERE organization_id = $1
     AND status = 'active'
@@ -36,31 +104,12 @@ const READ_SQL = `
     allowed_algorithms,
     max_assertion_ttl_seconds,
     status,
-    updated_at
+    updated_at,
+    jwks_cache_version
   FROM organization_identity_configs
   WHERE organization_id = $1
   LIMIT 1
 `;
-
-function identityStoreError(message: string): AppError {
-  return new AppError({
-    code: 'INTERNAL_ERROR',
-    message,
-    retryable: false,
-  });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function stringValue(
-  record: Record<string, unknown>,
-  key: string,
-): string | undefined {
-  const value = record[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
 
 function nullableStringValue(
   record: Record<string, unknown>,
@@ -149,6 +198,7 @@ function mapRecord(value: unknown): OrganizationIdentityConfig | undefined {
   }
 
   const organizationId = stringValue(value, 'organization_id');
+  const jwksCacheVersion = stringValue(value, 'jwks_cache_version');
   const issuer = stringValue(value, 'issuer');
   const jwksUrl = nullableStringValue(value, 'jwks_url');
   const rawPublicKeys = value.public_keys_jwks;
@@ -163,6 +213,7 @@ function mapRecord(value: unknown): OrganizationIdentityConfig | undefined {
 
   if (
     organizationId === undefined ||
+    jwksCacheVersion === undefined ||
     issuer === undefined ||
     jwksUrl === undefined ||
     (jwksUrl !== null && !isHttpsUrl(jwksUrl)) ||
@@ -177,6 +228,7 @@ function mapRecord(value: unknown): OrganizationIdentityConfig | undefined {
 
   return {
     organizationId,
+    jwksCacheVersion,
     issuer,
     jwksUrl,
     publicKeysJwks,
@@ -203,7 +255,10 @@ function mapStoredRecord(
 export class PostgresOrganizationIdentityConfigRepository
   implements OrganizationIdentityConfigRepositoryPort
 {
-  constructor(private readonly client: PostgresIdentityClient) {}
+  constructor(
+    private readonly client: PostgresIdentityClient &
+      PostgresIdentityTransactionalClient,
+  ) {}
 
   async findActiveByOrganizationId(
     organizationId: string,
@@ -237,6 +292,101 @@ export class PostgresOrganizationIdentityConfigRepository
     return record;
   }
 
+  async saveForOwner(
+    input: SaveOrganizationIdentityConfigInput,
+  ): Promise<SaveOrganizationIdentityConfigResult> {
+    const stamp = auditStamp(input, input.userId, input.context.receivedAt);
+
+    try {
+      return await this.client.transaction(async (transaction) => {
+        const organization = (
+          await transaction.query(LOCK_ORGANIZATION_SQL, [input.organizationId])
+        )[0];
+        if (!isRecord(organization)) {
+          return { kind: 'forbidden' as const };
+        }
+        const organizationStatus = organizationStatusValue(
+          organization,
+          'status',
+        );
+        if (organizationStatus === undefined) {
+          throw identityStoreError('Identity data is invalid');
+        }
+        if (organizationStatus !== 'active') {
+          return { kind: 'forbidden' as const };
+        }
+
+        const membership = (
+          await transaction.query(LOCK_CALLER_MEMBERSHIP_SQL, [
+            input.organizationId,
+            input.userId,
+          ])
+        )[0];
+        if (!isRecord(membership)) {
+          return { kind: 'forbidden' as const };
+        }
+        const role = membershipRoleValue(membership, 'role');
+        const status = membershipStatusValue(membership, 'status');
+        if (role === undefined || status === undefined) {
+          throw identityStoreError('Identity data is invalid');
+        }
+        if (role !== 'owner' || status !== 'active') {
+          return { kind: 'forbidden' as const };
+        }
+
+        const values = [
+          input.organizationId,
+          input.issuer,
+          input.jwksUrl,
+          input.publicKeysJwks === null
+            ? null
+            : JSON.stringify(input.publicKeysJwks),
+          [...input.allowedAlgorithms],
+          input.maxAssertionTtlSeconds,
+        ] as const;
+        const writtenRows = await transaction.query(UPSERT_SQL, values);
+        const changed = writtenRows.length > 0;
+        const row =
+          writtenRows[0] ??
+          (
+            await transaction.query(BUMP_CACHE_VERSION_SQL, [
+              input.organizationId,
+            ])
+          )[0];
+        const config = mapStoredRecord(row);
+        if (config === undefined) {
+          throw identityStoreError('Identity data is invalid');
+        }
+
+        if (changed) {
+          await recordOrganizationAuditEvent(transaction, stamp, {
+            action: 'organization.identity_config_set',
+            organizationId: input.organizationId,
+            issuer: input.issuer,
+            sourceKind: input.sourceKind,
+          });
+        }
+
+        return {
+          kind: changed ? ('saved' as const) : ('unchanged' as const),
+          config,
+        };
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      if (isIssuerConflict(error)) {
+        throw new AppError({
+          code: 'ORGANIZATION_IDENTITY_ISSUER_CONFLICT',
+          message: 'Issuer is already configured for another Organization',
+          retryable: false,
+        });
+      }
+      throw identityStoreError('Identity store is unavailable');
+    }
+  }
+
   private async firstRow(
     sql: string,
     organizationId: string,
@@ -257,4 +407,12 @@ export class PostgresOrganizationIdentityConfigRepository
   async onModuleDestroy(): Promise<void> {
     await this.client.close();
   }
+}
+
+function isIssuerConflict(error: unknown): boolean {
+  return (
+    isRecord(error) &&
+    error.code === '23505' &&
+    error.constraint === 'oic_issuer_uq'
+  );
 }

@@ -30,18 +30,29 @@ const remoteConfig: OrganizationIdentityConfig = {
 
 class FakeCache implements JwksCachePort {
   entry: JwksCacheEntry | undefined;
+  readonly versions = new Map<string, JwksCacheEntry>();
   lock: JwksRefreshLock = { acquired: true, available: true };
   setCount = 0;
   failSet = false;
 
-  getJwks(): Promise<JwksCacheEntry | undefined> {
-    return Promise.resolve(this.entry);
+  getJwks(
+    _organizationId: string,
+    version: string,
+  ): Promise<JwksCacheEntry | undefined> {
+    return Promise.resolve(
+      this.versions.get(version) ?? (version === '1' ? this.entry : undefined),
+    );
   }
 
-  setJwks(_organizationId: string, entry: JwksCacheEntry): Promise<void> {
+  setJwks(
+    _organizationId: string,
+    version: string,
+    entry: JwksCacheEntry,
+  ): Promise<void> {
     if (this.failSet) {
       return Promise.reject(new Error('cache unavailable'));
     }
+    this.versions.set(version, entry);
     this.entry = entry;
     this.setCount += 1;
     return Promise.resolve();
@@ -50,10 +61,20 @@ class FakeCache implements JwksCachePort {
   tryAcquireRefresh(): Promise<JwksRefreshLock> {
     return Promise.resolve(this.lock);
   }
+
+  deleteJwks(_organizationId: string, currentVersion: string): Promise<void> {
+    const version = BigInt(currentVersion);
+    this.versions.delete(currentVersion);
+    if (version > 1n) {
+      this.versions.delete((version - 1n).toString());
+    }
+    this.entry = undefined;
+    return Promise.resolve();
+  }
 }
 
-function publicLookup(address = '203.0.113.10') {
-  return async () => [{ address, family: 4 }];
+function publicLookup(address = '8.8.8.8') {
+  return async () => [{ address, family: address.includes(':') ? 6 : 4 }];
 }
 
 function configWithUrl(jwksUrl: string): OrganizationIdentityConfig {
@@ -86,6 +107,47 @@ describe('JwksKeyProvider', () => {
       headers: { accept: 'application/json' },
     });
     expect(cache.setCount).toBe(1);
+  });
+
+  it('does not let an in-flight old-config fetch repopulate the new cache version', async () => {
+    const cache = new FakeCache();
+    let finishOldFetch: ((response: Response) => void) | undefined;
+    let markOldFetchStarted: (() => void) | undefined;
+    const oldFetchStarted = new Promise<void>((resolve) => {
+      markOldFetchStarted = resolve;
+    });
+    let fetchCount = 0;
+    const provider = new JwksKeyProvider(
+      cache,
+      async () => {
+        fetchCount += 1;
+        if (fetchCount === 1) {
+          markOldFetchStarted?.();
+          return new Promise<Response>((resolve) => {
+            finishOldFetch = resolve;
+          });
+        }
+        return new Response(JSON.stringify(jwks));
+      },
+      publicLookup(),
+    );
+
+    const oldResolution = provider.resolve({
+      organizationId: 'org_acme',
+      config: { ...remoteConfig, jwksCacheVersion: '1' },
+    });
+    await oldFetchStarted;
+    await cache.deleteJwks('org_acme', '2');
+    finishOldFetch?.(new Response(JSON.stringify(jwks)));
+    await oldResolution;
+
+    await expect(
+      provider.resolve({
+        organizationId: 'org_acme',
+        config: { ...remoteConfig, jwksCacheVersion: '2' },
+      }),
+    ).resolves.toEqual(jwks);
+    expect(fetchCount).toBe(2);
   });
 
   it('uses a fresh cache entry without fetching again', async () => {
@@ -127,6 +189,53 @@ describe('JwksKeyProvider', () => {
     ).resolves.toEqual(jwks);
   });
 
+  it('validates a URL with one protected fetch while bypassing fresh cache data', async () => {
+    const cache = new FakeCache();
+    cache.entry = {
+      jwks: { keys: [] },
+      freshUntil: 10_000,
+      staleUntil: 20_000,
+    };
+    let fetches = 0;
+    let lookups = 0;
+    const provider = new JwksKeyProvider(
+      cache,
+      async () => {
+        fetches += 1;
+        return new Response(JSON.stringify(jwks));
+      },
+      async () => {
+        lookups += 1;
+        return [{ address: '8.8.8.8', family: 4 }];
+      },
+      () => 1_000,
+    );
+
+    await provider.validateRemote(remoteConfig.jwksUrl ?? '');
+
+    expect(fetches).toBe(1);
+    expect(lookups).toBe(1);
+    expect(cache.setCount).toBe(0);
+    expect(cache.entry?.jwks).toEqual({ keys: [] });
+  });
+
+  it('does not accept an unsafe URL from cached keys during save validation', async () => {
+    const cache = new FakeCache();
+    cache.entry = { jwks, freshUntil: 10_000, staleUntil: 20_000 };
+    const fetcher = jest.fn(async () => new Response(JSON.stringify(jwks)));
+    const provider = new JwksKeyProvider(
+      cache,
+      fetcher,
+      publicLookup('127.0.0.1'),
+      () => 1_000,
+    );
+
+    await expect(
+      provider.validateRemote(remoteConfig.jwksUrl ?? ''),
+    ).rejects.toThrow('JWKS host resolves to a blocked address');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('serves stale keys when a refresh fails within the stale window', async () => {
     const cache = new FakeCache();
     cache.entry = { jwks, freshUntil: 1_000, staleUntil: 3_000 };
@@ -159,8 +268,8 @@ describe('JwksKeyProvider', () => {
   });
 
   it.each([
-    ['http://id.acme.edu/keys', '203.0.113.10'],
-    ['https://user:password@id.acme.edu/keys', '203.0.113.10'],
+    ['http://id.acme.edu/keys', '8.8.8.8'],
+    ['https://user:password@id.acme.edu/keys', '8.8.8.8'],
     ['https://id.acme.edu/keys', '169.254.169.254'],
   ])('rejects unsafe JWKS URL %s', async (url, address) => {
     const fetcher = jest.fn(async () => new Response(JSON.stringify(jwks)));
@@ -179,6 +288,42 @@ describe('JwksKeyProvider', () => {
     ).rejects.toMatchObject({ code: 'IDENTITY_PROVIDER_UNAVAILABLE' });
     expect(fetcher).not.toHaveBeenCalled();
   });
+
+  it.each([
+    '192.0.2.10',
+    '192.88.99.1',
+    '198.18.0.1',
+    '198.51.100.7',
+    '203.0.113.10',
+    '224.0.0.1',
+    '::',
+    '::1',
+    '::ffff:127.0.0.1',
+    'fc00::1',
+    'fe80::1',
+    'ff02::1',
+    '100::1',
+    '5f00::1',
+    '2001:db8::1',
+    '3fff::1',
+    '64:ff9b:1::a00:1',
+    '2002:c000:0201::1',
+  ])(
+    'rejects reserved address range %s during uncached validation',
+    async (address) => {
+      const fetcher = jest.fn(async () => new Response(JSON.stringify(jwks)));
+      const provider = new JwksKeyProvider(
+        new FakeCache(),
+        fetcher,
+        publicLookup(address),
+      );
+
+      await expect(
+        provider.validateRemote(remoteConfig.jwksUrl ?? ''),
+      ).rejects.toThrow('JWKS host resolves to a blocked address');
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects a response over the 64KB cap before caching it', async () => {
     const cache = new FakeCache();

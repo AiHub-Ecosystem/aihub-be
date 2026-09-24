@@ -10,6 +10,7 @@ export const ORGANIZATION_AUDIT_ACTIONS = [
   'organization.renamed',
   'organization.suspended',
   'organization.restored',
+  'organization.identity_config_set',
   'invitation.sent',
   'invitation.resent',
   'invitation.accepted',

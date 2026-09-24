@@ -37,7 +37,10 @@ import {
   ORGANIZATION_AUDIT_ACTIONS,
   ORGANIZATION_AUDIT_OUTCOMES,
 } from '../contracts/organization/audit-event';
-import { ReadOrganizationIdentityConfigResponseSchema } from '../contracts/organization/identity-config';
+import {
+  ReadOrganizationIdentityConfigResponseSchema,
+  SetOrganizationIdentityConfigRequestSchema,
+} from '../contracts/organization/identity-config';
 import {
   AcceptOrganizationInvitationRequestSchema,
   AcceptOrganizationInvitationResponseSchema,
@@ -1009,6 +1012,44 @@ function organizationIdentityConfigPathItem(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
 ): Record<string, unknown> {
   return {
+    put: {
+      operationId: 'organizations.identityConfig.set',
+      summary: 'Set an organization identity configuration',
+      description:
+        'Creates or replaces the public User Assertion identity configuration for an active owner of an active Organization. Submit exactly one JWKS source. URL sources are fetched through the SSRF-protected JWKS path before saving. Existing status is preserved. A retryable cache error may mean the durable save succeeded; retrying the same request safely retries cache purge.',
+      'x-identity-scope': 'user',
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        {
+          name: 'organization_id',
+          in: 'path',
+          required: true,
+          description: 'The organization whose identity configuration is set.',
+          schema: { type: 'string', minLength: 1 },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: SetOrganizationIdentityConfigRequestSchema,
+          },
+        },
+      },
+      responses: {
+        '200': {
+          description:
+            'The stored public identity configuration, including its preserved status.',
+          content: {
+            'application/json': {
+              schema: ReadOrganizationIdentityConfigResponseSchema,
+            },
+          },
+        },
+        ...authErrorResponses(groupedErrors, [400, 401, 403, 409, 500, 503]),
+      },
+    },
     get: {
       operationId: 'organizations.identityConfig.read',
       summary: 'Read an organization identity configuration',

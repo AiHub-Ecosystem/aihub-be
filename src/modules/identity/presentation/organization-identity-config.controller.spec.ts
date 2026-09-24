@@ -6,6 +6,7 @@ import { Test } from '@nestjs/testing';
 import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '../../../app.module';
+import { AppError } from '../../../common/errors/app-error';
 import { ReadOrganizationIdentityConfigResponseSchema } from '../../../contracts/organization/identity-config';
 import {
   LOCAL_AUTH_REPOSITORY,
@@ -17,9 +18,12 @@ import {
   type UserAccessTokenIssuerPort,
   type UserAccessTokenVerifierPort,
 } from '../../auth/application/user-access-token.port';
+import { JWKS_CACHE } from '../application/jwks-cache.port';
+import { JWKS_KEY_PROVIDER } from '../application/jwks-key-provider.port';
 import {
   ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
   type OrganizationIdentityConfigRepositoryPort,
+  type SaveOrganizationIdentityConfigInput,
   type StoredOrganizationIdentityConfig,
 } from '../application/organization-identity-config-repository.port';
 import {
@@ -34,6 +38,8 @@ const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
 const REQUEST_ID = 'req_01J00000000000000000000000';
 const IDENTITY_CONFIG_URL = `/v1/organizations/${ORGANIZATION_ID}/identity-config`;
+const purgeJwks = jest.fn(async (_organizationId: string) => undefined);
+const validateRemote = jest.fn(async (_url: string) => undefined);
 
 type OrganizationStatus = 'active' | 'suspended';
 
@@ -69,6 +75,7 @@ describe('Organization identity configuration HTTP flow', () => {
   let membership: jest.Mocked<OrganizationMembershipPort>;
 
   let result: StoredOrganizationIdentityConfig | null = config();
+  let auditWrites = 0;
   let callerRole: OrganizationMembershipRole = 'owner';
   let callerStatus: OrganizationMembershipStatus = 'active';
   let callerMembershipExists = true;
@@ -80,6 +87,36 @@ describe('Organization identity configuration HTTP flow', () => {
         async (_organizationId: string) => null,
       ),
       findByOrganizationId: jest.fn(async (_organizationId: string) => result),
+      saveForOwner: jest.fn(
+        async (input: SaveOrganizationIdentityConfigInput) => {
+          const next = config({
+            issuer: input.issuer,
+            jwksUrl: input.jwksUrl,
+            publicKeysJwks: input.publicKeysJwks,
+            allowedAlgorithms: input.allowedAlgorithms,
+            maxAssertionTtlSeconds: input.maxAssertionTtlSeconds,
+            status: result?.status ?? 'active',
+            updatedAt: new Date('2026-09-24T12:34:56.000Z'),
+          });
+          const unchanged =
+            result !== null &&
+            result.issuer === next.issuer &&
+            result.jwksUrl === next.jwksUrl &&
+            JSON.stringify(result.publicKeysJwks) ===
+              JSON.stringify(next.publicKeysJwks) &&
+            JSON.stringify(result.allowedAlgorithms) ===
+              JSON.stringify(next.allowedAlgorithms) &&
+            result.maxAssertionTtlSeconds === next.maxAssertionTtlSeconds;
+          if (!unchanged) {
+            auditWrites += 1;
+          }
+          result = next;
+          return {
+            kind: unchanged ? ('unchanged' as const) : ('saved' as const),
+            config: next,
+          };
+        },
+      ),
     };
     membership = {
       resolveMembership: jest.fn(async ({ organizationId, userId }) => {
@@ -129,6 +166,18 @@ describe('Organization identity configuration HTTP flow', () => {
     })
       .overrideProvider(ORGANIZATION_IDENTITY_CONFIG_REPOSITORY)
       .useValue(configs)
+      .overrideProvider(JWKS_KEY_PROVIDER)
+      .useValue({
+        resolve: async () => ({ keys: [] }),
+        validateRemote,
+      })
+      .overrideProvider(JWKS_CACHE)
+      .useValue({
+        getJwks: async () => undefined,
+        setJwks: async () => undefined,
+        deleteJwks: purgeJwks,
+        tryAcquireRefresh: async () => ({ acquired: true, available: true }),
+      })
       .overrideProvider(ORGANIZATION_MEMBERSHIP)
       .useValue(membership)
       .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
@@ -156,6 +205,9 @@ describe('Organization identity configuration HTTP flow', () => {
     callerStatus = 'active';
     callerMembershipExists = true;
     organizationStatus = 'active';
+    auditWrites = 0;
+    purgeJwks.mockReset().mockResolvedValue(undefined);
+    validateRemote.mockReset().mockResolvedValue(undefined);
     jest.clearAllMocks();
   });
 
@@ -167,6 +219,207 @@ describe('Organization identity configuration HTTP flow', () => {
   ) {
     return app.inject({ method: 'GET', url, headers });
   }
+
+  function set(
+    payload: Record<string, unknown>,
+    headers: Record<string, string> = {
+      authorization: 'Bearer valid.token.value',
+    },
+  ) {
+    return app.inject({
+      method: 'PUT',
+      url: IDENTITY_CONFIG_URL,
+      headers,
+      payload,
+    });
+  }
+
+  it('creates an identity configuration through the owner Bearer route', async () => {
+    const response = await set({
+      issuer: 'https://acme.edu',
+      public_keys_jwks: {
+        keys: [
+          { kty: 'RSA', n: 'AQAB', e: 'AQAB', kid: 'rsa-1', alg: 'RS256' },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data: {
+        configured: true,
+        issuer: 'https://acme.edu',
+        jwks_url: null,
+        public_keys_jwks: {
+          keys: [{ kid: 'rsa-1' }],
+        },
+        allowed_algorithms: ['RS256', 'ES256'],
+        max_assertion_ttl_seconds: 300,
+        status: 'active',
+      },
+      meta: { request_id: REQUEST_ID },
+    });
+  });
+
+  it.each([
+    ['no key source', { issuer: 'https://acme.edu' }],
+    [
+      'both key sources',
+      {
+        issuer: 'https://acme.edu',
+        jwks_url: 'https://acme.edu/keys',
+        public_keys_jwks: { keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB' }] },
+      },
+    ],
+    [
+      'private key material',
+      {
+        issuer: 'https://acme.edu',
+        public_keys_jwks: {
+          keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB', d: 'private-material' }],
+        },
+      },
+    ],
+  ])(
+    'rejects %s without touching storage or cache',
+    async (_label, payload) => {
+      const response = await set(payload);
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expect(configs.saveForOwner).not.toHaveBeenCalled();
+      expect(purgeJwks).not.toHaveBeenCalled();
+      expect(JSON.stringify(response.json())).not.toContain('private-material');
+    },
+  );
+
+  it('validates a remote source before persisting and returns a safe error on fetch failure', async () => {
+    validateRemote.mockRejectedValueOnce(new Error('private network details'));
+
+    const response = await set({
+      issuer: 'https://acme.edu',
+      jwks_url: 'https://id.acme.edu/keys',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expect(JSON.stringify(response.json())).not.toContain(
+      'private network details',
+    );
+    expect(configs.saveForOwner).not.toHaveBeenCalled();
+  });
+
+  it.each<[string, () => void]>([
+    ['admin', () => (callerRole = 'admin')],
+    ['member', () => (callerRole = 'member')],
+    ['disabled owner', () => (callerStatus = 'disabled')],
+    ['non-member', () => (callerMembershipExists = false)],
+    [
+      'owner of a suspended Organization',
+      () => (organizationStatus = 'suspended'),
+    ],
+  ])(
+    'gives a %s the same denial before URL validation or persistence',
+    async (_label, arrange) => {
+      arrange();
+
+      const response = await set({
+        issuer: 'https://acme.edu',
+        jwks_url: 'https://id.acme.edu/keys',
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error).toMatchObject({
+        code: 'FORBIDDEN',
+        message: 'Organization identity configuration access is forbidden',
+      });
+      expect(validateRemote).not.toHaveBeenCalled();
+      expect(configs.saveForOwner).not.toHaveBeenCalled();
+      expect(purgeJwks).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['missing', {}],
+    ['invalid', { authorization: 'Bearer invalid.token.value' }],
+  ])('rejects %s PUT Bearer credentials', async (_label, headers) => {
+    const response = await set(
+      {
+        issuer: 'https://acme.edu',
+        public_keys_jwks: {
+          keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB' }],
+        },
+      },
+      headers,
+    );
+
+    expect(response.statusCode).toBe(401);
+    expect(configs.saveForOwner).not.toHaveBeenCalled();
+  });
+
+  it('maps an issuer already used by another Organization to a safe conflict', async () => {
+    configs.saveForOwner.mockRejectedValueOnce(
+      new AppError({
+        code: 'ORGANIZATION_IDENTITY_ISSUER_CONFLICT',
+        message: 'Issuer is already configured for another Organization',
+        retryable: false,
+      }),
+    );
+
+    const response = await set({
+      issuer: 'https://other.edu',
+      public_keys_jwks: {
+        keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.code).toBe(
+      'ORGANIZATION_IDENTITY_ISSUER_CONFLICT',
+    );
+    expect(purgeJwks).not.toHaveBeenCalled();
+  });
+
+  it('retries cache purge after a durable save without duplicating its audit event', async () => {
+    purgeJwks.mockRejectedValueOnce(new Error('Redis host and password'));
+    const payload = {
+      issuer: 'https://acme.edu',
+      public_keys_jwks: {
+        keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB', kid: 'new-key' }],
+      },
+    };
+
+    const failed = await set(payload);
+    const retried = await set(payload);
+
+    expect(failed.statusCode).toBe(503);
+    expect(failed.json().error).toMatchObject({
+      code: 'IDENTITY_CONFIG_CACHE_UNAVAILABLE',
+      retryable: true,
+    });
+    expect(JSON.stringify(failed.json())).not.toContain('Redis host');
+    expect(retried.statusCode).toBe(200);
+    expect(purgeJwks).toHaveBeenCalledTimes(2);
+    expect(configs.saveForOwner).toHaveBeenCalledTimes(2);
+    expect(auditWrites).toBe(1);
+  });
+
+  it('preserves a disabled status when an owner replaces the configuration', async () => {
+    result = config({ status: 'disabled' });
+
+    const response = await set({
+      issuer: 'https://acme.edu',
+      public_keys_jwks: {
+        keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB', kid: 'new-key' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({
+      configured: true,
+      status: 'disabled',
+    });
+  });
 
   it('returns the complete public configuration for an owner', async () => {
     const response = await read();

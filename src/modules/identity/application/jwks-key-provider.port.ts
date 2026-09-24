@@ -11,6 +11,7 @@ export interface JwksKeyProviderInput {
 
 export interface JwksKeyProviderPort {
   resolve(input: JwksKeyProviderInput): Promise<PublicJsonWebKeySet>;
+  validateRemote(url: string): Promise<void>;
 }
 
 export const JWKS_KEY_PROVIDER = Symbol('JWKS_KEY_PROVIDER');

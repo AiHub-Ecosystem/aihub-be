@@ -24,6 +24,7 @@ interface OpenApiOperation {
 
 interface OpenApiPathItem {
   readonly get?: OpenApiOperation;
+  readonly put?: OpenApiOperation;
   readonly post?: OpenApiOperation;
   readonly patch?: OpenApiOperation;
   readonly delete?: OpenApiOperation;
@@ -302,6 +303,23 @@ describe('buildOpenApiDocument', () => {
     expect(operation?.requestBody).toBeUndefined();
     expect(operation?.responses['200']).toBeDefined();
     expect(JSON.stringify(operation?.responses['200'])).not.toContain('email');
+  });
+
+  it('documents the owner-only identity configuration save contract and errors', () => {
+    const operation = build().paths[ORGANIZATION_IDENTITY_CONFIG_PATH]?.put;
+
+    expect(operation?.operationId).toBe('organizations.identityConfig.set');
+    expect(operation?.security).toEqual([{ BearerAuth: [] }]);
+    expect(operation?.requestBody?.required).toBe(true);
+    expect(operation?.responses['200']).toBeDefined();
+    expect(operation?.responses['400']).toBeDefined();
+    expect(operation?.responses['403']).toBeDefined();
+    expect(operation?.responses['409']).toBeDefined();
+    expect(operation?.responses['503']).toBeDefined();
+    expect(JSON.stringify(operation?.requestBody)).toContain('jwks_url');
+    expect(JSON.stringify(operation?.requestBody)).toContain(
+      'public_keys_jwks',
+    );
   });
 
   it('documents the bearer-authenticated API key creation route as uncacheable', () => {

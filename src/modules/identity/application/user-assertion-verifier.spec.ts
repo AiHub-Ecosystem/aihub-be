@@ -103,6 +103,10 @@ class FakeKeyProvider implements JwksKeyProviderPort {
     this.calls.push(input.forceRefresh === true);
     return Promise.resolve(input.forceRefresh ? this.refreshed : this.initial);
   }
+
+  validateRemote(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 async function rsaFixture(kid = 'rsa-1') {
