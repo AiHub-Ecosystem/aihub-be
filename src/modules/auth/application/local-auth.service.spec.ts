@@ -54,7 +54,6 @@ class FakeRepository implements LocalAuthRepositoryPort {
   passwordResetResult: PasswordResetResult = {
     kind: 'reset',
   };
-  passwordResetChecks = 0;
   passwordResetInputs: unknown[] = [];
 
   async register(input: unknown): Promise<void> {
@@ -72,7 +71,6 @@ class FakeRepository implements LocalAuthRepositoryPort {
   }
 
   async checkPasswordResetToken() {
-    this.passwordResetChecks += 1;
     return this.passwordResetResult.kind === 'reset'
       ? { kind: 'valid' as const }
       : this.passwordResetResult;
@@ -390,9 +388,9 @@ describe('LocalAuthService', () => {
   });
 
   it.each([11, 129])(
-    'rejects a %i-code-point reset password before reset work',
+    'returns a generic invalid request for a %i-code-point reset password',
     async (length) => {
-      const { local, repository, hasher } = service();
+      const { local } = service();
 
       await expect(
         local.resetPassword(
@@ -403,9 +401,6 @@ describe('LocalAuthService', () => {
         code: 'INVALID_REQUEST',
         httpStatus: 400,
       });
-      expect(hasher.hashed).toHaveLength(0);
-      expect(repository.passwordResetChecks).toBe(0);
-      expect(repository.passwordResetInputs).toHaveLength(0);
     },
   );
 

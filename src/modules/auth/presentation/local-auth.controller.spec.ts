@@ -434,27 +434,19 @@ describe('local auth HTTP boundary', () => {
     },
   ];
 
-  const validPasswordBoundaryCases = passwordBoundaryRequests.flatMap(
-    (request) =>
-      [12, 128].flatMap((length) =>
+  const createPasswordBoundaryCases = (lengths: readonly number[]) =>
+    passwordBoundaryRequests.flatMap((request) =>
+      lengths.flatMap((length) =>
         ['a', '😀'].map((character) => ({
           request,
           length,
           password: character.repeat(length),
         })),
       ),
-  );
+    );
 
-  const invalidPasswordBoundaryCases = passwordBoundaryRequests.flatMap(
-    (request) =>
-      [11, 129].flatMap((length) =>
-        ['a', '😀'].map((character) => ({
-          request,
-          length,
-          password: character.repeat(length),
-        })),
-      ),
-  );
+  const validPasswordBoundaryCases = createPasswordBoundaryCases([12, 128]);
+  const invalidPasswordBoundaryCases = createPasswordBoundaryCases([11, 129]);
 
   it.each(validPasswordBoundaryCases)(
     '$request.name accepts a $length-code-point password',
