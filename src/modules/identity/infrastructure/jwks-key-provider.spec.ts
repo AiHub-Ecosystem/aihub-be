@@ -109,7 +109,7 @@ describe('JwksKeyProvider', () => {
       provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
     ).resolves.toEqual(jwks);
     expect(requests[0]).toMatchObject({
-      redirect: 'error',
+      redirect: 'manual',
       credentials: 'omit',
       headers: { accept: 'application/json' },
     });
@@ -281,8 +281,27 @@ describe('JwksKeyProvider', () => {
 
     await expect(
       provider.validateRemote(remoteConfig.jwksUrl ?? ''),
-    ).rejects.toThrow('JWKS host resolves to a blocked address');
+    ).rejects.toMatchObject({
+      code: 'IDENTITY_JWKS_URL_UNSAFE',
+      retryable: false,
+    });
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('classifies non-HTTPS URLs as unsafe during save validation', async () => {
+    const provider = new JwksKeyProvider(
+      new FakeCache(),
+      async () => new Response(JSON.stringify(jwks)),
+      publicLookup(),
+    );
+
+    await expect(
+      provider.validateRemote('http://id.acme.edu/keys'),
+    ).rejects.toMatchObject({
+      code: 'IDENTITY_JWKS_URL_UNSAFE',
+      httpStatus: 400,
+      retryable: false,
+    });
   });
 
   it('serves stale keys when a refresh fails within the stale window', async () => {
@@ -369,8 +388,108 @@ describe('JwksKeyProvider', () => {
 
       await expect(
         provider.validateRemote(remoteConfig.jwksUrl ?? ''),
-      ).rejects.toThrow('JWKS host resolves to a blocked address');
+      ).rejects.toMatchObject({
+        code: 'IDENTITY_JWKS_URL_UNSAFE',
+        retryable: false,
+      });
       expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it('classifies rejected redirects as unsafe without following them', async () => {
+    let redirectMode: string | undefined;
+    const provider = new JwksKeyProvider(
+      new FakeCache(),
+      async (_url, init) => {
+        redirectMode = init?.redirect;
+        return new Response('', {
+          status: 302,
+          headers: { location: 'http://127.0.0.1/internal' },
+        });
+      },
+      publicLookup(),
+    );
+
+    await expect(
+      provider.validateRemote(remoteConfig.jwksUrl ?? ''),
+    ).rejects.toMatchObject({
+      code: 'IDENTITY_JWKS_URL_UNSAFE',
+      retryable: false,
+    });
+    expect(redirectMode).toBe('manual');
+  });
+
+  it('classifies DNS and network failures as retryable source unavailability', async () => {
+    const dnsFailure = new JwksKeyProvider(
+      new FakeCache(),
+      async () => new Response(JSON.stringify(jwks)),
+      async () => Promise.reject(new Error('private DNS details')),
+    );
+    await expect(
+      dnsFailure.validateRemote(remoteConfig.jwksUrl ?? ''),
+    ).rejects.toMatchObject({
+      code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+      httpStatus: 503,
+      retryable: true,
+    });
+
+    const networkFailure = new JwksKeyProvider(
+      new FakeCache(),
+      async () => Promise.reject(new Error('private network details')),
+      publicLookup(),
+    );
+    await expect(
+      networkFailure.validateRemote(remoteConfig.jwksUrl ?? ''),
+    ).rejects.toMatchObject({
+      code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+      retryable: true,
+      message: 'JWKS source is unavailable',
+    });
+  });
+
+  it.each([
+    [401, false],
+    [404, false],
+    [408, true],
+    [425, true],
+    [429, true],
+    [500, true],
+  ])(
+    'classifies unsuccessful JWKS response %s as retryable=%s',
+    async (status, retryable) => {
+      const provider = new JwksKeyProvider(
+        new FakeCache(),
+        async () => new Response('', { status }),
+        publicLookup(),
+      );
+
+      await expect(
+        provider.validateRemote(remoteConfig.jwksUrl ?? ''),
+      ).rejects.toMatchObject({
+        code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+        httpStatus: 503,
+        retryable,
+      });
+    },
+  );
+
+  it.each(['not-json', '{"keys":[]}', '{"keys":[{"kty":"oct"}]}'])(
+    'classifies unsupported JWKS content as invalid without echoing it',
+    async (body) => {
+      const provider = new JwksKeyProvider(
+        new FakeCache(),
+        async () => new Response(body),
+        publicLookup(),
+      );
+
+      await expect(
+        provider.validateRemote(remoteConfig.jwksUrl ?? ''),
+      ).rejects.toMatchObject({
+        code: 'IDENTITY_JWKS_INVALID',
+        httpStatus: 400,
+        retryable: false,
+        message: 'Public JWKS is invalid',
+      });
     },
   );
 

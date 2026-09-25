@@ -67,12 +67,15 @@ const LIST_ROSTER_SQL = `
     organization.name AS organization_name,
     organization.status AS organization_status,
     organization.entitlements AS organization_entitlements,
+    identity_config.status AS identity_config_status,
     caller.role AS caller_role,
     member_account.username AS member_username,
     member.role AS member_role
   FROM organization_members AS caller
   INNER JOIN organizations AS organization
     ON organization.id = caller.organization_id
+  LEFT JOIN organization_identity_configs AS identity_config
+    ON identity_config.organization_id = caller.organization_id
   INNER JOIN organization_members AS member
     ON member.organization_id = caller.organization_id
    AND member.status = 'active'
@@ -221,6 +224,7 @@ interface RosterRow {
   readonly organizationName: string;
   readonly organizationStatus: OrganizationStatus;
   readonly organizationEntitlements: readonly string[];
+  readonly identityConfigured: boolean;
   readonly callerRole: OrganizationMembershipRole;
   readonly memberUsername: string;
   readonly memberRole: OrganizationMembershipRole;
@@ -376,6 +380,8 @@ function mapRosterRow(value: unknown): RosterRow | undefined {
     'organization_status',
   );
   const organizationEntitlements = value.organization_entitlements;
+  const identityConfigStatus = value.identity_config_status;
+  const identityConfigured = identityConfigStatus === 'active';
   const callerRole = membershipRoleValue(value, 'caller_role');
   const memberUsername = stringValue(value, 'member_username');
   const memberRole = membershipRoleValue(value, 'member_role');
@@ -389,6 +395,9 @@ function mapRosterRow(value: unknown): RosterRow | undefined {
       (entitlement) =>
         typeof entitlement === 'string' && entitlement.length > 0,
     ) ||
+    (identityConfigStatus !== null &&
+      identityConfigStatus !== 'active' &&
+      identityConfigStatus !== 'disabled') ||
     callerRole === undefined ||
     memberUsername === undefined ||
     memberRole === undefined
@@ -401,6 +410,7 @@ function mapRosterRow(value: unknown): RosterRow | undefined {
     organizationName,
     organizationStatus,
     organizationEntitlements,
+    identityConfigured,
     callerRole,
     memberUsername,
     memberRole,
@@ -417,6 +427,7 @@ function groupRosterRows(
       readonly name: string;
       readonly status: OrganizationStatus;
       readonly entitlements: readonly string[];
+      readonly identityConfigured: boolean;
       readonly membershipRole: OrganizationMembershipRole;
       readonly members: OrganizationRosterOrganization['members'][number][];
     }
@@ -435,6 +446,7 @@ function groupRosterRows(
         name: row.organizationName,
         status: row.organizationStatus,
         entitlements: row.organizationEntitlements,
+        identityConfigured: row.identityConfigured,
         membershipRole: row.callerRole,
         members: [{ username: row.memberUsername, role: row.memberRole }],
       });
@@ -449,7 +461,8 @@ function groupRosterRows(
         (entitlement, index) =>
           entitlement !== row.organizationEntitlements[index],
       ) ||
-      existing.membershipRole !== row.callerRole
+      existing.membershipRole !== row.callerRole ||
+      existing.identityConfigured !== row.identityConfigured
     ) {
       throw identityStoreError('Identity data is invalid');
     }

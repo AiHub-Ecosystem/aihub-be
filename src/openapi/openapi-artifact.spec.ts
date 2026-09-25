@@ -56,6 +56,7 @@ describe('committed openapi.json', () => {
   it('publishes the owner identity configuration PUT and safe retry errors', () => {
     const document = committedDocument() as {
       paths: Record<string, unknown>;
+      components: { responses: Record<string, unknown> };
     };
     const path = document.paths[
       '/v1/organizations/{organization_id}/identity-config'
@@ -75,6 +76,30 @@ describe('committed openapi.json', () => {
     expect(JSON.stringify(path.put?.requestBody)).toContain('jwks_url');
     expect(path.put?.responses?.['409']).toBeDefined();
     expect(path.put?.responses?.['503']).toBeDefined();
+    expect(JSON.stringify(document.components.responses.Error400)).toContain(
+      'IDENTITY_JWKS_URL_UNSAFE',
+    );
+    expect(JSON.stringify(document.components.responses.Error400)).toContain(
+      'IDENTITY_JWKS_INVALID',
+    );
+    expect(JSON.stringify(document.components.responses.Error503)).toContain(
+      'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+    );
+  });
+
+  it('publishes the roster saved-state boolean without identity configuration material', () => {
+    const document = committedDocument() as {
+      paths: Record<string, unknown>;
+    };
+    const path = document.paths['/v1/organizations/me/members'] as {
+      get?: { description?: string; responses?: Record<string, unknown> };
+    };
+    const success = JSON.stringify(path.get?.responses?.['200']);
+
+    expect(path.get?.description).toContain('JWKS source is not probed');
+    expect(success).toContain('identity_configured');
+    expect(success).not.toContain('jwks_url');
+    expect(success).not.toContain('public_keys_jwks');
   });
 
   // OpenAPI 3.1 validity itself is checked by `scripts/validate-openapi.mjs`

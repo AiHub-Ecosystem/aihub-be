@@ -49,6 +49,7 @@ const OrganizationRosterOrganizationSchema = Type.Object(
     organization_id: Type.String({ minLength: 1 }),
     name: Type.String({ minLength: 1 }),
     status: OrganizationStatusSchema,
+    identity_configured: Type.Boolean(),
     entitlements: Type.Array(Type.String({ minLength: 1 })),
     membership: Type.Object(
       { role: OrganizationMembershipRoleSchema },

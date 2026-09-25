@@ -58,6 +58,22 @@ function cacheUnavailable(): AppError {
   });
 }
 
+function invalidJwks(): AppError {
+  return new AppError({
+    code: 'IDENTITY_JWKS_INVALID',
+    message: 'Public JWKS is invalid',
+    retryable: false,
+  });
+}
+
+function unsafeJwksUrl(): AppError {
+  return new AppError({
+    code: 'IDENTITY_JWKS_URL_UNSAFE',
+    message: 'JWKS URL is not safe',
+    retryable: false,
+  });
+}
+
 export class SetOrganizationIdentityConfig {
   constructor(
     private readonly membership: Pick<
@@ -100,15 +116,14 @@ export class SetOrganizationIdentityConfig {
     ];
     const maxAssertionTtlSeconds =
       input.maxAssertionTtlSeconds ?? DEFAULT_MAX_ASSERTION_TTL_SECONDS;
+    const hasInlineSource =
+      input.publicKeysJwks !== undefined && input.publicKeysJwks !== null;
 
     if (
       issuer.length === 0 ||
       issuer.length > 2_048 ||
-      (jwksUrl === null) === (publicKeysJwks === null) ||
-      (jwksUrl !== null && (jwksUrl.length === 0 || !httpsUrl(jwksUrl))) ||
-      (input.publicKeysJwks !== undefined &&
-        input.publicKeysJwks !== null &&
-        publicKeysJwks === undefined) ||
+      (jwksUrl === null) === !hasInlineSource ||
+      (jwksUrl !== null && jwksUrl.length === 0) ||
       allowedAlgorithms.length === 0 ||
       new Set(allowedAlgorithms).size !== allowedAlgorithms.length ||
       allowedAlgorithms.some(
@@ -121,12 +136,15 @@ export class SetOrganizationIdentityConfig {
       throw invalidRequest();
     }
 
+    if (jwksUrl !== null && !httpsUrl(jwksUrl)) {
+      throw unsafeJwksUrl();
+    }
+    if (hasInlineSource && publicKeysJwks === undefined) {
+      throw invalidJwks();
+    }
+
     if (jwksUrl !== null) {
-      try {
-        await this.keys.validateRemote(jwksUrl);
-      } catch {
-        throw invalidRequest();
-      }
+      await this.keys.validateRemote(jwksUrl);
     }
 
     const saved = await this.configs.saveForOwner({

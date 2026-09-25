@@ -18,6 +18,7 @@ const rosterRows = [
     organization_name: 'Acme',
     organization_status: 'active',
     organization_entitlements: ['writing'],
+    identity_config_status: 'active',
     caller_role: 'owner',
     member_username: 'alice',
     member_role: 'owner',
@@ -27,6 +28,7 @@ const rosterRows = [
     organization_name: 'Acme',
     organization_status: 'active',
     organization_entitlements: ['writing'],
+    identity_config_status: 'active',
     caller_role: 'owner',
     member_username: 'bob',
     member_role: 'member',
@@ -36,6 +38,7 @@ const rosterRows = [
     organization_name: 'Suspended',
     organization_status: 'suspended',
     organization_entitlements: ['writing', 'speaking'],
+    identity_config_status: 'disabled',
     caller_role: 'member',
     member_username: 'alice',
     member_role: 'member',
@@ -204,6 +207,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
         name: 'Acme',
         status: 'active',
         entitlements: ['writing'],
+        identityConfigured: true,
         membershipRole: 'owner',
         members: [
           { username: 'alice', role: 'owner' },
@@ -215,6 +219,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
         name: 'Suspended',
         status: 'suspended',
         entitlements: ['writing', 'speaking'],
+        identityConfigured: false,
         membershipRole: 'member',
         members: [{ username: 'alice', role: 'member' }],
       },
@@ -227,7 +232,38 @@ describe('PostgresOrganizationMembershipRepository', () => {
     expect(client.queries[0]?.text).toContain(
       'organization.entitlements AS organization_entitlements',
     );
+    expect(client.queries[0]?.text).toContain(
+      'identity_config.status AS identity_config_status',
+    );
+    expect(client.queries[0]?.text).toContain(
+      'LEFT JOIN organization_identity_configs',
+    );
+    expect(client.queries[0]?.text).not.toContain('jwks_url');
     expect(client.queries[0]?.text).toContain('ORDER BY');
+  });
+
+  it('treats a missing identity configuration as not configured', async () => {
+    const client = new FakePostgres();
+    client.result = [{ ...rosterRows[0], identity_config_status: null }];
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(client).listRoster({
+        context,
+        userId: membershipRow.user_account_id,
+      }),
+    ).resolves.toMatchObject([{ identityConfigured: false }]);
+  });
+
+  it('fails the full roster projection for an unknown identity config status', async () => {
+    const client = new FakePostgres();
+    client.result = [{ ...rosterRows[0], identity_config_status: 'pending' }];
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(client).listRoster({
+        context,
+        userId: membershipRow.user_account_id,
+      }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
   });
 
   it('returns an empty roster when the caller has no active membership', async () => {

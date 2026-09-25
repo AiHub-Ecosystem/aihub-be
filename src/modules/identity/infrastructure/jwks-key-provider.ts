@@ -34,7 +34,7 @@ type DnsLookup = (
 
 interface FetchInit {
   readonly [JWKS_DISPATCHER]?: Dispatcher;
-  readonly redirect?: 'error';
+  readonly redirect?: 'error' | 'manual';
   readonly credentials?: 'omit';
   readonly headers?: Record<string, string>;
   readonly signal?: AbortSignal;
@@ -69,6 +69,31 @@ function unavailable(cause?: unknown): AppError {
     message: 'Identity provider is unavailable',
     retryable: true,
     ...(cause === undefined ? {} : { cause }),
+  });
+}
+
+function unsafeUrl(): AppError {
+  return new AppError({
+    code: 'IDENTITY_JWKS_URL_UNSAFE',
+    message: 'JWKS URL is not safe',
+    retryable: false,
+  });
+}
+
+function sourceUnavailable(retryable: boolean, cause?: unknown): AppError {
+  return new AppError({
+    code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+    message: 'JWKS source is unavailable',
+    retryable,
+    ...(cause === undefined ? {} : { cause }),
+  });
+}
+
+function invalidJwks(): AppError {
+  return new AppError({
+    code: 'IDENTITY_JWKS_INVALID',
+    message: 'Public JWKS is invalid',
+    retryable: false,
   });
 }
 
@@ -223,15 +248,20 @@ async function assertSafeHost(
   lookup: DnsLookup,
   deadlineAt: number,
 ): Promise<readonly DnsAddress[]> {
-  const addresses = await withDeadline(
-    lookup(hostname, { all: true, verbatim: true }),
-    deadlineAt,
-  );
-  if (
-    addresses.length === 0 ||
-    addresses.some((address) => isUnsafeAddress(address.address))
-  ) {
-    throw new Error('JWKS host resolves to a blocked address');
+  let addresses: readonly DnsAddress[];
+  try {
+    addresses = await withDeadline(
+      lookup(hostname, { all: true, verbatim: true }),
+      deadlineAt,
+    );
+  } catch (cause) {
+    throw sourceUnavailable(true, cause);
+  }
+  if (addresses.length === 0) {
+    throw sourceUnavailable(true);
+  }
+  if (addresses.some((address) => isUnsafeAddress(address.address))) {
+    throw unsafeUrl();
   }
   return addresses;
 }
@@ -301,12 +331,12 @@ async function readLimitedBody(response: FetchResponse): Promise<string> {
       length < 0 ||
       length > JWKS_MAX_RESPONSE_BYTES
     ) {
-      throw new Error('JWKS response is too large');
+      throw invalidJwks();
     }
   }
 
   if (response.body === null) {
-    throw new Error('JWKS response has no body');
+    throw invalidJwks();
   }
 
   const reader = response.body.getReader();
@@ -315,7 +345,9 @@ async function readLimitedBody(response: FetchResponse): Promise<string> {
 
   try {
     while (true) {
-      const next = await reader.read();
+      const next = await reader.read().catch((cause: unknown) => {
+        throw sourceUnavailable(true, cause);
+      });
       if (next.done) {
         break;
       }
@@ -323,7 +355,7 @@ async function readLimitedBody(response: FetchResponse): Promise<string> {
       total += next.value.byteLength;
       if (total > JWKS_MAX_RESPONSE_BYTES) {
         await reader.cancel();
-        throw new Error('JWKS response is too large');
+        throw invalidJwks();
       }
       chunks.push(next.value);
     }
@@ -433,7 +465,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       url.username.length > 0 ||
       url.password.length > 0
     ) {
-      throw new Error('JWKS URL must use HTTPS without credentials');
+      throw unsafeUrl();
     }
 
     const deadlineAt = Date.now() + JWKS_FETCH_TIMEOUT_MS;
@@ -452,22 +484,43 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     });
 
     try {
-      const response = await this.fetcher(url.toString(), {
-        [JWKS_DISPATCHER]: dispatcher,
-        redirect: 'error',
-        credentials: 'omit',
-        headers: { accept: 'application/json' },
-        signal: AbortSignal.timeout(remainingMs),
-      });
-
-      if (!response.ok) {
-        throw new Error(`JWKS endpoint returned ${response.status}`);
+      let response: FetchResponse;
+      try {
+        response = await this.fetcher(url.toString(), {
+          [JWKS_DISPATCHER]: dispatcher,
+          redirect: 'manual',
+          credentials: 'omit',
+          headers: { accept: 'application/json' },
+          signal: AbortSignal.timeout(remainingMs),
+        });
+      } catch (cause) {
+        throw sourceUnavailable(true, cause);
       }
 
-      const parsed: unknown = JSON.parse(await readLimitedBody(response));
+      if (response.status >= 300 && response.status < 400) {
+        throw unsafeUrl();
+      }
+      if (!response.ok) {
+        const retryable =
+          response.status === 408 ||
+          response.status === 425 ||
+          response.status === 429 ||
+          response.status >= 500;
+        throw sourceUnavailable(retryable);
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(await readLimitedBody(response));
+      } catch (error) {
+        if (error instanceof AppError) {
+          throw error;
+        }
+        throw invalidJwks();
+      }
       const jwks = parsePublicJsonWebKeySet(parsed);
       if (jwks === undefined) {
-        throw new Error('JWKS response is invalid');
+        throw invalidJwks();
       }
 
       return jwks;

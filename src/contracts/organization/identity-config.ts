@@ -9,7 +9,7 @@ const PublicJsonWebKeySchema = Type.Intersect([
   ),
 ]);
 
-const PublicJsonWebKeySetSchema = Type.Object(
+export const PublicJsonWebKeySetSchema = Type.Object(
   { keys: Type.Array(PublicJsonWebKeySchema, { minItems: 1 }) },
   { additionalProperties: false },
 );

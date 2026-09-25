@@ -280,13 +280,24 @@ describe('Organization identity configuration HTTP flow', () => {
         },
       },
     ],
+    [
+      'invalid inline JWKS',
+      {
+        issuer: 'https://acme.edu',
+        public_keys_jwks: { keys: [] },
+      },
+    ],
   ])(
     'rejects %s without touching storage or cache',
     async (_label, payload) => {
       const response = await set(payload);
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expect(response.json().error.code).toBe(
+        _label === 'private key material' || _label === 'invalid inline JWKS'
+          ? 'IDENTITY_JWKS_INVALID'
+          : 'INVALID_REQUEST',
+      );
       expect(configs.saveForOwner).not.toHaveBeenCalled();
       expect(purgeJwks).not.toHaveBeenCalled();
       expect(JSON.stringify(response.json())).not.toContain('private-material');
@@ -294,7 +305,65 @@ describe('Organization identity configuration HTTP flow', () => {
   );
 
   it('validates a remote source before persisting and returns a safe error on fetch failure', async () => {
-    validateRemote.mockRejectedValueOnce(new Error('private network details'));
+    validateRemote.mockRejectedValueOnce(
+      new AppError({
+        code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+        message: 'JWKS source is unavailable',
+        retryable: true,
+      }),
+    );
+
+    const response = await set({
+      issuer: 'https://acme.edu',
+      jwks_url: 'https://id.acme.edu/keys',
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error).toMatchObject({
+      code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+      retryable: true,
+    });
+    expect(configs.saveForOwner).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid public key material with the stable JWKS error', async () => {
+    const response = await set({
+      issuer: 'https://acme.edu',
+      public_keys_jwks: {
+        keys: [{ kty: 'RSA', n: 'not_base64url!', e: 'AQAB' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toMatchObject({
+      code: 'IDENTITY_JWKS_INVALID',
+      retryable: false,
+    });
+    expect(configs.saveForOwner).not.toHaveBeenCalled();
+  });
+
+  it('classifies a non-HTTPS source as unsafe before fetching', async () => {
+    const response = await set({
+      issuer: 'https://acme.edu',
+      jwks_url: 'http://id.acme.edu/keys',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toMatchObject({
+      code: 'IDENTITY_JWKS_URL_UNSAFE',
+      retryable: false,
+    });
+    expect(validateRemote).not.toHaveBeenCalled();
+  });
+
+  it('classifies a valid HTTP response with unsupported JWKS as invalid', async () => {
+    validateRemote.mockRejectedValueOnce(
+      new AppError({
+        code: 'IDENTITY_JWKS_INVALID',
+        message: 'Public JWKS is invalid',
+        retryable: false,
+      }),
+    );
 
     const response = await set({
       issuer: 'https://acme.edu',
@@ -302,10 +371,33 @@ describe('Organization identity configuration HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
-    expect(JSON.stringify(response.json())).not.toContain(
-      'private network details',
+    expect(response.json().error).toMatchObject({
+      code: 'IDENTITY_JWKS_INVALID',
+      retryable: false,
+    });
+    expect(configs.saveForOwner).not.toHaveBeenCalled();
+  });
+
+  it('returns an unsafe-URL error without disclosing destination details', async () => {
+    validateRemote.mockRejectedValueOnce(
+      new AppError({
+        code: 'IDENTITY_JWKS_URL_UNSAFE',
+        message: 'JWKS URL is not safe',
+        retryable: false,
+      }),
     );
+
+    const response = await set({
+      issuer: 'https://acme.edu',
+      jwks_url: 'https://id.acme.edu/keys',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toMatchObject({
+      code: 'IDENTITY_JWKS_URL_UNSAFE',
+      retryable: false,
+    });
+    expect(response.payload).not.toContain('id.acme.edu');
     expect(configs.saveForOwner).not.toHaveBeenCalled();
   });
 

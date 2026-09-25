@@ -100,6 +100,7 @@ export class OrganizationMembershipController {
           organization_id: organization.organizationId,
           name: organization.name,
           status: organization.status,
+          identity_configured: organization.identityConfigured,
           entitlements: [...organization.entitlements],
           membership: { role: organization.membershipRole },
           members: organization.members.map((member) => ({

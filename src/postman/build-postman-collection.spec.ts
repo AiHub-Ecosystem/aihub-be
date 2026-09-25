@@ -143,7 +143,7 @@ describe('buildPostmanCollection', () => {
     );
   });
 
-  it('documents the roster entitlement field for the Customer Web', async () => {
+  it('documents saved identity readiness without exposing JWKS configuration', async () => {
     const collection = await build();
     const items = collection.item as readonly PostmanItem[];
     const roster = items.find(
@@ -152,8 +152,13 @@ describe('buildPostmanCollection', () => {
     const script = roster?.event?.[0]?.script.exec.join('\n') ?? '';
 
     expect(roster?.request?.description).toContain('entitlement names');
+    expect(roster?.request?.description).toContain(
+      'does not probe the JWKS source',
+    );
     expect(script).toContain('organization.entitlements');
     expect(script).toContain("typeof value === 'string'");
+    expect(script).toContain('organization.identity_configured');
+    expect(script).toContain("property('jwks_url')");
   });
 
   it('has 17 D1 handover test cases including the post-freeze issue #156 case', async () => {

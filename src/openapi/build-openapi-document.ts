@@ -1117,6 +1117,8 @@ function organizationRosterPathItem(
     get: {
       operationId: 'organizations.me.members.list',
       summary: 'List the authenticated user organization roster',
+      description:
+        'Returns the Organizations where the authenticated user has an active membership, including suspended Organizations. `identity_configured` reports only whether an active identity configuration is saved; the JWKS source is not probed and its URL or key material is not returned.',
       'x-identity-scope': 'user',
       security: [{ BearerAuth: [] }],
       parameters: [{ $ref: '#/components/parameters/CorrelationId' }],

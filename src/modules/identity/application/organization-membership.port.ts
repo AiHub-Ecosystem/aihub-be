@@ -64,6 +64,7 @@ export interface OrganizationRosterOrganization {
   readonly organizationId: string;
   readonly name: string;
   readonly status: OrganizationStatus;
+  readonly identityConfigured: boolean;
   readonly entitlements: readonly string[];
   readonly membershipRole: OrganizationMembershipRole;
   readonly members: readonly OrganizationRosterMember[];

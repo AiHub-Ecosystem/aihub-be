@@ -12,8 +12,10 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyRequest } from 'fastify';
 
+import { AppError } from '../../../common/errors/app-error';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
+  PublicJsonWebKeySetSchema,
   type ReadOrganizationIdentityConfigResponse,
   type SetOrganizationIdentityConfigRequest,
   SetOrganizationIdentityConfigRequestSchema,
@@ -105,6 +107,13 @@ export class OrganizationIdentityConfigController {
       request,
       organizationId,
     );
+    if (hasInvalidInlineJwks(body)) {
+      throw new AppError({
+        code: 'IDENTITY_JWKS_INVALID',
+        message: 'Public JWKS is invalid',
+        retryable: false,
+      });
+    }
     if (!Value.Check(SetOrganizationIdentityConfigRequestSchema, body)) {
       throw invalidRequest();
     }
@@ -129,4 +138,18 @@ export class OrganizationIdentityConfigController {
       meta: { request_id: requestId },
     };
   }
+}
+
+function hasInvalidInlineJwks(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const request = value as Record<string, unknown>;
+  return (
+    (request.jwks_url === undefined || request.jwks_url === null) &&
+    request.public_keys_jwks !== undefined &&
+    request.public_keys_jwks !== null &&
+    !Value.Check(PublicJsonWebKeySetSchema, request.public_keys_jwks)
+  );
 }

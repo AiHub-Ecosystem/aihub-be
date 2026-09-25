@@ -734,19 +734,23 @@ function addOrganizationRosterCheck(items: unknown[]): void {
     }
 
     item.request.description =
-      'Lists the active Organization Roster, including each Organization as an open array of configured entitlement names.';
+      'Lists Organizations where the user has an active membership, including configured entitlement names. identity_configured reports saved active identity configuration only; it does not probe the JWKS source.';
     item.event = [
       {
         listen: 'test',
         script: {
           type: 'text/javascript',
           exec: [
-            "pm.test('each organization exposes configured entitlement names', function () {",
+            "pm.test('each organization exposes entitlement and identity readiness', function () {",
             '  const organizations = pm.response.json().data.organizations;',
             "  pm.expect(organizations).to.be.an('array');",
             '  for (const organization of organizations) {',
             "    pm.expect(organization.entitlements).to.be.an('array');",
             "    pm.expect(organization.entitlements.every((value) => typeof value === 'string')).to.be.true;",
+            "    pm.expect(organization.identity_configured).to.be.a('boolean');",
+            "    pm.expect(organization).not.to.have.property('issuer');",
+            "    pm.expect(organization).not.to.have.property('jwks_url');",
+            "    pm.expect(organization).not.to.have.property('public_keys_jwks');",
             '  }',
             '});',
           ],

@@ -132,6 +132,7 @@ describe('Self-serve Organization creation against PostgreSQL', () => {
         name: 'Acme Learning',
         status: 'active',
         entitlements: ['writing', 'speaking'],
+        identityConfigured: false,
         rate_limit_rpm: 60,
         max_concurrent: 5,
         monthly_request_quota: 100,
