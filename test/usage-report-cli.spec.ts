@@ -36,14 +36,25 @@ function recentWindow(): readonly [string, string] {
 }
 
 describe('usage report CLI', () => {
-  it('ships the CLI wrapper in the runtime image', async () => {
+  it('ships the generic loader and no obsolete command loaders', async () => {
     const [dockerfile, dockerignore] = await Promise.all([
       readFile('Dockerfile', 'utf8'),
       readFile('.dockerignore', 'utf8'),
     ]);
+    const obsoleteLoaders = [
+      'organization-status.cjs',
+      'organization-first-owner.cjs',
+      'usage-prune.cjs',
+      'usage-report.cjs',
+      'quota-reconcile.cjs',
+    ];
 
-    expect(dockerfile).toContain('/app/scripts/usage-report.cjs');
-    expect(dockerignore).toContain('!scripts/usage-report.cjs');
+    expect(dockerfile).toContain('/app/scripts/load-cli-runner.cjs');
+    expect(dockerignore).toContain('!scripts/load-cli-runner.cjs');
+    for (const loader of obsoleteLoaders) {
+      expect(dockerfile).not.toContain(`/app/scripts/${loader}`);
+      expect(dockerignore).not.toContain(`!scripts/${loader}`);
+    }
   });
 
   it('rejects malformed UTC arguments before opening infrastructure', async () => {

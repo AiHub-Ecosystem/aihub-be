@@ -13,6 +13,8 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Customer Web:** the user-facing AIHUB console in the `AiHub-Frontend` repository, served at `aihubproduction.com`, which advertises public account registration and Self-serve Organization creation. Its existing Clerk-backed sandbox flow remains transitional until [issue #94](https://github.com/AiHub-Ecosystem/aihub-be/issues/94) cuts over; the separate sandbox demo keeps its own server-held Sandbox API key.
 - **Customer User:** a person authenticated by the Customer Web; this is not an AIHUB account.
 - **AIHUB User Account:** a credential-bearing account managed by AIHUB for user-facing access; it is distinct from an Organization and from the existing Customer User term until the Customer Web boundary is migrated.
+- **Operator:** a person who runs a privileged AIHUB control-plane CLI command; an Operator is not a Customer User and is not authenticated by the Bearer boundary.
+- **Operator actor:** the active AIHUB User Account named by the `--actor` option for an Operator command; it is the recorded actor for Organization Audit Events.
 - **Auth Identity:** a login identity attached to an AIHUB User Account, such as the Phase 1 local email/password identity or a future Google identity; it is not itself an Organization, API key, or username.
 - **Password policy:** the local Auth Identity password rule that accepts 12 through 128 Unicode code points, counted without normalization.
 - **Auth identity conflict:** the domain result of a registration attempt whose normalized email or username is already in use; it is distinct from malformed input.

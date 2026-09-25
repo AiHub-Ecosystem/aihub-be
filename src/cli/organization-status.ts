@@ -1,5 +1,4 @@
 import Redis from 'ioredis';
-import { ulid } from 'ulid';
 
 import type { OrganizationStatus } from '../modules/identity/application/api-key-authenticator.port';
 import type {
@@ -9,6 +8,7 @@ import type {
 import { createPostgresIdentityClient } from '../modules/identity/infrastructure/postgres-identity.client';
 import { PostgresOrganizationStatusRepository } from '../modules/identity/infrastructure/postgres-organization-status.repository';
 import { apiKeyCacheKeys } from '../modules/identity/infrastructure/redis-identity.store';
+import { runOperatorCommand } from './operator-command-context';
 
 export interface OrganizationStatusCliInput {
   readonly databaseUrl: string;
@@ -64,26 +64,25 @@ export async function runOrganizationStatusCommand(
   input: OrganizationStatusCliInput,
 ): Promise<OrganizationStatusCliOutcome> {
   const emit = input.emit ?? console.log;
-  const now = input.now ?? (() => new Date());
-  const requestId = `req_${ulid()}`;
   const repository =
     input.repository ??
     new PostgresOrganizationStatusRepository(
       createPostgresIdentityClient(input.databaseUrl),
     );
-
-  let result: SetOrganizationStatusResult;
-  try {
-    result = await repository.setOrganizationStatus({
-      organizationId: input.organizationId,
-      actorUsername: input.actorUsername,
-      status: input.status,
-      requestId,
-      occurredAt: now(),
-    });
-  } finally {
-    await repository.close();
-  }
+  const execution = await runOperatorCommand(
+    repository,
+    input.now,
+    ({ requestId, occurredAt }) =>
+      repository.setOrganizationStatus({
+        organizationId: input.organizationId,
+        actorUsername: input.actorUsername,
+        status: input.status,
+        requestId,
+        occurredAt,
+      }),
+  );
+  const { result, context } = execution;
+  const requestId = context.requestId;
 
   // Named separately so an operator can tell a mistyped `--org` from a
   // mistyped `--actor`; the process still exits as a usage error.

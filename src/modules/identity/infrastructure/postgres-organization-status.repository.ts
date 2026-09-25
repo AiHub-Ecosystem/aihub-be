@@ -5,6 +5,7 @@ import type {
   SetOrganizationStatusResult,
 } from '../application/organization-status.port';
 
+import { findActiveAccountId } from './active-account';
 import {
   identityStoreError,
   isRecord,
@@ -16,13 +17,6 @@ import {
   recordOrganizationAuditEvent,
 } from './organization-audit-event.store';
 import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
-
-const ACTIVE_ACCOUNT_BY_USERNAME_SQL = `
-  SELECT id
-  FROM user_accounts
-  WHERE username = $1
-    AND status = 'active'
-`;
 
 const LOCK_ORGANIZATION_SQL = `
   SELECT name, status
@@ -76,12 +70,10 @@ export class PostgresOrganizationStatusRepository
     input: SetOrganizationStatusInput,
   ): Promise<SetOrganizationStatusResult> {
     return this.client.transaction(async (transaction) => {
-      const actorRows = await transaction.query(
-        ACTIVE_ACCOUNT_BY_USERNAME_SQL,
-        [input.actorUsername],
+      const actorId = await findActiveAccountId(
+        transaction,
+        input.actorUsername,
       );
-      const actor = actorRows[0];
-      const actorId = isRecord(actor) ? stringValue(actor, 'id') : undefined;
       if (actorId === undefined) {
         return { kind: 'actor_invalid' as const };
       }

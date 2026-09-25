@@ -1,11 +1,10 @@
-import { ulid } from 'ulid';
-
 import type {
   AttachFirstOwnerResult,
   OrganizationFirstOwnerPort,
 } from '../modules/identity/application/organization-first-owner.port';
 import { createPostgresIdentityClient } from '../modules/identity/infrastructure/postgres-identity.client';
 import { PostgresOrganizationFirstOwnerRepository } from '../modules/identity/infrastructure/postgres-organization-first-owner.repository';
+import { runOperatorCommand } from './operator-command-context';
 
 export interface AttachFirstOwnerCliInput {
   readonly databaseUrl: string;
@@ -27,26 +26,25 @@ export async function runAttachFirstOwnerCommand(
   input: AttachFirstOwnerCliInput,
 ): Promise<AttachFirstOwnerCliOutcome> {
   const emit = input.emit ?? console.log;
-  const now = input.now ?? (() => new Date());
-  const requestId = `req_${ulid()}`;
   const repository =
     input.repository ??
     new PostgresOrganizationFirstOwnerRepository(
       createPostgresIdentityClient(input.databaseUrl),
     );
-
-  let result: AttachFirstOwnerResult;
-  try {
-    result = await repository.attachFirstOwner({
-      organizationId: input.organizationId,
-      ownerUsername: input.ownerUsername,
-      actorUsername: input.actorUsername,
-      requestId,
-      occurredAt: now(),
-    });
-  } finally {
-    await repository.close();
-  }
+  const execution = await runOperatorCommand(
+    repository,
+    input.now,
+    ({ requestId, occurredAt }) =>
+      repository.attachFirstOwner({
+        organizationId: input.organizationId,
+        ownerUsername: input.ownerUsername,
+        actorUsername: input.actorUsername,
+        requestId,
+        occurredAt,
+      }),
+  );
+  const { result, context } = execution;
+  const requestId = context.requestId;
 
   const messages: Record<AttachFirstOwnerCliOutcome, string> = {
     attached: `Attached ${input.ownerUsername} as owner of ${input.organizationId}; recorded as ${requestId}.`,

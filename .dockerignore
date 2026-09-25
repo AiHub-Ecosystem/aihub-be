@@ -13,9 +13,7 @@ ops
 scripts/*
 !scripts/cli.mjs
 !scripts/cli-options.cjs
-!scripts/quota-reconcile.cjs
-!scripts/usage-prune.cjs
-!scripts/usage-report.cjs
+!scripts/load-cli-runner.cjs
 !scripts/migrate.mjs
 !scripts/runtime-entrypoint.mjs
 database/*

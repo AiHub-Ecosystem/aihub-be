@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { loadEnvFile } from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 import { ulid } from 'ulid';
 
@@ -47,14 +48,122 @@ import {
   quotaOption,
   usageError,
 } from './cli-options.cjs';
-import { runAttachFirstOwner } from './organization-first-owner.cjs';
-import { runOrganizationStatus } from './organization-status.cjs';
-import {
-  parseTargetMonth,
-  runQuotaReconciliation,
-} from './quota-reconcile.cjs';
-import { runUsagePrune } from './usage-prune.cjs';
-import { runUsageReport } from './usage-report.cjs';
+import { loadCliRunner } from './load-cli-runner.cjs';
+
+function cliRunnerDescriptor(name, exportName, unavailableMessage) {
+  return {
+    builtPath: fileURLToPath(
+      new URL(`../dist/cli/${name}.js`, import.meta.url),
+    ),
+    sourcePath: fileURLToPath(
+      new URL(`../src/cli/${name}.ts`, import.meta.url),
+    ),
+    exportName,
+    unavailableMessage,
+  };
+}
+
+const organizationStatusDescriptor = cliRunnerDescriptor(
+  'organization-status',
+  'runOrganizationStatusCommand',
+  'organization status command is unavailable',
+);
+const attachFirstOwnerDescriptor = cliRunnerDescriptor(
+  'organization-first-owner',
+  'runAttachFirstOwnerCommand',
+  'first owner attachment command is unavailable',
+);
+const usagePruneDescriptor = cliRunnerDescriptor(
+  'usage-prune',
+  'runUsagePruneCommand',
+  'usage prune command is unavailable',
+);
+const usageReportDescriptor = cliRunnerDescriptor(
+  'usage-report',
+  'runUsageReportCommand',
+  'usage report command is unavailable',
+);
+const quotaReconciliationDescriptor = cliRunnerDescriptor(
+  'quota-reconcile',
+  'runQuotaReconciliationCommand',
+  'quota reconciliation command is unavailable',
+);
+const quotaTargetMonthDescriptor = cliRunnerDescriptor(
+  'quota-reconcile',
+  'parseTargetMonth',
+  'quota reconciliation command is unavailable',
+);
+
+async function runCliCommand(descriptor, ...args) {
+  const runner = await loadCliRunner(descriptor);
+  return runner(...args);
+}
+
+async function runOrganizationStatus(input) {
+  return runCliCommand(organizationStatusDescriptor, input);
+}
+
+async function runAttachFirstOwner(input) {
+  return runCliCommand(attachFirstOwnerDescriptor, input);
+}
+
+async function runUsagePrune(input) {
+  return runCliCommand(usagePruneDescriptor, input);
+}
+
+function invalidUsageReportWindow(error) {
+  return (
+    error instanceof Error &&
+    error.message === 'usage report window is invalid' &&
+    error.code === 'USAGE_REPORT_INVALID_WINDOW'
+  );
+}
+
+async function runUsageReport(input) {
+  try {
+    return await runCliCommand(usageReportDescriptor, input);
+  } catch (error) {
+    if (invalidUsageReportWindow(error)) {
+      usageError();
+    }
+    throw error;
+  }
+}
+
+const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+function invalidQuotaMonth(error) {
+  return (
+    error instanceof Error &&
+    error.name === 'InvalidQuotaReconciliationMonthError'
+  );
+}
+
+async function parseTargetMonth(raw, now) {
+  if (raw !== undefined && !MONTH_PATTERN.test(raw)) {
+    usageError();
+  }
+
+  try {
+    return await runCliCommand(quotaTargetMonthDescriptor, raw, now);
+  } catch (error) {
+    if (invalidQuotaMonth(error)) {
+      usageError();
+    }
+    throw error;
+  }
+}
+
+async function runQuotaReconciliation(input) {
+  try {
+    return await runCliCommand(quotaReconciliationDescriptor, input);
+  } catch (error) {
+    if (invalidQuotaMonth(error)) {
+      usageError();
+    }
+    throw error;
+  }
+}
 
 if (existsSync('.env')) {
   loadEnvFile('.env');

@@ -5,6 +5,7 @@ import type {
   OrganizationFirstOwnerPort,
 } from '../application/organization-first-owner.port';
 
+import { findActiveAccountId } from './active-account';
 import {
   identityStoreError,
   isRecord,
@@ -16,14 +17,6 @@ import {
   recordOrganizationAuditEvent,
 } from './organization-audit-event.store';
 import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
-
-// The operator must be able to act, so only an active account qualifies.
-const ACTIVE_ACCOUNT_BY_USERNAME_SQL = `
-  SELECT id
-  FROM user_accounts
-  WHERE username = $1
-    AND status = 'active'
-`;
 
 // The owner need not have verified their email yet: an unverified account
 // cannot sign in, so attaching it early harms nothing and saves a round trip
@@ -105,8 +98,8 @@ export class PostgresOrganizationFirstOwnerRepository
         return isRecord(row) ? stringValue(row, 'id') : undefined;
       };
 
-      const actorId = await accountId(
-        ACTIVE_ACCOUNT_BY_USERNAME_SQL,
+      const actorId = await findActiveAccountId(
+        transaction,
         input.actorUsername,
       );
       if (actorId === undefined) {
