@@ -121,3 +121,13 @@ export function publishedScopes(): readonly string[] {
     ),
   ];
 }
+
+export function publishedEntitlements(): readonly string[] {
+  return [
+    ...new Set(
+      publishedScopes()
+        .map((scope) => scope.split('.')[0]!)
+        .filter(Boolean),
+    ),
+  ];
+}

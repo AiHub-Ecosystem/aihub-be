@@ -13,6 +13,23 @@ const STAMP: OrganizationAuditStamp = {
 };
 
 describe('organizationAuditEvent', () => {
+  it('records the granted entitlement in the Organization audit detail', () => {
+    const event = organizationAuditEvent(STAMP, {
+      action: 'organization.entitlement_granted',
+      organizationId: 'org_acme',
+      name: 'Acme',
+      entitlement: 'speaking',
+    });
+
+    expect(event).toMatchObject({
+      action: 'organization.entitlement_granted',
+      targetType: 'organization',
+      targetId: 'org_acme',
+      targetLabel: 'Acme',
+      detail: { entitlement: 'speaking' },
+    });
+  });
+
   it('records a first owner attachment against the membership, labelled by the owner username', () => {
     const event = organizationAuditEvent(STAMP, {
       action: 'membership.owner_attached',

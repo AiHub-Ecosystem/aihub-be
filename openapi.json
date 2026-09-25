@@ -5662,6 +5662,7 @@
                   "organization.suspended",
                   "organization.restored",
                   "organization.identity_config_set",
+                  "organization.entitlement_granted",
                   "invitation.sent",
                   "invitation.resent",
                   "invitation.accepted",
@@ -5786,6 +5787,10 @@
                                   },
                                   {
                                     "const": "organization.identity_config_set",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "organization.entitlement_granted",
                                     "type": "string"
                                   },
                                   {
