@@ -140,16 +140,19 @@ export class OrganizationIdentityConfigController {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function hasInvalidInlineJwks(value: unknown): boolean {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return false;
   }
 
-  const request = value as Record<string, unknown>;
   return (
-    (request.jwks_url === undefined || request.jwks_url === null) &&
-    request.public_keys_jwks !== undefined &&
-    request.public_keys_jwks !== null &&
-    !Value.Check(PublicJsonWebKeySetSchema, request.public_keys_jwks)
+    (value.jwks_url === undefined || value.jwks_url === null) &&
+    value.public_keys_jwks !== undefined &&
+    value.public_keys_jwks !== null &&
+    !Value.Check(PublicJsonWebKeySetSchema, value.public_keys_jwks)
   );
 }

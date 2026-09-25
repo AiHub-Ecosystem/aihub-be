@@ -304,27 +304,37 @@ describe('Organization identity configuration HTTP flow', () => {
     },
   );
 
-  it('validates a remote source before persisting and returns a safe error on fetch failure', async () => {
-    validateRemote.mockRejectedValueOnce(
-      new AppError({
+  it.each([
+    ['network failure', true],
+    ['timeout', true],
+    ['upstream 5xx', true],
+    ['upstream 429', true],
+    ['upstream 404', false],
+  ])(
+    'returns a stable source-unavailable response for %s',
+    async (_reason, retryable) => {
+      validateRemote.mockRejectedValueOnce(
+        new AppError({
+          code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+          message: 'JWKS source is unavailable',
+          retryable,
+        }),
+      );
+
+      const response = await set({
+        issuer: 'https://acme.edu',
+        jwks_url: 'https://id.acme.edu/keys',
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json().error).toMatchObject({
         code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
         message: 'JWKS source is unavailable',
-        retryable: true,
-      }),
-    );
-
-    const response = await set({
-      issuer: 'https://acme.edu',
-      jwks_url: 'https://id.acme.edu/keys',
-    });
-
-    expect(response.statusCode).toBe(503);
-    expect(response.json().error).toMatchObject({
-      code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
-      retryable: true,
-    });
-    expect(configs.saveForOwner).not.toHaveBeenCalled();
-  });
+        retryable,
+      });
+      expect(configs.saveForOwner).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects invalid public key material with the stable JWKS error', async () => {
     const response = await set({
@@ -378,7 +388,10 @@ describe('Organization identity configuration HTTP flow', () => {
     expect(configs.saveForOwner).not.toHaveBeenCalled();
   });
 
-  it('returns an unsafe-URL error without disclosing destination details', async () => {
+  it.each([
+    ['blocked private destination', 'https://10.0.0.8/keys'],
+    ['rejected redirect', 'https://id.acme.edu/keys'],
+  ])('returns the safe unsafe-URL error for a %s', async (_reason, url) => {
     validateRemote.mockRejectedValueOnce(
       new AppError({
         code: 'IDENTITY_JWKS_URL_UNSAFE',
@@ -387,16 +400,15 @@ describe('Organization identity configuration HTTP flow', () => {
       }),
     );
 
-    const response = await set({
-      issuer: 'https://acme.edu',
-      jwks_url: 'https://id.acme.edu/keys',
-    });
+    const response = await set({ issuer: 'https://acme.edu', jwks_url: url });
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error).toMatchObject({
       code: 'IDENTITY_JWKS_URL_UNSAFE',
+      message: 'JWKS URL is not safe',
       retryable: false,
     });
+    expect(response.payload).not.toContain('10.0.0.8');
     expect(response.payload).not.toContain('id.acme.edu');
     expect(configs.saveForOwner).not.toHaveBeenCalled();
   });
