@@ -22,12 +22,11 @@ export interface CreatedOrganization {
 }
 
 /**
- * Self-serve terms are tighter than an operator's defaults because no
- * commercial agreement exists yet: `writing` lets the owner issue a usable key
- * at once, and the hard-stopped quota caps what that key can cost (ADR-0041).
+ * Self-serve Organizations start with every currently available capability;
+ * the hard-stopped quota still caps usage under the default commercial terms.
  */
 export const SELF_SERVE_ORGANIZATION_TERMS: SelfServeOrganizationTerms = {
-  entitlements: ['writing'],
+  entitlements: ['writing', 'speaking'],
   rateLimitRpm: 60,
   maxConcurrent: 5,
   monthlyRequestQuota: 100,

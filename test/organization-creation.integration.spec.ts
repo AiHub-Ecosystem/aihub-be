@@ -222,7 +222,7 @@ describe('Self-serve Organization creation over HTTP', () => {
       name: 'Acme Learning',
       creationLimit: 3,
       terms: {
-        entitlements: ['writing'],
+        entitlements: ['writing', 'speaking'],
         rateLimitRpm: 60,
         maxConcurrent: 5,
         monthlyRequestQuota: 100,

@@ -22,7 +22,7 @@ import {
 } from './database';
 
 const TERMS = {
-  entitlements: ['writing'],
+  entitlements: ['writing', 'speaking'],
   rateLimitRpm: 60,
   maxConcurrent: 5,
   monthlyRequestQuota: 100,
@@ -131,7 +131,7 @@ describe('Self-serve Organization creation against PostgreSQL', () => {
       {
         name: 'Acme Learning',
         status: 'active',
-        entitlements: ['writing'],
+        entitlements: ['writing', 'speaking'],
         rate_limit_rpm: 60,
         max_concurrent: 5,
         monthly_request_quota: 100,
@@ -290,7 +290,7 @@ describe('Self-serve Organization creation against PostgreSQL', () => {
         organizationId,
         name: 'Acme Learning',
         status: 'active',
-        entitlements: ['writing'],
+        entitlements: ['writing', 'speaking'],
         membershipRole: 'owner',
         members: [
           {
