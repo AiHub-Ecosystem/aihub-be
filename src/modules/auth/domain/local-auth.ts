@@ -1,3 +1,6 @@
+export const PASSWORD_MIN_CODE_POINTS = 12;
+export const PASSWORD_MAX_CODE_POINTS = 128;
+
 export type LocalAccountStatus = 'pending_verification' | 'active' | 'disabled';
 
 export interface RegistrationInput {
@@ -49,9 +52,15 @@ export function normalizeUsername(value: string): string {
   return normalized;
 }
 
-export function validatePassword(value: string): string {
+export function isValidPassword(value: string): boolean {
   const length = [...value].length;
-  if (length < 12 || length > 128) {
+  return (
+    length >= PASSWORD_MIN_CODE_POINTS && length <= PASSWORD_MAX_CODE_POINTS
+  );
+}
+
+export function validatePassword(value: string): string {
+  if (!isValidPassword(value)) {
     throw new LocalAuthValidationError();
   }
   return value;

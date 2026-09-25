@@ -43,6 +43,22 @@ interface OpenApiDocument {
   readonly paths: Record<string, OpenApiPathItem>;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function requestProperty(
+  operation: OpenApiOperation | undefined,
+  property: string,
+): Record<string, unknown> | undefined {
+  const schema = operation?.requestBody.content['application/json']?.schema;
+  if (!isRecord(schema) || !isRecord(schema.properties)) {
+    return undefined;
+  }
+  const value = schema.properties[property];
+  return isRecord(value) ? value : undefined;
+}
+
 const SANDBOX_MINT_PATH = '/v1/sandbox/assertions';
 const SANDBOX_MINT_OPERATION_ID = 'sandbox.assertions.mint';
 const ORGANIZATION_PATH = '/v1/organizations';
@@ -519,6 +535,24 @@ describe('buildOpenApiDocument', () => {
     const refresh = doc.paths['/v1/auth/refresh']?.post;
     const logout = doc.paths['/v1/auth/logout']?.post;
 
+    for (const operation of [register, login, reset]) {
+      const password = requestProperty(operation, 'password');
+      expect(password).toMatchObject({
+        type: 'string',
+        minLength: 12,
+        maxLength: 128,
+        description: '12–128 Unicode code points; no normalization.',
+      });
+      expect(password?.format).toBeUndefined();
+    }
+
+    expect(login?.responses['409']).toBeUndefined();
+    expect(verify?.responses['409']).toBeUndefined();
+    expect(resend?.responses['409']).toBeUndefined();
+    expect(forgot?.responses['409']).toBeUndefined();
+    expect(reset?.responses['409']).toBeUndefined();
+    expect(refresh?.responses['409']).toBeUndefined();
+    expect(logout?.responses['409']).toBeUndefined();
     expect(register?.security).toEqual([]);
     expect(login?.security).toEqual([]);
     expect(login?.responses['200']).toBeDefined();

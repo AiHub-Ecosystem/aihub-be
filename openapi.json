@@ -5976,8 +5976,9 @@
                     "type": "string"
                   },
                   "password": {
-                    "minLength": 1,
-                    "maxLength": 256,
+                    "minLength": 12,
+                    "maxLength": 128,
+                    "description": "12–128 Unicode code points; no normalization.",
                     "type": "string"
                   }
                 }
@@ -6069,8 +6070,9 @@
                     "type": "string"
                   },
                   "password": {
-                    "minLength": 1,
-                    "maxLength": 256,
+                    "minLength": 12,
+                    "maxLength": 128,
+                    "description": "12–128 Unicode code points; no normalization.",
                     "type": "string"
                   }
                 }
@@ -6349,8 +6351,9 @@
                     "type": "string"
                   },
                   "password": {
-                    "minLength": 1,
-                    "maxLength": 256,
+                    "minLength": 12,
+                    "maxLength": 128,
+                    "description": "12–128 Unicode code points; no normalization.",
                     "type": "string"
                   }
                 }

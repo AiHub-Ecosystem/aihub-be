@@ -16,6 +16,7 @@ import {
   type EmailSenderPort,
 } from '../application/email-sender.port';
 import {
+  AuthIdentityConflictError,
   LOCAL_AUTH_REPOSITORY,
   type LocalAuthRepositoryPort,
   type LoginIdentity,
@@ -50,7 +51,7 @@ import {
 class RepositoryFake implements LocalAuthRepositoryPort {
   consumed = true;
   target = { email: 'person@example.com' };
-  registered = 0;
+  registerConflict = false;
   loginIdentity: LoginIdentity | undefined = {
     userId: 'usr_01J00000000000000000000000',
     passwordHash: '$argon2id$fake',
@@ -66,7 +67,9 @@ class RepositoryFake implements LocalAuthRepositoryPort {
   };
 
   async register(): Promise<void> {
-    this.registered += 1;
+    if (this.registerConflict) {
+      throw new AuthIdentityConflictError();
+    }
   }
 
   async rotateVerificationToken() {
@@ -405,6 +408,128 @@ describe('local auth HTTP boundary', () => {
     });
     expect(replay.statusCode).toBe(204);
     expect(replay.payload).toBe('');
+  });
+
+  const passwordBoundaryRequests = [
+    {
+      name: 'register',
+      url: '/v1/auth/register',
+      body: {
+        email: 'person@example.com',
+        username: 'person_01',
+      },
+      validStatus: 201,
+    },
+    {
+      name: 'login',
+      url: '/v1/auth/login',
+      body: { email: 'person@example.com' },
+      validStatus: 200,
+    },
+    {
+      name: 'reset-password',
+      url: '/v1/auth/reset-password',
+      body: { token: 'reset-token' },
+      validStatus: 204,
+    },
+  ];
+
+  const validPasswordBoundaryCases = passwordBoundaryRequests.flatMap(
+    (request) =>
+      [12, 128].flatMap((length) =>
+        ['a', '😀'].map((character) => ({
+          request,
+          length,
+          password: character.repeat(length),
+        })),
+      ),
+  );
+
+  const invalidPasswordBoundaryCases = passwordBoundaryRequests.flatMap(
+    (request) =>
+      [11, 129].flatMap((length) =>
+        ['a', '😀'].map((character) => ({
+          request,
+          length,
+          password: character.repeat(length),
+        })),
+      ),
+  );
+
+  it.each(validPasswordBoundaryCases)(
+    '$request.name accepts a $length-code-point password',
+    async ({ request, password }) => {
+      if (request.name === 'reset-password') {
+        repository.passwordResetResult = { kind: 'reset' };
+      }
+
+      const response = await app.inject({
+        method: 'POST',
+        url: request.url,
+        headers: { 'content-type': 'application/json' },
+        payload: { ...request.body, password },
+      });
+
+      expect(response.statusCode).toBe(request.validStatus);
+    },
+  );
+
+  it.each(invalidPasswordBoundaryCases)(
+    '$request.name rejects a $length-code-point password generically',
+    async ({ request, password }) => {
+      const response = await app.inject({
+        method: 'POST',
+        url: request.url,
+        headers: { 'content-type': 'application/json' },
+        payload: { ...request.body, password },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'Request failed validation',
+          request_id: expect.stringMatching(/^req_/),
+          retryable: false,
+        },
+      });
+    },
+  );
+
+  it('keeps an identity conflict distinct from an invalid password length', async () => {
+    repository.registerConflict = true;
+
+    try {
+      const conflict = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/register',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          email: 'person@example.com',
+          username: 'person_01',
+          password: 'a'.repeat(12),
+        },
+      });
+      const invalid = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/register',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          email: 'person@example.com',
+          username: 'person_01',
+          password: 'a'.repeat(11),
+        },
+      });
+
+      expect([
+        conflict.statusCode,
+        conflict.json().error.code,
+        invalid.statusCode,
+        invalid.json().error.code,
+      ]).toEqual([409, 'AUTH_IDENTITY_UNAVAILABLE', 400, 'INVALID_REQUEST']);
+    } finally {
+      repository.registerConflict = false;
+    }
   });
 
   it('keeps malformed input generic and provider failures non-sensitive', async () => {

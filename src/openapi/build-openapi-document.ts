@@ -1,4 +1,4 @@
-import { type TSchema, Type } from '@sinclair/typebox';
+import { type TObject, type TSchema, Type } from '@sinclair/typebox';
 
 import type {
   IdempotencyMode,
@@ -18,6 +18,7 @@ import {
   ForgotPasswordResponseSchema,
   LoginRequestSchema,
   LoginResponseSchema,
+  PASSWORD_POLICY_DESCRIPTION,
   RegisterRequestSchema,
   RegisterResponseSchema,
   ResendVerificationRequestSchema,
@@ -65,6 +66,10 @@ import {
   MintSandboxAssertionRequestSchema,
   MintSandboxAssertionResponseSchema,
 } from '../contracts/sandbox/assertion';
+import {
+  PASSWORD_MAX_CODE_POINTS,
+  PASSWORD_MIN_CODE_POINTS,
+} from '../modules/auth/domain/local-auth';
 import { REFRESH_COOKIE_NAME } from '../modules/auth/presentation/refresh-cookie';
 
 /**
@@ -320,6 +325,25 @@ function refreshInvalidResponse(): Record<string, unknown> {
   };
 }
 
+function publishedLocalAuthRequestSchema(schema: TObject): TSchema {
+  const options =
+    schema.additionalProperties === undefined
+      ? {}
+      : { additionalProperties: schema.additionalProperties };
+
+  return Type.Object(
+    {
+      ...schema.properties,
+      password: Type.String({
+        minLength: PASSWORD_MIN_CODE_POINTS,
+        maxLength: PASSWORD_MAX_CODE_POINTS,
+        description: PASSWORD_POLICY_DESCRIPTION,
+      }),
+    },
+    options,
+  );
+}
+
 function localAuthPathItems(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
 ): Record<string, Record<string, unknown>> {
@@ -442,13 +466,13 @@ function localAuthPathItems(
     [AUTH_REGISTER_PATH]: operation(
       'auth.register',
       'Register a local AIHUB account',
-      RegisterRequestSchema,
+      publishedLocalAuthRequestSchema(RegisterRequestSchema),
       registerResponses,
     ),
     [AUTH_LOGIN_PATH]: operation(
       'auth.login',
       'Issue a User Access JWT',
-      LoginRequestSchema,
+      publishedLocalAuthRequestSchema(LoginRequestSchema),
       loginResponses,
     ),
     [AUTH_VERIFY_PATH]: operation(
@@ -472,7 +496,7 @@ function localAuthPathItems(
     [AUTH_RESET_PASSWORD_PATH]: operation(
       'auth.reset_password',
       'Reset a local account password',
-      ResetPasswordRequestSchema,
+      publishedLocalAuthRequestSchema(ResetPasswordRequestSchema),
       resetPasswordResponses,
     ),
     [AUTH_REFRESH_PATH]: operation(

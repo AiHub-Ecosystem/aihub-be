@@ -1,5 +1,7 @@
 import {
   LocalAuthValidationError,
+  PASSWORD_MAX_CODE_POINTS,
+  PASSWORD_MIN_CODE_POINTS,
   canTransitionToActive,
   normalizeEmail,
   normalizeRegistration,
@@ -18,13 +20,37 @@ describe('local auth domain', () => {
     );
   });
 
-  it('keeps password bytes/characters exact while enforcing Unicode length', () => {
-    const password = '  1234567890é';
+  it('exposes the agreed password policy bounds', () => {
+    expect([PASSWORD_MIN_CODE_POINTS, PASSWORD_MAX_CODE_POINTS]).toEqual([
+      12, 128,
+    ]);
+  });
+
+  it.each([12, 128])('accepts %i ASCII code points', (length) => {
+    const password = 'a'.repeat(length);
     expect(validatePassword(password)).toBe(password);
-    expect(() => validatePassword('short')).toThrow(LocalAuthValidationError);
-    expect(() => validatePassword('x'.repeat(129))).toThrow(
+  });
+
+  it.each([11, 129])('rejects %i ASCII code points', (length) => {
+    expect(() => validatePassword('a'.repeat(length))).toThrow(
       LocalAuthValidationError,
     );
+  });
+
+  it.each([12, 128])('accepts %i astral code points', (length) => {
+    const password = '😀'.repeat(length);
+    expect(validatePassword(password)).toBe(password);
+  });
+
+  it.each([11, 129])('rejects %i astral code points', (length) => {
+    expect(() => validatePassword('😀'.repeat(length))).toThrow(
+      LocalAuthValidationError,
+    );
+  });
+
+  it('counts combining code points without normalizing the password', () => {
+    const password = `${'a'.repeat(10)}e\u0301`;
+    expect(validatePassword(password)).toBe(password);
   });
 
   it('normalizes registration as one boundary operation', () => {

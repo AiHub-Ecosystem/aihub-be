@@ -1,10 +1,32 @@
-import { type Static, Type } from '@sinclair/typebox';
+import { FormatRegistry, type Static, Type } from '@sinclair/typebox';
+
+import {
+  PASSWORD_MAX_CODE_POINTS,
+  PASSWORD_MIN_CODE_POINTS,
+  isValidPassword,
+} from '../../modules/auth/domain/local-auth';
+
+const PASSWORD_POLICY_FORMAT = 'aihub-password-policy';
+export const PASSWORD_POLICY_DESCRIPTION = `${PASSWORD_MIN_CODE_POINTS}–${PASSWORD_MAX_CODE_POINTS} Unicode code points; no normalization.`;
+
+if (!FormatRegistry.Has(PASSWORD_POLICY_FORMAT)) {
+  FormatRegistry.Set(PASSWORD_POLICY_FORMAT, isValidPassword);
+}
+
+const PASSWORD_RUNTIME_MAX_CODE_UNITS = PASSWORD_MAX_CODE_POINTS * 2;
+
+const PasswordSchema = Type.String({
+  minLength: 1,
+  maxLength: PASSWORD_RUNTIME_MAX_CODE_UNITS,
+  format: PASSWORD_POLICY_FORMAT,
+  description: PASSWORD_POLICY_DESCRIPTION,
+});
 
 export const RegisterRequestSchema = Type.Object(
   {
     email: Type.String({ minLength: 1, maxLength: 320 }),
     username: Type.String({ minLength: 1, maxLength: 64 }),
-    password: Type.String({ minLength: 1, maxLength: 256 }),
+    password: PasswordSchema,
   },
   { additionalProperties: false },
 );
@@ -37,7 +59,7 @@ export type ForgotPasswordRequest = Static<typeof ForgotPasswordRequestSchema>;
 export const ResetPasswordRequestSchema = Type.Object(
   {
     token: Type.String({ minLength: 1, maxLength: 512 }),
-    password: Type.String({ minLength: 1, maxLength: 256 }),
+    password: PasswordSchema,
   },
   { additionalProperties: false },
 );
@@ -47,7 +69,7 @@ export type ResetPasswordRequest = Static<typeof ResetPasswordRequestSchema>;
 export const LoginRequestSchema = Type.Object(
   {
     email: Type.String({ minLength: 1, maxLength: 320 }),
-    password: Type.String({ minLength: 1, maxLength: 256 }),
+    password: PasswordSchema,
   },
   { additionalProperties: false },
 );
