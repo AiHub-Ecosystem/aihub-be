@@ -157,4 +157,17 @@ describe('organization audit event migration', () => {
       expect(migration).toContain(`'${action}'`);
     }
   });
+
+  it('extends the action constraint for operator entitlement grants', async () => {
+    const migration = await readFile(
+      join(
+        __dirname,
+        '../../../../database/migrations/0021_organization_entitlement_grant.sql',
+      ),
+      'utf8',
+    );
+    expect(migration).toContain("'organization.entitlement_granted'");
+    expect(migration).toContain("'organization.identity_config_set'");
+    expect(migration).toContain("'api_key.revoked'");
+  });
 });

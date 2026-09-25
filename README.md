@@ -63,6 +63,12 @@ pnpm cli org:create --name "Acme Edu" --entitlements writing,speaking
 pnpm cli key:create --org org_... --name "Local backend" --scopes writing.grade,speaking.grade --envs development
 ```
 
+Grant an entitlement to an existing Organization as an operator:
+
+```text
+pnpm cli org:grant-entitlement --org org_... --entitlement speaking --actor aihub-ops-username
+```
+
 Schedule `pnpm cli idempotency:cleanup` from the deployment environment once
 per night to remove expired idempotency records. The command reports the
 deleted row count and exits non-zero when PostgreSQL is unavailable.

@@ -68,6 +68,11 @@ const organizationStatusDescriptor = cliRunnerDescriptor(
   'runOrganizationStatusCommand',
   'organization status command is unavailable',
 );
+const organizationEntitlementDescriptor = cliRunnerDescriptor(
+  'organization-entitlement',
+  'runGrantOrganizationEntitlementCommand',
+  'organization entitlement command is unavailable',
+);
 const attachFirstOwnerDescriptor = cliRunnerDescriptor(
   'organization-first-owner',
   'runAttachFirstOwnerCommand',
@@ -101,6 +106,10 @@ async function runCliCommand(descriptor, ...args) {
 
 async function runOrganizationStatus(input) {
   return runCliCommand(organizationStatusDescriptor, input);
+}
+
+async function runGrantOrganizationEntitlement(input) {
+  return runCliCommand(organizationEntitlementDescriptor, input);
 }
 
 async function runAttachFirstOwner(input) {
@@ -719,6 +728,21 @@ async function organizationStatusCommand(options, status) {
   }
 }
 
+async function organizationGrantEntitlementCommand(options) {
+  for (const name of options.keys()) {
+    if (name !== 'org' && name !== 'actor' && name !== 'entitlement')
+      usageError();
+  }
+  const outcome = await runGrantOrganizationEntitlement({
+    databaseUrl: process.env.DATABASE_URL ?? '',
+    redisUrl: process.env.REDIS_URL,
+    organizationId: requiredOption(options, 'org'),
+    actorUsername: requiredOption(options, 'actor'),
+    entitlement: requiredOption(options, 'entitlement'),
+  });
+  if (!['granted', 'unchanged'].includes(outcome)) usageError();
+}
+
 // First Owner Attachment (ADR-0045): the bootstrap for an Organization
 // `org:create` provisioned, which starts with no members. Every refusal is a
 // usage error, named by the command before it exits.
@@ -802,6 +826,10 @@ async function main() {
   }
   if (command === 'org:restore') {
     await organizationStatusCommand(options, 'active');
+    return;
+  }
+  if (command === 'org:grant-entitlement') {
+    await organizationGrantEntitlementCommand(options);
     return;
   }
   if (command === 'usage:prune') {
