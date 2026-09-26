@@ -1,7 +1,7 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
-import { getRequestMeteringState } from '../../../common/metering/request-metering-state';
+import { getRequestMeteringState } from '../../../common/request-metering/request-metering-state';
 import type { AuthenticatedApiKey } from '../../identity/application/api-key-authenticator.port';
 import {
   QUOTA_COUNTER,

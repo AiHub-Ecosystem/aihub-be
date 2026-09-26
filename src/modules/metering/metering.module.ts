@@ -3,7 +3,7 @@ import { Module } from '@nestjs/common';
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
-} from '../../common/metering/metering-finalizer.port';
+} from '../../common/request-metering/metering-finalizer.port';
 import {
   QUOTA_COUNTER,
   type QuotaCounterPort,

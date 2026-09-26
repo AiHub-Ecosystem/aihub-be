@@ -104,6 +104,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Speaking grading job:** the future durable async operation that accepts an organization-owned audio asset and returns a job result.
 - **Audio asset:** an organization-owned reference to recorded audio; downstream URLs and partner credentials never become public request fields.
 - **Metering record:** the durable internal evidence for one authenticated gateway request, used for usage, billing, and audit; it is not part of the public response.
+- **Request metering:** the per-request collection of context and usage evidence used to produce a Metering record; it is transient and distinct from the durable record.
 - **Metering status:** the internal classification of usage evidence as complete, missing, not applicable, or unverified; `not_applicable` covers non-model or no-model-call requests and model-backed services without a reporting declaration, `missing_usage` is anomalous only for a service with a reporting declaration, and `quota_unverified` takes precedence when quota admission could not be verified. These statuses are never exposed to API clients.
 - **Billable request:** a successfully completed operation eligible for request-based billing; recorded failures remain non-billable evidence.
 - **Monthly request quota:** the organization-scoped maximum number of billable requests in one UTC calendar month; `null` means unlimited and zero freezes billable work.

@@ -3,7 +3,7 @@ import type {
   MeteringOutcome,
   MeteringStatus,
   MeteringUsage,
-} from '../../../common/metering/metering.types';
+} from '../../../common/request-metering/metering.types';
 
 export interface UsageRecord {
   readonly requestId: string;

@@ -7,7 +7,7 @@ import { SuccessEnvelopeInterceptor } from '../../../common/http/success-envelop
 import {
   initializeRequestMetering,
   setRequestMeteringIdentity,
-} from '../../../common/metering/request-metering-state';
+} from '../../../common/request-metering/request-metering-state';
 import type { AuthenticatedApiKey } from '../../identity/application/api-key-authenticator.port';
 import { MeteringService } from '../../metering/application/metering.service';
 import type {

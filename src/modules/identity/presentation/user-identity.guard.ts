@@ -10,7 +10,7 @@ import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
 import { userIdentityRequired } from '../../../common/errors/user-identity-required';
-import { setRequestMeteringActor } from '../../../common/metering/request-metering-state';
+import { setRequestMeteringActor } from '../../../common/request-metering/request-metering-state';
 import { invalidUserIdentity } from '../application/user-identity-errors';
 import {
   USER_IDENTITY_RESOLVER,

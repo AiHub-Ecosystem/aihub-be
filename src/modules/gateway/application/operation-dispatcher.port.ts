@@ -1,9 +1,9 @@
 import type { OperationId } from '../../../catalog/operation-id';
+import type { RequestContext } from '../../../common/request-context/request-context';
 import type {
   MeteringModel,
   MeteringUsage,
-} from '../../../common/metering/metering.types';
-import type { RequestContext } from '../../../common/request-context/request-context';
+} from '../../../common/request-metering/metering.types';
 import type {
   SpeakingGradeInput,
   SpeakingGradeJsonInput,

@@ -5,9 +5,9 @@ import {
 import { Test } from '@nestjs/testing';
 
 import { AppModule } from '../../app.module';
-import { METERING_FINALIZER } from '../../common/metering/metering-finalizer.port';
-import type { MeteringFinalizeInput } from '../../common/metering/metering-finalizer.port';
 import { generateRequestId } from '../../common/request-context/request-id';
+import { METERING_FINALIZER } from '../../common/request-metering/metering-finalizer.port';
+import type { MeteringFinalizeInput } from '../../common/request-metering/metering-finalizer.port';
 import { OPERATION_DISPATCHER } from '../gateway/application/operation-dispatcher.port';
 import type {
   IdempotencyExecution,

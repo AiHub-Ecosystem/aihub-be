@@ -10,7 +10,7 @@ import { AppError } from '../../../common/errors/app-error';
 import {
   setRequestMeteringQuotaTracked,
   setRequestMeteringQuotaUnverified,
-} from '../../../common/metering/request-metering-state';
+} from '../../../common/request-metering/request-metering-state';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,

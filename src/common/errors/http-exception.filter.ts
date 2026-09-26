@@ -7,16 +7,16 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
-import { finalizeRequestMetering } from '../metering/finalize-request-metering';
+import { isRequestId } from '../request-context/request-id';
+import { finalizeRequestMetering } from '../request-metering/finalize-request-metering';
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
-} from '../metering/metering-finalizer.port';
+} from '../request-metering/metering-finalizer.port';
 import {
   elapsedRequestMs,
   getRequestMeteringState,
-} from '../metering/request-metering-state';
-import { isRequestId } from '../request-context/request-id';
+} from '../request-metering/request-metering-state';
 import { AppError } from './app-error';
 import type { ErrorCode } from './error-code';
 import {

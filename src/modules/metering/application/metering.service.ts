@@ -5,9 +5,9 @@ import {
 import type {
   MeteringFinalizeInput,
   MeteringFinalizerPort,
-} from '../../../common/metering/metering-finalizer.port';
-import type { MeteringStatus } from '../../../common/metering/metering.types';
-import { normalizeMeteringTelemetry } from '../../../common/metering/telemetry';
+} from '../../../common/request-metering/metering-finalizer.port';
+import type { MeteringStatus } from '../../../common/request-metering/metering.types';
+import { normalizeMeteringTelemetry } from '../../../common/request-metering/telemetry';
 import type { DownstreamId } from '../../../downstream/downstream.types';
 import type { QuotaCounterPort } from '../../gateway/application/quota-counter.port';
 import type { MeteringFailureLoggerPort } from './metering-logger.port';

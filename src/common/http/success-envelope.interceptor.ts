@@ -9,17 +9,20 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { type Observable, mergeMap } from 'rxjs';
 
 import { isOperationId } from '../../catalog/operation-id';
-import { finalizeRequestMetering } from '../metering/finalize-request-metering';
+import { isRequestId } from '../request-context/request-id';
+import { finalizeRequestMetering } from '../request-metering/finalize-request-metering';
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
-} from '../metering/metering-finalizer.port';
-import type { MeteringModel, MeteringUsage } from '../metering/metering.types';
+} from '../request-metering/metering-finalizer.port';
+import type {
+  MeteringModel,
+  MeteringUsage,
+} from '../request-metering/metering.types';
 import {
   getRequestMeteringState,
   setRequestMeteringTelemetry,
-} from '../metering/request-metering-state';
-import { isRequestId } from '../request-context/request-id';
+} from '../request-metering/request-metering-state';
 
 interface DispatchResultLike {
   readonly operation: string;

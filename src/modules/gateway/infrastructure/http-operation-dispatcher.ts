@@ -3,8 +3,8 @@ import { Logger } from '@nestjs/common';
 import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
 import type { ErrorCode } from '../../../common/errors/error-code';
-import { extractDownstreamTelemetry } from '../../../common/metering/telemetry';
 import type { RequestContext } from '../../../common/request-context/request-context';
+import { extractDownstreamTelemetry } from '../../../common/request-metering/telemetry';
 import type {
   SpeakingGradeInput,
   SpeakingGradeJsonInput,

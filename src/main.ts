@@ -11,8 +11,8 @@ import {
 import { AppModule } from './app.module';
 import { registerBodySizeGuard } from './common/http/body-size.hook';
 import { registerRequestLifecycle } from './common/http/request-lifecycle.hook';
-import { registerRequestMeteringStart } from './common/metering/request-metering-state';
 import { generateRequestId } from './common/request-context/request-id';
+import { registerRequestMeteringStart } from './common/request-metering/request-metering-state';
 import {
   assertAuthBypassFlagIsSafe,
   assertHostConfigurationIsSafe,

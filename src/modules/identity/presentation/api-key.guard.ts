@@ -9,7 +9,7 @@ import { Reflector } from '@nestjs/core';
 import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
-import { setRequestMeteringIdentity } from '../../../common/metering/request-metering-state';
+import { setRequestMeteringIdentity } from '../../../common/request-metering/request-metering-state';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
