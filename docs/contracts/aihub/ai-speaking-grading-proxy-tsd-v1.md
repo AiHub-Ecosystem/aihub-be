@@ -91,7 +91,9 @@ environment-specific server configuration. They are never request fields,
 browser values, fixtures, logs, public responses, or ordinary business data.
 
 The client must not send a `user_id` form or JSON field. AIHUB derives
-downstream `user_id` from the verified assertion sub claim.
+downstream `user_id` from the End-User ID resolved from `X-User-Identity`: the
+verified assertion `sub` claim for an Organization with an active identity
+configuration, otherwise the Declared User ID (ADR-0053).
 
 ## 4. Response envelope
 
@@ -122,14 +124,14 @@ service-private ids do not cross this boundary.
 
 ### Public request to downstream request
 
-| Public source          | Downstream field          | Rule                                    |
-| ---------------------- | ------------------------- | --------------------------------------- |
-| Multipart audio        | audio                     | Forward the bounded bytes and filename  |
-| Verified assertion sub | user_id                   | Server-derived; never client-controlled |
-| part                   | part                      | Forward after boundary validation       |
-| question_id            | question_id               | Forward after non-empty validation      |
-| Optional text fields   | Same names                | Forward only when present               |
-| Server configuration   | x-client-id, x-secret-key | Inject at dispatcher/HTTP boundary      |
+| Public source        | Downstream field          | Rule                                   |
+| -------------------- | ------------------------- | -------------------------------------- |
+| Multipart audio      | audio                     | Forward the bounded bytes and filename |
+| End-User ID          | user_id                   | Server-derived; never a body field     |
+| part                 | part                      | Forward after boundary validation      |
+| question_id          | question_id               | Forward after non-empty validation     |
+| Optional text fields | Same names                | Forward only when present              |
+| Server configuration | x-client-id, x-secret-key | Inject at dispatcher/HTTP boundary     |
 
 For JSON-by-URL grading, `audio_url` replaces the multipart `audio` file and
 the same verified identity and metadata mapping applies. The downstream path
@@ -205,7 +207,7 @@ of the AI Speaking service under this contract.
 
 | Value                      | Source                                               | Public request field? |
 | -------------------------- | ---------------------------------------------------- | --------------------- |
-| user_id                    | Verified X-User-Identity.sub                         | No                    |
+| user_id                    | End-User ID from X-User-Identity                     | No                    |
 | AI Speaking service origin | DOWNSTREAM_AI_SPEAKING_URL                           | No                    |
 | x-client-id                | DOWNSTREAM_AI_SPEAKING_CLIENT_ID or secret provider  | No                    |
 | x-secret-key               | DOWNSTREAM_AI_SPEAKING_SECRET_KEY or secret provider | No                    |
@@ -276,7 +278,6 @@ that a retry is safe. Speaking has no idempotent replay.
 | Missing/unknown/expired AIHUB API key                        |  401 | UNAUTHORIZED                  | No                         |
 | Missing user identity                                        |  401 | USER_IDENTITY_REQUIRED        | No                         |
 | Invalid user assertion                                       |  401 | INVALID_USER_IDENTITY         | No                         |
-| Organization has no active identity configuration            |  403 | IDENTITY_CONFIG_REQUIRED      | No                         |
 | Key lacks speaking.grade                                     |  403 | FORBIDDEN                     | No                         |
 | Key not valid for environment                                |  403 | ENVIRONMENT_NOT_ALLOWED       | No                         |
 | Route not found                                              |  404 | NOT_FOUND                     | No                         |

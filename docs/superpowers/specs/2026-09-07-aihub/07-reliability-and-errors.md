@@ -149,33 +149,32 @@ Handled naturally via architecture documented in [04 — Redis](04-redis.md):
 
 ## J.2 Error Code Inventory v1
 
-| HTTP Status | Error Code                      | Condition                                         | Retryable                 |
-| ----------: | ------------------------------- | ------------------------------------------------- | ------------------------- |
-|         400 | `INVALID_REQUEST`               | Schema violation, unknown properties              | No                        |
-|         401 | `UNAUTHORIZED`                  | Missing or invalid API key                        | No                        |
-|         401 | `USER_IDENTITY_REQUIRED`        | User-scoped operation lacks user identity         | No                        |
-|         401 | `INVALID_USER_IDENTITY`         | Bad signature, expired, or invalid claims         | No                        |
-|         403 | `IDENTITY_CONFIG_REQUIRED`      | Organization has no active identity configuration | No                        |
-|         403 | `FORBIDDEN`                     | Insufficient scopes / entitlements                | No                        |
-|         403 | `ENVIRONMENT_NOT_ALLOWED`       | API key not authorized for this environment       | No                        |
-|         404 | `NOT_FOUND`                     | Endpoint or resource does not exist               | No                        |
-|         409 | `IDEMPOTENCY_CONFLICT`          | Reused key with divergent payload or in-flight    | No                        |
-|         413 | `PAYLOAD_TOO_LARGE`             | Exceeds operation `maxBodyBytes`                  | No                        |
-|         429 | `RATE_LIMITED`                  | Breached AIHUB per-minute rate limit              | Yes                       |
-|         429 | `CONCURRENCY_LIMIT`             | Too many simultaneous in-flight requests          | Yes (immediate)           |
-|         429 | `QUOTA_EXCEEDED`                | Monthly allocated quota depleted                  | Next month                |
-|         502 | `AI_SERVICE_ERROR`              | Downstream returned 5xx                           | Potentially               |
-|         502 | `AI_SERVICE_CONTRACT_VIOLATION` | Downstream returned unparseable shape             | No                        |
-|         503 | `AI_SERVICE_UNAVAILABLE`        | Downstream unreachable or circuit breaker open    | Yes                       |
-|         503 | `AI_SERVICE_THROTTLED`          | Downstream or underlying LLM provider throttled   | Yes                       |
-|         503 | `IDENTITY_PROVIDER_UNAVAILABLE` | Unable to fetch customer's JWKS keys              | Yes                       |
-|         504 | `AI_SERVICE_TIMEOUT`            | Operation exceeded deadline budget                | Only with Idempotency-Key |
+| HTTP Status | Error Code                      | Condition                                       | Retryable                 |
+| ----------: | ------------------------------- | ----------------------------------------------- | ------------------------- |
+|         400 | `INVALID_REQUEST`               | Schema violation, unknown properties            | No                        |
+|         401 | `UNAUTHORIZED`                  | Missing or invalid API key                      | No                        |
+|         401 | `USER_IDENTITY_REQUIRED`        | User-scoped operation lacks user identity       | No                        |
+|         401 | `INVALID_USER_IDENTITY`         | Bad signature, expired, or invalid claims       | No                        |
+|         403 | `FORBIDDEN`                     | Insufficient scopes / entitlements              | No                        |
+|         403 | `ENVIRONMENT_NOT_ALLOWED`       | API key not authorized for this environment     | No                        |
+|         404 | `NOT_FOUND`                     | Endpoint or resource does not exist             | No                        |
+|         409 | `IDEMPOTENCY_CONFLICT`          | Reused key with divergent payload or in-flight  | No                        |
+|         413 | `PAYLOAD_TOO_LARGE`             | Exceeds operation `maxBodyBytes`                | No                        |
+|         429 | `RATE_LIMITED`                  | Breached AIHUB per-minute rate limit            | Yes                       |
+|         429 | `CONCURRENCY_LIMIT`             | Too many simultaneous in-flight requests        | Yes (immediate)           |
+|         429 | `QUOTA_EXCEEDED`                | Monthly allocated quota depleted                | Next month                |
+|         502 | `AI_SERVICE_ERROR`              | Downstream returned 5xx                         | Potentially               |
+|         502 | `AI_SERVICE_CONTRACT_VIOLATION` | Downstream returned unparseable shape           | No                        |
+|         503 | `AI_SERVICE_UNAVAILABLE`        | Downstream unreachable or circuit breaker open  | Yes                       |
+|         503 | `AI_SERVICE_THROTTLED`          | Downstream or underlying LLM provider throttled | Yes                       |
+|         503 | `IDENTITY_PROVIDER_UNAVAILABLE` | Unable to fetch customer's JWKS keys            | Yes                       |
+|         504 | `AI_SERVICE_TIMEOUT`            | Operation exceeded deadline budget              | Only with Idempotency-Key |
 
 ### Six Error Codes Added Beyond Initial D1 Specs
 
 Added to D1 §25 prior to freezing: `USER_IDENTITY_REQUIRED`, `ENVIRONMENT_NOT_ALLOWED`, `PAYLOAD_TOO_LARGE`, `CONCURRENCY_LIMIT`, `AI_SERVICE_CONTRACT_VIOLATION`, `IDENTITY_PROVIDER_UNAVAILABLE`.
 
-Issue #156 adds `IDENTITY_CONFIG_REQUIRED` after the D1 freeze. It is a non-retryable 403 because the API key has authenticated the Organization, but the Organization cannot satisfy the active identity-configuration prerequisite for grading. Missing and disabled configurations share the same public error.
+Issue #156 added `IDENTITY_CONFIG_REQUIRED` after the D1 freeze; ADR-0053 (#167) removed it. An Organization without an active identity configuration now grades with a Declared User ID, so a missing configuration is no longer an error. `INVALID_USER_IDENTITY` carries a mode-specific message: the End-User ID rule in declared mode, and "a valid Signed User Assertion is required" in signed mode, without disclosing which verification check failed.
 
 Most critical addition: **`AI_SERVICE_CONTRACT_VIOLATION`**. When AI Writing silently alters its response schema without notifying us, this must be distinguished from transient infrastructure failure. Grouping it under `AI_SERVICE_ERROR` prompts operators to chase phantom network bugs when the real cause was an unannounced downstream deploy.
 

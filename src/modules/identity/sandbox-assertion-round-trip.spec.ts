@@ -10,6 +10,7 @@ import type {
   PublicJsonWebKeySet,
 } from './application/organization-identity-config-repository.port';
 import { UserAssertionVerifier } from './application/user-assertion-verifier';
+import { UserIdentityResolver } from './application/user-identity-resolver';
 import { JoseSandboxAssertionSigner } from './infrastructure/jose-sandbox-assertion-signer';
 import { JoseUserAssertionCrypto } from './infrastructure/jose-user-assertion-crypto';
 
@@ -90,7 +91,7 @@ function keyProvider(
 describe('sandbox assertion round trip', () => {
   let organizations: Map<string, Organization>;
   let minter: MintSandboxAssertion;
-  let verifier: UserAssertionVerifier;
+  let verifier: UserIdentityResolver;
 
   beforeAll(async () => {
     const sandbox = await organization(SANDBOX_ORG, SANDBOX_ISSUER, KEY_ID);
@@ -110,10 +111,12 @@ describe('sandbox assertion round trip', () => {
       })),
     );
 
-    verifier = new UserAssertionVerifier(
+    verifier = new UserIdentityResolver(
       repository(organizations),
-      keyProvider(organizations),
-      new JoseUserAssertionCrypto(),
+      new UserAssertionVerifier(
+        keyProvider(organizations),
+        new JoseUserAssertionCrypto(),
+      ),
     );
   });
 
@@ -135,8 +138,8 @@ describe('sandbox assertion round trip', () => {
     });
 
     await expect(
-      verifier.verify({
-        signedAssertion: minted.assertion,
+      verifier.resolve({
+        value: minted.assertion,
         organizationId: SANDBOX_ORG,
       }),
     ).resolves.toEqual({
@@ -153,8 +156,8 @@ describe('sandbox assertion round trip', () => {
     });
 
     await expect(
-      verifier.verify({
-        signedAssertion: minted.assertion,
+      verifier.resolve({
+        value: minted.assertion,
         organizationId: OTHER_ORG,
       }),
     ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });

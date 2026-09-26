@@ -107,7 +107,8 @@ import {
   type UserAssertionCryptoPort,
 } from './application/user-assertion-crypto.port';
 import { UserAssertionVerifier } from './application/user-assertion-verifier';
-import { USER_ASSERTION_VERIFIER } from './application/user-assertion-verifier.port';
+import { UserIdentityResolver } from './application/user-identity-resolver';
+import { USER_IDENTITY_RESOLVER } from './application/user-identity-resolver.port';
 import { CryptoOrganizationInviteToken } from './infrastructure/crypto-organization-invite-token';
 import { EnvSandboxAssertionPolicy } from './infrastructure/env-sandbox-assertion-policy';
 import { JoseSandboxAssertionSigner } from './infrastructure/jose-sandbox-assertion-signer';
@@ -385,12 +386,16 @@ import { UserIdentityGuard } from './presentation/user-identity.guard';
       inject: [JWKS_CACHE],
     },
     {
-      provide: USER_ASSERTION_VERIFIER,
+      provide: USER_IDENTITY_RESOLVER,
       useFactory: (
         repository: OrganizationIdentityConfigRepositoryPort,
         keyProvider: JwksKeyProviderPort,
         crypto: UserAssertionCryptoPort,
-      ) => new UserAssertionVerifier(repository, keyProvider, crypto),
+      ) =>
+        new UserIdentityResolver(
+          repository,
+          new UserAssertionVerifier(keyProvider, crypto),
+        ),
       inject: [
         ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
         JWKS_KEY_PROVIDER,
@@ -433,7 +438,7 @@ import { UserIdentityGuard } from './presentation/user-identity.guard';
     UserIdentityGuard,
     ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
     ORGANIZATION_MEMBERSHIP,
-    USER_ASSERTION_VERIFIER,
+    USER_IDENTITY_RESOLVER,
   ],
 })
 export class IdentityModule {}

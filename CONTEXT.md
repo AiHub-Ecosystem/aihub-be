@@ -78,7 +78,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **User Identity:** the value of `X-User-Identity` on user-scoped operations; its form is chosen by Organization Identity Readiness, never by the shape of the value.
 - **Signed User Assertion:** the User Identity form for an Organization with an active identity configuration: a short-lived organization-signed JWT verified through that Organization's JWKS. A plain value sent by such an Organization is rejected, never downgraded.
 - **Declared User ID:** the User Identity form for an Organization without an active identity configuration: an opaque identifier the Organization's API-key holder asserts without a signature. AIHUB does not interpret it; an email address is accepted but stored and forwarded as-is.
-- **End-User ID:** the identifier AIHUB resolves from a User Identity, in either form, for metering and downstream `user_id`/`sub`; it is the Organization's own end user, distinct from a Customer User, an AIHUB User Account, and a Username.
+- **End-User ID:** the identifier AIHUB resolves from a User Identity, in either form, for metering and downstream `user_id`/`sub`; it is the Organization's own end user, distinct from a Customer User, an AIHUB User Account, and a Username. AIHUB compares it exactly as sent, never case-folded or normalized, so one end user must always be sent as the same value.
 - **Internal JWT:** a short-lived AIHUB-signed token used only on AIHUB-to-service calls.
 - **Runtime secret:** a credential needed by a running service to call a dependency; it is not an API-key hash or a User Identity.
 - **Machine identity:** the service identity used to access infrastructure such as Vault; it is distinct from End-User ID and User Identity.

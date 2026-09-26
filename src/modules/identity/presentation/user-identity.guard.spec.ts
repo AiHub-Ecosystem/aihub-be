@@ -1,7 +1,7 @@
 import type { ExecutionContext } from '@nestjs/common';
 
 import type { AuthenticatedApiKey } from '../application/api-key-authenticator.port';
-import type { UserAssertionVerifierPort } from '../application/user-assertion-verifier.port';
+import type { UserIdentityResolverPort } from '../application/user-identity-resolver.port';
 import { UserIdentityGuard } from './user-identity.guard';
 
 const authenticated: AuthenticatedApiKey = {
@@ -25,8 +25,8 @@ function context(request: Record<string, unknown>): ExecutionContext {
 
 function guard(
   operation: string,
-  verifier: UserAssertionVerifierPort = {
-    verify: async () => ({
+  resolver: UserIdentityResolverPort = {
+    resolve: async () => ({
       userId: 'user_123',
       organizationId: 'org_acme',
       scopes: [],
@@ -35,7 +35,7 @@ function guard(
 ) {
   return new UserIdentityGuard(
     { getAllAndOverride: () => operation } as never,
-    verifier,
+    resolver,
   );
 }
 
@@ -80,5 +80,17 @@ describe('UserIdentityGuard', () => {
       organizationId: 'local-development',
       scopes: [],
     });
+  });
+
+  it('rejects a blank user identity instead of treating it as missing', async () => {
+    const request: Record<string, unknown> = {
+      headers: { 'x-user-identity': '   ' },
+      aihubAuth: authenticated,
+    };
+
+    await expect(
+      guard('writing.task1.grade').canActivate(context(request)),
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY', httpStatus: 401 });
+    expect(request.aihubIdentity).toBeUndefined();
   });
 });

@@ -40,15 +40,16 @@ Keep the step optional and skippable:
 
 3. Only the Organization `owner` can see or change this step. Admins and
    members see a read-only notice asking the owner to finish setup.
-4. Until the configuration exists, the dashboard shows a banner: "Grading API
-   calls will fail until user identity is configured", linking to the settings
-   page. Drive it from `GET /v1/organizations/:organizationId/identity-config`
+4. Until the configuration exists, the dashboard shows a banner: "Grading uses
+   unsigned Declared User IDs. Set up user identity verification to prove which
+   user is acting", linking to the settings page. Drive it from `GET /v1/organizations/:organizationId/identity-config`
    returning `configured: false`.
 5. The API key creation screen shows the same reminder. It does not block key
    creation.
-6. If the Organization calls grading anyway, AIHUB returns
-   `IDENTITY_CONFIG_REQUIRED`. Link that code to the settings page in any error
-   help the Customer Web shows.
+6. Without a configuration, grading still works: AIHUB accepts a Declared User
+   ID in `X-User-Identity` (ADR-0053). Present signed verification as
+   recommended, not required. Disabling an active configuration switches the
+   Organization back to Declared User IDs, so warn the owner before confirming.
 
 ## Form behavior
 

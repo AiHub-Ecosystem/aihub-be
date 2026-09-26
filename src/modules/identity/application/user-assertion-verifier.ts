@@ -1,22 +1,23 @@
 import { AppError } from '../../../common/errors/app-error';
+import { isEndUserId } from '../domain/end-user-id';
 import {
   type PublicJsonWebKey,
   parsePublicJsonWebKeySet,
 } from '../domain/organization-identity-config';
 import type { JwksKeyProviderPort } from './jwks-key-provider.port';
-import type {
-  OrganizationIdentityConfig,
-  OrganizationIdentityConfigRepositoryPort,
-} from './organization-identity-config-repository.port';
+import type { OrganizationIdentityConfig } from './organization-identity-config-repository.port';
 import type {
   UserAssertionCryptoPort,
   UserAssertionProtectedHeader,
 } from './user-assertion-crypto.port';
-import type {
-  UserAssertionInput,
-  UserAssertionVerifierPort,
-  VerifiedUserAssertion,
-} from './user-assertion-verifier.port';
+import type { ResolvedUserIdentity } from './user-identity-resolver.port';
+
+export interface SignedUserAssertionInput {
+  readonly signedAssertion: string;
+  readonly organizationId: string;
+  /** The Organization's active identity configuration, already loaded. */
+  readonly config: OrganizationIdentityConfig;
+}
 
 const ASSERTION_CLOCK_SKEW_SECONDS = 60;
 const MAX_ASSERTION_BYTES = 32 * 1024;
@@ -25,13 +26,14 @@ const MAX_CLAIM_STRING_LENGTH = 256;
 function invalidUserAssertion(cause?: unknown): AppError {
   return new AppError({
     code: 'INVALID_USER_IDENTITY',
-    message: 'User identity is invalid',
+    message:
+      'User identity must be a valid Signed User Assertion for this Organization',
     retryable: false,
     ...(cause === undefined ? {} : { cause }),
   });
 }
 
-function identityProviderUnavailable(cause?: unknown): AppError {
+export function identityProviderUnavailable(cause?: unknown): AppError {
   return new AppError({
     code: 'IDENTITY_PROVIDER_UNAVAILABLE',
     message: 'Identity provider is unavailable',
@@ -156,7 +158,7 @@ function validateClaims(
   if (
     payload.iss !== config.issuer ||
     payload.aud !== 'aihub' ||
-    !isBoundedString(payload.sub) ||
+    !isEndUserId(payload.sub) ||
     !isBoundedString(payload.jti) ||
     !isIntegerSeconds(payload.iat) ||
     !isIntegerSeconds(payload.exp) ||
@@ -171,18 +173,14 @@ function validateClaims(
   return { userId: payload.sub };
 }
 
-export class UserAssertionVerifier implements UserAssertionVerifierPort {
+export class UserAssertionVerifier {
   constructor(
-    private readonly configRepository: Pick<
-      OrganizationIdentityConfigRepositoryPort,
-      'findActiveByOrganizationId'
-    >,
     private readonly keyProvider: JwksKeyProviderPort,
     private readonly crypto: UserAssertionCryptoPort,
     private readonly now: () => number = () => Math.floor(Date.now() / 1_000),
   ) {}
 
-  async verify(input: UserAssertionInput): Promise<VerifiedUserAssertion> {
+  async verify(input: SignedUserAssertionInput): Promise<ResolvedUserIdentity> {
     if (
       input.organizationId.trim().length === 0 ||
       input.signedAssertion.trim().length === 0
@@ -190,7 +188,7 @@ export class UserAssertionVerifier implements UserAssertionVerifierPort {
       throw invalidUserAssertion();
     }
 
-    const config = await this.loadConfig(input.organizationId);
+    const { config } = input;
     const header = protectedHeader(this.crypto, input.signedAssertion);
 
     if (!isAllowedAlgorithm(header.algorithm, config)) {
@@ -227,29 +225,6 @@ export class UserAssertionVerifier implements UserAssertionVerifierPort {
       organizationId: input.organizationId,
       scopes: [],
     };
-  }
-
-  private async loadConfig(
-    organizationId: string,
-  ): Promise<OrganizationIdentityConfig> {
-    let config: OrganizationIdentityConfig | null;
-    try {
-      config =
-        await this.configRepository.findActiveByOrganizationId(organizationId);
-    } catch (error) {
-      throw identityProviderUnavailable(error);
-    }
-
-    if (config === null) {
-      throw new AppError({
-        code: 'IDENTITY_CONFIG_REQUIRED',
-        message:
-          'Grading requires an active user identity configuration for your Organization. Ask an Organization owner to complete setup; if it is already configured, contact AIHUB support.',
-        retryable: false,
-      });
-    }
-
-    return config;
   }
 
   private async loadKeys(

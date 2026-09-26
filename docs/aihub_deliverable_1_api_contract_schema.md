@@ -328,7 +328,7 @@ The three constraints below are **additions compared to the initial D1 draft**, 
 
 **Step 5 — Prevent indefinitely lived assertions.** Without a TTL limit, a customer could sign an assertion with `exp` 5 years into the future and embed it into a mobile app — turning the assertion into a leaked permanent API key. `max_assertion_ttl_seconds` is stored in the database and can be relaxed for specific orgs when justified.
 
-If a client sends an assertion for an organization-scoped operation: **it must still be verified**. If present, it must be valid — ignoring a broken assertion paves the way for silent integration bugs.
+If a client sends `X-User-Identity` for an organization-scoped operation: **it must still be resolved**. If present, it must be valid — ignoring a broken value paves the way for silent integration bugs.
 
 ### Organization Identity Config — Minimum Contract
 
@@ -352,8 +352,8 @@ Not mandatory. AIHUB can trust the Organization to verify end-users via signed a
 ### The Operation Catalog must explicitly specify
 
 ```text
-organization-scoped → assertion optional
-user-scoped         → assertion required
+organization-scoped → X-User-Identity optional
+user-scoped         → X-User-Identity required
 ```
 
 ---
@@ -1185,33 +1185,32 @@ Requires an error mapping matrix spanning client, system, and AI Provider errors
 
 ## [Implementation Proposal]
 
-The initial frozen D1 gateway list contained **19 codes**. Issue #156 adds `IDENTITY_CONFIG_REQUIRED` as an additive gateway code, bringing that matrix to **20**. The six codes marked with ★ are additions relative to the initial D1 draft. These counts describe the gateway matrix below, not the complete error registry, which also serves Bearer management and local-auth routes.
+The initial frozen D1 gateway list contained **19 codes**. Issue #156 added `IDENTITY_CONFIG_REQUIRED`; ADR-0053 (#167) removed it again when end-user verification became optional, returning the matrix to **19**. The six codes marked with ★ are additions relative to the initial D1 draft. These counts describe the gateway matrix below, not the complete error registry, which also serves Bearer management and local-auth routes.
 
 The **Downstream Signal** column indicates what AIHUB _observes_ from the downstream tier before constructing the error code. A dash `—` signifies that the request never left the gateway, so engineers debugging this error do not need to inspect AI Service logs.
 
-| Layer       | Condition                                     | Downstream Signal                 | HTTP | AIHUB Code                        |  Retryable | Client Action                                           | System Action           |
-| ----------- | --------------------------------------------- | --------------------------------- | ---: | --------------------------------- | ---------: | ------------------------------------------------------- | ----------------------- |
-| Client      | Missing/invalid field, unknown field          | —                                 |  400 | `INVALID_REQUEST`                 |         No | Fix request                                             | None                    |
-| Client      | Body exceeds `max_body_bytes`                 | —                                 |  413 | ★ `PAYLOAD_TOO_LARGE`             |         No | Reduce payload size                                     | Metric                  |
-| Client      | Endpoint/resource does not exist              | —                                 |  404 | `NOT_FOUND`                       |         No | Check URL                                               | None                    |
-| Auth        | Missing/invalid API key                       | —                                 |  401 | `UNAUTHORIZED`                    |         No | Check credentials                                       | Audit                   |
-| Auth        | User-scoped operation lacks user identity     | —                                 |  401 | ★ `USER_IDENTITY_REQUIRED`        |         No | Provide `X-User-Identity`                               | Audit                   |
-| Auth        | Assertion signature invalid/expired/bad claim | —                                 |  401 | `INVALID_USER_IDENTITY`           |         No | Re-issue assertion                                      | Audit                   |
-| Auth        | Unable to fetch Organization JWKS             | Org JWKS endpoint, not AI Service |  503 | ★ `IDENTITY_PROVIDER_UNAVAILABLE` |        Yes | Check customer JWKS endpoint                            | Alert                   |
-| AuthZ       | Scope denied                                  | —                                 |  403 | `FORBIDDEN`                       |         No | Check permissions/plan                                  | Audit                   |
-| AuthZ       | Organization has no active identity config    | —                                 |  403 | `IDENTITY_CONFIG_REQUIRED`        |         No | Configure identity; contact AIHUB if already configured | None                    |
-| AuthZ       | Key not permitted in this environment         | —                                 |  403 | ★ `ENVIRONMENT_NOT_ALLOWED`       |         No | Use key matching environment                            | Audit                   |
-| Idempotency | Same key, different payload — or in flight    | —                                 |  409 | `IDEMPOTENCY_CONFLICT`            |         No | New key / fix request                                   | Audit                   |
-| Gateway     | Client exceeds AIHUB rate limit               | —                                 |  429 | `RATE_LIMITED`                    |        Yes | Back off; obey `Retry-After`                            | Metric                  |
-| Gateway     | Too many concurrent requests for the same org | —                                 |  429 | ★ `CONCURRENCY_LIMIT`             |  Yes, soon | Reduce parallelism, retry ~500ms                        | Metric                  |
-| Quota       | Organization quota exhausted                  | —                                 |  429 | `QUOTA_EXCEEDED`                  | Time-based | Wait / upgrade plan                                     | Metering                |
-| Downstream  | AI Service / Model Provider throttled         | `HTTP 429`                        |  503 | `AI_SERVICE_THROTTLED`            |        Yes | Retry later                                             | Backoff/circuit breaker |
-| Downstream  | Timeout                                       | abort / `UND_ERR_*_TIMEOUT`       |  504 | `AI_SERVICE_TIMEOUT`              |      Yes\* | Retry only idempotently                                 | Timeout/circuit breaker |
-| Downstream  | AI Service unavailable / breaker open         | `ECONNREFUSED` / DNS fail         |  503 | `AI_SERVICE_UNAVAILABLE`          |        Yes | Retry later                                             | Alert/health check      |
-| Downstream  | Response cannot be parsed to contract         | `HTTP 2xx` + malformed body       |  502 | ★ `AI_SERVICE_CONTRACT_VIOLATION` |         No | Contact AIHUB support                                   | **Urgent alert**        |
-| Downstream  | Other 5xx / invalid response                  | `HTTP ≥ 500`                      |  502 | `AI_SERVICE_ERROR`                |      Maybe | Retry later                                             | Alert/metrics           |
-| Downstream  | 4xx other than 429 — see note below           | `HTTP 4xx`                        |  502 | `AI_SERVICE_ERROR`                |         No | Contact AIHUB support                                   | Metric                  |
-| AIHUB       | Unexpected error                              | —                                 |  500 | `INTERNAL_ERROR`                  |      Maybe | Retry later                                             | Alert                   |
+| Layer       | Condition                                     | Downstream Signal                 | HTTP | AIHUB Code                        |  Retryable | Client Action                    | System Action           |
+| ----------- | --------------------------------------------- | --------------------------------- | ---: | --------------------------------- | ---------: | -------------------------------- | ----------------------- |
+| Client      | Missing/invalid field, unknown field          | —                                 |  400 | `INVALID_REQUEST`                 |         No | Fix request                      | None                    |
+| Client      | Body exceeds `max_body_bytes`                 | —                                 |  413 | ★ `PAYLOAD_TOO_LARGE`             |         No | Reduce payload size              | Metric                  |
+| Client      | Endpoint/resource does not exist              | —                                 |  404 | `NOT_FOUND`                       |         No | Check URL                        | None                    |
+| Auth        | Missing/invalid API key                       | —                                 |  401 | `UNAUTHORIZED`                    |         No | Check credentials                | Audit                   |
+| Auth        | User-scoped operation lacks user identity     | —                                 |  401 | ★ `USER_IDENTITY_REQUIRED`        |         No | Provide `X-User-Identity`        | Audit                   |
+| Auth        | Assertion signature invalid/expired/bad claim | —                                 |  401 | `INVALID_USER_IDENTITY`           |         No | Re-issue assertion               | Audit                   |
+| Auth        | Unable to fetch Organization JWKS             | Org JWKS endpoint, not AI Service |  503 | ★ `IDENTITY_PROVIDER_UNAVAILABLE` |        Yes | Check customer JWKS endpoint     | Alert                   |
+| AuthZ       | Scope denied                                  | —                                 |  403 | `FORBIDDEN`                       |         No | Check permissions/plan           | Audit                   |
+| AuthZ       | Key not permitted in this environment         | —                                 |  403 | ★ `ENVIRONMENT_NOT_ALLOWED`       |         No | Use key matching environment     | Audit                   |
+| Idempotency | Same key, different payload — or in flight    | —                                 |  409 | `IDEMPOTENCY_CONFLICT`            |         No | New key / fix request            | Audit                   |
+| Gateway     | Client exceeds AIHUB rate limit               | —                                 |  429 | `RATE_LIMITED`                    |        Yes | Back off; obey `Retry-After`     | Metric                  |
+| Gateway     | Too many concurrent requests for the same org | —                                 |  429 | ★ `CONCURRENCY_LIMIT`             |  Yes, soon | Reduce parallelism, retry ~500ms | Metric                  |
+| Quota       | Organization quota exhausted                  | —                                 |  429 | `QUOTA_EXCEEDED`                  | Time-based | Wait / upgrade plan              | Metering                |
+| Downstream  | AI Service / Model Provider throttled         | `HTTP 429`                        |  503 | `AI_SERVICE_THROTTLED`            |        Yes | Retry later                      | Backoff/circuit breaker |
+| Downstream  | Timeout                                       | abort / `UND_ERR_*_TIMEOUT`       |  504 | `AI_SERVICE_TIMEOUT`              |      Yes\* | Retry only idempotently          | Timeout/circuit breaker |
+| Downstream  | AI Service unavailable / breaker open         | `ECONNREFUSED` / DNS fail         |  503 | `AI_SERVICE_UNAVAILABLE`          |        Yes | Retry later                      | Alert/health check      |
+| Downstream  | Response cannot be parsed to contract         | `HTTP 2xx` + malformed body       |  502 | ★ `AI_SERVICE_CONTRACT_VIOLATION` |         No | Contact AIHUB support            | **Urgent alert**        |
+| Downstream  | Other 5xx / invalid response                  | `HTTP ≥ 500`                      |  502 | `AI_SERVICE_ERROR`                |      Maybe | Retry later                      | Alert/metrics           |
+| Downstream  | 4xx other than 429 — see note below           | `HTTP 4xx`                        |  502 | `AI_SERVICE_ERROR`                |         No | Contact AIHUB support            | Metric                  |
+| AIHUB       | Unexpected error                              | —                                 |  500 | `INTERNAL_ERROR`                  |      Maybe | Retry later                      | Alert                   |
 
 ### Bearer Management and Local Authentication
 
@@ -1659,7 +1658,7 @@ Canonical Response
 13. Provider usage and processing telemetry is metered internally and absent from the public response.
 14. Aggregate usage across multiple model calls is persisted correctly.
 15. Idempotency behavior when implemented in scope.
-16. Missing or disabled Organization identity configuration → `403 IDENTITY_CONFIG_REQUIRED`; provide a valid API key and User Assertion for an Organization without active identity configuration. Added after the original D1 freeze for issue #156.
+16. Organization without an active identity configuration → graded with a Declared User ID in `X-User-Identity` (ADR-0053, #167). It replaces the #156 `403 IDENTITY_CONFIG_REQUIRED` case.
 
 ---
 

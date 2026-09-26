@@ -60,12 +60,18 @@ describe('Writing user identity HTTP flow', () => {
   let identityConfig: OrganizationIdentityConfig;
   let identityConfigMissing = false;
   let providerUnavailable = false;
+  let configStoreDown = false;
   const originalNodeEnv = process.env.NODE_ENV;
   const originalBypass = process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV;
 
   const configRepository = {
-    findActiveByOrganizationId: async () =>
-      identityConfigMissing ? null : identityConfig,
+    findActiveByOrganizationId: async () => {
+      if (configStoreDown) {
+        throw new Error('connection refused');
+      }
+
+      return identityConfigMissing ? null : identityConfig;
+    },
   };
   const keyProvider: JwksKeyProviderPort = {
     validateRemote: async () => undefined,
@@ -171,6 +177,7 @@ describe('Writing user identity HTTP flow', () => {
     capturedContext = undefined;
     identityConfigMissing = false;
     providerUnavailable = false;
+    configStoreDown = false;
     identityConfig = {
       ...identityConfig,
       jwksUrl: null,
@@ -245,8 +252,57 @@ describe('Writing user identity HTTP flow', () => {
     expect(capturedContext).toBeUndefined();
   });
 
-  it('reports missing active identity configuration without dispatch or detail leakage', async () => {
+  it.each(['student_456', 'a.b+c@example.com', 'Student@Example.COM'])(
+    'grades with Declared User ID %s when the Organization has no identity configuration',
+    async (declaredUserId) => {
+      identityConfigMissing = true;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/writing/task1/grade',
+        headers: apiKeyHeaders(declaredUserId),
+        payload: gradePayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedContext).toMatchObject({
+        organizationId: 'org_acme',
+        userId: declaredUserId,
+      });
+    },
+  );
+
+  it.each([
+    ['an internal space', 'student 456'],
+    ['a non-ASCII character', 'học_viên_1'],
+    ['257 characters', 'x'.repeat(257)],
+  ])(
+    'rejects a Declared User ID with %s before dispatch',
+    async (_name, declaredUserId) => {
+      identityConfigMissing = true;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/writing/task1/grade',
+        headers: apiKeyHeaders(declaredUserId),
+        payload: gradePayload,
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json().error).toMatchObject({
+        code: 'INVALID_USER_IDENTITY',
+        message:
+          'User identity must be 1-256 visible ASCII characters with no spaces',
+      });
+      expect(capturedContext).toBeUndefined();
+    },
+  );
+
+  it('rejects a Signed User Assertion sent by an Organization in declared mode', async () => {
     const signed = await assertion();
+    // The rejection comes from the 256-character End-User ID rule, not from
+    // recognising a JWT, so the fixture must stay longer than that.
+    expect(signed.length).toBeGreaterThan(256);
     identityConfigMissing = true;
 
     const response = await app.inject({
@@ -256,13 +312,11 @@ describe('Writing user identity HTTP flow', () => {
       payload: gradePayload,
     });
 
-    expect(response.statusCode).toBe(403);
+    expect(response.statusCode).toBe(401);
     expect(response.json().error).toMatchObject({
-      code: 'IDENTITY_CONFIG_REQUIRED',
+      code: 'INVALID_USER_IDENTITY',
       message:
-        'Grading requires an active user identity configuration for your Organization. Ask an Organization owner to complete setup; if it is already configured, contact AIHUB support.',
-      request_id: expect.stringMatching(/^req_/),
-      retryable: false,
+        'User identity must be 1-256 visible ASCII characters with no spaces',
     });
     expect(response.payload).not.toContain(signed);
     expect(response.payload).not.toContain('test-api-key');
@@ -300,7 +354,25 @@ describe('Writing user identity HTTP flow', () => {
     expect(response.statusCode).toBe(401);
     expect(response.json().error).toMatchObject({
       code: 'INVALID_USER_IDENTITY',
-      message: 'User identity is invalid',
+      message:
+        'User identity must be a valid Signed User Assertion for this Organization',
+    });
+    expect(capturedContext).toBeUndefined();
+  });
+
+  it('rejects a Declared User ID when the Organization requires Signed User Assertions', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/grade',
+      headers: apiKeyHeaders('student_456'),
+      payload: gradePayload,
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error).toMatchObject({
+      code: 'INVALID_USER_IDENTITY',
+      message:
+        'User identity must be a valid Signed User Assertion for this Organization',
     });
     expect(capturedContext).toBeUndefined();
   });
@@ -330,5 +402,22 @@ describe('Writing user identity HTTP flow', () => {
       },
     });
     expect(response.payload).not.toContain('provider down');
+    expect(capturedContext).toBeUndefined();
+  });
+
+  it('reports an identity-configuration store failure as an outage, never as declared mode', async () => {
+    configStoreDown = true;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/grade',
+      headers: apiKeyHeaders('student_456'),
+      payload: gradePayload,
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.code).toBe('IDENTITY_PROVIDER_UNAVAILABLE');
+    expect(response.payload).not.toContain('connection refused');
+    expect(capturedContext).toBeUndefined();
   });
 });

@@ -3,6 +3,7 @@ import { Response } from 'undici';
 import { ApiKeyAuthenticator } from '../../../src/modules/identity/application/api-key-authenticator';
 import { generateOrganizationApiKey } from '../../../src/modules/identity/application/organization-api-key-generator';
 import { UserAssertionVerifier } from '../../../src/modules/identity/application/user-assertion-verifier';
+import { UserIdentityResolver } from '../../../src/modules/identity/application/user-identity-resolver';
 import { hashApiKey } from '../../../src/modules/identity/domain/api-key';
 import { JoseUserAssertionCrypto } from '../../../src/modules/identity/infrastructure/jose-user-assertion-crypto';
 import { JwksKeyProvider } from '../../../src/modules/identity/infrastructure/jwks-key-provider';
@@ -121,20 +122,58 @@ describe('tenant isolation for identity boundaries', () => {
       clientIp: '127.0.0.1',
     });
     const assertion = await signUserAssertion(fixture.organizationB.identity);
-    const verifier = new UserAssertionVerifier(
+    const verifier = new UserIdentityResolver(
       configRepository,
-      new JwksKeyProvider(identityStore, undefined, undefined, () =>
-        TEST_NOW.getTime(),
+      new UserAssertionVerifier(
+        new JwksKeyProvider(identityStore, undefined, undefined, () =>
+          TEST_NOW.getTime(),
+        ),
+        new JoseUserAssertionCrypto(),
+        nowSeconds,
       ),
-      new JoseUserAssertionCrypto(),
-      nowSeconds,
     );
 
     expect(authenticated.organizationId).toBe(ORGANIZATION_A);
     await expect(
-      verifier.verify({
-        signedAssertion: assertion,
+      verifier.resolve({
+        value: assertion,
         organizationId: authenticated.organizationId,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
+  });
+
+  it('treats a disabled identity configuration as declared mode for that Organization only', async () => {
+    await pool.query(
+      `UPDATE organization_identity_configs
+       SET status = 'disabled'
+       WHERE organization_id = $1`,
+      [ORGANIZATION_A],
+    );
+    const resolver = new UserIdentityResolver(
+      configRepository,
+      new UserAssertionVerifier(
+        new JwksKeyProvider(identityStore, undefined, undefined, () =>
+          TEST_NOW.getTime(),
+        ),
+        new JoseUserAssertionCrypto(),
+        nowSeconds,
+      ),
+    );
+
+    await expect(
+      resolver.resolve({
+        value: 'student_456',
+        organizationId: ORGANIZATION_A,
+      }),
+    ).resolves.toEqual({
+      userId: 'student_456',
+      organizationId: ORGANIZATION_A,
+      scopes: [],
+    });
+    await expect(
+      resolver.resolve({
+        value: 'student_456',
+        organizationId: ORGANIZATION_B,
       }),
     ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
   });
@@ -171,18 +210,20 @@ describe('tenant isolation for identity boundaries', () => {
       lookup,
       Date.now,
     );
-    const verifier = new UserAssertionVerifier(
+    const verifier = new UserIdentityResolver(
       configRepository,
-      provider,
-      new JoseUserAssertionCrypto(),
-      nowSeconds,
+      new UserAssertionVerifier(
+        provider,
+        new JoseUserAssertionCrypto(),
+        nowSeconds,
+      ),
     );
     const assertionA = await signUserAssertion(fixture.organizationA.identity);
     const assertionB = await signUserAssertion(fixture.organizationB.identity);
 
     await expect(
-      verifier.verify({
-        signedAssertion: assertionA,
+      verifier.resolve({
+        value: assertionA,
         organizationId: ORGANIZATION_A,
       }),
     ).resolves.toEqual({
@@ -191,14 +232,14 @@ describe('tenant isolation for identity boundaries', () => {
       scopes: [],
     });
     await expect(
-      verifier.verify({
-        signedAssertion: assertionB,
+      verifier.resolve({
+        value: assertionB,
         organizationId: ORGANIZATION_A,
       }),
     ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
     await expect(
-      verifier.verify({
-        signedAssertion: assertionB,
+      verifier.resolve({
+        value: assertionB,
         organizationId: ORGANIZATION_B,
       }),
     ).resolves.toEqual({
@@ -206,8 +247,8 @@ describe('tenant isolation for identity boundaries', () => {
       organizationId: ORGANIZATION_B,
       scopes: [],
     });
-    await verifier.verify({
-      signedAssertion: assertionB,
+    await verifier.resolve({
+      value: assertionB,
       organizationId: ORGANIZATION_B,
     });
 

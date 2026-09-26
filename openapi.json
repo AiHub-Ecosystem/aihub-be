@@ -48,7 +48,7 @@
           "type": "string",
           "minLength": 1
         },
-        "description": "Signed User Assertion identifying the end user. Required for user-scoped operations."
+        "description": "Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent."
       }
     },
     "responses": {
@@ -191,7 +191,7 @@
         }
       },
       "Error403": {
-        "description": "IDENTITY_CONFIG_REQUIRED | FORBIDDEN | ENVIRONMENT_NOT_ALLOWED",
+        "description": "FORBIDDEN | ENVIRONMENT_NOT_ALLOWED",
         "content": {
           "application/json": {
             "schema": {
@@ -206,10 +206,6 @@
                   "properties": {
                     "code": {
                       "anyOf": [
-                        {
-                          "const": "IDENTITY_CONFIG_REQUIRED",
-                          "type": "string"
-                        },
                         {
                           "const": "FORBIDDEN",
                           "type": "string"

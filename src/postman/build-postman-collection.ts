@@ -355,24 +355,24 @@ const D1_SCENARIOS: readonly Scenario[] = [
     ],
   },
   {
-    name: '16. Missing or disabled identity configuration',
+    name: '16. Declared User ID for an Organization without identity configuration',
     description:
-      'Fill {{identityConfigRequiredApiKey}} with a valid API key for an Organization without active identity configuration. Send a valid Signed User Assertion in X-User-Identity; grading must fail before dispatch.',
+      'Fill {{declaredIdentityApiKey}} with a valid API key for an Organization without an active identity configuration. It sends a plain Declared User ID in X-User-Identity and must be graded.',
     path: TASK1_GRADE_PATH,
     headers: [
       JSON_HEADER,
       {
         key: 'X-API-Key',
-        value: '{{identityConfigRequiredApiKey}}',
+        value: '{{declaredIdentityApiKey}}',
       },
-      USER_IDENTITY_HEADER,
+      {
+        key: 'X-User-Identity',
+        value: '{{declaredUserId}}',
+      },
       IDEMPOTENCY_HEADER,
     ],
     body: TASK1_GRADE_BODY,
-    testScript: [
-      assertStatus(403),
-      ...assertErrorCode(['IDENTITY_CONFIG_REQUIRED']),
-    ],
+    testScript: [assertStatus(200), ...assertEnvelope('writing.task1.grade')],
   },
 ];
 
@@ -833,11 +833,17 @@ export async function buildPostmanCollection(
         value: 'REPLACE_WITH_A_KEY_WITHOUT_WRITING_GRADE_SCOPE',
       },
       {
-        key: 'identityConfigRequiredApiKey',
+        key: 'declaredIdentityApiKey',
         value:
           'REPLACE_WITH_A_KEY_FOR_AN_ORGANIZATION_WITHOUT_ACTIVE_IDENTITY_CONFIG',
         description:
-          'Valid Writing API key for an Organization with missing or disabled user identity configuration.',
+          'Valid Writing API key for an Organization with missing or disabled user identity configuration (declared mode).',
+      },
+      {
+        key: 'declaredUserId',
+        value: 'student_456',
+        description:
+          'Declared User ID sent as plain text by a declared-mode Organization.',
       },
       {
         key: 'userIdentity',

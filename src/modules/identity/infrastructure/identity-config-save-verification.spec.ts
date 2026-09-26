@@ -14,6 +14,7 @@ import type { OrganizationMembershipPort } from '../application/organization-mem
 import { SetOrganizationIdentityConfig } from '../application/set-organization-identity-config';
 import type { UserAssertionCryptoPort } from '../application/user-assertion-crypto.port';
 import { UserAssertionVerifier } from '../application/user-assertion-verifier';
+import { UserIdentityResolver } from '../application/user-identity-resolver';
 import type { PublicJsonWebKey } from '../domain/organization-identity-config';
 import { JwksKeyProvider } from './jwks-key-provider';
 
@@ -169,17 +170,15 @@ describe('identity configuration save and next assertion verification', () => {
         };
       },
     };
-    const verifier = new UserAssertionVerifier(
+    const verifier = new UserIdentityResolver(
       repository,
-      keys,
-      crypto,
-      () => 1_800_000_000,
+      new UserAssertionVerifier(keys, crypto, () => 1_800_000_000),
     );
 
     await expect(
-      verifier.verify({
+      verifier.resolve({
         organizationId: ORGANIZATION_ID,
-        signedAssertion: 'signed.assertion',
+        value: 'signed.assertion',
       }),
     ).resolves.toMatchObject({ userId: 'user-1' });
 

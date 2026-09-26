@@ -21,7 +21,7 @@
           },
           {
             "disabled": false,
-            "description": "(Required) Signed User Assertion identifying the end user. Required for user-scoped operations.",
+            "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
             "key": "X-User-Identity",
             "value": "<string>"
           },
@@ -94,7 +94,7 @@
           },
           {
             "disabled": false,
-            "description": "(Required) Signed User Assertion identifying the end user. Required for user-scoped operations.",
+            "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
             "key": "X-User-Identity",
             "value": "<string>"
           },
@@ -167,7 +167,7 @@
           },
           {
             "disabled": false,
-            "description": "(Required) Signed User Assertion identifying the end user. Required for user-scoped operations.",
+            "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
             "key": "X-User-Identity",
             "value": "<string>"
           },
@@ -277,7 +277,7 @@
           },
           {
             "disabled": false,
-            "description": "(Required) Signed User Assertion identifying the end user. Required for user-scoped operations.",
+            "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
             "key": "X-User-Identity",
             "value": "<string>"
           },
@@ -2653,7 +2653,7 @@
           ]
         },
         {
-          "name": "16. Missing or disabled identity configuration",
+          "name": "16. Declared User ID for an Organization without identity configuration",
           "request": {
             "method": "POST",
             "header": [
@@ -2663,11 +2663,11 @@
               },
               {
                 "key": "X-API-Key",
-                "value": "{{identityConfigRequiredApiKey}}"
+                "value": "{{declaredIdentityApiKey}}"
               },
               {
                 "key": "X-User-Identity",
-                "value": "{{userIdentity}}"
+                "value": "{{declaredUserId}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2679,7 +2679,7 @@
               "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
             "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
-            "description": "Fill {{identityConfigRequiredApiKey}} with a valid API key for an Organization without active identity configuration. Send a valid Signed User Assertion in X-User-Identity; grading must fail before dispatch."
+            "description": "Fill {{declaredIdentityApiKey}} with a valid API key for an Organization without an active identity configuration. It sends a plain Declared User ID in X-User-Identity and must be graded."
           },
           "event": [
             {
@@ -2687,10 +2687,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('responds with HTTP 403', function () { pm.response.to.have.status(403); });",
-                  "pm.test('error.code is one of IDENTITY_CONFIG_REQUIRED', function () {",
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",
                   "  const body = pm.response.json();",
-                  "  pm.expect([\"IDENTITY_CONFIG_REQUIRED\"]).to.include(body.error.code);",
+                  "  pm.expect(body.meta.operation).to.eql('writing.task1.grade');",
+                  "  pm.expect(body.meta.service).to.eql('ai-writing');",
+                  "  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);",
                   "});"
                 ]
               }
@@ -2951,9 +2953,14 @@
       "value": "REPLACE_WITH_A_KEY_WITHOUT_WRITING_GRADE_SCOPE"
     },
     {
-      "key": "identityConfigRequiredApiKey",
+      "key": "declaredIdentityApiKey",
       "value": "REPLACE_WITH_A_KEY_FOR_AN_ORGANIZATION_WITHOUT_ACTIVE_IDENTITY_CONFIG",
-      "description": "Valid Writing API key for an Organization with missing or disabled user identity configuration."
+      "description": "Valid Writing API key for an Organization with missing or disabled user identity configuration (declared mode)."
+    },
+    {
+      "key": "declaredUserId",
+      "value": "student_456",
+      "description": "Declared User ID sent as plain text by a declared-mode Organization."
     },
     {
       "key": "userIdentity",

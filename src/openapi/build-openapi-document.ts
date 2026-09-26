@@ -183,7 +183,7 @@ const USER_IDENTITY_PARAMETER = {
   required: true,
   schema: { type: 'string', minLength: 1 },
   description:
-    'Signed User Assertion identifying the end user. Required for user-scoped operations.',
+    'Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.',
 };
 
 function resolvedResponseSchema(

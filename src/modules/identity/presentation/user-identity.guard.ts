@@ -14,9 +14,9 @@ import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
 import { setRequestMeteringActor } from '../../../common/metering/request-metering-state';
 import {
-  USER_ASSERTION_VERIFIER,
-  type UserAssertionVerifierPort,
-} from '../application/user-assertion-verifier.port';
+  USER_IDENTITY_RESOLVER,
+  type UserIdentityResolverPort,
+} from '../application/user-identity-resolver.port';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
@@ -53,8 +53,8 @@ export class UserIdentityGuard implements CanActivate {
   constructor(
     @Inject(Reflector)
     private readonly reflector: Reflector,
-    @Inject(USER_ASSERTION_VERIFIER)
-    private readonly verifier: UserAssertionVerifierPort,
+    @Inject(USER_IDENTITY_RESOLVER)
+    private readonly resolver: UserIdentityResolverPort,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -97,8 +97,8 @@ export class UserIdentityGuard implements CanActivate {
       throw invalidIdentity();
     }
 
-    request.aihubIdentity = await this.verifier.verify({
-      signedAssertion: header,
+    request.aihubIdentity = await this.resolver.resolve({
+      value: header,
       organizationId: authenticated.organizationId,
     });
     setRequestMeteringActor(request, request.aihubIdentity.userId);

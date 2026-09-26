@@ -1,18 +1,18 @@
 # AIHUB Customer Integration Guide
 
 For engineers connecting a backend to the AIHUB API. It covers the parts an
-OpenAPI document cannot express: who holds which credential, how to sign user
-assertions, and how to handle retries, timeouts, and errors.
+OpenAPI document cannot express: who holds which credential, how to identify
+your end users (plainly or with signed assertions), and how to handle retries,
+timeouts, and errors.
 
 The endpoint reference lives at `GET /docs`, generated from the same schemas
 the server validates against. This guide is the surrounding context.
 
-Before making production calls, complete the onboarding flow in section 2. The
-short version is: AIHUB issues an organization API key, your backend publishes
-the public key material used to verify your assertions, both sides verify the
-integration in staging, and only then do you switch to the production base URL
-and production credential. The signing private key always stays in your
-infrastructure.
+The fastest start is section 1a: with only an organization API key you can
+grade by sending your own user id in `X-User-Identity`. When you are ready to
+prove to AIHUB which user is acting, register a JWKS and switch to Signed User
+Assertions (section 3). Before making production calls, complete the onboarding
+flow in section 2.
 
 ---
 
@@ -33,7 +33,7 @@ questions:
 | Header            | Answers                       | Who creates it         |
 | ----------------- | ----------------------------- | ---------------------- |
 | `X-API-Key`       | Which organization is calling | AIHUB issues it to you |
-| `X-User-Identity` | Which of your users is acting | You sign it yourself   |
+| `X-User-Identity` | Which of your users is acting | Your backend sets it   |
 
 **The API key must stay on your server.** Embedding it in a mobile app, a
 single-page app, or anything else a user can read hands your organization's
@@ -42,7 +42,50 @@ quotas, and billing are all attributed to the key.
 
 Your users sign in to _your_ system, however you already do it — password,
 Google, SSO. AIHUB has no login, no user accounts, and no sessions. It learns
-who the user is only from the assertion your backend signs.
+who the user is only from `X-User-Identity`.
+
+`X-User-Identity` takes one of two forms. Your organization's saved identity
+configuration decides which one, never the shape of the value:
+
+| Your organization                | `X-User-Identity` carries                               |
+| -------------------------------- | ------------------------------------------------------- |
+| No active identity configuration | A **Declared User ID**: your own user id, as plain text |
+| Active identity configuration    | A **Signed User Assertion**: a short-lived JWT you sign |
+
+Once an identity configuration is active, a plain value is rejected with
+`401 INVALID_USER_IDENTITY`. There is no fallback.
+
+---
+
+## 1a. Quick start: identify users without signing
+
+A new organization can grade as soon as it has an API key. Send your own
+identifier for the end user in `X-User-Identity`:
+
+```bash
+curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/writing/task2/grade" \
+  -H "X-API-Key: $AIHUB_API_KEY" \
+  -H "X-User-Identity: student_456" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "...", "essay": "..."}'
+```
+
+Rules for a Declared User ID (the same rule applies to a signed assertion's
+`sub`):
+
+- 1-256 visible ASCII characters (`0x21`-`0x7E`), with no spaces.
+- Compared exactly as sent: `Student@X.com` and `student@x.com` are two users.
+  Send the same value for the same person every time.
+- Prefer an opaque, stable id over an email address. AIHUB stores the value in
+  usage records and forwards it to the AI services as-is, so an email address
+  becomes personal data held by AIHUB.
+
+**The trade-off.** AIHUB trusts a Declared User ID exactly as far as it trusts
+your API key. Anyone holding the key can name any user in your organization, so
+usage attributed per user is only as reliable as your key handling. Other
+organizations are never affected: the organization always comes from the API
+key. When per-user attribution matters, move to Signed User Assertions.
 
 ---
 
@@ -60,7 +103,8 @@ AIHUB and your team complete these steps in order:
    confirms your organization, enables the requested entitlements, and issues an
    API key with explicit environment and scope permissions. The raw key is shown
    once. Store it in your server-side secret manager immediately.
-3. **You provide signing identity metadata.** Send AIHUB the exact issuer and
+3. **Optional: provide signing identity metadata.** Skip this step to use
+   Declared User IDs (section 1a). To verify end users, send AIHUB the exact issuer and
    either a publicly reachable HTTPS JWKS URL or the public JWKS document. AIHUB
    registers this identity configuration against your organization. Never send a
    private key. Keep the issuer stable; if staging and production use different
@@ -169,7 +213,12 @@ a revoke and a replacement; revocation takes effect immediately.
 
 ---
 
-## 3. Signing a user assertion
+## 3. Recommended: verify end users with a Signed User Assertion
+
+Declared User IDs (section 1a) are trusted as far as your API key. A Signed
+User Assertion proves that your backend's signing key, not merely your API key,
+vouched for the user. Once your identity configuration is active, every
+user-scoped call must carry one.
 
 An assertion is a short-lived JWT your backend signs immediately before
 calling AIHUB. It is not a session token: do not cache it for long, and never
@@ -181,7 +230,7 @@ send it to a browser or mobile client.
 | ----- | ---------------------- | ------------------------------------------- |
 | `iss` | Your registered issuer | Must match exactly, character for character |
 | `aud` | `"aihub"`              | Constant                                    |
-| `sub` | Your user's id         | Any stable string, max 256 characters       |
+| `sub` | Your user's id         | 1-256 visible ASCII characters, no spaces   |
 | `jti` | A fresh unique id      | One per assertion; a UUID is fine           |
 | `iat` | Issued-at, seconds     | Must not be more than 60s in the future     |
 | `exp` | Expiry, seconds        | Lifetime capped at 300s by default          |
@@ -258,8 +307,9 @@ String assertion = jwt.serialize();
 ### Which calls need one
 
 All current grading operations - Writing Task 1, Writing Task 2, and Speaking -
-are user-scoped and require an assertion. The `sub` claim is the only source of
-learner identity that AIHUB trusts.
+are user-scoped and require `X-User-Identity`. With an active identity
+configuration, the assertion's `sub` claim is the only source of learner
+identity that AIHUB trusts.
 
 Sending an assertion where none is required is allowed — but it must still be
 valid. AIHUB will not ignore a malformed one, because silently accepting
@@ -430,8 +480,9 @@ fits together with its multipart framing. The 25 MiB file cap mirrors the AI
 Speaking service's own limit.
 
 Send the learner identity only through `X-User-Identity`; do not send a
-`user_id` form field. AIHUB derives the downstream identity from the verified
-`sub` claim. The response uses the common `{ "data", "meta" }` envelope; see
+`user_id` form field. AIHUB derives the downstream identity from the End-User ID:
+the verified `sub` claim, or your Declared User ID when your organization has no
+active identity configuration. The response uses the common `{ "data", "meta" }` envelope; see
 `/docs` for the complete Speaking response schema.
 
 `POST /v1/ielts/speaking/grading-json` is the URL fallback. It accepts the same
@@ -564,9 +615,8 @@ When present, `retry_after_ms` is in the body, not in a `Retry-After` header.
 | ---: | ------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 |  400 | `INVALID_REQUEST`               | Body failed validation, or carried an unknown field                                          | Fix the request. Retrying is pointless                                                                |
 |  401 | `UNAUTHORIZED`                  | Missing, unknown, revoked, or expired API key                                                | Check the credential                                                                                  |
-|  401 | `USER_IDENTITY_REQUIRED`        | User-scoped operation called without an assertion                                            | Send `X-User-Identity`                                                                                |
-|  401 | `INVALID_USER_IDENTITY`         | Bad signature, expired, wrong `iss`/`aud`, unknown `kid`                                     | Mint a fresh assertion; check issuer and JWKS                                                         |
-|  403 | `IDENTITY_CONFIG_REQUIRED`      | Your Organization has no active user identity configuration                                  | Ask an owner to complete setup; if already configured, contact AIHUB support                          |
+|  401 | `USER_IDENTITY_REQUIRED`        | User-scoped operation called without `X-User-Identity`                                       | Send `X-User-Identity`                                                                                |
+|  401 | `INVALID_USER_IDENTITY`         | Declared User ID breaks the rule, or the Signed User Assertion failed verification           | Declared: fix the value. Signed: mint a fresh assertion; check issuer and JWKS                        |
 |  403 | `FORBIDDEN`                     | Key lacks the scope for this operation                                                       | Ask AIHUB to widen the key                                                                            |
 |  403 | `ENVIRONMENT_NOT_ALLOWED`       | Key is not valid for this environment                                                        | Use the key issued for that environment                                                               |
 |  404 | `NOT_FOUND`                     | No such route                                                                                | Check path and method                                                                                 |
@@ -616,15 +666,17 @@ not a longer delay.
 - [ ] Staging and production base URLs recorded separately
 - [ ] API key stored server-side in a secret manager, never in a client build
 - [ ] Staging and production keys stored separately and used only with their allowed environment
-- [ ] Signing private key never leaves your infrastructure
-- [ ] Issuer agreed with AIHUB and copied exactly into the signer configuration
-- [ ] JWKS endpoint publicly reachable over HTTPS, or public JWKS document sent to AIHUB
-- [ ] Current `kid` and signing algorithm match exactly one usable JWKS key
-- [ ] Staging assertion and at least one successful request verified before production access
+- [ ] Decided between Declared User IDs and Signed User Assertions
+- [ ] Signed only: signing private key never leaves your infrastructure
+- [ ] Signed only: issuer agreed with AIHUB and copied exactly into the signer configuration
+- [ ] Signed only: JWKS endpoint publicly reachable over HTTPS, or public JWKS document sent to AIHUB
+- [ ] Signed only: current `kid` and signing algorithm match exactly one usable JWKS key
+- [ ] At least one successful staging request verified before production access
 
 ### Every request
 
-- [ ] Assertions minted per request, ≤ 300s lifetime, with a fresh `jti`
+- [ ] Declared: the same stable, opaque id for the same learner on every call
+- [ ] Signed: assertions minted per request, ≤ 300s lifetime, with a fresh `jti`
 - [ ] `X-User-Identity` contains the learner identity; no client-supplied `user_id` is sent
 - [ ] `Idempotency-Key` generated per Writing submission and reused across retries
 - [ ] Speaking audio is one supported file within the documented size limit

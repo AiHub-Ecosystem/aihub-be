@@ -76,6 +76,8 @@ Redis: aihub:v1:authfail:<ip>   INCR, TTL 300s
 
 ## G.4 User Assertion — Verification Rules
 
+> **Amended by [ADR-0053](../../../adr/0053-optional-user-identity-verification.md) (2026-09-26).** Verification is optional per Organization. `X-User-Identity` carries a Signed User Assertion only when the Organization has an **active** identity configuration; the rules below apply to that form, and a plain value is rejected rather than downgraded. Without an active configuration, the value is a **Declared User ID** accepted unsigned. Both forms resolve to one End-User ID with one rule, which also binds `sub`: 1–256 characters in `0x21`–`0x7E`, compared exactly as sent. A configuration-store or JWKS failure stays `503 IDENTITY_PROVIDER_UNAVAILABLE` and never falls back to the declared form.
+
 ```
 Deliberate order: cheap checks first, cryptography last.
 

@@ -35,7 +35,10 @@ contract and is not part of this document.
   the outbound configuration used to call the AI Speaking service; neither side should persist the
   secret in ordinary business data.
 - `user_id` is required by the AI Speaking service, but AIHUB derives it from the
-  verified `X-User-Identity`. A client-supplied identity must not override it.
+  End-User ID in `X-User-Identity`. It is signature-verified only for
+  Organizations with an active identity configuration; otherwise it is a
+  Declared User ID the Organization asserts (ADR-0053). A client-supplied body
+  field must not override it.
 
 ## 3. Multipart request contract
 
@@ -45,7 +48,7 @@ below. Unknown or duplicate fields are invalid.
 | Field         | Type    | Required | Contract                                                                  |
 | ------------- | ------- | -------- | ------------------------------------------------------------------------- |
 | `audio`       | file    | yes      | `wav`, `mp3`, `m4a`, `webm`, or `ogg`; 100 bytes minimum, 25 MiB maximum. |
-| `user_id`     | string  | yes      | Verified learner identity supplied by AIHUB.                              |
+| `user_id`     | string  | yes      | End-User ID supplied by AIHUB; verified only in signed mode.              |
 | `part`        | integer | yes      | `1`, `2`, or `3`.                                                         |
 | `question_id` | string  | yes      | Non-empty question-bank identifier.                                       |
 | `prompt_text` | string  | no       | Prompt used for relevance analysis; provider default is `null`.           |

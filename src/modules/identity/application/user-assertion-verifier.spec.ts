@@ -10,16 +10,13 @@ import {
 
 import type { PublicJsonWebKey } from '../domain/organization-identity-config';
 import type { JwksKeyProviderPort } from './jwks-key-provider.port';
-import type {
-  OrganizationIdentityConfig,
-  OrganizationIdentityConfigRepositoryPort,
-} from './organization-identity-config-repository.port';
+import type { OrganizationIdentityConfig } from './organization-identity-config-repository.port';
 import type {
   UserAssertionCryptoPort,
   UserAssertionProtectedHeader,
 } from './user-assertion-crypto.port';
 import { UserAssertionVerifier } from './user-assertion-verifier';
-import type { VerifiedUserAssertion } from './user-assertion-verifier.port';
+import type { ResolvedUserIdentity } from './user-identity-resolver.port';
 
 const NOW = 1_700_000_000;
 
@@ -74,22 +71,6 @@ const config: OrganizationIdentityConfig = {
   maxAssertionTtlSeconds: 300,
   status: 'active' as const,
 };
-
-class FakeConfigRepository
-  implements
-    Pick<OrganizationIdentityConfigRepositoryPort, 'findActiveByOrganizationId'>
-{
-  constructor(
-    private readonly result = {
-      ...config,
-      publicKeysJwks: null,
-    },
-  ) {}
-
-  findActiveByOrganizationId(): Promise<typeof this.result> {
-    return Promise.resolve(this.result);
-  }
-}
 
 class FakeKeyProvider implements JwksKeyProviderPort {
   readonly calls: boolean[] = [];
@@ -151,17 +132,22 @@ async function token(
 
 function verifier(
   provider: JwksKeyProviderPort,
-  repository: Pick<
-    OrganizationIdentityConfigRepositoryPort,
-    'findActiveByOrganizationId'
-  > = new FakeConfigRepository(),
+  activeConfig: OrganizationIdentityConfig = {
+    ...config,
+    publicKeysJwks: null,
+  },
 ) {
-  return new UserAssertionVerifier(
-    repository,
+  const subject = new UserAssertionVerifier(
     provider,
     new TestUserAssertionCrypto(),
     () => NOW,
   );
+  return {
+    verify: (input: {
+      readonly signedAssertion: string;
+      readonly organizationId: string;
+    }) => subject.verify({ ...input, config: activeConfig }),
+  };
 }
 
 describe('UserAssertionVerifier', () => {
@@ -175,7 +161,7 @@ describe('UserAssertionVerifier', () => {
         signedAssertion: assertion,
         organizationId: 'org_acme',
       }),
-    ).resolves.toEqual<VerifiedUserAssertion>({
+    ).resolves.toEqual<ResolvedUserIdentity>({
       userId: 'user_123',
       organizationId: 'org_acme',
       scopes: [],
@@ -290,14 +276,14 @@ describe('UserAssertionVerifier', () => {
     const fixture = await rsaFixture();
     const assertion = await token(fixture.privateKey, { jti: 'jti-1' });
     const provider = new FakeKeyProvider(fixture.jwks);
-    const repository = new FakeConfigRepository({
+    const esOnly: OrganizationIdentityConfig = {
       ...config,
       allowedAlgorithms: ['ES256'],
       publicKeysJwks: null,
-    });
+    };
 
     await expect(
-      verifier(provider, repository).verify({
+      verifier(provider, esOnly).verify({
         signedAssertion: assertion,
         organizationId: 'org_acme',
       }),
@@ -305,49 +291,28 @@ describe('UserAssertionVerifier', () => {
     expect(provider.calls).toEqual([]);
   });
 
-  it('reports a missing active identity configuration before assertion validation', async () => {
-    const fixture = await rsaFixture();
-    const assertion = await token(fixture.privateKey, { jti: 'jti-1' });
-    const provider = new FakeKeyProvider(fixture.jwks);
-    const repository: Pick<
-      OrganizationIdentityConfigRepositoryPort,
-      'findActiveByOrganizationId'
-    > = {
-      findActiveByOrganizationId: () => Promise.resolve(null),
-    };
+  it.each([
+    ['an internal space', 'user 123'],
+    ['a non-ASCII character', 'học_viên_1'],
+    ['257 characters', 'x'.repeat(257)],
+  ])(
+    'rejects a sub with %s under the End-User ID rule',
+    async (_name, subject) => {
+      const fixture = await rsaFixture();
+      const assertion = await token(fixture.privateKey, {
+        subject,
+        jti: 'jti-1',
+      });
 
-    await expect(
-      verifier(provider, repository).verify({
-        signedAssertion: assertion,
-        organizationId: 'org_acme',
-      }),
-    ).rejects.toMatchObject({
-      code: 'IDENTITY_CONFIG_REQUIRED',
-      httpStatus: 403,
-      message:
-        'Grading requires an active user identity configuration for your Organization. Ask an Organization owner to complete setup; if it is already configured, contact AIHUB support.',
-      retryable: false,
-    });
-    expect(provider.calls).toEqual([]);
-  });
-
-  it('maps an unavailable identity configuration to the public provider error', async () => {
-    const repository: Pick<
-      OrganizationIdentityConfigRepositoryPort,
-      'findActiveByOrganizationId'
-    > = {
-      findActiveByOrganizationId: () =>
-        Promise.reject(new Error('database down')),
-    };
-
-    await expect(
-      verifier(new FakeKeyProvider({ keys: [] }), repository).verify({
-        signedAssertion: 'not-a-token',
-        organizationId: 'org_acme',
-      }),
-    ).rejects.toMatchObject({
-      code: 'IDENTITY_PROVIDER_UNAVAILABLE',
-      httpStatus: 503,
-    });
-  });
+      await expect(
+        verifier(new FakeKeyProvider(fixture.jwks)).verify({
+          signedAssertion: assertion,
+          organizationId: 'org_acme',
+        }),
+      ).rejects.toMatchObject({
+        code: 'INVALID_USER_IDENTITY',
+        httpStatus: 401,
+      });
+    },
+  );
 });
