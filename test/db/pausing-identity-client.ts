@@ -16,6 +16,18 @@ interface ArmedPause {
   release(): void;
 }
 
+async function backendPidOf(
+  client: PostgresIdentityQueryClient,
+): Promise<number | undefined> {
+  const rows = await client.query('SELECT pg_backend_pid() AS pid', []);
+  const first = rows[0];
+  if (typeof first !== 'object' || first === null) {
+    return undefined;
+  }
+  const pid = (first as { pid?: unknown }).pid;
+  return typeof pid === 'number' ? pid : undefined;
+}
+
 /**
  * A real identity client that can be held open immediately after one statement
  * returns.
@@ -34,10 +46,22 @@ export class PausingIdentityClient
   implements PostgresIdentityQueryClient, PostgresIdentityTransactionalClient
 {
   private pause: ArmedPause | undefined;
+  private heldBackendPid: number | undefined;
 
   constructor(
     private readonly client: ReturnType<typeof createPostgresIdentityClient>,
   ) {}
+
+  /**
+   * The backend of the connection currently held open by a pause.
+   *
+   * Read from the held connection itself rather than by looking for whichever
+   * backend happens to be sitting in a transaction, so a second session on the
+   * same database cannot be mistaken for it.
+   */
+  heldBackend(): Promise<number | undefined> {
+    return Promise.resolve(this.heldBackendPid);
+  }
 
   pauseAfterNextQuery(): QueryPause {
     return this.arm(undefined);
@@ -90,7 +114,7 @@ export class PausingIdentityClient
     values: readonly unknown[],
   ): Promise<readonly unknown[]> {
     const rows = await this.client.query(text, values);
-    await this.holdIfArmed(text);
+    await this.holdIfArmed(text, this.client);
     return rows;
   }
 
@@ -101,7 +125,7 @@ export class PausingIdentityClient
       callback({
         query: async (text, values) => {
           const rows = await client.query(text, values);
-          await this.holdIfArmed(text);
+          await this.holdIfArmed(text, client);
           return rows;
         },
       }),
@@ -109,7 +133,10 @@ export class PausingIdentityClient
     return result;
   }
 
-  private async holdIfArmed(text: string): Promise<void> {
+  private async holdIfArmed(
+    text: string,
+    onConnection: PostgresIdentityQueryClient,
+  ): Promise<void> {
     const pause = this.pause;
     if (pause === undefined) {
       return;
@@ -118,8 +145,11 @@ export class PausingIdentityClient
       return;
     }
     this.pause = undefined;
+    const pid = await backendPidOf(onConnection);
+    this.heldBackendPid = pid;
     pause.captured();
     await pause.released;
+    this.heldBackendPid = undefined;
   }
 
   close(): Promise<void> {

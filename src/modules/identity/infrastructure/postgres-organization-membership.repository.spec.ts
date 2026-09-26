@@ -416,7 +416,10 @@ describe('PostgresOrganizationMembershipRepository', () => {
           role: 'owner',
         },
       ],
-      [{}],
+      // What the demote statement actually returns now that it has a RETURNING
+      // clause. The fake used to answer with an empty object here, which a
+      // statement with no RETURNING could never have produced.
+      [{ role: 'admin' }],
     ];
 
     await expect(

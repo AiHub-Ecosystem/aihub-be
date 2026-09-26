@@ -909,7 +909,11 @@ export class PostgresOrganizationMembershipRepository
           DEMOTE_TRANSFER_CALLER_SQL,
           [input.organizationId, caller.userId],
         );
-        if (demotedRows.length === 0) {
+        const demoted = demotedRows[0];
+        const demotedRole = isRecord(demoted)
+          ? membershipRoleValue(demoted, 'role')
+          : undefined;
+        if (demotedRole !== 'admin') {
           throw identityStoreError('Identity data is invalid');
         }
 

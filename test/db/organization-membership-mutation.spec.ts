@@ -134,29 +134,6 @@ function activeOwners(): Promise<number> {
     .then((result) => result.rows[0]?.count ?? 0);
 }
 
-/**
- * The backend currently sitting in an open transaction.
- *
- * While the first mutation is held, it is the only one inside a transaction, and
- * it is the one holding the Organization row lock. Resolving the holder and
- * handing it to the lane's own `waitForBlockedBy` is what proves the second
- * request is blocked *by that backend*, rather than by anything else that might
- * have been slow.
- */
-async function heldTransactionBackend(): Promise<number> {
-  const result = await pool.query<{ pid: number }>(
-    `SELECT pid FROM pg_stat_activity
-     WHERE datname = current_database()
-       AND state = 'idle in transaction'
-     LIMIT 1`,
-  );
-  const pid = result.rows[0]?.pid;
-  if (pid === undefined) {
-    throw new Error('no backend is holding a transaction open');
-  }
-  return pid;
-}
-
 interface Case {
   readonly name: string;
   readonly arrange?: () => Promise<void>;
@@ -175,8 +152,14 @@ async function seedDisabledMember(username: string): Promise<void> {
 }
 
 /**
- * The refusal matrix, written by hand rather than generated from the policy
+ * The decision matrix, written by hand rather than generated from the policy
  * functions, so a case built out of the thing it checks would prove nothing.
+ *
+ * It carries the same refusal matrix the fast lane carries, so no row of that
+ * one is covered only by a suite that cannot see the SQL. The rows here are not
+ * unit tests of the policy: the policy has its own, and this one proves the
+ * repository calls it and translates each outcome correctly through a real
+ * engine.
  *
  * `audit` is the number of Organization Audit Events the request leaves behind.
  * A real target and an invented one get the same response and not the same
@@ -279,6 +262,29 @@ const CASES: Readonly<Record<MutationRoute, readonly Case[]>> = {
       code: 'FORBIDDEN',
       message: ROUTE_DENIAL.change_role,
     },
+    // A role change checks the target's status before it looks at the caller's
+    // role, so it returns "unavailable" without recording anything, and the
+    // route's own denial still reaches the response. A 404 here would have told
+    // the caller that the disabled membership they guessed really exists.
+    {
+      name: 'a member changing a disabled membership',
+      callerId: () => memberId,
+      target: 'gone',
+      status: 403,
+      audit: 0,
+      code: 'FORBIDDEN',
+      message: ROUTE_DENIAL.change_role,
+      arrange: seedDisabledMember.bind(null, 'gone'),
+    },
+    {
+      name: 'an owner changing a username that does not exist',
+      callerId: () => ownerId,
+      target: 'nobody',
+      status: 404,
+      audit: 0,
+      code: 'NOT_FOUND',
+      message: NOT_FOUND,
+    },
   ],
   disable: [
     {
@@ -361,6 +367,37 @@ const CASES: Readonly<Record<MutationRoute, readonly Case[]>> = {
       code: 'FORBIDDEN',
       message: ROUTE_DENIAL.disable,
     },
+    // Disable is the one route whose target policy looks at the caller's role
+    // before the target's status, so this is the one place a caller with no
+    // route authority still leaves a record for a disabled target.
+    {
+      name: 'a member disabling a disabled membership',
+      callerId: () => memberId,
+      target: 'gone',
+      status: 403,
+      audit: 1,
+      code: 'FORBIDDEN',
+      message: ROUTE_DENIAL.disable,
+      arrange: seedDisabledMember.bind(null, 'gone'),
+    },
+    {
+      name: 'an owner disabling a username that does not exist',
+      callerId: () => ownerId,
+      target: 'nobody',
+      status: 404,
+      audit: 0,
+      code: 'NOT_FOUND',
+      message: NOT_FOUND,
+    },
+    {
+      name: 'an admin disabling a username that does not exist, as an admin',
+      callerId: () => adminId,
+      target: 'nobody',
+      status: 404,
+      audit: 0,
+      code: 'NOT_FOUND',
+      message: NOT_FOUND,
+    },
   ],
   transfer: [
     {
@@ -423,6 +460,20 @@ const CASES: Readonly<Record<MutationRoute, readonly Case[]>> = {
       code: 'FORBIDDEN',
       message: ROUTE_DENIAL.transfer,
     },
+    // Transfer checks the target's status before the caller's role too, so a
+    // caller with no route authority naming a disabled membership is still
+    // refused by the route, and still leaves no record. Disable is the one
+    // route that looks at the caller first, which is why its row below differs.
+    {
+      name: 'a member transferring to a disabled member',
+      callerId: () => memberId,
+      target: 'gone',
+      status: 403,
+      audit: 0,
+      code: 'FORBIDDEN',
+      message: ROUTE_DENIAL.transfer,
+      arrange: seedDisabledMember.bind(null, 'gone'),
+    },
     {
       name: 'an owner transferring to a username that does not exist',
       callerId: () => ownerId,
@@ -431,6 +482,15 @@ const CASES: Readonly<Record<MutationRoute, readonly Case[]>> = {
       audit: 0,
       code: 'NOT_FOUND',
       message: NOT_FOUND,
+    },
+    {
+      name: 'an admin transferring to a username that does not exist',
+      callerId: () => adminId,
+      target: 'nobody',
+      status: 403,
+      audit: 0,
+      code: 'FORBIDDEN',
+      message: ROUTE_DENIAL.transfer,
     },
   ],
 };
@@ -557,6 +617,27 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
         });
       });
 
+      it('gives a caller with a disabled membership the route denial, and records nothing', async () => {
+        await pool.query(
+          "UPDATE organization_members SET status = 'disabled' WHERE user_account_id = $1",
+          [ownerId],
+        );
+
+        const response = await mutate(route, ownerId, 'member');
+
+        expect({
+          status: response.statusCode,
+          code: response.json().error?.code,
+          message: response.json().error?.message,
+          audit: (await auditEvents()).length,
+        }).toEqual({
+          status: 403,
+          code: 'FORBIDDEN',
+          message: ROUTE_DENIAL[route],
+          audit: 0,
+        });
+      });
+
       it('refuses a suspended Organization, and records nothing', async () => {
         await pool.query(
           "UPDATE organizations SET status = 'suspended' WHERE id = $1",
@@ -567,10 +648,12 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
 
         expect({
           status: response.statusCode,
+          code: response.json().error?.code,
           message: response.json().error?.message,
           audit: (await auditEvents()).length,
         }).toEqual({
           status: 403,
+          code: 'FORBIDDEN',
           message: ROUTE_DENIAL[route],
           audit: 0,
         });
@@ -580,8 +663,11 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
         // Held after the caller's Membership was read and before the
         // transaction opens, which is the only moment a suspension can land
         // between the use case's own check and the transaction's re-read of the
-        // Organization row.
-        const pause = identityClient.pauseAfterNextQuery();
+        // Organization row. Naming the statement rather than the first one keeps
+        // the test honest if the use case ever reads something else first.
+        const pause = identityClient.pauseAfterQueryContaining(
+          'organization_status',
+        );
         const request = mutate(route, ownerId, 'member');
         try {
           await waitForQueryCapture(pause, 10_000);
@@ -611,17 +697,36 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
     },
   );
 
-  it('answers a caller with no route authority identically for a real username and an invented one', async () => {
-    const real = await mutate('change_role', memberId, 'owner');
-    const invented = await mutate('change_role', memberId, 'nobody');
+  it.each(['change_role', 'transfer'] as const)(
+    'answers a caller with no route authority identically on %s, for a real username and an invented one',
+    async (route) => {
+      const real = await mutate(route, memberId, 'owner');
+      const invented = await mutate(route, memberId, 'nobody');
 
-    const shape = (response: { statusCode: number; json: () => unknown }) => ({
-      status: response.statusCode,
-      body: response.json(),
-    });
+      const shape = (response: {
+        statusCode: number;
+        json: () => unknown;
+      }) => ({
+        status: response.statusCode,
+        body: response.json(),
+      });
 
-    expect(shape(real)).toEqual(shape(invented));
-  });
+      // Anchored, so two identical internal failures would not pass as the point
+      // of the test.
+      expect(shape(real)).toEqual({
+        status: 403,
+        body: {
+          error: {
+            code: 'FORBIDDEN',
+            message: ROUTE_DENIAL[route],
+            request_id: REQUEST_ID,
+            retryable: false,
+          },
+        },
+      });
+      expect(shape(invented)).toEqual(shape(real));
+    },
+  );
 
   it('writes one applied event for a transfer, not two role changes', async () => {
     const response = await mutate('transfer', ownerId, 'member');
@@ -722,31 +827,49 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
     // request can only be waiting on that lock and on nothing else.
     const pause = identityClient.pauseAfterQueryContaining('FOR UPDATE');
     const first = mutate('change_role', ownerId, 'second-owner');
+    let second: ReturnType<typeof mutate> | undefined;
     try {
       await waitForQueryCapture(pause, 10_000);
 
-      const holder = await heldTransactionBackend();
-      const second = mutate('change_role', secondOwnerId, 'owner');
+      // The pid of the connection the hold is on, not whichever backend happens
+      // to be inside a transaction.
+      const holder = await identityClient.heldBackend();
+      if (holder === undefined) {
+        throw new Error('the held statement reported no backend');
+      }
+      second = mutate('change_role', secondOwnerId, 'owner');
       const waiting = await waitForBlockedBy(pool, holder);
+      const blockers = await pool.query<{ blockers: number[] }>(
+        'SELECT pg_blocking_pids($1) AS blockers',
+        [waiting],
+      );
 
       pause.release();
       const responses = await Promise.all([first, second]);
 
+      // The wait edge, read from the waiting backend itself.
+      // `waitForBlockedBy` returns the waiter, not the holder.
       expect({
-        secondWasBlockedByTheHolder: waiting > 0,
+        heldBackend: holder,
+        itsBlockers: blockers.rows[0]?.blockers ?? [],
+      }).toEqual({ heldBackend: holder, itsBlockers: [holder] });
+      expect({
         succeeded: responses.filter((r) => r.statusCode === 200).length,
         owners: await activeOwners(),
-      }).toEqual({
-        secondWasBlockedByTheHolder: true,
-        succeeded: 1,
-        owners: 1,
-      });
+      }).toEqual({ succeeded: 1, owners: 1 });
     } finally {
       // A hold that outlives its test would stall every later statement and the
       // suite's own teardown.
       identityClient.disarm();
       pause.release();
-      await first.catch(() => undefined);
+      await Promise.all(
+        [first, second]
+          .filter(
+            (request): request is ReturnType<typeof mutate> =>
+              request !== undefined,
+          )
+          .map(async (request) => (await request).statusCode),
+      ).catch(() => undefined);
     }
   });
 });
