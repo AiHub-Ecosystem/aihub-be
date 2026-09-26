@@ -60,4 +60,22 @@ describe('error registry', () => {
       'Unknown ErrorCode: UNKNOWN_CODE',
     );
   });
+
+  // These are all real Object.prototype members, not registered ErrorCodes. A
+  // plain `registry[code]` lookup would resolve them and return a function
+  // where an HTTP status belongs, so the guard has to be own-key only.
+  it.each([
+    'constructor',
+    'toString',
+    '__proto__',
+    'valueOf',
+    'hasOwnProperty',
+  ])(
+    'refuses the inherited member %s instead of resolving it as a status',
+    (code) => {
+      expect(() => httpStatusForErrorCode(code)).toThrow(
+        `Unknown ErrorCode: ${code}`,
+      );
+    },
+  );
 });

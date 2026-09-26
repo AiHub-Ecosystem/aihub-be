@@ -53,11 +53,13 @@ export const ERROR_STATUS_BY_CODE = {
 } as const satisfies Record<ErrorCode, HttpStatus>;
 
 export function httpStatusForErrorCode(code: string): HttpStatus {
-  for (const [registeredCode, status] of Object.entries(ERROR_STATUS_BY_CODE)) {
-    if (registeredCode === code) {
-      return status;
-    }
+  // `Object.hasOwn`, not a plain index: a plain index reaches the prototype
+  // chain, so `code = 'constructor'` would resolve to `Object` and escape as
+  // a bogus status instead of refusing. The registry is looked up with error
+  // codes that are a closed union today, but this function is the boundary
+  // that says "unregistered code is a bug", and it must keep saying it.
+  if (!Object.hasOwn(ERROR_STATUS_BY_CODE, code)) {
+    throw new Error(`Unknown ErrorCode: ${code}`);
   }
-
-  throw new Error(`Unknown ErrorCode: ${code}`);
+  return ERROR_STATUS_BY_CODE[code as keyof typeof ERROR_STATUS_BY_CODE];
 }

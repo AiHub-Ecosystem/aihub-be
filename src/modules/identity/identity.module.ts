@@ -1,6 +1,10 @@
 import { Module } from '@nestjs/common';
 
 import {
+  OPAQUE_TOKEN_BINDINGS,
+  opaqueTokenIssuer,
+} from '../../common/security/opaque-token-issuer';
+import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from '../auth/application/auth-rate-limiter.port';
@@ -109,7 +113,6 @@ import {
 import { UserAssertionVerifier } from './application/user-assertion-verifier';
 import { UserIdentityResolver } from './application/user-identity-resolver';
 import { USER_IDENTITY_RESOLVER } from './application/user-identity-resolver.port';
-import { CryptoOrganizationInviteToken } from './infrastructure/crypto-organization-invite-token';
 import { EnvSandboxAssertionPolicy } from './infrastructure/env-sandbox-assertion-policy';
 import { JoseSandboxAssertionSigner } from './infrastructure/jose-sandbox-assertion-signer';
 import { JoseUserAssertionCrypto } from './infrastructure/jose-user-assertion-crypto';
@@ -307,7 +310,11 @@ import { UserIdentityGuard } from './presentation/user-identity.guard';
     },
     {
       provide: ORGANIZATION_INVITE_TOKEN,
-      useClass: CryptoOrganizationInviteToken,
+      useFactory: (): OrganizationInviteTokenPort =>
+        opaqueTokenIssuer(
+          OPAQUE_TOKEN_BINDINGS.organizationInvite.prefix,
+          OPAQUE_TOKEN_BINDINGS.organizationInvite.ttlMs,
+        ),
     },
     {
       provide: INVITE_ORGANIZATION_MEMBER,

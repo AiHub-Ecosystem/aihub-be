@@ -1,6 +1,10 @@
 import { Module } from '@nestjs/common';
 
 import {
+  OPAQUE_TOKEN_BINDINGS,
+  opaqueTokenIssuer,
+} from '../../common/security/opaque-token-issuer';
+import {
   RUNTIME_SECRET_PROVIDER,
   type RuntimeSecretProvider,
 } from '../secrets/application/runtime-secret-provider.port';
@@ -24,17 +28,21 @@ import {
 } from './application/local-auth.service';
 import { LocalAuthService } from './application/local-auth.service';
 import { PASSWORD_HASHER } from './application/password-hasher.port';
-import { PASSWORD_RESET_TOKEN } from './application/password-reset-token.port';
+import {
+  PASSWORD_RESET_TOKEN,
+  type PasswordResetTokenPort,
+} from './application/password-reset-token.port';
 import { REFRESH_TOKEN_ISSUER } from './application/refresh-token.port';
 import {
   USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
 } from './application/user-access-token.port';
-import { VERIFICATION_TOKEN } from './application/verification-token.port';
+import {
+  VERIFICATION_TOKEN,
+  type VerificationTokenPort,
+} from './application/verification-token.port';
 import { Argon2PasswordHasher } from './infrastructure/argon2-password.hasher';
-import { CryptoPasswordResetToken } from './infrastructure/crypto-password-reset-token';
 import { CryptoRefreshToken } from './infrastructure/crypto-refresh-token';
-import { CryptoVerificationToken } from './infrastructure/crypto-verification-token';
 import {
   JoseUserAccessTokenService,
   USER_ACCESS_TOKEN_CRYPTO,
@@ -58,9 +66,23 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
         ),
     },
     { provide: PASSWORD_HASHER, useClass: Argon2PasswordHasher },
-    { provide: PASSWORD_RESET_TOKEN, useClass: CryptoPasswordResetToken },
+    {
+      provide: PASSWORD_RESET_TOKEN,
+      useFactory: (): PasswordResetTokenPort =>
+        opaqueTokenIssuer(
+          OPAQUE_TOKEN_BINDINGS.passwordReset.prefix,
+          OPAQUE_TOKEN_BINDINGS.passwordReset.ttlMs,
+        ),
+    },
     { provide: REFRESH_TOKEN_ISSUER, useClass: CryptoRefreshToken },
-    { provide: VERIFICATION_TOKEN, useClass: CryptoVerificationToken },
+    {
+      provide: VERIFICATION_TOKEN,
+      useFactory: (): VerificationTokenPort =>
+        opaqueTokenIssuer(
+          OPAQUE_TOKEN_BINDINGS.verification.prefix,
+          OPAQUE_TOKEN_BINDINGS.verification.ttlMs,
+        ),
+    },
     {
       provide: AUTH_CLOCK,
       useFactory: (): LocalAuthServiceClock => ({ now: () => new Date() }),

@@ -6,6 +6,7 @@ import type {
   OrganizationMembershipListPort,
   OrganizationMembershipListResult,
 } from '../application/organization-membership-list.port';
+import { forbidden } from '../application/organization-membership.authorization';
 import {
   ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL,
   ORGANIZATION_MEMBERSHIP_TARGET_REFUSAL,
@@ -236,10 +237,6 @@ interface MutationMembershipRow {
   readonly username: string;
   readonly role: OrganizationMembershipRole;
   readonly status: OrganizationMembershipStatus;
-}
-
-function forbidden(message: string): AppError {
-  return new AppError({ code: 'FORBIDDEN', message, retryable: false });
 }
 
 function notFound(): AppError {
