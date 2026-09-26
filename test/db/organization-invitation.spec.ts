@@ -421,7 +421,8 @@ describe('organization invitation revocation against PostgreSQL', () => {
    * `invitation.sent` event against the same target. Reading these ordered and
    * whole is what keeps the setup event from being mistaken for the revocation
    * one, and it lets a test assert that a no-op revocation appended nothing.
-   * Audit ids are ULIDs, so `ORDER BY id` is chronological.
+   * The production audit read orders by `occurred_at, id`; this test orders by
+   * id to keep the events it inspects stable for its single-process fixtures.
    */
   async function invitationAuditEvents(
     ...targetIds: readonly string[]

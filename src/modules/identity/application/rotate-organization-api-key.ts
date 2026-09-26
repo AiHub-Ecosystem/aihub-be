@@ -1,8 +1,8 @@
 import { AppError } from '../../../common/errors/app-error';
 import type { RequestContext } from '../../../common/request-context/request-context';
-import { generateApiKey } from '../domain/api-key';
 
 import type { ApiKeyCachePort } from './api-key-authenticator.port';
+import { generateOrganizationApiKey } from './organization-api-key-generator';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
 import {
   forbidden,
@@ -65,7 +65,7 @@ export class RotateOrganizationApiKey {
     );
 
     const now = this.now();
-    const generated = generateApiKey(now);
+    const generated = generateOrganizationApiKey(now);
     const result = await this.apiKeys.rotateApiKey({
       context: input.context,
       organizationId: input.organizationId,

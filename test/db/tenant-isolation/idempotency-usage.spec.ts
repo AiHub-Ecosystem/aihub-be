@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 
 import { createPostgresIdempotencyClient } from '../../../src/modules/idempotency/infrastructure/postgres-idempotency.client';
 import { PostgresIdempotencyRepository } from '../../../src/modules/idempotency/infrastructure/postgres-idempotency.repository';
-import { generateApiKey } from '../../../src/modules/identity/domain/api-key';
+import { generateOrganizationApiKey } from '../../../src/modules/identity/application/organization-api-key-generator';
 import { createPostgresMeteringClient } from '../../../src/modules/metering/infrastructure/postgres-usage.repository';
 import { PostgresUsageRepository } from '../../../src/modules/metering/infrastructure/postgres-usage.repository';
 
@@ -100,8 +100,8 @@ beforeEach(async () => {
     pool,
     identityA,
     identityB,
-    generateApiKey(TEST_NOW),
-    generateApiKey(TEST_NOW),
+    generateOrganizationApiKey(TEST_NOW),
+    generateOrganizationApiKey(TEST_NOW),
   );
 });
 

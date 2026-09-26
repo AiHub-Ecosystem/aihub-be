@@ -40,17 +40,16 @@ export const INSERT_ORGANIZATION_AUDIT_EVENT_SQL = `
 `;
 
 /**
- * Time-ordered by construction, so it doubles as the tie-break for events that
- * share an instant and reads need no second sort column.
+ * IDs minted for one instant sort in mint order within this process. The read
+ * path still sorts and cursors on both `occurred_at` and `id`; this local order
+ * is only a deterministic tie-break for events minted by the same process.
  *
  * The factory is what makes that true. A plain `ulid(t)` randomises everything
  * after the millisecond prefix, so two events stamped with one instant — a
  * denial recorded beside the mutation that refused it, or any pair written
  * inside a single request — would sort against each other at random. The
- * monotonic factory increments instead, which is the guarantee the sentence
- * above claims. It holds within a process; two instances writing in the same
- * millisecond still tie, and nothing in the read path depends on ordering
- * events that did not come from the same request.
+ * monotonic factory increments instead. It holds within a process; separate
+ * instances writing in the same millisecond have no defined relative order.
  */
 const nextUlid = monotonicFactory();
 

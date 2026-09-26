@@ -27,4 +27,12 @@ describe('CryptoOrganizationInviteToken', () => {
     expect(second.raw).not.toBe(first.raw);
     expect(second.hash).not.toBe(first.hash);
   });
+
+  it('orders token IDs by mint order when timestamps match', () => {
+    const now = new Date('2026-09-20T00:00:00.000Z');
+    const issuer = new CryptoOrganizationInviteToken();
+    const ids = Array.from({ length: 20 }, () => issuer.issue(now).id);
+
+    expect([...ids].sort()).toEqual(ids);
+  });
 });

@@ -1,8 +1,8 @@
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
+import { generateOrganizationApiKey } from '../../src/modules/identity/application/organization-api-key-generator';
 import type { SetOrganizationStatusInput } from '../../src/modules/identity/application/organization-status.port';
-import { generateApiKey } from '../../src/modules/identity/domain/api-key';
 import { PostgresApiKeyRepository } from '../../src/modules/identity/infrastructure/postgres-api-key.repository';
 import {
   type PostgresIdentityTransactionalClient,
@@ -50,7 +50,7 @@ async function seedAccount(
 }
 
 async function seedKey(status: 'active' | 'revoked'): Promise<string> {
-  const key = generateApiKey();
+  const key = generateOrganizationApiKey();
   await pool.query(
     `INSERT INTO api_keys
        (id, organization_id, key_hash, key_prefix, name, scopes,

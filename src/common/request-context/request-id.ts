@@ -7,8 +7,8 @@ import { monotonicFactory } from 'ulid';
  * `usage_records`; being time-sortable keeps index writes local instead of
  * scattering them across the B-tree.
  *
- * The monotonic factory guarantees ordering for ids minted inside the same
- * millisecond, which a plain `ulid()` does not.
+ * The monotonic factory preserves mint order for calls in this process that
+ * share a millisecond. It does not establish order across processes.
  */
 const nextUlid = monotonicFactory();
 

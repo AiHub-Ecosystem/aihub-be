@@ -24,4 +24,27 @@ describe('CryptoRefreshToken', () => {
     expect(successor.id).not.toBe(initial.id);
     expect(successor.raw).not.toBe(initial.raw);
   });
+
+  it('orders family IDs by mint order when timestamps match', () => {
+    const now = new Date('2026-09-20T00:00:00.000Z');
+    const issuer = new CryptoRefreshToken();
+    const familyIds = Array.from(
+      { length: 20 },
+      () => issuer.issue(now).familyId,
+    );
+
+    expect([...familyIds].sort()).toEqual(familyIds);
+  });
+
+  it('orders token IDs by mint order when timestamps match', () => {
+    const now = new Date('2026-09-20T00:00:00.000Z');
+    const issuer = new CryptoRefreshToken();
+    const familyId = issuer.issue(now).familyId;
+    const tokenIds = Array.from(
+      { length: 20 },
+      () => issuer.issue(now, familyId).id,
+    );
+
+    expect([...tokenIds].sort()).toEqual(tokenIds);
+  });
 });

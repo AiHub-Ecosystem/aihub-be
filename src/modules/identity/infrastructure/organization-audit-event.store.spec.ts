@@ -18,14 +18,7 @@ describe('organizationAuditEventId', () => {
     expect([later, earlier].sort()).toEqual([earlier, later]);
   });
 
-  /**
-   * The read path orders by `occurred_at` and tie-breaks on `id` alone, so two
-   * events stamped with one instant — a denial recorded beside the mutation it
-   * refused, two events written inside one request — have to keep the order
-   * they were written in. A plain ULID does not: it randomises everything after
-   * the millisecond prefix.
-   */
-  it('keeps write order for events that share an instant', () => {
+  it('keeps mint order within this process for events that share an instant', () => {
     const occurredAt = new Date('2026-09-21T12:00:00.000Z');
 
     const ids = Array.from({ length: 20 }, () =>

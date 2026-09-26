@@ -1,11 +1,9 @@
 import { Response } from 'undici';
 
 import { ApiKeyAuthenticator } from '../../../src/modules/identity/application/api-key-authenticator';
+import { generateOrganizationApiKey } from '../../../src/modules/identity/application/organization-api-key-generator';
 import { UserAssertionVerifier } from '../../../src/modules/identity/application/user-assertion-verifier';
-import {
-  generateApiKey,
-  hashApiKey,
-} from '../../../src/modules/identity/domain/api-key';
+import { hashApiKey } from '../../../src/modules/identity/domain/api-key';
 import { JoseUserAssertionCrypto } from '../../../src/modules/identity/infrastructure/jose-user-assertion-crypto';
 import { JwksKeyProvider } from '../../../src/modules/identity/infrastructure/jwks-key-provider';
 import { PostgresApiKeyRepository } from '../../../src/modules/identity/infrastructure/postgres-api-key.repository';
@@ -73,8 +71,8 @@ beforeEach(async () => {
       'https://tenant-b.example.test',
       'tenant-shared-key',
     ),
-    generateApiKey(TEST_NOW),
-    generateApiKey(TEST_NOW),
+    generateOrganizationApiKey(TEST_NOW),
+    generateOrganizationApiKey(TEST_NOW),
   );
 });
 

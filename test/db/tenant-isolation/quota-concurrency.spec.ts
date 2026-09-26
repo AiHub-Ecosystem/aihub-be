@@ -6,7 +6,7 @@ import {
   quotaKeyForMonth,
 } from '../../../src/modules/gateway/infrastructure/redis-quota-counter';
 import { QuotaGuard } from '../../../src/modules/gateway/presentation/quota.guard';
-import { generateApiKey } from '../../../src/modules/identity/domain/api-key';
+import { generateOrganizationApiKey } from '../../../src/modules/identity/application/organization-api-key-generator';
 
 import { createTestPool } from '../database';
 
@@ -53,8 +53,8 @@ beforeEach(async () => {
     pool,
     await createTenantIdentity('https://tenant-a.example.test', 'tenant-a-key'),
     await createTenantIdentity('https://tenant-b.example.test', 'tenant-b-key'),
-    generateApiKey(TEST_NOW),
-    generateApiKey(TEST_NOW),
+    generateOrganizationApiKey(TEST_NOW),
+    generateOrganizationApiKey(TEST_NOW),
   );
 });
 

@@ -1,7 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-import { ulid } from 'ulid';
-
 export const API_KEY_PREFIX = 'aihub_sk_';
 
 /** base62 over 32 bytes of CSPRNG output, left-padded to a fixed width. */
@@ -32,12 +30,8 @@ export function apiKeyDisplayPrefix(rawKey: string): string {
   return rawKey.slice(0, DISPLAY_PREFIX_LENGTH);
 }
 
-/**
- * The one definition of an AIHUB API key. Both the self-service endpoint and
- * the operator CLI generate credentials through this function, so the two
- * provisioning paths cannot drift apart in prefix, entropy, or hashing.
- */
-export function generateApiKey(now: Date = new Date()): GeneratedApiKey {
+/** Builds API-key secret material around an ID minted by the application. */
+export function generateApiKey(id: string): GeneratedApiKey {
   let value = BigInt(`0x${randomBytes(32).toString('hex')}`);
   let secret = '';
   while (value > 0n) {
@@ -51,7 +45,7 @@ export function generateApiKey(now: Date = new Date()): GeneratedApiKey {
 
   const raw = `${API_KEY_PREFIX}${secret.padStart(API_KEY_SECRET_LENGTH, '0')}`;
   return {
-    id: `ak_${ulid(now.getTime())}`,
+    id,
     raw,
     hash: hashApiKey(raw),
     prefix: apiKeyDisplayPrefix(raw),

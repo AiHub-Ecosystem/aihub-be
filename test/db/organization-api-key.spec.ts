@@ -4,8 +4,8 @@ import { ulid } from 'ulid';
 import { createRequestContext } from '../../src/common/request-context/request-context.factory';
 import { ApiKeyAuthenticator } from '../../src/modules/identity/application/api-key-authenticator';
 import type { ApiKeyCachePort } from '../../src/modules/identity/application/api-key-authenticator.port';
+import { generateOrganizationApiKey } from '../../src/modules/identity/application/organization-api-key-generator';
 import type { CreateOrganizationApiKeyRecordResult } from '../../src/modules/identity/application/organization-api-key.port';
-import { generateApiKey } from '../../src/modules/identity/domain/api-key';
 import { PostgresApiKeyRepository } from '../../src/modules/identity/infrastructure/postgres-api-key.repository';
 import type { PostgresIdentityTransactionalClient } from '../../src/modules/identity/infrastructure/postgres-identity.client';
 import { createPostgresIdentityClient } from '../../src/modules/identity/infrastructure/postgres-identity.client';
@@ -93,7 +93,7 @@ async function seedKey(options: {
   readonly status?: 'active' | 'revoked';
   readonly createdAt?: Date;
 }): Promise<string> {
-  const generated = generateApiKey();
+  const generated = generateOrganizationApiKey();
   const { organizationId, name, status = 'active', createdAt } = options;
   await pool.query(
     `INSERT INTO api_keys
@@ -124,7 +124,7 @@ function create(
     readonly expiresAt?: Date | null;
   } = {},
 ): Promise<CreateOrganizationApiKeyRecordResult> {
-  const generated = generateApiKey();
+  const generated = generateOrganizationApiKey();
   return repository.createApiKey({
     context: listContext(ORGANIZATION_ID),
     organizationId: ORGANIZATION_ID,
@@ -161,7 +161,7 @@ describe('organization API key creation against PostgreSQL', () => {
 
   it('stores a hash the authentication lookup can find again', async () => {
     await seedOrganization();
-    const generated = generateApiKey();
+    const generated = generateOrganizationApiKey();
 
     await repository.createApiKey({
       context: listContext(ORGANIZATION_ID),
@@ -421,7 +421,7 @@ describe('organization API key rotation against PostgreSQL', () => {
     readonly organizationId?: string;
     readonly now?: Date;
   }) {
-    const replacement = generateApiKey();
+    const replacement = generateOrganizationApiKey();
     const organizationId = options.organizationId ?? ORGANIZATION_ID;
     return repository.rotateApiKey({
       context: listContext(organizationId),
@@ -451,7 +451,7 @@ describe('organization API key rotation against PostgreSQL', () => {
     readonly environments?: readonly string[];
     readonly expiresAt?: Date | null;
   }) {
-    const key = generateApiKey();
+    const key = generateOrganizationApiKey();
     await pool.query(
       `INSERT INTO api_keys
          (id, organization_id, key_hash, key_prefix, name, scopes,
@@ -601,7 +601,7 @@ describe('organization API key rotation against PostgreSQL', () => {
     await seedOrganization();
     const retired = await seedKeyWith({ name: 'original' });
     const collision = await seedKeyWith({ name: 'collision' });
-    const replacement = generateApiKey();
+    const replacement = generateOrganizationApiKey();
 
     // Reusing an existing identifier makes the insert fail after the old key
     // has already been revoked, so only an atomic rotation leaves it usable.
@@ -694,7 +694,7 @@ describe('organization API key revocation against PostgreSQL', () => {
 
   it('leaves the withdrawn key refused by a real authenticator', async () => {
     await seedOrganization();
-    const key = generateApiKey();
+    const key = generateOrganizationApiKey();
     await pool.query(
       `INSERT INTO api_keys
          (id, organization_id, key_hash, key_prefix, name, scopes,
@@ -822,7 +822,7 @@ describe('organization API key revocation against PostgreSQL', () => {
 
   it('withdraws an expired key and frees the cap slot it was holding', async () => {
     await seedOrganization();
-    const expired = generateApiKey();
+    const expired = generateOrganizationApiKey();
     await pool.query(
       `INSERT INTO api_keys
          (id, organization_id, key_hash, key_prefix, name, scopes,
@@ -908,7 +908,7 @@ describe('organization API key audit trail against PostgreSQL', () => {
       organizationId: ORGANIZATION_ID,
       name: 'original',
     });
-    const replacement = generateApiKey();
+    const replacement = generateOrganizationApiKey();
 
     await repository.rotateApiKey({
       context: listContext(ORGANIZATION_ID),

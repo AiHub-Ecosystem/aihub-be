@@ -2,11 +2,11 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { createRequestContext } from '../../src/common/request-context/request-context.factory';
+import { generateOrganizationApiKey } from '../../src/modules/identity/application/organization-api-key-generator';
 import type {
   CreateOrganizationRecordInput,
   CreateOrganizationRecordResult,
 } from '../../src/modules/identity/application/organization-creation.port';
-import { generateApiKey } from '../../src/modules/identity/domain/api-key';
 import {
   type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,
@@ -327,7 +327,7 @@ describe('Self-serve Organization creation against PostgreSQL', () => {
       membership: { role: 'owner', organizationStatus: 'active' },
     });
 
-    const key = generateApiKey();
+    const key = generateOrganizationApiKey();
     await expect(
       new PostgresOrganizationApiKeyRepository(client).createApiKey({
         context,

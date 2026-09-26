@@ -48,9 +48,9 @@ const INSERT_API_KEY_SQL = `
 /**
  * The live-credential inventory. Revoked rows stay durable and unlisted, and
  * the organization predicate is the only thing standing between one tenant and
- * another's key inventory. Ordering is newest-first with the identifier as
- * tie-break, which agrees with the primary sort because the identifier is
- * time-ordered.
+ * another's key inventory. Ordering is newest-first with the identifier as a
+ * deterministic tie-break. Same-millisecond mint order is process-local and
+ * does not imply commit order.
  */
 const LIST_API_KEYS_SQL = `
   SELECT

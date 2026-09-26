@@ -1,8 +1,7 @@
 import { publishedScopes } from '../../../catalog/operation-catalog';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import type { RequestContext } from '../../../common/request-context/request-context';
-import { generateApiKey } from '../domain/api-key';
-
+import { generateOrganizationApiKey } from './organization-api-key-generator';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
 import {
   forbidden,
@@ -164,7 +163,7 @@ export class CreateOrganizationApiKey {
       ),
     ];
 
-    const generated = generateApiKey(now);
+    const generated = generateOrganizationApiKey(now);
     const result = await this.apiKeys.createApiKey({
       context: input.context,
       organizationId: input.organizationId,
