@@ -1,11 +1,10 @@
-import type { AppError } from '../../../common/errors/app-error';
-import type { RequestContext } from '../../../common/request-context/request-context';
+import { AppError } from '../../../common/errors/app-error';
 
-import { forbidden } from './organization-membership.authorization';
 import type {
   OrganizationMembershipPort,
   OrganizationMembershipRecord,
   OrganizationMembershipRole,
+  ResolveMembershipInput,
 } from './organization-membership.port';
 
 /**
@@ -74,11 +73,23 @@ export type OrganizationAdmissionDecision =
       readonly refusal: AppError;
     };
 
-export interface OrganizationReadAdmissionRequest {
+export interface OrganizationReadAdmissionRequest
+  extends ResolveMembershipInput {
   readonly surface: OrganizationReadSurface;
-  readonly context: RequestContext;
-  readonly userId: string;
-  readonly organizationId: string;
+}
+
+/**
+ * A surface's single refusal, for every caller outside its authority. Owned
+ * here rather than borrowed from the membership mutation helpers, which are
+ * being retired: an admitted caller and a refused caller must not be able to
+ * tell those two apart from how the refusal was built.
+ */
+function refuse(surface: OrganizationReadSurface): AppError {
+  return new AppError({
+    code: 'FORBIDDEN',
+    message: ORGANIZATION_READ_ADMISSION[surface].refusal,
+    retryable: false,
+  });
 }
 
 /**
@@ -93,10 +104,10 @@ export function decideOrganizationRead(
   const rule = ORGANIZATION_READ_ADMISSION[surface];
 
   if (!rule.admittedRoles.includes(caller.role)) {
-    return { admitted: false, refusal: forbidden(rule.refusal) };
+    return { admitted: false, refusal: refuse(surface) };
   }
   if (rule.suspensionClosesSurface && caller.organizationStatus !== 'active') {
-    return { admitted: false, refusal: forbidden(rule.refusal) };
+    return { admitted: false, refusal: refuse(surface) };
   }
 
   return { admitted: true, caller };
@@ -111,17 +122,10 @@ export async function admitOrganizationRead(
   membership: Pick<OrganizationMembershipPort, 'resolveMembership'>,
   request: OrganizationReadAdmissionRequest,
 ): Promise<OrganizationAdmissionDecision> {
-  const resolution = await membership.resolveMembership({
-    context: request.context,
-    userId: request.userId,
-    organizationId: request.organizationId,
-  });
+  const resolution = await membership.resolveMembership(request);
 
   if (resolution.kind !== 'active') {
-    return {
-      admitted: false,
-      refusal: forbidden(ORGANIZATION_READ_ADMISSION[request.surface].refusal),
-    };
+    return { admitted: false, refusal: refuse(request.surface) };
   }
 
   return decideOrganizationRead(request.surface, resolution.membership);

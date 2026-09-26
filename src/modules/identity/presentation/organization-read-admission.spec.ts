@@ -68,7 +68,8 @@ type CallerKind =
   | 'member of an active Organization'
   | 'a disabled membership'
   | 'a caller outside the Organization'
-  | 'an owner of a suspended Organization';
+  | 'an owner of a suspended Organization'
+  | 'an admin of a suspended Organization';
 
 function arrangeCaller(kind: CallerKind): {
   role: OrganizationMembershipRole;
@@ -119,6 +120,13 @@ function arrangeCaller(kind: CallerKind): {
         exists: true,
         organizationStatus: 'suspended',
       };
+    case 'an admin of a suspended Organization':
+      return {
+        role: 'admin',
+        status: 'active',
+        exists: true,
+        organizationStatus: 'suspended',
+      };
   }
 }
 
@@ -129,6 +137,7 @@ const CALLER_KINDS: readonly CallerKind[] = [
   'a disabled membership',
   'a caller outside the Organization',
   'an owner of a suspended Organization',
+  'an admin of a suspended Organization',
 ];
 
 const EXPECTED: Readonly<
@@ -146,6 +155,7 @@ const EXPECTED: Readonly<
     'a disabled membership': 'refused',
     'a caller outside the Organization': 'refused',
     'an owner of a suspended Organization': 'refused',
+    'an admin of a suspended Organization': 'refused',
   },
   open_invitations: {
     'owner of an active Organization': 'read',
@@ -154,6 +164,7 @@ const EXPECTED: Readonly<
     'a disabled membership': 'refused',
     'a caller outside the Organization': 'refused',
     'an owner of a suspended Organization': 'refused',
+    'an admin of a suspended Organization': 'refused',
   },
   audit_read: {
     'owner of an active Organization': 'read',
@@ -164,6 +175,7 @@ const EXPECTED: Readonly<
     // ADR-0040: the trail is evidence, and a suspended Organization's owner is
     // the one who needs it.
     'an owner of a suspended Organization': 'read',
+    'an admin of a suspended Organization': 'read',
   },
   identity_configuration: {
     'owner of an active Organization': 'read',
@@ -174,7 +186,21 @@ const EXPECTED: Readonly<
     'a disabled membership': 'refused',
     'a caller outside the Organization': 'refused',
     'an owner of a suspended Organization': 'refused',
+    'an admin of a suspended Organization': 'refused',
   },
+};
+
+/**
+ * Every surface's refusal text, written out by hand and never read from the
+ * policy table. A string edited in the table has to be edited here too, which
+ * is the point: the published wording is pinned, not derived.
+ */
+const PUBLISHED_REFUSALS: Readonly<Record<OrganizationReadSurface, string>> = {
+  membership_list: 'Organization membership list access is forbidden',
+  open_invitations: 'Organization invitation access is forbidden',
+  audit_read: 'Organization audit access is forbidden',
+  identity_configuration:
+    'Organization identity configuration access is forbidden',
 };
 
 describe('Organization read admission through the public route', () => {
@@ -214,7 +240,10 @@ describe('Organization read admission through the public route', () => {
       listOpenInvitations: jest.fn(
         async (_input: ListOpenOrganizationInvitationsInput) => [],
       ),
-    } as unknown as jest.Mocked<OrganizationInvitationPort>;
+      createInvitation: jest.fn(),
+      revokeInvitation: jest.fn(),
+      acceptInvitation: jest.fn(),
+    };
     auditEvents = {
       listAuditEvents: jest.fn(
         async (_input: ListOrganizationAuditEventsInput) => [],
@@ -316,7 +345,7 @@ describe('Organization read admission through the public route', () => {
           body: {
             error: {
               code: 'FORBIDDEN',
-              message: ORGANIZATION_READ_ADMISSION[surface].refusal,
+              message: PUBLISHED_REFUSALS[surface],
               request_id: REQUEST_ID,
               retryable: false,
             },
@@ -420,6 +449,23 @@ describe('Organization read admission through the public route', () => {
           outcome: EXPECTED[surface][kind],
         }).toEqual({ surface, kind, outcome: expectedOutcome });
       }
+    }
+  });
+
+  // The published wording is pinned here rather than read from the table, so
+  // editing a refusal string in the table fails the build instead of quietly
+  // changing what every caller is told.
+  it('publishes exactly the refusal text each surface has always returned', () => {
+    for (const surface of Object.keys(
+      PUBLISHED_REFUSALS,
+    ) as OrganizationReadSurface[]) {
+      expect({
+        surface,
+        refusal: ORGANIZATION_READ_ADMISSION[surface].refusal,
+      }).toEqual({
+        surface,
+        refusal: PUBLISHED_REFUSALS[surface],
+      });
     }
   });
 });

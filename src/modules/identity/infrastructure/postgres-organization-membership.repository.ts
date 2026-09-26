@@ -89,21 +89,22 @@ const LIST_ROSTER_SQL = `
 `;
 
 /**
- * Renders a surface's admitted Membership Roles as a SQL list.
+ * A surface's admitted Membership Roles, with the check that one is declared.
  *
- * An empty set is refused rather than rendered: `IN ()` admits every role, so
- * a table row that lost its roles would silently turn a management read into a
- * public one. Only the code-owned table reaches this, never a request.
+ * The roles travel as a query parameter rather than as text spliced into the
+ * statement, so the policy can never alter the query's shape. An empty set is
+ * refused rather than passed on: a surface that admits no Membership Role is a
+ * policy mistake, and it would silently become a read with no authorization.
  */
-export function renderAdmittedRoles(
+export function admittedRoles(
   roles: readonly OrganizationMembershipRole[],
-): string {
+): readonly OrganizationMembershipRole[] {
   if (roles.length === 0) {
     throw new Error(
       'organization read admission must admit at least one Membership Role',
     );
   }
-  return roles.map((role) => `'${role}'`).join(', ');
+  return roles;
 }
 
 const MEMBERSHIP_LIST_ADMISSION = ORGANIZATION_READ_ADMISSION.membership_list;
@@ -126,7 +127,7 @@ const LIST_ORGANIZATION_MEMBERS_SQL = `
       WHERE caller.organization_id = $1
         AND caller.user_account_id = $2
         AND caller.status = 'active'
-        AND caller.role IN (${renderAdmittedRoles(MEMBERSHIP_LIST_ADMISSION.admittedRoles)})
+        AND caller.role = ANY($3::text[])
         ${
           MEMBERSHIP_LIST_ADMISSION.suspensionClosesSurface
             ? "AND organization.status = 'active'"
@@ -137,7 +138,7 @@ const LIST_ORGANIZATION_MEMBERS_SQL = `
   LEFT JOIN organization_members AS membership
     ON authority.allowed
    AND membership.organization_id = $1
-   AND membership.status = $3
+   AND membership.status = $4
   LEFT JOIN user_accounts AS member_account
     ON member_account.id = membership.user_account_id
   ORDER BY member_account.username ASC
@@ -654,6 +655,7 @@ export class PostgresOrganizationMembershipRepository
       rows = await this.client.query(LIST_ORGANIZATION_MEMBERS_SQL, [
         input.organizationId,
         input.userId,
+        admittedRoles(MEMBERSHIP_LIST_ADMISSION.admittedRoles),
         input.status,
       ]);
     } catch {

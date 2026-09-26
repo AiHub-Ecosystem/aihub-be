@@ -1,14 +1,12 @@
 import type { RequestContext } from '../../../common/request-context/request-context';
 
+import { ORGANIZATION_READ_ADMISSION } from './organization-admission';
 import type {
   ListedOrganizationMember,
   OrganizationMembershipListPort,
 } from './organization-membership-list.port';
 import { forbidden } from './organization-membership.authorization';
 import type { OrganizationMembershipStatus } from './organization-membership.port';
-
-const MEMBERSHIP_LIST_ACCESS_FORBIDDEN =
-  'Organization membership list access is forbidden';
 
 export interface ListOrganizationMembershipsCommand {
   readonly context: RequestContext;
@@ -25,7 +23,7 @@ export class ListOrganizationMemberships {
   ): Promise<readonly ListedOrganizationMember[]> {
     const result = await this.membership.listOrganizationMembers(input);
     if (result.kind === 'denied') {
-      throw forbidden(MEMBERSHIP_LIST_ACCESS_FORBIDDEN);
+      throw forbidden(ORGANIZATION_READ_ADMISSION.membership_list.refusal);
     }
     return result.members;
   }

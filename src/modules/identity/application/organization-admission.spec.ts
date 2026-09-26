@@ -1,4 +1,4 @@
-import type { RequestContext } from '../../../common/request-context/request-context';
+import { createRequestContext } from '../../../common/request-context/request-context.factory';
 
 import {
   ORGANIZATION_READ_ADMISSION,
@@ -29,10 +29,14 @@ type OrganizationStatus = 'active' | 'suspended';
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
 
-const context = {
-  requestId: 'req_01',
-  receivedAt: new Date(),
-} as RequestContext;
+const context = createRequestContext({
+  requestId: 'req_01J00000000000000000000000',
+  receivedAt: new Date('2026-09-21T12:00:00.000Z'),
+  deadlineMs: 5_000,
+  organizationId: ORGANIZATION_ID,
+  userId: USER_ID,
+  scopes: [],
+});
 
 function record(
   role: OrganizationMembershipRole,
@@ -153,13 +157,12 @@ describe('decideOrganizationRead', () => {
         ] as const,
       ]),
     ),
-  )('%s', (label, surface, role, organizationStatus, admitted) => {
+  )('%s', (_label, surface, role, organizationStatus, admitted) => {
     const decision = decideOrganizationRead(
       surface,
       record(role, organizationStatus),
     );
 
-    expect(label).toContain(surface);
     expect(decision.admitted).toBe(admitted);
     expect(refusalOf(decision)).toBe(
       admitted ? undefined : ORGANIZATION_READ_ADMISSION[surface].refusal,

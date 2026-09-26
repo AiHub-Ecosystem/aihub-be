@@ -4,30 +4,18 @@ import {
 } from '../application/organization-admission';
 import type { OrganizationMembershipRole } from '../application/organization-membership.port';
 
-import { renderAdmittedRoles } from './postgres-organization-membership.repository';
+import { admittedRoles } from './postgres-organization-membership.repository';
 
 describe('membership list query admission', () => {
-  it('renders the admitted Membership Roles as a SQL list', () => {
-    expect(renderAdmittedRoles(['owner', 'admin'])).toBe("'owner', 'admin'");
+  it('passes the admitted Membership Roles as query values, not query text', () => {
+    expect(
+      admittedRoles(ORGANIZATION_READ_ADMISSION.membership_list.admittedRoles),
+    ).toEqual(['owner', 'admin']);
   });
 
-  it('refuses an empty role set instead of rendering a query that admits everyone', () => {
-    expect(() => renderAdmittedRoles([])).toThrow(
+  it('refuses a surface that admits no Membership Role rather than reading without authorization', () => {
+    expect(() => admittedRoles([])).toThrow(
       'organization read admission must admit at least one Membership Role',
-    );
-  });
-
-  it('never renders an empty IN list for any surface the table declares', () => {
-    for (const rule of Object.values(ORGANIZATION_READ_ADMISSION)) {
-      expect(renderAdmittedRoles(rule.admittedRoles)).not.toBe('');
-    }
-  });
-
-  it('takes the membership list roles from the shared table, not a private copy', () => {
-    const rule = ORGANIZATION_READ_ADMISSION.membership_list;
-
-    expect(renderAdmittedRoles(rule.admittedRoles)).toBe(
-      renderAdmittedRoles(['owner', 'admin']),
     );
   });
 
