@@ -18,7 +18,6 @@ describe('authorizeOrganizationMembershipMutation', () => {
         ...base,
         targetRole: 'owner',
         action: 'change_role',
-        requestedRole: 'admin',
       }),
     ).toEqual({ kind: 'allowed' });
   });
@@ -29,7 +28,6 @@ describe('authorizeOrganizationMembershipMutation', () => {
         ...base,
         callerRole: 'admin',
         action: 'change_role',
-        requestedRole: 'admin',
       }),
     ).toEqual({ kind: 'allowed' });
 
@@ -39,7 +37,6 @@ describe('authorizeOrganizationMembershipMutation', () => {
         callerRole: 'admin',
         targetRole: 'admin',
         action: 'change_role',
-        requestedRole: 'member',
       }),
     ).toEqual({ kind: 'forbidden' });
   });
@@ -62,7 +59,6 @@ describe('authorizeOrganizationMembershipMutation', () => {
         callerRole: 'member',
         callerUserId: 'usr_target',
         action: 'change_role',
-        requestedRole: 'admin',
       }),
     ).toEqual({ kind: 'forbidden' });
 
@@ -82,7 +78,6 @@ describe('authorizeOrganizationMembershipMutation', () => {
         ...base,
         targetStatus: 'disabled',
         action: 'change_role',
-        requestedRole: 'admin',
       }),
     ).toEqual({ kind: 'target_unavailable' });
 

@@ -5,7 +5,6 @@ import {
   type OrganizationAdmissionDecision,
   type OrganizationReadSurface,
   admitOrganizationRead,
-  decideOrganizationRead,
 } from './organization-admission';
 import type {
   OrganizationMembershipPort,
@@ -86,9 +85,21 @@ describe('ORGANIZATION_READ_ADMISSION', () => {
   });
 });
 
-describe('decideOrganizationRead', () => {
+describe('admitOrganizationRead', () => {
+  async function admit(
+    resolution: OrganizationMembershipResolution,
+    surface: OrganizationReadSurface = 'open_invitations',
+  ): Promise<OrganizationAdmissionDecision> {
+    return admitOrganizationRead(portReturning(resolution), {
+      surface,
+      context,
+      userId: USER_ID,
+      organizationId: ORGANIZATION_ID,
+    });
+  }
+
   // Expected outcomes are written here by hand, not read back from the table,
-  // so a corrupted table still fails the build.
+  // so an implementation that drifts from the table still fails the build.
   const EXPECTED: Readonly<
     Record<
       OrganizationReadSurface,
@@ -157,10 +168,10 @@ describe('decideOrganizationRead', () => {
         ] as const,
       ]),
     ),
-  )('%s', (_label, surface, role, organizationStatus, admitted) => {
-    const decision = decideOrganizationRead(
+  )('%s', async (_label, surface, role, organizationStatus, admitted) => {
+    const decision = await admit(
+      { kind: 'active', membership: record(role, organizationStatus) },
       surface,
-      record(role, organizationStatus),
     );
 
     expect(decision.admitted).toBe(admitted);
@@ -178,35 +189,15 @@ describe('decideOrganizationRead', () => {
     expect(refusals.size).toBe(SURFACES.length);
   });
 
-  it('carries the caller record through an admission so a use case can use it', () => {
+  it('carries the caller record through an admission so a use case can use it', async () => {
     const caller = record('owner');
 
-    const decision = decideOrganizationRead('open_invitations', caller);
+    const decision = await admit(
+      { kind: 'active', membership: caller },
+      'open_invitations',
+    );
 
     expect(decision).toEqual({ admitted: true, caller });
-  });
-});
-
-describe('admitOrganizationRead', () => {
-  async function admit(
-    resolution: OrganizationMembershipResolution,
-    surface: OrganizationReadSurface = 'open_invitations',
-  ): Promise<OrganizationAdmissionDecision> {
-    return admitOrganizationRead(portReturning(resolution), {
-      surface,
-      context,
-      userId: USER_ID,
-      organizationId: ORGANIZATION_ID,
-    });
-  }
-
-  it('admits an active owner of an active Organization', async () => {
-    const decision = await admit({
-      kind: 'active',
-      membership: record('owner'),
-    });
-
-    expect(decision.admitted).toBe(true);
   });
 
   it('refuses a caller with no membership in the Organization', async () => {

@@ -1,5 +1,4 @@
 import type {
-  OrganizationMembershipMutationRole,
   OrganizationMembershipRole,
   OrganizationMembershipStatus,
 } from './organization-membership.port';
@@ -16,14 +15,12 @@ export interface OrganizationMembershipMutationPolicyInput {
   readonly targetUserId: string;
   readonly targetRole: OrganizationMembershipRole;
   readonly targetStatus: OrganizationMembershipStatus;
-  readonly requestedRole?: OrganizationMembershipMutationRole;
 }
 
 export type OrganizationMembershipMutationPolicyDecision =
   | { readonly kind: 'allowed' }
   | { readonly kind: 'forbidden' }
-  | { readonly kind: 'target_unavailable' }
-  | { readonly kind: 'invalid' };
+  | { readonly kind: 'target_unavailable' };
 
 /**
  * Each route's Safe Authorization Denial. Raised by the use case and, for
@@ -81,6 +78,9 @@ export function authorizeOrganizationMembershipMutation(
 ): OrganizationMembershipMutationPolicyDecision {
   const callerIsTarget = input.callerUserId === input.targetUserId;
 
+  // Whether the requested role is the one the membership already carries is
+  // not this policy's business: a repeat that changes nothing is a delivery
+  // rather than an act, and the repository settles it.
   if (input.action === 'disable') {
     if (callerIsTarget) {
       return { kind: 'allowed' };
@@ -109,9 +109,6 @@ export function authorizeOrganizationMembershipMutation(
     return { kind: 'allowed' };
   }
 
-  if (input.requestedRole === undefined) {
-    return { kind: 'invalid' };
-  }
   if (input.callerRole === 'member') {
     return { kind: 'forbidden' };
   }

@@ -212,6 +212,7 @@ const DEMOTE_TRANSFER_CALLER_SQL = `
     AND user_account_id = $2
     AND role = 'owner'
     AND status = 'active'
+  RETURNING role
 `;
 
 function mapMembershipRecord(
@@ -272,14 +273,6 @@ function notFound(): AppError {
   return new AppError({
     code: 'NOT_FOUND',
     message: 'Resource not found',
-    retryable: false,
-  });
-}
-
-function invalidMutation(): AppError {
-  return new AppError({
-    code: 'INVALID_REQUEST',
-    message: 'Request failed validation',
     retryable: false,
   });
 }
@@ -774,7 +767,6 @@ export class PostgresOrganizationMembershipRepository
             targetUserId: target.userId,
             targetRole: target.role,
             targetStatus: target.status,
-            ...(requestedRole === undefined ? {} : { requestedRole }),
           });
         if (target && decision?.kind === 'forbidden') {
           // Recorded exactly when the target-level policy refuses, as before
@@ -792,7 +784,11 @@ export class PostgresOrganizationMembershipRepository
 
         // Answered before the target's existence can show: a caller without
         // authority on the route gets the same answer for a real username and
-        // an unknown one (ADR-0048).
+        // an unknown one (ADR-0048). `targetIsCaller` is true only when the
+        // target was found and is the caller, so a name that resolves to
+        // nobody is never the caller's own membership. The application tier
+        // cannot answer this: it holds the caller's User Account ID and the
+        // target's username, never the target's User Account ID.
         if (
           !hasOrganizationMembershipRouteAuthority({
             action,
@@ -811,9 +807,6 @@ export class PostgresOrganizationMembershipRepository
         }
         if (decision.kind === 'target_unavailable') {
           throw notFound();
-        }
-        if (decision.kind === 'invalid') {
-          throw invalidMutation();
         }
 
         // Both repeats that change nothing return early, before the owner

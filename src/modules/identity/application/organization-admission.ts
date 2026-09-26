@@ -93,28 +93,7 @@ function refuse(surface: OrganizationReadSurface): AppError {
 }
 
 /**
- * Settles admission for a caller whose Membership record is already in hand.
- * Pure, so a caller inside a transaction can use it without the module knowing
- * that transactions exist.
- */
-export function decideOrganizationRead(
-  surface: OrganizationReadSurface,
-  caller: OrganizationMembershipRecord,
-): OrganizationAdmissionDecision {
-  const rule = ORGANIZATION_READ_ADMISSION[surface];
-
-  if (!rule.admittedRoles.includes(caller.role)) {
-    return { admitted: false, refusal: refuse(surface) };
-  }
-  if (rule.suspensionClosesSurface && caller.organizationStatus !== 'active') {
-    return { admitted: false, refusal: refuse(surface) };
-  }
-
-  return { admitted: true, caller };
-}
-
-/**
- * Resolves the caller's Membership and settles admission from the same table.
+ * Resolves the caller's Membership and settles admission from the table above.
  * A durable lookup failure is left to propagate: it is an internal failure,
  * never a refusal, and never an admission.
  */
@@ -128,5 +107,15 @@ export async function admitOrganizationRead(
     return { admitted: false, refusal: refuse(request.surface) };
   }
 
-  return decideOrganizationRead(request.surface, resolution.membership);
+  const caller = resolution.membership;
+  const rule = ORGANIZATION_READ_ADMISSION[request.surface];
+
+  if (!rule.admittedRoles.includes(caller.role)) {
+    return { admitted: false, refusal: refuse(request.surface) };
+  }
+  if (rule.suspensionClosesSurface && caller.organizationStatus !== 'active') {
+    return { admitted: false, refusal: refuse(request.surface) };
+  }
+
+  return { admitted: true, caller };
 }

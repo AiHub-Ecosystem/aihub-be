@@ -17,11 +17,7 @@ import {
   type UserAccessTokenVerifierPort,
 } from '../../src/modules/auth/application/user-access-token.port';
 import { ORGANIZATION_MEMBERSHIP } from '../../src/modules/identity/application/organization-membership.port';
-import {
-  type PostgresIdentityQueryClient,
-  type PostgresIdentityTransactionalClient,
-  createPostgresIdentityClient,
-} from '../../src/modules/identity/infrastructure/postgres-identity.client';
+import { createPostgresIdentityClient } from '../../src/modules/identity/infrastructure/postgres-identity.client';
 import { PostgresOrganizationMembershipRepository } from '../../src/modules/identity/infrastructure/postgres-organization-membership.repository';
 
 import {
@@ -29,6 +25,11 @@ import {
   resetIdentityTables,
   testDatabaseUrl,
 } from './database';
+import {
+  PausingIdentityClient,
+  type QueryPause,
+  waitForQueryCapture,
+} from './pausing-identity-client';
 
 const ORGANIZATION_ID = 'org_membership_list';
 const REQUEST_ID = 'req_01J00000000000000000000000';
@@ -37,64 +38,6 @@ const NOW = new Date('2026-09-24T12:00:00.000Z');
 let app: NestFastifyApplication;
 let pool: Pool;
 let ownerId: string;
-
-interface QueryPause {
-  readonly captured: Promise<void>;
-  release(): void;
-}
-
-class PausingIdentityClient
-  implements PostgresIdentityQueryClient, PostgresIdentityTransactionalClient
-{
-  private pause:
-    | {
-        readonly captured: () => void;
-        readonly released: Promise<void>;
-        release(): void;
-      }
-    | undefined;
-
-  constructor(
-    private readonly client: ReturnType<typeof createPostgresIdentityClient>,
-  ) {}
-
-  pauseAfterNextQuery(): QueryPause {
-    let markCaptured!: () => void;
-    let release!: () => void;
-    const captured = new Promise<void>((resolve) => {
-      markCaptured = resolve;
-    });
-    const released = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    this.pause = { captured: markCaptured, released, release };
-    return { captured, release };
-  }
-
-  async query(
-    text: string,
-    values: readonly unknown[],
-  ): Promise<readonly unknown[]> {
-    const rows = await this.client.query(text, values);
-    const pause = this.pause;
-    if (pause !== undefined) {
-      this.pause = undefined;
-      pause.captured();
-      await pause.released;
-    }
-    return rows;
-  }
-
-  transaction<T>(
-    callback: Parameters<PostgresIdentityTransactionalClient['transaction']>[0],
-  ): Promise<T> {
-    return this.client.transaction(callback) as Promise<T>;
-  }
-
-  close(): Promise<void> {
-    return this.client.close();
-  }
-}
 
 let identityClient: PausingIdentityClient;
 
@@ -139,25 +82,6 @@ function listMemberships(
     url: `/v1/organizations/${organizationId}/members${query}`,
     headers: { authorization: bearer(userId) },
   });
-}
-
-async function waitForQueryCapture(pause: QueryPause): Promise<void> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    await Promise.race([
-      pause.captured,
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new Error('membership list query did not finish')),
-          2_000,
-        );
-      }),
-    ]);
-  } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
-  }
 }
 
 beforeAll(async () => {
