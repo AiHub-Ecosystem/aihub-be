@@ -29,6 +29,7 @@ import {
   VerifyEmailRequestSchema,
 } from '../../../contracts/auth/local-auth';
 import {
+  type IssuedSession,
   LOCAL_AUTH_SERVICE,
   type LocalAuthServicePort,
   RefreshRotationCommittedError,
@@ -86,6 +87,27 @@ function parseEmptyBody(body: unknown): void {
   parseBody(EmptyAuthRequestSchema, body === undefined ? {} : body);
 }
 
+/** Sets the refresh cookie and returns the envelope every session-issuing route shares. */
+function sessionEnvelope(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  session: IssuedSession,
+): LoginEnvelope {
+  reply.setCookie(
+    REFRESH_COOKIE_NAME,
+    session.refreshToken,
+    REFRESH_COOKIE_OPTIONS,
+  );
+  return {
+    data: {
+      access_token: session.accessToken,
+      token_type: 'Bearer',
+      expires_in: session.expiresIn,
+    },
+    meta: { request_id: String(request.id) },
+  };
+}
+
 function clearRefreshCookie(reply: FastifyReply): void {
   reply.setCookie(REFRESH_COOKIE_NAME, '', REFRESH_COOKIE_CLEAR_OPTIONS);
 }
@@ -110,7 +132,11 @@ export class LocalAuthController {
     @Body() body: unknown,
   ): Promise<RegisterEnvelope> {
     const input = parseBody<RegisterRequest>(RegisterRequestSchema, body);
-    const result = await this.service.register(input, requestIp(request));
+    const result = await this.service.register(
+      input,
+      requestIp(request),
+      input.browser_binding,
+    );
     return {
       data: result,
       meta: { request_id: String(request.id) },
@@ -127,19 +153,7 @@ export class LocalAuthController {
   ): Promise<LoginEnvelope> {
     const input = parseBody<LoginRequest>(LoginRequestSchema, body);
     const result = await this.service.login(input, requestIp(request));
-    reply.setCookie(
-      REFRESH_COOKIE_NAME,
-      result.refreshToken,
-      REFRESH_COOKIE_OPTIONS,
-    );
-    return {
-      data: {
-        access_token: result.accessToken,
-        token_type: 'Bearer',
-        expires_in: result.expiresIn,
-      },
-      meta: { request_id: String(request.id) },
-    };
+    return sessionEnvelope(request, reply, result);
   }
 
   @Post('refresh')
@@ -157,19 +171,7 @@ export class LocalAuthController {
 
     try {
       const result = await this.service.refresh(rawToken, requestIp(request));
-      reply.setCookie(
-        REFRESH_COOKIE_NAME,
-        result.refreshToken,
-        REFRESH_COOKIE_OPTIONS,
-      );
-      return {
-        data: {
-          access_token: result.accessToken,
-          token_type: 'Bearer',
-          expires_in: result.expiresIn,
-        },
-        meta: { request_id: String(request.id) },
-      };
+      return sessionEnvelope(request, reply, result);
     } catch (error) {
       if (isInvalidRefreshToken(error)) {
         clearRefreshCookie(reply);
@@ -198,13 +200,26 @@ export class LocalAuthController {
   }
 
   @Post('verify-email')
-  @HttpCode(204)
+  @Header('Cache-Control', 'no-store')
   async verify(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
-  ): Promise<void> {
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<LoginEnvelope | undefined> {
     const input = parseBody<VerifyEmailRequest>(VerifyEmailRequestSchema, body);
-    await this.service.verify(input.token, requestIp(request));
+    const session = await this.service.verify(
+      input.token,
+      requestIp(request),
+      input.browser_binding,
+    );
+    if (session === undefined) {
+      reply.status(204);
+      return undefined;
+    }
+
+    // Verification Sign-in (ADR-0054): the same session a login returns.
+    reply.status(200);
+    return sessionEnvelope(request, reply, session);
   }
 
   @Post('resend-verification')
@@ -217,7 +232,11 @@ export class LocalAuthController {
       ResendVerificationRequestSchema,
       body,
     );
-    await this.service.resend(input.email, requestIp(request));
+    await this.service.resend(
+      input.email,
+      requestIp(request),
+      input.browser_binding,
+    );
   }
 
   @Post('forgot-password')

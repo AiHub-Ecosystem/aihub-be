@@ -1559,7 +1559,7 @@
         "auth": null,
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"<string>\",\n  \"username\": \"<string>\",\n  \"password\": \"<string>\"\n}",
+          "raw": "{\n  \"email\": \"<string>\",\n  \"username\": \"<string>\",\n  \"password\": \"<string>\",\n  \"browser_binding\": \"<string>\"\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -1649,7 +1649,7 @@
         "auth": null,
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"token\": \"<string>\"\n}",
+          "raw": "{\n  \"token\": \"<string>\",\n  \"browser_binding\": \"<string>\"\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -1694,7 +1694,7 @@
         "auth": null,
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"<string>\"\n}",
+          "raw": "{\n  \"email\": \"<string>\",\n  \"browser_binding\": \"<string>\"\n}",
           "options": {
             "raw": {
               "language": "json"

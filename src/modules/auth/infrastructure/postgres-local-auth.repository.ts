@@ -13,11 +13,15 @@ import {
   type RegisterLocalAccountInput,
   type ResendVerificationTarget,
   type RotateRefreshTokenInput,
+  type VerificationOutcome,
 } from '../application/local-auth-repository.port';
 import type {
   PostgresAuthClient,
   PostgresAuthQueryClient,
 } from './postgres-auth.client';
+
+const INVALID: VerificationOutcome = { kind: 'invalid' };
+const VERIFIED: VerificationOutcome = { kind: 'verified' };
 
 function isUniqueViolation(error: unknown): boolean {
   return (
@@ -101,9 +105,10 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
         await transaction.query(
           `
             INSERT INTO email_verification_tokens (
-              id, user_account_id, token_hash, expires_at, created_at
+              id, user_account_id, token_hash, expires_at, created_at,
+              browser_binding_hash
             )
-            VALUES ($1, $2, $3, $4, $5)
+            VALUES ($1, $2, $3, $4, $5, $6)
           `,
           [
             input.tokenId,
@@ -111,6 +116,7 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
             input.tokenHash,
             input.tokenExpiresAt,
             input.now,
+            input.browserBindingHash ?? null,
           ],
         );
       });
@@ -127,6 +133,7 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
     readonly tokenId: string;
     readonly tokenHash: string;
     readonly tokenExpiresAt: Date;
+    readonly browserBindingHash?: string;
     readonly now: Date;
   }): Promise<ResendVerificationTarget | undefined> {
     try {
@@ -162,9 +169,10 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
         await transaction.query(
           `
             INSERT INTO email_verification_tokens (
-              id, user_account_id, token_hash, expires_at, created_at
+              id, user_account_id, token_hash, expires_at, created_at,
+              browser_binding_hash
             )
-            VALUES ($1, $2, $3, $4, $5)
+            VALUES ($1, $2, $3, $4, $5, $6)
           `,
           [
             input.tokenId,
@@ -172,6 +180,7 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
             input.tokenHash,
             input.tokenExpiresAt,
             input.now,
+            input.browserBindingHash ?? null,
           ],
         );
         return { email: row.canonical_email };
@@ -241,8 +250,9 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
 
   async consumeVerificationToken(input: {
     readonly tokenHash: string;
+    readonly browserBindingHash?: string;
     readonly now: Date;
-  }): Promise<boolean> {
+  }): Promise<VerificationOutcome> {
     return this.client.transaction(async (transaction) => {
       const accounts = await transaction.query(
         `
@@ -262,12 +272,14 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
         (account.status !== 'pending_verification' &&
           account.status !== 'active')
       ) {
-        return false;
+        return INVALID;
       }
+      const accountId: string = account.id;
 
       const tokens = await transaction.query(
         `
-          SELECT id, expires_at, consumed_at, consumed_reason
+          SELECT id, expires_at, consumed_at, consumed_reason,
+                 browser_binding_hash, signed_in_at
           FROM email_verification_tokens
           WHERE user_account_id = $1 AND token_hash = $2
           FOR UPDATE
@@ -286,20 +298,50 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
         (token.consumed_reason !== null &&
           token.consumed_reason !== 'verified' &&
           token.consumed_reason !== 'superseded') ||
+        (token.browser_binding_hash !== null &&
+          typeof token.browser_binding_hash !== 'string') ||
+        (token.signed_in_at !== null &&
+          !(token.signed_in_at instanceof Date)) ||
         token.expires_at.getTime() <= input.now.getTime()
       ) {
-        return false;
+        return INVALID;
       }
 
-      if (account.status === 'active') {
-        return (
-          token.consumed_at instanceof Date &&
-          token.consumed_reason === 'verified'
+      const signInIfBound = async (): Promise<VerificationOutcome> => {
+        // Verification Sign-in (ADR-0054): only the bound browser, only once.
+        // The conditional update makes two racing requests claim it once.
+        if (
+          input.browserBindingHash === undefined ||
+          token.browser_binding_hash !== input.browserBindingHash ||
+          token.signed_in_at !== null
+        ) {
+          return VERIFIED;
+        }
+        const claimed = await transaction.query(
+          `
+            UPDATE email_verification_tokens
+            SET signed_in_at = $2
+            WHERE id = $1
+              AND signed_in_at IS NULL
+              AND consumed_reason = 'verified'
+            RETURNING id
+          `,
+          [token.id, input.now],
         );
+        return claimed.length > 0
+          ? { kind: 'signed_in', userId: accountId }
+          : VERIFIED;
+      };
+
+      if (account.status === 'active') {
+        return token.consumed_at instanceof Date &&
+          token.consumed_reason === 'verified'
+          ? signInIfBound()
+          : INVALID;
       }
 
       if (token.consumed_at !== null || token.consumed_reason !== null) {
-        return false;
+        return INVALID;
       }
 
       const consumed = await transaction.query(
@@ -312,7 +354,7 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
         [token.id, input.now],
       );
       if (consumed.length === 0) {
-        return false;
+        return INVALID;
       }
 
       const activated = await transaction.query(
@@ -324,7 +366,7 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
         `,
         [account.id, input.now],
       );
-      return activated.length > 0;
+      return activated.length > 0 ? signInIfBound() : INVALID;
     });
   }
 

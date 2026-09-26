@@ -1,6 +1,6 @@
 # Rotating refresh-session boundary
 
-Status: accepted
+Status: accepted (amended by ADR-0054: a Verification Sign-in also creates a Refresh Session)
 
 Each successful AIHUB login creates an independent durable Refresh Session and
 Refresh Token Family. Refresh rotation is strict and atomic: reuse of any

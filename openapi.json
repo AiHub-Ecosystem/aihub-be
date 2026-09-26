@@ -5998,6 +5998,11 @@
                     "maxLength": 128,
                     "description": "12–128 Unicode code points; no normalization.",
                     "type": "string"
+                  },
+                  "browser_binding": {
+                    "pattern": "^[A-Za-z0-9_-]{43}$",
+                    "description": "Signup Browser Binding: 32 random bytes, base64url. Optional; binds the issued verification token to the requesting browser.",
+                    "type": "string"
                   }
                 }
               }
@@ -6196,6 +6201,11 @@
                     "minLength": 1,
                     "maxLength": 512,
                     "type": "string"
+                  },
+                  "browser_binding": {
+                    "pattern": "^[A-Za-z0-9_-]{43}$",
+                    "description": "Signup Browser Binding: 32 random bytes, base64url. Optional; binds the issued verification token to the requesting browser.",
+                    "type": "string"
                   }
                 }
               }
@@ -6203,8 +6213,66 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Verification Sign-in (ADR-0054): the request carried the Signup Browser Binding of the browser that requested this token, which had not signed in yet. Same session as a login.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              },
+              "Set-Cookie": {
+                "description": "The host-only refresh cookie for the new session.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["access_token", "token_type", "expires_in"],
+                      "properties": {
+                        "access_token": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "token_type": {
+                          "const": "Bearer",
+                          "type": "string"
+                        },
+                        "expires_in": {
+                          "const": 900,
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "204": {
-            "description": "Email verified; re-submitting the same unexpired token that activated the still-active account succeeds"
+            "description": "Email verified without signing in: no binding, another browser, or the token already signed in. Re-submitting the same unexpired token that activated the still-active account also succeeds."
           },
           "400": {
             "$ref": "#/components/responses/Error400"
@@ -6241,6 +6309,11 @@
                   "email": {
                     "minLength": 1,
                     "maxLength": 320,
+                    "type": "string"
+                  },
+                  "browser_binding": {
+                    "pattern": "^[A-Za-z0-9_-]{43}$",
+                    "description": "Signup Browser Binding: 32 random bytes, base64url. Optional; binds the issued verification token to the requesting browser.",
                     "type": "string"
                   }
                 }

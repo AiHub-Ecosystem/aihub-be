@@ -524,6 +524,25 @@ describe('buildOpenApiDocument', () => {
     expect(JSON.stringify(member?.patch?.requestBody)).not.toContain('owner');
   });
 
+  it('documents Verification Sign-in on verify-email and the optional Signup Browser Binding', () => {
+    const doc = build();
+    const verify = doc.paths['/v1/auth/verify-email']?.post;
+
+    expect(Object.keys(verify?.responses ?? {})).toEqual(
+      expect.arrayContaining(['200', '204']),
+    );
+    expect(JSON.stringify(verify?.responses?.['200'])).toContain('Set-Cookie');
+    for (const path of [
+      '/v1/auth/register',
+      '/v1/auth/resend-verification',
+      '/v1/auth/verify-email',
+    ]) {
+      expect(
+        requestProperty(doc.paths[path]?.post, 'browser_binding'),
+      ).toMatchObject({ type: 'string', pattern: '^[A-Za-z0-9_-]{43}$' });
+    }
+  });
+
   it('documents local auth as unauthenticated and keeps token/password fields out of responses', () => {
     const doc = build();
     const register = doc.paths['/v1/auth/register']?.post;

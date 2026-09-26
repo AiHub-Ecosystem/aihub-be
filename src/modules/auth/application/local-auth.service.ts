@@ -21,7 +21,10 @@ import {
   LOCAL_AUTH_REPOSITORY,
   type LocalAuthRepositoryPort,
 } from './local-auth-repository.port';
-import { RefreshRotationCommittedError } from './local-auth-service.port';
+import {
+  type IssuedSession,
+  RefreshRotationCommittedError,
+} from './local-auth-service.port';
 import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
@@ -125,6 +128,7 @@ export class LocalAuthService {
   async register(
     input: RegistrationInput,
     ip: string,
+    browserBinding?: string,
   ): Promise<RegisteredLocalAccount> {
     let normalized: NormalizedRegistration;
     try {
@@ -160,6 +164,7 @@ export class LocalAuthService {
         tokenId: issued.id,
         tokenHash: issued.hash,
         tokenExpiresAt: issued.expiresAt,
+        ...this.bindingHash(browserBinding),
         now,
       });
     } catch (error) {
@@ -195,25 +200,44 @@ export class LocalAuthService {
     };
   }
 
-  async verify(token: string, ip: string): Promise<void> {
+  async verify(
+    token: string,
+    ip: string,
+    browserBinding?: string,
+  ): Promise<IssuedSession | undefined> {
     await this.enforceRateLimits([
       { scope: 'verify_ip', key: ip, limit: 10, windowMs: 5 * 60 * 1000 },
     ]);
 
-    const valid = await this.repository.consumeVerificationToken({
+    const now = this.clock.now();
+    const outcome = await this.repository.consumeVerificationToken({
       tokenHash: this.tokenIssuer.hash(token),
-      now: this.clock.now(),
+      ...this.bindingHash(browserBinding),
+      now,
     });
-    if (!valid) {
+    if (outcome.kind === 'invalid') {
       throw new AppError({
         code: 'AUTH_VERIFICATION_TOKEN_INVALID',
         message: 'Verification token is invalid',
         retryable: false,
       });
     }
+    if (outcome.kind === 'verified') {
+      return undefined;
+    }
+
+    // ponytail: the sign-in is claimed before the session is written, so a
+    // failure here spends it; the customer can still log in with a password.
+    // Upgrade: pass a pre-issued refresh token to the repository so the claim
+    // and the refresh-session insert commit in one transaction.
+    return this.issueSession(outcome.userId, now);
   }
 
-  async resend(email: string, ip: string): Promise<void> {
+  async resend(
+    email: string,
+    ip: string,
+    browserBinding?: string,
+  ): Promise<void> {
     let normalizedEmail: string;
     try {
       normalizedEmail = normalizeEmail(email);
@@ -243,6 +267,7 @@ export class LocalAuthService {
       tokenId: issued.id,
       tokenHash: issued.hash,
       tokenExpiresAt: issued.expiresAt,
+      ...this.bindingHash(browserBinding),
       now,
     });
     if (target === undefined) {
@@ -349,11 +374,7 @@ export class LocalAuthService {
   async login(
     input: { readonly email: string; readonly password: string },
     ip: string,
-  ): Promise<{
-    readonly accessToken: string;
-    readonly expiresIn: number;
-    readonly refreshToken: string;
-  }> {
+  ): Promise<IssuedSession> {
     let normalized: { readonly email: string; readonly password: string };
     try {
       normalized = normalizeLogin(input);
@@ -396,11 +417,18 @@ export class LocalAuthService {
       });
     }
 
-    const now = this.clock.now();
-    const accessToken = await this.accessTokenIssuer.issue(identity.userId);
+    return this.issueSession(identity.userId, this.clock.now());
+  }
+
+  /** The one way a Refresh Session is created: login or Verification Sign-in. */
+  private async issueSession(
+    userId: string,
+    now: Date,
+  ): Promise<IssuedSession> {
+    const accessToken = await this.accessTokenIssuer.issue(userId);
     const refreshToken = this.refreshTokenIssuer.issue(now);
     await this.repository.createRefreshSession({
-      userId: identity.userId,
+      userId,
       token: refreshToken,
       issuedAt: now,
     });
@@ -411,14 +439,19 @@ export class LocalAuthService {
     };
   }
 
+  /** The Signup Browser Binding is stored and compared only as a hash. */
+  private bindingHash(browserBinding: string | undefined): {
+    readonly browserBindingHash?: string;
+  } {
+    return browserBinding === undefined
+      ? {}
+      : { browserBindingHash: this.tokenIssuer.hash(browserBinding) };
+  }
+
   async refresh(
     rawToken: string | undefined,
     ip: string,
-  ): Promise<{
-    readonly accessToken: string;
-    readonly expiresIn: number;
-    readonly refreshToken: string;
-  }> {
+  ): Promise<IssuedSession> {
     if (rawToken === undefined || rawToken.length === 0) {
       await this.enforceRefreshFailureLimits(ip);
       throw invalidRefreshToken();

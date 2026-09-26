@@ -8,8 +8,20 @@ export interface RegisterLocalAccountInput {
   readonly tokenId: string;
   readonly tokenHash: string;
   readonly tokenExpiresAt: Date;
+  /** Hash of the requesting browser's Signup Browser Binding, if any. */
+  readonly browserBindingHash?: string;
   readonly now: Date;
 }
+
+/**
+ * `verified`: the email is (or already was) verified; no session.
+ * `signed_in`: the Signup Browser Binding matched and this token's one
+ * Verification Sign-in was claimed for `userId`.
+ */
+export type VerificationOutcome =
+  | { readonly kind: 'invalid' }
+  | { readonly kind: 'verified' }
+  | { readonly kind: 'signed_in'; readonly userId: string };
 
 export interface ResendVerificationTarget {
   readonly email: string;
@@ -82,6 +94,7 @@ export interface LocalAuthRepositoryPort {
     readonly tokenId: string;
     readonly tokenHash: string;
     readonly tokenExpiresAt: Date;
+    readonly browserBindingHash?: string;
     readonly now: Date;
   }): Promise<ResendVerificationTarget | undefined>;
   issuePasswordResetToken(input: {
@@ -93,8 +106,9 @@ export interface LocalAuthRepositoryPort {
   }): Promise<PasswordResetTarget | undefined>;
   consumeVerificationToken(input: {
     readonly tokenHash: string;
+    readonly browserBindingHash?: string;
     readonly now: Date;
-  }): Promise<boolean>;
+  }): Promise<VerificationOutcome>;
   checkPasswordResetToken(input: {
     readonly tokenHash: string;
     readonly now: Date;

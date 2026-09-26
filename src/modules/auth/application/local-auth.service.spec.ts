@@ -12,6 +12,7 @@ import type {
   PasswordResetTarget,
   RefreshTokenRecord,
   ResendVerificationTarget,
+  VerificationOutcome,
 } from './local-auth-repository.port';
 import { LocalAuthService } from './local-auth.service';
 import type { PasswordHasherPort } from './password-hasher.port';
@@ -60,14 +61,20 @@ class FakeRepository implements LocalAuthRepositoryPort {
     this.registered.push(input);
   }
 
-  async rotateVerificationToken(): Promise<
-    ResendVerificationTarget | undefined
-  > {
+  resendInputs: unknown[] = [];
+  verificationInputs: unknown[] = [];
+  verificationOutcome: VerificationOutcome = { kind: 'verified' };
+
+  async rotateVerificationToken(
+    input: unknown,
+  ): Promise<ResendVerificationTarget | undefined> {
+    this.resendInputs.push(input);
     return this.resendTarget;
   }
 
-  async consumeVerificationToken(): Promise<boolean> {
-    return this.consumed;
+  async consumeVerificationToken(input: unknown): Promise<VerificationOutcome> {
+    this.verificationInputs.push(input);
+    return this.consumed ? this.verificationOutcome : { kind: 'invalid' };
   }
 
   async checkPasswordResetToken() {
@@ -469,6 +476,66 @@ describe('LocalAuthService', () => {
       local.verify('bad-token', '203.0.113.7'),
     ).rejects.toMatchObject({
       code: 'AUTH_VERIFICATION_TOKEN_INVALID',
+    });
+  });
+
+  describe('Verification Sign-in', () => {
+    const binding = 'b'.repeat(43);
+
+    it('passes only the hash of the Signup Browser Binding to storage', async () => {
+      const { local, repository } = service();
+
+      await local.register(
+        {
+          email: 'person@example.com',
+          username: 'person_01',
+          password: 'correct horse battery',
+        },
+        '203.0.113.7',
+        binding,
+      );
+      await local.resend('person@example.com', '203.0.113.7', binding);
+      await local.verify('opaque-token', '203.0.113.7', binding);
+
+      for (const input of [
+        repository.registered[0],
+        repository.resendInputs[0],
+        repository.verificationInputs[0],
+      ]) {
+        expect(input).toMatchObject({ browserBindingHash: `hash:${binding}` });
+        expect(JSON.stringify(input)).not.toContain(`"${binding}"`);
+      }
+    });
+
+    it('returns no session when storage only verifies', async () => {
+      const { local, repository } = service();
+
+      await expect(
+        local.verify('opaque-token', '203.0.113.7'),
+      ).resolves.toBeUndefined();
+      expect(repository.verificationInputs[0]).not.toHaveProperty(
+        'browserBindingHash',
+      );
+      expect(repository.refreshTokens.size).toBe(0);
+    });
+
+    it('issues a login-equivalent session when storage grants the sign-in', async () => {
+      const { local, repository } = service();
+      repository.verificationOutcome = {
+        kind: 'signed_in',
+        userId: 'usr_01J00000000000000000000000',
+      };
+
+      await expect(
+        local.verify('opaque-token', '203.0.113.7', binding),
+      ).resolves.toEqual({
+        accessToken: 'jwt-for-usr_01J00000000000000000000000',
+        expiresIn: 900,
+        refreshToken: 'refresh-1',
+      });
+      expect([...repository.refreshTokens.values()]).toEqual([
+        expect.objectContaining({ userId: 'usr_01J00000000000000000000000' }),
+      ]);
     });
   });
 

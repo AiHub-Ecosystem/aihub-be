@@ -23,6 +23,7 @@ import {
   type PasswordResetResult,
   type PasswordResetTarget,
   type RefreshTokenRecord,
+  type VerificationOutcome,
 } from '../application/local-auth-repository.port';
 import {
   PASSWORD_HASHER,
@@ -66,18 +67,43 @@ class RepositoryFake implements LocalAuthRepositoryPort {
     kind: 'reset',
   };
 
-  async register(): Promise<void> {
+  registeredBindingHashes: (string | undefined)[] = [];
+  resentBindingHashes: (string | undefined)[] = [];
+  /** The binding hash the fake's open token was issued to, if any. */
+  boundBindingHash: string | undefined;
+  signedIn = false;
+
+  async register(input: {
+    readonly browserBindingHash?: string;
+  }): Promise<void> {
     if (this.registerConflict) {
       throw new AuthIdentityConflictError();
     }
+    this.registeredBindingHashes.push(input.browserBindingHash);
   }
 
-  async rotateVerificationToken() {
+  async rotateVerificationToken(input: {
+    readonly browserBindingHash?: string;
+  }) {
+    this.resentBindingHashes.push(input.browserBindingHash);
     return this.target;
   }
 
-  async consumeVerificationToken(): Promise<boolean> {
-    return this.consumed;
+  async consumeVerificationToken(input: {
+    readonly browserBindingHash?: string;
+  }): Promise<VerificationOutcome> {
+    if (!this.consumed) {
+      return { kind: 'invalid' };
+    }
+    if (
+      !this.signedIn &&
+      input.browserBindingHash !== undefined &&
+      input.browserBindingHash === this.boundBindingHash
+    ) {
+      this.signedIn = true;
+      return { kind: 'signed_in', userId: 'usr_01J00000000000000000000000' };
+    }
+    return { kind: 'verified' };
   }
 
   async checkPasswordResetToken() {
@@ -408,6 +434,118 @@ describe('local auth HTTP boundary', () => {
     });
     expect(replay.statusCode).toBe(204);
     expect(replay.payload).toBe('');
+  });
+
+  describe('Verification Sign-in', () => {
+    const binding = 'b'.repeat(43);
+
+    beforeEach(() => {
+      repository.consumed = true;
+      repository.signedIn = false;
+      repository.boundBindingHash = `hash:${binding}`;
+      repository.registeredBindingHashes = [];
+      repository.resentBindingHashes = [];
+    });
+
+    it('stores only the hash of the binding sent with register and resend', async () => {
+      await app.inject({
+        method: 'POST',
+        url: '/v1/auth/register',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          email: 'bound@example.com',
+          username: 'bound_01',
+          password: 'correct horse battery',
+          browser_binding: binding,
+        },
+      });
+      await app.inject({
+        method: 'POST',
+        url: '/v1/auth/resend-verification',
+        headers: { 'content-type': 'application/json' },
+        payload: { email: 'bound@example.com', browser_binding: binding },
+      });
+
+      expect(repository.registeredBindingHashes).toEqual([`hash:${binding}`]);
+      expect(repository.resentBindingHashes).toEqual([`hash:${binding}`]);
+    });
+
+    it('signs in the signup browser once when the binding matches', async () => {
+      const first = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/verify-email',
+        headers: { 'content-type': 'application/json' },
+        payload: { token: 'opaque-token', browser_binding: binding },
+      });
+
+      expect(first.statusCode).toBe(200);
+      expect(first.headers['cache-control']).toBe('no-store');
+      expect(first.json()).toEqual({
+        data: {
+          access_token: 'ey.fake.access',
+          token_type: 'Bearer',
+          expires_in: 900,
+        },
+        meta: { request_id: expect.stringMatching(/^req_/) },
+      });
+      const setCookie = first.headers['set-cookie'];
+      expect(Array.isArray(setCookie) ? setCookie : [setCookie]).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(
+            /^__Host-aihub_refresh=.+; Max-Age=2592000; Path=\/; HttpOnly; Secure; SameSite=Strict$/,
+          ),
+        ]),
+      );
+      expect(first.payload).not.toContain(binding);
+
+      const replay = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/verify-email',
+        headers: { 'content-type': 'application/json' },
+        payload: { token: 'opaque-token', browser_binding: binding },
+      });
+      expect(replay.statusCode).toBe(204);
+      expect(replay.headers['set-cookie']).toBeUndefined();
+    });
+
+    it.each([
+      ['no binding', {}],
+      ['another browser binding', { browser_binding: 'c'.repeat(43) }],
+    ])('only verifies with %s', async (_name, extra) => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/verify-email',
+        headers: { 'content-type': 'application/json' },
+        payload: { token: 'opaque-token', ...extra },
+      });
+
+      expect(response.statusCode).toBe(204);
+      expect(response.payload).toBe('');
+      expect(response.headers['set-cookie']).toBeUndefined();
+    });
+
+    it.each([
+      ['/v1/auth/verify-email', { token: 'opaque-token' }],
+      ['/v1/auth/resend-verification', { email: 'bound@example.com' }],
+      [
+        '/v1/auth/register',
+        {
+          email: 'bound@example.com',
+          username: 'bound_01',
+          password: 'correct horse battery',
+        },
+      ],
+    ])('rejects a malformed binding on %s', async (url, body) => {
+      const response = await app.inject({
+        method: 'POST',
+        url,
+        headers: { 'content-type': 'application/json' },
+        payload: { ...body, browser_binding: 'too-short' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe('INVALID_REQUEST');
+    });
   });
 
   const passwordBoundaryRequests = [

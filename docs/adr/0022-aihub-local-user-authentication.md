@@ -1,6 +1,6 @@
 # ADR-0022: AIHUB-owned local user authentication alongside the sandbox identity boundary
 
-- Status: Accepted
+- Status: Accepted (amended by ADR-0054: verification may also create a session, in the signup browser only)
 
 ## Amendment for issue #64 (2026-09-19)
 

@@ -61,25 +61,32 @@ async function insertToken(options: {
   readonly hash: string;
   readonly expiresAt?: Date;
   readonly createdAt?: Date;
+  readonly bindingHash?: string;
 }): Promise<string> {
   const id = `evt_${ulid()}`;
   await pool.query(
     `INSERT INTO email_verification_tokens (
-       id, user_account_id, token_hash, expires_at, consumed_at, created_at
-     ) VALUES ($1, $2, $3, $4, NULL, $5)`,
+       id, user_account_id, token_hash, expires_at, consumed_at, created_at,
+       browser_binding_hash
+     ) VALUES ($1, $2, $3, $4, NULL, $5, $6)`,
     [
       id,
       options.userId,
       options.hash,
       options.expiresAt ?? EXPIRES_AT,
       options.createdAt ?? NOW,
+      options.bindingHash ?? null,
     ],
   );
   return id;
 }
 
 async function verify(hash: string, now = NOW): Promise<boolean> {
-  return repository.consumeVerificationToken({ tokenHash: hash, now });
+  const outcome = await repository.consumeVerificationToken({
+    tokenHash: hash,
+    now,
+  });
+  return outcome.kind !== 'invalid';
 }
 
 async function beginLockHolderTransaction() {
@@ -360,5 +367,178 @@ describe('local email verification against PostgreSQL', () => {
       if (resend !== undefined) await resend.catch(() => undefined);
       if (verification !== undefined) await verification.catch(() => undefined);
     }
+  });
+
+  describe('Verification Sign-in', () => {
+    it('stores the binding hash on register and resend tokens', async () => {
+      const registerBinding = tokenHash();
+      await repository.register({
+        email: 'bound@example.com',
+        username: 'bound_01',
+        passwordHash: '$argon2id$v=19$m=65536,t=3,p=1$c2FsdHNhbHQ$aGFzaA',
+        tokenId: `evt_${ulid()}`,
+        tokenHash: tokenHash(),
+        tokenExpiresAt: EXPIRES_AT,
+        browserBindingHash: registerBinding,
+        now: NOW,
+      });
+      const resendBinding = tokenHash();
+      await repository.rotateVerificationToken({
+        email: 'bound@example.com',
+        tokenId: `evt_${ulid()}`,
+        tokenHash: tokenHash(),
+        tokenExpiresAt: EXPIRES_AT,
+        browserBindingHash: resendBinding,
+        now: new Date(NOW.getTime() + 1_000),
+      });
+
+      const { rows } = await pool.query<{
+        browser_binding_hash: string;
+        consumed_reason: string | null;
+      }>(
+        `SELECT browser_binding_hash, consumed_reason
+         FROM email_verification_tokens ORDER BY created_at`,
+      );
+      expect(rows).toEqual([
+        {
+          browser_binding_hash: registerBinding,
+          consumed_reason: 'superseded',
+        },
+        { browser_binding_hash: resendBinding, consumed_reason: null },
+      ]);
+    });
+
+    it('signs in once, only with the matching binding, even after an earlier verification', async () => {
+      const userId = await seedAccount();
+      const hash = tokenHash();
+      const binding = tokenHash();
+      await insertToken({ userId, hash, bindingHash: binding });
+
+      await expect(
+        repository.consumeVerificationToken({ tokenHash: hash, now: NOW }),
+      ).resolves.toEqual({ kind: 'verified' });
+      await expect(
+        repository.consumeVerificationToken({
+          tokenHash: hash,
+          browserBindingHash: tokenHash(),
+          now: NOW,
+        }),
+      ).resolves.toEqual({ kind: 'verified' });
+      await expect(
+        repository.consumeVerificationToken({
+          tokenHash: hash,
+          browserBindingHash: binding,
+          now: NOW,
+        }),
+      ).resolves.toEqual({ kind: 'signed_in', userId });
+      await expect(
+        repository.consumeVerificationToken({
+          tokenHash: hash,
+          browserBindingHash: binding,
+          now: NOW,
+        }),
+      ).resolves.toEqual({ kind: 'verified' });
+    });
+
+    it('lets exactly one of two concurrent matching requests sign in', async () => {
+      const userId = await seedAccount();
+      const hash = tokenHash();
+      const binding = tokenHash();
+      await insertToken({ userId, hash, bindingHash: binding });
+
+      const outcomes = await Promise.all([
+        repository.consumeVerificationToken({
+          tokenHash: hash,
+          browserBindingHash: binding,
+          now: NOW,
+        }),
+        repository.consumeVerificationToken({
+          tokenHash: hash,
+          browserBindingHash: binding,
+          now: NOW,
+        }),
+      ]);
+
+      expect(outcomes.map((outcome) => outcome.kind).sort()).toEqual([
+        'signed_in',
+        'verified',
+      ]);
+    });
+
+    it('never signs in with a superseded, expired, unbound, or disabled-account token', async () => {
+      const binding = tokenHash();
+
+      const superseded = await seedAccount(
+        'pending_verification',
+        'a@example.com',
+      );
+      const oldHash = tokenHash();
+      await insertToken({
+        userId: superseded,
+        hash: oldHash,
+        bindingHash: binding,
+      });
+      await repository.rotateVerificationToken({
+        email: 'a@example.com',
+        tokenId: `evt_${ulid()}`,
+        tokenHash: tokenHash(),
+        tokenExpiresAt: EXPIRES_AT,
+        now: new Date(NOW.getTime() + 1_000),
+      });
+      await expect(
+        repository.consumeVerificationToken({
+          tokenHash: oldHash,
+          browserBindingHash: binding,
+          now: NOW,
+        }),
+      ).resolves.toEqual({ kind: 'invalid' });
+
+      const expired = await seedAccount(
+        'pending_verification',
+        'b@example.com',
+      );
+      const expiredHash = tokenHash();
+      await insertToken({
+        userId: expired,
+        hash: expiredHash,
+        bindingHash: binding,
+      });
+      await expect(
+        repository.consumeVerificationToken({
+          tokenHash: expiredHash,
+          browserBindingHash: binding,
+          now: EXPIRES_AT,
+        }),
+      ).resolves.toEqual({ kind: 'invalid' });
+
+      const unbound = await seedAccount(
+        'pending_verification',
+        'c@example.com',
+      );
+      const unboundHash = tokenHash();
+      await insertToken({ userId: unbound, hash: unboundHash });
+      await expect(
+        repository.consumeVerificationToken({
+          tokenHash: unboundHash,
+          browserBindingHash: binding,
+          now: NOW,
+        }),
+      ).resolves.toEqual({ kind: 'verified' });
+
+      const disabled = await seedAccount('disabled', 'd@example.com');
+      const disabledHash = tokenHash();
+      await insertToken({
+        userId: disabled,
+        hash: disabledHash,
+        bindingHash: binding,
+      });
+      await expect(
+        repository.consumeVerificationToken({
+          tokenHash: disabledHash,
+          browserBindingHash: binding,
+          now: NOW,
+        }),
+      ).resolves.toEqual({ kind: 'invalid' });
+    });
   });
 });

@@ -373,9 +373,14 @@ function localAuthPathItems(
     ...authErrorResponses(groupedErrors, [400, 401, 429, 500]),
   };
   const verifyResponses = {
+    '200': {
+      ...loginResponses['200'],
+      description:
+        'Verification Sign-in (ADR-0054): the request carried the Signup Browser Binding of the browser that requested this token, which had not signed in yet. Same session as a login.',
+    },
     '204': {
       description:
-        'Email verified; re-submitting the same unexpired token that activated the still-active account succeeds',
+        'Email verified without signing in: no binding, another browser, or the token already signed in. Re-submitting the same unexpired token that activated the still-active account also succeeds.',
     },
     ...authErrorResponses(groupedErrors, [400, 429, 500]),
   };
