@@ -9,8 +9,8 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 ## Vocabulary
 
 - **Organization:** the tenant that owns API keys, identity configuration, quotas, usage, and downstream policy.
-- **Organization Identity Configuration:** the Organization-owned settings AIHUB uses to verify User Assertions: issuer, a JWKS URL or inline public JWKS, allowed algorithms, maximum assertion TTL, and active/disabled status.
-- **Organization Identity Readiness:** whether an Organization has an active identity configuration for User Assertions; it reflects saved configuration state, not current JWKS endpoint health.
+- **Organization Identity Configuration:** the Organization-owned settings AIHUB uses to verify Signed User Assertions: issuer, a JWKS URL or inline public JWKS, allowed algorithms, maximum assertion TTL, and active/disabled status.
+- **Organization Identity Readiness:** whether an Organization has an active identity configuration, and therefore verifies End-User IDs through Signed User Assertions rather than accepting Declared User IDs; it reflects saved configuration state, not current JWKS endpoint health, and it is not a precondition for grading.
 - **Customer Web:** the user-facing AIHUB console in the `AiHub-Frontend` repository, served at `aihubproduction.com`, which advertises public account registration and Self-serve Organization creation. Its existing Clerk-backed sandbox flow remains transitional until [issue #94](https://github.com/AiHub-Ecosystem/aihub-be/issues/94) cuts over; the separate sandbox demo keeps its own server-held Sandbox API key.
 - **Customer User:** a person authenticated by the Customer Web; this is not an AIHUB account.
 - **AIHUB User Account:** a credential-bearing account managed by AIHUB for user-facing access; it is distinct from an Organization and from the existing Customer User term until the Customer Web boundary is migrated.
@@ -20,8 +20,8 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Password policy:** the local Auth Identity password rule that accepts 12 through 128 Unicode code points, counted without normalization.
 - **Auth identity conflict:** the domain result of a registration attempt whose normalized email or username is already in use; it is distinct from malformed input.
 - **Username:** the normalized, unique account identifier owned by an AIHUB User Account; it is separate from the Auth Identity used to authenticate.
-- **User Access JWT:** a short-lived RS256 token issued by AIHUB after local credential authentication for user-facing APIs or the Customer Web BFF; it is distinct from `X-API-Key`, User Assertions, and internal downstream JWTs, carries the User Account ID as `sub`, and does not carry organization or mutable credential data.
-- **Bearer boundary:** the user-facing authentication boundary that accepts an AIHUB User Access JWT in `Authorization: Bearer`; it is separate from the `X-API-Key` and `X-User-Assertion` grading boundaries.
+- **User Access JWT:** a short-lived RS256 token issued by AIHUB after local credential authentication for user-facing APIs or the Customer Web BFF; it is distinct from `X-API-Key`, User Identities, and internal downstream JWTs, carries the User Account ID as `sub`, and does not carry organization or mutable credential data.
+- **Bearer boundary:** the user-facing authentication boundary that accepts an AIHUB User Access JWT in `Authorization: Bearer`; it is separate from the `X-API-Key` and `X-User-Identity` grading boundaries.
 - **Refresh Token:** a renewable login credential paired with a User Access JWT; it can be rotated and revoked without changing the user account or API key.
 - **Refresh Session:** the durable login session created by one successful login; it owns one Refresh Token Family and is independent from the User Account and User Access JWT.
 - **Refresh Token Family:** the ordered lineage of rotated Refresh Token versions for one Refresh Session; reusing any previous version revokes the entire family.
@@ -59,7 +59,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Server-side session:** a Customer Web session represented to the browser only by a secure, HttpOnly, same-site cookie; provider access tokens do not live in browser storage.
 - **Sandbox API key:** the single server-held API key for the dedicated sandbox AIHUB Organization; it is used by the Customer Web BFF and is never sent to a browser.
 - **Membership decision:** the active/disabled authorization result for a Customer User; the Customer Web evaluates it on every BFF request and may cache it for no more than five minutes in the sandbox MVP.
-- **Per-request assertion:** a short-lived sandbox User Assertion minted immediately before one grading call; it is never persisted or reused for another request.
+- **Per-request assertion:** a short-lived sandbox Signed User Assertion minted immediately before one grading call; it is never persisted or reused for another request.
 - **Pass-through audio:** uploaded Speaking audio streamed from the Customer Web BFF to AIHUB and discarded after the response; it is not an MVP audio asset.
 - **Sandbox-only deployment:** the first Customer Web release is configured only for AIHUB's sandbox hostname and credential; Production is absent until the production bridge is approved.
 - **Live grading:** an authenticated Speaking grading request that crosses the Customer Web BFF boundary; the anonymous mock preview is not live grading.
@@ -75,10 +75,13 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Environment:** the request tier derived from its deployment hostname; an API key may be restricted to a set of allowed environments.
 - **Sandbox environment:** AIHUB's fourth, hostname-bound request tier for controlled testing; it has its own sandbox organization, request-control configuration, Postgres database, Redis logical database, and application container while sharing downstream services and the deployment secret realm with production.
 - **Deployment secret realm:** the environment scope used to select runtime credentials; `sandbox` is not a separate realm and sandbox traffic uses the enclosing deployment's credentials.
-- **User Assertion:** a short-lived organization-signed assertion in `X-User-Assertion` for user-scoped operations.
+- **User Identity:** the value of `X-User-Identity` on user-scoped operations; its form is chosen by Organization Identity Readiness, never by the shape of the value.
+- **Signed User Assertion:** the User Identity form for an Organization with an active identity configuration: a short-lived organization-signed JWT verified through that Organization's JWKS. A plain value sent by such an Organization is rejected, never downgraded.
+- **Declared User ID:** the User Identity form for an Organization without an active identity configuration: an opaque identifier the Organization's API-key holder asserts without a signature. AIHUB does not interpret it; an email address is accepted but stored and forwarded as-is.
+- **End-User ID:** the identifier AIHUB resolves from a User Identity, in either form, for metering and downstream `user_id`/`sub`; it is the Organization's own end user, distinct from a Customer User, an AIHUB User Account, and a Username.
 - **Internal JWT:** a short-lived AIHUB-signed token used only on AIHUB-to-service calls.
-- **Runtime secret:** a credential needed by a running service to call a dependency; it is not an API-key hash or a user assertion.
-- **Machine identity:** the service identity used to access infrastructure such as Vault; it is distinct from end-user identity and User Assertion.
+- **Runtime secret:** a credential needed by a running service to call a dependency; it is not an API-key hash or a User Identity.
+- **Machine identity:** the service identity used to access infrastructure such as Vault; it is distinct from End-User ID and User Identity.
 - **Secret source of truth:** Vault owns runtime secret values, while Postgres remains the durable source of truth for control-plane data such as API-key hashes.
 - **AI Service:** a downstream domain service behind AIHUB, such as AI Writing or AI Speaking.
 - **Model Provider:** an upstream foundational model service invoked by an AI Service; this term does not mean an AI Writing or AI Speaking service.
@@ -124,7 +127,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - Membership mutations use the immutable public `username` as the target identifier. An admin may change or disable a target whose current role is `member`, including promoting that target to `admin`; only an owner may change or disable a current owner or admin.
 - The membership mutation boundary uses `PATCH /v1/organizations/:organizationId/members/:username` with a role body for role changes and `DELETE` on the same resource to disable access. Both return the current membership in the shared success envelope; a disabled membership is not reactivated by these endpoints and invitation acceptance remains the reactivation path.
 - Owner transfer is a dedicated atomic command: the target becomes `owner` and the initiating owner becomes `admin` in one transaction. A two-request promote/demote sequence is not a transfer substitute.
-- The transfer command is the only path that promotes a membership to `owner`; ordinary role PATCH rejects `role: owner`. Membership disable affects Bearer membership/management authorization at the next check and does not change the separate `X-API-Key`, User Assertion, or downstream grading boundaries.
+- The transfer command is the only path that promotes a membership to `owner`; ordinary role PATCH rejects `role: owner`. Membership disable affects Bearer membership/management authorization at the next check and does not change the separate `X-API-Key`, User Identity, or downstream grading boundaries.
 - Pending Organization Invitations are separate from memberships. At most one unconsumed invitation exists per organization and normalized email; resend invalidates the previous token, and acceptance uses the existing registration → verification → login path before creating or reactivating membership.
 - Invitation sending is admitted only after caller authorization and email normalization: the configured limits are 5 attempts per 15 minutes per inviting User Account, 20 per 15 minutes per Organization, and 3 per 24 hours per normalized invited email shared across Organizations. The checks run in that order; a rejected attempt has no durable or delivery side effect and exposes only the generic rate-limited result, an idempotency replay spends no new allowance, and an email-delivery failure does not refund the attempt.
 - The open-invitation view is read-only metadata for active owners and admins of the named Organization. It returns actionable pending invitations—unconsumed and unexpired at the request's received-at time—in deterministic order, identifies the issuer by immutable username, and never exposes account IDs, inviter email, invite tokens, or token hashes; members, non-members, disabled callers, and suspended Organizations receive the Safe Authorization Denial. The initial view is intentionally unpaginated; measured invitation volume must justify a follow-up contract.
@@ -179,7 +182,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - An inactive account presented with an otherwise valid User Access JWT maps to the same invalid-Bearer error; no account-state-specific public code is added.
 - The User Access JWT response is `Cache-Control: no-store`; the #65 boundary accepts one compact token from the Bearer header only, never a cookie, query parameter, or duplicate header.
 - Login reads one durable projection of Auth Identity plus its owning User Account (`userId`, status, password hash); organization membership is not part of credential authentication.
-- User Access JWTs authenticate user-facing/BFF boundaries; grading routes continue to use the organization API-key and user-assertion boundaries until a separate authorization decision changes them.
+- User Access JWTs authenticate user-facing/BFF boundaries; grading routes continue to use the organization API-key and User Identity boundaries until a separate authorization decision changes them.
 - Refresh Tokens are renewable credentials with explicit rotation and revocation; they are not interchangeable with API keys or User Access JWTs.
 - Each successful login creates a separate Refresh Session and Token Family; logout revokes only the family represented by the current cookie, so another login remains independent.
 - The #66 slice treats the refresh cookie as an AIHUB-hosted, host-only, `Secure`/`HttpOnly`/`SameSite=Strict` browser credential; cross-site BFF forwarding and its CSRF contract are deferred.
@@ -232,7 +235,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - Each AI service owns its business data and model-specific behavior.
 - `organizationId` is explicit in request context and application ports.
 - The D2 Speaking grading proxy authenticates the client at AIHUB; downstream partner credentials remain server-side configuration.
-- Downstream Speaking `user_id` comes from the verified user assertion, never from an untrusted client identity field.
+- Downstream Speaking `user_id` is the End-User ID resolved from `X-User-Identity`, never a body field; it is signature-verified only for an Organization with Organization Identity Readiness.
 - D2 Speaking proxy responses use the shared `{ data, meta }` envelope; raw downstream bodies are not public responses.
 - Controllers are thin; application ports hide infrastructure; domain code is framework-free.
 - Redis is ephemeral protection/cache state, never durable source of truth.
@@ -282,6 +285,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - [ADR-0029: Organization membership mutation boundary](docs/adr/0029-organization-membership-mutation-boundary.md)
 - [ADR-0039: Organization invitation send-rate boundary](docs/adr/0039-organization-invitation-send-rate-boundary.md)
 - [ADR-0024: Rotating refresh-session boundary](docs/adr/0024-rotating-refresh-session-boundary.md)
+- [ADR-0053: Optional end-user identity verification per Organization](docs/adr/0053-optional-user-identity-verification.md)
 - [Agent and architecture design](docs/superpowers/specs/2026-09-07-aihub/12-agent-workflow-and-clean-architecture-design.md)
 - [Matt issue workflow](docs/agents/issue-tracker.md)
 - [Follow-up issue #92: durable audit trail for organization membership and API-key mutations](https://github.com/AiHub-Ecosystem/aihub-be/issues/92)

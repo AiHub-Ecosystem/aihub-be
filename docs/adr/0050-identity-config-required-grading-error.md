@@ -1,6 +1,6 @@
 # ADR-0050: Report missing grading identity configuration as a policy error
 
-- Status: Accepted
+- Status: Superseded by ADR-0053
 - Related issue: #156
 - Related ADR: ADR-0049
 
