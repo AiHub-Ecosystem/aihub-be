@@ -73,6 +73,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Customer Web BFF:** the server-side boundary that authenticates a Customer User, checks membership, and calls AIHUB; the browser never calls AIHUB directly.
 - **Public grading result:** the normalized `{ data, meta }` envelope safe for the Customer Web; provider-only identifiers, timing, credentials, assertions, audio, and raw downstream detail are excluded.
 - **API key:** an organization credential presented with `X-API-Key`; AIHUB stores only its SHA-256 hash and metadata.
+- **Public API Route:** an endpoint in AIHUB's externally documented API contract, whether or not it requires authentication; health probes and reference pages are operational endpoints, not Public API Routes.
 - **Scope:** the permission an API key carries for one class of operation, written as `<entitlement>.<action>` such as `writing.grade`; the Operation Catalog owns the scope each public operation requires.
 - **Entitlement:** a service capability configured for an Organization, such as `writing` or `speaking`, which bounds the scopes its API keys may carry. Effective use also requires an active Organization and a matching API key scope.
 - **API key status:** the lifecycle an API key is in — `active` while it may authenticate, `expired` once its expiry moment has passed, `revoked` once it has been withdrawn; expiry arrives on its own without anyone acting, revocation does not.

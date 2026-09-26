@@ -394,6 +394,69 @@
       }
     },
     {
+      "id": "b416860c-0c1d-4c48-9392-1adba3c6f844",
+      "name": "List Speaking questions",
+      "request": {
+        "name": "List Speaking questions",
+        "description": {},
+        "url": {
+          "path": ["v1", "ielts", "speaking", "questions"],
+          "host": ["{{baseUrl}}"],
+          "query": [
+            {
+              "disabled": false,
+              "key": "part",
+              "value": "<string>",
+              "description": "Filter by Speaking part; omit to list all parts."
+            }
+          ],
+          "variable": []
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "GET",
+        "auth": null
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "fb156c5d-4df5-4d37-a0b6-483a9f5383ef",
+      "name": "Retrieve response headers",
+      "request": {
+        "name": "Retrieve response headers",
+        "description": {
+          "content": "Returns the same status and headers as GET without a response body.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "ielts", "speaking", "questions"],
+          "host": ["{{baseUrl}}"],
+          "query": [
+            {
+              "disabled": false,
+              "key": "part",
+              "value": "<string>",
+              "description": "Filter by Speaking part; omit to list all parts."
+            }
+          ],
+          "variable": []
+        },
+        "method": "HEAD",
+        "auth": null
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
       "id": "8cd75512-9ad3-416b-91da-739d3056c77f",
       "name": "Create a Self-serve Organization and become its first owner",
       "request": {
@@ -581,6 +644,63 @@
       }
     },
     {
+      "id": "a633b316-0b72-4f9b-918c-d9870ee36ada",
+      "name": "Retrieve response headers",
+      "request": {
+        "name": "Retrieve response headers",
+        "description": "Lists Organizations where the user has an active membership, including configured entitlement names. identity_configured reports saved active identity configuration only; it does not probe the JWKS source.",
+        "url": {
+          "path": ["v1", "organizations", "me", "members"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          }
+        ],
+        "method": "HEAD",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('each organization exposes entitlement and identity readiness', function () {",
+              "  const organizations = pm.response.json().data.organizations;",
+              "  pm.expect(organizations).to.be.an('array');",
+              "  for (const organization of organizations) {",
+              "    pm.expect(organization.entitlements).to.be.an('array');",
+              "    pm.expect(organization.entitlements.every((value) => typeof value === 'string')).to.be.true;",
+              "    pm.expect(organization.identity_configured).to.be.a('boolean');",
+              "    pm.expect(organization).not.to.have.property('issuer');",
+              "    pm.expect(organization).not.to.have.property('jwks_url');",
+              "    pm.expect(organization).not.to.have.property('public_keys_jwks');",
+              "  }",
+              "});"
+            ]
+          }
+        }
+      ],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
       "id": "881498cb-0714-437e-8126-57c4dab9a676",
       "name": "List an organization's memberships",
       "request": {
@@ -623,6 +743,60 @@
           }
         ],
         "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "c2772533-1c64-4919-a4a7-6cd54fbec322",
+      "name": "Retrieve response headers",
+      "request": {
+        "name": "Retrieve response headers",
+        "description": {
+          "content": "Returns the same status and headers as GET without a response body.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "organizations", ":organization_id", "members"],
+          "host": ["{{baseUrl}}"],
+          "query": [
+            {
+              "disabled": false,
+              "key": "status",
+              "value": "active",
+              "description": "Membership status to list. Defaults to active."
+            }
+          ],
+          "variable": [
+            {
+              "disabled": false,
+              "type": "any",
+              "value": "<string>",
+              "key": "organization_id",
+              "description": "(Required) The organization whose memberships are listed."
+            }
+          ]
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          }
+        ],
+        "method": "HEAD",
         "auth": {
           "type": "bearer",
           "bearer": [
@@ -746,6 +920,53 @@
               "language": "json"
             }
           }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "88eb66b2-0a05-45bd-a706-7aa718164c07",
+      "name": "Retrieve response headers",
+      "request": {
+        "name": "Retrieve response headers",
+        "description": {
+          "content": "Returns the same status and headers as GET without a response body.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "organizations", ":organization_id", "invitations"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": [
+            {
+              "disabled": false,
+              "type": "any",
+              "value": "<string>",
+              "key": "organization_id",
+              "description": "(Required) The organization whose open invitations are listed."
+            }
+          ]
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          }
+        ],
+        "method": "HEAD",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
         }
       },
       "event": [],
@@ -1180,6 +1401,53 @@
       }
     },
     {
+      "id": "c7f6a324-e1db-4f6d-a527-33e0ec11d9cb",
+      "name": "Retrieve response headers",
+      "request": {
+        "name": "Retrieve response headers",
+        "description": {
+          "content": "Returns the same status and headers as GET without a response body.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "organizations", ":organization_id", "api-keys"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": [
+            {
+              "disabled": false,
+              "type": "any",
+              "value": "<string>",
+              "key": "organization_id",
+              "description": "(Required) The organization whose API keys are listed."
+            }
+          ]
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          }
+        ],
+        "method": "HEAD",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
       "id": "c8e799ee-39a0-43dc-9b4d-ebd72e5372cb",
       "name": "Revoke an organization API key",
       "request": {
@@ -1434,6 +1702,58 @@
       }
     },
     {
+      "id": "166e39b1-2d09-4b47-bb49-1a44edacf6de",
+      "name": "Retrieve response headers",
+      "request": {
+        "name": "Retrieve response headers",
+        "description": {
+          "content": "Returns the same status and headers as GET without a response body.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": [
+            "v1",
+            "organizations",
+            ":organization_id",
+            "identity-config"
+          ],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": [
+            {
+              "disabled": false,
+              "type": "any",
+              "value": "<string>",
+              "key": "organization_id",
+              "description": "(Required) The organization whose identity configuration is read."
+            }
+          ]
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          }
+        ],
+        "method": "HEAD",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
       "id": "3db7e90f-abe9-454e-9394-babaa566a6fc",
       "name": "Read an organization audit trail",
       "request": {
@@ -1512,6 +1832,96 @@
           }
         ],
         "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "53da7407-db25-4cb0-bd5e-7bbb18933805",
+      "name": "Retrieve response headers",
+      "request": {
+        "name": "Retrieve response headers",
+        "description": {
+          "content": "Returns the same status and headers as GET without a response body.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "organizations", ":organization_id", "audit-events"],
+          "host": ["{{baseUrl}}"],
+          "query": [
+            {
+              "disabled": false,
+              "key": "action",
+              "value": "<string>",
+              "description": "Restrict the trail to these audit actions. Repeat the key for several values; an unrecognized value is rejected rather than treated as an empty filter."
+            },
+            {
+              "disabled": false,
+              "key": "action",
+              "value": "<string>",
+              "description": "Restrict the trail to these audit actions. Repeat the key for several values; an unrecognized value is rejected rather than treated as an empty filter."
+            },
+            {
+              "disabled": false,
+              "key": "outcome",
+              "value": "<string>",
+              "description": "Restrict the trail to acts that took effect, or to refused attempts against a real target."
+            },
+            {
+              "disabled": false,
+              "key": "from",
+              "value": "<dateTime>",
+              "description": "Inclusive start of a half-open UTC window. Independent of `to`."
+            },
+            {
+              "disabled": false,
+              "key": "to",
+              "value": "<dateTime>",
+              "description": "Exclusive end of a half-open UTC window, so adjacent windows tile without counting an event twice."
+            },
+            {
+              "disabled": false,
+              "key": "limit",
+              "value": "50",
+              "description": "Events per page. A value outside the range is rejected rather than clamped, because a silently shortened page is indistinguishable from the end of the trail."
+            },
+            {
+              "disabled": false,
+              "key": "cursor",
+              "value": "<string>",
+              "description": "Opaque position from a previous `next_cursor`. Bound to the filters it was issued under: replaying it with different filters is rejected."
+            }
+          ],
+          "variable": [
+            {
+              "disabled": false,
+              "type": "any",
+              "value": "<string>",
+              "key": "organization_id",
+              "description": "(Required) The organization whose audit trail is read."
+            }
+          ]
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          }
+        ],
+        "method": "HEAD",
         "auth": {
           "type": "bearer",
           "bearer": [

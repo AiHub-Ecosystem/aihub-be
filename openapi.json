@@ -2806,6 +2806,189 @@
         }
       }
     },
+    "/v1/ielts/speaking/questions": {
+      "get": {
+        "operationId": "speaking.questions",
+        "summary": "List Speaking questions",
+        "security": [],
+        "parameters": [
+          {
+            "name": "part",
+            "in": "query",
+            "required": false,
+            "description": "Filter by Speaking part; omit to list all parts.",
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "1",
+                  "type": "string"
+                },
+                {
+                  "const": "2",
+                  "type": "string"
+                },
+                {
+                  "const": "3",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Speaking questions and signed audio URLs",
+            "headers": {
+              "Cache-Control": {
+                "description": "This response must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["part", "questions"],
+                      "properties": {
+                        "part": {
+                          "anyOf": [
+                            {
+                              "minimum": 1,
+                              "maximum": 3,
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "questions": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "question_id",
+                              "part",
+                              "prompt_text",
+                              "audio_url"
+                            ],
+                            "properties": {
+                              "question_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "part": {
+                                "minimum": 1,
+                                "maximum": 3,
+                                "type": "integer"
+                              },
+                              "prompt_text": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "audio_url": {
+                                "minLength": 1,
+                                "maxLength": 2048,
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id", "service", "operation"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "service": {
+                          "const": "speaking",
+                          "type": "string"
+                        },
+                        "operation": {
+                          "const": "speaking.questions",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      },
+      "head": {
+        "operationId": "speaking.questions.head",
+        "summary": "Retrieve response headers",
+        "security": [],
+        "parameters": [
+          {
+            "name": "part",
+            "in": "query",
+            "required": false,
+            "description": "Filter by Speaking part; omit to list all parts.",
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "1",
+                  "type": "string"
+                },
+                {
+                  "const": "2",
+                  "type": "string"
+                },
+                {
+                  "const": "3",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; same headers as GET, without a response body.",
+            "headers": {
+              "Cache-Control": {
+                "description": "This response must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Same status as GET, without a response body."
+          },
+          "500": {
+            "description": "Same status as GET, without a response body."
+          }
+        },
+        "description": "Returns the same status and headers as GET without a response body."
+      }
+    },
     "/v1/organizations": {
       "post": {
         "operationId": "organizations.create",
@@ -3207,6 +3390,36 @@
             "$ref": "#/components/responses/Error500"
           }
         }
+      },
+      "head": {
+        "operationId": "organizations.me.members.list.head",
+        "summary": "Retrieve response headers",
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; same headers as GET, without a response body."
+          },
+          "401": {
+            "description": "Same status as GET, without a response body."
+          },
+          "403": {
+            "description": "Same status as GET, without a response body."
+          },
+          "500": {
+            "description": "Same status as GET, without a response body."
+          }
+        }
       }
     },
     "/v1/organizations/{organization_id}/members": {
@@ -3332,6 +3545,60 @@
           },
           "500": {
             "$ref": "#/components/responses/Error500"
+          }
+        }
+      },
+      "head": {
+        "operationId": "organizations.members.list.head",
+        "summary": "Retrieve response headers",
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization whose memberships are listed.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Membership status to list. Defaults to active.",
+            "schema": {
+              "type": "string",
+              "enum": ["active", "disabled"],
+              "default": "active"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; same headers as GET, without a response body."
+          },
+          "400": {
+            "description": "Same status as GET, without a response body."
+          },
+          "401": {
+            "description": "Same status as GET, without a response body."
+          },
+          "403": {
+            "description": "Same status as GET, without a response body."
+          },
+          "500": {
+            "description": "Same status as GET, without a response body."
           }
         }
       }
@@ -3643,6 +3910,46 @@
             "$ref": "#/components/responses/Error503"
           }
         }
+      },
+      "head": {
+        "operationId": "organizations.invitations.list.head",
+        "summary": "Retrieve response headers",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization whose open invitations are listed.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; same headers as GET, without a response body."
+          },
+          "401": {
+            "description": "Same status as GET, without a response body."
+          },
+          "403": {
+            "description": "Same status as GET, without a response body."
+          },
+          "500": {
+            "description": "Same status as GET, without a response body."
+          }
+        },
+        "description": "Returns the same status and headers as GET without a response body."
       }
     },
     "/v1/organizations/{organization_id}/invitations/{invitation_id}": {
@@ -4589,6 +4896,49 @@
           },
           "503": {
             "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "head": {
+        "operationId": "organizations.apiKeys.list.head",
+        "summary": "Retrieve response headers",
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization whose API keys are listed.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; same headers as GET, without a response body."
+          },
+          "401": {
+            "description": "Same status as GET, without a response body."
+          },
+          "403": {
+            "description": "Same status as GET, without a response body."
+          },
+          "500": {
+            "description": "Same status as GET, without a response body."
+          },
+          "503": {
+            "description": "Same status as GET, without a response body."
           }
         }
       }
@@ -5631,6 +5981,49 @@
             "$ref": "#/components/responses/Error503"
           }
         }
+      },
+      "head": {
+        "operationId": "organizations.identityConfig.read.head",
+        "summary": "Retrieve response headers",
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization whose identity configuration is read.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; same headers as GET, without a response body."
+          },
+          "401": {
+            "description": "Same status as GET, without a response body."
+          },
+          "403": {
+            "description": "Same status as GET, without a response body."
+          },
+          "500": {
+            "description": "Same status as GET, without a response body."
+          },
+          "503": {
+            "description": "Same status as GET, without a response body."
+          }
+        }
       }
     },
     "/v1/organizations/{organization_id}/audit-events": {
@@ -5959,6 +6352,137 @@
           },
           "503": {
             "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "head": {
+        "operationId": "organizations.auditEvents.list.head",
+        "summary": "Retrieve response headers",
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "description": "The organization whose audit trail is read.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "description": "Restrict the trail to these audit actions. Repeat the key for several values; an unrecognized value is rejected rather than treated as an empty filter.",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "organization.created",
+                  "organization.renamed",
+                  "organization.suspended",
+                  "organization.restored",
+                  "organization.identity_config_set",
+                  "organization.entitlement_granted",
+                  "invitation.sent",
+                  "invitation.resent",
+                  "invitation.accepted",
+                  "invitation.revoked",
+                  "membership.role_changed",
+                  "membership.disabled",
+                  "membership.owner_transferred",
+                  "membership.owner_attached",
+                  "api_key.created",
+                  "api_key.rotated",
+                  "api_key.revoked"
+                ]
+              }
+            }
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "required": false,
+            "description": "Restrict the trail to acts that took effect, or to refused attempts against a real target.",
+            "schema": {
+              "type": "string",
+              "enum": ["applied", "denied"]
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive start of a half-open UTC window. Independent of `to`.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Exclusive end of a half-open UTC window, so adjacent windows tile without counting an event twice.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Events per page. A value outside the range is rejected rather than clamped, because a silently shortened page is indistinguishable from the end of the trail.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque position from a previous `next_cursor`. Bound to the filters it was issued under: replaying it with different filters is rejected.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; same headers as GET, without a response body."
+          },
+          "400": {
+            "description": "Same status as GET, without a response body."
+          },
+          "401": {
+            "description": "Same status as GET, without a response body."
+          },
+          "403": {
+            "description": "Same status as GET, without a response body."
+          },
+          "500": {
+            "description": "Same status as GET, without a response body."
+          },
+          "503": {
+            "description": "Same status as GET, without a response body."
           }
         }
       }

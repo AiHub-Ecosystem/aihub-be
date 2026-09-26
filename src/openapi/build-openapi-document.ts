@@ -67,6 +67,10 @@ import {
   MintSandboxAssertionResponseSchema,
 } from '../contracts/sandbox/assertion';
 import {
+  SpeakingQuestionSchema,
+  SpeakingQuestionsQuerySchema,
+} from '../contracts/speaking/questions';
+import {
   PASSWORD_MAX_CODE_POINTS,
   PASSWORD_MIN_CODE_POINTS,
 } from '../modules/auth/domain/local-auth';
@@ -269,6 +273,7 @@ function operationToPathItem(
 }
 
 const SANDBOX_ASSERTION_PATH = '/v1/sandbox/assertions';
+const SPEAKING_QUESTIONS_PATH = '/v1/ielts/speaking/questions';
 const AUTH_REGISTER_PATH = '/v1/auth/register';
 const AUTH_LOGIN_PATH = '/v1/auth/login';
 const AUTH_VERIFY_PATH = '/v1/auth/verify-email';
@@ -1349,6 +1354,108 @@ function sandboxAssertionPathItem(
   };
 }
 
+function speakingQuestionsPathItem(): Record<string, unknown> {
+  return {
+    get: {
+      operationId: 'speaking.questions',
+      summary: 'List Speaking questions',
+      security: [],
+      parameters: [
+        {
+          name: 'part',
+          in: 'query',
+          required: false,
+          description: 'Filter by Speaking part; omit to list all parts.',
+          schema: SpeakingQuestionsQuerySchema.properties.part,
+        },
+      ],
+      responses: {
+        '200': {
+          description: 'Speaking questions and signed audio URLs',
+          headers: {
+            'Cache-Control': {
+              description: 'This response must not be cached.',
+              schema: { type: 'string', enum: ['no-store'] },
+            },
+          },
+          content: {
+            'application/json': {
+              schema: Type.Object(
+                {
+                  data: Type.Object(
+                    {
+                      part: Type.Union([
+                        SpeakingQuestionSchema.properties.part,
+                        Type.Null(),
+                      ]),
+                      questions: Type.Array(SpeakingQuestionSchema),
+                    },
+                    { additionalProperties: false },
+                  ),
+                  meta: Type.Object(
+                    {
+                      request_id: Type.String({
+                        pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
+                      }),
+                      service: Type.Literal('speaking'),
+                      operation: Type.Literal('speaking.questions'),
+                    },
+                    { additionalProperties: false },
+                  ),
+                },
+                { additionalProperties: false },
+              ),
+            },
+          },
+        },
+        '400': { $ref: '#/components/responses/Error400' },
+        '500': { $ref: '#/components/responses/Error500' },
+      },
+    },
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function addHeadOperations(paths: Record<string, unknown>): void {
+  for (const pathItem of Object.values(paths)) {
+    if (!isRecord(pathItem) || !isRecord(pathItem.get) || pathItem.head) {
+      continue;
+    }
+
+    const getOperation = pathItem.get;
+    const getResponses = isRecord(getOperation.responses)
+      ? getOperation.responses
+      : {};
+    const responses = Object.fromEntries(
+      Object.entries(getResponses).map(([status, response]) => {
+        const headers = isRecord(response) ? response.headers : undefined;
+        return [
+          status,
+          {
+            description:
+              status === '200'
+                ? 'Success; same headers as GET, without a response body.'
+                : 'Same status as GET, without a response body.',
+            ...(headers === undefined ? {} : { headers }),
+          },
+        ];
+      }),
+    );
+
+    pathItem.head = {
+      ...getOperation,
+      operationId: `${String(getOperation.operationId)}.head`,
+      summary: 'Retrieve response headers',
+      description:
+        'Returns the same status and headers as GET without a response body.',
+      responses,
+    };
+  }
+}
+
 export function buildOpenApiDocument(version: string): unknown {
   const paths: Record<string, unknown> = {};
   const groupedErrors = errorsByStatus();
@@ -1362,6 +1469,7 @@ export function buildOpenApiDocument(version: string): unknown {
   }
 
   paths[SANDBOX_ASSERTION_PATH] = sandboxAssertionPathItem(groupedErrors);
+  paths[SPEAKING_QUESTIONS_PATH] = speakingQuestionsPathItem();
   paths[ORGANIZATION_PATH] = organizationPathItem(groupedErrors);
   paths[ORGANIZATION_ITEM_PATH] = organizationItemPathItem(groupedErrors);
   paths[ORGANIZATION_ROSTER_PATH] = organizationRosterPathItem(groupedErrors);
@@ -1387,6 +1495,7 @@ export function buildOpenApiDocument(version: string): unknown {
   paths[ORGANIZATION_AUDIT_EVENT_PATH] =
     organizationAuditEventPathItem(groupedErrors);
   Object.assign(paths, localAuthPathItems(groupedErrors));
+  addHeadOperations(paths);
 
   const errorResponses: Record<string, unknown> = {};
   for (const [status, codes] of groupedErrors) {

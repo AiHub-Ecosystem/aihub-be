@@ -10,6 +10,7 @@ import { OPERATION_CATALOG } from './catalog/operation-catalog';
 import { AppError } from './common/errors/app-error';
 import { registerBodySizeGuard } from './common/http/body-size.hook';
 import { generateRequestId } from './common/request-context/request-id';
+import { buildOpenApiDocument } from './openapi/build-openapi-document';
 
 @Controller('boom')
 class BoomController {
@@ -23,8 +24,63 @@ class BoomController {
   }
 }
 
+interface RegisteredRoute {
+  readonly method: string;
+  readonly url: string;
+}
+
+const OPENAPI_METHODS = new Set([
+  'delete',
+  'get',
+  'head',
+  'options',
+  'patch',
+  'post',
+  'put',
+  'trace',
+]);
+
+function routeShape(path: string): string {
+  return path
+    .split('/')
+    .map((segment) =>
+      segment.startsWith(':') ||
+      (segment.startsWith('{') && segment.endsWith('}'))
+        ? '{}'
+        : segment,
+    )
+    .join('/');
+}
+
+function missingPublicRoutes(
+  registeredRoutes: readonly RegisteredRoute[],
+  openApiDocument: unknown,
+): string[] {
+  const paths = (openApiDocument as { paths: Record<string, unknown> }).paths;
+  const documentedRoutes = new Set<string>();
+
+  for (const [path, pathItem] of Object.entries(paths)) {
+    if (typeof pathItem !== 'object' || pathItem === null) {
+      continue;
+    }
+
+    for (const method of Object.keys(pathItem)) {
+      if (OPENAPI_METHODS.has(method)) {
+        documentedRoutes.add(`${method.toUpperCase()} ${routeShape(path)}`);
+      }
+    }
+  }
+
+  return registeredRoutes
+    .filter(({ url }) => url === '/v1' || url.startsWith('/v1/'))
+    .map(({ method, url }) => `${method.toUpperCase()} ${routeShape(url)}`)
+    .filter((route) => !documentedRoutes.has(route))
+    .sort();
+}
+
 describe('AppModule wiring', () => {
   let app: NestFastifyApplication;
+  const registeredRoutes: RegisteredRoute[] = [];
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -35,6 +91,17 @@ describe('AppModule wiring', () => {
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({ genReqId: () => generateRequestId() }),
     );
+    app
+      .getHttpAdapter()
+      .getInstance()
+      .addHook('onRoute', (route) => {
+        const methods = Array.isArray(route.method)
+          ? route.method
+          : [route.method];
+        for (const method of methods) {
+          registeredRoutes.push({ method, url: route.url });
+        }
+      });
     registerBodySizeGuard(app.getHttpAdapter().getInstance());
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
@@ -64,6 +131,29 @@ describe('AppModule wiring', () => {
       expect(operation.path).toMatch(/^\/v1\//);
       expect(operation.path).not.toMatch(/^\/v1\/v1\//);
     }
+  });
+
+  it('documents every registered Public API Route by method and path shape', () => {
+    const missing = missingPublicRoutes(
+      registeredRoutes,
+      buildOpenApiDocument('test'),
+    );
+
+    expect(missing).toEqual([]);
+  });
+
+  it('fails when the method is missing even though the path remains', () => {
+    const openApiDocument = JSON.parse(
+      JSON.stringify(buildOpenApiDocument('test')),
+    ) as { paths: Record<string, unknown> };
+    const speakingPath = openApiDocument.paths[
+      '/v1/ielts/speaking/questions'
+    ] as { get?: unknown };
+    delete speakingPath.get;
+
+    expect(missingPublicRoutes(registeredRoutes, openApiDocument)).toContain(
+      'GET /v1/ielts/speaking/questions',
+    );
   });
 
   it('renders an AppError through the globally bound filter', async () => {

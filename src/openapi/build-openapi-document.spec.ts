@@ -25,6 +25,7 @@ interface OpenApiOperation {
 
 interface OpenApiPathItem {
   readonly get?: OpenApiOperation;
+  readonly head?: OpenApiOperation;
   readonly put?: OpenApiOperation;
   readonly post?: OpenApiOperation;
   readonly patch?: OpenApiOperation;
@@ -60,6 +61,7 @@ function requestProperty(
 }
 
 const SANDBOX_MINT_PATH = '/v1/sandbox/assertions';
+const SPEAKING_QUESTIONS_PATH = '/v1/ielts/speaking/questions';
 const SANDBOX_MINT_OPERATION_ID = 'sandbox.assertions.mint';
 const ORGANIZATION_PATH = '/v1/organizations';
 const ORGANIZATION_CREATE_OPERATION_ID = 'organizations.create';
@@ -170,6 +172,7 @@ describe('buildOpenApiDocument', () => {
       Object.keys(doc.paths).filter((path) => !catalogued.has(path)),
     ).toEqual([
       SANDBOX_MINT_PATH,
+      SPEAKING_QUESTIONS_PATH,
       ORGANIZATION_PATH,
       ORGANIZATION_ITEM_PATH,
       ORGANIZATION_ROSTER_PATH,
@@ -828,6 +831,64 @@ describe('buildOpenApiDocument', () => {
     const operation = build().paths['/v1/ielts/speaking/grading']?.post;
 
     expect(operation?.responses['409']).toBeUndefined();
+  });
+
+  it('documents the unauthenticated Speaking questions route as implemented', () => {
+    const operation = build().paths[SPEAKING_QUESTIONS_PATH]?.get;
+    const partParameter = operation?.parameters.find(
+      (parameter) => parameter.name === 'part',
+    );
+    const success = operation?.responses['200'] as {
+      readonly headers?: Record<string, unknown>;
+      readonly content?: Record<string, { readonly schema: unknown }>;
+    };
+    const responseSchema = JSON.stringify(
+      success?.content?.['application/json']?.schema,
+    );
+
+    expect(operation).toMatchObject({
+      operationId: 'speaking.questions',
+      security: [],
+    });
+    expect(partParameter).toMatchObject({
+      name: 'part',
+      in: 'query',
+      required: false,
+    });
+    expect(JSON.stringify(partParameter?.schema)).toContain('"1"');
+    expect(JSON.stringify(partParameter?.schema)).toContain('"2"');
+    expect(JSON.stringify(partParameter?.schema)).toContain('"3"');
+    expect(responseSchema).toContain('"part"');
+    expect(responseSchema).toContain('"questions"');
+    expect(responseSchema).toContain('"question_id"');
+    expect(responseSchema).toContain('"prompt_text"');
+    expect(responseSchema).toContain('"audio_url"');
+    expect(responseSchema).toContain('"request_id"');
+    expect(responseSchema).toContain('"speaking.questions"');
+    expect(responseSchema).not.toContain('"timing"');
+    expect(success?.headers?.['Cache-Control']).toBeDefined();
+    expect(operation?.responses['400']).toBeDefined();
+    expect(operation?.responses['500']).toBeDefined();
+  });
+
+  it('documents every GET route HEAD variant without a response body', () => {
+    const paths = build().paths;
+
+    for (const pathItem of Object.values(paths)) {
+      if (pathItem?.get === undefined) {
+        continue;
+      }
+
+      const head = pathItem.head;
+      expect(head).toMatchObject({
+        operationId: `${pathItem.get.operationId}.head`,
+        security: pathItem.get.security,
+      });
+
+      for (const response of Object.values(head?.responses ?? {})) {
+        expect(response).not.toHaveProperty('content');
+      }
+    }
   });
 
   it('takes the document version from the caller rather than hardcoding one', () => {
