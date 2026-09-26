@@ -10,7 +10,7 @@ Verifying the email and signing in are separate outcomes of `POST /v1/auth/verif
 - **Verification** is idempotent. Any holder of an unexpired token activates the account, and the response is `204`.
 - **Verification Sign-in** happens at most once per token, and only when the request carries the matching binding. It runs through the same session issuance as login: the account must be active, and it creates a new Refresh Session under ADR-0024. The response is the login envelope (`200`) with the refresh cookie.
 
-The token is consumed only when it signs in, when it expires, or when a newer token supersedes it. A scanner or a second device can therefore verify the email first without spending the owner's sign-in. Reusing a token after it has signed in returns `204` until the token expires.
+Verification keeps its existing consumption: the first verification marks the token `verified`, and a resend marks older tokens `superseded`. Sign-in is tracked separately on the token. A token signs in at most once, only while it is `verified` and unexpired, and verification by anyone else never spends that sign-in. A scanner or a second device can therefore verify the email first, and the signup browser can still sign in until the token expires. After sign-in, reusing the token returns `204`.
 
 ## Considered Options
 
