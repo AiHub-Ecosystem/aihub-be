@@ -13,21 +13,13 @@ import type {
   SandboxAssertionMinterPort,
 } from './sandbox-assertion-minter.port';
 import type { SandboxAssertionSignerPort } from './sandbox-assertion-signer.port';
+import { identityProviderUnavailable } from './user-identity-errors';
 
 function configurationError(cause?: unknown): AppError {
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Sandbox assertion configuration is invalid',
     retryable: false,
-    ...(cause === undefined ? {} : { cause }),
-  });
-}
-
-function identityProviderUnavailable(cause?: unknown): AppError {
-  return new AppError({
-    code: 'IDENTITY_PROVIDER_UNAVAILABLE',
-    message: 'Identity provider is unavailable',
-    retryable: true,
     ...(cause === undefined ? {} : { cause }),
   });
 }

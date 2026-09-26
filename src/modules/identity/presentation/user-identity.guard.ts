@@ -6,13 +6,12 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
-import {
-  OPERATION_CATALOG,
-  type OperationDef,
-} from '../../../catalog/operation-catalog';
+import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
+import { userIdentityRequired } from '../../../common/errors/user-identity-required';
 import { setRequestMeteringActor } from '../../../common/metering/request-metering-state';
+import { invalidUserIdentity } from '../application/user-identity-errors';
 import {
   USER_IDENTITY_RESOLVER,
   type UserIdentityResolverPort,
@@ -28,22 +27,6 @@ function configurationError(): AppError {
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Authentication configuration is invalid',
-    retryable: false,
-  });
-}
-
-function identityRequired(): AppError {
-  return new AppError({
-    code: 'USER_IDENTITY_REQUIRED',
-    message: 'User identity is required in X-User-Identity',
-    retryable: false,
-  });
-}
-
-function invalidIdentity(): AppError {
-  return new AppError({
-    code: 'INVALID_USER_IDENTITY',
-    message: 'User identity is invalid',
     retryable: false,
   });
 }
@@ -68,15 +51,10 @@ export class UserIdentityGuard implements CanActivate {
       throw configurationError();
     }
 
-    const operation: OperationDef = OPERATION_CATALOG[operationId];
     const authenticated = getAuthenticatedApiKey(request);
     const header = request.headers['x-user-identity'];
 
     if (header === undefined) {
-      if (operation.identityScope === 'organization') {
-        return true;
-      }
-
       if (
         isLocalAuthBypassEnabled() &&
         authenticated.organizationId === 'local-development'
@@ -90,11 +68,11 @@ export class UserIdentityGuard implements CanActivate {
         return true;
       }
 
-      throw identityRequired();
+      throw userIdentityRequired();
     }
 
     if (typeof header !== 'string' || header.trim().length === 0) {
-      throw invalidIdentity();
+      throw invalidUserIdentity();
     }
 
     request.aihubIdentity = await this.resolver.resolve({

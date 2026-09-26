@@ -1,13 +1,13 @@
-import { AppError } from '../../../common/errors/app-error';
 import { isEndUserId } from '../domain/end-user-id';
 import type {
   OrganizationIdentityConfig,
   OrganizationIdentityConfigRepositoryPort,
 } from './organization-identity-config-repository.port';
+import type { UserAssertionVerifier } from './user-assertion-verifier';
 import {
-  type UserAssertionVerifier,
   identityProviderUnavailable,
-} from './user-assertion-verifier';
+  invalidDeclaredUserId,
+} from './user-identity-errors';
 import type {
   ResolvedUserIdentity,
   UserIdentityInput,
@@ -41,12 +41,7 @@ export class UserIdentityResolver implements UserIdentityResolverPort {
     }
 
     if (!isEndUserId(input.value)) {
-      throw new AppError({
-        code: 'INVALID_USER_IDENTITY',
-        message:
-          'User identity must be 1-256 visible ASCII characters with no spaces',
-        retryable: false,
-      });
+      throw invalidDeclaredUserId();
     }
 
     return {

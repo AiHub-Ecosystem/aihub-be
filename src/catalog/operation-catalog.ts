@@ -13,7 +13,9 @@ import {
 import type { DownstreamId } from '../downstream/downstream.types';
 import type { OperationId } from './operation-id';
 
-type IdentityScope = 'organization' | 'user';
+// ponytail: 'organization' scope removed while no operation uses it (#168);
+// the first organization-scoped operation brings it back with a guard test.
+type IdentityScope = 'user';
 export type IdempotencyMode = 'none' | 'optional' | 'required';
 export type MeteringMode = 'model' | 'none';
 type ResponseContract = TSchema | 'unresolved';

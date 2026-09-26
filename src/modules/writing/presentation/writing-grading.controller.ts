@@ -11,8 +11,8 @@ import {
 import { Value } from '@sinclair/typebox/value';
 
 import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
-import { AppError } from '../../../common/errors/app-error';
 import { invalidRequest } from '../../../common/errors/invalid-request';
+import { userIdentityRequired } from '../../../common/errors/user-identity-required';
 import { createClientDisconnectSignal } from '../../../common/http/client-disconnect-signal';
 import { SuccessEnvelopeInterceptor } from '../../../common/http/success-envelope.interceptor';
 import { createRequestContext } from '../../../common/request-context/request-context.factory';
@@ -135,11 +135,7 @@ function decodeTask2Replay(value: unknown): DispatchResult<GradeResponse> {
 function requireUserId(request: AuthenticatedRequest): string {
   const userId = request.aihubIdentity?.userId;
   if (userId === undefined || userId.trim().length === 0) {
-    throw new AppError({
-      code: 'USER_IDENTITY_REQUIRED',
-      message: 'User identity is required in X-User-Identity',
-      retryable: false,
-    });
+    throw userIdentityRequired();
   }
   return userId;
 }

@@ -21,6 +21,7 @@ import {
 import { SuccessEnvelopeInterceptor } from '../../../common/http/success-envelope.interceptor';
 import { createRequestContext } from '../../../common/request-context/request-context.factory';
 
+import { userIdentityRequired } from '../../../common/errors/user-identity-required';
 import {
   type SpeakingGradeJsonInput,
   SpeakingGradeJsonRequestSchema,
@@ -87,11 +88,7 @@ function parseJsonBody(body: unknown): SpeakingGradeJsonInput {
 function userId(request: AuthenticatedRequest): string {
   const value = request.aihubIdentity?.userId;
   if (value === undefined || value.trim().length === 0) {
-    throw new AppError({
-      code: 'USER_IDENTITY_REQUIRED',
-      message: 'User identity is required in X-User-Identity',
-      retryable: false,
-    });
+    throw userIdentityRequired();
   }
   return value;
 }

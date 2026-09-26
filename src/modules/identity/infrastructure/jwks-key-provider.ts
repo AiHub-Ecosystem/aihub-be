@@ -13,6 +13,7 @@ import type {
   OrganizationIdentityConfig,
   PublicJsonWebKeySet,
 } from '../application/organization-identity-config-repository.port';
+import { identityProviderUnavailable } from '../application/user-identity-errors';
 import { parsePublicJsonWebKeySet } from '../domain/organization-identity-config';
 
 export const JWKS_FRESH_TTL_MS = 15 * 60 * 1_000;
@@ -62,15 +63,6 @@ const defaultFetcher: Fetcher = (url, init) => {
     ...(init?.signal === undefined ? {} : { signal: init.signal }),
   });
 };
-
-function unavailable(cause?: unknown): AppError {
-  return new AppError({
-    code: 'IDENTITY_PROVIDER_UNAVAILABLE',
-    message: 'Identity provider is unavailable',
-    retryable: true,
-    ...(cause === undefined ? {} : { cause }),
-  });
-}
 
 function unsafeUrl(): AppError {
   return new AppError({
@@ -387,7 +379,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
   }): Promise<PublicJsonWebKeySet> {
     if (input.config.jwksUrl === null) {
       if (input.config.publicKeysJwks === null) {
-        throw unavailable();
+        throw identityProviderUnavailable();
       }
       return input.config.publicKeysJwks;
     }
@@ -448,7 +440,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       if (cached !== undefined && cached.staleUntil > now) {
         return cached.jwks;
       }
-      throw unavailable(error);
+      throw identityProviderUnavailable(error);
     }
   }
 

@@ -356,6 +356,8 @@ organization-scoped → X-User-Identity optional
 user-scoped         → X-User-Identity required
 ```
 
+> Reserved: no operation is organization-scoped today, so the catalog does not model this scope; the first such operation reintroduces it with a guard test (#168).
+
 ---
 
 # 9. Authorization Contract

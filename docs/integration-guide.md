@@ -311,7 +311,8 @@ are user-scoped and require `X-User-Identity`. With an active identity
 configuration, the assertion's `sub` claim is the only source of learner
 identity that AIHUB trusts.
 
-Sending an assertion where none is required is allowed — but it must still be
+Every current operation is user-scoped. If an operation that needs no user
+identity is added later, sending one anyway will be allowed — but it must still be
 valid. AIHUB will not ignore a malformed one, because silently accepting
 broken assertions hides integration bugs until they matter.
 

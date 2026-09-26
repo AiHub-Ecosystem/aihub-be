@@ -1,5 +1,5 @@
 import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
-import { AppError } from '../../common/errors/app-error';
+import { userIdentityRequired } from '../../common/errors/user-identity-required';
 import type { RequestContext } from '../../common/request-context/request-context';
 import type {
   SpeakingGradeInput,
@@ -15,11 +15,7 @@ import { parseSpeakingGradeResponse } from './speaking-grading-response.adapter'
 export function requiredSpeakingUserId(context: RequestContext): string {
   const userId = context.userId;
   if (userId === undefined || userId.trim().length === 0) {
-    throw new AppError({
-      code: 'USER_IDENTITY_REQUIRED',
-      message: 'User identity is required in X-User-Identity',
-      retryable: false,
-    });
+    throw userIdentityRequired();
   }
   return userId;
 }

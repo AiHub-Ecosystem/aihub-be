@@ -10,6 +10,10 @@ import type {
   UserAssertionCryptoPort,
   UserAssertionProtectedHeader,
 } from './user-assertion-crypto.port';
+import {
+  identityProviderUnavailable,
+  invalidSignedUserAssertion,
+} from './user-identity-errors';
 import type { ResolvedUserIdentity } from './user-identity-resolver.port';
 
 export interface SignedUserAssertionInput {
@@ -22,25 +26,6 @@ export interface SignedUserAssertionInput {
 const ASSERTION_CLOCK_SKEW_SECONDS = 60;
 const MAX_ASSERTION_BYTES = 32 * 1024;
 const MAX_CLAIM_STRING_LENGTH = 256;
-
-function invalidUserAssertion(cause?: unknown): AppError {
-  return new AppError({
-    code: 'INVALID_USER_IDENTITY',
-    message:
-      'User identity must be a valid Signed User Assertion for this Organization',
-    retryable: false,
-    ...(cause === undefined ? {} : { cause }),
-  });
-}
-
-export function identityProviderUnavailable(cause?: unknown): AppError {
-  return new AppError({
-    code: 'IDENTITY_PROVIDER_UNAVAILABLE',
-    message: 'Identity provider is unavailable',
-    retryable: true,
-    ...(cause === undefined ? {} : { cause }),
-  });
-}
 
 function isAllowedAlgorithm(
   value: unknown,
@@ -122,26 +107,26 @@ function protectedHeader(
     signedAssertion.length === 0 ||
     Buffer.byteLength(signedAssertion, 'utf8') > MAX_ASSERTION_BYTES
   ) {
-    throw invalidUserAssertion();
+    throw invalidSignedUserAssertion();
   }
 
   let header: UserAssertionProtectedHeader;
   try {
     header = crypto.decodeHeader(signedAssertion);
   } catch (error) {
-    throw invalidUserAssertion(error);
+    throw invalidSignedUserAssertion(error);
   }
 
   if (header.alg !== 'RS256' && header.alg !== 'ES256') {
-    throw invalidUserAssertion();
+    throw invalidSignedUserAssertion();
   }
 
   if (header.kid !== undefined && typeof header.kid !== 'string') {
-    throw invalidUserAssertion();
+    throw invalidSignedUserAssertion();
   }
 
   if (header.kid === '') {
-    throw invalidUserAssertion();
+    throw invalidSignedUserAssertion();
   }
 
   return {
@@ -167,7 +152,7 @@ function validateClaims(
     payload.exp <= nowSeconds - ASSERTION_CLOCK_SKEW_SECONDS ||
     payload.iat >= nowSeconds + ASSERTION_CLOCK_SKEW_SECONDS
   ) {
-    throw invalidUserAssertion();
+    throw invalidSignedUserAssertion();
   }
 
   return { userId: payload.sub };
@@ -185,14 +170,14 @@ export class UserAssertionVerifier {
       input.organizationId.trim().length === 0 ||
       input.signedAssertion.trim().length === 0
     ) {
-      throw invalidUserAssertion();
+      throw invalidSignedUserAssertion();
     }
 
     const { config } = input;
     const header = protectedHeader(this.crypto, input.signedAssertion);
 
     if (!isAllowedAlgorithm(header.algorithm, config)) {
-      throw invalidUserAssertion();
+      throw invalidSignedUserAssertion();
     }
 
     let jwks = await this.loadKeys(input.organizationId, config);
@@ -204,7 +189,7 @@ export class UserAssertionVerifier {
     }
 
     if (key === undefined) {
-      throw invalidUserAssertion();
+      throw invalidSignedUserAssertion();
     }
 
     let verified: Readonly<Record<string, unknown>>;
@@ -216,7 +201,7 @@ export class UserAssertionVerifier {
         algorithm: header.algorithm,
       });
     } catch (error) {
-      throw invalidUserAssertion(error);
+      throw invalidSignedUserAssertion(error);
     }
 
     const claims = validateClaims(verified, config, nowSeconds);

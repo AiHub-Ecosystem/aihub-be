@@ -96,7 +96,7 @@ Deliberate order: cheap checks first, cryptography last.
 
 **Step 5 is an addition relative to D1.** Without TTL caps, a customer could sign an assertion with a 5-year `exp` and hardcode it into a mobile app — effectively leaking a permanent API key. `max_assertion_ttl_seconds` defaults to 300, configured in the DB so it can be tuned per tenant.
 
-**Org-scoped operations where client sends assertion anyway: still verify.** If present, it must be valid. Silently ignoring an invalid assertion masks integration bugs.
+**Org-scoped operations where client sends assertion anyway: still verify.** If present, it must be valid. Silently ignoring an invalid assertion masks integration bugs. Reserved: no operation is organization-scoped today, so the catalog does not model this scope; the first such operation reintroduces it with a guard test (#168).
 
 <a id="g5-jwks-fetch--chặn-ssrf"></a>
 <a id="g5-jwks-fetch-blocking-ssrf"></a>
