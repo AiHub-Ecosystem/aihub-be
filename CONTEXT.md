@@ -23,7 +23,9 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **User Access JWT:** a short-lived RS256 token issued by AIHUB after local credential authentication for user-facing APIs or the Customer Web BFF; it is distinct from `X-API-Key`, User Identities, and internal downstream JWTs, carries the User Account ID as `sub`, and does not carry organization or mutable credential data.
 - **Bearer boundary:** the user-facing authentication boundary that accepts an AIHUB User Access JWT in `Authorization: Bearer`; it is separate from the `X-API-Key` and `X-User-Identity` grading boundaries.
 - **Refresh Token:** a renewable login credential paired with a User Access JWT; it can be rotated and revoked without changing the user account or API key.
-- **Refresh Session:** the durable login session created by one successful login; it owns one Refresh Token Family and is independent from the User Account and User Access JWT.
+- **Refresh Session:** the durable login session created by one successful login or one Verification Sign-in; it owns one Refresh Token Family and is independent from the User Account and User Access JWT.
+- **Signup Browser Binding:** a random nonce held in an HttpOnly cookie by the browser that requested an email verification token (by registering or resending), stored by AIHUB only as a hash on that token; it proves which browser may be signed in by that token, never who owns the email.
+- **Verification Sign-in:** the one Refresh Session a verification token may create, issued only when the verifying browser presents the token's Signup Browser Binding; any holder of the link can verify the email, but only the bound browser is signed in, and only once per token.
 - **Refresh Token Family:** the ordered lineage of rotated Refresh Token versions for one Refresh Session; reusing any previous version revokes the entire family.
 - **Customer Organization:** the tenant concept in the Customer Web. During the invite-only sandbox MVP, all invited Customer Users belong to one Customer Organization mapped to the dedicated sandbox AIHUB Organization.
 - **Managed IdP:** the external identity provider used by the existing Customer Web sandbox during the transition; it is separate from AIHUB's local credential auth and is not the target identity boundary for AIHUB accounts.
@@ -286,6 +288,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - [ADR-0039: Organization invitation send-rate boundary](docs/adr/0039-organization-invitation-send-rate-boundary.md)
 - [ADR-0024: Rotating refresh-session boundary](docs/adr/0024-rotating-refresh-session-boundary.md)
 - [ADR-0053: Optional end-user identity verification per Organization](docs/adr/0053-optional-user-identity-verification.md)
+- [ADR-0054: Sign in on email verification only in the browser that signed up](docs/adr/0054-verification-sign-in-bound-to-signup-browser.md)
 - [Agent and architecture design](docs/superpowers/specs/2026-09-07-aihub/12-agent-workflow-and-clean-architecture-design.md)
 - [Matt issue workflow](docs/agents/issue-tracker.md)
 - [Follow-up issue #92: durable audit trail for organization membership and API-key mutations](https://github.com/AiHub-Ecosystem/aihub-be/issues/92)
