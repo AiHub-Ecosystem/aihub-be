@@ -575,6 +575,39 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
           audit: 0,
         });
       });
+
+      it('refuses a suspension that lands while the request is in flight, and records nothing', async () => {
+        // Held after the caller's Membership was read and before the
+        // transaction opens, which is the only moment a suspension can land
+        // between the use case's own check and the transaction's re-read of the
+        // Organization row.
+        const pause = identityClient.pauseAfterNextQuery();
+        const request = mutate(route, ownerId, 'member');
+        try {
+          await waitForQueryCapture(pause, 10_000);
+          await pool.query(
+            "UPDATE organizations SET status = 'suspended' WHERE id = $1",
+            [ORGANIZATION_ID],
+          );
+        } finally {
+          identityClient.disarm();
+          pause.release();
+        }
+
+        const response = await request;
+
+        expect({
+          status: response.statusCode,
+          code: response.json().error?.code,
+          message: response.json().error?.message,
+          audit: (await auditEvents()).length,
+        }).toEqual({
+          status: 403,
+          code: 'FORBIDDEN',
+          message: ROUTE_DENIAL[route],
+          audit: 0,
+        });
+      });
     },
   );
 
