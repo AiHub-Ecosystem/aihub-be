@@ -1,5 +1,6 @@
 import type { RequestContext } from '../../../common/request-context/request-context';
 
+import { admitOrganizationRead } from './organization-admission';
 import {
   type ListOrganizationAuditEventsInput,
   type OrganizationAuditEventFilter,
@@ -7,19 +8,7 @@ import {
   type OrganizationAuditEventReadPort,
   type OrganizationAuditEventRecord,
 } from './organization-audit-event-read.port';
-import {
-  forbidden,
-  requireActiveMembership,
-} from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
-
-/**
- * One message for every refusal, following the open-invitation listing. A
- * distinguishable message turns this read into an Organization prober: a
- * caller holding no membership anywhere would learn from a suspended-specific
- * refusal that the Organization they guessed exists.
- */
-const AUDIT_ACCESS_FORBIDDEN = 'Organization audit access is forbidden';
 
 export interface ReadOrganizationAuditEventsCommand {
   readonly context: RequestContext;
@@ -61,18 +50,14 @@ export class ReadOrganizationAuditEvents {
   async read(
     input: ReadOrganizationAuditEventsCommand,
   ): Promise<OrganizationAuditEventPage> {
-    const caller = await requireActiveMembership(
-      this.membership,
-      {
-        context: input.context,
-        userId: input.userId,
-        organizationId: input.organizationId,
-      },
-      AUDIT_ACCESS_FORBIDDEN,
-    );
-
-    if (caller.role === 'member') {
-      throw forbidden(AUDIT_ACCESS_FORBIDDEN);
+    const admission = await admitOrganizationRead(this.membership, {
+      surface: 'audit_read',
+      context: input.context,
+      userId: input.userId,
+      organizationId: input.organizationId,
+    });
+    if (!admission.admitted) {
+      throw admission.refusal;
     }
 
     const query: ListOrganizationAuditEventsInput = {

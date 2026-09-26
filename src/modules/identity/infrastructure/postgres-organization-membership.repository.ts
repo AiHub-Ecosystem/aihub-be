@@ -1,5 +1,6 @@
 import { AppError } from '../../../common/errors/app-error';
 import type { OrganizationStatus } from '../application/api-key-authenticator.port';
+import { ORGANIZATION_READ_ADMISSION } from '../application/organization-admission';
 import type {
   ListOrganizationMembersInput,
   ListedOrganizationMember,
@@ -87,6 +88,29 @@ const LIST_ROSTER_SQL = `
   ORDER BY caller.organization_id ASC, member_account.username ASC
 `;
 
+/**
+ * Renders a surface's admitted Membership Roles as a SQL list.
+ *
+ * An empty set is refused rather than rendered: `IN ()` admits every role, so
+ * a table row that lost its roles would silently turn a management read into a
+ * public one. Only the code-owned table reaches this, never a request.
+ */
+export function renderAdmittedRoles(
+  roles: readonly OrganizationMembershipRole[],
+): string {
+  if (roles.length === 0) {
+    throw new Error(
+      'organization read admission must admit at least one Membership Role',
+    );
+  }
+  return roles.map((role) => `'${role}'`).join(', ');
+}
+
+const MEMBERSHIP_LIST_ADMISSION = ORGANIZATION_READ_ADMISSION.membership_list;
+
+// Authorization stays inside this query because ADR-0051 requires it and the
+// rows to come from one point-in-time snapshot. The policy it enforces is read
+// from the shared table rather than repeated here.
 const LIST_ORGANIZATION_MEMBERS_SQL = `
   SELECT
     authority.allowed AS authorized,
@@ -102,8 +126,12 @@ const LIST_ORGANIZATION_MEMBERS_SQL = `
       WHERE caller.organization_id = $1
         AND caller.user_account_id = $2
         AND caller.status = 'active'
-        AND caller.role IN ('owner', 'admin')
-        AND organization.status = 'active'
+        AND caller.role IN (${renderAdmittedRoles(MEMBERSHIP_LIST_ADMISSION.admittedRoles)})
+        ${
+          MEMBERSHIP_LIST_ADMISSION.suspensionClosesSurface
+            ? "AND organization.status = 'active'"
+            : ''
+        }
     ) AS allowed
   ) AS authority
   LEFT JOIN organization_members AS membership

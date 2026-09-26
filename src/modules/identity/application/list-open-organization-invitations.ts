@@ -1,14 +1,11 @@
 import type { RequestContext } from '../../../common/request-context/request-context';
 
+import { admitOrganizationRead } from './organization-admission';
 import type {
   OpenOrganizationInvitationRecord,
   OrganizationInvitationPort,
 } from './organization-invitation.port';
-import { requireOrganizationManager } from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
-
-const INVITATION_ACCESS_FORBIDDEN =
-  'Organization invitation access is forbidden';
 
 export interface ListOpenOrganizationInvitationsCommand {
   readonly context: RequestContext;
@@ -41,15 +38,15 @@ export class ListOpenOrganizationInvitations {
   async list(
     input: ListOpenOrganizationInvitationsCommand,
   ): Promise<readonly ListedOrganizationInvitation[]> {
-    await requireOrganizationManager(
-      this.membership,
-      {
-        context: input.context,
-        userId: input.userId,
-        organizationId: input.organizationId,
-      },
-      INVITATION_ACCESS_FORBIDDEN,
-    );
+    const admission = await admitOrganizationRead(this.membership, {
+      surface: 'open_invitations',
+      context: input.context,
+      userId: input.userId,
+      organizationId: input.organizationId,
+    });
+    if (!admission.admitted) {
+      throw admission.refusal;
+    }
 
     const records = await this.invitations.listOpenInvitations({
       context: input.context,
