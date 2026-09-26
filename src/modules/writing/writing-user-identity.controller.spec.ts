@@ -52,7 +52,7 @@ const gradePayload = {
   image_url: 'https://example.com/chart.png',
 };
 
-describe('Writing user assertion HTTP flow', () => {
+describe('Writing user identity HTTP flow', () => {
   let app: NestFastifyApplication;
   let privateKey: unknown;
   let publicJwk: Record<string, unknown>;
@@ -196,18 +196,18 @@ describe('Writing user assertion HTTP flow', () => {
       .sign(privateKey as never);
   }
 
-  function apiKeyHeaders(assertionValue?: string): Record<string, string> {
+  function apiKeyHeaders(identityValue?: string): Record<string, string> {
     return {
       host: 'localhost',
       'x-api-key': 'test-api-key',
-      'idempotency-key': 'user-assertion-test',
-      ...(assertionValue === undefined
+      'idempotency-key': 'user-identity-test',
+      ...(identityValue === undefined
         ? {}
-        : { 'x-user-assertion': assertionValue }),
+        : { 'x-user-identity': identityValue }),
     };
   }
 
-  it('rejects missing Task 1 and Task 2 assertions before dispatch', async () => {
+  it('rejects missing Task 1 and Task 2 user identities before dispatch', async () => {
     for (const url of [
       '/v1/ielts/writing/task1/grade',
       '/v1/ielts/writing/task2/grade',
@@ -220,9 +220,29 @@ describe('Writing user assertion HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      expect(response.json().error.code).toBe('USER_ASSERTION_REQUIRED');
+      expect(response.json().error).toMatchObject({
+        code: 'USER_IDENTITY_REQUIRED',
+        message: 'User identity is required in X-User-Identity',
+      });
       expect(capturedContext).toBeUndefined();
     }
+  });
+
+  it('treats the retired X-User-Assertion header as a missing user identity', async () => {
+    const signed = await assertion();
+    const { 'x-user-identity': _unused, ...headers } = apiKeyHeaders(signed);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/grade',
+      headers: { ...headers, 'x-user-assertion': signed },
+      payload: gradePayload,
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.code).toBe('USER_IDENTITY_REQUIRED');
+    expect(response.payload).not.toContain(signed);
+    expect(capturedContext).toBeUndefined();
   });
 
   it('reports missing active identity configuration without dispatch or detail leakage', async () => {
@@ -278,7 +298,10 @@ describe('Writing user assertion HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(401);
-    expect(response.json().error.code).toBe('INVALID_USER_ASSERTION');
+    expect(response.json().error).toMatchObject({
+      code: 'INVALID_USER_IDENTITY',
+      message: 'User identity is invalid',
+    });
     expect(capturedContext).toBeUndefined();
   });
 

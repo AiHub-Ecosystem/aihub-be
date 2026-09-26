@@ -189,8 +189,8 @@ describe('buildPostmanCollection', () => {
       value: '{{identityConfigRequiredApiKey}}',
     });
     expect(headers).toContainEqual({
-      key: 'X-User-Assertion',
-      value: '{{userAssertion}}',
+      key: 'X-User-Identity',
+      value: '{{userIdentity}}',
     });
     expect(script).toContain('responds with HTTP 403');
     expect(script).toContain('IDENTITY_CONFIG_REQUIRED');
@@ -211,22 +211,22 @@ describe('buildPostmanCollection', () => {
     }
   });
 
-  it('uses a valid assertion for user-scoped grading scenarios and checks missing assertion', async () => {
+  it('sends the user identity on user-scoped grading scenarios and checks a missing one', async () => {
     const collection = await build();
     const folder = findD1Folder(collection);
     const task1Grade = folder.item?.find(
       (item) => item.name === '1a. Valid request routes to Task 1 grading',
     );
-    const missingAssertion = folder.item?.find(
-      (item) => item.name === '7. User-scoped operation missing User Assertion',
+    const missingIdentity = folder.item?.find(
+      (item) => item.name === '7. User-scoped operation missing User Identity',
     );
 
     expect(task1Grade?.request?.header).toContainEqual({
-      key: 'X-User-Assertion',
-      value: '{{userAssertion}}',
+      key: 'X-User-Identity',
+      value: '{{userIdentity}}',
     });
-    expect(missingAssertion?.event?.[0]?.script.exec.join('\n')).toContain(
-      'USER_ASSERTION_REQUIRED',
+    expect(missingIdentity?.event?.[0]?.script.exec.join('\n')).toContain(
+      'USER_IDENTITY_REQUIRED',
     );
   });
 

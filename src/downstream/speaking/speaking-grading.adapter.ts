@@ -16,8 +16,8 @@ export function requiredSpeakingUserId(context: RequestContext): string {
   const userId = context.userId;
   if (userId === undefined || userId.trim().length === 0) {
     throw new AppError({
-      code: 'USER_ASSERTION_REQUIRED',
-      message: 'A valid user assertion is required',
+      code: 'USER_IDENTITY_REQUIRED',
+      message: 'User identity is required in X-User-Identity',
       retryable: false,
     });
   }

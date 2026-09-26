@@ -202,7 +202,7 @@ This fulfills US03 while preventing spoofing of identity metadata.
 ```http
 POST /v1/ielts/writing/task1/grade
 X-API-Key: aihub_sk_xxxxx
-X-User-Assertion: <signed-jwt>       # Only on user-scoped operations
+X-User-Identity: <signed-jwt>       # Only on user-scoped operations
 X-Correlation-Id: customer-req-123  # Optional
 Idempotency-Key: <uuid>             # If required by operation
 Content-Type: application/json
@@ -274,7 +274,7 @@ The initial Deliverable 1 draft focused on organization, service, and environmen
 The customer backend sends:
 
 ```http
-X-User-Assertion: <SIGNED_JWT>
+X-User-Identity: <SIGNED_JWT>
 ```
 
 Example payload:
@@ -1195,8 +1195,8 @@ The **Downstream Signal** column indicates what AIHUB _observes_ from the downst
 | Client      | Body exceeds `max_body_bytes`                 | —                                 |  413 | ★ `PAYLOAD_TOO_LARGE`             |         No | Reduce payload size                                     | Metric                  |
 | Client      | Endpoint/resource does not exist              | —                                 |  404 | `NOT_FOUND`                       |         No | Check URL                                               | None                    |
 | Auth        | Missing/invalid API key                       | —                                 |  401 | `UNAUTHORIZED`                    |         No | Check credentials                                       | Audit                   |
-| Auth        | User-scoped operation lacks assertion         | —                                 |  401 | ★ `USER_ASSERTION_REQUIRED`       |         No | Provide `X-User-Assertion`                              | Audit                   |
-| Auth        | Assertion signature invalid/expired/bad claim | —                                 |  401 | `INVALID_USER_ASSERTION`          |         No | Re-issue assertion                                      | Audit                   |
+| Auth        | User-scoped operation lacks user identity     | —                                 |  401 | ★ `USER_IDENTITY_REQUIRED`        |         No | Provide `X-User-Identity`                               | Audit                   |
+| Auth        | Assertion signature invalid/expired/bad claim | —                                 |  401 | `INVALID_USER_IDENTITY`           |         No | Re-issue assertion                                      | Audit                   |
 | Auth        | Unable to fetch Organization JWKS             | Org JWKS endpoint, not AI Service |  503 | ★ `IDENTITY_PROVIDER_UNAVAILABLE` |        Yes | Check customer JWKS endpoint                            | Alert                   |
 | AuthZ       | Scope denied                                  | —                                 |  403 | `FORBIDDEN`                       |         No | Check permissions/plan                                  | Audit                   |
 | AuthZ       | Organization has no active identity config    | —                                 |  403 | `IDENTITY_CONFIG_REQUIRED`        |         No | Configure identity; contact AIHUB if already configured | None                    |

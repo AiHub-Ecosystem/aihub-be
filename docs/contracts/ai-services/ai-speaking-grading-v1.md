@@ -35,7 +35,7 @@ contract and is not part of this document.
   the outbound configuration used to call the AI Speaking service; neither side should persist the
   secret in ordinary business data.
 - `user_id` is required by the AI Speaking service, but AIHUB derives it from the
-  verified `X-User-Assertion`. A client-supplied identity must not override it.
+  verified `X-User-Identity`. A client-supplied identity must not override it.
 
 ## 3. Multipart request contract
 

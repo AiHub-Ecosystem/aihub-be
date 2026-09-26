@@ -50,7 +50,7 @@ import {
   getAuthenticatedApiKey,
 } from '../../identity/presentation/authenticated-request';
 import { RequireOperation } from '../../identity/presentation/require-operation.decorator';
-import { UserAssertionGuard } from '../../identity/presentation/user-assertion.guard';
+import { UserIdentityGuard } from '../../identity/presentation/user-identity.guard';
 
 const TASK1_OPERATION = 'writing.task1.grade' as const;
 const TASK2_OPERATION = 'writing.task2.grade' as const;
@@ -136,8 +136,8 @@ function requireUserId(request: AuthenticatedRequest): string {
   const userId = request.aihubIdentity?.userId;
   if (userId === undefined || userId.trim().length === 0) {
     throw new AppError({
-      code: 'USER_ASSERTION_REQUIRED',
-      message: 'A valid user assertion is required',
+      code: 'USER_IDENTITY_REQUIRED',
+      message: 'User identity is required in X-User-Identity',
       retryable: false,
     });
   }
@@ -153,7 +153,7 @@ function requireUserId(request: AuthenticatedRequest): string {
 @Controller()
 @UseGuards(
   ApiKeyGuard,
-  UserAssertionGuard,
+  UserIdentityGuard,
   RateLimitGuard,
   QuotaGuard,
   ConcurrencyGuard,

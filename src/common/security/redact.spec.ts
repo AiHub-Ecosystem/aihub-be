@@ -26,4 +26,20 @@ describe('redactRecord', () => {
     expect(input.api_key).toBe('aihub_sk_secret');
     expect(input.nested.essay).toBe('private essay');
   });
+
+  it('redacts the user identity header and the retired assertion header', () => {
+    expect(
+      redactRecord({
+        headers: {
+          'X-User-Identity': 'student@example.com',
+          'x-user-assertion': 'eyJhbGciOiJSUzI1NiJ9.payload.signature',
+        },
+      }),
+    ).toEqual({
+      headers: {
+        'X-User-Identity': '[REDACTED]',
+        'x-user-assertion': '[REDACTED]',
+      },
+    });
+  });
 });

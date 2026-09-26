@@ -552,7 +552,7 @@ Established standard:
 ```text
 Client → AIHUB:
 X-API-Key          = Organization credential
-X-User-Assertion   = End-user identity assertion (user-scoped operations)
+X-User-Identity   = End-user identity assertion (user-scoped operations)
 
 AIHUB → AI Service:
 Authorization      = Bearer <AIHUB_INTERNAL_JWT>

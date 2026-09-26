@@ -177,13 +177,13 @@ const CORRELATION_ID_PARAMETER = {
     "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
 };
 
-const USER_ASSERTION_PARAMETER = {
-  name: 'X-User-Assertion',
+const USER_IDENTITY_PARAMETER = {
+  name: 'X-User-Identity',
   in: 'header',
   required: true,
   schema: { type: 'string', minLength: 1 },
   description:
-    'Signed organization assertion identifying the end user. Required for user-scoped operations.',
+    'Signed User Assertion identifying the end user. Required for user-scoped operations.',
 };
 
 function resolvedResponseSchema(
@@ -210,7 +210,7 @@ function operationToPathItem(
   const parameters = [
     { $ref: '#/components/parameters/CorrelationId' },
     operation.identityScope === 'user'
-      ? { $ref: '#/components/parameters/UserAssertion' }
+      ? { $ref: '#/components/parameters/UserIdentity' }
       : undefined,
     idempotencyKeyParameter(operation.idempotency),
   ].filter((parameter) => parameter !== undefined);
@@ -1043,7 +1043,7 @@ function organizationIdentityConfigPathItem(
       operationId: 'organizations.identityConfig.set',
       summary: 'Set an organization identity configuration',
       description:
-        'Creates or replaces the public User Assertion identity configuration for an active owner of an active Organization. Submit exactly one JWKS source. URL sources are fetched through the SSRF-protected JWKS path before saving. Existing status is preserved. A retryable cache error may mean the durable save succeeded; retrying the same request safely retries cache purge.',
+        'Creates or replaces the public Signed User Assertion identity configuration for an active owner of an active Organization. Submit exactly one JWKS source. URL sources are fetched through the SSRF-protected JWKS path before saving. Existing status is preserved. A retryable cache error may mean the durable save succeeded; retrying the same request safely retries cache purge.',
       'x-identity-scope': 'user',
       security: [{ BearerAuth: [] }],
       parameters: [
@@ -1081,7 +1081,7 @@ function organizationIdentityConfigPathItem(
       operationId: 'organizations.identityConfig.read',
       summary: 'Read an organization identity configuration',
       description:
-        'Returns the stored public User Assertion identity configuration to an active owner of an active Organization. Admins, members, disabled memberships, non-members, and owners of suspended Organizations receive the same Safe Authorization Denial. `configured` indicates whether a row exists, including disabled rows; `status` indicates whether that configuration is active. Private JWK members are never returned.',
+        'Returns the stored public Signed User Assertion identity configuration to an active owner of an active Organization. Admins, members, disabled memberships, non-members, and owners of suspended Organizations receive the same Safe Authorization Denial. `configured` indicates whether a row exists, including disabled rows; `status` indicates whether that configuration is active. Private JWK members are never returned.',
       'x-identity-scope': 'user',
       security: [{ BearerAuth: [] }],
       parameters: [
@@ -1425,7 +1425,7 @@ export function buildOpenApiDocument(version: string): unknown {
       },
       parameters: {
         CorrelationId: CORRELATION_ID_PARAMETER,
-        UserAssertion: USER_ASSERTION_PARAMETER,
+        UserIdentity: USER_IDENTITY_PARAMETER,
       },
       responses: errorResponses,
     },

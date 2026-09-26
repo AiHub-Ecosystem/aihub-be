@@ -5,6 +5,9 @@ const SENSITIVE_KEYS = new Set([
   'x-api-key',
   'authorization',
   'user_assertion',
+  'x-user-identity',
+  // Retired header name. Unmigrated clients still send a signed JWT in it,
+  // so it stays redacted even though AIHUB no longer reads it.
   'x-user-assertion',
   'internal_token',
   'essay',

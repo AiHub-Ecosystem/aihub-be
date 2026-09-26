@@ -78,7 +78,7 @@ async operation.
 | Header           | Required     | Source and rule                                                              |
 | ---------------- | ------------ | ---------------------------------------------------------------------------- |
 | X-API-Key        | Yes          | Organization credential; validated before dispatch                           |
-| X-User-Assertion | Yes          | Organization-signed assertion; verified before dispatch                      |
+| X-User-Identity  | Yes          | Organization-signed assertion; verified before dispatch                      |
 | X-Correlation-Id | No           | Echoed in meta when present                                                  |
 | Content-Type     | Yes          | `multipart/form-data` for file grading or `application/json` for JSON-by-URL |
 | Idempotency-Key  | No semantics | Speaking v1 does not consume it and provides no replay guarantee             |
@@ -205,7 +205,7 @@ of the AI Speaking service under this contract.
 
 | Value                      | Source                                               | Public request field? |
 | -------------------------- | ---------------------------------------------------- | --------------------- |
-| user_id                    | Verified X-User-Assertion.sub                        | No                    |
+| user_id                    | Verified X-User-Identity.sub                         | No                    |
 | AI Speaking service origin | DOWNSTREAM_AI_SPEAKING_URL                           | No                    |
 | x-client-id                | DOWNSTREAM_AI_SPEAKING_CLIENT_ID or secret provider  | No                    |
 | x-secret-key               | DOWNSTREAM_AI_SPEAKING_SECRET_KEY or secret provider | No                    |
@@ -274,8 +274,8 @@ that a retry is safe. Speaking has no idempotent replay.
 | ------------------------------------------------------------ | ---: | ----------------------------- | -------------------------- |
 | Invalid multipart, unknown/duplicate field, invalid metadata |  400 | INVALID_REQUEST               | No                         |
 | Missing/unknown/expired AIHUB API key                        |  401 | UNAUTHORIZED                  | No                         |
-| Missing user assertion                                       |  401 | USER_ASSERTION_REQUIRED       | No                         |
-| Invalid user assertion                                       |  401 | INVALID_USER_ASSERTION        | No                         |
+| Missing user identity                                        |  401 | USER_IDENTITY_REQUIRED        | No                         |
+| Invalid user assertion                                       |  401 | INVALID_USER_IDENTITY         | No                         |
 | Organization has no active identity configuration            |  403 | IDENTITY_CONFIG_REQUIRED      | No                         |
 | Key lacks speaking.grade                                     |  403 | FORBIDDEN                     | No                         |
 | Key not valid for environment                                |  403 | ENVIRONMENT_NOT_ALLOWED       | No                         |

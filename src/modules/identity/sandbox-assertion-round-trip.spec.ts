@@ -157,7 +157,7 @@ describe('sandbox assertion round trip', () => {
         signedAssertion: minted.assertion,
         organizationId: OTHER_ORG,
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_USER_ASSERTION' });
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
   });
 
   it('honours the organization assertion lifetime', async () => {

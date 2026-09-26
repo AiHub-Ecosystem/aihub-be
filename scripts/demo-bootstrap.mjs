@@ -101,5 +101,5 @@ console.error(
   `\nOrganization ${organizationId} ready. Credentials appended to ${ENV_FILE}.`,
 );
 console.error(`X-API-Key:        ${apiKey}`);
-console.error(`X-User-Assertion: ${assertion}`);
+console.error(`X-User-Identity: ${assertion}`);
 console.error('\nNew assertions later: pnpm dev:assertion');

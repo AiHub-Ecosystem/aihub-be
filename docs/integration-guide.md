@@ -30,10 +30,10 @@ Your user  →  your app  →  YOUR BACKEND  →  AIHUB  →  AI service
 Two credentials travel on every graded request, and they answer different
 questions:
 
-| Header             | Answers                       | Who creates it         |
-| ------------------ | ----------------------------- | ---------------------- |
-| `X-API-Key`        | Which organization is calling | AIHUB issues it to you |
-| `X-User-Assertion` | Which of your users is acting | You sign it yourself   |
+| Header            | Answers                       | Who creates it         |
+| ----------------- | ----------------------------- | ---------------------- |
+| `X-API-Key`       | Which organization is calling | AIHUB issues it to you |
+| `X-User-Identity` | Which of your users is acting | You sign it yourself   |
 
 **The API key must stay on your server.** Embedding it in a mobile app, a
 single-page app, or anything else a user can read hands your organization's
@@ -330,13 +330,13 @@ refused, and a deployment with no sandbox configured answers `404`.
 
 ### Using it
 
-The assertion goes into `X-User-Assertion` on a normal grading call, against the
+The assertion goes into `X-User-Identity` on a normal grading call, against the
 sandbox hostname:
 
 ```bash
 ASSERTION=$(curl -sS -X POST 'https://sandbox.aihubproduction.com/v1/sandbox/assertions'   -H "X-API-Key: $SANDBOX_API_KEY" -H 'Content-Type: application/json'   -d '{"user_id":"student_456"}' | python -c 'import json,sys; print(json.load(sys.stdin)["data"]["assertion"])')
 
-curl -sS -X POST 'https://sandbox.aihubproduction.com/v1/ielts/speaking/grading'   -H "X-API-Key: $SANDBOX_API_KEY"   -H "X-User-Assertion: $ASSERTION"   -F 'audio=@/path/to/sample.wav'   -F 'part=1'   -F 'question_id=p1_hometown'   -F 'prompt_text=Do you enjoy living in your hometown?'   -F 'test_type=Practice'
+curl -sS -X POST 'https://sandbox.aihubproduction.com/v1/ielts/speaking/grading'   -H "X-API-Key: $SANDBOX_API_KEY"   -H "X-User-Identity: $ASSERTION"   -F 'audio=@/path/to/sample.wav'   -F 'part=1'   -F 'question_id=p1_hometown'   -F 'prompt_text=Do you enjoy living in your hometown?'   -F 'test_type=Practice'
 ```
 
 Note the path. Grading operations live under `/v1/ielts/...`, not `/v1/...`;
@@ -393,7 +393,7 @@ Supply the prompt and essay from your own application:
 ```bash
 curl -X POST https://api.example.com/v1/ielts/writing/task1/grade \
   -H "X-API-Key: $AIHUB_API_KEY" \
-  -H "X-User-Assertion: $ASSERTION" \
+  -H "X-User-Identity: $ASSERTION" \
   -H "Idempotency-Key: $(uuidgen)" \
   -H "Content-Type: application/json" \
   -d '{
@@ -429,7 +429,7 @@ The multipart request itself is capped at 26 MiB, so a full 25 MiB audio file
 fits together with its multipart framing. The 25 MiB file cap mirrors the AI
 Speaking service's own limit.
 
-Send the learner identity only through `X-User-Assertion`; do not send a
+Send the learner identity only through `X-User-Identity`; do not send a
 `user_id` form field. AIHUB derives the downstream identity from the verified
 `sub` claim. The response uses the common `{ "data", "meta" }` envelope; see
 `/docs` for the complete Speaking response schema.
@@ -445,7 +445,7 @@ retrieval and does not follow redirects.
 ```bash
 curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/speaking/grading-json" \
   -H "X-API-Key: $AIHUB_API_KEY" \
-  -H "X-User-Assertion: $AIHUB_ASSERTION" \
+  -H "X-User-Identity: $AIHUB_ASSERTION" \
   -H 'Content-Type: application/json' \
   -d '{
     "audio_url": "https://s3.wispace.app/audio/sample.mp3?signature=demo",
@@ -564,8 +564,8 @@ When present, `retry_after_ms` is in the body, not in a `Retry-After` header.
 | ---: | ------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 |  400 | `INVALID_REQUEST`               | Body failed validation, or carried an unknown field                                          | Fix the request. Retrying is pointless                                                                |
 |  401 | `UNAUTHORIZED`                  | Missing, unknown, revoked, or expired API key                                                | Check the credential                                                                                  |
-|  401 | `USER_ASSERTION_REQUIRED`       | User-scoped operation called without an assertion                                            | Send `X-User-Assertion`                                                                               |
-|  401 | `INVALID_USER_ASSERTION`        | Bad signature, expired, wrong `iss`/`aud`, unknown `kid`                                     | Mint a fresh assertion; check issuer and JWKS                                                         |
+|  401 | `USER_IDENTITY_REQUIRED`        | User-scoped operation called without an assertion                                            | Send `X-User-Identity`                                                                                |
+|  401 | `INVALID_USER_IDENTITY`         | Bad signature, expired, wrong `iss`/`aud`, unknown `kid`                                     | Mint a fresh assertion; check issuer and JWKS                                                         |
 |  403 | `IDENTITY_CONFIG_REQUIRED`      | Your Organization has no active user identity configuration                                  | Ask an owner to complete setup; if already configured, contact AIHUB support                          |
 |  403 | `FORBIDDEN`                     | Key lacks the scope for this operation                                                       | Ask AIHUB to widen the key                                                                            |
 |  403 | `ENVIRONMENT_NOT_ALLOWED`       | Key is not valid for this environment                                                        | Use the key issued for that environment                                                               |
@@ -625,7 +625,7 @@ not a longer delay.
 ### Every request
 
 - [ ] Assertions minted per request, ≤ 300s lifetime, with a fresh `jti`
-- [ ] `X-User-Assertion` contains the learner identity; no client-supplied `user_id` is sent
+- [ ] `X-User-Identity` contains the learner identity; no client-supplied `user_id` is sent
 - [ ] `Idempotency-Key` generated per Writing submission and reused across retries
 - [ ] Speaking audio is one supported file within the documented size limit
 - [ ] Client timeout is ≥ 90s for Writing and ≥ 60s for Speaking

@@ -44,7 +44,7 @@ Maps nearly 1-to-1 with NestJS's native execution lifecycle, requiring no bespok
 | ---------- | ----------------------------------------------------- |
 | 1, 2       | Middleware                                            |
 | 3, 4, 5    | `ApiKeyGuard`                                         |
-| 7, 8, 9    | `UserAssertionGuard` → `ScopeGuard`                   |
+| 7, 8, 9    | `UserIdentityGuard` → `ScopeGuard`                    |
 | 10         | `RateLimitGuard`                                      |
 | 6          | Pipe (executes after Guards — exactly as intended)    |
 | 11, 16, 17 | Interceptor (wraps handler)                           |
@@ -58,7 +58,7 @@ Controllers merely declare operations and invoke the dispatcher. **No controller
 `POST /v1/ielts/writing/task1/grade`
 
 ```
-Customer BE ──X-API-Key, X-User-Assertion, Idempotency-Key──► AIHUB
+Customer BE ──X-API-Key, X-User-Identity, Idempotency-Key──► AIHUB
                                           t0 ─┐
    req_01J... ; env=production                │  steps 1-11: ~3-8ms
    org_abc ; actor=student_123                │

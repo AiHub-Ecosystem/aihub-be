@@ -10,7 +10,7 @@ identity configuration for them.
 ## Why this step exists
 
 Every grading operation (Writing Task 1/Task 2 and both Speaking routes) is
-user-scoped and requires `X-User-Assertion`. AIHUB verifies that assertion with
+user-scoped and requires `X-User-Identity`. AIHUB verifies that assertion with
 the Organization's identity configuration: an issuer plus either a JWKS URL or
 an inline public JWKS. An Organization without one has a working API key but
 cannot grade anything.

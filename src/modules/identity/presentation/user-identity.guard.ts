@@ -32,24 +32,24 @@ function configurationError(): AppError {
   });
 }
 
-function assertionRequired(): AppError {
+function identityRequired(): AppError {
   return new AppError({
-    code: 'USER_ASSERTION_REQUIRED',
-    message: 'User assertion is required',
+    code: 'USER_IDENTITY_REQUIRED',
+    message: 'User identity is required in X-User-Identity',
     retryable: false,
   });
 }
 
-function invalidAssertion(): AppError {
+function invalidIdentity(): AppError {
   return new AppError({
-    code: 'INVALID_USER_ASSERTION',
-    message: 'User assertion is invalid',
+    code: 'INVALID_USER_IDENTITY',
+    message: 'User identity is invalid',
     retryable: false,
   });
 }
 
 @Injectable()
-export class UserAssertionGuard implements CanActivate {
+export class UserIdentityGuard implements CanActivate {
   constructor(
     @Inject(Reflector)
     private readonly reflector: Reflector,
@@ -70,7 +70,7 @@ export class UserAssertionGuard implements CanActivate {
 
     const operation: OperationDef = OPERATION_CATALOG[operationId];
     const authenticated = getAuthenticatedApiKey(request);
-    const header = request.headers['x-user-assertion'];
+    const header = request.headers['x-user-identity'];
 
     if (header === undefined) {
       if (operation.identityScope === 'organization') {
@@ -90,11 +90,11 @@ export class UserAssertionGuard implements CanActivate {
         return true;
       }
 
-      throw assertionRequired();
+      throw identityRequired();
     }
 
     if (typeof header !== 'string' || header.trim().length === 0) {
-      throw invalidAssertion();
+      throw invalidIdentity();
     }
 
     request.aihubIdentity = await this.verifier.verify({

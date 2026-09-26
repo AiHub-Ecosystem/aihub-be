@@ -136,7 +136,7 @@ describe('tenant isolation for identity boundaries', () => {
         signedAssertion: assertion,
         organizationId: authenticated.organizationId,
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_USER_ASSERTION' });
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
   });
 
   it('keeps colliding assertion subjects in their Organization JWKS cache namespace', async () => {
@@ -195,7 +195,7 @@ describe('tenant isolation for identity boundaries', () => {
         signedAssertion: assertionB,
         organizationId: ORGANIZATION_A,
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_USER_ASSERTION' });
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
     await expect(
       verifier.verify({
         signedAssertion: assertionB,

@@ -24,8 +24,8 @@ const MAX_CLAIM_STRING_LENGTH = 256;
 
 function invalidUserAssertion(cause?: unknown): AppError {
   return new AppError({
-    code: 'INVALID_USER_ASSERTION',
-    message: 'User assertion is invalid',
+    code: 'INVALID_USER_IDENTITY',
+    message: 'User identity is invalid',
     retryable: false,
     ...(cause === undefined ? {} : { cause }),
   });

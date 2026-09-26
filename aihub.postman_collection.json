@@ -21,8 +21,8 @@
           },
           {
             "disabled": false,
-            "description": "(Required) Signed organization assertion identifying the end user. Required for user-scoped operations.",
-            "key": "X-User-Assertion",
+            "description": "(Required) Signed User Assertion identifying the end user. Required for user-scoped operations.",
+            "key": "X-User-Identity",
             "value": "<string>"
           },
           {
@@ -94,8 +94,8 @@
           },
           {
             "disabled": false,
-            "description": "(Required) Signed organization assertion identifying the end user. Required for user-scoped operations.",
-            "key": "X-User-Assertion",
+            "description": "(Required) Signed User Assertion identifying the end user. Required for user-scoped operations.",
+            "key": "X-User-Identity",
             "value": "<string>"
           },
           {
@@ -167,8 +167,8 @@
           },
           {
             "disabled": false,
-            "description": "(Required) Signed organization assertion identifying the end user. Required for user-scoped operations.",
-            "key": "X-User-Assertion",
+            "description": "(Required) Signed User Assertion identifying the end user. Required for user-scoped operations.",
+            "key": "X-User-Identity",
             "value": "<string>"
           },
           {
@@ -277,8 +277,8 @@
           },
           {
             "disabled": false,
-            "description": "(Required) Signed organization assertion identifying the end user. Required for user-scoped operations.",
-            "key": "X-User-Assertion",
+            "description": "(Required) Signed User Assertion identifying the end user. Required for user-scoped operations.",
+            "key": "X-User-Identity",
             "value": "<string>"
           },
           {
@@ -1314,7 +1314,7 @@
       "request": {
         "name": "Set an organization identity configuration",
         "description": {
-          "content": "Creates or replaces the public User Assertion identity configuration for an active owner of an active Organization. Submit exactly one JWKS source. URL sources are fetched through the SSRF-protected JWKS path before saving. Existing status is preserved. A retryable cache error may mean the durable save succeeded; retrying the same request safely retries cache purge.",
+          "content": "Creates or replaces the public Signed User Assertion identity configuration for an active owner of an active Organization. Submit exactly one JWKS source. URL sources are fetched through the SSRF-protected JWKS path before saving. Existing status is preserved. A retryable cache error may mean the durable save succeeded; retrying the same request safely retries cache purge.",
           "type": "text/plain"
         },
         "url": {
@@ -1383,7 +1383,7 @@
       "request": {
         "name": "Read an organization identity configuration",
         "description": {
-          "content": "Returns the stored public User Assertion identity configuration to an active owner of an active Organization. Admins, members, disabled memberships, non-members, and owners of suspended Organizations receive the same Safe Authorization Denial. `configured` indicates whether a row exists, including disabled rows; `status` indicates whether that configuration is active. Private JWK members are never returned.",
+          "content": "Returns the stored public Signed User Assertion identity configuration to an active owner of an active Organization. Admins, members, disabled memberships, non-members, and owners of suspended Organizations receive the same Safe Authorization Denial. `configured` indicates whether a row exists, including disabled rows; `status` indicates whether that configuration is active. Private JWK members are never returned.",
           "type": "text/plain"
         },
         "url": {
@@ -1949,8 +1949,8 @@
                 "value": "{{apiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -1996,8 +1996,8 @@
                 "value": "{{apiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2113,8 +2113,8 @@
                 "value": "{{apiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2158,8 +2158,8 @@
                 "value": "{{apiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2203,8 +2203,8 @@
                 "value": "{{wrongScopeApiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2235,7 +2235,7 @@
           ]
         },
         {
-          "name": "7. User-scoped operation missing User Assertion",
+          "name": "7. User-scoped operation missing User Identity",
           "request": {
             "method": "POST",
             "header": [
@@ -2253,7 +2253,7 @@
               "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
             "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
-            "description": "A user-scoped grading operation without X-User-Assertion must be rejected before dispatch."
+            "description": "A user-scoped grading operation without X-User-Identity must be rejected before dispatch."
           },
           "event": [
             {
@@ -2262,9 +2262,9 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('responds with HTTP 401', function () { pm.response.to.have.status(401); });",
-                  "pm.test('error.code is one of USER_ASSERTION_REQUIRED', function () {",
+                  "pm.test('error.code is one of USER_IDENTITY_REQUIRED', function () {",
                   "  const body = pm.response.json();",
-                  "  pm.expect([\"USER_ASSERTION_REQUIRED\"]).to.include(body.error.code);",
+                  "  pm.expect([\"USER_IDENTITY_REQUIRED\"]).to.include(body.error.code);",
                   "});"
                 ]
               }
@@ -2285,8 +2285,8 @@
                 "value": "{{apiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2330,8 +2330,8 @@
                 "value": "{{apiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2375,8 +2375,8 @@
                 "value": "{{apiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2420,8 +2420,8 @@
                 "value": "{{apiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2472,8 +2472,8 @@
                 "value": "{{apiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2520,8 +2520,8 @@
                 "value": "{{apiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2563,8 +2563,8 @@
                 "value": "{{apiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2606,8 +2606,8 @@
                 "value": "{{apiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2666,8 +2666,8 @@
                 "value": "{{identityConfigRequiredApiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2679,7 +2679,7 @@
               "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
             "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
-            "description": "Fill {{identityConfigRequiredApiKey}} with a valid API key for an Organization without active identity configuration. Send a valid User Assertion; grading must fail before dispatch."
+            "description": "Fill {{identityConfigRequiredApiKey}} with a valid API key for an Organization without active identity configuration. Send a valid Signed User Assertion in X-User-Identity; grading must fail before dispatch."
           },
           "event": [
             {
@@ -2716,8 +2716,8 @@
                 "value": "{{apiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2776,8 +2776,8 @@
                 "value": "{{apiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2842,8 +2842,8 @@
                 "value": "{{apiKey}}"
               },
               {
-                "key": "X-User-Assertion",
-                "value": "{{userAssertion}}"
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
               },
               {
                 "key": "Idempotency-Key",
@@ -2956,7 +2956,7 @@
       "description": "Valid Writing API key for an Organization with missing or disabled user identity configuration."
     },
     {
-      "key": "userAssertion",
+      "key": "userIdentity",
       "value": "REPLACE_WITH_A_VALID_SIGNED_USER_ASSERTION"
     },
     {

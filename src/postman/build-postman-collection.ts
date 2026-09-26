@@ -25,9 +25,9 @@ const IDEMPOTENCY_HEADER = {
   key: 'Idempotency-Key',
   value: '{{$guid}}',
 } as const;
-const USER_ASSERTION_HEADER = {
-  key: 'X-User-Assertion',
-  value: '{{userAssertion}}',
+const USER_IDENTITY_HEADER = {
+  key: 'X-User-Identity',
+  value: '{{userIdentity}}',
 } as const;
 
 const TASK1_GRADE_PATH = '/v1/ielts/writing/task1/grade';
@@ -97,7 +97,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: TASK1_GRADE_BODY,
@@ -111,7 +111,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: TASK2_GRADE_BODY,
@@ -147,7 +147,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: { ...TASK1_GRADE_BODY, essay: undefined },
@@ -161,7 +161,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: { ...TASK1_GRADE_BODY, unexpected_field: 'nope' },
@@ -175,22 +175,22 @@ const D1_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       { key: 'X-API-Key', value: '{{wrongScopeApiKey}}' },
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: TASK1_GRADE_BODY,
     testScript: [assertStatus(403), ...assertErrorCode(['FORBIDDEN'])],
   },
   {
-    name: '7. User-scoped operation missing User Assertion',
+    name: '7. User-scoped operation missing User Identity',
     description:
-      'A user-scoped grading operation without X-User-Assertion must be rejected before dispatch.',
+      'A user-scoped grading operation without X-User-Identity must be rejected before dispatch.',
     path: TASK1_GRADE_PATH,
     headers: [JSON_HEADER, VALID_KEY_HEADER],
     body: TASK1_GRADE_BODY,
     testScript: [
       assertStatus(401),
-      ...assertErrorCode(['USER_ASSERTION_REQUIRED']),
+      ...assertErrorCode(['USER_IDENTITY_REQUIRED']),
     ],
   },
   {
@@ -201,7 +201,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: TASK1_GRADE_BODY,
@@ -215,7 +215,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: TASK1_GRADE_BODY,
@@ -232,7 +232,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: TASK1_GRADE_BODY,
@@ -249,7 +249,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
       { key: 'X-Correlation-Id', value: 'client-trace-{{$guid}}' },
     ],
@@ -273,7 +273,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: TASK1_GRADE_BODY,
@@ -296,7 +296,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: TASK1_GRADE_BODY,
@@ -314,7 +314,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: TASK1_GRADE_BODY,
@@ -332,7 +332,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: TASK1_GRADE_BODY,
@@ -357,7 +357,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
   {
     name: '16. Missing or disabled identity configuration',
     description:
-      'Fill {{identityConfigRequiredApiKey}} with a valid API key for an Organization without active identity configuration. Send a valid User Assertion; grading must fail before dispatch.',
+      'Fill {{identityConfigRequiredApiKey}} with a valid API key for an Organization without active identity configuration. Send a valid Signed User Assertion in X-User-Identity; grading must fail before dispatch.',
     path: TASK1_GRADE_PATH,
     headers: [
       JSON_HEADER,
@@ -365,7 +365,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
         key: 'X-API-Key',
         value: '{{identityConfigRequiredApiKey}}',
       },
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: TASK1_GRADE_BODY,
@@ -385,7 +385,7 @@ const IDEMPOTENCY_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: TASK2_GRADE_BODY,
@@ -415,7 +415,7 @@ const IDEMPOTENCY_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: TASK2_GRADE_BODY,
@@ -449,7 +449,7 @@ const CONCURRENCY_SCENARIOS: readonly Scenario[] = [
     headers: [
       JSON_HEADER,
       VALID_KEY_HEADER,
-      USER_ASSERTION_HEADER,
+      USER_IDENTITY_HEADER,
       IDEMPOTENCY_HEADER,
     ],
     body: TASK1_GRADE_BODY,
@@ -840,7 +840,7 @@ export async function buildPostmanCollection(
           'Valid Writing API key for an Organization with missing or disabled user identity configuration.',
       },
       {
-        key: 'userAssertion',
+        key: 'userIdentity',
         value: 'REPLACE_WITH_A_VALID_SIGNED_USER_ASSERTION',
       },
       {

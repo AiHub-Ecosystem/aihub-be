@@ -2,7 +2,7 @@ import type { ExecutionContext } from '@nestjs/common';
 
 import type { AuthenticatedApiKey } from '../application/api-key-authenticator.port';
 import type { UserAssertionVerifierPort } from '../application/user-assertion-verifier.port';
-import { UserAssertionGuard } from './user-assertion.guard';
+import { UserIdentityGuard } from './user-identity.guard';
 
 const authenticated: AuthenticatedApiKey = {
   organizationId: 'org_acme',
@@ -33,13 +33,13 @@ function guard(
     }),
   },
 ) {
-  return new UserAssertionGuard(
+  return new UserIdentityGuard(
     { getAllAndOverride: () => operation } as never,
     verifier,
   );
 }
 
-describe('UserAssertionGuard', () => {
+describe('UserIdentityGuard', () => {
   const originalNodeEnv = process.env.NODE_ENV;
   const originalBypass = process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV;
 
@@ -48,7 +48,7 @@ describe('UserAssertionGuard', () => {
     process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = originalBypass;
   });
 
-  it('rejects a missing assertion for user-scoped operations', async () => {
+  it('rejects a missing user identity for user-scoped operations', async () => {
     process.env.NODE_ENV = 'production';
     process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'false';
     const request: Record<string, unknown> = {
@@ -59,7 +59,7 @@ describe('UserAssertionGuard', () => {
     await expect(
       guard('writing.task1.grade').canActivate(context(request)),
     ).rejects.toMatchObject({
-      code: 'USER_ASSERTION_REQUIRED',
+      code: 'USER_IDENTITY_REQUIRED',
       httpStatus: 401,
     });
   });

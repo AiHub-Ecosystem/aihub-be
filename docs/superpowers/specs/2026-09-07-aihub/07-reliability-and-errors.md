@@ -153,8 +153,8 @@ Handled naturally via architecture documented in [04 — Redis](04-redis.md):
 | ----------: | ------------------------------- | ------------------------------------------------- | ------------------------- |
 |         400 | `INVALID_REQUEST`               | Schema violation, unknown properties              | No                        |
 |         401 | `UNAUTHORIZED`                  | Missing or invalid API key                        | No                        |
-|         401 | `USER_ASSERTION_REQUIRED`       | User-scoped operation lacks user assertion        | No                        |
-|         401 | `INVALID_USER_ASSERTION`        | Bad signature, expired, or invalid claims         | No                        |
+|         401 | `USER_IDENTITY_REQUIRED`        | User-scoped operation lacks user identity         | No                        |
+|         401 | `INVALID_USER_IDENTITY`         | Bad signature, expired, or invalid claims         | No                        |
 |         403 | `IDENTITY_CONFIG_REQUIRED`      | Organization has no active identity configuration | No                        |
 |         403 | `FORBIDDEN`                     | Insufficient scopes / entitlements                | No                        |
 |         403 | `ENVIRONMENT_NOT_ALLOWED`       | API key not authorized for this environment       | No                        |
@@ -173,7 +173,7 @@ Handled naturally via architecture documented in [04 — Redis](04-redis.md):
 
 ### Six Error Codes Added Beyond Initial D1 Specs
 
-Added to D1 §25 prior to freezing: `USER_ASSERTION_REQUIRED`, `ENVIRONMENT_NOT_ALLOWED`, `PAYLOAD_TOO_LARGE`, `CONCURRENCY_LIMIT`, `AI_SERVICE_CONTRACT_VIOLATION`, `IDENTITY_PROVIDER_UNAVAILABLE`.
+Added to D1 §25 prior to freezing: `USER_IDENTITY_REQUIRED`, `ENVIRONMENT_NOT_ALLOWED`, `PAYLOAD_TOO_LARGE`, `CONCURRENCY_LIMIT`, `AI_SERVICE_CONTRACT_VIOLATION`, `IDENTITY_PROVIDER_UNAVAILABLE`.
 
 Issue #156 adds `IDENTITY_CONFIG_REQUIRED` after the D1 freeze. It is a non-retryable 403 because the API key has authenticated the Organization, but the Organization cannot satisfy the active identity-configuration prerequisite for grading. Missing and disabled configurations share the same public error.
 

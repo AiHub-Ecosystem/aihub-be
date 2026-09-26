@@ -596,9 +596,7 @@ describe('buildOpenApiDocument', () => {
       (parameter) => parameter.$ref,
     );
 
-    expect(parameterRefs).not.toContain(
-      '#/components/parameters/UserAssertion',
-    );
+    expect(parameterRefs).not.toContain('#/components/parameters/UserIdentity');
     expect(mint?.['x-identity-scope']).toBe('organization');
     expect(mint?.['x-required-scope']).toBeUndefined();
   });
@@ -682,20 +680,20 @@ describe('buildOpenApiDocument', () => {
     }
   });
 
-  it('requires a user assertion only for user-scoped operations', () => {
+  it('requires a user identity only for user-scoped operations', () => {
     const userParameters =
       build().paths['/v1/ielts/writing/task1/grade']?.post?.parameters;
     const speakingParameters =
       build().paths['/v1/ielts/speaking/grading']?.post?.parameters;
 
     expect(userParameters).toContainEqual({
-      $ref: '#/components/parameters/UserAssertion',
+      $ref: '#/components/parameters/UserIdentity',
     });
     expect(speakingParameters).toContainEqual({
-      $ref: '#/components/parameters/UserAssertion',
+      $ref: '#/components/parameters/UserIdentity',
     });
-    expect(build().components.parameters.UserAssertion).toMatchObject({
-      name: 'X-User-Assertion',
+    expect(build().components.parameters.UserIdentity).toMatchObject({
+      name: 'X-User-Identity',
       in: 'header',
       required: true,
     });

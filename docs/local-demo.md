@@ -38,7 +38,7 @@ The demo uses:
 ## Choose a demo mode
 
 The authenticated demo is recommended because it exercises the real API-key and
-user-assertion guards. A faster smoke test is available when you only need to
+user-identity guards. A faster smoke test is available when you only need to
 check that the gateway starts and can reach AI Writing.
 
 ### Authenticated demo (recommended)
@@ -160,7 +160,7 @@ The script performs all of the following:
 5. Creates a development API key scoped to `writing.grade` and
    `speaking.grade`.
 6. Appends `DEMO_ORG_ID` and `DEMO_API_KEY` to `.env`.
-7. Prints the API key and one initial `X-User-Assertion`.
+7. Prints the API key and one initial `X-User-Identity`.
 
 The generated private key represents the private key that a real customer's
 backend would hold. AIHUB verifies assertions with the public JWKS; it does not
@@ -238,7 +238,7 @@ PowerShell:
 $idempotencyKey = [guid]::NewGuid().ToString()
 $headers = @{
   'X-API-Key' = $env:AIHUB_API_KEY
-  'X-User-Assertion' = $env:AIHUB_ASSERTION
+  'X-User-Identity' = $env:AIHUB_ASSERTION
   'Idempotency-Key' = $idempotencyKey
 }
 $body = @{
@@ -263,7 +263,7 @@ IDEMPOTENCY_KEY="$(uuidgen)"
 
 curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/writing/task2/grade" \
   -H "X-API-Key: $AIHUB_API_KEY" \
-  -H "X-User-Assertion: $AIHUB_ASSERTION" \
+  -H "X-User-Identity: $AIHUB_ASSERTION" \
   -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
   -H 'Content-Type: application/json' \
   -d '{
@@ -298,7 +298,7 @@ Do not send `image_url` or `chart_type` to the Task 2 grading endpoint.
 ### 6.3 Speaking grading (synchronous multipart proxy)
 
 Speaking grading is user-scoped and requires the organization API key plus a
-fresh `X-User-Assertion`. The client uploads one audio file and sends `part`
+fresh `X-User-Identity`. The client uploads one audio file and sends `part`
 and `question_id`; AIHUB derives the downstream `user_id` from the verified
 assertion. Do not send `user_id` from the client.
 
@@ -312,7 +312,7 @@ PowerShell 7:
 ```powershell
 $headers = @{
   'X-API-Key' = $env:AIHUB_API_KEY
-  'X-User-Assertion' = $env:AIHUB_ASSERTION
+  'X-User-Identity' = $env:AIHUB_ASSERTION
 }
 $form = @{
   audio = Get-Item -LiteralPath '.\sample.wav'
@@ -335,7 +335,7 @@ macOS/Linux:
 ```bash
 curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/speaking/grading" \
   -H "X-API-Key: $AIHUB_API_KEY" \
-  -H "X-User-Assertion: $AIHUB_ASSERTION" \
+  -H "X-User-Identity: $AIHUB_ASSERTION" \
   -F "audio=@sample.wav;type=audio/wav" \
   -F 'part=1' \
   -F 'question_id=p1_hometown' \
@@ -384,7 +384,7 @@ macOS/Linux:
 ```bash
 curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/speaking/grading-json" \
   -H "X-API-Key: $AIHUB_API_KEY" \
-  -H "X-User-Assertion: $AIHUB_ASSERTION" \
+  -H "X-User-Identity: $AIHUB_ASSERTION" \
   -H 'Content-Type: application/json' \
   -d '{
     "audio_url": "https://s3.wispace.app/audio/sample.mp3?signature=demo",
@@ -420,14 +420,14 @@ idempotency key; do not expect an idempotent replay header for that route.
 These checks confirm that the demo is using the real guards rather than the
 local bypass.
 
-| Check                                           | Expected status | Expected error code       |
-| ----------------------------------------------- | --------------: | ------------------------- |
-| Remove `X-API-Key`                              |             401 | `UNAUTHORIZED`            |
-| Call a grading route without `X-User-Assertion` |             401 | `USER_ASSERTION_REQUIRED` |
-| Use an expired or altered assertion             |             401 | `INVALID_USER_ASSERTION`  |
-| Use a key without `writing.grade`               |             403 | `FORBIDDEN`               |
-| Use a key without `speaking.grade`              |             403 | `FORBIDDEN`               |
-| Send an unknown body field                      |             400 | `INVALID_REQUEST`         |
+| Check                                          | Expected status | Expected error code      |
+| ---------------------------------------------- | --------------: | ------------------------ |
+| Remove `X-API-Key`                             |             401 | `UNAUTHORIZED`           |
+| Call a grading route without `X-User-Identity` |             401 | `USER_IDENTITY_REQUIRED` |
+| Use an expired or altered assertion            |             401 | `INVALID_USER_IDENTITY`  |
+| Use a key without `writing.grade`              |             403 | `FORBIDDEN`              |
+| Use a key without `speaking.grade`             |             403 | `FORBIDDEN`              |
+| Send an unknown body field                     |             400 | `INVALID_REQUEST`        |
 
 All retained Writing routes are user-scoped, so they require a valid assertion.
 AIHUB does not silently ignore a broken assertion.
@@ -463,7 +463,7 @@ For a grading request, the local flow is:
 ```text
 X-API-Key
   → resolve organization and environment
-X-User-Assertion
+X-User-Identity
   → verify issuer, audience, timestamps, key id, and signature
   → extract the user id from `sub`
 operation catalog and policy checks
@@ -518,12 +518,12 @@ Check that the request includes the raw `DEMO_API_KEY` in `X-API-Key`, that the
 key was created for the `development` environment, and that
 `AIHUB_ALLOW_UNAUTHENTICATED_DEV` is not being relied on unintentionally.
 
-### `USER_ASSERTION_REQUIRED`
+### `USER_IDENTITY_REQUIRED`
 
 The grading route is user-scoped. Generate a fresh assertion and send it in
-`X-User-Assertion`.
+`X-User-Identity`.
 
-### `INVALID_USER_ASSERTION`
+### `INVALID_USER_IDENTITY`
 
 Generate a new token and check:
 

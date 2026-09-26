@@ -135,7 +135,7 @@ import { OrganizationMembershipController } from './presentation/organization-me
 import { OrganizationController } from './presentation/organization.controller';
 import { SandboxApiKeyGuard } from './presentation/sandbox-api-key.guard';
 import { SandboxAssertionController } from './presentation/sandbox-assertion.controller';
-import { UserAssertionGuard } from './presentation/user-assertion.guard';
+import { UserIdentityGuard } from './presentation/user-identity.guard';
 
 @Module({
   // `RateLimitGuard` on the sandbox route consumes the gateway's rate limiter.
@@ -425,12 +425,12 @@ import { UserAssertionGuard } from './presentation/user-assertion.guard';
     },
     ApiKeyGuard,
     SandboxApiKeyGuard,
-    UserAssertionGuard,
+    UserIdentityGuard,
   ],
   exports: [
     API_KEY_AUTHENTICATOR,
     ApiKeyGuard,
-    UserAssertionGuard,
+    UserIdentityGuard,
     ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
     ORGANIZATION_MEMBERSHIP,
     USER_ASSERTION_VERIFIER,

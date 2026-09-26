@@ -41,7 +41,7 @@ import {
   getAuthenticatedApiKey,
 } from '../../identity/presentation/authenticated-request';
 import { RequireOperation } from '../../identity/presentation/require-operation.decorator';
-import { UserAssertionGuard } from '../../identity/presentation/user-assertion.guard';
+import { UserIdentityGuard } from '../../identity/presentation/user-identity.guard';
 import { isApprovedSpeakingAudioUrl } from '../application/speaking-audio-url.policy';
 import {
   SPEAKING_MULTIPART_PARSER,
@@ -88,8 +88,8 @@ function userId(request: AuthenticatedRequest): string {
   const value = request.aihubIdentity?.userId;
   if (value === undefined || value.trim().length === 0) {
     throw new AppError({
-      code: 'USER_ASSERTION_REQUIRED',
-      message: 'A valid user assertion is required',
+      code: 'USER_IDENTITY_REQUIRED',
+      message: 'User identity is required in X-User-Identity',
       retryable: false,
     });
   }
@@ -109,7 +109,7 @@ function requestLifecycle(
 @Controller()
 @UseGuards(
   ApiKeyGuard,
-  UserAssertionGuard,
+  UserIdentityGuard,
   RateLimitGuard,
   QuotaGuard,
   ConcurrencyGuard,

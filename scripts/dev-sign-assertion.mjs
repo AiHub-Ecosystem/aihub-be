@@ -31,7 +31,7 @@ if (existsSync('.env')) {
 // Defaults reproduce the local demo stack. Override them to sign with a key
 // registered for another organization -- the key id must match a `kid` in that
 // organization's registered JWKS, or the gateway rejects every token with
-// INVALID_USER_ASSERTION.
+// INVALID_USER_IDENTITY.
 const ALGORITHM = process.env.ASSERTION_ALG ?? 'RS256';
 const KEY_ID = process.env.ASSERTION_KID ?? 'demo-2026-01';
 const PRIVATE_KEY_FILE =
@@ -78,7 +78,7 @@ async function loadOrCreatePrivateKey() {
   await writeFile(PRIVATE_KEY_FILE, await exportPKCS8(privateKey));
 
   // Until this runs, every token below verifies against a key AIHUB has
-  // never seen, and the request fails with INVALID_USER_ASSERTION.
+  // never seen, and the request fails with INVALID_USER_IDENTITY.
   console.error(
     `Created ${PRIVATE_KEY_FILE} and ${JWKS_FILE}. Register it once:`,
   );

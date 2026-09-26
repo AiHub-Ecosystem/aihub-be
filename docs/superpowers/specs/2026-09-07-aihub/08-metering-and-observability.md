@@ -140,7 +140,7 @@ Per D1 §6.1 and target architecture §18:
 ### Strictly Forbidden From Logs
 
 - Raw API keys
-- `X-User-Assertion` JWTs
+- `X-User-Identity` values (Signed User Assertion JWTs), and the retired `X-User-Assertion` header if an unmigrated client still sends it
 - **Student essay body content**
 
 Essay content represents PII belonging to our customer's end-users — logging it creates legal liability, not just technical bad practice. Enforced via a **redaction filter** in the logger alongside **automated test verification** ([10 §N.7](10-deployment-roadmap.md#n7-testing-strategy)).

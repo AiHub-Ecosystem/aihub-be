@@ -200,7 +200,7 @@ describe('UserAssertionVerifier', () => {
         organizationId: 'org_acme',
       }),
     ).rejects.toMatchObject({
-      code: 'INVALID_USER_ASSERTION',
+      code: 'INVALID_USER_IDENTITY',
       httpStatus: 401,
     });
   });
@@ -214,7 +214,7 @@ describe('UserAssertionVerifier', () => {
         signedAssertion: assertion,
         organizationId: 'org_acme',
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_USER_ASSERTION' });
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
   });
 
   it('rejects a tampered signature and unsecured algorithm before trusting claims', async () => {
@@ -230,14 +230,14 @@ describe('UserAssertionVerifier', () => {
         signedAssertion: tampered,
         organizationId: 'org_acme',
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_USER_ASSERTION' });
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
 
     await expect(
       verifier(new FakeKeyProvider(fixture.jwks)).verify({
         signedAssertion: 'eyJhbGciOiJub25lIn0.e30.',
         organizationId: 'org_acme',
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_USER_ASSERTION' });
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
   });
 
   it('allows a key without kid only when one usable key matches', async () => {
@@ -283,7 +283,7 @@ describe('UserAssertionVerifier', () => {
         signedAssertion: assertion,
         organizationId: 'org_acme',
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_USER_ASSERTION' });
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
   });
 
   it('does not accept an algorithm outside the organization allowlist', async () => {
@@ -301,7 +301,7 @@ describe('UserAssertionVerifier', () => {
         signedAssertion: assertion,
         organizationId: 'org_acme',
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_USER_ASSERTION' });
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
     expect(provider.calls).toEqual([]);
   });
 
