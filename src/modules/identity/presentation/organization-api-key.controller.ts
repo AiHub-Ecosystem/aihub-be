@@ -14,6 +14,7 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyRequest } from 'fastify';
 
+import { MANAGEMENT_OPERATIONS } from '../../../catalog/management-operations';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
   type CreateOrganizationApiKeyRequest,
@@ -58,8 +59,8 @@ export class OrganizationApiKeyController {
 
   // `DELETE`, following the route that disables a member: a withdrawal that
   // keeps the durable row rather than erasing it.
-  @Delete('/v1/organizations/:organizationId/api-keys/:apiKeyId')
-  @HttpCode(200)
+  @Delete(MANAGEMENT_OPERATIONS['organizations.apiKeys.revoke'].path)
+  @HttpCode(MANAGEMENT_OPERATIONS['organizations.apiKeys.revoke'].successStatus)
   async revoke(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,
@@ -95,8 +96,8 @@ export class OrganizationApiKeyController {
 
   // A verb sub-resource, following the membership transfer route: rotation is
   // one act on one key, not a partial update of it.
-  @Post('/v1/organizations/:organizationId/api-keys/:apiKeyId/rotate')
-  @HttpCode(200)
+  @Post(MANAGEMENT_OPERATIONS['organizations.apiKeys.rotate'].path)
+  @HttpCode(MANAGEMENT_OPERATIONS['organizations.apiKeys.rotate'].successStatus)
   @Header('Cache-Control', 'no-store')
   async rotate(
     @Req() request: FastifyRequest,
@@ -132,8 +133,8 @@ export class OrganizationApiKeyController {
     };
   }
 
-  @Get('/v1/organizations/:organizationId/api-keys')
-  @HttpCode(200)
+  @Get(MANAGEMENT_OPERATIONS['organizations.apiKeys.list'].path)
+  @HttpCode(MANAGEMENT_OPERATIONS['organizations.apiKeys.list'].successStatus)
   // No `Cache-Control` here, unlike creation: this response carries no
   // credential, and reserving `no-store` for the ones that do keeps it
   // meaningful.
@@ -166,8 +167,8 @@ export class OrganizationApiKeyController {
     };
   }
 
-  @Post('/v1/organizations/:organizationId/api-keys')
-  @HttpCode(201)
+  @Post(MANAGEMENT_OPERATIONS['organizations.apiKeys.create'].path)
+  @HttpCode(MANAGEMENT_OPERATIONS['organizations.apiKeys.create'].successStatus)
   // The body carries a credential that is disclosed exactly once; no cache on
   // the way to the caller may keep a copy of it.
   @Header('Cache-Control', 'no-store')

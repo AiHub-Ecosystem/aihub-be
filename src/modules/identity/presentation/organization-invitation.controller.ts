@@ -14,6 +14,7 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { MANAGEMENT_OPERATIONS } from '../../../catalog/management-operations';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
   type AcceptOrganizationInvitationRequest,
@@ -108,8 +109,10 @@ export class OrganizationInvitationController {
 
   // The router ranks this static path above the parameterised invite route, so
   // an organization that happens to be called "invitations" still resolves.
-  @Post('/v1/organizations/invitations/accept')
-  @HttpCode(200)
+  @Post(MANAGEMENT_OPERATIONS['organizations.invitations.accept'].path)
+  @HttpCode(
+    MANAGEMENT_OPERATIONS['organizations.invitations.accept'].successStatus,
+  )
   async accept(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
@@ -137,8 +140,10 @@ export class OrganizationInvitationController {
     };
   }
 
-  @Post('/v1/organizations/:organizationId/invitations')
-  @HttpCode(201)
+  @Post(MANAGEMENT_OPERATIONS['organizations.invitations.create'].path)
+  @HttpCode(
+    MANAGEMENT_OPERATIONS['organizations.invitations.create'].successStatus,
+  )
   async invite(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,
@@ -219,8 +224,10 @@ export class OrganizationInvitationController {
     };
   }
 
-  @Get('/v1/organizations/:organizationId/invitations')
-  @HttpCode(200)
+  @Get(MANAGEMENT_OPERATIONS['organizations.invitations.list'].path)
+  @HttpCode(
+    MANAGEMENT_OPERATIONS['organizations.invitations.list'].successStatus,
+  )
   async list(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,
@@ -252,8 +259,10 @@ export class OrganizationInvitationController {
     };
   }
 
-  @Delete('/v1/organizations/:organizationId/invitations/:invitationId')
-  @HttpCode(204)
+  @Delete(MANAGEMENT_OPERATIONS['organizations.invitations.revoke'].path)
+  @HttpCode(
+    MANAGEMENT_OPERATIONS['organizations.invitations.revoke'].successStatus,
+  )
   async revoke(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,

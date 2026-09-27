@@ -2,6 +2,7 @@ import { Readable } from 'node:stream';
 
 import Fastify, { type FastifyInstance } from 'fastify';
 
+import { MANAGEMENT_OPERATIONS } from '../../catalog/management-operations';
 import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
 import { registerBodySizeGuard } from './body-size.hook';
 
@@ -9,6 +10,7 @@ const CATALOGUED_PATH = OPERATION_CATALOG['writing.task1.grade'].path;
 const LIMIT = OPERATION_CATALOG['writing.task1.grade'].maxBodyBytes;
 const JSON_PATH = OPERATION_CATALOG['speaking.grading-json'].path;
 const JSON_LIMIT = OPERATION_CATALOG['speaking.grading-json'].maxBodyBytes;
+const PARAMETERISED_PATH = MANAGEMENT_OPERATIONS['organizations.rename'].path;
 
 describe('registerBodySizeGuard', () => {
   let app: FastifyInstance;
@@ -27,6 +29,10 @@ describe('registerBodySizeGuard', () => {
       return { ok: true };
     });
     app.post('/v1/uncatalogued', async () => {
+      handlerCalls += 1;
+      return { ok: true };
+    });
+    app.patch(PARAMETERISED_PATH, async () => {
       handlerCalls += 1;
       return { ok: true };
     });
@@ -104,5 +110,41 @@ describe('registerBodySizeGuard', () => {
     expect(response.statusCode).toBe(413);
     expect(response.json().code).toBe('FST_ERR_CTP_BODY_TOO_LARGE');
     expect(handlerCalls).toBe(0);
+  });
+
+  /**
+   * The limit map is keyed by an exact path, so a Management operation — whose
+   * path carries a `:segment` the URL does not spell the same way — is never
+   * matched. That is deliberate (ADR-0059): Management operations declare no
+   * `maxBodyBytes`, because declaring one would publish a limit this hook
+   * silently ignores. If someone teaches this hook to pattern-match, this test
+   * fails and the limit question is reopened on purpose.
+   */
+  it('never applies a catalogued limit to a parameterised management path', async () => {
+    const largePayload = JSON.stringify({ padding: 'x'.repeat(LIMIT * 2) });
+    const response = await app.inject({
+      method: 'PATCH',
+      url: PARAMETERISED_PATH.replace(':organizationId', 'org_concrete'),
+      headers: { 'content-type': 'application/json' },
+      payload: largePayload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(handlerCalls).toBe(1);
+  });
+
+  it('has no Management operation carrying a body limit the hook would apply', () => {
+    const cataloguedPaths = new Set<string>(
+      Object.values(OPERATION_CATALOG).map((operation) => operation.path),
+    );
+
+    for (const [operationId, operation] of Object.entries(
+      MANAGEMENT_OPERATIONS,
+    )) {
+      expect({
+        operationId,
+        catalogued: cataloguedPaths.has(operation.path),
+      }).toEqual({ operationId, catalogued: false });
+    }
   });
 });

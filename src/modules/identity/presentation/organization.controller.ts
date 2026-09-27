@@ -13,6 +13,7 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { MANAGEMENT_OPERATIONS } from '../../../catalog/management-operations';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
   type CreateOrganizationRequest,
@@ -73,8 +74,8 @@ export class OrganizationController {
     private readonly renameOrganization: RenameOrganizationPort,
   ) {}
 
-  @Post('/v1/organizations')
-  @HttpCode(201)
+  @Post(MANAGEMENT_OPERATIONS['organizations.create'].path)
+  @HttpCode(MANAGEMENT_OPERATIONS['organizations.create'].successStatus)
   async create(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
@@ -142,8 +143,8 @@ export class OrganizationController {
    * State-idempotent by construction, so no Idempotency-Key is read: a retry
    * after success finds the name already applied and changes nothing.
    */
-  @Patch('/v1/organizations/:organizationId')
-  @HttpCode(200)
+  @Patch(MANAGEMENT_OPERATIONS['organizations.rename'].path)
+  @HttpCode(MANAGEMENT_OPERATIONS['organizations.rename'].successStatus)
   async rename(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,

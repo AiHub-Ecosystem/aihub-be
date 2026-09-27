@@ -5,8 +5,8 @@ import {
 import { Test } from '@nestjs/testing';
 
 import { AppModule } from '../../../app.module';
+import { MANAGEMENT_OPERATIONS } from '../../../catalog/management-operations';
 import { AppError } from '../../../common/errors/app-error';
-import { ORGANIZATION_ROSTER_PATH } from '../../../contracts/organization/membership';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
@@ -23,6 +23,9 @@ import {
   type OrganizationMembershipPort,
   type OrganizationRosterOrganization,
 } from '../application/organization-membership.port';
+
+const ORGANIZATION_ROSTER_PATH =
+  MANAGEMENT_OPERATIONS['organizations.me.members.list'].path;
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
@@ -135,7 +138,7 @@ describe('Organization membership HTTP flow', () => {
     headers: Record<string, string> = {
       authorization: 'Bearer valid.token.value',
     },
-    url = ORGANIZATION_ROSTER_PATH,
+    url: string = ORGANIZATION_ROSTER_PATH,
   ) {
     return app.inject({
       method: 'GET',

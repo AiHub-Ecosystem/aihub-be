@@ -14,11 +14,10 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyRequest } from 'fastify';
 
+import { MANAGEMENT_OPERATIONS } from '../../../catalog/management-operations';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
   EmptyOrganizationMembershipMutationRequestSchema,
-  ORGANIZATION_MEMBERSHIP_LIST_PATH,
-  ORGANIZATION_ROSTER_PATH,
   type OrganizationMembershipListQuery,
   OrganizationMembershipListQuerySchema,
   type OrganizationMembershipListResponse,
@@ -51,7 +50,7 @@ export class OrganizationMembershipController {
     private readonly membershipList: ListOrganizationMemberships,
   ) {}
 
-  @Get(ORGANIZATION_MEMBERSHIP_LIST_PATH)
+  @Get(MANAGEMENT_OPERATIONS['organizations.members.list'].path)
   @HttpCode(200)
   async listOrganizationMembers(
     @Req() request: FastifyRequest,
@@ -86,7 +85,7 @@ export class OrganizationMembershipController {
     };
   }
 
-  @Get(ORGANIZATION_ROSTER_PATH)
+  @Get(MANAGEMENT_OPERATIONS['organizations.me.members.list'].path)
   @HttpCode(200)
   async roster(
     @Req() request: FastifyRequest,
@@ -113,7 +112,7 @@ export class OrganizationMembershipController {
     };
   }
 
-  @Patch('/v1/organizations/:organizationId/members/:username')
+  @Patch(MANAGEMENT_OPERATIONS['organizations.members.change_role'].path)
   @HttpCode(200)
   async changeRole(
     @Req() request: FastifyRequest,
@@ -141,7 +140,7 @@ export class OrganizationMembershipController {
     return mutationResponse(result, requestId);
   }
 
-  @Delete('/v1/organizations/:organizationId/members/:username')
+  @Delete(MANAGEMENT_OPERATIONS['organizations.members.disable'].path)
   @HttpCode(200)
   async disable(
     @Req() request: FastifyRequest,
@@ -165,7 +164,7 @@ export class OrganizationMembershipController {
     return mutationResponse(result, requestId);
   }
 
-  @Post('/v1/organizations/:organizationId/members/:username/transfer')
+  @Post(MANAGEMENT_OPERATIONS['organizations.members.transfer'].path)
   @HttpCode(200)
   async transfer(
     @Req() request: FastifyRequest,

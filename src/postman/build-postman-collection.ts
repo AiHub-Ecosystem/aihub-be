@@ -1,6 +1,9 @@
 import { convert } from 'openapi-to-postmanv2';
 
-import { ORGANIZATION_ROSTER_PATH } from '../contracts/organization/membership';
+import { MANAGEMENT_OPERATIONS } from '../catalog/management-operations';
+
+const ORGANIZATION_ROSTER_PATH =
+  MANAGEMENT_OPERATIONS['organizations.me.members.list'].path;
 
 /**
  * D2 handover artifact, not a regression suite (see issue #6): every request
