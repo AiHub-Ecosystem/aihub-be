@@ -87,16 +87,22 @@ export interface PublicRouteDef {
   readonly organizationResolution: OrganizationResolution;
   readonly successStatus: 200 | 201 | 202 | 204;
   /**
-   * The value the document publishes as `x-identity-scope`, or `null` when the
+   * What the document publishes as `x-identity-scope`, or `null` when the
    * document omits the extension.
    *
-   * This is named for what it is — a published vendor-extension value — and not
-   * as an "identity mode", because it is not one thing. Across this document it
-   * is `user` for the dispatch operations and for the eighteen Organization
-   * routes (which consume no User Identity at all), `none` for the local auth
-   * routes, `organization` for the sandbox mint, and absent for the Speaking
-   * question list. Declaring it here gathers that into one place, which is where
-   * it becomes visible enough to be worth a decision; it does not resolve it.
+   *   - `user` — the operation resolves an End-User ID from a User Identity.
+   *     Only these publish the `X-User-Identity` parameter, and a guard test
+   *     holds that equivalence both ways.
+   *   - `organization` — the operation acts on an Organization. No route in
+   *     this registry consumes a User Identity.
+   *   - `none` — the operation resolves no identity.
+   *   - `null` — the document omits the extension. `speaking.questions` is the
+   *     only one: an anonymous read of published prompts that names nothing.
+   *
+   * This used to record what the document happened to publish rather than what
+   * it should, and the two had drifted: the eighteen Organization routes
+   * published `user` while consuming no User Identity, which told a generated
+   * client to send a header the route rejects.
    */
   readonly publishedIdentityScope: 'user' | 'none' | 'organization' | null;
   readonly idempotency: IdempotencyMode;
@@ -137,7 +143,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'caller',
     successStatus: 201,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'optional',
     requestSchema: CreateOrganizationRequestSchema,
     responseSchema: CreateOrganizationResponseSchema,
@@ -149,7 +155,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: RenameOrganizationRequestSchema,
     responseSchema: RenameOrganizationResponseSchema,
@@ -161,7 +167,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'caller',
     successStatus: 200,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: null,
     responseSchema: OrganizationRosterResponseSchema,
@@ -173,7 +179,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: null,
     responseSchema: OrganizationMembershipListResponseSchema,
@@ -185,7 +191,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: OrganizationMembershipMutationRequestSchema,
     responseSchema: OrganizationMembershipMutationResponseSchema,
@@ -197,7 +203,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: null,
     responseSchema: OrganizationMembershipMutationResponseSchema,
@@ -209,7 +215,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: null,
     responseSchema: OrganizationMembershipMutationResponseSchema,
@@ -221,7 +227,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 201,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'optional',
     requestSchema: CreateOrganizationInvitationRequestSchema,
     responseSchema: CreateOrganizationInvitationResponseSchema,
@@ -233,7 +239,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: null,
     responseSchema: ListOpenOrganizationInvitationsResponseSchema,
@@ -245,7 +251,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 204,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: null,
     responseSchema: null,
@@ -257,7 +263,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'caller',
     successStatus: 200,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: AcceptOrganizationInvitationRequestSchema,
     responseSchema: AcceptOrganizationInvitationResponseSchema,
@@ -269,7 +275,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 201,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: CreateOrganizationApiKeyRequestSchema,
     responseSchema: OrganizationApiKeySecretResponseSchema,
@@ -281,7 +287,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: null,
     responseSchema: ListOrganizationApiKeysResponseSchema,
@@ -293,7 +299,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: null,
     responseSchema: OrganizationApiKeySecretResponseSchema,
@@ -305,7 +311,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: null,
     responseSchema: RevokeOrganizationApiKeyResponseSchema,
@@ -317,7 +323,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: null,
     responseSchema: ReadOrganizationIdentityConfigResponseSchema,
@@ -329,7 +335,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: SetOrganizationIdentityConfigRequestSchema,
     responseSchema: ReadOrganizationIdentityConfigResponseSchema,
@@ -341,7 +347,7 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
-    publishedIdentityScope: 'user',
+    publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: null,
     responseSchema: ListOrganizationAuditEventsResponseSchema,
