@@ -4,8 +4,7 @@ import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import { SuccessEnvelopeInterceptor } from '../../../common/http/success-envelope.interceptor';
 import { ApiKeyGuard } from '../../identity/presentation/api-key.guard';
 import { UserIdentityGuard } from '../../identity/presentation/user-identity.guard';
-import { ConcurrencyReleaseInterceptor } from './concurrency-release.interceptor';
-import { ConcurrencyGuard } from './concurrency.guard';
+import { ConcurrencyPermitInterceptor } from './concurrency-permit.interceptor';
 import { QuotaGuard } from './quota.guard';
 import { RateLimitGuard } from './rate-limit.guard';
 
@@ -38,17 +37,16 @@ export const GRADED_REQUEST_GUARDS = [
   UserIdentityGuard,
   RateLimitGuard,
   QuotaGuard,
-  ConcurrencyGuard,
 ] as const;
 
 /**
- * The response side of the same chain. `ConcurrencyReleaseInterceptor` releases
- * the permit the guard acquired (issue #172 fuses these into one unit; keeping
- * both halves here is what makes that fusion a change to this file alone), and
- * `SuccessEnvelopeInterceptor` shapes the public response.
+ * The response side of the same chain. `ConcurrencyPermitInterceptor` acquires
+ * the concurrency permit before the handler and releases it after (ADR-0058,
+ * issue #172), so the acquire and release halves are one unit no route can
+ * split; `SuccessEnvelopeInterceptor` shapes the public response.
  */
 export const GRADED_REQUEST_INTERCEPTORS = [
-  ConcurrencyReleaseInterceptor,
+  ConcurrencyPermitInterceptor,
   SuccessEnvelopeInterceptor,
 ] as const;
 

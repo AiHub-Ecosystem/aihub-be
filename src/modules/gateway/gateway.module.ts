@@ -36,8 +36,7 @@ import {
 } from './infrastructure/redis-gateway.client';
 import { RedisQuotaCounter } from './infrastructure/redis-quota-counter';
 import { RedisRateLimiter } from './infrastructure/redis-rate-limiter';
-import { ConcurrencyReleaseInterceptor } from './presentation/concurrency-release.interceptor';
-import { ConcurrencyGuard } from './presentation/concurrency.guard';
+import { ConcurrencyPermitInterceptor } from './presentation/concurrency-permit.interceptor';
 import { QuotaGuard } from './presentation/quota.guard';
 import { RateLimitGuard } from './presentation/rate-limit.guard';
 
@@ -129,8 +128,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     },
     RateLimitGuard,
     QuotaGuard,
-    ConcurrencyGuard,
-    ConcurrencyReleaseInterceptor,
+    ConcurrencyPermitInterceptor,
   ],
   exports: [
     OPERATION_DISPATCHER,
@@ -140,8 +138,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     QUOTA_COUNTER,
     QuotaGuard,
     CONCURRENCY_LIMITER,
-    ConcurrencyGuard,
-    ConcurrencyReleaseInterceptor,
+    ConcurrencyPermitInterceptor,
   ],
 })
 export class GatewayModule {}

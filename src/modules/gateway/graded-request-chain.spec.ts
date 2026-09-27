@@ -20,6 +20,7 @@ import { REQUIRED_OPERATION_METADATA } from '../identity/presentation/require-op
 import { SpeakingGradingController } from '../speaking/presentation/speaking-grading.controller';
 import { WritingGradingController } from '../writing/presentation/writing-grading.controller';
 import { DownstreamHttpClient } from './infrastructure/downstream-http.client';
+import { ConcurrencyPermitInterceptor } from './presentation/concurrency-permit.interceptor';
 import {
   GRADED_REQUEST_GUARDS,
   GRADED_REQUEST_INTERCEPTORS,
@@ -59,18 +60,20 @@ const task1Request = fixture('grade-task1.request.json') as {
 };
 
 /**
- * The known-good order, written out literally rather than derived from
- * `GRADED_REQUEST_GUARDS`. This is deliberate: if the executing chain were
- * compared against the (mutable) declaration, reordering the declaration would
- * still match itself and pass, so "moving a step fails verification" would be
- * false. ADR-0018 requires quota to be read before concurrency admission.
+ * The known-good order, written out literally rather than derived from the
+ * declarations. This is deliberate: if the executing chain were compared against
+ * the (mutable) declaration, reordering the declaration would still match
+ * itself and pass, so "moving a step fails verification" would be false.
+ * ADR-0018 requires quota to be read before concurrency admission; ADR-0058
+ * moved the concurrency step from a guard to a permit interceptor, so it is
+ * recorded across the guard/interceptor boundary as one sequence.
  */
 const EXPECTED_ORDER = [
   'ApiKeyGuard',
   'UserIdentityGuard',
   'RateLimitGuard',
   'QuotaGuard',
-  'ConcurrencyGuard',
+  'ConcurrencyPermitInterceptor',
 ] as const;
 
 describe('graded request chain', () => {
@@ -102,6 +105,18 @@ describe('graded request chain', () => {
           return original.call(this, context);
         });
     }
+
+    // The concurrency permit is now one interceptor that acquires before the
+    // handler and releases after (ADR-0058). Recording its acquire here, in the
+    // same sequence as the guards, keeps the quota-before-concurrency guarantee
+    // observable across the guard/interceptor boundary.
+    const permitOriginal = ConcurrencyPermitInterceptor.prototype.intercept;
+    jest
+      .spyOn(ConcurrencyPermitInterceptor.prototype, 'intercept')
+      .mockImplementation(async function (this: unknown, context, next) {
+        executed.push('ConcurrencyPermitInterceptor');
+        return permitOriginal.call(this, context, next);
+      });
 
     mockAgent = new MockAgent();
     mockAgent.disableNetConnect();
@@ -166,8 +181,18 @@ describe('graded request chain', () => {
   });
 
   it('declares the chain in exactly the order the real chain runs', () => {
+    // Both expectations are literal, not derived from EXPECTED_ORDER: deriving
+    // them would make the declaration check compare against itself, which is
+    // the tautology this file exists to prevent.
     expect(GRADED_REQUEST_GUARDS.map((guard) => guard.name)).toEqual([
-      ...EXPECTED_ORDER,
+      'ApiKeyGuard',
+      'UserIdentityGuard',
+      'RateLimitGuard',
+      'QuotaGuard',
+    ]);
+    expect(GRADED_REQUEST_INTERCEPTORS.map((i) => i.name)).toEqual([
+      'ConcurrencyPermitInterceptor',
+      'SuccessEnvelopeInterceptor',
     ]);
   });
 
