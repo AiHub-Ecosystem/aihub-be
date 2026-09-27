@@ -10,6 +10,7 @@ import type {
 import type { DownstreamAdapter } from '../../../downstream/downstream-adapter';
 import type { DownstreamRequest } from '../../../downstream/downstream.types';
 import type { InternalTokenIssuerPort } from '../application/internal-token-issuer.port';
+import type { SandboxDispatchBudgetPort } from '../application/sandbox-dispatch-budget.port';
 import { DownstreamHttpClient } from './downstream-http.client';
 import { HttpOperationDispatcher } from './http-operation-dispatcher';
 
@@ -63,6 +64,33 @@ function context(deadlineMs = 5_000, signal?: AbortSignal) {
     scopes: [],
     ...(signal === undefined ? {} : { signal }),
   });
+}
+
+function sandboxContext() {
+  return {
+    ...context(),
+    organizationId: 'org_sandbox',
+    environment: 'sandbox',
+    sandboxOrganizationDispatchLimit: 25,
+  };
+}
+
+function fakeSandboxBudget(admitted = true): SandboxDispatchBudgetPort & {
+  reserveCalls: unknown[];
+  releaseCalls: string[];
+} {
+  const budget = {
+    reserveCalls: [] as unknown[],
+    releaseCalls: [] as string[],
+    async reserve(input: unknown) {
+      this.reserveCalls.push(input);
+      return admitted;
+    },
+    async release(requestId: string) {
+      this.releaseCalls.push(requestId);
+    },
+  };
+  return budget;
 }
 
 function readLogLine(loggerError: jest.SpiedFunction<Logger['error']>): string {
@@ -159,6 +187,72 @@ describe('HttpOperationDispatcher', () => {
       message: 'downstream status 503',
     });
     expect(downstreamMs(logLine)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('releases a reservation when local downstream configuration proves the request was not sent', async () => {
+    const budget = fakeSandboxBudget();
+    const httpClient = new DownstreamHttpClient('', mockAgent);
+    const dispatcher = new HttpOperationDispatcher(
+      httpClient,
+      new FakeTokenIssuer(),
+      [fakeGradeAdapter('/task-one')],
+      budget,
+    );
+
+    await expect(
+      dispatcher.dispatch('writing.task1.grade', gradeInput, sandboxContext()),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+
+    expect(budget.reserveCalls).toEqual([
+      {
+        organizationId: 'org_sandbox',
+        requestId: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+        organizationLimit: 25,
+      },
+    ]);
+    expect(budget.releaseCalls).toEqual(['req_01J8QK3M7XW2P5NRTVA9BCDEFG']);
+  });
+
+  it('consumes a reservation when a downstream response proves dispatch occurred', async () => {
+    const budget = fakeSandboxBudget();
+    mockAgent
+      .get('https://ai-writing.test')
+      .intercept({ method: 'POST', path: '/task-one' })
+      .reply(503, {});
+    const dispatcher = new HttpOperationDispatcher(
+      new DownstreamHttpClient('https://ai-writing.test', mockAgent),
+      new FakeTokenIssuer(),
+      [fakeGradeAdapter('/task-one')],
+      budget,
+    );
+
+    await expect(
+      dispatcher.dispatch('writing.task1.grade', gradeInput, sandboxContext()),
+    ).rejects.toMatchObject({ code: 'AI_SERVICE_ERROR' });
+
+    expect(budget.releaseCalls).toEqual([]);
+  });
+
+  it('fails before calling downstream when durable monthly admission denies a reservation', async () => {
+    const budget = fakeSandboxBudget(false);
+    const httpClient = new DownstreamHttpClient(
+      'https://ai-writing.test',
+      mockAgent,
+    );
+    const request = jest.spyOn(httpClient, 'request');
+    const dispatcher = new HttpOperationDispatcher(
+      httpClient,
+      new FakeTokenIssuer(),
+      [fakeGradeAdapter('/task-one')],
+      budget,
+    );
+
+    await expect(
+      dispatcher.dispatch('writing.task1.grade', gradeInput, sandboxContext()),
+    ).rejects.toMatchObject({ code: 'QUOTA_EXCEEDED', httpStatus: 429 });
+
+    expect(request).not.toHaveBeenCalled();
+    expect(budget.releaseCalls).toEqual([]);
   });
 
   it('maps a downstream 429 to the throttled error, not the client rate-limit error', async () => {

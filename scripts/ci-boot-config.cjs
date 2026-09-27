@@ -51,7 +51,11 @@ function connectionSecrets() {
   const database = 'postgres://ci-boot:ci-boot@database.invalid:5432/aihub';
   const redis = 'redis://cache.invalid:6379';
   return {
-    database: { url: database, sandbox_url: database },
+    database: {
+      url: database,
+      sandbox_url: database,
+      sandbox_control_plane_read_url: database,
+    },
     redis: { url: redis, sandbox_url: redis },
     'sandbox-assertion': {
       private_key_pem: privateKeyPem('ec', { namedCurve: 'P-256' }),

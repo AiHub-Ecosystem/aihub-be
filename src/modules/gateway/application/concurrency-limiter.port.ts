@@ -2,6 +2,7 @@ export interface ConcurrencyRequest {
   readonly organizationId: string;
   readonly maxConcurrent: number;
   readonly requestId: string;
+  readonly environment?: string;
 }
 
 export interface ConcurrencyLease {

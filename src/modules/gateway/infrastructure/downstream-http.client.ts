@@ -25,41 +25,64 @@ type DownstreamHeaders = Readonly<
   Partial<Record<DownstreamId, Readonly<Record<string, string>>>>
 >;
 
+const definitelyNotDispatched = new WeakSet<AppError>();
+
+export function isDefinitelyNotDispatched(error: unknown): boolean {
+  return error instanceof AppError && definitelyNotDispatched.has(error);
+}
+
+function markNotDispatched(error: AppError): AppError {
+  definitelyNotDispatched.add(error);
+  return error;
+}
+
 function configurationError(reason: string): AppError {
-  return new AppError({
-    code: 'INTERNAL_ERROR',
-    message: 'Downstream HTTP client is not configured',
-    retryable: false,
-    cause: new Error(reason),
-  });
+  return markNotDispatched(
+    new AppError({
+      code: 'INTERNAL_ERROR',
+      message: 'Downstream HTTP client is not configured',
+      retryable: false,
+      cause: new Error(reason),
+    }),
+  );
 }
 
 function transportError(error: unknown, signalAborted = false): AppError {
   const name = errorName(error);
   const code = errorCode(error);
 
-  if (
+  const timeout =
     signalAborted ||
     name === 'AbortError' ||
     name === 'TimeoutError' ||
     code === 'UND_ERR_HEADERS_TIMEOUT' ||
     code === 'UND_ERR_BODY_TIMEOUT' ||
-    code === 'UND_ERR_CONNECT_TIMEOUT'
-  ) {
-    return new AppError({
-      code: 'AI_SERVICE_TIMEOUT',
-      message: 'AI service request timed out',
-      retryable: true,
-      cause: error,
-    });
-  }
+    code === 'UND_ERR_CONNECT_TIMEOUT';
+  const mapped = timeout
+    ? new AppError({
+        code: 'AI_SERVICE_TIMEOUT',
+        message: 'AI service request timed out',
+        retryable: true,
+        cause: error,
+      })
+    : new AppError({
+        code: 'AI_SERVICE_UNAVAILABLE',
+        message: 'AI service is temporarily unavailable',
+        retryable: true,
+        cause: error,
+      });
 
-  return new AppError({
-    code: 'AI_SERVICE_UNAVAILABLE',
-    message: 'AI service is temporarily unavailable',
-    retryable: true,
-    cause: error,
-  });
+  return !signalAborted &&
+    [
+      'UND_ERR_CONNECT_TIMEOUT',
+      'ECONNREFUSED',
+      'ENOTFOUND',
+      'EAI_AGAIN',
+      'EHOSTUNREACH',
+      'ENETUNREACH',
+    ].includes(code)
+    ? markNotDispatched(mapped)
+    : mapped;
 }
 
 function errorName(error: unknown): string {

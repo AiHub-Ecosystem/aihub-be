@@ -39,6 +39,7 @@ export class ConcurrencyGuard implements CanActivate {
       organizationId: authenticated.organizationId,
       maxConcurrent: authenticated.maxConcurrent,
       requestId: String(request.id),
+      environment: authenticated.environment,
     });
 
     if (!decision.allowed) {

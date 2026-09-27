@@ -8,6 +8,8 @@ export interface RequestContextInput {
   readonly deadlineMs: number;
   readonly organizationId?: string;
   readonly apiKeyId?: string;
+  readonly environment?: string;
+  readonly sandboxOrganizationDispatchLimit?: number | null;
   readonly userId?: string;
   readonly scopes: readonly string[];
   readonly signal?: AbortSignal;
@@ -47,6 +49,15 @@ export function createRequestContext(
       ? {}
       : { organizationId: input.organizationId }),
     ...(input.apiKeyId === undefined ? {} : { apiKeyId: input.apiKeyId }),
+    ...(input.environment === undefined
+      ? {}
+      : { environment: input.environment }),
+    ...(input.sandboxOrganizationDispatchLimit === undefined
+      ? {}
+      : {
+          sandboxOrganizationDispatchLimit:
+            input.sandboxOrganizationDispatchLimit,
+        }),
     ...(input.userId === undefined ? {} : { userId: input.userId }),
   };
 }

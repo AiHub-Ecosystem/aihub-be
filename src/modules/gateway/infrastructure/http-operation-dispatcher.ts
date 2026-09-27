@@ -22,7 +22,11 @@ import type {
   DispatchResult,
   OperationDispatcherPort,
 } from '../application/operation-dispatcher.port';
-import type { DownstreamHttpClient } from './downstream-http.client';
+import type { SandboxDispatchBudgetPort } from '../application/sandbox-dispatch-budget.port';
+import {
+  type DownstreamHttpClient,
+  isDefinitelyNotDispatched,
+} from './downstream-http.client';
 
 function mapDownstreamStatus(status: number): AppError {
   if (status === 429) {
@@ -96,6 +100,26 @@ function downstreamFailureMessage(
   }
 }
 
+function quotaExceeded(now: Date): AppError {
+  const nextMonth = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+  );
+  return new AppError({
+    code: 'QUOTA_EXCEEDED',
+    message: 'Monthly request quota exceeded',
+    retryable: true,
+    retryAfterMs: Math.max(0, nextMonth.getTime() - now.getTime()),
+  });
+}
+
+function sandboxBudgetUnavailable(): AppError {
+  return new AppError({
+    code: 'INTERNAL_ERROR',
+    message: 'Sandbox dispatch admission is unavailable',
+    retryable: true,
+  });
+}
+
 export class HttpOperationDispatcher implements OperationDispatcherPort {
   // `unknown` on both sides is the one place a dispatch table for a
   // heterogeneous set of adapters has to erase the per-operation types the
@@ -114,6 +138,7 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
     private readonly httpClient: DownstreamHttpClient,
     private readonly tokenIssuer: InternalTokenIssuerPort,
     adapters: readonly DownstreamAdapter<unknown, unknown>[],
+    private readonly sandboxBudget?: SandboxDispatchBudgetPort,
   ) {
     this.adapters = new Map(
       adapters.map((adapter) => [adapter.operation, adapter]),
@@ -160,6 +185,31 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
       adapter.downstream === 'ai-writing'
         ? `Bearer ${await this.tokenIssuer.mint(context, operation)}`
         : undefined;
+    const sandboxRequest = context.environment === 'sandbox';
+    if (sandboxRequest) {
+      const organizationId = context.organizationId;
+      const organizationLimit = context.sandboxOrganizationDispatchLimit;
+      if (
+        this.sandboxBudget === undefined ||
+        organizationId === undefined ||
+        organizationLimit === undefined
+      ) {
+        throw sandboxBudgetUnavailable();
+      }
+      let admitted: boolean;
+      try {
+        admitted = await this.sandboxBudget.reserve({
+          organizationId,
+          requestId: context.requestId,
+          organizationLimit,
+        });
+      } catch {
+        throw sandboxBudgetUnavailable();
+      }
+      if (!admitted) {
+        throw quotaExceeded(new Date());
+      }
+    }
     const remainingMs = Math.max(1, context.deadlineAt.getTime() - Date.now());
     const timeoutMs = remainingMs;
     const signal = AbortSignal.any([
@@ -196,6 +246,15 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
           : { aiProcessingMs: telemetry.aiProcessingMs }),
       };
     } catch (error) {
+      if (sandboxRequest && isDefinitelyNotDispatched(error)) {
+        await this.sandboxBudget
+          ?.release(context.requestId)
+          .catch(() =>
+            this.logger.warn(
+              'Sandbox dispatch reservation could not be released after a pre-dispatch failure',
+            ),
+          );
+      }
       const errorCode = loggedDownstreamErrorCode(error);
       if (errorCode !== undefined) {
         const downstreamStatus = response?.status ?? null;

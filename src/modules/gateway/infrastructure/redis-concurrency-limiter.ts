@@ -32,6 +32,27 @@ redis.call('EXPIRE', KEYS[1], ttl_seconds)
 return 1
 `;
 
+export const ACQUIRE_SANDBOX_CONCURRENCY_SCRIPT = `
+local server_time = redis.call('TIME')
+local now_ms = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
+local stale_ms = tonumber(ARGV[4])
+local ttl_seconds = math.ceil(stale_ms / 1000)
+for i = 1, 2 do
+  redis.call('ZREMRANGEBYSCORE', KEYS[i], '-inf', now_ms - stale_ms)
+end
+if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[1]) or
+   redis.call('ZCARD', KEYS[2]) >= tonumber(ARGV[2]) then
+  redis.call('EXPIRE', KEYS[1], ttl_seconds)
+  redis.call('EXPIRE', KEYS[2], ttl_seconds)
+  return 0
+end
+for i = 1, 2 do
+  redis.call('ZADD', KEYS[i], now_ms, ARGV[3])
+  redis.call('EXPIRE', KEYS[i], ttl_seconds)
+end
+return 1
+`;
+
 interface FallbackLease {
   readonly startedAt: number;
 }
@@ -72,15 +93,24 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
       return this.acquireFallback(request);
     }
 
-    const key = `aihub:v1:inflight:${request.organizationId}`;
+    const sandbox = request.environment === 'sandbox';
+    const organizationKey = `aihub:v1:inflight:${request.organizationId}`;
+    const sandboxKey = 'aihub:v1:inflight:sandbox';
+    const keys = sandbox ? [organizationKey, sandboxKey] : [organizationKey];
     try {
       const result = await this.client.eval(
-        ACQUIRE_CONCURRENCY_SCRIPT,
-        1,
-        key,
-        String(request.maxConcurrent),
-        request.requestId,
-        String(CONCURRENCY_STALE_LEASE_MS),
+        sandbox
+          ? ACQUIRE_SANDBOX_CONCURRENCY_SCRIPT
+          : ACQUIRE_CONCURRENCY_SCRIPT,
+        keys.length,
+        ...keys,
+        ...(sandbox
+          ? ['1', '10', request.requestId, String(CONCURRENCY_STALE_LEASE_MS)]
+          : [
+              String(request.maxConcurrent),
+              request.requestId,
+              String(CONCURRENCY_STALE_LEASE_MS),
+            ]),
       );
       if (result === 0) {
         this.reportRecovered();
@@ -93,7 +123,7 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
       this.reportRecovered();
       return {
         allowed: true,
-        lease: this.remoteLease(key, request.requestId),
+        lease: this.remoteLease(this.client, keys, request.requestId),
       };
     } catch (error) {
       this.reportDegraded(error);
@@ -105,7 +135,11 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
     await this.client?.quit().catch(() => undefined);
   }
 
-  private remoteLease(key: string, requestId: string): ConcurrencyLease {
+  private remoteLease(
+    client: RedisConcurrencyClient,
+    keys: readonly string[],
+    requestId: string,
+  ): ConcurrencyLease {
     let released = false;
     return {
       release: async () => {
@@ -114,7 +148,7 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
         }
         released = true;
         try {
-          await this.client?.zrem(key, requestId);
+          await Promise.all(keys.map((key) => client.zrem(key, requestId)));
           this.reportRecovered();
         } catch (error) {
           this.reportDegraded(error);

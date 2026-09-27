@@ -53,6 +53,11 @@ The helper writes the selected policy, creates an AppRole with a short token
 TTL and bounded maximum TTL, and writes all eight KV bundles. The credential
 directory must also contain `database.json`, `redis.json`, and
 `sandbox-assertion.json` with the flat keys used by the connection template.
+`database.json` contains `url`, `sandbox_url`, and
+`sandbox_control_plane_read_url`. The last value is a separate least-privilege
+Postgres login for the sandbox process: it can select the Organization,
+API-key, and identity-configuration columns used for request authentication,
+and update only `api_keys.last_used_at`. It cannot change control-plane data.
 Deliver the Role
 ID and one-time Secret ID to Vault Agent through the deployment secret channel;
 never commit or paste them into an issue.

@@ -20,9 +20,14 @@ import {
   type QuotaCounterPort,
 } from './application/quota-counter.port';
 import { RATE_LIMITER } from './application/rate-limiter.port';
+import {
+  SANDBOX_DISPATCH_BUDGET,
+  type SandboxDispatchBudgetPort,
+} from './application/sandbox-dispatch-budget.port';
 import { ConfiguredTokenIssuer } from './infrastructure/configured-token-issuer';
 import { DownstreamHttpClient } from './infrastructure/downstream-http.client';
 import { HttpOperationDispatcher } from './infrastructure/http-operation-dispatcher';
+import { PostgresSandboxDispatchBudget } from './infrastructure/postgres-sandbox-dispatch-budget';
 import { RedisConcurrencyLimiter } from './infrastructure/redis-concurrency-limiter';
 import {
   REDIS_GATEWAY_CLIENT,
@@ -94,18 +99,33 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       inject: [REDIS_GATEWAY_CLIENT],
     },
     {
+      provide: SANDBOX_DISPATCH_BUDGET,
+      useFactory: (): SandboxDispatchBudgetPort =>
+        new PostgresSandboxDispatchBudget(process.env.DATABASE_URL ?? ''),
+    },
+    {
       provide: OPERATION_DISPATCHER,
       useFactory: (
         httpClient: DownstreamHttpClient,
         tokenIssuer: ConfiguredTokenIssuer,
+        sandboxBudget: SandboxDispatchBudgetPort,
       ): HttpOperationDispatcher =>
-        new HttpOperationDispatcher(httpClient, tokenIssuer, [
-          task1GradeAdapter,
-          task2GradeAdapter,
-          speakingGradingAdapter,
-          speakingGradingJsonAdapter,
-        ]),
-      inject: [DownstreamHttpClient, INTERNAL_TOKEN_ISSUER],
+        new HttpOperationDispatcher(
+          httpClient,
+          tokenIssuer,
+          [
+            task1GradeAdapter,
+            task2GradeAdapter,
+            speakingGradingAdapter,
+            speakingGradingJsonAdapter,
+          ],
+          sandboxBudget,
+        ),
+      inject: [
+        DownstreamHttpClient,
+        INTERNAL_TOKEN_ISSUER,
+        SANDBOX_DISPATCH_BUDGET,
+      ],
     },
     RateLimitGuard,
     QuotaGuard,

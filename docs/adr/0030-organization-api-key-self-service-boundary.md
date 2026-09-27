@@ -1,6 +1,10 @@
 # Organization API-key self-service creation boundary
 
-Status: accepted
+Status: accepted; customer Environment set amended by ADR-0056
+
+## Amendment for #182 (ADR-0056)
+
+Customer key creation may issue a separate key restricted to `sandbox`. Customer sandbox keys are for Writing Task 1 and Task 2 and are not combined with production credentials; the existing default remains `{production}`. The production/staging-only restriction below records the original boundary and is superseded for sandbox-key creation by ADR-0056.
 
 An authorized member creates an organization API key with `POST /v1/organizations/:organizationId/api-keys`, Bearer-authenticated and authorized against the durable membership resolved for the explicit `organizationId`; owners and admins may create keys and members may not. The request carries a name, requested scopes, optional allowed environments defaulting to `{production}`, and an optional expiry. The response is `201` with `Cache-Control: no-store` and returns the raw credential once as `data.api_key` alongside the same metadata shape the key-listing endpoint returns: `id`, `name`, `key_prefix`, `scopes`, `allowed_environments`, `status`, `expires_at`, `last_used_at`, and `created_at`. Key identifiers are `ak_` plus a ULID and are constrained by pattern in the public contract. The raw credential field is named `api_key` so that it matches the existing centralized redaction key set, which makes the "never logged" requirement a property of the mechanism rather than of discipline alone.
 

@@ -45,10 +45,12 @@ class FakeRepository implements ApiKeyRepositoryPort {
 
 class FakeCache implements ApiKeyCachePort {
   value: ApiKeyRecord | null | undefined = undefined;
+  getCalls = 0;
   setCalls = 0;
   missCalls = 0;
 
   get(_hashHex: string): Promise<ApiKeyRecord | null | undefined> {
+    this.getCalls += 1;
     return Promise.resolve(this.value);
   }
 
@@ -330,5 +332,34 @@ describe('ApiKeyAuthenticator', () => {
         clientIp: '203.0.113.10',
       }),
     ).resolves.toMatchObject({ organizationId: 'org_acme' });
+  });
+
+  it('reads Sandbox keys from Postgres on every request without reading or populating the key cache', async () => {
+    const { authenticator, repository, cache } = createAuthenticator({
+      ...activeRecord,
+      allowedEnvironments: ['sandbox'],
+    });
+    cache.value = { ...activeRecord, status: 'revoked' };
+    const credentials = {
+      value: VALID_KEY,
+      environment: 'sandbox',
+      clientIp: '203.0.113.10',
+    };
+
+    await expect(
+      authenticator.authenticate(credentials),
+    ).resolves.toMatchObject({
+      organizationId: 'org_acme',
+    });
+    await expect(
+      authenticator.authenticate(credentials),
+    ).resolves.toMatchObject({
+      organizationId: 'org_acme',
+    });
+
+    expect(repository.calls).toBe(2);
+    expect(cache.getCalls).toBe(0);
+    expect(cache.setCalls).toBe(0);
+    expect(cache.missCalls).toBe(0);
   });
 });

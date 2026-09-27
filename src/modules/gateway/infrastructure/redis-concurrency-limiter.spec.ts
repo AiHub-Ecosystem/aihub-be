@@ -111,6 +111,39 @@ describe('RedisConcurrencyLimiter', () => {
     ).resolves.toEqual({ allowed: false, retryAfterMs: 500 });
   });
 
+  it('atomically enforces Sandbox limits for the Organization and whole environment', async () => {
+    const redis = new FakeRedis();
+    const limiter = new RedisConcurrencyLimiter(redis);
+    const decision = await limiter.acquire({
+      organizationId: 'org_customer',
+      maxConcurrent: 99,
+      requestId: 'req_sandbox',
+      environment: 'sandbox',
+    });
+
+    expect(decision.allowed).toBe(true);
+    expect(redis.evaluations[0]).toEqual({
+      script: expect.stringContaining("ZCARD', KEYS[2]"),
+      numberOfKeys: 2,
+      args: [
+        'aihub:v1:inflight:org_customer',
+        'aihub:v1:inflight:sandbox',
+        '1',
+        '10',
+        'req_sandbox',
+        '120000',
+      ],
+    });
+    if (!decision.allowed) {
+      throw new Error('expected a concurrency lease');
+    }
+    await decision.lease.release();
+    expect(redis.removals).toEqual([
+      { key: 'aihub:v1:inflight:org_customer', member: 'req_sandbox' },
+      { key: 'aihub:v1:inflight:sandbox', member: 'req_sandbox' },
+    ]);
+  });
+
   it('uses a global process-local backstop and releases fallback leases', async () => {
     const limiter = new RedisConcurrencyLimiter(
       new FailingRedis(),

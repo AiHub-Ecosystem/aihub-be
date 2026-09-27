@@ -11,8 +11,12 @@ import type { OrganizationMembershipPort } from './organization-membership.port'
 
 const API_KEY_CREATION_FORBIDDEN = 'Organization API key creation is forbidden';
 
-/** Customer-facing request tiers. AIHUB's sandbox and development are not. */
-const CUSTOMER_ENVIRONMENTS: readonly string[] = ['production', 'staging'];
+/** Customer-facing request tiers. Development remains operator-only. */
+const CUSTOMER_ENVIRONMENTS: readonly string[] = [
+  'production',
+  'staging',
+  'sandbox',
+];
 const DEFAULT_ENVIRONMENTS: readonly string[] = ['production'];
 const MAX_KEY_LIFETIME_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -91,6 +95,23 @@ function validatedEnvironments(
   return requested;
 }
 
+function validateSandboxKey(
+  scopes: readonly string[],
+  environments: readonly string[],
+): void {
+  if (!environments.includes('sandbox')) {
+    return;
+  }
+
+  if (
+    environments.length !== 1 ||
+    scopes.length !== 1 ||
+    scopes[0] !== 'writing.grade'
+  ) {
+    throw invalidRequest();
+  }
+}
+
 function validatedExpiry(
   expiresAt: string | undefined,
   now: Date,
@@ -149,6 +170,7 @@ export class CreateOrganizationApiKey {
     const allowedEnvironments = validatedEnvironments(
       input.allowedEnvironments,
     );
+    validateSandboxKey(scopes, allowedEnvironments);
     const expiresAt = validatedExpiry(input.expiresAt, now);
 
     const requiredEntitlements = [

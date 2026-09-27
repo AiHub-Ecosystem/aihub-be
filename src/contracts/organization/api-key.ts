@@ -24,13 +24,11 @@ const ApiKeyStatusSchema = Type.Union([
   Type.Literal('revoked'),
 ]);
 
-/**
- * The Environments a customer may bind a key to. AIHUB's own sandbox and
- * development tiers are deliberately absent: they are not customer tiers.
- */
+/** The Environments available to customer-owned API keys. */
 export const CustomerEnvironmentSchema = Type.Union([
   Type.Literal('production'),
   Type.Literal('staging'),
+  Type.Literal('sandbox'),
 ]);
 
 export const CreateOrganizationApiKeyRequestSchema = Type.Object(

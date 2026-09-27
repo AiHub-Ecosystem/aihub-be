@@ -338,14 +338,53 @@ describe('Organization API key creation HTTP flow', () => {
     expect(createCall().allowedEnvironments).toEqual(['staging']);
   });
 
-  it('rejects an environment that is not customer-facing', async () => {
+  it('creates a Writing-only key restricted to the sandbox environment', async () => {
     const response = await create({
-      name: 'Sneaky',
+      name: 'Sandbox test key',
       scopes: ['writing.grade'],
       allowed_environments: ['sandbox'],
     });
 
+    expect(response.statusCode).toBe(201);
+    expect(response.json().data.allowed_environments).toEqual(['sandbox']);
+    expect(response.json().data.scopes).toEqual(['writing.grade']);
+    expect(createCall().allowedEnvironments).toEqual(['sandbox']);
+    expect(createCall().scopes).toEqual(['writing.grade']);
+  });
+
+  it('rejects an environment that is not customer-facing', async () => {
+    const response = await create({
+      name: 'Sneaky',
+      scopes: ['writing.grade'],
+      allowed_environments: ['development'],
+    });
+
     expect(response.statusCode).toBe(400);
+    expect(apiKeys.createApiKey).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: 'combines sandbox with another environment',
+      payload: {
+        name: 'Sandbox and production',
+        scopes: ['writing.grade'],
+        allowed_environments: ['sandbox', 'production'],
+      },
+    },
+    {
+      name: 'requests a non-Writing scope',
+      payload: {
+        name: 'Sandbox Speaking',
+        scopes: ['speaking.grade'],
+        allowed_environments: ['sandbox'],
+      },
+    },
+  ])('rejects a Sandbox key that $name', async ({ payload }) => {
+    const response = await create(payload);
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('INVALID_REQUEST');
     expect(apiKeys.createApiKey).not.toHaveBeenCalled();
   });
 

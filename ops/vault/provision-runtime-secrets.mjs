@@ -110,7 +110,11 @@ const bundles = [
   ['resend.json', ['api_key'], 'resend'],
   ['user-access-jwt.json', ['private_key_pem', 'key_id'], 'user-access-jwt'],
   ['seaweedfs.json', ['access_key_id', 'secret_access_key'], 'seaweedfs'],
-  ['database.json', ['url', 'sandbox_url'], 'database'],
+  [
+    'database.json',
+    ['url', 'sandbox_url', 'sandbox_control_plane_read_url'],
+    'database',
+  ],
   ['redis.json', ['url', 'sandbox_url'], 'redis'],
   [
     'sandbox-assertion.json',

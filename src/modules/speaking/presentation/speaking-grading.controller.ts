@@ -140,6 +140,13 @@ export class SpeakingGradingController {
         deadlineMs: OPERATION_CATALOG[OPERATION].timeoutMs,
         organizationId: authenticated.organizationId,
         apiKeyId: authenticated.apiKeyId,
+        environment: authenticated.environment,
+        ...(authenticated.sandboxOrganizationDispatchLimit === undefined
+          ? {}
+          : {
+              sandboxOrganizationDispatchLimit:
+                authenticated.sandboxOrganizationDispatchLimit,
+            }),
         userId: verifiedUserId,
         scopes: authenticated.scopes,
         signal: lifecycle.signal,
@@ -175,6 +182,13 @@ export class SpeakingGradingController {
         deadlineMs: OPERATION_CATALOG[JSON_OPERATION].timeoutMs,
         organizationId: authenticated.organizationId,
         apiKeyId: authenticated.apiKeyId,
+        environment: authenticated.environment,
+        ...(authenticated.sandboxOrganizationDispatchLimit === undefined
+          ? {}
+          : {
+              sandboxOrganizationDispatchLimit:
+                authenticated.sandboxOrganizationDispatchLimit,
+            }),
         userId: verifiedUserId,
         scopes: authenticated.scopes,
         signal: lifecycle.signal,

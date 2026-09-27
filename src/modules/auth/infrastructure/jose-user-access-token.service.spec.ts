@@ -109,7 +109,8 @@ describe('JoseUserAccessTokenService', () => {
       service.verify(
         (() => {
           const parts = issued.token.split('.');
-          parts[2] = `x${parts[2]?.slice(1) ?? ''}`;
+          const signature = parts[2] ?? '';
+          parts[2] = `${signature.startsWith('x') ? 'y' : 'x'}${signature.slice(1)}`;
           return parts.join('.');
         })(),
       ),

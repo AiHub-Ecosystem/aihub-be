@@ -8,6 +8,7 @@ function document(): string {
     database: {
       url: 'postgresql://production',
       sandbox_url: 'postgresql://sandbox',
+      sandbox_control_plane_read_url: 'postgresql://sandbox-control-read',
     },
     redis: {
       url: 'redis://production/0',
@@ -33,6 +34,7 @@ describe('loadRuntimeConnectionEnvironment', () => {
     });
 
     expect(env.DATABASE_URL).toBe('postgresql://production');
+    expect(env.CONTROL_PLANE_READ_DATABASE_URL).toBe('postgresql://production');
     expect(env.REDIS_URL).toBe('redis://production/0');
     expect(env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY).toBe('private-key');
     expect(env.AIHUB_SANDBOX_ASSERTION_KID).toBe('sandbox-key');
@@ -50,6 +52,9 @@ describe('loadRuntimeConnectionEnvironment', () => {
     });
 
     expect(env.DATABASE_URL).toBe('postgresql://sandbox');
+    expect(env.CONTROL_PLANE_READ_DATABASE_URL).toBe(
+      'postgresql://sandbox-control-read',
+    );
     expect(env.REDIS_URL).toBe('redis://sandbox/1');
   });
 

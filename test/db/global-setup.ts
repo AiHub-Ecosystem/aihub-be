@@ -4,9 +4,11 @@ import { join } from 'node:path';
 import { Client } from 'pg';
 
 import {
+  SANDBOX_TEST_DATABASE_NAME,
   TEST_DATABASE_NAME,
   adminDatabaseUrl,
   adminTarget,
+  sandboxTestDatabaseUrl,
   testDatabaseUrl,
 } from './database';
 
@@ -39,6 +41,10 @@ export default async function globalSetup(): Promise<void> {
       `DROP DATABASE IF EXISTS ${TEST_DATABASE_NAME} WITH (FORCE)`,
     );
     await admin.query(`CREATE DATABASE ${TEST_DATABASE_NAME}`);
+    await admin.query(
+      `DROP DATABASE IF EXISTS ${SANDBOX_TEST_DATABASE_NAME} WITH (FORCE)`,
+    );
+    await admin.query(`CREATE DATABASE ${SANDBOX_TEST_DATABASE_NAME}`);
   } finally {
     await admin.end();
   }
@@ -46,18 +52,20 @@ export default async function globalSetup(): Promise<void> {
   const entries = await readdir(MIGRATIONS_DIR);
   const migrations = entries.filter((name) => name.endsWith('.sql')).sort();
 
-  const target = new Client({ connectionString: testDatabaseUrl() });
-  await target.connect();
-  try {
-    for (const filename of migrations) {
-      const sql = await readFile(join(MIGRATIONS_DIR, filename), 'utf8');
-      try {
-        await target.query(sql);
-      } catch (error) {
-        throw new Error(`Migration failed: ${filename}`, { cause: error });
+  for (const databaseUrl of [testDatabaseUrl(), sandboxTestDatabaseUrl()]) {
+    const target = new Client({ connectionString: databaseUrl });
+    await target.connect();
+    try {
+      for (const filename of migrations) {
+        const sql = await readFile(join(MIGRATIONS_DIR, filename), 'utf8');
+        try {
+          await target.query(sql);
+        } catch (error) {
+          throw new Error(`Migration failed: ${filename}`, { cause: error });
+        }
       }
+    } finally {
+      await target.end();
     }
-  } finally {
-    await target.end();
   }
 }

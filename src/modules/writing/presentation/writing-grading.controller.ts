@@ -188,6 +188,13 @@ export class WritingGradingController {
         deadlineMs: OPERATION_CATALOG[TASK1_OPERATION].timeoutMs,
         organizationId: authenticated.organizationId,
         apiKeyId: authenticated.apiKeyId,
+        environment: authenticated.environment,
+        ...(authenticated.sandboxOrganizationDispatchLimit === undefined
+          ? {}
+          : {
+              sandboxOrganizationDispatchLimit:
+                authenticated.sandboxOrganizationDispatchLimit,
+            }),
         ...(request.aihubIdentity === undefined
           ? {}
           : { userId: request.aihubIdentity.userId }),
@@ -250,6 +257,13 @@ export class WritingGradingController {
         deadlineMs: OPERATION_CATALOG[TASK2_OPERATION].timeoutMs,
         organizationId: authenticated.organizationId,
         apiKeyId: authenticated.apiKeyId,
+        environment: authenticated.environment,
+        ...(authenticated.sandboxOrganizationDispatchLimit === undefined
+          ? {}
+          : {
+              sandboxOrganizationDispatchLimit:
+                authenticated.sandboxOrganizationDispatchLimit,
+            }),
         ...(request.aihubIdentity === undefined
           ? {}
           : { userId: request.aihubIdentity.userId }),

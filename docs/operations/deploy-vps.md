@@ -3,8 +3,11 @@
 This is the production baseline for the single-node Compose deployment. It uses
 the existing production `aihub-db` and Wispace Redis, and renders downstream
 runtime credentials through Vault Agent. When sandbox isolation is enabled,
-`app-sandbox` is a second container from the same image, backed by
-`aihub_sandbox` and Redis logical database `/1`.
+`app-sandbox` is a second container from the same image. Its usage,
+idempotency, and dispatch budgets use `aihub_sandbox` and Redis logical
+database `/1`; Organization, API-key, and identity-configuration records stay
+in the production control-plane database and are read through a least-privilege
+database login.
 
 **Public TLS is terminated by nginx on the host, not by this Compose stack.**
 The `app` service binds `127.0.0.1:${AIHUB_APP_PORT}` and `app-sandbox` binds
@@ -71,12 +74,34 @@ Redis URLs. Serving the hostname is a separate nginx change described in
 sandbox host and container absent.
 
 Point the gateway at the existing production database over the shared Docker
-network. Store the URL-encoded production and sandbox URLs in the operator-only
-Vault bundles:
+network. Store the URL-encoded production and sandbox URLs, plus the Sandbox
+read-only control-plane URL, in the operator-only Vault bundles. Create the
+reader role on the production database with only the columns needed for Sandbox
+admission and authentication:
+
+```sql
+CREATE ROLE aihub_sandbox_reader LOGIN;
+GRANT CONNECT ON DATABASE aihub TO aihub_sandbox_reader;
+GRANT USAGE ON SCHEMA public TO aihub_sandbox_reader;
+GRANT SELECT (id, status, entitlements, rate_limit_rpm, max_concurrent,
+              monthly_request_quota, hard_stop_on_quota)
+  ON organizations TO aihub_sandbox_reader;
+GRANT SELECT (id, organization_id, key_hash, status, scopes,
+              allowed_environments, expires_at, last_used_at),
+      UPDATE (last_used_at)
+  ON api_keys TO aihub_sandbox_reader;
+GRANT SELECT (organization_id, issuer, jwks_url, public_keys_jwks,
+              allowed_algorithms, max_assertion_ttl_seconds, status,
+              jwks_cache_version)
+  ON organization_identity_configs TO aihub_sandbox_reader;
+```
+
+Set the role password interactively with `\password aihub_sandbox_reader`;
+store its URL only in the operator-managed Vault `database.json` bundle:
 
 ```json
 // database.json
-{"url":"postgresql://aihub_admin:<password>@aihub-db:5432/aihub","sandbox_url":"postgresql://aihub_admin:<password>@aihub-db:5432/aihub_sandbox"}
+{"url":"postgresql://aihub_admin:<password>@aihub-db:5432/aihub","sandbox_url":"postgresql://aihub_admin:<password>@aihub-db:5432/aihub_sandbox","sandbox_control_plane_read_url":"postgresql://aihub_sandbox_reader:<password>@aihub-db:5432/aihub"}
 // redis.json
 {"url":"redis://:<password>@redis.aihubproduction.com:6379/0","sandbox_url":"redis://:<password>@redis.aihubproduction.com:6379/1"}
 ```
@@ -112,7 +137,15 @@ copies only the required password into the AIHUB `redis` bundle. Redis `/1` is n
 durable isolation boundary: it keeps sandbox counters/cache keys out of the
 production logical database, while Postgres remains the durable boundary.
 
-## Create and cut over the sandbox database
+## Existing #50 sandbox database cutover (pre-#182)
+
+> **Do not repeat this procedure for #182.** ADR-0056 records the approved
+> target: move sandbox Organization, API-key, and identity-configuration rows
+> back into the production control-plane database, while retaining sandbox
+> usage, idempotency, and dispatch reservations in `aihub_sandbox`. This
+> section documents the historical #50 cutover only; follow [Customer Sandbox
+> control-plane migration](#customer-sandbox-control-plane-migration) for the
+> current layout.
 
 Run this once before starting the `sandbox` Compose profile. The procedure keeps
 the existing sandbox organization, identity configuration, API keys, usage, and
@@ -243,6 +276,42 @@ AIHUB_VAULT_ENVIRONMENT=production \
 Run the smoke command from a Vault CLI session authenticated as the generated
 non-root AppRole, not as the provisioning operator or a root token.
 
+## Customer Sandbox control-plane migration
+
+Run this once for each configured demo Organization during the #182 cutover.
+Back up both databases and stop `app`, `app-sandbox`, and any other writers.
+Apply the schema migration to both databases while the applications are
+stopped:
+
+```sh
+compose=(sudo -n docker compose --env-file .env.production \
+  -f docker-compose.production.yml)
+"${compose[@]}" --profile migration run --rm migrate
+"${compose[@]}" --profile migration --profile sandbox run --rm migrate-sandbox
+```
+
+From a workstation checkout over the Postgres SSH tunnel, first inspect the dry
+run. `--apply` is required to write; `DATABASE_URL` must point to
+`aihub_sandbox` and `CONTROL_PLANE_DATABASE_URL` must point to `aihub`:
+
+```sh
+DATABASE_URL='postgresql://<user>:<password>@127.0.0.1:15433/aihub_sandbox' \
+CONTROL_PLANE_DATABASE_URL='postgresql://<user>:<password>@127.0.0.1:15433/aihub' \
+  pnpm migrate:sandbox-control-plane -- --org org_...
+
+DATABASE_URL='postgresql://<user>:<password>@127.0.0.1:15433/aihub_sandbox' \
+CONTROL_PLANE_DATABASE_URL='postgresql://<user>:<password>@127.0.0.1:15433/aihub' \
+  pnpm migrate:sandbox-control-plane -- --org org_... --apply
+```
+
+The command copies the Organization, keys, and identity configuration to
+production, preserves each key ID and hash, and restricts moved keys to the
+`sandbox` environment. It deletes only those control-plane rows from Sandbox;
+usage, idempotency, and dispatch history stay in `aihub_sandbox`. It refuses
+Organizations with membership, invitation, or audit records. Confirm the dry
+run and rerun it after applying before starting the applications below. Do not
+drop `aihub_sandbox`.
+
 ## Start the Vault-backed stack
 
 Validate interpolation first; this does not start containers:
@@ -259,10 +328,14 @@ then start the app:
 docker compose --env-file .env.production -f docker-compose.production.yml build app
 docker compose --env-file .env.production -f docker-compose.production.yml up -d vault-agent
 docker compose --env-file .env.production -f docker-compose.production.yml --profile migration run --rm migrate
+docker compose --env-file .env.production -f docker-compose.production.yml --profile migration --profile sandbox run --rm migrate-sandbox
 docker compose --env-file .env.production -f docker-compose.production.yml up -d app
+docker compose --env-file .env.production -f docker-compose.production.yml --profile sandbox up -d app-sandbox
 # Replace api.example.com with AIHUB_PRODUCTION_HOST from .env.production.
 curl --fail https://api.example.com/health
 ```
+
+Run the two Sandbox-profile commands only when `AIHUB_SANDBOX_ENABLED=true`.
 
 The migration container is one-shot. Do not run `docker compose down -v`; the
 Postgres and Redis data belong to the existing VPS stacks. Back up the existing
@@ -414,41 +487,43 @@ docker compose --env-file .env.production \
   --profile sandbox logs --tail=100 app app-sandbox vault-agent
 ```
 
-The production database must contain no sandbox rows after cutover:
+After migration, production owns the Sandbox Organization and its key and
+identity-configuration rows. Usage, idempotency, and dispatch reservations stay
+in `aihub_sandbox`. Check the configured Organization IDs in both databases:
 
 ```sh
 sandbox_org_ids="${AIHUB_SANDBOX_ORG_IDS:?AIHUB_SANDBOX_ORG_IDS is required}"
-remaining="$(sudo -n docker exec aihub-db psql -U aihub_admin -d aihub -At \
-  -v sandbox_org_ids="$sandbox_org_ids" -c "
-    SELECT count(*) FROM organizations
-      WHERE id = ANY(string_to_array(:'sandbox_org_ids', ','))
-    UNION ALL
-    SELECT count(*) FROM api_keys
-      WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','))
-    UNION ALL
-    SELECT count(*) FROM organization_identity_configs
-      WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','))
-    UNION ALL
-    SELECT count(*) FROM usage_records
-      WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','))
-    UNION ALL
-    SELECT count(*) FROM idempotency_records
-      WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','));")"
-test "$(printf '%s\n' "$remaining" | awk '{sum += $1} END {print sum + 0}')" -eq 0
+sudo -n docker exec aihub-db psql -U aihub_admin -d aihub \
+  -v sandbox_org_ids="$sandbox_org_ids" <<'SQL'
+SELECT id,
+       (SELECT count(*) FROM api_keys WHERE organization_id = o.id) AS api_keys,
+       (SELECT count(*) FROM organization_identity_configs WHERE organization_id = o.id) AS identity_configs
+FROM organizations AS o
+WHERE id = ANY(string_to_array(:'sandbox_org_ids', ','));
+SQL
+
+sudo -n docker exec aihub-db psql -U aihub_admin -d aihub_sandbox \
+  -v sandbox_org_ids="$sandbox_org_ids" <<'SQL'
+SELECT 'organizations' AS record, count(*) FROM organizations
+  WHERE id = ANY(string_to_array(:'sandbox_org_ids', ','))
+UNION ALL SELECT 'api_keys', count(*) FROM api_keys
+  WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','))
+UNION ALL SELECT 'identity_configs', count(*) FROM organization_identity_configs
+  WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','))
+UNION ALL SELECT 'usage_records', count(*) FROM usage_records
+  WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','))
+UNION ALL SELECT 'idempotency_records', count(*) FROM idempotency_records
+  WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','))
+UNION ALL SELECT 'dispatch_reservations', count(*) FROM sandbox_dispatch_reservations
+  WHERE organization_id = ANY(string_to_array(:'sandbox_org_ids', ','));
+SQL
 ```
 
-The production backup must also be free of sandbox identifiers. Check the
-plain-text form of the dump without retaining another copy on disk:
-
-```sh
-IFS=',' read -r -a sandbox_org_id_list <<< "$sandbox_org_ids"
-for sandbox_org_id in "${sandbox_org_id_list[@]}"; do
-  if sudo -n docker exec aihub-db pg_dump -U aihub_admin -d aihub --data-only | grep -F -- "$sandbox_org_id" >/dev/null; then
-    echo 'sandbox identifier found in production dump' >&2
-    exit 1
-  fi
-done
-```
+Expect the control-plane counts for each configured Organization in production,
+and zero Organization, key, and identity-configuration rows in Sandbox. Any
+Sandbox usage, idempotency, or reservation history remains in the sandbox
+database. The production backup includes the migrated control-plane records;
+store it with the same restricted access as other production backups.
 
 Use real sandbox and production keys for the final boundary checks: a sandbox
 key on the production hostname and a production key on the sandbox hostname

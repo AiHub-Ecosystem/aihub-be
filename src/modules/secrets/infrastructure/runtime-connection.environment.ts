@@ -62,7 +62,7 @@ export function loadRuntimeConnectionEnvironment(
   const redis = asRecord(root.redis, 'Redis runtime secret bundle');
   assertAllowedKeys(
     database,
-    ['url', 'sandbox_url'],
+    ['url', 'sandbox_url', 'sandbox_control_plane_read_url'],
     'database runtime secret bundle',
   );
   assertAllowedKeys(
@@ -76,6 +76,14 @@ export function loadRuntimeConnectionEnvironment(
     scope === 'sandbox' ? 'sandbox_url' : 'url',
     scope === 'sandbox' ? 'sandbox database URL' : 'database URL',
   );
+  env.CONTROL_PLANE_READ_DATABASE_URL =
+    scope === 'sandbox'
+      ? requiredRecordString(
+          database,
+          'sandbox_control_plane_read_url',
+          'sandbox control-plane read URL',
+        )
+      : (env.CONTROL_PLANE_DATABASE_URL ?? env.DATABASE_URL);
   env.REDIS_URL = requiredRecordString(
     redis,
     scope === 'sandbox' ? 'sandbox_url' : 'url',

@@ -32,6 +32,7 @@
     // (tsx in dev, dist in prod), which knip cannot follow statically. Entry
     // status also treats their exports as public surface.
     "src/cli/quota-reconcile.ts",
+    "src/cli/sandbox-control-plane-migration.ts",
     "src/cli/usage-report.ts",
     "src/cli/usage-prune.ts",
     // Container runtime evidence that package.json scripts do not name:

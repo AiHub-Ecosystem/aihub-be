@@ -1,23 +1,26 @@
 # ADR-0017: Sandbox as a hostname-bound fourth environment
 
-- Status: Accepted
+- Status: Accepted; control-plane placement amended by ADR-0056
 - Related issues: #47, #50
+
+## Amendment for #182 (ADR-0056)
+
+ADR-0056 moves sandbox Organization, API-key, and identity-configuration records to the production control-plane database and restores the existing demo Organization's control-plane rows there. Sandbox usage, idempotency, quota reservations, the sandbox application, its Postgres database, and Redis logical database `/1` remain separate. The statements below that require no sandbox control-plane rows in production describe only the pre-#182 layout.
 
 AIHUB treats `sandbox` as a fourth request environment with its own API hostname, alongside `production`, `staging`, and `development`. `production` remains mandatory; the other tiers are optional and an unset tier is absent from the hostname map. On the production VPS, host nginx explicitly serves only the configured production and sandbox hosts; it never uses a wildcard, catch-all, or on-demand TLS. Hostnames must be unique after normalization, and host configuration changes reload nginx.
 
-Sandbox is an identity, metering, and request-control boundary. #50 strengthens
-the data boundary with a second application container, a separate database in
-the existing Postgres instance, and Redis logical database `/1`; downstream
-services and the deployment runtime credential realm remain shared. Its
-controls are the sandbox organization, environment-bound API keys, issuer
-binding, rate limit, and concurrency ceiling. Monthly quota and hard-stop
-enforcement are tracked separately in #51. The sandbox ingress hostname is
-`sandbox.aihubproduction.com`; the sandbox organization's issuer remains the
-stable identity URI `https://sandbox.aihubproduction.com`.
+Sandbox is an identity, metering, and request-control boundary. #50 adds a
+second application container, a separate database in the existing Postgres
+instance, and Redis logical database `/1`; ADR-0056 places control-plane
+identity records in production Postgres while usage, idempotency, and dispatch
+reservations stay in the sandbox database. Downstream services and the
+deployment runtime credential realm remain shared. The sandbox ingress
+hostname is `sandbox.aihubproduction.com`; the demo organization's issuer
+remains the stable identity URI `https://sandbox.aihubproduction.com`.
 
 Local `localhost` remains the development-only convenience host, but public placeholder hostnames are never added to the map when their variables are absent. Host settings accept normalized hostnames only and fail closed on duplicates. Host configuration is independent of sandbox assertion-mint configuration: an unconfigured mint route is `404`, while environment binding remains available to authenticated operations. The CLI accepts only the four canonical environment names; the existing text-array schema remains extensible and unknown legacy values fail closed. `sandbox` is not a deployment secret realm, and cross-environment enforcement covers every API-key route, including assertion minting; infrastructure probes and documentation routes are outside that matrix.
 
-The production Compose stack may know about configured staging/development hosts for resolver compatibility while deliberately public-serving only production and sandbox through the host nginx configuration; another deployment or proxy owns the other tiers. Nginx receives an explicit production-plus-optional-sandbox server configuration and reloads when that list changes. The sandbox profile uses the same image and downstream credentials as production but requires its own database URL, Redis URL, and loopback port. Verification covers boot guards, normalized host collisions, resolver absence, CLI validation, nginx configuration rendering, cross-environment rejection at the application boundary, and absence of sandbox rows from the production database; the edge may reject an unknown host with its own 421/404 response.
+The production Compose stack may know about configured staging/development hosts for resolver compatibility while deliberately public-serving only production and sandbox through the host nginx configuration; another deployment or proxy owns the other tiers. Nginx receives an explicit production-plus-optional-sandbox server configuration and reloads when that list changes. The sandbox profile uses the same image and downstream credentials as production but requires its own usage database, Redis URL, and loopback port, plus a least-privilege reader for production control-plane identity. Verification covers boot guards, normalized host collisions, resolver absence, CLI validation, nginx configuration rendering, cross-environment rejection at the application boundary, control-plane migration, and isolation of sandbox usage; the edge may reject an unknown host with its own 421/404 response.
 
 ## Update for #50 (2026-09-18)
 

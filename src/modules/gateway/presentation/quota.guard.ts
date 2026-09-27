@@ -52,6 +52,11 @@ export class QuotaGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const authenticated = getAuthenticatedApiKey(request);
+    if (authenticated.environment === 'sandbox') {
+      setRequestMeteringQuotaTracked(request, false);
+      return true;
+    }
+
     const quota = authenticated.monthlyRequestQuota;
 
     setRequestMeteringQuotaTracked(request, quota !== null);

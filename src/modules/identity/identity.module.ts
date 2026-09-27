@@ -141,6 +141,21 @@ import { SandboxApiKeyGuard } from './presentation/sandbox-api-key.guard';
 import { SandboxAssertionController } from './presentation/sandbox-assertion.controller';
 import { UserIdentityGuard } from './presentation/user-identity.guard';
 
+function controlPlaneDatabaseUrl(): string {
+  return (
+    process.env.CONTROL_PLANE_DATABASE_URL ?? process.env.DATABASE_URL ?? ''
+  );
+}
+
+function controlPlaneReadDatabaseUrl(): string {
+  return (
+    process.env.CONTROL_PLANE_READ_DATABASE_URL ??
+    process.env.CONTROL_PLANE_DATABASE_URL ??
+    process.env.DATABASE_URL ??
+    ''
+  );
+}
+
 @Module({
   // `RateLimitGuard` on the sandbox route consumes the gateway's rate limiter.
   imports: [AuthModule, GatewayModule, IdempotencyModule],
@@ -158,21 +173,22 @@ import { UserIdentityGuard } from './presentation/user-identity.guard';
       provide: API_KEY_REPOSITORY,
       useFactory: () =>
         new PostgresApiKeyRepository(
-          createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
+          createPostgresIdentityClient(controlPlaneReadDatabaseUrl()),
         ),
     },
     {
       provide: ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
       useFactory: (): OrganizationIdentityConfigRepositoryPort =>
         new PostgresOrganizationIdentityConfigRepository(
-          createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
+          createPostgresIdentityClient(controlPlaneDatabaseUrl()),
+          createPostgresIdentityClient(controlPlaneReadDatabaseUrl()),
         ),
     },
     {
       provide: ORGANIZATION_MEMBERSHIP,
       useFactory: (): OrganizationMembershipPort =>
         new PostgresOrganizationMembershipRepository(
-          createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
+          createPostgresIdentityClient(controlPlaneDatabaseUrl()),
         ),
     },
     {
@@ -197,7 +213,7 @@ import { UserIdentityGuard } from './presentation/user-identity.guard';
       provide: ORGANIZATION_CREATION,
       useFactory: (): OrganizationCreationPort =>
         new PostgresOrganizationCreationRepository(
-          createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
+          createPostgresIdentityClient(controlPlaneDatabaseUrl()),
         ),
     },
     {
@@ -210,7 +226,7 @@ import { UserIdentityGuard } from './presentation/user-identity.guard';
       provide: ORGANIZATION_RENAME,
       useFactory: (): OrganizationRenamePort =>
         new PostgresOrganizationRenameRepository(
-          createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
+          createPostgresIdentityClient(controlPlaneDatabaseUrl()),
         ),
     },
     {
@@ -223,7 +239,7 @@ import { UserIdentityGuard } from './presentation/user-identity.guard';
       provide: ORGANIZATION_API_KEY,
       useFactory: (): OrganizationApiKeyPort =>
         new PostgresOrganizationApiKeyRepository(
-          createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
+          createPostgresIdentityClient(controlPlaneDatabaseUrl()),
         ),
     },
     {
@@ -238,7 +254,7 @@ import { UserIdentityGuard } from './presentation/user-identity.guard';
       provide: ORGANIZATION_AUDIT_EVENT_READ,
       useFactory: (): OrganizationAuditEventReadPort =>
         new PostgresOrganizationAuditReadRepository(
-          createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
+          createPostgresIdentityClient(controlPlaneDatabaseUrl()),
         ),
     },
     {
@@ -305,7 +321,7 @@ import { UserIdentityGuard } from './presentation/user-identity.guard';
       provide: ORGANIZATION_INVITATION,
       useFactory: (): OrganizationInvitationPort =>
         new PostgresOrganizationInvitationRepository(
-          createPostgresIdentityClient(process.env.DATABASE_URL ?? ''),
+          createPostgresIdentityClient(controlPlaneDatabaseUrl()),
         ),
     },
     {

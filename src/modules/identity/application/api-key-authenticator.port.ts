@@ -13,6 +13,8 @@ export interface AuthenticatedApiKey {
   readonly maxConcurrent: number;
   readonly monthlyRequestQuota: number | null;
   readonly hardStopOnQuota: boolean;
+  /** Sandbox per-Organization dispatch cap; null means no additional cap. */
+  readonly sandboxOrganizationDispatchLimit?: number | null;
 }
 
 export type OrganizationStatus = 'active' | 'suspended';

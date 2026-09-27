@@ -3,6 +3,7 @@ import {
   type ExecutionContext,
   Inject,
   Injectable,
+  Optional,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
@@ -16,6 +17,10 @@ import {
   type AuthenticatedApiKey,
 } from '../application/api-key-authenticator.port';
 import { hasRequiredScope } from '../application/authorization';
+import {
+  SANDBOX_ASSERTION_POLICY,
+  type SandboxAssertionPolicyPort,
+} from '../application/sandbox-assertion-policy.port';
 import { authenticateApiKey, forbidden } from './authenticate-api-key';
 import type { AuthenticatedRequest } from './authenticated-request';
 import {
@@ -55,6 +60,9 @@ export class ApiKeyGuard implements CanActivate {
     private readonly reflector: Reflector,
     @Inject(API_KEY_AUTHENTICATOR)
     private readonly authenticator: ApiKeyAuthenticatorPort,
+    @Optional()
+    @Inject(SANDBOX_ASSERTION_POLICY)
+    private readonly sandboxPolicy?: SandboxAssertionPolicyPort,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -89,14 +97,28 @@ export class ApiKeyGuard implements CanActivate {
     }
 
     const authenticated = await authenticateApiKey(request, this.authenticator);
+    const authorized =
+      environment === 'sandbox'
+        ? {
+            ...authenticated,
+            rateLimitRpm: Math.min(authenticated.rateLimitRpm, 5),
+            sandboxOrganizationDispatchLimit:
+              this.sandboxPolicy?.isConfiguredOrganization?.(
+                authenticated.organizationId,
+              )
+                ? authenticated.monthlyRequestQuota
+                : 25,
+          }
+        : authenticated;
+    request.aihubAuth = authorized;
     setRequestMeteringIdentity(request, {
       operation: operationId,
-      organizationId: authenticated.organizationId,
-      apiKeyId: authenticated.apiKeyId,
-      environment: authenticated.environment,
+      organizationId: authorized.organizationId,
+      apiKeyId: authorized.apiKeyId,
+      environment: authorized.environment,
     });
 
-    if (!hasRequiredScope(authenticated, operation.requiredScope)) {
+    if (!hasRequiredScope(authorized, operation.requiredScope)) {
       throw forbidden();
     }
 

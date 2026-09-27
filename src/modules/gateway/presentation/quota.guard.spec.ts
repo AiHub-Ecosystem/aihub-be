@@ -70,6 +70,24 @@ describe('QuotaGuard', () => {
     );
   });
 
+  it('skips production quota reads and metering increments in Sandbox', async () => {
+    const counter = new FakeQuotaCounter();
+    counter.current = 100;
+    const request = requestFor({
+      ...baseAuthenticated,
+      environment: 'sandbox',
+      monthlyRequestQuota: 0,
+    });
+    const guard = new QuotaGuard(counter, now);
+
+    await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
+
+    expect(counter.reads).toEqual([]);
+    expect(getRequestMeteringState(request)).toEqual(
+      expect.objectContaining({ quotaTracked: false }),
+    );
+  });
+
   it('allows a request below the limit and marks it for quota tracking', async () => {
     const counter = new FakeQuotaCounter();
     counter.current = 4;

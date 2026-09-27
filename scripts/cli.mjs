@@ -447,8 +447,10 @@ function existingIdentityTtl(row) {
   return row.max_assertion_ttl_seconds;
 }
 
-async function databasePool() {
-  const databaseUrl = process.env.DATABASE_URL;
+async function databasePool({ controlPlane = false } = {}) {
+  const databaseUrl = controlPlane
+    ? (process.env.CONTROL_PLANE_DATABASE_URL ?? process.env.DATABASE_URL)
+    : process.env.DATABASE_URL;
   if (databaseUrl === undefined || databaseUrl.trim().length === 0) {
     throw new Error('DATABASE_URL is required');
   }
@@ -457,7 +459,7 @@ async function databasePool() {
 }
 
 async function createOrganization(options) {
-  const pool = await databasePool();
+  const pool = await databasePool({ controlPlane: true });
   try {
     const result = await pool.query(
       `INSERT INTO organizations
@@ -486,7 +488,7 @@ async function createOrganization(options) {
 
 async function createKey(options) {
   const generateApiKey = await loadApiKeyGenerator();
-  const pool = await databasePool();
+  const pool = await databasePool({ controlPlane: true });
   try {
     const organizationId = requiredOption(options, 'org');
     const organization = await pool.query(
@@ -522,7 +524,7 @@ async function createKey(options) {
 
 async function revokeKey(options) {
   const keyId = requiredOption(options, 'key');
-  const pool = await databasePool();
+  const pool = await databasePool({ controlPlane: true });
   let hashHex;
   try {
     const result = await pool.query(
@@ -590,7 +592,7 @@ async function revokeKey(options) {
 
 async function setIdentity(options) {
   const input = await parseIdentityOptions(options);
-  const pool = await databasePool();
+  const pool = await databasePool({ controlPlane: true });
   try {
     const organization = await pool.query(
       'SELECT 1 FROM organizations WHERE id = $1',
@@ -717,7 +719,8 @@ async function organizationStatusCommand(options, status) {
   }
 
   const outcome = await runOrganizationStatus({
-    databaseUrl: process.env.DATABASE_URL ?? '',
+    databaseUrl:
+      process.env.CONTROL_PLANE_DATABASE_URL ?? process.env.DATABASE_URL ?? '',
     redisUrl: process.env.REDIS_URL,
     organizationId: requiredOption(options, 'org'),
     actorUsername: requiredOption(options, 'actor'),
@@ -734,7 +737,8 @@ async function organizationGrantEntitlementCommand(options) {
       usageError();
   }
   const outcome = await runGrantOrganizationEntitlement({
-    databaseUrl: process.env.DATABASE_URL ?? '',
+    databaseUrl:
+      process.env.CONTROL_PLANE_DATABASE_URL ?? process.env.DATABASE_URL ?? '',
     redisUrl: process.env.REDIS_URL,
     organizationId: requiredOption(options, 'org'),
     actorUsername: requiredOption(options, 'actor'),
@@ -754,7 +758,8 @@ async function attachFirstOwnerCommand(options) {
   }
 
   const outcome = await runAttachFirstOwner({
-    databaseUrl: process.env.DATABASE_URL ?? '',
+    databaseUrl:
+      process.env.CONTROL_PLANE_DATABASE_URL ?? process.env.DATABASE_URL ?? '',
     organizationId: requiredOption(options, 'org'),
     ownerUsername: requiredOption(options, 'owner'),
     actorUsername: requiredOption(options, 'actor'),

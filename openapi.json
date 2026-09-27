@@ -4745,6 +4745,10 @@
                         {
                           "const": "staging",
                           "type": "string"
+                        },
+                        {
+                          "const": "sandbox",
+                          "type": "string"
                         }
                       ]
                     }

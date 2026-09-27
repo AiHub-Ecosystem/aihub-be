@@ -12,7 +12,8 @@ The fastest start is section 1a: with only an organization API key you can
 grade by sending your own user id in `X-User-Identity`. When you are ready to
 prove to AIHUB which user is acting, register a JWKS and switch to Signed User
 Assertions (section 3). Before making production calls, complete the onboarding
-flow in section 2.
+flow in section 2. Customer Web users evaluating Writing can use the separate
+Customer Sandbox tier in section 3b once issue #182 is deployed.
 
 ---
 
@@ -97,8 +98,10 @@ AIHUB and your team complete these steps in order:
 
 1. **Choose the capabilities and environment.** Tell AIHUB which operations you
    need (`writing.grade`, `speaking.grade`, or both) and whether the request is
-   for staging or production. Do not build a client around a production
-   credential before staging has passed.
+   for staging or production. Customer Web users may separately evaluate
+   Writing through the Customer Sandbox tier in section 3b; a Sandbox API key
+   is separate from production and staging credentials. Do not build a client
+   around a production credential before staging has passed.
 2. **AIHUB creates the organization and API credential.** AIHUB creates or
    confirms your organization, enables the requested entitlements, and issues an
    API key with explicit environment and scope permissions. The raw key is shown
@@ -134,7 +137,7 @@ configuration, not headers that change from request to request.
 | ---------------------- | -------------------------------------------- | ------------------------------------------------------------------- |
 | Organization name      | Your display or legal name                   | Used by AIHUB to identify the tenant                                |
 | Capabilities           | `writing.grade`, `speaking.grade`, or both   | AIHUB maps these to entitlements and API-key scopes                 |
-| Environment            | Staging or production                        | Keys are restricted to their allowed environment                    |
+| Environment            | Staging or production for integration        | Customer Sandbox is a separate Writing test tier; see section 3b    |
 | Issuer (`iss`)         | Exact string, for example `https://acme.edu` | Must match the assertion character for character                    |
 | JWKS URL               | HTTPS URL serving public keys                | Preferred; must be reachable by AIHUB without a private network hop |
 | Public JWKS            | JWKS JSON document                           | Fallback when you cannot host a JWKS URL                            |
@@ -337,20 +340,21 @@ issuer, JWKS URL, algorithm, or rotation process itself changes.
 
 ---
 
-## 3a. The sandbox, for testing without a signing key
+## 3a. Demo sandbox: testing without a signing key
 
 Everything in section 3 assumes you are the one signing. If you are exercising
 AIHUB from a terminal or a test console rather than from your own backend,
-there is a sandbox that signs for you.
+the demo sandbox can sign for you.
 
 **This is not how you integrate.** A customer with a backend signs assertions
 from their own identity provider, exactly as described above, and never calls
-this route. The sandbox exists so that people testing AIHUB do not have to hold
-an organization's private key to do it.
+this route. This route is for the dedicated demo Organization and its
+server-held Sandbox API key. Customer Sandbox API keys use their own
+Organization Identity Configuration and cannot call this mint route.
 
-It runs on its own hostname and its own environment, with its own organization
-and its own API keys. A sandbox key is refused on the production hostname and a
-production key is refused on the sandbox hostname, both with
+It runs on the sandbox hostname with a dedicated demo Organization and key. A
+sandbox key is refused on the production hostname and a production key is
+refused on the sandbox hostname, both with
 `ENVIRONMENT_NOT_ALLOWED`.
 
 ### Minting
@@ -393,16 +397,60 @@ curl -sS -X POST 'https://sandbox.aihubproduction.com/v1/ielts/speaking/grading'
 Note the path. Grading operations live under `/v1/ielts/...`, not `/v1/...`;
 `/v1/speaking/grading` is a 404 and is a common first mistake.
 
-### It is not free
+### Shared sandbox allowance
 
-Sandbox requests reach the same AI services as production traffic and cost the
-same money. The sandbox organization carries a monthly request quota with a hard
-stop, plus a low rate limit and concurrency ceiling, so exceeding it returns
-`QUOTA_EXCEEDED` rather than running up a bill. Treat it as a small budget for
-hand-testing, not a free tier.
+Sandbox requests reach the same AI services as production traffic and incur real
+AI cost, but customers are not billed for Sandbox usage. Every AI dispatch,
+including demo Speaking calls, shares a hard ceiling of 500 dispatches per UTC
+month. The demo Organization also keeps its own configured quota. A dispatch
+counts even if the downstream call fails or times out. The Customer Sandbox
+allowance and the shared ceiling are separate from production usage and quota.
 
-Usage is metered exactly as production usage is, and recorded against the
-sandbox environment.
+Sandbox usage is recorded against the sandbox Environment. The request-count
+ceiling bounds the number of AI calls; it is not a USD spending limit.
+
+---
+
+## 3b. Customer Sandbox Environment
+
+> **Availability:** The design is approved, but customer Sandbox keys are not
+> available until [aihub-be issue #182](https://github.com/AiHub-Ecosystem/aihub-be/issues/182)
+> is implemented and deployed. Customer Web key creation and its Sample request
+> are tracked in [AiHub-Frontend issue #27](https://github.com/AiHub-Ecosystem/AiHub-Frontend/issues/27).
+
+The Customer Sandbox is for trying the live Writing grading API without using
+the Organization's production quota or receiving a customer bill. An active
+Organization owner or admin creates a separate API key restricted to the
+`sandbox` Environment. Keep production and Sandbox keys separate; a Sandbox key
+cannot call the production hostname. Customer Sandbox keys are initially
+limited to `writing.grade`, which supports Writing Task 1 and Task 2. Speaking
+remains available to the dedicated demo Organization only.
+
+Use `https://sandbox.aihubproduction.com` as the base URL. The Customer Web
+Sample request provides a copyable command after the Sandbox key is created.
+The request uses the same Organization Identity Configuration as production:
+send a Declared User ID when no active configuration exists, or a Signed User
+Assertion when it does. Customer Organization keys cannot call
+`POST /v1/sandbox/assertions`; that route remains restricted to the dedicated
+demo Organization.
+
+Sandbox dispatches are limited to 25 per Customer Organization per UTC calendar
+month and 500 across the entire Sandbox Environment per month. The global
+allowance includes the demo Organization, so it may be exhausted before a
+Customer Organization uses its individual 25 requests. AIHUB returns
+`429 QUOTA_EXCEEDED` at either limit until the next UTC month. During normal
+operation, Sandbox also limits each key to 5 requests per minute, each
+Organization to one concurrent grading request, and the whole Environment to
+ten concurrent grading requests. These Redis-backed burst controls follow the
+existing degraded-mode policy; the durable monthly allowance remains the hard
+spending boundary. If the durable Sandbox quota store is unavailable, the
+gateway fails closed.
+
+Each downstream Writing dispatch consumes one allowance, including a downstream
+error or timeout. A completed request replayed with the same `Idempotency-Key`
+returns its stored result without another AI call or allowance unit, even when
+the quota has run out. These request limits cap the number of calls, not their
+exact cost in USD.
 
 ---
 

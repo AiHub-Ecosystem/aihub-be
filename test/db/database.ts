@@ -1,3 +1,4 @@
+import Redis from 'ioredis';
 import { Pool } from 'pg';
 
 /**
@@ -16,6 +17,7 @@ import { Pool } from 'pg';
  */
 const DEFAULT_ADMIN_URL = 'postgres://aihub:change-me@localhost:5432/aihub';
 const DEFAULT_TEST_DATABASE_NAME = 'aihub_db_lane';
+export const SANDBOX_TEST_DATABASE_NAME = 'aihub_sandbox_db_lane';
 const configuredTestDatabaseName = process.env.DB_LANE_DATABASE_NAME?.trim();
 const TEST_DATABASE_NAME =
   configuredTestDatabaseName !== undefined &&
@@ -54,10 +56,49 @@ export function testDatabaseUrl(): string {
   return admin.toString();
 }
 
+export function sandboxTestDatabaseUrl(): string {
+  const admin = new URL(adminDatabaseUrl());
+  admin.pathname = `/${SANDBOX_TEST_DATABASE_NAME}`;
+  return admin.toString();
+}
+
 export { TEST_DATABASE_NAME };
 
 export function createTestPool(): Pool {
   return new Pool({ connectionString: testDatabaseUrl(), max: 4 });
+}
+
+export function createSandboxTestPool(): Pool {
+  return new Pool({ connectionString: sandboxTestDatabaseUrl(), max: 4 });
+}
+
+export function sandboxTestRedisUrl(): string {
+  const url = new URL(
+    process.env.SANDBOX_TEST_REDIS_URL?.trim() || 'redis://127.0.0.1:6379/14',
+  );
+  const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (
+    url.protocol !== 'redis:' ||
+    !['localhost', '127.0.0.1', '::1'].includes(hostname) ||
+    url.pathname !== '/14' ||
+    url.username !== '' ||
+    url.password !== ''
+  ) {
+    throw new Error(
+      'SANDBOX_TEST_REDIS_URL must use a loopback Redis database 14 without credentials',
+    );
+  }
+  return url.toString();
+}
+
+export function createSandboxTestRedis(): Redis {
+  const redis = new Redis(sandboxTestRedisUrl(), {
+    commandTimeout: 1_000,
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+  });
+  redis.on('error', () => undefined);
+  return redis;
 }
 
 /**

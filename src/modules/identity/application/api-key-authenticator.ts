@@ -77,7 +77,8 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     }
 
     const hashHex = hashApiKey(credentials.value);
-    let record = await this.getCachedRecord(hashHex);
+    const sandbox = credentials.environment === 'sandbox';
+    let record = sandbox ? undefined : await this.getCachedRecord(hashHex);
 
     if (record === undefined) {
       // The brute-force gate sits specifically here, in front of the
@@ -95,10 +96,12 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       }
 
       record = await this.repository.findByHash(hashHex);
-      if (record === null) {
-        await this.cache.setMiss(hashHex).catch(() => undefined);
-      } else {
-        await this.cache.set(hashHex, record).catch(() => undefined);
+      if (!sandbox) {
+        if (record === null) {
+          await this.cache.setMiss(hashHex).catch(() => undefined);
+        } else {
+          await this.cache.set(hashHex, record).catch(() => undefined);
+        }
       }
     }
 

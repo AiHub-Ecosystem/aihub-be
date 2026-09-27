@@ -1,73 +1,56 @@
 # Sandbox provisioning
 
-How to stand up the organization that `POST /v1/sandbox/assertions` mints for, issue and revoke tester keys, and rotate the sandbox signing key.
+How to provision the demo organization used by `POST /v1/sandbox/assertions`, issue and revoke tester keys, and rotate the demo signing key. The mint route itself is described in [`../integration-guide.md`].
 
-The mint endpoint itself is described in [`../integration-guide.md`]. This document covers only the control-plane objects it needs. Until the sandbox organization and signing material exist, the route answers `404` and the rest of the gateway is unaffected.
+## Sandbox data and limits
 
-> **Environment.** Sandbox runs as its own `sandbox` environment on its own hostname; #47 delivered it. Configure `AIHUB_SANDBOX_HOST` in the deployment before testing the route. The `--envs sandbox` value in step 5 is now the stable key scope.
->
-> This is a boundary of clarity and defence in depth, not the thing that confines a sandbox key. A key is confined by the organization it belongs to: it can only ever act as that organization, its scopes are filtered through that organization's entitlements, and its spend is bounded by that organization's limits. That holds on any hostname. The hostname binding adds a second layer that catches a credential used in the wrong place, and unlike the first it depends on the reverse proxy passing a truthful `Host` — so it is worth having and not worth relying on alone.
+Organization, API-key, and identity-configuration records live in the
+production control-plane database. The Sandbox application reads those records
+through the restricted `sandbox_control_plane_read_url` Vault connection.
+Sandbox usage, idempotency records, and monthly dispatch reservations live in
+`aihub_sandbox`; Redis uses logical database `/1` for sandbox cache and pacing
+state.
 
-## What the isolation does and does not cover
+Customer Sandbox keys are restricted to the `sandbox` environment and the
+`writing.grade` scope, which admits Writing Task 1 and Task 2. They use the
+customer Organization's own identity configuration and do not call the demo
+assertion mint route. Calls reach the real AI Writing service. Each customer
+Organization gets at most 25 dispatches per UTC month; the entire Sandbox
+environment, including the demo Organization, shares a 500-dispatch monthly
+ceiling. The demo Organization's configured quota is an additional limit.
+Normal pacing is five requests per minute per key, one in-flight request per
+Organization, and ten across Sandbox. These are request-count ceilings, not a
+USD cost guarantee.
 
-Worth being clear before choosing the numbers below.
+The demo mint route stays restricted to the Organization IDs configured in
+`AIHUB_SANDBOX_ORG_IDS`. Until its Organization, identity configuration, and
+signing material exist, that route answers `404` and the rest of the gateway is
+unaffected.
 
-A minted assertion carries the sandbox organization's issuer, and `UserAssertionVerifier` compares `iss` against the config of the organization resolved from the API key. So a sandbox assertion is accepted by the sandbox organization and by nothing else, even if the mint endpoint were completely compromised. Identity is contained by design.
+Provision Organization, API-key, and identity-configuration records through
+the production control plane. Set `CONTROL_PLANE_DATABASE_URL` to the
+production database for the `pnpm cli org:create`, `identity:set`,
+`key:create`, and `key:revoke` commands below. Usage and quota tools continue
+to use `DATABASE_URL`, which should point to `aihub_sandbox` for sandbox usage.
+The CLI can run from a workstation through the SSH tunnel described in
+[`deploy-vps.md`](deploy-vps.md). Sandbox authentication reads the key record
+directly on each request, so revocation and suspension apply on the next
+request.
 
-What is **not** contained is spend. Sandbox requests reach the same AI Writing and AI Speaking services as production traffic and cost the same money.
-
-Be precise about what currently bounds that, because the limits below are not all equal. `--rate-limit-rpm` and `--max-concurrent` are enforced on every request. `--monthly-quota` and `--hard-stop` are enforced by the quota gate from #51, so the sandbox has both a burst ceiling and a hard monthly spending ceiling.
-
-Sandbox control-plane and metering rows now live in the isolated `aihub_sandbox`
-database. The production database must contain no sandbox organization, key,
-identity, usage, or idempotency rows after the #50 cutover. Sandbox still uses
-the same downstream AI services and runtime secret realm; only the data store,
-Redis logical database, and application container are separate.
-
-## Running the CLI against the sandbox database
-
-Every `pnpm cli` command below needs a database connection, and neither obvious
-place on the VPS can give it one. Run the commands against `aihub_sandbox`, not
-the production database; using the production URL would recreate the boundary
-that #50 removes.
-
-Postgres is bound to loopback on the VPS, so reach it from a workstation
-checkout through an SSH tunnel:
-
-```sh
-ssh -f -N -L 15433:127.0.0.1:5433 <user>@<vps>
-
-DATABASE_URL='postgresql://<user>:<password>@127.0.0.1:15433/aihub_sandbox' \
-REDIS_URL='redis://:<password>@127.0.0.1:16379/1' \
-  pnpm cli key:create --org org_... --name "..." --scopes ... --envs sandbox
-```
-
-Take the credentials from the sandbox URLs in `.env.production` on the VPS and
-rewrite the hosts: the file names the containers (`@aihub-db:5432` and the
-Redis hostname) because the application resolves them over Docker/network DNS,
-which a tunnel cannot.
-
-Close the tunnel when finished.
-
-`key:revoke` also purges the identity cache entry, and Redis runs on a
-different host from Postgres. Forward it too if the purge should succeed:
+For example, expose the production database through the local SSH tunnel and
+set the control-plane URL in the workstation shell before running the
+Organization, identity, or key commands:
 
 ```sh
-ssh -f -N -L 15433:127.0.0.1:5433 -L 16379:<redis host>:6379 <user>@<vps>
+ssh -N -L 15433:127.0.0.1:5433 <user>@<vps>
+export CONTROL_PLANE_DATABASE_URL='postgresql://<user>:<password>@127.0.0.1:15433/aihub'
 ```
 
-The command reports which of the two happened, and succeeds either way:
+## Environment and organization boundaries
 
-```
-Revoked ak_... and purged its identity cache entry.
-Revoked ak_..., but could not purge the identity cache; the key may still be
-accepted for up to 60 seconds.
-```
-
-The revocation is committed before the purge is attempted, so the second
-message means the key is revoked and merely still cached. Acceptable for a
-routine revocation; for a leaked credential, forward Redis and re-run so the
-window closes immediately.
+Sandbox runs as its own `sandbox` environment and hostname. Configure
+`AIHUB_SANDBOX_HOST` before testing. A key is bound to its Organization and
+allowed environment; the hostname check adds a second boundary at ingress.
 
 ## 1. Generate the signing key pair
 

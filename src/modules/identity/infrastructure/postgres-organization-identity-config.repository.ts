@@ -249,6 +249,7 @@ export class PostgresOrganizationIdentityConfigRepository
   constructor(
     private readonly client: PostgresIdentityClient &
       PostgresIdentityTransactionalClient,
+    private readonly readClient: PostgresIdentityClient = client,
   ) {}
 
   async findActiveByOrganizationId(
@@ -384,7 +385,7 @@ export class PostgresOrganizationIdentityConfigRepository
 
     let rows: readonly unknown[];
     try {
-      rows = await this.client.query(sql, [organizationId]);
+      rows = await this.readClient.query(sql, [organizationId]);
     } catch {
       throw identityStoreError('Identity store is unavailable');
     }
@@ -393,6 +394,9 @@ export class PostgresOrganizationIdentityConfigRepository
 
   async onModuleDestroy(): Promise<void> {
     await this.client.close();
+    if (this.readClient !== this.client) {
+      await this.readClient.close();
+    }
   }
 }
 
