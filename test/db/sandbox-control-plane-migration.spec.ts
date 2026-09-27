@@ -1,8 +1,17 @@
 import { ulid } from 'ulid';
 
 import { migrateSandboxOrganization } from '../../src/cli/sandbox-control-plane-migration';
+import { PostgresSandboxDispatchBudget } from '../../src/modules/gateway/infrastructure/postgres-sandbox-dispatch-budget';
+import { ApiKeyAuthenticator } from '../../src/modules/identity/application/api-key-authenticator';
 import { generateApiKey } from '../../src/modules/identity/domain/api-key';
-import { createSandboxTestPool, createTestPool } from './database';
+import { PostgresApiKeyRepository } from '../../src/modules/identity/infrastructure/postgres-api-key.repository';
+import { createPostgresIdentityClient } from '../../src/modules/identity/infrastructure/postgres-identity.client';
+import {
+  createSandboxTestPool,
+  createTestPool,
+  sandboxTestDatabaseUrl,
+  testDatabaseUrl,
+} from './database';
 
 const ORGANIZATION_ID = 'org_demo_migration';
 const ACTOR_ID = `usr_${ulid()}`;
@@ -34,7 +43,7 @@ beforeEach(async () => {
     `INSERT INTO organizations
        (id, name, entitlements, rate_limit_rpm, max_concurrent,
         monthly_request_quota, hard_stop_on_quota)
-     VALUES ($1, 'Demo Organization', ARRAY['writing', 'speaking'], 60, 3, 100, true)`,
+     VALUES ($1, 'Demo Organization', ARRAY['writing', 'speaking'], 60, 3, 1, true)`,
     [ORGANIZATION_ID],
   );
   await sandbox.query(
@@ -64,6 +73,23 @@ beforeEach(async () => {
     [ORGANIZATION_ID, apiKey.id],
   );
   await sandbox.query(
+    `INSERT INTO usage_records
+       (request_id, organization_id, api_key_id, service, operation,
+        environment, outcome, http_status, billable_requests,
+        metering_status, total_ms)
+     VALUES ('req_demo_pre_dispatch', $1, $2, 'writing', 'writing.task1.grade',
+       'sandbox', 'downstream_error', 503, 0, 'not_applicable', 5)`,
+    [ORGANIZATION_ID, apiKey.id],
+  );
+  await sandbox.query(
+    `INSERT INTO sandbox_dispatch_reservations
+       (request_id, organization_id, month_start, status, created_at, released_at)
+     VALUES ('req_demo_pre_dispatch', $1,
+       date_trunc('month', now() AT TIME ZONE 'UTC')::date,
+       'released', now(), now())`,
+    [ORGANIZATION_ID],
+  );
+  await sandbox.query(
     `INSERT INTO idempotency_records
        (organization_id, operation, idempotency_key, request_fingerprint,
         state, request_id, response_status, response_body, created_at,
@@ -89,6 +115,7 @@ describe('guarded Sandbox control-plane migration', () => {
       organizations: 1,
       apiKeys: 1,
       identityConfigs: 1,
+      historicalDispatches: 1,
     });
     await expect(
       controlPlane.query('SELECT count(*)::int AS count FROM organizations'),
@@ -96,7 +123,10 @@ describe('guarded Sandbox control-plane migration', () => {
 
     await expect(
       migrateSandboxOrganization(sandbox, controlPlane, ORGANIZATION_ID, true),
-    ).resolves.toMatchObject({ status: 'applied' });
+    ).resolves.toMatchObject({
+      status: 'applied',
+      historicalDispatches: 1,
+    });
 
     const movedKey = await controlPlane.query<{
       id: string;
@@ -114,6 +144,35 @@ describe('guarded Sandbox control-plane migration', () => {
         allowed_environments: ['sandbox'],
       },
     ]);
+    const identityClient = createPostgresIdentityClient(testDatabaseUrl());
+    try {
+      const authenticator = new ApiKeyAuthenticator(
+        new PostgresApiKeyRepository(identityClient),
+        {
+          get: async () => undefined,
+          set: async () => undefined,
+          setMiss: async () => undefined,
+          delete: async () => undefined,
+        },
+        {
+          get: async () => 0,
+          recordFailure: async () => 1,
+        },
+      );
+      await expect(
+        authenticator.authenticate({
+          value: apiKey.raw,
+          environment: 'sandbox',
+          clientIp: '127.0.0.1',
+        }),
+      ).resolves.toMatchObject({
+        organizationId: ORGANIZATION_ID,
+        apiKeyId: apiKey.id,
+        monthlyRequestQuota: 1,
+      });
+    } finally {
+      await identityClient.close();
+    }
     await expect(
       controlPlane.query(
         'SELECT issuer FROM organization_identity_configs WHERE organization_id = $1',
@@ -134,10 +193,36 @@ describe('guarded Sandbox control-plane migration', () => {
     ).resolves.toMatchObject({ rows: [{ count: 1 }] });
     await expect(
       sandbox.query(
+        `SELECT count(*)::int AS count FROM sandbox_dispatch_reservations
+         WHERE request_id = 'migration-history:req_demo_pre_dispatch'`,
+      ),
+    ).resolves.toMatchObject({ rows: [{ count: 0 }] });
+    await expect(
+      sandbox.query(
         'SELECT count(*)::int AS count FROM idempotency_records WHERE organization_id = $1',
         [ORGANIZATION_ID],
       ),
     ).resolves.toMatchObject({ rows: [{ count: 1 }] });
+    await expect(
+      sandbox.query(
+        `SELECT count(*)::int AS count FROM sandbox_dispatch_reservations
+         WHERE organization_id = $1 AND status = 'reserved'
+           AND month_start = date_trunc('month', now() AT TIME ZONE 'UTC')::date`,
+        [ORGANIZATION_ID],
+      ),
+    ).resolves.toMatchObject({ rows: [{ count: 1 }] });
+    const budget = new PostgresSandboxDispatchBudget(sandboxTestDatabaseUrl());
+    try {
+      await expect(
+        budget.reserve({
+          organizationId: ORGANIZATION_ID,
+          requestId: 'req_after_migration',
+          organizationLimit: 1,
+        }),
+      ).resolves.toBe(false);
+    } finally {
+      await budget.onModuleDestroy();
+    }
     await expect(
       migrateSandboxOrganization(sandbox, controlPlane, ORGANIZATION_ID, true),
     ).resolves.toMatchObject({ status: 'already_migrated' });

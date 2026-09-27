@@ -66,9 +66,9 @@ function context(deadlineMs = 5_000, signal?: AbortSignal) {
   });
 }
 
-function sandboxContext() {
+function sandboxContext(signal?: AbortSignal) {
   return {
-    ...context(),
+    ...context(5_000, signal),
     organizationId: 'org_sandbox',
     environment: 'sandbox',
     sandboxOrganizationDispatchLimit: 25,
@@ -210,6 +210,67 @@ describe('HttpOperationDispatcher', () => {
         organizationLimit: 25,
       },
     ]);
+    expect(budget.releaseCalls).toEqual(['req_01J8QK3M7XW2P5NRTVA9BCDEFG']);
+  });
+
+  it('does not reserve quota when the request is already aborted', async () => {
+    const abort = new AbortController();
+    abort.abort();
+    const budget = fakeSandboxBudget();
+    const httpClient = new DownstreamHttpClient(
+      'https://ai-writing.test',
+      mockAgent,
+    );
+    const request = jest.spyOn(httpClient, 'request');
+    const dispatcher = new HttpOperationDispatcher(
+      httpClient,
+      new FakeTokenIssuer(),
+      [fakeGradeAdapter('/task-one')],
+      budget,
+    );
+
+    await expect(
+      dispatcher.dispatch(
+        'writing.task1.grade',
+        gradeInput,
+        sandboxContext(abort.signal),
+      ),
+    ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
+
+    expect(budget.reserveCalls).toEqual([]);
+    expect(request).not.toHaveBeenCalled();
+    expect(budget.releaseCalls).toEqual([]);
+  });
+
+  it('releases quota when the request aborts while admission is pending', async () => {
+    const abort = new AbortController();
+    const budget = fakeSandboxBudget();
+    jest.spyOn(budget, 'reserve').mockImplementation(async (input) => {
+      budget.reserveCalls.push(input);
+      abort.abort();
+      return true;
+    });
+    const httpClient = new DownstreamHttpClient(
+      'https://ai-writing.test',
+      mockAgent,
+    );
+    const request = jest.spyOn(httpClient, 'request');
+    const dispatcher = new HttpOperationDispatcher(
+      httpClient,
+      new FakeTokenIssuer(),
+      [fakeGradeAdapter('/task-one')],
+      budget,
+    );
+
+    await expect(
+      dispatcher.dispatch(
+        'writing.task1.grade',
+        gradeInput,
+        sandboxContext(abort.signal),
+      ),
+    ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
+
+    expect(request).not.toHaveBeenCalled();
     expect(budget.releaseCalls).toEqual(['req_01J8QK3M7XW2P5NRTVA9BCDEFG']);
   });
 

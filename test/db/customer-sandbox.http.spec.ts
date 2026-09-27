@@ -8,9 +8,11 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import type { LightMyRequestResponse } from 'fastify';
+import { exportPKCS8 } from 'jose';
 import { ulid } from 'ulid';
 
 import { AppModule } from '../../src/app.module';
+import { migrateSandboxOrganization } from '../../src/cli/sandbox-control-plane-migration';
 import { registerRequestLifecycle } from '../../src/common/http/request-lifecycle.hook';
 import { registerRequestMeteringStart } from '../../src/common/request-metering/request-metering-state';
 import {
@@ -20,6 +22,7 @@ import {
 import { USER_ACCOUNT_REPOSITORY } from '../../src/modules/auth/application/user-account.port';
 import { userAccountStatus } from '../../src/modules/auth/testing/user-account-status.stub';
 import { DownstreamHttpClient } from '../../src/modules/gateway/infrastructure/downstream-http.client';
+import { generateApiKey } from '../../src/modules/identity/domain/api-key';
 import {
   createSandboxTestPool,
   createSandboxTestRedis,
@@ -74,6 +77,12 @@ const TASK2_INPUT = {
 const TASK2_RESPONSE: unknown = JSON.parse(
   readFileSync(
     join(process.cwd(), 'test/fixtures/ai-writing/grade-task2.response.json'),
+    'utf8',
+  ),
+);
+const SPEAKING_RESPONSE: unknown = JSON.parse(
+  readFileSync(
+    join(process.cwd(), 'test/fixtures/ai-speaking/grading.response.json'),
     'utf8',
   ),
 );
@@ -266,7 +275,11 @@ beforeAll(async () => {
       return {
         status: 200,
         headers: {},
-        body: request.path.includes('task2') ? TASK2_RESPONSE : GRADE_RESPONSE,
+        body: request.path.includes('/speaking/')
+          ? SPEAKING_RESPONSE
+          : request.path.includes('task2')
+            ? TASK2_RESPONSE
+            : GRADE_RESPONSE,
       };
     },
     async close() {},
@@ -368,6 +381,144 @@ function grade(
 }
 
 describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
+  it('keeps the migrated demo key usable for assertion minting and Speaking', async () => {
+    const demoOrganizationId = `org_sandbox_demo_${ulid().toLowerCase()}`;
+    const demoKey = generateApiKey(`ak_sandbox_demo_${ulid().toLowerCase()}`);
+    const demoIdentity = await createTenantIdentity(
+      'https://demo.identity.test',
+      'demo-sandbox-http',
+    );
+    const demoPrivateKey = await exportPKCS8(demoIdentity.privateKey);
+    const savedEnvironment = {
+      organizations: process.env.AIHUB_SANDBOX_ORG_IDS,
+      privateKey: process.env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY,
+      keyId: process.env.AIHUB_SANDBOX_ASSERTION_KID,
+    };
+
+    await sandbox.query(
+      `INSERT INTO organizations
+         (id, name, entitlements, rate_limit_rpm, max_concurrent,
+          monthly_request_quota, hard_stop_on_quota)
+       VALUES ($1, 'Demo Sandbox', ARRAY['speaking'], 60, 3, 10, true)`,
+      [demoOrganizationId],
+    );
+    await sandbox.query(
+      `INSERT INTO api_keys
+         (id, organization_id, key_hash, key_prefix, name, scopes,
+          allowed_environments, status)
+       VALUES ($1, $2, decode($3, 'hex'), $4, 'BFF demo key',
+         ARRAY['speaking.grade'], ARRAY['development'], 'active')`,
+      [demoKey.id, demoOrganizationId, demoKey.hash, demoKey.prefix],
+    );
+    await sandbox.query(
+      `INSERT INTO organization_identity_configs
+         (organization_id, issuer, jwks_url, public_keys_jwks,
+          allowed_algorithms, max_assertion_ttl_seconds, status)
+       VALUES ($1, $2, NULL, $3::jsonb,
+         ARRAY['RS256'], 300, 'active')`,
+      [
+        demoOrganizationId,
+        demoIdentity.issuer,
+        JSON.stringify(demoIdentity.jwks),
+      ],
+    );
+
+    try {
+      await expect(
+        migrateSandboxOrganization(
+          sandbox,
+          controlPlane,
+          demoOrganizationId,
+          true,
+        ),
+      ).resolves.toMatchObject({ status: 'applied' });
+
+      process.env.AIHUB_SANDBOX_ORG_IDS = demoOrganizationId;
+      process.env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY = demoPrivateKey;
+      process.env.AIHUB_SANDBOX_ASSERTION_KID = demoIdentity.keyId;
+      const minted = await app
+        .getHttpAdapter()
+        .getInstance()
+        .inject({
+          method: 'POST',
+          url: '/v1/sandbox/assertions',
+          headers: {
+            host: 'api.sandbox.test',
+            'content-type': 'application/json',
+            'x-api-key': demoKey.raw,
+          },
+          payload: { user_id: 'demo-user-123' },
+        });
+      expect(minted.statusCode).toBe(200);
+      const mintedAssertion = minted.json<{
+        data: { assertion: string; user_id: string };
+      }>().data.assertion;
+      expect(minted.json()).toMatchObject({
+        data: { user_id: 'demo-user-123' },
+      });
+      const speaking = await app
+        .getHttpAdapter()
+        .getInstance()
+        .inject({
+          method: 'POST',
+          url: '/v1/ielts/speaking/grading-json',
+          headers: {
+            host: 'api.sandbox.test',
+            'content-type': 'application/json',
+            'x-api-key': demoKey.raw,
+            'x-user-identity': mintedAssertion,
+          },
+          payload: {
+            audio_url: 'https://s3.wispace.app/audio/demo.mp3',
+            part: 1,
+            question_id: 'p1_hometown',
+          },
+        });
+
+      expect(speaking.statusCode).toBe(200);
+      expect(speaking.json().meta.operation).toBe('speaking.grading-json');
+      expect(downstreamCalls).toBe(1);
+    } finally {
+      if (savedEnvironment.organizations === undefined) {
+        delete process.env.AIHUB_SANDBOX_ORG_IDS;
+      } else {
+        process.env.AIHUB_SANDBOX_ORG_IDS = savedEnvironment.organizations;
+      }
+      if (savedEnvironment.privateKey === undefined) {
+        delete process.env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY;
+      } else {
+        process.env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY =
+          savedEnvironment.privateKey;
+      }
+      if (savedEnvironment.keyId === undefined) {
+        delete process.env.AIHUB_SANDBOX_ASSERTION_KID;
+      } else {
+        process.env.AIHUB_SANDBOX_ASSERTION_KID = savedEnvironment.keyId;
+      }
+      await controlPlane.query(
+        'DELETE FROM api_keys WHERE organization_id = $1',
+        [demoOrganizationId],
+      );
+      await controlPlane.query(
+        'DELETE FROM organization_identity_configs WHERE organization_id = $1',
+        [demoOrganizationId],
+      );
+      await controlPlane.query('DELETE FROM organizations WHERE id = $1', [
+        demoOrganizationId,
+      ]);
+      await sandbox.query('DELETE FROM api_keys WHERE organization_id = $1', [
+        demoOrganizationId,
+      ]);
+      await sandbox.query(
+        'DELETE FROM organization_identity_configs WHERE organization_id = $1',
+        [demoOrganizationId],
+      );
+      await sandbox.query('DELETE FROM organizations WHERE id = $1', [
+        demoOrganizationId,
+      ]);
+    }
+  });
+
   it('creates an owner Sandbox key over HTTP and persists only its hash', async () => {
     expect(apiKeyCreation.statusCode).toBe(201);
     expect(apiKeyCreation.headers['cache-control']).toBe('no-store');

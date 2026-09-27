@@ -120,6 +120,14 @@ function sandboxBudgetUnavailable(): AppError {
   });
 }
 
+function dispatchTimedOut(): AppError {
+  return new AppError({
+    code: 'AI_SERVICE_TIMEOUT',
+    message: 'AI service request timed out',
+    retryable: true,
+  });
+}
+
 export class HttpOperationDispatcher implements OperationDispatcherPort {
   // `unknown` on both sides is the one place a dispatch table for a
   // heterogeneous set of adapters has to erase the per-operation types the
@@ -185,7 +193,19 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
       adapter.downstream === 'ai-writing'
         ? `Bearer ${await this.tokenIssuer.mint(context, operation)}`
         : undefined;
+    const remainingMs = Math.max(1, context.deadlineAt.getTime() - Date.now());
+    const timeoutMs = remainingMs;
+    const signal = AbortSignal.any([
+      context.signal,
+      AbortSignal.timeout(timeoutMs),
+    ]);
     const sandboxRequest = context.environment === 'sandbox';
+    const deadlineExpired = (): boolean =>
+      context.deadlineAt.getTime() <= Date.now();
+    if (sandboxRequest && (signal.aborted || deadlineExpired())) {
+      throw dispatchTimedOut();
+    }
+
     if (sandboxRequest) {
       const organizationId = context.organizationId;
       const organizationLimit = context.sandboxOrganizationDispatchLimit;
@@ -206,20 +226,31 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
       } catch {
         throw sandboxBudgetUnavailable();
       }
+      if (signal.aborted || deadlineExpired()) {
+        if (admitted) {
+          await this.sandboxBudget
+            .release(context.requestId)
+            .catch(() =>
+              this.logger.warn(
+                'Sandbox dispatch reservation could not be released after a pre-dispatch failure',
+              ),
+            );
+        }
+        throw dispatchTimedOut();
+      }
       if (!admitted) {
         throw quotaExceeded(new Date());
       }
     }
-    const remainingMs = Math.max(1, context.deadlineAt.getTime() - Date.now());
-    const timeoutMs = remainingMs;
-    const signal = AbortSignal.any([
-      context.signal,
-      AbortSignal.timeout(timeoutMs),
-    ]);
     const startedAt = performance.now();
     let response: InternalAIServiceResponse<unknown> | undefined;
+    let downstreamDispatchStarted = false;
 
     try {
+      if (signal.aborted || deadlineExpired()) {
+        throw dispatchTimedOut();
+      }
+      downstreamDispatchStarted = true;
       response = await this.httpClient.request(downstreamRequest, {
         ...(authorization === undefined ? {} : { authorization }),
         downstream: adapter.downstream,
@@ -246,7 +277,11 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
           : { aiProcessingMs: telemetry.aiProcessingMs }),
       };
     } catch (error) {
-      if (sandboxRequest && isDefinitelyNotDispatched(error)) {
+      if (
+        sandboxRequest &&
+        (isDefinitelyNotDispatched(error) ||
+          (!downstreamDispatchStarted && (signal.aborted || deadlineExpired())))
+      ) {
         await this.sandboxBudget
           ?.release(context.requestId)
           .catch(() =>
@@ -255,7 +290,9 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
             ),
           );
       }
-      const errorCode = loggedDownstreamErrorCode(error);
+      const errorCode = downstreamDispatchStarted
+        ? loggedDownstreamErrorCode(error)
+        : undefined;
       if (errorCode !== undefined) {
         const downstreamStatus = response?.status ?? null;
         const downstreamMs = Math.max(

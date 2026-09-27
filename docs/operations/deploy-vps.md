@@ -307,10 +307,14 @@ CONTROL_PLANE_DATABASE_URL='postgresql://<user>:<password>@127.0.0.1:15433/aihub
 The command copies the Organization, keys, and identity configuration to
 production, preserves each key ID and hash, and restricts moved keys to the
 `sandbox` environment. It deletes only those control-plane rows from Sandbox;
-usage, idempotency, and dispatch history stay in `aihub_sandbox`. It refuses
-Organizations with membership, invitation, or audit records. Confirm the dry
-run and rerun it after applying before starting the applications below. Do not
-drop `aihub_sandbox`.
+usage and idempotency stay in `aihub_sandbox`, and current-month dispatches are
+included in the durable quota reservations. It refuses Organizations with
+membership, invitation, or audit records. The dry run reports how many
+current-month historical dispatches would seed the durable allowance; it
+conservatively includes legacy downstream errors without reservation evidence
+because their dispatch status cannot be reconstructed. Review that count and
+rerun the command after applying before starting the applications below. Do
+not drop `aihub_sandbox`.
 
 ## Start the Vault-backed stack
 

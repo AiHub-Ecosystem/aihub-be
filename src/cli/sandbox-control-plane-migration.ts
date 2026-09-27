@@ -10,12 +10,26 @@ const DEPENDENCIES = [
   'organization_invitations',
   'organization_audit_events',
 ] as const;
+const CURRENT_MONTH_DISPATCH_CANDIDATES = `
+  FROM usage_records AS usage
+  WHERE usage.organization_id = $1
+    AND usage.environment = 'sandbox'
+    AND (usage.billable_requests = 1 OR usage.outcome = 'downstream_error')
+    AND usage.created_at >= $2::timestamptz
+    AND usage.created_at < $3::timestamptz
+    AND NOT EXISTS (
+      SELECT 1 FROM sandbox_dispatch_reservations AS reservation
+      WHERE reservation.request_id = usage.request_id
+         OR reservation.request_id = 'migration-history:' || usage.request_id
+    )`;
 
 export interface SandboxMigrationResult {
   readonly status: 'dry_run' | 'applied' | 'already_migrated';
   readonly organizations: number;
   readonly apiKeys: number;
   readonly identityConfigs: number;
+  /** Current-month usage that the apply would add to durable dispatch reservations. */
+  readonly historicalDispatches: number;
 }
 
 type Row = Record<string, unknown>;
@@ -70,6 +84,47 @@ async function assertNoDependencies(
       `sandbox Organization has dependent control-plane records (${populated.map(({ table, count }) => `${table}:${count}`).join(', ')}); resolve them before migration`,
     );
   }
+}
+
+async function preserveCurrentMonthDispatches(
+  client: PoolClient,
+  organizationId: string,
+): Promise<number> {
+  const now = new Date();
+  const monthStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+  );
+  const nextMonth = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+  );
+  const result = await client.query(
+    `INSERT INTO sandbox_dispatch_reservations
+       (request_id, organization_id, month_start, status, created_at)
+     SELECT 'migration-history:' || usage.request_id, usage.organization_id,
+       $2::date, 'reserved', usage.created_at
+     ${CURRENT_MONTH_DISPATCH_CANDIDATES}
+     ON CONFLICT (request_id) DO NOTHING`,
+    [organizationId, monthStart, nextMonth],
+  );
+  return result.rowCount ?? 0;
+}
+
+async function currentMonthDispatchesToPreserve(
+  client: PoolClient,
+  organizationId: string,
+): Promise<number> {
+  const now = new Date();
+  const monthStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+  );
+  const nextMonth = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+  );
+  const result = await client.query<{ count: string }>(
+    `SELECT count(*)::text AS count ${CURRENT_MONTH_DISPATCH_CANDIDATES}`,
+    [organizationId, monthStart, nextMonth],
+  );
+  return Number(result.rows[0]?.count ?? 0);
 }
 
 async function rowsForOrganization(
@@ -169,6 +224,7 @@ export async function migrateSandboxOrganization(
           organizations: 1,
           apiKeys: targetKeys.length,
           identityConfigs: 1,
+          historicalDispatches: 0,
         };
       }
       throw new Error(
@@ -226,6 +282,10 @@ export async function migrateSandboxOrganization(
         organizations: organizations.length,
         apiKeys: apiKeys.length,
         identityConfigs: identityConfigs.length,
+        historicalDispatches: await currentMonthDispatchesToPreserve(
+          sourceClient,
+          organizationId,
+        ),
       };
     }
 
@@ -246,6 +306,7 @@ export async function migrateSandboxOrganization(
       throw error;
     }
 
+    let historicalDispatches = 0;
     await sourceClient.query('BEGIN');
     try {
       await sourceClient.query(
@@ -253,6 +314,10 @@ export async function migrateSandboxOrganization(
         [organizationId],
       );
       await assertNoDependencies(sourceClient, organizationId);
+      historicalDispatches = await preserveCurrentMonthDispatches(
+        sourceClient,
+        organizationId,
+      );
       for (const table of TABLES) {
         const currentRows = await rowsForOrganization(
           sourceClient,
@@ -288,6 +353,7 @@ export async function migrateSandboxOrganization(
       organizations: organizations.length,
       apiKeys: apiKeys.length,
       identityConfigs: identityConfigs.length,
+      historicalDispatches,
     };
   } finally {
     sourceClient.release();
@@ -352,7 +418,7 @@ export async function runSandboxControlPlaneMigrationCli(
       apply,
     );
     (input.emit ?? console.log)(
-      `${result.status}: Organizations=${result.organizations}, API keys=${result.apiKeys}, identity configs=${result.identityConfigs}; Sandbox usage and idempotency stay in place.`,
+      `${result.status}: Organizations=${result.organizations}, API keys=${result.apiKeys}, identity configs=${result.identityConfigs}, current-month historical dispatches=${result.historicalDispatches}; legacy downstream errors without reservation evidence are conservatively counted because their dispatch status cannot be reconstructed. Sandbox usage and idempotency stay in place.`,
     );
     return result;
   } finally {
