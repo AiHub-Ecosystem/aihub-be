@@ -80,7 +80,7 @@ class AtomicRepository implements IdempotencyRepositoryPort {
   }
 }
 
-function input(requestId = 'req_1') {
+function input(requestId = 'req_1', timeoutMs = 50) {
   return {
     organizationId: 'org_acme',
     operation: 'writing.task1.grade' as const,
@@ -88,9 +88,9 @@ function input(requestId = 'req_1') {
     actorId: 'user_1',
     requestBody: { answer: 'hello' },
     requestId,
-    timeoutMs: 50,
+    timeoutMs,
     signal: new AbortController().signal,
-    deadlineAt: new Date(51_000),
+    deadlineAt: new Date(Date.now() + timeoutMs),
   };
 }
 
@@ -100,17 +100,21 @@ describe('IdempotencyService', () => {
     const service = new IdempotencyService(repository, () => 1_000);
     const work = jest.fn(async () => ({ value: 'graded' }));
 
-    const first = await service.execute(input(), work, (value) => {
-      if (
-        typeof value !== 'object' ||
-        value === null ||
-        !('value' in value) ||
-        typeof value.value !== 'string'
-      ) {
-        throw new Error('invalid replay');
-      }
-      return { value: value.value };
-    });
+    const first = await service.execute(
+      { ...input(), deadlineAt: new Date(1_050) },
+      work,
+      (value) => {
+        if (
+          typeof value !== 'object' ||
+          value === null ||
+          !('value' in value) ||
+          typeof value.value !== 'string'
+        ) {
+          throw new Error('invalid replay');
+        }
+        return { value: value.value };
+      },
+    );
     repository.nextReservations.push({
       kind: 'replay',
       responseStatus: 200,
@@ -228,14 +232,14 @@ describe('IdempotencyService', () => {
 
     await expect(
       service.execute(
-        { ...input('req_timeout'), timeoutMs: 10 },
+        input('req_timeout', 10),
         () => workPromise,
         () => ({ value: 'unused' }),
       ),
     ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT', httpStatus: 504 });
     await expect(
       service.execute(
-        { ...input('req_timeout_retry'), timeoutMs: 10 },
+        input('req_timeout_retry', 10),
         async () => ({ value: 'unused' }),
         () => ({ value: 'unused' }),
       ),
@@ -246,6 +250,72 @@ describe('IdempotencyService', () => {
     expect(repository.completed[0]?.responseBody).toEqual({
       value: 'completed-after-timeout',
     });
+  });
+
+  it('counts reservation time against the ingress response deadline and keeps work running', async () => {
+    class DelayedRepository extends FakeRepository {
+      constructor(private readonly delayMs = 30) {
+        super();
+      }
+
+      override async reserve(
+        reservation: ReserveIdempotencyInput,
+      ): Promise<IdempotencyReservation> {
+        await new Promise((resolve) => setTimeout(resolve, this.delayMs));
+        return super.reserve(reservation);
+      }
+    }
+
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-09-27T04:00:00.000Z'));
+    try {
+      const repository = new DelayedRepository();
+      const service = new IdempotencyService(repository);
+      const lifecycle = { started: jest.fn(), settled: jest.fn() };
+      let resolveWork: ((value: { value: string }) => void) | undefined;
+      const workPromise = new Promise<{ value: string }>((resolve) => {
+        resolveWork = resolve;
+      });
+      const work = jest.fn(() => workPromise);
+      const execution = service.execute(
+        { ...input('req_delayed', 40), backgroundLifecycle: lifecycle },
+        work,
+        () => ({ value: 'unused' }),
+      );
+      const timeout = execution.catch((error: unknown) => error);
+
+      await jest.advanceTimersByTimeAsync(39);
+      expect(work).toHaveBeenCalledTimes(1);
+      expect(lifecycle.started).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(1);
+      expect(await timeout).toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
+      expect(lifecycle.started).toHaveBeenCalledTimes(1);
+      expect(lifecycle.settled).not.toHaveBeenCalled();
+
+      resolveWork?.({ value: 'finished' });
+      await jest.advanceTimersByTimeAsync(0);
+      expect(repository.completed[0]?.responseBody).toEqual({
+        value: 'finished',
+      });
+      expect(lifecycle.settled).toHaveBeenCalledTimes(1);
+
+      const expiredRepository = new DelayedRepository(30);
+      const expiredWork = jest.fn(async () => ({ value: 'unsent' }));
+      const expiredExecution = new IdempotencyService(
+        expiredRepository,
+      ).execute(input('req_expired', 20), expiredWork, () => ({
+        value: 'unused',
+      }));
+      const expiredTimeout = expiredExecution.catch((error: unknown) => error);
+      await jest.advanceTimersByTimeAsync(30);
+      expect(await expiredTimeout).toMatchObject({
+        code: 'AI_SERVICE_TIMEOUT',
+      });
+      expect(expiredWork).not.toHaveBeenCalled();
+      expect(expiredRepository.failed).toHaveLength(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('signals background lifecycle around work that outlives the response deadline', async () => {
@@ -267,8 +337,7 @@ describe('IdempotencyService', () => {
     await expect(
       service.execute(
         {
-          ...input('req_background_lifecycle'),
-          timeoutMs: 5,
+          ...input('req_background_lifecycle', 5),
           backgroundLifecycle: lifecycle,
         },
         () => workPromise,
@@ -319,7 +388,7 @@ describe('IdempotencyService', () => {
 
     await expect(
       service.execute(
-        { ...input('req_hard'), timeoutMs: 5 },
+        input('req_hard', 5),
         () => new Promise<{ value: string }>(() => undefined),
         () => ({ value: 'unused' }),
       ),
@@ -349,7 +418,7 @@ describe('IdempotencyService', () => {
 
     await expect(
       service.execute(
-        { ...input('req_background_client_error'), timeoutMs: 5 },
+        input('req_background_client_error', 5),
         () => workPromise,
         () => ({ value: 'unused' }),
       ),

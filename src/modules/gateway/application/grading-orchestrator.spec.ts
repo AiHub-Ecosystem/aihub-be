@@ -129,7 +129,7 @@ function fixture() {
     dispatcher,
     idempotency,
   );
-  return { port, calls, executions, workSignal, workDeadline };
+  return { port, calls, executions, stored, workSignal, workDeadline };
 }
 
 describe('GradingOrchestratorPort', () => {
@@ -169,16 +169,32 @@ describe('GradingOrchestratorPort', () => {
     const replayTask1 = await port.execute(task1);
     const replayTask2 = await port.execute(task2);
 
-    expect(firstTask1.data).toEqual(writingData);
-    expect(firstTask2.data).toEqual(writingData);
+    expect(firstTask1).toMatchObject({
+      operation: 'writing.task1.grade',
+      data: writingData,
+    });
+    expect(firstTask2).toMatchObject({
+      operation: 'writing.task2.grade',
+      data: writingData,
+    });
     expect(calls).toHaveLength(2);
-    expect(calls.map((call) => call.operation)).toEqual([
-      'writing.task1.grade',
-      'writing.task2.grade',
-    ]);
-    expect(calls[0]?.input).toBe(task1.input);
-    expect(calls[1]?.input).toBe(task2.input);
-    expect(calls[0]?.context).toMatchObject({
+    const task1Call = calls.find(
+      (call) => call.operation === 'writing.task1.grade',
+    );
+    const task2Call = calls.find(
+      (call) => call.operation === 'writing.task2.grade',
+    );
+    expect(task1Call?.input).toBe(task1.input);
+    expect(task2Call?.input).toBe(task2.input);
+    expect(task1Call?.context).toMatchObject({
+      organizationId: 'org-183',
+      apiKeyId: 'key-183',
+      userId: 'user-183',
+      receivedAt,
+      deadlineAt: workDeadline,
+      signal: workSignal,
+    });
+    expect(task2Call?.context).toMatchObject({
       organizationId: 'org-183',
       apiKeyId: 'key-183',
       userId: 'user-183',
@@ -187,7 +203,11 @@ describe('GradingOrchestratorPort', () => {
       signal: workSignal,
     });
     expect(executions).toHaveLength(4);
-    expect(executions[0]).toMatchObject({
+    expect(
+      executions.find(
+        (execution) => execution.operation === 'writing.task1.grade',
+      ),
+    ).toMatchObject({
       requestId: 'req-183',
       requestBody: task1.input,
       organizationId: 'org-183',
@@ -200,7 +220,22 @@ describe('GradingOrchestratorPort', () => {
       ),
       backgroundLifecycle,
     });
-    expect(calls[0]?.abortedAtDispatch).toBe(false);
+    expect(
+      executions.find(
+        (execution) => execution.operation === 'writing.task2.grade',
+      ),
+    ).toMatchObject({
+      requestBody: task2.input,
+      idempotencyKey: 'task2-key',
+      signal: lifecycle.signal,
+      deadlineAt: new Date(
+        receivedAt.getTime() +
+          OPERATION_CATALOG['writing.task2.grade'].timeoutMs,
+      ),
+      backgroundLifecycle,
+    });
+    expect(task1Call?.abortedAtDispatch).toBe(false);
+    expect(task2Call?.abortedAtDispatch).toBe(false);
     expect(replayTask1).toMatchObject({
       operation: 'writing.task1.grade',
       data: writingData,
@@ -213,6 +248,38 @@ describe('GradingOrchestratorPort', () => {
       downstreamMs: 0,
       idempotentReplay: true,
     });
+  });
+
+  it('decodes replay telemetry and rejects malformed Writing data without another dispatch', async () => {
+    const { port, calls, stored } = fixture();
+    const command = {
+      ...metadata(new AbortController().signal),
+      operation: 'writing.task2.grade' as const,
+      input: {
+        question: 'Discuss the topic.',
+        topic: 'education',
+        essay: 'A clear essay.',
+      },
+      idempotencyKey: 'replay-key',
+    };
+    const first = await port.execute(command);
+    const key = 'writing.task2.grade:replay-key';
+    stored.set(key, { ...first, aiProcessingMs: 17 });
+
+    await expect(port.execute(command)).resolves.toMatchObject({
+      data: writingData,
+      downstreamMs: 0,
+      aiProcessingMs: 17,
+      idempotentReplay: true,
+    });
+    stored.set(key, {
+      ...first,
+      data: { ...writingData, overall_band: 10 },
+    });
+    await expect(port.execute(command)).rejects.toThrow(
+      'stored Writing grading response is malformed',
+    );
+    expect(calls).toHaveLength(1);
   });
 
   it('dispatches both Speaking operations directly with the lifecycle signal and individual deadlines', async () => {
@@ -247,16 +314,26 @@ describe('GradingOrchestratorPort', () => {
       input: jsonInput,
     });
 
-    expect(multipart.data).toBe(speakingData);
-    expect(json.data).toBe(speakingData);
+    expect(multipart).toMatchObject({
+      operation: 'speaking.grading',
+      data: speakingData,
+    });
+    expect(json).toMatchObject({
+      operation: 'speaking.grading-json',
+      data: speakingData,
+    });
     expect(executions).toHaveLength(0);
-    expect(calls.map((call) => call.operation)).toEqual([
-      'speaking.grading',
-      'speaking.grading-json',
-    ]);
-    expect(calls[0]?.input).toBe(multipartInput);
-    expect(calls[1]?.input).toBe(jsonInput);
-    expect(calls.map((call) => call.abortedAtDispatch)).toEqual([false, true]);
+    expect(calls).toHaveLength(2);
+    const multipartCall = calls.find(
+      (call) => call.operation === 'speaking.grading',
+    );
+    const jsonCall = calls.find(
+      (call) => call.operation === 'speaking.grading-json',
+    );
+    expect(multipartCall?.input).toBe(multipartInput);
+    expect(jsonCall?.input).toBe(jsonInput);
+    expect(multipartCall?.abortedAtDispatch).toBe(false);
+    expect(jsonCall?.abortedAtDispatch).toBe(true);
     for (const call of calls) {
       expect(call.context).toMatchObject({
         organizationId: 'org-183',

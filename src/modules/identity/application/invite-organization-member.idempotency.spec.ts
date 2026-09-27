@@ -199,10 +199,11 @@ function decodeInvitation(value: unknown): InvitedOrganizationMember {
 }
 
 function context(organizationId: string, requestId: string): RequestContext {
+  const receivedAt = new Date();
   return {
     requestId,
-    receivedAt: new Date('2026-09-22T00:00:00.000Z'),
-    deadlineAt: new Date('2026-09-22T00:00:05.000Z'),
+    receivedAt,
+    deadlineAt: new Date(receivedAt.getTime() + 5_000),
     organizationId,
     scopes: [],
     signal: new AbortController().signal,

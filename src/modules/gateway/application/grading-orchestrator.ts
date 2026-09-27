@@ -1,12 +1,10 @@
-import { Value } from '@sinclair/typebox/value';
-
 import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import type { RequestContext } from '../../../common/request-context/request-context';
 import { createRequestContext } from '../../../common/request-context/request-context.factory';
 import type { SpeakingGradeResponse } from '../../../contracts/speaking/grading';
 import {
   type GradeResponse,
-  GradeResponseSchema,
+  decodeGradeResponse,
 } from '../../../contracts/writing/grading';
 import type {
   IdempotencyServicePort,
@@ -45,8 +43,7 @@ function decodeWritingReplay(
     typeof value.downstreamMs !== 'number' ||
     !Number.isFinite(value.downstreamMs) ||
     value.downstreamMs < 0 ||
-    !('data' in value) ||
-    !Value.Check(GradeResponseSchema, value.data)
+    !('data' in value)
   ) {
     throw new Error(`stored ${operation} grading response is malformed`);
   }
@@ -54,7 +51,7 @@ function decodeWritingReplay(
   return withDispatchTelemetry(
     {
       operation,
-      data: Value.Parse(GradeResponseSchema, value.data),
+      data: decodeGradeResponse(value.data),
       downstreamMs: value.downstreamMs,
     },
     readDispatchTelemetry(value),
