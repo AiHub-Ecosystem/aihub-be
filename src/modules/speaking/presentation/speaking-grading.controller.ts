@@ -4,24 +4,22 @@ import { Value } from '@sinclair/typebox/value';
 import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import { AppError } from '../../../common/errors/app-error';
 import { invalidRequest } from '../../../common/errors/invalid-request';
+import { userIdentityRequired } from '../../../common/errors/user-identity-required';
 import {
   type RequestLifecycleState,
-  createRequestLifecycleState,
   getRequestLifecycle,
 } from '../../../common/http/request-lifecycle.hook';
-import { createRequestContext } from '../../../common/request-context/request-context.factory';
-
-import { userIdentityRequired } from '../../../common/errors/user-identity-required';
 import {
   type SpeakingGradeJsonInput,
   SpeakingGradeJsonRequestSchema,
   type SpeakingGradeResponse,
 } from '../../../contracts/speaking/grading';
 import {
-  type DispatchResult,
-  OPERATION_DISPATCHER,
-  type OperationDispatcherPort,
-} from '../../gateway/application/operation-dispatcher.port';
+  GRADING_ORCHESTRATOR,
+  type GradingOrchestratorPort,
+  type GradingRequestMetadata,
+} from '../../gateway/application/grading-orchestrator.port';
+import type { DispatchResult } from '../../gateway/application/operation-dispatcher.port';
 import { GradedRequest } from '../../gateway/presentation/graded-request.decorator';
 import {
   type AuthenticatedRequest,
@@ -80,20 +78,45 @@ function userId(request: AuthenticatedRequest): string {
 
 function requestLifecycle(
   request: AuthenticatedRequest,
-  timeoutMs: number,
 ): RequestLifecycleState {
-  return (
-    getRequestLifecycle(request.raw) ??
-    createRequestLifecycleState(request.raw, timeoutMs)
-  );
+  const lifecycle = getRequestLifecycle(request.raw);
+  if (lifecycle === undefined) {
+    throw new Error('Request lifecycle is missing');
+  }
+  return lifecycle;
+}
+
+function requestMetadata(
+  request: AuthenticatedRequest,
+  lifecycle: RequestLifecycleState,
+): GradingRequestMetadata {
+  const authenticated = getAuthenticatedApiKey(request);
+  const verifiedUserId = userId(request);
+
+  return {
+    requestId: String(request.id),
+    receivedAt: lifecycle.receivedAt,
+    signal: lifecycle.signal,
+    organizationId: authenticated.organizationId,
+    apiKeyId: authenticated.apiKeyId,
+    environment: authenticated.environment,
+    ...(authenticated.sandboxOrganizationDispatchLimit === undefined
+      ? {}
+      : {
+          sandboxOrganizationDispatchLimit:
+            authenticated.sandboxOrganizationDispatchLimit,
+        }),
+    userId: verifiedUserId,
+    scopes: authenticated.scopes,
+  };
 }
 
 @Controller()
 @GradedRequest()
 export class SpeakingGradingController {
   constructor(
-    @Inject(OPERATION_DISPATCHER)
-    private readonly dispatcher: OperationDispatcherPort,
+    @Inject(GRADING_ORCHESTRATOR)
+    private readonly orchestrator: GradingOrchestratorPort,
     @Inject(SPEAKING_MULTIPART_PARSER)
     private readonly multipartParser: SpeakingMultipartParserPort,
   ) {}
@@ -104,35 +127,17 @@ export class SpeakingGradingController {
   async grade(
     @Req() request: AuthenticatedRequest,
   ): Promise<DispatchResult<SpeakingGradeResponse>> {
-    const authenticated = getAuthenticatedApiKey(request);
-    const verifiedUserId = userId(request);
-    const lifecycle = requestLifecycle(
-      request,
-      OPERATION_CATALOG[OPERATION].timeoutMs,
-    );
-
+    const lifecycle = requestLifecycle(request);
     try {
-      const context = createRequestContext({
-        requestId: String(request.id),
-        receivedAt: lifecycle.receivedAt,
-        deadlineMs: OPERATION_CATALOG[OPERATION].timeoutMs,
-        organizationId: authenticated.organizationId,
-        apiKeyId: authenticated.apiKeyId,
-        environment: authenticated.environment,
-        ...(authenticated.sandboxOrganizationDispatchLimit === undefined
-          ? {}
-          : {
-              sandboxOrganizationDispatchLimit:
-                authenticated.sandboxOrganizationDispatchLimit,
-            }),
-        userId: verifiedUserId,
-        scopes: authenticated.scopes,
-        signal: lifecycle.signal,
-      });
+      const metadata = requestMetadata(request, lifecycle);
       const source = createFastifySpeakingMultipartSource(request);
-      const input = await this.multipartParser.parse(source, context.signal);
+      const input = await this.multipartParser.parse(source, lifecycle.signal);
 
-      return await this.dispatcher.dispatch(OPERATION, input, context);
+      return await this.orchestrator.execute({
+        operation: OPERATION,
+        input,
+        ...metadata,
+      });
     } finally {
       lifecycle.dispose();
     }
@@ -145,34 +150,16 @@ export class SpeakingGradingController {
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
   ): Promise<DispatchResult<SpeakingGradeResponse>> {
-    const input = parseJsonBody(body);
-    const authenticated = getAuthenticatedApiKey(request);
-    const verifiedUserId = userId(request);
-    const lifecycle = requestLifecycle(
-      request,
-      OPERATION_CATALOG[JSON_OPERATION].timeoutMs,
-    );
-
+    const lifecycle = requestLifecycle(request);
     try {
-      const context = createRequestContext({
-        requestId: String(request.id),
-        receivedAt: lifecycle.receivedAt,
-        deadlineMs: OPERATION_CATALOG[JSON_OPERATION].timeoutMs,
-        organizationId: authenticated.organizationId,
-        apiKeyId: authenticated.apiKeyId,
-        environment: authenticated.environment,
-        ...(authenticated.sandboxOrganizationDispatchLimit === undefined
-          ? {}
-          : {
-              sandboxOrganizationDispatchLimit:
-                authenticated.sandboxOrganizationDispatchLimit,
-            }),
-        userId: verifiedUserId,
-        scopes: authenticated.scopes,
-        signal: lifecycle.signal,
-      });
+      const input = parseJsonBody(body);
+      const metadata = requestMetadata(request, lifecycle);
 
-      return await this.dispatcher.dispatch(JSON_OPERATION, input, context);
+      return await this.orchestrator.execute({
+        operation: JSON_OPERATION,
+        input,
+        ...metadata,
+      });
     } finally {
       lifecycle.dispose();
     }
