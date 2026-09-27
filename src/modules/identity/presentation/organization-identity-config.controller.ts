@@ -12,7 +12,7 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyRequest } from 'fastify';
 
-import { MANAGEMENT_OPERATIONS } from '../../../catalog/management-operations';
+import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
 import { AppError } from '../../../common/errors/app-error';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
@@ -67,10 +67,8 @@ export class OrganizationIdentityConfigController {
     private readonly setIdentityConfig: SetOrganizationIdentityConfigPort,
   ) {}
 
-  @Get(MANAGEMENT_OPERATIONS['organizations.identityConfig.read'].path)
-  @HttpCode(
-    MANAGEMENT_OPERATIONS['organizations.identityConfig.read'].successStatus,
-  )
+  @Get(PUBLIC_ROUTES['organizations.identityConfig.read'].path)
+  @HttpCode(PUBLIC_ROUTES['organizations.identityConfig.read'].successStatus)
   async read(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,
@@ -99,10 +97,8 @@ export class OrganizationIdentityConfigController {
     };
   }
 
-  @Put(MANAGEMENT_OPERATIONS['organizations.identityConfig.set'].path)
-  @HttpCode(
-    MANAGEMENT_OPERATIONS['organizations.identityConfig.set'].successStatus,
-  )
+  @Put(PUBLIC_ROUTES['organizations.identityConfig.set'].path)
+  @HttpCode(PUBLIC_ROUTES['organizations.identityConfig.set'].successStatus)
   async set(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,

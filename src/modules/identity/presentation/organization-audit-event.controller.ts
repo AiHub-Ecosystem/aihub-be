@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
-import { MANAGEMENT_OPERATIONS } from '../../../catalog/management-operations';
+import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
 import type { ListOrganizationAuditEventsResponse } from '../../../contracts/organization/audit-event';
 import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
 import {
@@ -29,10 +29,8 @@ export class OrganizationAuditEventController {
     private readonly auditEvents: ReadOrganizationAuditEventsPort,
   ) {}
 
-  @Get(MANAGEMENT_OPERATIONS['organizations.auditEvents.list'].path)
-  @HttpCode(
-    MANAGEMENT_OPERATIONS['organizations.auditEvents.list'].successStatus,
-  )
+  @Get(PUBLIC_ROUTES['organizations.auditEvents.list'].path)
+  @HttpCode(PUBLIC_ROUTES['organizations.auditEvents.list'].successStatus)
   async list(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,

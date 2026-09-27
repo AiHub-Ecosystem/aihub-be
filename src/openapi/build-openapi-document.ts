@@ -1,7 +1,5 @@
 import { type TObject, type TSchema, Type } from '@sinclair/typebox';
 
-import type { ManagementOperationId } from '../catalog/management-operations';
-import { MANAGEMENT_OPERATIONS } from '../catalog/management-operations';
 import type {
   IdempotencyMode,
   OperationDef,
@@ -9,23 +7,18 @@ import type {
 import { OPERATION_CATALOG } from '../catalog/operation-catalog';
 import { OPERATION_IDS } from '../catalog/operation-id';
 import type { OperationId } from '../catalog/operation-id';
+import type { PublicRouteId } from '../catalog/public-routes';
+import { PUBLIC_ROUTES } from '../catalog/public-routes';
 import { ERROR_CODES, type ErrorCode } from '../common/errors/error-code';
 import {
   type HttpStatus,
   httpStatusForErrorCode,
 } from '../common/errors/error-registry';
 import {
-  EmptyAuthRequestSchema,
-  ForgotPasswordRequestSchema,
   ForgotPasswordResponseSchema,
-  LoginRequestSchema,
   LoginResponseSchema,
   PASSWORD_POLICY_DESCRIPTION,
-  RegisterRequestSchema,
   RegisterResponseSchema,
-  ResendVerificationRequestSchema,
-  ResetPasswordRequestSchema,
-  VerifyEmailRequestSchema,
 } from '../contracts/auth/local-auth';
 import {
   DEFAULT_ORGANIZATION_AUDIT_PAGE_SIZE,
@@ -33,10 +26,7 @@ import {
   ORGANIZATION_AUDIT_ACTIONS,
   ORGANIZATION_AUDIT_OUTCOMES,
 } from '../contracts/organization/audit-event';
-import {
-  MintSandboxAssertionRequestSchema,
-  MintSandboxAssertionResponseSchema,
-} from '../contracts/sandbox/assertion';
+import { MintSandboxAssertionResponseSchema } from '../contracts/sandbox/assertion';
 import {
   SpeakingQuestionSchema,
   SpeakingQuestionsQuerySchema,
@@ -49,37 +39,68 @@ import { REFRESH_COOKIE_NAME } from '../modules/auth/presentation/refresh-cookie
 import { toOpenApiPath } from './openapi-path';
 
 /**
- * Reads a Control-plane operation's declared data out of the Management
- * operation registry. A missing schema is a registry error, not a document
- * error: a bodyless operation that asks for a schema means the entry and the
- * path item disagree about what the route accepts.
+ * Reads a route's declared data out of the Public API Route registry. A missing
+ * schema is a registry error, not a document error: a bodyless route that asks
+ * for a schema means the entry and the path item disagree about what it accepts.
  */
-function managementSchemaOf(
-  operationId: ManagementOperationId,
+function routeSchemaOf(
+  routeId: PublicRouteId,
   kind: 'request' | 'response',
 ): TSchema {
-  const schema = MANAGEMENT_OPERATIONS[operationId][`${kind}Schema`];
+  const schema = PUBLIC_ROUTES[routeId][`${kind}Schema`];
   if (schema === null) {
     throw new Error(
-      `${operationId} declares no ${kind} schema, but its path item published one`,
+      `${routeId} declares no ${kind} schema, but its path item published one`,
     );
   }
   return schema;
 }
 
-function managementPathOf(operationId: ManagementOperationId): string {
-  return toOpenApiPath(MANAGEMENT_OPERATIONS[operationId].path);
+function routePathOf(routeId: PublicRouteId): string {
+  return toOpenApiPath(PUBLIC_ROUTES[routeId].path);
 }
 
-function managementSuccessKeyOf(operationId: ManagementOperationId): string {
-  return String(MANAGEMENT_OPERATIONS[operationId].successStatus);
+function routeSuccessKeyOf(routeId: PublicRouteId): string {
+  return String(PUBLIC_ROUTES[routeId].successStatus);
 }
 
-function managementErrorResponsesOf(
-  operationId: ManagementOperationId,
+function routeSecurityOf(routeId: PublicRouteId): Record<string, unknown> {
+  switch (PUBLIC_ROUTES[routeId].callerAuth) {
+    case 'bearer':
+      return { security: [{ BearerAuth: [] }] };
+    case 'api-key':
+      return { security: [{ ApiKeyAuth: [] }] };
+    case 'refresh-cookie':
+      return { security: [{ RefreshCookie: [] }] };
+    case 'none':
+      return { security: [] };
+  }
+}
+
+function routeErrorResponsesOf(
+  routeId: PublicRouteId,
+  groupedErrors?: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
 ): Record<string, unknown> {
+  const { errorStatuses } = PUBLIC_ROUTES[routeId];
+
+  if (errorStatuses === 'all-except-idempotency-conflict') {
+    if (groupedErrors === undefined) {
+      throw new Error(
+        `${routeId} derives its error statuses and needs the error registry`,
+      );
+    }
+    return Object.fromEntries(
+      [...groupedErrors.keys()]
+        .filter((status) => status !== 409)
+        .map((status) => [
+          String(status),
+          { $ref: `#/components/responses/Error${status}` },
+        ]),
+    );
+  }
+
   return Object.fromEntries(
-    MANAGEMENT_OPERATIONS[operationId].errorStatuses.map((status) => [
+    errorStatuses.map((status) => [
       String(status),
       { $ref: `#/components/responses/Error${status}` },
     ]),
@@ -91,18 +112,18 @@ function managementErrorResponsesOf(
  * registry declares an idempotency mode, so a mode change in one place cannot
  * leave a stale extension behind in the document.
  */
-function managementIdempotencyExtensionsOf(
-  operationId: ManagementOperationId,
+function routeIdempotencyExtensionsOf(
+  routeId: PublicRouteId,
 ): Record<string, unknown> {
-  const { idempotency } = MANAGEMENT_OPERATIONS[operationId];
+  const { idempotency } = PUBLIC_ROUTES[routeId];
   return idempotency === 'none' ? {} : { 'x-idempotency': idempotency };
 }
 
-function managementReplayHeaderOf(
-  operationId: ManagementOperationId,
+function routeReplayHeaderOf(
+  routeId: PublicRouteId,
   description: string,
 ): Record<string, unknown> {
-  if (MANAGEMENT_OPERATIONS[operationId].idempotency === 'none') {
+  if (PUBLIC_ROUTES[routeId].idempotency === 'none') {
     return {};
   }
   return {
@@ -311,28 +332,6 @@ function operationToPathItem(
   };
 }
 
-const SANDBOX_ASSERTION_PATH = '/v1/sandbox/assertions';
-const SPEAKING_QUESTIONS_PATH = '/v1/ielts/speaking/questions';
-const AUTH_REGISTER_PATH = '/v1/auth/register';
-const AUTH_LOGIN_PATH = '/v1/auth/login';
-const AUTH_VERIFY_PATH = '/v1/auth/verify-email';
-const AUTH_RESEND_PATH = '/v1/auth/resend-verification';
-const AUTH_FORGOT_PASSWORD_PATH = '/v1/auth/forgot-password';
-const AUTH_RESET_PASSWORD_PATH = '/v1/auth/reset-password';
-const AUTH_REFRESH_PATH = '/v1/auth/refresh';
-const AUTH_LOGOUT_PATH = '/v1/auth/logout';
-
-function authErrorResponses(
-  statuses: readonly HttpStatus[],
-): Record<string, unknown> {
-  return Object.fromEntries(
-    statuses.map((status) => [
-      String(status),
-      { $ref: `#/components/responses/Error${status}` },
-    ]),
-  );
-}
-
 function refreshInvalidResponse(): Record<string, unknown> {
   return {
     description: 'Refresh credential is missing, invalid, expired, or revoked',
@@ -344,15 +343,23 @@ function refreshInvalidResponse(): Record<string, unknown> {
   };
 }
 
-function publishedLocalAuthRequestSchema(schema: TObject): TSchema {
+function publishedLocalAuthRequestSchema(schema: TSchema): TSchema {
+  // The three routes that publish a password re-state the policy so a generated
+  // client enforces it, which means restating the object rather than merging a
+  // flag. A non-object schema here is a contract bug, not a document one.
+  if (!('properties' in schema)) {
+    throw new Error('a published local-auth request must be an object schema');
+  }
+
+  const objectSchema = schema as TObject;
   const options =
-    schema.additionalProperties === undefined
+    objectSchema.additionalProperties === undefined
       ? {}
-      : { additionalProperties: schema.additionalProperties };
+      : { additionalProperties: objectSchema.additionalProperties };
 
   return Type.Object(
     {
-      ...schema.properties,
+      ...objectSchema.properties,
       password: Type.String({
         minLength: PASSWORD_MIN_CODE_POINTS,
         maxLength: PASSWORD_MAX_CODE_POINTS,
@@ -365,13 +372,15 @@ function publishedLocalAuthRequestSchema(schema: TObject): TSchema {
 
 function localAuthPathItems(): Record<string, Record<string, unknown>> {
   // Keep auth responses intentionally narrow: these routes do not carry API
-  // key, assertion, downstream, or idempotency behavior.
+  // key, assertion, downstream, or idempotency behavior. The success status,
+  // the error statuses, and the security entry come from the registry; the
+  // response prose stays here.
   const registerResponses = {
     '201': {
       description: 'Account created and pending email verification',
       content: { 'application/json': { schema: RegisterResponseSchema } },
     },
-    ...authErrorResponses([400, 409, 429, 500, 503]),
+    ...routeErrorResponsesOf('auth.register'),
   };
   const loginResponses = {
     '200': {
@@ -387,7 +396,7 @@ function localAuthPathItems(): Record<string, Record<string, unknown>> {
       },
       content: { 'application/json': { schema: LoginResponseSchema } },
     },
-    ...authErrorResponses([400, 401, 429, 500]),
+    ...routeErrorResponsesOf('auth.login'),
   };
   const verifyResponses = {
     '200': {
@@ -399,11 +408,11 @@ function localAuthPathItems(): Record<string, Record<string, unknown>> {
       description:
         'Email verified without signing in: no binding, another browser, or the token already signed in. Re-submitting the same unexpired token that activated the still-active account also succeeds.',
     },
-    ...authErrorResponses([400, 429, 500]),
+    ...routeErrorResponsesOf('auth.verify_email'),
   };
   const resendResponses = {
     '202': { description: 'Verification resend accepted' },
-    ...authErrorResponses([400, 429, 500]),
+    ...routeErrorResponsesOf('auth.resend_verification'),
   };
   const forgotPasswordResponses = {
     '202': {
@@ -412,7 +421,7 @@ function localAuthPathItems(): Record<string, Record<string, unknown>> {
         'application/json': { schema: ForgotPasswordResponseSchema },
       },
     },
-    ...authErrorResponses([400, 429, 500]),
+    ...routeErrorResponsesOf('auth.forgot_password'),
   };
   const resetPasswordResponses = {
     '204': {
@@ -427,7 +436,7 @@ function localAuthPathItems(): Record<string, Record<string, unknown>> {
         },
       },
     },
-    ...authErrorResponses([400, 429, 500]),
+    ...routeErrorResponsesOf('auth.reset_password'),
   };
   const refreshResponses = {
     '200': {
@@ -443,7 +452,7 @@ function localAuthPathItems(): Record<string, Record<string, unknown>> {
       },
       content: { 'application/json': { schema: LoginResponseSchema } },
     },
-    ...authErrorResponses([400, 429, 500]),
+    ...routeErrorResponsesOf('auth.refresh'),
     '401': refreshInvalidResponse(),
   };
   const logoutResponses = {
@@ -459,22 +468,21 @@ function localAuthPathItems(): Record<string, Record<string, unknown>> {
         },
       },
     },
-    ...authErrorResponses([400, 500]),
+    ...routeErrorResponsesOf('auth.logout'),
   };
 
   const operation = (
-    operationId: string,
+    operationId: PublicRouteId,
     summary: string,
     schema: TSchema,
     responses: Record<string, unknown>,
-    security: readonly Record<string, readonly string[]>[] = [],
     requestBodyRequired = true,
   ): Record<string, unknown> => ({
     post: {
       operationId,
       summary,
       'x-identity-scope': 'none',
-      security,
+      ...routeSecurityOf(operationId),
       parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
       requestBody: {
         required: requestBodyRequired,
@@ -485,56 +493,58 @@ function localAuthPathItems(): Record<string, Record<string, unknown>> {
   });
 
   return {
-    [AUTH_REGISTER_PATH]: operation(
+    [routePathOf('auth.register')]: operation(
       'auth.register',
       'Register a local AIHUB account',
-      publishedLocalAuthRequestSchema(RegisterRequestSchema),
+      publishedLocalAuthRequestSchema(
+        routeSchemaOf('auth.register', 'request'),
+      ),
       registerResponses,
     ),
-    [AUTH_LOGIN_PATH]: operation(
+    [routePathOf('auth.login')]: operation(
       'auth.login',
       'Issue a User Access JWT',
-      publishedLocalAuthRequestSchema(LoginRequestSchema),
+      publishedLocalAuthRequestSchema(routeSchemaOf('auth.login', 'request')),
       loginResponses,
     ),
-    [AUTH_VERIFY_PATH]: operation(
+    [routePathOf('auth.verify_email')]: operation(
       'auth.verify_email',
       'Verify a local account email address',
-      VerifyEmailRequestSchema,
+      routeSchemaOf('auth.verify_email', 'request'),
       verifyResponses,
     ),
-    [AUTH_RESEND_PATH]: operation(
+    [routePathOf('auth.resend_verification')]: operation(
       'auth.resend_verification',
       'Request a verification email resend',
-      ResendVerificationRequestSchema,
+      routeSchemaOf('auth.resend_verification', 'request'),
       resendResponses,
     ),
-    [AUTH_FORGOT_PASSWORD_PATH]: operation(
+    [routePathOf('auth.forgot_password')]: operation(
       'auth.forgot_password',
       'Request a password reset email',
-      ForgotPasswordRequestSchema,
+      routeSchemaOf('auth.forgot_password', 'request'),
       forgotPasswordResponses,
     ),
-    [AUTH_RESET_PASSWORD_PATH]: operation(
+    [routePathOf('auth.reset_password')]: operation(
       'auth.reset_password',
       'Reset a local account password',
-      publishedLocalAuthRequestSchema(ResetPasswordRequestSchema),
+      publishedLocalAuthRequestSchema(
+        routeSchemaOf('auth.reset_password', 'request'),
+      ),
       resetPasswordResponses,
     ),
-    [AUTH_REFRESH_PATH]: operation(
+    [routePathOf('auth.refresh')]: operation(
       'auth.refresh',
       'Rotate a refresh session and issue a User Access JWT',
-      EmptyAuthRequestSchema,
+      routeSchemaOf('auth.refresh', 'request'),
       refreshResponses,
-      [{ RefreshCookie: [] }],
       false,
     ),
-    [AUTH_LOGOUT_PATH]: operation(
+    [routePathOf('auth.logout')]: operation(
       'auth.logout',
       'Revoke the current refresh session',
-      EmptyAuthRequestSchema,
+      routeSchemaOf('auth.logout', 'request'),
       logoutResponses,
-      [{ RefreshCookie: [] }],
       false,
     ),
   };
@@ -544,7 +554,7 @@ function organizationInvitationAcceptPathItem(): Record<string, unknown> {
   const id = 'organizations.invitations.accept' as const;
 
   return {
-    [MANAGEMENT_OPERATIONS[id].method.toLowerCase()]: {
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
       operationId: id,
       summary: 'Accept an organization invitation',
       'x-identity-scope': 'user',
@@ -553,17 +563,17 @@ function organizationInvitationAcceptPathItem(): Record<string, unknown> {
       requestBody: {
         required: true,
         content: {
-          'application/json': { schema: managementSchemaOf(id, 'request') },
+          'application/json': { schema: routeSchemaOf(id, 'request') },
         },
       },
       responses: {
-        [managementSuccessKeyOf(id)]: {
+        [routeSuccessKeyOf(id)]: {
           description: 'Organization membership granted or reactivated',
           content: {
-            'application/json': { schema: managementSchemaOf(id, 'response') },
+            'application/json': { schema: routeSchemaOf(id, 'response') },
           },
         },
-        ...managementErrorResponsesOf(id),
+        ...routeErrorResponsesOf(id),
       },
     },
   };
@@ -573,37 +583,37 @@ function organizationPathItem(): Record<string, unknown> {
   const id = 'organizations.create' as const;
 
   return {
-    [MANAGEMENT_OPERATIONS[id].method.toLowerCase()]: {
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
       operationId: id,
       summary: 'Create a Self-serve Organization and become its first owner',
       description:
         'Commercial terms are operator-controlled defaults and cannot be set by the request. Each account may create a limited number of Organizations over its lifetime.',
       'x-identity-scope': 'user',
-      ...managementIdempotencyExtensionsOf(id),
+      ...routeIdempotencyExtensionsOf(id),
       security: [{ BearerAuth: [] }],
       parameters: [
         { $ref: '#/components/parameters/CorrelationId' },
-        idempotencyKeyParameter(MANAGEMENT_OPERATIONS[id].idempotency),
+        idempotencyKeyParameter(PUBLIC_ROUTES[id].idempotency),
       ],
       requestBody: {
         required: true,
         content: {
-          'application/json': { schema: managementSchemaOf(id, 'request') },
+          'application/json': { schema: routeSchemaOf(id, 'request') },
         },
       },
       responses: {
-        [managementSuccessKeyOf(id)]: {
+        [routeSuccessKeyOf(id)]: {
           description:
             'Organization created with the caller as its active owner',
-          ...managementReplayHeaderOf(
+          ...routeReplayHeaderOf(
             id,
             'Present with value true when the completed creation result was replayed for this key.',
           ),
           content: {
-            'application/json': { schema: managementSchemaOf(id, 'response') },
+            'application/json': { schema: routeSchemaOf(id, 'response') },
           },
         },
-        ...managementErrorResponsesOf(id),
+        ...routeErrorResponsesOf(id),
       },
     },
   };
@@ -617,7 +627,7 @@ function organizationItemPathItem(): Record<string, unknown> {
   const id = 'organizations.rename' as const;
 
   return {
-    [MANAGEMENT_OPERATIONS[id].method.toLowerCase()]: {
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
       operationId: id,
       summary: 'Rename an organization',
       description:
@@ -637,17 +647,17 @@ function organizationItemPathItem(): Record<string, unknown> {
       requestBody: {
         required: true,
         content: {
-          'application/json': { schema: managementSchemaOf(id, 'request') },
+          'application/json': { schema: routeSchemaOf(id, 'request') },
         },
       },
       responses: {
-        [managementSuccessKeyOf(id)]: {
+        [routeSuccessKeyOf(id)]: {
           description: 'The organization under its current name',
           content: {
-            'application/json': { schema: managementSchemaOf(id, 'response') },
+            'application/json': { schema: routeSchemaOf(id, 'response') },
           },
         },
-        ...managementErrorResponsesOf(id),
+        ...routeErrorResponsesOf(id),
       },
     },
   };
@@ -678,26 +688,26 @@ function organizationInvitationPathItem(): Record<string, unknown> {
         },
       ],
       responses: {
-        [managementSuccessKeyOf(list)]: {
+        [routeSuccessKeyOf(list)]: {
           description: 'Open organization invitations',
           content: {
             'application/json': {
-              schema: managementSchemaOf(list, 'response'),
+              schema: routeSchemaOf(list, 'response'),
             },
           },
         },
-        ...managementErrorResponsesOf(list),
+        ...routeErrorResponsesOf(list),
       },
     },
     post: {
       operationId: create,
       summary: 'Invite a person to an organization',
       'x-identity-scope': 'user',
-      ...managementIdempotencyExtensionsOf(create),
+      ...routeIdempotencyExtensionsOf(create),
       security: [{ BearerAuth: [] }],
       parameters: [
         { $ref: '#/components/parameters/CorrelationId' },
-        idempotencyKeyParameter(MANAGEMENT_OPERATIONS[create].idempotency),
+        idempotencyKeyParameter(PUBLIC_ROUTES[create].idempotency),
         {
           name: 'organization_id',
           in: 'path',
@@ -709,24 +719,24 @@ function organizationInvitationPathItem(): Record<string, unknown> {
       requestBody: {
         required: true,
         content: {
-          'application/json': { schema: managementSchemaOf(create, 'request') },
+          'application/json': { schema: routeSchemaOf(create, 'request') },
         },
       },
       responses: {
-        [managementSuccessKeyOf(create)]: {
+        [routeSuccessKeyOf(create)]: {
           description:
             'Pending organization invitation created; the single-use invite credential reaches the invited person by email only',
-          ...managementReplayHeaderOf(
+          ...routeReplayHeaderOf(
             create,
             'Present with value true when the completed invitation result was replayed for this key.',
           ),
           content: {
             'application/json': {
-              schema: managementSchemaOf(create, 'response'),
+              schema: routeSchemaOf(create, 'response'),
             },
           },
         },
-        ...managementErrorResponsesOf(create),
+        ...routeErrorResponsesOf(create),
       },
     },
   };
@@ -736,7 +746,7 @@ function organizationInvitationItemPathItem(): Record<string, unknown> {
   const id = 'organizations.invitations.revoke' as const;
 
   return {
-    [MANAGEMENT_OPERATIONS[id].method.toLowerCase()]: {
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
       operationId: id,
       summary: 'Revoke an organization invitation',
       description:
@@ -764,11 +774,11 @@ function organizationInvitationItemPathItem(): Record<string, unknown> {
         },
       ],
       responses: {
-        [managementSuccessKeyOf(id)]: {
+        [routeSuccessKeyOf(id)]: {
           description:
             'Invitation closed, or already closed/expired; the response has no body',
         },
-        ...managementErrorResponsesOf(id),
+        ...routeErrorResponsesOf(id),
       },
     },
   };
@@ -778,7 +788,7 @@ function organizationApiKeyItemPathItem(): Record<string, unknown> {
   const id = 'organizations.apiKeys.revoke' as const;
 
   return {
-    [MANAGEMENT_OPERATIONS[id].method.toLowerCase()]: {
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
       operationId: id,
       summary: 'Revoke an organization API key',
       description:
@@ -803,15 +813,15 @@ function organizationApiKeyItemPathItem(): Record<string, unknown> {
         },
       ],
       responses: {
-        [managementSuccessKeyOf(id)]: {
+        [routeSuccessKeyOf(id)]: {
           description: 'API key withdrawn; its durable row is kept',
           content: {
             'application/json': {
-              schema: managementSchemaOf(id, 'response'),
+              schema: routeSchemaOf(id, 'response'),
             },
           },
         },
-        ...managementErrorResponsesOf(id),
+        ...routeErrorResponsesOf(id),
       },
     },
   };
@@ -821,7 +831,7 @@ function organizationApiKeyRotatePathItem(): Record<string, unknown> {
   const id = 'organizations.apiKeys.rotate' as const;
 
   return {
-    [MANAGEMENT_OPERATIONS[id].method.toLowerCase()]: {
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
       operationId: id,
       summary: 'Rotate an organization API key',
       description:
@@ -846,7 +856,7 @@ function organizationApiKeyRotatePathItem(): Record<string, unknown> {
         },
       ],
       responses: {
-        [managementSuccessKeyOf(id)]: {
+        [routeSuccessKeyOf(id)]: {
           description:
             'API key rotated; the raw replacement is returned in this response only and cannot be recovered afterwards. `status` is always `active`.',
           headers: {
@@ -855,10 +865,10 @@ function organizationApiKeyRotatePathItem(): Record<string, unknown> {
             },
           },
           content: {
-            'application/json': { schema: managementSchemaOf(id, 'response') },
+            'application/json': { schema: routeSchemaOf(id, 'response') },
           },
         },
-        ...managementErrorResponsesOf(id),
+        ...routeErrorResponsesOf(id),
       },
     },
   };
@@ -887,16 +897,16 @@ function organizationApiKeyPathItem(): Record<string, unknown> {
         },
       ],
       responses: {
-        [managementSuccessKeyOf(list)]: {
+        [routeSuccessKeyOf(list)]: {
           description:
             'Live API key inventory; never a credential hash or raw credential',
           content: {
             'application/json': {
-              schema: managementSchemaOf(list, 'response'),
+              schema: routeSchemaOf(list, 'response'),
             },
           },
         },
-        ...managementErrorResponsesOf(list),
+        ...routeErrorResponsesOf(list),
       },
     },
     post: {
@@ -917,11 +927,11 @@ function organizationApiKeyPathItem(): Record<string, unknown> {
       requestBody: {
         required: true,
         content: {
-          'application/json': { schema: managementSchemaOf(create, 'request') },
+          'application/json': { schema: routeSchemaOf(create, 'request') },
         },
       },
       responses: {
-        [managementSuccessKeyOf(create)]: {
+        [routeSuccessKeyOf(create)]: {
           description:
             'API key created; the raw credential is returned in this response only and cannot be recovered afterwards. `status` is always `active`: a requested expiry must be in the future, so this response never carries `expired`.',
           headers: {
@@ -931,11 +941,11 @@ function organizationApiKeyPathItem(): Record<string, unknown> {
           },
           content: {
             'application/json': {
-              schema: managementSchemaOf(create, 'response'),
+              schema: routeSchemaOf(create, 'response'),
             },
           },
         },
-        ...managementErrorResponsesOf(create),
+        ...routeErrorResponsesOf(create),
       },
     },
   };
@@ -951,7 +961,7 @@ function organizationAuditEventPathItem(): Record<string, unknown> {
   const id = 'organizations.auditEvents.list' as const;
 
   return {
-    [MANAGEMENT_OPERATIONS[id].method.toLowerCase()]: {
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
       operationId: id,
       summary: 'Read an organization audit trail',
       description:
@@ -1027,16 +1037,16 @@ function organizationAuditEventPathItem(): Record<string, unknown> {
         },
       ],
       responses: {
-        [managementSuccessKeyOf(id)]: {
+        [routeSuccessKeyOf(id)]: {
           description:
             'One page of recorded acts, newest first. `next_cursor` is null at the end of the trail.',
           content: {
             'application/json': {
-              schema: managementSchemaOf(id, 'response'),
+              schema: routeSchemaOf(id, 'response'),
             },
           },
         },
-        ...managementErrorResponsesOf(id),
+        ...routeErrorResponsesOf(id),
       },
     },
   };
@@ -1067,18 +1077,18 @@ function organizationIdentityConfigPathItem(): Record<string, unknown> {
       requestBody: {
         required: true,
         content: {
-          'application/json': { schema: managementSchemaOf(set, 'request') },
+          'application/json': { schema: routeSchemaOf(set, 'request') },
         },
       },
       responses: {
-        [managementSuccessKeyOf(set)]: {
+        [routeSuccessKeyOf(set)]: {
           description:
             'The stored public identity configuration, including its preserved status.',
           content: {
-            'application/json': { schema: managementSchemaOf(set, 'response') },
+            'application/json': { schema: routeSchemaOf(set, 'response') },
           },
         },
-        ...managementErrorResponsesOf(set),
+        ...routeErrorResponsesOf(set),
       },
     },
     get: {
@@ -1099,16 +1109,16 @@ function organizationIdentityConfigPathItem(): Record<string, unknown> {
         },
       ],
       responses: {
-        [managementSuccessKeyOf(read)]: {
+        [routeSuccessKeyOf(read)]: {
           description:
             'Stored public identity configuration, or `configured: false` when no row exists.',
           content: {
             'application/json': {
-              schema: managementSchemaOf(read, 'response'),
+              schema: routeSchemaOf(read, 'response'),
             },
           },
         },
-        ...managementErrorResponsesOf(read),
+        ...routeErrorResponsesOf(read),
       },
     },
   };
@@ -1118,7 +1128,7 @@ function organizationRosterPathItem(): Record<string, unknown> {
   const id = 'organizations.me.members.list' as const;
 
   return {
-    [MANAGEMENT_OPERATIONS[id].method.toLowerCase()]: {
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
       operationId: id,
       summary: 'List the authenticated user organization roster',
       description:
@@ -1127,13 +1137,13 @@ function organizationRosterPathItem(): Record<string, unknown> {
       security: [{ BearerAuth: [] }],
       parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
       responses: {
-        [managementSuccessKeyOf(id)]: {
+        [routeSuccessKeyOf(id)]: {
           description: 'Organization roster',
           content: {
-            'application/json': { schema: managementSchemaOf(id, 'response') },
+            'application/json': { schema: routeSchemaOf(id, 'response') },
           },
         },
-        ...managementErrorResponsesOf(id),
+        ...routeErrorResponsesOf(id),
       },
     },
   };
@@ -1143,7 +1153,7 @@ function organizationMembershipListPathItem(): Record<string, unknown> {
   const id = 'organizations.members.list' as const;
 
   return {
-    [MANAGEMENT_OPERATIONS[id].method.toLowerCase()]: {
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
       operationId: id,
       summary: "List an organization's memberships",
       description:
@@ -1172,15 +1182,15 @@ function organizationMembershipListPathItem(): Record<string, unknown> {
         },
       ],
       responses: {
-        [managementSuccessKeyOf(id)]: {
+        [routeSuccessKeyOf(id)]: {
           description: 'Organization memberships',
           content: {
             'application/json': {
-              schema: managementSchemaOf(id, 'response'),
+              schema: routeSchemaOf(id, 'response'),
             },
           },
         },
-        ...managementErrorResponsesOf(id),
+        ...routeErrorResponsesOf(id),
       },
     },
   };
@@ -1211,10 +1221,10 @@ function organizationMembershipMutationPathItem(): Record<string, unknown> {
   const disable = 'organizations.members.disable' as const;
 
   const successFor = (id: typeof changeRole | typeof disable) => ({
-    [managementSuccessKeyOf(id)]: {
+    [routeSuccessKeyOf(id)]: {
       description: 'The resulting organization membership',
       content: {
-        'application/json': { schema: managementSchemaOf(id, 'response') },
+        'application/json': { schema: routeSchemaOf(id, 'response') },
       },
     },
   });
@@ -1230,13 +1240,13 @@ function organizationMembershipMutationPathItem(): Record<string, unknown> {
         required: true,
         content: {
           'application/json': {
-            schema: managementSchemaOf(changeRole, 'request'),
+            schema: routeSchemaOf(changeRole, 'request'),
           },
         },
       },
       responses: {
         ...successFor(changeRole),
-        ...managementErrorResponsesOf(changeRole),
+        ...routeErrorResponsesOf(changeRole),
       },
     },
     delete: {
@@ -1247,7 +1257,7 @@ function organizationMembershipMutationPathItem(): Record<string, unknown> {
       parameters: organizationMemberParameters(),
       responses: {
         ...successFor(disable),
-        ...managementErrorResponsesOf(disable),
+        ...routeErrorResponsesOf(disable),
       },
     },
   };
@@ -1257,20 +1267,20 @@ function organizationMembershipTransferPathItem(): Record<string, unknown> {
   const id = 'organizations.members.transfer' as const;
 
   return {
-    [MANAGEMENT_OPERATIONS[id].method.toLowerCase()]: {
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
       operationId: id,
       summary: 'Transfer organization ownership',
       'x-identity-scope': 'user',
       security: [{ BearerAuth: [] }],
       parameters: organizationMemberParameters(),
       responses: {
-        [managementSuccessKeyOf(id)]: {
+        [routeSuccessKeyOf(id)]: {
           description: 'The resulting organization membership',
           content: {
-            'application/json': { schema: managementSchemaOf(id, 'response') },
+            'application/json': { schema: routeSchemaOf(id, 'response') },
           },
         },
-        ...managementErrorResponsesOf(id),
+        ...routeErrorResponsesOf(id),
       },
     },
   };
@@ -1290,6 +1300,7 @@ function organizationMembershipTransferPathItem(): Record<string, unknown> {
 function sandboxAssertionPathItem(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
 ): Record<string, unknown> {
+  const id = 'sandbox.assertions.mint' as const;
   const responses: Record<string, unknown> = {
     '200': {
       description: 'A freshly signed assertion for the sandbox organization',
@@ -1314,19 +1325,9 @@ function sandboxAssertionPathItem(
     },
   };
 
-  for (const status of groupedErrors.keys()) {
-    // No idempotency, so no conflict to report.
-    if (status === 409) {
-      continue;
-    }
-    responses[String(status)] = {
-      $ref: `#/components/responses/Error${status}`,
-    };
-  }
-
   return {
-    post: {
-      operationId: 'sandbox.assertions.mint',
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
+      operationId: id,
       summary: 'Mint a sandbox user assertion',
       description: [
         'Issues a short-lived user assertion for the sandbox organization, so that exercising the API does not require holding an organization signing key.',
@@ -1334,25 +1335,30 @@ function sandboxAssertionPathItem(
         'This is not the integration pattern for a customer with their own backend. Such a customer signs assertions from their own identity provider and never calls this route.',
       ].join('\n\n'),
       'x-identity-scope': 'organization',
-      security: [{ ApiKeyAuth: [] }],
+      ...routeSecurityOf(id),
       parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
       requestBody: {
         required: true,
         content: {
-          'application/json': { schema: MintSandboxAssertionRequestSchema },
+          'application/json': { schema: routeSchemaOf(id, 'request') },
         },
       },
-      responses,
+      responses: {
+        ...responses,
+        ...routeErrorResponsesOf(id, groupedErrors),
+      },
     },
   };
 }
 
 function speakingQuestionsPathItem(): Record<string, unknown> {
+  const id = 'speaking.questions' as const;
+
   return {
-    get: {
-      operationId: 'speaking.questions',
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
+      operationId: id,
       summary: 'List Speaking questions',
-      security: [],
+      ...routeSecurityOf(id),
       parameters: [
         {
           name: 'part',
@@ -1401,8 +1407,7 @@ function speakingQuestionsPathItem(): Record<string, unknown> {
             },
           },
         },
-        '400': { $ref: '#/components/responses/Error400' },
-        '500': { $ref: '#/components/responses/Error500' },
+        ...routeErrorResponsesOf(id),
       },
     },
   };
@@ -1461,33 +1466,34 @@ export function buildOpenApiDocument(version: string): unknown {
     };
   }
 
-  paths[SANDBOX_ASSERTION_PATH] = sandboxAssertionPathItem(groupedErrors);
-  paths[SPEAKING_QUESTIONS_PATH] = speakingQuestionsPathItem();
-  paths[managementPathOf('organizations.create')] = organizationPathItem();
-  paths[managementPathOf('organizations.rename')] = organizationItemPathItem();
-  paths[managementPathOf('organizations.me.members.list')] =
+  paths[routePathOf('sandbox.assertions.mint')] =
+    sandboxAssertionPathItem(groupedErrors);
+  paths[routePathOf('speaking.questions')] = speakingQuestionsPathItem();
+  paths[routePathOf('organizations.create')] = organizationPathItem();
+  paths[routePathOf('organizations.rename')] = organizationItemPathItem();
+  paths[routePathOf('organizations.me.members.list')] =
     organizationRosterPathItem();
-  paths[managementPathOf('organizations.members.list')] =
+  paths[routePathOf('organizations.members.list')] =
     organizationMembershipListPathItem();
-  paths[managementPathOf('organizations.invitations.list')] =
+  paths[routePathOf('organizations.invitations.list')] =
     organizationInvitationPathItem();
-  paths[managementPathOf('organizations.invitations.revoke')] =
+  paths[routePathOf('organizations.invitations.revoke')] =
     organizationInvitationItemPathItem();
-  paths[managementPathOf('organizations.invitations.accept')] =
+  paths[routePathOf('organizations.invitations.accept')] =
     organizationInvitationAcceptPathItem();
-  paths[managementPathOf('organizations.members.change_role')] =
+  paths[routePathOf('organizations.members.change_role')] =
     organizationMembershipMutationPathItem();
-  paths[managementPathOf('organizations.members.transfer')] =
+  paths[routePathOf('organizations.members.transfer')] =
     organizationMembershipTransferPathItem();
-  paths[managementPathOf('organizations.apiKeys.list')] =
+  paths[routePathOf('organizations.apiKeys.list')] =
     organizationApiKeyPathItem();
-  paths[managementPathOf('organizations.apiKeys.revoke')] =
+  paths[routePathOf('organizations.apiKeys.revoke')] =
     organizationApiKeyItemPathItem();
-  paths[managementPathOf('organizations.apiKeys.rotate')] =
+  paths[routePathOf('organizations.apiKeys.rotate')] =
     organizationApiKeyRotatePathItem();
-  paths[managementPathOf('organizations.identityConfig.read')] =
+  paths[routePathOf('organizations.identityConfig.read')] =
     organizationIdentityConfigPathItem();
-  paths[managementPathOf('organizations.auditEvents.list')] =
+  paths[routePathOf('organizations.auditEvents.list')] =
     organizationAuditEventPathItem();
   Object.assign(paths, localAuthPathItems());
   addHeadOperations(paths);

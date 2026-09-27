@@ -1,6 +1,6 @@
-import { MANAGEMENT_OPERATIONS } from '../catalog/management-operations';
 import { OPERATION_CATALOG } from '../catalog/operation-catalog';
 import { OPERATION_IDS } from '../catalog/operation-id';
+import { PUBLIC_ROUTES } from '../catalog/public-routes';
 import { buildOpenApiDocument } from './build-openapi-document';
 import { toOpenApiPath } from './openapi-path';
 
@@ -69,10 +69,10 @@ const ORGANIZATION_CREATE_OPERATION_ID = 'organizations.create';
 const ORGANIZATION_ITEM_PATH = '/v1/organizations/{organization_id}';
 const ORGANIZATION_ROSTER_OPERATION_ID = 'organizations.me.members.list';
 const ORGANIZATION_ROSTER_PATH = toOpenApiPath(
-  MANAGEMENT_OPERATIONS[ORGANIZATION_ROSTER_OPERATION_ID].path,
+  PUBLIC_ROUTES[ORGANIZATION_ROSTER_OPERATION_ID].path,
 );
 const ORGANIZATION_MEMBERSHIP_LIST_PATH = toOpenApiPath(
-  MANAGEMENT_OPERATIONS['organizations.members.list'].path,
+  PUBLIC_ROUTES['organizations.members.list'].path,
 );
 const ORGANIZATION_MEMBERSHIP_LIST_OPERATION_ID = 'organizations.members.list';
 const ORGANIZATION_INVITATION_PATH =

@@ -2,15 +2,15 @@ import { Readable } from 'node:stream';
 
 import Fastify, { type FastifyInstance } from 'fastify';
 
-import { MANAGEMENT_OPERATIONS } from '../../catalog/management-operations';
 import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
+import { PUBLIC_ROUTES } from '../../catalog/public-routes';
 import { registerBodySizeGuard } from './body-size.hook';
 
 const CATALOGUED_PATH = OPERATION_CATALOG['writing.task1.grade'].path;
 const LIMIT = OPERATION_CATALOG['writing.task1.grade'].maxBodyBytes;
 const JSON_PATH = OPERATION_CATALOG['speaking.grading-json'].path;
 const JSON_LIMIT = OPERATION_CATALOG['speaking.grading-json'].maxBodyBytes;
-const PARAMETERISED_PATH = MANAGEMENT_OPERATIONS['organizations.rename'].path;
+const PARAMETERISED_PATH = PUBLIC_ROUTES['organizations.rename'].path;
 
 describe('registerBodySizeGuard', () => {
   let app: FastifyInstance;
@@ -113,9 +113,9 @@ describe('registerBodySizeGuard', () => {
   });
 
   /**
-   * The limit map is keyed by an exact path, so a Management operation — whose
+   * The limit map is keyed by an exact path, so a Public API Route — whose
    * path carries a `:segment` the URL does not spell the same way — is never
-   * matched. That is deliberate (ADR-0059): Management operations declare no
+   * matched. That is deliberate (ADR-0059): Public API Routes declare no
    * `maxBodyBytes`, because declaring one would publish a limit this hook
    * silently ignores. If someone teaches this hook to pattern-match, this test
    * fails and the limit question is reopened on purpose.
@@ -133,14 +133,12 @@ describe('registerBodySizeGuard', () => {
     expect(handlerCalls).toBe(1);
   });
 
-  it('has no Management operation carrying a body limit the hook would apply', () => {
+  it('has no Public API Route carrying a body limit the hook would apply', () => {
     const cataloguedPaths = new Set<string>(
       Object.values(OPERATION_CATALOG).map((operation) => operation.path),
     );
 
-    for (const [operationId, operation] of Object.entries(
-      MANAGEMENT_OPERATIONS,
-    )) {
+    for (const [operationId, operation] of Object.entries(PUBLIC_ROUTES)) {
       expect({
         operationId,
         catalogued: cataloguedPaths.has(operation.path),

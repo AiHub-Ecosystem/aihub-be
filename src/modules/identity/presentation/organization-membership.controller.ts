@@ -14,7 +14,7 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyRequest } from 'fastify';
 
-import { MANAGEMENT_OPERATIONS } from '../../../catalog/management-operations';
+import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
   EmptyOrganizationMembershipMutationRequestSchema,
@@ -50,7 +50,7 @@ export class OrganizationMembershipController {
     private readonly membershipList: ListOrganizationMemberships,
   ) {}
 
-  @Get(MANAGEMENT_OPERATIONS['organizations.members.list'].path)
+  @Get(PUBLIC_ROUTES['organizations.members.list'].path)
   @HttpCode(200)
   async listOrganizationMembers(
     @Req() request: FastifyRequest,
@@ -85,7 +85,7 @@ export class OrganizationMembershipController {
     };
   }
 
-  @Get(MANAGEMENT_OPERATIONS['organizations.me.members.list'].path)
+  @Get(PUBLIC_ROUTES['organizations.me.members.list'].path)
   @HttpCode(200)
   async roster(
     @Req() request: FastifyRequest,
@@ -112,7 +112,7 @@ export class OrganizationMembershipController {
     };
   }
 
-  @Patch(MANAGEMENT_OPERATIONS['organizations.members.change_role'].path)
+  @Patch(PUBLIC_ROUTES['organizations.members.change_role'].path)
   @HttpCode(200)
   async changeRole(
     @Req() request: FastifyRequest,
@@ -140,7 +140,7 @@ export class OrganizationMembershipController {
     return mutationResponse(result, requestId);
   }
 
-  @Delete(MANAGEMENT_OPERATIONS['organizations.members.disable'].path)
+  @Delete(PUBLIC_ROUTES['organizations.members.disable'].path)
   @HttpCode(200)
   async disable(
     @Req() request: FastifyRequest,
@@ -164,7 +164,7 @@ export class OrganizationMembershipController {
     return mutationResponse(result, requestId);
   }
 
-  @Post(MANAGEMENT_OPERATIONS['organizations.members.transfer'].path)
+  @Post(PUBLIC_ROUTES['organizations.members.transfer'].path)
   @HttpCode(200)
   async transfer(
     @Req() request: FastifyRequest,

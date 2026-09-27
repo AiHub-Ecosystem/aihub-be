@@ -5,7 +5,7 @@ import {
 import { Test } from '@nestjs/testing';
 
 import { AppModule } from '../../../app.module';
-import { MANAGEMENT_OPERATIONS } from '../../../catalog/management-operations';
+import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
 import { AppError } from '../../../common/errors/app-error';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
@@ -25,7 +25,7 @@ import {
 } from '../application/organization-membership.port';
 
 const ORGANIZATION_ROSTER_PATH =
-  MANAGEMENT_OPERATIONS['organizations.me.members.list'].path;
+  PUBLIC_ROUTES['organizations.me.members.list'].path;
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';

@@ -2,6 +2,18 @@ import type { TSchema } from '@sinclair/typebox';
 
 import type { HttpStatus } from '../common/errors/error-registry';
 import {
+  EmptyAuthRequestSchema,
+  ForgotPasswordRequestSchema,
+  ForgotPasswordResponseSchema,
+  LoginRequestSchema,
+  LoginResponseSchema,
+  RegisterRequestSchema,
+  RegisterResponseSchema,
+  ResendVerificationRequestSchema,
+  ResetPasswordRequestSchema,
+  VerifyEmailRequestSchema,
+} from '../contracts/auth/local-auth';
+import {
   CreateOrganizationApiKeyRequestSchema,
   ListOrganizationApiKeysResponseSchema,
   OrganizationApiKeySecretResponseSchema,
@@ -31,51 +43,83 @@ import {
   RenameOrganizationRequestSchema,
   RenameOrganizationResponseSchema,
 } from '../contracts/organization/organization';
+import {
+  MintSandboxAssertionRequestSchema,
+  MintSandboxAssertionResponseSchema,
+} from '../contracts/sandbox/assertion';
 import type { IdempotencyMode } from './operation-catalog';
 
 /**
- * How a Control-plane operation learns which Organization it acts on.
+ * How a route learns who is calling it, which decides the `security` entry the
+ * document publishes.
+ */
+export type CallerAuth = 'bearer' | 'refresh-cookie' | 'api-key' | 'none';
+
+/**
+ * How a route learns which Organization it acts on.
  *
  * `path` means the caller named it in the route. `caller` means the route
- * carries no organization segment: the Organization is the one the Bearer
- * identity already belongs to, or — for `organizations.create` — does not yet
- * exist. Reading this field is the only way to tell those two apart, and a
- * generator that assumed `path` would publish an `organization_id` parameter
- * the route does not accept.
+ * carries no organization segment: the Organization is the one the caller's
+ * credential already belongs to, or — for `organizations.create` — does not yet
+ * exist. `none` means the route acts on no Organization at all. Reading this
+ * field is the only way to tell those apart, and a generator that assumed
+ * `path` would publish an `organization_id` parameter the route does not accept.
  */
-export type OrganizationResolution = 'path' | 'caller';
+export type OrganizationResolution = 'path' | 'caller' | 'none';
 
-export interface ManagementOperationDef {
+/**
+ * The statuses an operation may return besides its success status.
+ *
+ * `'all-except-idempotency-conflict'` derives the list from the error registry
+ * the way a dispatch operation does, and is for the one route that reports a
+ * `409` it can never reach. Prefer a literal list: it is the only form that
+ * fails when a new error code appears.
+ */
+export type ErrorStatuses =
+  | readonly HttpStatus[]
+  | 'all-except-idempotency-conflict';
+
+export interface PublicRouteDef {
   readonly method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   /** Nest form, so a route declaration can bind it directly. */
   readonly path: string;
+  readonly callerAuth: CallerAuth;
   readonly organizationResolution: OrganizationResolution;
-  readonly successStatus: 200 | 201 | 204;
+  readonly successStatus: 200 | 201 | 202 | 204;
   readonly idempotency: IdempotencyMode;
-  /** `null` for a bodyless operation, not an optional field. */
+  /** `null` for a route that takes no body, not an optional field. */
   readonly requestSchema: TSchema | null;
-  /** `null` for the bodyless `204`. */
+  /**
+   * `null` when the success response has no body, or when no contract schema
+   * exists to name. `speaking.questions` is the latter: its envelope is built
+   * where the document is built and has never had a contract module.
+   */
   readonly responseSchema: TSchema | null;
-  readonly errorStatuses: readonly HttpStatus[];
+  readonly errorStatuses: ErrorStatuses;
 }
 
 /**
- * Every Control-plane operation, in the order the OpenAPI document lists them.
+ * Every Public API Route that does not dispatch to an AI Service.
  *
- * This is not the Operation Catalog and must not become one. A Control-plane
- * operation dispatches nothing, so it has no downstream service, no downstream
- * path, and no API-key scope; `OperationId` is the dispatch vocabulary, and
- * widening it with non-dispatch ids would force a `dispatch()` overload per
- * management route (ADR-0059).
+ * This is not the Operation Catalog and must not become one. These routes have
+ * no downstream service, no downstream path, no downstream contract, and no
+ * API-key scope; `OperationId` is the dispatch vocabulary, and widening it with
+ * non-dispatch ids would force a `dispatch()` overload per route here
+ * (ADR-0059). The two registries partition the Public API Routes rather than
+ * duplicating them, and `app.module.spec.ts` proves the partition is complete
+ * by comparing the registered routes against the generated document.
  *
- * Parameter descriptions, response prose, and query parameter shapes stay with
- * the builder's per-operation path items. This registry owns the parts that
- * were previously written in three places at once.
+ * Parameter descriptions, response prose, query parameter shapes, and the
+ * `x-identity-scope` extension stay with the builder's per-route path items.
+ * `x-identity-scope` in particular carries four different published values
+ * across this document, so declaring it here would enshrine the inconsistency
+ * rather than record a fact.
  */
-export const MANAGEMENT_OPERATIONS = {
+export const PUBLIC_ROUTES = {
   'organizations.create': {
     method: 'POST',
     path: '/v1/organizations',
+    callerAuth: 'bearer',
     organizationResolution: 'caller',
     successStatus: 201,
     idempotency: 'optional',
@@ -86,6 +130,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.rename': {
     method: 'PATCH',
     path: '/v1/organizations/:organizationId',
+    callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
     idempotency: 'none',
@@ -96,6 +141,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.me.members.list': {
     method: 'GET',
     path: '/v1/organizations/me/members',
+    callerAuth: 'bearer',
     organizationResolution: 'caller',
     successStatus: 200,
     idempotency: 'none',
@@ -106,6 +152,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.members.list': {
     method: 'GET',
     path: '/v1/organizations/:organizationId/members',
+    callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
     idempotency: 'none',
@@ -116,6 +163,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.members.change_role': {
     method: 'PATCH',
     path: '/v1/organizations/:organizationId/members/:username',
+    callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
     idempotency: 'none',
@@ -126,6 +174,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.members.disable': {
     method: 'DELETE',
     path: '/v1/organizations/:organizationId/members/:username',
+    callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
     idempotency: 'none',
@@ -136,6 +185,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.members.transfer': {
     method: 'POST',
     path: '/v1/organizations/:organizationId/members/:username/transfer',
+    callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
     idempotency: 'none',
@@ -146,6 +196,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.invitations.create': {
     method: 'POST',
     path: '/v1/organizations/:organizationId/invitations',
+    callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 201,
     idempotency: 'optional',
@@ -156,6 +207,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.invitations.list': {
     method: 'GET',
     path: '/v1/organizations/:organizationId/invitations',
+    callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
     idempotency: 'none',
@@ -166,6 +218,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.invitations.revoke': {
     method: 'DELETE',
     path: '/v1/organizations/:organizationId/invitations/:invitationId',
+    callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 204,
     idempotency: 'none',
@@ -176,6 +229,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.invitations.accept': {
     method: 'POST',
     path: '/v1/organizations/invitations/accept',
+    callerAuth: 'bearer',
     organizationResolution: 'caller',
     successStatus: 200,
     idempotency: 'none',
@@ -186,6 +240,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.apiKeys.create': {
     method: 'POST',
     path: '/v1/organizations/:organizationId/api-keys',
+    callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 201,
     idempotency: 'none',
@@ -196,6 +251,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.apiKeys.list': {
     method: 'GET',
     path: '/v1/organizations/:organizationId/api-keys',
+    callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
     idempotency: 'none',
@@ -206,6 +262,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.apiKeys.rotate': {
     method: 'POST',
     path: '/v1/organizations/:organizationId/api-keys/:apiKeyId/rotate',
+    callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
     idempotency: 'none',
@@ -216,6 +273,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.apiKeys.revoke': {
     method: 'DELETE',
     path: '/v1/organizations/:organizationId/api-keys/:apiKeyId',
+    callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
     idempotency: 'none',
@@ -226,6 +284,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.identityConfig.read': {
     method: 'GET',
     path: '/v1/organizations/:organizationId/identity-config',
+    callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
     idempotency: 'none',
@@ -236,6 +295,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.identityConfig.set': {
     method: 'PUT',
     path: '/v1/organizations/:organizationId/identity-config',
+    callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
     idempotency: 'none',
@@ -246,6 +306,7 @@ export const MANAGEMENT_OPERATIONS = {
   'organizations.auditEvents.list': {
     method: 'GET',
     path: '/v1/organizations/:organizationId/audit-events',
+    callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
     idempotency: 'none',
@@ -253,6 +314,116 @@ export const MANAGEMENT_OPERATIONS = {
     responseSchema: ListOrganizationAuditEventsResponseSchema,
     errorStatuses: [400, 401, 403, 500, 503],
   },
-} as const satisfies Record<string, ManagementOperationDef>;
+  'auth.register': {
+    method: 'POST',
+    path: '/v1/auth/register',
+    callerAuth: 'none',
+    organizationResolution: 'none',
+    successStatus: 201,
+    idempotency: 'none',
+    requestSchema: RegisterRequestSchema,
+    responseSchema: RegisterResponseSchema,
+    errorStatuses: [400, 409, 429, 500, 503],
+  },
+  'auth.login': {
+    method: 'POST',
+    path: '/v1/auth/login',
+    callerAuth: 'none',
+    organizationResolution: 'none',
+    successStatus: 200,
+    idempotency: 'none',
+    requestSchema: LoginRequestSchema,
+    responseSchema: LoginResponseSchema,
+    errorStatuses: [400, 401, 429, 500],
+  },
+  'auth.verify_email': {
+    method: 'POST',
+    path: '/v1/auth/verify-email',
+    callerAuth: 'none',
+    organizationResolution: 'none',
+    successStatus: 200,
+    idempotency: 'none',
+    requestSchema: VerifyEmailRequestSchema,
+    responseSchema: LoginResponseSchema,
+    errorStatuses: [400, 429, 500],
+  },
+  'auth.resend_verification': {
+    method: 'POST',
+    path: '/v1/auth/resend-verification',
+    callerAuth: 'none',
+    organizationResolution: 'none',
+    successStatus: 202,
+    idempotency: 'none',
+    requestSchema: ResendVerificationRequestSchema,
+    responseSchema: null,
+    errorStatuses: [400, 429, 500],
+  },
+  'auth.forgot_password': {
+    method: 'POST',
+    path: '/v1/auth/forgot-password',
+    callerAuth: 'none',
+    organizationResolution: 'none',
+    successStatus: 202,
+    idempotency: 'none',
+    requestSchema: ForgotPasswordRequestSchema,
+    responseSchema: ForgotPasswordResponseSchema,
+    errorStatuses: [400, 429, 500],
+  },
+  'auth.reset_password': {
+    method: 'POST',
+    path: '/v1/auth/reset-password',
+    callerAuth: 'none',
+    organizationResolution: 'none',
+    successStatus: 204,
+    idempotency: 'none',
+    requestSchema: ResetPasswordRequestSchema,
+    responseSchema: null,
+    errorStatuses: [400, 429, 500],
+  },
+  'auth.refresh': {
+    method: 'POST',
+    path: '/v1/auth/refresh',
+    callerAuth: 'refresh-cookie',
+    organizationResolution: 'none',
+    successStatus: 200,
+    idempotency: 'none',
+    requestSchema: EmptyAuthRequestSchema,
+    responseSchema: LoginResponseSchema,
+    errorStatuses: [400, 429, 500],
+  },
+  'auth.logout': {
+    method: 'POST',
+    path: '/v1/auth/logout',
+    callerAuth: 'refresh-cookie',
+    organizationResolution: 'none',
+    successStatus: 204,
+    idempotency: 'none',
+    requestSchema: EmptyAuthRequestSchema,
+    responseSchema: null,
+    errorStatuses: [400, 500],
+  },
+  'sandbox.assertions.mint': {
+    method: 'POST',
+    path: '/v1/sandbox/assertions',
+    callerAuth: 'api-key',
+    organizationResolution: 'caller',
+    successStatus: 200,
+    idempotency: 'none',
+    requestSchema: MintSandboxAssertionRequestSchema,
+    responseSchema: MintSandboxAssertionResponseSchema,
+    errorStatuses: 'all-except-idempotency-conflict',
+  },
+  'speaking.questions': {
+    method: 'GET',
+    path: '/v1/ielts/speaking/questions',
+    callerAuth: 'none',
+    organizationResolution: 'none',
+    successStatus: 200,
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: null,
+    errorStatuses: [400, 500],
+  },
+} as const satisfies Record<string, PublicRouteDef>;
 
-export type ManagementOperationId = keyof typeof MANAGEMENT_OPERATIONS;
+export type PublicRouteId = keyof typeof PUBLIC_ROUTES;
