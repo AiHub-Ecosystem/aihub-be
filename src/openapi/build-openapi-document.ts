@@ -1297,10 +1297,14 @@ function organizationMembershipTransferPathItem(): Record<string, unknown> {
 }
 
 /**
- * Described by hand rather than from `OPERATION_CATALOG`, because it is not a
- * catalog operation: it has no downstream service, no downstream contract, and
- * no scope. Adding a synthetic entry to reuse the generator would put a
- * phantom proxy operation in front of every reader of this document.
+ * Its path, schemas, error statuses, and security come from
+ * `PUBLIC_ROUTES`; the description and the envelope stay here, because those
+ * are what make it this route.
+ *
+ * It is not a dispatch operation: it has no downstream service, no downstream
+ * contract, and no scope, so it does not belong in `OPERATION_CATALOG` either.
+ * Putting it there to reuse `operationToPathItem` would put a phantom proxy
+ * operation in front of every reader of this document.
  *
  * The envelope is narrower than a proxied operation's for the same reason. A
  * dispatch envelope reports downstream and gateway timings for a call that

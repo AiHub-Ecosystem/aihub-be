@@ -29,12 +29,13 @@ function notFound(): AppError {
  * Authenticates a sandbox mint request.
  *
  * `ApiKeyGuard` cannot serve here: it resolves an operation id against
- * `OPERATION_CATALOG`, and every catalog entry must name a downstream service,
+ * `OPERATION_CATALOG`, and every dispatch entry must name a downstream service,
  * a downstream path, and request and response contracts. Minting has no
  * downstream. Adding a synthetic entry to satisfy the guard would also place a
- * phantom operation in the generated OpenAPI document and Postman collection,
- * both of which are produced from that catalog. The authentication step itself
- * is shared rather than copied, so both guards admit exactly the same keys.
+ * phantom proxy operation in the generated OpenAPI document and Postman
+ * collection. Minting is declared instead in `PUBLIC_ROUTES`, which describes
+ * it without giving it a dispatcher. The authentication step itself is shared
+ * rather than copied, so both guards admit exactly the same keys.
  *
  * Authorization is membership of the configured sandbox allowlist rather than
  * a scope. A scope would have to be granted somewhere, and a scope granted by
