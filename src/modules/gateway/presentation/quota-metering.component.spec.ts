@@ -104,23 +104,17 @@ function httpContextFor(
   } as ArgumentsHost;
 }
 
-describe('quota request pipeline', () => {
+describe('quota and metering component behaviour', () => {
   const now = () => new Date('2026-09-16T12:00:00.000Z');
 
-  it('hard-stop rejects before concurrency and records a non-billable error', async () => {
+  it('hard-stop rejects an over-quota request and records a non-billable error', async () => {
     const counter = new FakeQuotaCounter();
     counter.unavailable = true;
     const request = requestFor({ hardStopOnQuota: true });
     const quota = new QuotaGuard(counter, now);
-    let concurrencyCalls = 0;
 
     const failure = await quota.canActivate(executionContextFor(request)).then(
-      (allowed) => {
-        if (allowed) {
-          concurrencyCalls += 1;
-        }
-        return undefined;
-      },
+      () => undefined,
       (error: unknown) => error,
     );
 
@@ -128,7 +122,6 @@ describe('quota request pipeline', () => {
       code: 'QUOTA_EXCEEDED',
       httpStatus: 429,
     });
-    expect(concurrencyCalls).toBe(0);
 
     const repository = new FakeUsageRepository();
     const metering = new MeteringService(repository, undefined, counter);
@@ -217,5 +210,54 @@ describe('quota request pipeline', () => {
         meteringStatus: 'quota_unverified',
       }),
     );
+  });
+
+  it('advances the quota counter for a billable success on a tracked quota', async () => {
+    const counter = new FakeQuotaCounter();
+    const request = requestFor();
+    await expect(
+      new QuotaGuard(counter, now).canActivate(executionContextFor(request)),
+    ).resolves.toBe(true);
+
+    const repository = new FakeUsageRepository();
+    const metering = new MeteringService(repository, undefined, counter);
+    await firstValueFrom(
+      new SuccessEnvelopeInterceptor(metering).intercept(
+        httpContextFor(request, { header: jest.fn() }) as ExecutionContext,
+        {
+          handle: () =>
+            of({
+              operation: 'writing.task1.grade',
+              data: { band: 7 },
+              downstreamMs: 80,
+            }),
+        },
+      ),
+    );
+
+    expect(counter.increments).toEqual(['org_acme']);
+  });
+
+  it('does not advance the quota counter for a non-billable error', async () => {
+    const counter = new FakeQuotaCounter();
+    const request = requestFor();
+    await expect(
+      new QuotaGuard(counter, now).canActivate(executionContextFor(request)),
+    ).resolves.toBe(true);
+
+    const repository = new FakeUsageRepository();
+    const send = jest.fn();
+    await new HttpExceptionFilter(
+      new MeteringService(repository, undefined, counter),
+    ).catch(
+      new AppError({
+        code: 'INVALID_REQUEST',
+        message: 'Request failed validation',
+        retryable: false,
+      }),
+      httpContextFor(request, { status: () => ({ send }) }),
+    );
+
+    expect(counter.increments).toEqual([]);
   });
 });

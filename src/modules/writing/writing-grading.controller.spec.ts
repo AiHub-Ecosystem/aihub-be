@@ -11,14 +11,8 @@ import { MockAgent } from 'undici';
 import { AppModule } from '../../app.module';
 import { generateRequestId } from '../../common/request-context/request-id';
 import { DownstreamHttpClient } from '../gateway/infrastructure/downstream-http.client';
-import type {
-  CompleteIdempotencyInput,
-  IdempotencyAttemptInput,
-  IdempotencyRepositoryPort,
-  IdempotencyReservation,
-  ReserveIdempotencyInput,
-} from '../idempotency/application/idempotency-repository.port';
 import { IDEMPOTENCY_REPOSITORY } from '../idempotency/application/idempotency-repository.port';
+import { InMemoryIdempotencyRepository } from '../idempotency/testing/in-memory-idempotency.repository';
 
 const FIXTURES = join(__dirname, '../../../test/fixtures/ai-writing');
 
@@ -40,88 +34,6 @@ const task2Request = fixture('grade-task2.request.json') as {
   topic: string;
   essay: string;
 };
-
-interface StoredIdempotencyRecord {
-  fingerprintHex: string;
-  requestId: string;
-  state: 'pending' | 'completed' | 'failed';
-  responseBody?: unknown;
-}
-
-class InMemoryIdempotencyRepository implements IdempotencyRepositoryPort {
-  private readonly records = new Map<string, StoredIdempotencyRecord>();
-
-  reserve(input: ReserveIdempotencyInput): Promise<IdempotencyReservation> {
-    const key = `${input.organizationId}:${input.operation}:${input.idempotencyKey}`;
-    const existing = this.records.get(key);
-    if (existing === undefined) {
-      this.records.set(key, {
-        fingerprintHex: input.fingerprintHex,
-        requestId: input.requestId,
-        state: 'pending',
-      });
-      return Promise.resolve({ kind: 'claimed', requestId: input.requestId });
-    }
-    if (existing.fingerprintHex !== input.fingerprintHex) {
-      return Promise.resolve({ kind: 'conflict', reason: 'fingerprint' });
-    }
-    if (existing.state === 'pending') {
-      return Promise.resolve({ kind: 'conflict', reason: 'pending' });
-    }
-    if (existing.state === 'failed') {
-      existing.state = 'pending';
-      existing.requestId = input.requestId;
-      existing.responseBody = undefined;
-      return Promise.resolve({ kind: 'claimed', requestId: input.requestId });
-    }
-    return Promise.resolve({
-      kind: 'replay',
-      responseStatus: 200,
-      responseBody: existing.responseBody,
-    });
-  }
-
-  complete(input: CompleteIdempotencyInput): Promise<void> {
-    const key = `${input.organizationId}:${input.operation}:${input.idempotencyKey}`;
-    const existing = this.records.get(key);
-    if (
-      existing?.state === 'pending' &&
-      existing.requestId === input.requestId
-    ) {
-      existing.state = 'completed';
-      existing.responseBody = input.responseBody;
-    }
-    return Promise.resolve();
-  }
-
-  markFailed(input: IdempotencyAttemptInput): Promise<void> {
-    const key = `${input.organizationId}:${input.operation}:${input.idempotencyKey}`;
-    const existing = this.records.get(key);
-    if (
-      existing?.state === 'pending' &&
-      existing.requestId === input.requestId
-    ) {
-      existing.state = 'failed';
-    }
-    return Promise.resolve();
-  }
-
-  delete(input: IdempotencyAttemptInput): Promise<void> {
-    const key = `${input.organizationId}:${input.operation}:${input.idempotencyKey}`;
-    const existing = this.records.get(key);
-    if (
-      existing?.state === 'pending' &&
-      existing.requestId === input.requestId
-    ) {
-      this.records.delete(key);
-    }
-    return Promise.resolve();
-  }
-
-  cleanupExpired(): Promise<number> {
-    return Promise.resolve(0);
-  }
-}
 
 // Auth and rate limiting use shared guards; this file focuses on what is
 // actually new for grading: field renaming per task, the shared response

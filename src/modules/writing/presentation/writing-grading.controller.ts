@@ -1,20 +1,10 @@
-import {
-  Body,
-  Controller,
-  HttpCode,
-  Inject,
-  Post,
-  Req,
-  UseGuards,
-  UseInterceptors,
-} from '@nestjs/common';
+import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
 import { Value } from '@sinclair/typebox/value';
 
 import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import { userIdentityRequired } from '../../../common/errors/user-identity-required';
 import { createClientDisconnectSignal } from '../../../common/http/client-disconnect-signal';
-import { SuccessEnvelopeInterceptor } from '../../../common/http/success-envelope.interceptor';
 import { createRequestContext } from '../../../common/request-context/request-context.factory';
 import {
   type GradeResponse,
@@ -34,23 +24,18 @@ import {
   type OperationDispatcherPort,
 } from '../../gateway/application/operation-dispatcher.port';
 import { getConcurrencyBackgroundLifecycle } from '../../gateway/presentation/concurrency-permit';
-import { ConcurrencyReleaseInterceptor } from '../../gateway/presentation/concurrency-release.interceptor';
-import { ConcurrencyGuard } from '../../gateway/presentation/concurrency.guard';
-import { QuotaGuard } from '../../gateway/presentation/quota.guard';
-import { RateLimitGuard } from '../../gateway/presentation/rate-limit.guard';
+import { GradedRequest } from '../../gateway/presentation/graded-request.decorator';
 import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyServicePort,
   type IdempotencyWorkContext,
 } from '../../idempotency/application/idempotency-service.port';
 import { resolveIdempotencyKey } from '../../idempotency/presentation/idempotency-key';
-import { ApiKeyGuard } from '../../identity/presentation/api-key.guard';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
 } from '../../identity/presentation/authenticated-request';
 import { RequireOperation } from '../../identity/presentation/require-operation.decorator';
-import { UserIdentityGuard } from '../../identity/presentation/user-identity.guard';
 
 const TASK1_OPERATION = 'writing.task1.grade' as const;
 const TASK2_OPERATION = 'writing.task2.grade' as const;
@@ -147,14 +132,7 @@ function requireUserId(request: AuthenticatedRequest): string {
  * the class-level guard/interceptor wiring for no benefit.
  */
 @Controller()
-@UseGuards(
-  ApiKeyGuard,
-  UserIdentityGuard,
-  RateLimitGuard,
-  QuotaGuard,
-  ConcurrencyGuard,
-)
-@UseInterceptors(ConcurrencyReleaseInterceptor, SuccessEnvelopeInterceptor)
+@GradedRequest()
 export class WritingGradingController {
   constructor(
     @Inject(OPERATION_DISPATCHER)
