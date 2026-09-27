@@ -162,6 +162,51 @@ describe('buildOpenApiDocument', () => {
     );
   });
 
+  /**
+   * `callerAuth` and the published `security` entry are declared in two places:
+   * the registry, and the path item the builder renders. The auth, sandbox, and
+   * Speaking-question path items derive `security` from the registry, but the
+   * eighteen organization path items still hand-write
+   * `security: [{ BearerAuth: [] }]`. Nothing joined the two, so changing a
+   * route's `callerAuth` would have published a document that still claimed the
+   * old scheme. This is that join.
+   */
+  it('publishes the security scheme each route declares as callerAuth', () => {
+    const schemeFor: Record<string, string> = {
+      bearer: 'BearerAuth',
+      'api-key': 'ApiKeyAuth',
+      'refresh-cookie': 'RefreshCookie',
+      none: '',
+    };
+
+    const doc = build();
+    const mismatches: Record<string, unknown> = {};
+
+    for (const [routeId, route] of Object.entries(PUBLIC_ROUTES)) {
+      const pathItem = doc.paths[toOpenApiPath(route.path)];
+      const operation = pathItem?.[
+        route.method.toLowerCase() as keyof OpenApiPathItem
+      ] as OpenApiOperation | undefined;
+      const published = operation?.security as
+        | readonly Record<string, readonly string[]>[]
+        | undefined;
+
+      const expected = schemeFor[route.callerAuth];
+      const actual = (published ?? [])
+        .map((entry) => Object.keys(entry)[0] ?? '')
+        .join(',');
+
+      if (actual !== expected) {
+        mismatches[routeId] = {
+          callerAuth: route.callerAuth,
+          published: actual,
+        };
+      }
+    }
+
+    expect(mismatches).toEqual({});
+  });
+
   it('documents the bearer-authenticated invitation acceptance route', () => {
     const operation = build().paths[ORGANIZATION_INVITATION_ACCEPT_PATH]?.post;
 

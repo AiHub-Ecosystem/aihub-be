@@ -51,7 +51,7 @@ export class OrganizationMembershipController {
   ) {}
 
   @Get(PUBLIC_ROUTES['organizations.members.list'].path)
-  @HttpCode(200)
+  @HttpCode(PUBLIC_ROUTES['organizations.members.list'].successStatus)
   async listOrganizationMembers(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,
@@ -86,7 +86,7 @@ export class OrganizationMembershipController {
   }
 
   @Get(PUBLIC_ROUTES['organizations.me.members.list'].path)
-  @HttpCode(200)
+  @HttpCode(PUBLIC_ROUTES['organizations.me.members.list'].successStatus)
   async roster(
     @Req() request: FastifyRequest,
   ): Promise<OrganizationRosterResponse> {
@@ -113,7 +113,7 @@ export class OrganizationMembershipController {
   }
 
   @Patch(PUBLIC_ROUTES['organizations.members.change_role'].path)
-  @HttpCode(200)
+  @HttpCode(PUBLIC_ROUTES['organizations.members.change_role'].successStatus)
   async changeRole(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,
@@ -141,7 +141,7 @@ export class OrganizationMembershipController {
   }
 
   @Delete(PUBLIC_ROUTES['organizations.members.disable'].path)
-  @HttpCode(200)
+  @HttpCode(PUBLIC_ROUTES['organizations.members.disable'].successStatus)
   async disable(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,
@@ -165,7 +165,7 @@ export class OrganizationMembershipController {
   }
 
   @Post(PUBLIC_ROUTES['organizations.members.transfer'].path)
-  @HttpCode(200)
+  @HttpCode(PUBLIC_ROUTES['organizations.members.transfer'].successStatus)
   async transfer(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,

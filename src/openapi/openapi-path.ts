@@ -4,8 +4,8 @@
  *
  * The two spellings are not interchangeable — a generated client that sends a
  * literal `organization_id` segment receives a 404 from the Nest route — so the
- * Management operation registry stores the Nest form that a route declaration
- * can bind directly, and the document derives this one from it.
+ * Public API Route registry stores the Nest form that a route declaration can
+ * bind directly, and the document derives this one from it.
  */
 export function toOpenApiPath(nestPath: string): string {
   return nestPath
