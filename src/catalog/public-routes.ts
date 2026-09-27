@@ -119,8 +119,10 @@ export interface PublicRouteDef {
  * API-key scope; `OperationId` is the dispatch vocabulary, and widening it with
  * non-dispatch ids would force a `dispatch()` overload per route here
  * (ADR-0059). The two registries partition the Public API Routes rather than
- * duplicating them, and `app.module.spec.ts` proves the partition is complete
- * by comparing the registered routes against the generated document.
+ * duplicating them. Two tests hold that partition from opposite sides:
+ * `app.module.spec.ts` proves every registered route is documented, and
+ * `build-openapi-document.spec.ts` proves the document holds nothing beyond the
+ * two registries' paths. Neither is sufficient alone.
  *
  * Parameter descriptions, response prose, query parameter shapes, and the
  * `x-identity-scope` extension stay with the builder's per-route path items.

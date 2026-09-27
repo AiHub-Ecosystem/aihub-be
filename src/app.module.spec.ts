@@ -7,6 +7,7 @@ import { Test } from '@nestjs/testing';
 
 import { AppModule } from './app.module';
 import { OPERATION_CATALOG } from './catalog/operation-catalog';
+import { PUBLIC_ROUTES } from './catalog/public-routes';
 import { AppError } from './common/errors/app-error';
 import { registerBodySizeGuard } from './common/http/body-size.hook';
 import { generateRequestId } from './common/request-context/request-id';
@@ -126,10 +127,15 @@ describe('AppModule wiring', () => {
     expect(docs.statusCode).toBe(200);
   });
 
-  it('does not double the version prefix onto catalogued public paths', () => {
-    for (const operation of Object.values(OPERATION_CATALOG)) {
-      expect(operation.path).toMatch(/^\/v1\//);
-      expect(operation.path).not.toMatch(/^\/v1\/v1\//);
+  it('does not double the version prefix onto any declared public path', () => {
+    // Both registries: a doubled prefix would register a route nothing
+    // documents, and the route-coverage check below would only see the shape.
+    for (const { path } of [
+      ...Object.values(OPERATION_CATALOG),
+      ...Object.values(PUBLIC_ROUTES),
+    ]) {
+      expect(path).toMatch(/^\/v1\//);
+      expect(path).not.toMatch(/^\/v1\/v1\//);
     }
   });
 
