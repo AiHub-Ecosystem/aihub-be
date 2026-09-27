@@ -165,13 +165,21 @@ describe('buildOpenApiDocument', () => {
   /**
    * `callerAuth` and the published `security` entry are declared in two places:
    * the registry, and the path item the builder renders. The auth, sandbox, and
-   * Speaking-question path items derive `security` from the registry, but the
-   * eighteen organization path items still hand-write
-   * `security: [{ BearerAuth: [] }]`. Nothing joined the two, so changing a
-   * route's `callerAuth` would have published a document that still claimed the
-   * old scheme. This is that join.
+   * Speaking-question path items derive `security` from the registry, so for
+   * those eleven the comparison below re-states `routeSecurityOf` and proves
+   * nothing. Its value is the eighteen organization path items, which still
+   * hand-write `security: [{ BearerAuth: [] }]`; nothing else joins the two, so
+   * changing an organization route's `callerAuth` would have published a
+   * document still claiming BearerAuth.
+   *
+   * `security` must be present and explicit, not merely correct when present.
+   * The document declares a root-level default of `[{ ApiKeyAuth: [] }]`, which
+   * OpenAPI makes every operation inherit unless it declares its own. A
+   * `callerAuth: 'none'` route whose explicit `security: []` went missing
+   * would therefore publish as ApiKeyAuth while reading as unset here, so both
+   * the missing route and the missing key fail this test.
    */
-  it('publishes the security scheme each route declares as callerAuth', () => {
+  it('publishes an explicit security scheme matching each route callerAuth', () => {
     const schemeFor: Record<string, string> = {
       bearer: 'BearerAuth',
       'api-key': 'ApiKeyAuth',
@@ -186,13 +194,25 @@ describe('buildOpenApiDocument', () => {
       const pathItem = doc.paths[toOpenApiPath(route.path)];
       const operation = pathItem?.[
         route.method.toLowerCase() as keyof OpenApiPathItem
-      ] as OpenApiOperation | undefined;
-      const published = operation?.security as
-        | readonly Record<string, readonly string[]>[]
-        | undefined;
+      ] as (OpenApiOperation & { security?: unknown }) | undefined;
 
+      if (operation === undefined) {
+        mismatches[routeId] = { reason: 'route is missing from the document' };
+        continue;
+      }
+      if (operation.security === undefined) {
+        mismatches[routeId] = {
+          reason: 'inherits the root ApiKeyAuth default',
+        };
+        continue;
+      }
+
+      const published = operation.security as readonly Record<
+        string,
+        readonly string[]
+      >[];
       const expected = schemeFor[route.callerAuth];
-      const actual = (published ?? [])
+      const actual = published
         .map((entry) => Object.keys(entry)[0] ?? '')
         .join(',');
 
