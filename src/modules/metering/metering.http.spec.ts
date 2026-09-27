@@ -5,6 +5,7 @@ import {
 import { Test } from '@nestjs/testing';
 
 import { AppModule } from '../../app.module';
+import { registerRequestLifecycle } from '../../common/http/request-lifecycle.hook';
 import { generateRequestId } from '../../common/request-context/request-id';
 import { METERING_FINALIZER } from '../../common/request-metering/metering-finalizer.port';
 import type { MeteringFinalizeInput } from '../../common/request-metering/metering-finalizer.port';
@@ -76,6 +77,7 @@ describe('authenticated metering HTTP boundary', () => {
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({ genReqId: () => generateRequestId() }),
     );
+    registerRequestLifecycle(app.getHttpAdapter().getInstance());
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });
