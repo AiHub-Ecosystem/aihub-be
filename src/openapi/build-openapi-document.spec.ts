@@ -1,6 +1,6 @@
 import { OPERATION_CATALOG } from '../catalog/operation-catalog';
-import { OPERATION_IDS } from '../catalog/operation-id';
-import { PUBLIC_ROUTES } from '../catalog/public-routes';
+import { OPERATION_IDS, isOperationId } from '../catalog/operation-id';
+import { PUBLIC_ROUTES, isPublicRouteId } from '../catalog/public-routes';
 import { buildOpenApiDocument } from './build-openapi-document';
 import { toOpenApiPath } from './openapi-path';
 
@@ -64,8 +64,6 @@ function requestProperty(
 const SANDBOX_MINT_PATH = '/v1/sandbox/assertions';
 const SPEAKING_QUESTIONS_PATH = '/v1/ielts/speaking/questions';
 const SANDBOX_MINT_OPERATION_ID = 'sandbox.assertions.mint';
-const ORGANIZATION_PATH = '/v1/organizations';
-const ORGANIZATION_CREATE_OPERATION_ID = 'organizations.create';
 const ORGANIZATION_ITEM_PATH = '/v1/organizations/{organization_id}';
 const ORGANIZATION_ROSTER_OPERATION_ID = 'organizations.me.members.list';
 const ORGANIZATION_ROSTER_PATH = toOpenApiPath(
@@ -113,26 +111,6 @@ const ORGANIZATION_MEMBER_DISABLE_OPERATION_ID =
   'organizations.members.disable';
 const ORGANIZATION_MEMBER_TRANSFER_OPERATION_ID =
   'organizations.members.transfer';
-const AUTH_PATHS = [
-  '/v1/auth/register',
-  '/v1/auth/login',
-  '/v1/auth/verify-email',
-  '/v1/auth/resend-verification',
-  '/v1/auth/forgot-password',
-  '/v1/auth/reset-password',
-  '/v1/auth/refresh',
-  '/v1/auth/logout',
-] as const;
-const AUTH_OPERATION_IDS = [
-  'auth.register',
-  'auth.login',
-  'auth.verify_email',
-  'auth.resend_verification',
-  'auth.forgot_password',
-  'auth.reset_password',
-  'auth.refresh',
-  'auth.logout',
-] as const;
 
 function build(): OpenApiDocument {
   return buildOpenApiDocument('0.0.0-test') as OpenApiDocument;
@@ -145,55 +123,40 @@ describe('buildOpenApiDocument', () => {
 
   it('has exactly one path entry per catalogued operation, so adding an operation without regenerating fails', () => {
     const doc = build();
-    const operationIds = Object.values(doc.paths)
-      .flatMap((item) =>
-        item.post === undefined ? [] : [item.post.operationId],
-      )
-      .filter(
-        (operationId) =>
-          operationId !== SANDBOX_MINT_OPERATION_ID &&
-          operationId !== ORGANIZATION_CREATE_OPERATION_ID &&
-          operationId !== ORGANIZATION_INVITATION_OPERATION_ID &&
-          operationId !== ORGANIZATION_INVITATION_ACCEPT_OPERATION_ID &&
-          operationId !== ORGANIZATION_MEMBER_TRANSFER_OPERATION_ID &&
-          operationId !== ORGANIZATION_API_KEY_OPERATION_ID &&
-          operationId !== ORGANIZATION_API_KEY_ROTATE_OPERATION_ID &&
-          !AUTH_OPERATION_IDS.includes(
-            operationId as (typeof AUTH_OPERATION_IDS)[number],
-          ),
-      );
+    const postOperationIds = Object.values(doc.paths).flatMap((item) =>
+      item.post === undefined ? [] : [item.post.operationId],
+    );
 
-    expect(operationIds.sort()).toEqual([...OPERATION_IDS].sort());
-    expect(operationIds).toHaveLength(OPERATION_IDS.length);
+    // The two registries partition the Public API Routes, so deciding which
+    // document operation is which needs no hand-written list. A post operation
+    // declared in neither registry is the drift this catches.
+    const undeclared = postOperationIds.filter(
+      (operationId) =>
+        !isOperationId(operationId) && !isPublicRouteId(operationId),
+    );
+    const dispatchOperationIds = postOperationIds.filter((operationId) =>
+      isOperationId(operationId),
+    );
+
+    expect(undeclared).toEqual([]);
+    expect(dispatchOperationIds.sort()).toEqual([...OPERATION_IDS].sort());
+    expect(dispatchOperationIds).toHaveLength(OPERATION_IDS.length);
   });
 
-  it('publishes the explicit sandbox and local-auth paths off the catalog', () => {
+  it('documents every non-dispatch route from the registry, and nothing else off the catalog', () => {
     const doc = build();
-    const catalogued = new Set<string>(
+    const dispatchPaths = new Set<string>(
       OPERATION_IDS.map((operationId) => OPERATION_CATALOG[operationId].path),
+    );
+    const declared = new Set(
+      Object.values(PUBLIC_ROUTES).map((route) => toOpenApiPath(route.path)),
     );
 
     expect(
-      Object.keys(doc.paths).filter((path) => !catalogued.has(path)),
-    ).toEqual([
-      SANDBOX_MINT_PATH,
-      SPEAKING_QUESTIONS_PATH,
-      ORGANIZATION_PATH,
-      ORGANIZATION_ITEM_PATH,
-      ORGANIZATION_ROSTER_PATH,
-      ORGANIZATION_MEMBERSHIP_LIST_PATH,
-      ORGANIZATION_INVITATION_PATH,
-      ORGANIZATION_INVITATION_ITEM_PATH,
-      ORGANIZATION_INVITATION_ACCEPT_PATH,
-      ORGANIZATION_MEMBER_PATH,
-      ORGANIZATION_MEMBER_TRANSFER_PATH,
-      ORGANIZATION_API_KEY_PATH,
-      ORGANIZATION_API_KEY_ITEM_PATH,
-      ORGANIZATION_API_KEY_ROTATE_PATH,
-      ORGANIZATION_IDENTITY_CONFIG_PATH,
-      ORGANIZATION_AUDIT_EVENT_PATH,
-      ...AUTH_PATHS,
-    ]);
+      Object.keys(doc.paths)
+        .filter((path) => !dispatchPaths.has(path))
+        .sort(),
+    ).toEqual([...declared].sort());
     expect(doc.paths[SANDBOX_MINT_PATH]?.post?.operationId).toBe(
       SANDBOX_MINT_OPERATION_ID,
     );

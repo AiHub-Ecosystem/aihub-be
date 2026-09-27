@@ -427,3 +427,12 @@ export const PUBLIC_ROUTES = {
 } as const satisfies Record<string, PublicRouteDef>;
 
 export type PublicRouteId = keyof typeof PUBLIC_ROUTES;
+
+/**
+ * Tells a declared non-dispatch route id apart from an `OperationId`. The two
+ * registries partition the Public API Routes, so a document operation id is
+ * either one or the other and never both.
+ */
+export function isPublicRouteId(value: string): value is PublicRouteId {
+  return Object.hasOwn(PUBLIC_ROUTES, value);
+}
