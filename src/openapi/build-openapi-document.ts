@@ -119,6 +119,16 @@ function routeIdempotencyExtensionsOf(
   return idempotency === 'none' ? {} : { 'x-idempotency': idempotency };
 }
 
+/**
+ * The published `x-identity-scope` extension, or nothing when the document
+ * omits it. The value is the one the registry records as a fact about the
+ * document, not a claim about what the route resolves.
+ */
+function routeIdentityScopeOf(routeId: PublicRouteId): Record<string, unknown> {
+  const scope = PUBLIC_ROUTES[routeId].publishedIdentityScope;
+  return scope === null ? {} : { 'x-identity-scope': scope };
+}
+
 function routeReplayHeaderOf(
   routeId: PublicRouteId,
   description: string,
@@ -481,7 +491,7 @@ function localAuthPathItems(): Record<string, Record<string, unknown>> {
     post: {
       operationId,
       summary,
-      'x-identity-scope': 'none',
+      ...routeIdentityScopeOf(operationId),
       ...routeSecurityOf(operationId),
       parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
       requestBody: {
@@ -557,7 +567,7 @@ function organizationInvitationAcceptPathItem(): Record<string, unknown> {
     [PUBLIC_ROUTES[id].method.toLowerCase()]: {
       operationId: id,
       summary: 'Accept an organization invitation',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(id),
       security: [{ BearerAuth: [] }],
       parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
       requestBody: {
@@ -588,7 +598,7 @@ function organizationPathItem(): Record<string, unknown> {
       summary: 'Create a Self-serve Organization and become its first owner',
       description:
         'Commercial terms are operator-controlled defaults and cannot be set by the request. Each account may create a limited number of Organizations over its lifetime.',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(id),
       ...routeIdempotencyExtensionsOf(id),
       security: [{ BearerAuth: [] }],
       parameters: [
@@ -632,7 +642,7 @@ function organizationItemPathItem(): Record<string, unknown> {
       summary: 'Rename an organization',
       description:
         'Only an active owner of an active organization may rename it. Every other caller, and a suspended organization, receives the same denial. Commercial terms and status cannot be changed by this request.',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(id),
       security: [{ BearerAuth: [] }],
       parameters: [
         { $ref: '#/components/parameters/CorrelationId' },
@@ -675,7 +685,7 @@ function organizationInvitationPathItem(): Record<string, unknown> {
     get: {
       operationId: list,
       summary: "List an organization's open invitations",
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(list),
       security: [{ BearerAuth: [] }],
       parameters: [
         { $ref: '#/components/parameters/CorrelationId' },
@@ -702,7 +712,7 @@ function organizationInvitationPathItem(): Record<string, unknown> {
     post: {
       operationId: create,
       summary: 'Invite a person to an organization',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(create),
       ...routeIdempotencyExtensionsOf(create),
       security: [{ BearerAuth: [] }],
       parameters: [
@@ -751,7 +761,7 @@ function organizationInvitationItemPathItem(): Record<string, unknown> {
       summary: 'Revoke an organization invitation',
       description:
         'Closes an open invitation using the durable invitation close signal. An already closed or expired invitation is a retry-safe no-op and still returns bodyless 204.',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(id),
       security: [{ BearerAuth: [] }],
       parameters: [
         { $ref: '#/components/parameters/CorrelationId' },
@@ -793,7 +803,7 @@ function organizationApiKeyItemPathItem(): Record<string, unknown> {
       summary: 'Revoke an organization API key',
       description:
         'Withdraws the key and keeps its durable row, purging the identity cache so the change takes effect inside the existing cache ceiling. State-idempotent: withdrawing an already withdrawn key succeeds and leaves the recorded moment unchanged. This is the only response from which `revoked` is reachable.',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(id),
       security: [{ BearerAuth: [] }],
       parameters: [
         { $ref: '#/components/parameters/CorrelationId' },
@@ -836,7 +846,7 @@ function organizationApiKeyRotatePathItem(): Record<string, unknown> {
       summary: 'Rotate an organization API key',
       description:
         'Creates a replacement and revokes the named key in one act, with no window in which both work. The replacement inherits the name, scopes, allowed environments, and expiry, and its raw credential is returned in this response only. A revoked or expired key cannot be rotated.',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(id),
       security: [{ BearerAuth: [] }],
       parameters: [
         { $ref: '#/components/parameters/CorrelationId' },
@@ -884,7 +894,7 @@ function organizationApiKeyPathItem(): Record<string, unknown> {
       summary: 'List an organization API key inventory',
       description:
         'Returns the organization live API keys as metadata only. Revoked keys are absent; `status` is `expired` once a key expiry has passed. `last_used_at` is approximate.',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(list),
       security: [{ BearerAuth: [] }],
       parameters: [
         { $ref: '#/components/parameters/CorrelationId' },
@@ -912,7 +922,7 @@ function organizationApiKeyPathItem(): Record<string, unknown> {
     post: {
       operationId: create,
       summary: 'Create an organization API key',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(create),
       security: [{ BearerAuth: [] }],
       parameters: [
         { $ref: '#/components/parameters/CorrelationId' },
@@ -966,7 +976,7 @@ function organizationAuditEventPathItem(): Record<string, unknown> {
       summary: 'Read an organization audit trail',
       description:
         'Returns the organization recorded control-plane acts, newest first, paginated by an opaque cursor. Active owners and admins may read; members, non-members, and disabled memberships receive one indistinguishable denial. A suspended organization stays readable, because the trail is evidence rather than a management surface. The actor is named by immutable username: no user account id, target id, key hash, or token hash appears. An event whose label has been removed by audit redaction is returned with `target_label` null rather than hidden.',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(id),
       security: [{ BearerAuth: [] }],
       parameters: [
         { $ref: '#/components/parameters/CorrelationId' },
@@ -1062,7 +1072,7 @@ function organizationIdentityConfigPathItem(): Record<string, unknown> {
       summary: 'Set an organization identity configuration',
       description:
         'Creates or replaces the public Signed User Assertion identity configuration for an active owner of an active Organization. Submit exactly one JWKS source. URL sources are fetched through the SSRF-protected JWKS path before saving. Existing status is preserved. A retryable cache error may mean the durable save succeeded; retrying the same request safely retries cache purge.',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(set),
       security: [{ BearerAuth: [] }],
       parameters: [
         { $ref: '#/components/parameters/CorrelationId' },
@@ -1096,7 +1106,7 @@ function organizationIdentityConfigPathItem(): Record<string, unknown> {
       summary: 'Read an organization identity configuration',
       description:
         'Returns the stored public Signed User Assertion identity configuration to an active owner of an active Organization. Admins, members, disabled memberships, non-members, and owners of suspended Organizations receive the same Safe Authorization Denial. `configured` indicates whether a row exists, including disabled rows; `status` indicates whether that configuration is active. Private JWK members are never returned.',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(read),
       security: [{ BearerAuth: [] }],
       parameters: [
         { $ref: '#/components/parameters/CorrelationId' },
@@ -1133,7 +1143,7 @@ function organizationRosterPathItem(): Record<string, unknown> {
       summary: 'List the authenticated user organization roster',
       description:
         'Returns the Organizations where the authenticated user has an active membership, including suspended Organizations. `identity_configured` reports only whether an active identity configuration is saved; the JWKS source is not probed and its URL or key material is not returned.',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(id),
       security: [{ BearerAuth: [] }],
       parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
       responses: {
@@ -1158,7 +1168,7 @@ function organizationMembershipListPathItem(): Record<string, unknown> {
       summary: "List an organization's memberships",
       description:
         'Active owners and admins may list active or disabled memberships for one active Organization. The filter defaults to active membership and does not depend on the member account status. Results are ordered by immutable username and omit account IDs and email addresses.',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(id),
       security: [{ BearerAuth: [] }],
       parameters: [
         { $ref: '#/components/parameters/CorrelationId' },
@@ -1233,7 +1243,7 @@ function organizationMembershipMutationPathItem(): Record<string, unknown> {
     patch: {
       operationId: changeRole,
       summary: 'Change an organization member role',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(changeRole),
       security: [{ BearerAuth: [] }],
       parameters: organizationMemberParameters(),
       requestBody: {
@@ -1252,7 +1262,7 @@ function organizationMembershipMutationPathItem(): Record<string, unknown> {
     delete: {
       operationId: disable,
       summary: 'Disable an organization member',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(disable),
       security: [{ BearerAuth: [] }],
       parameters: organizationMemberParameters(),
       responses: {
@@ -1270,7 +1280,7 @@ function organizationMembershipTransferPathItem(): Record<string, unknown> {
     [PUBLIC_ROUTES[id].method.toLowerCase()]: {
       operationId: id,
       summary: 'Transfer organization ownership',
-      'x-identity-scope': 'user',
+      ...routeIdentityScopeOf(id),
       security: [{ BearerAuth: [] }],
       parameters: organizationMemberParameters(),
       responses: {
@@ -1334,7 +1344,7 @@ function sandboxAssertionPathItem(
         'Available only to API keys belonging to a configured sandbox organization; every other key is refused. Deployments with no sandbox configured answer 404.',
         'This is not the integration pattern for a customer with their own backend. Such a customer signs assertions from their own identity provider and never calls this route.',
       ].join('\n\n'),
-      'x-identity-scope': 'organization',
+      ...routeIdentityScopeOf(id),
       ...routeSecurityOf(id),
       parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
       requestBody: {

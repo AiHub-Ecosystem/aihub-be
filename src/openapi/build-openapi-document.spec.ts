@@ -179,6 +179,47 @@ describe('buildOpenApiDocument', () => {
    * would therefore publish as ApiKeyAuth while reading as unset here, so both
    * the missing route and the missing key fail this test.
    */
+  /**
+   * `x-identity-scope` used to be twenty hand-written literals in this builder.
+   * The registry now records what the document publishes, and the builder
+   * derives the extension from it.
+   *
+   * This test therefore does **not** prove the recorded value is the right one:
+   * for the twenty-seven routes whose path item calls `routeIdentityScopeOf`,
+   * changing the registry changes the document too, and the two agree by
+   * construction. What it proves is that no path item has stopped calling the
+   * helper — the one route that omits the extension on purpose
+   * (`speaking.questions`, recorded as `null`) fails this test the moment it
+   * starts publishing one. That is the drift mode worth catching; whether the
+   * recorded values should change is a separate decision, and ADR-0059 leaves
+   * it open.
+   */
+  it('publishes the x-identity-scope value the registry records', () => {
+    const doc = build();
+    const mismatches: Record<string, unknown> = {};
+
+    for (const [routeId, route] of Object.entries(PUBLIC_ROUTES)) {
+      const pathItem = doc.paths[toOpenApiPath(route.path)];
+      const operation = pathItem?.[
+        route.method.toLowerCase() as keyof OpenApiPathItem
+      ] as (OpenApiOperation & Record<string, unknown>) | undefined;
+
+      const published =
+        operation === undefined
+          ? 'missing-route'
+          : (operation['x-identity-scope'] ?? null);
+
+      if (published !== route.publishedIdentityScope) {
+        mismatches[routeId] = {
+          declared: route.publishedIdentityScope,
+          published,
+        };
+      }
+    }
+
+    expect(mismatches).toEqual({});
+  });
+
   it('publishes an explicit security scheme matching each route callerAuth', () => {
     const schemeFor: Record<string, string> = {
       bearer: 'BearerAuth',

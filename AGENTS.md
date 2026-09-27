@@ -12,6 +12,10 @@ Use the five canonical labels documented in `docs/agents/triage-labels.md`.
 
 This is a single-context repo. See `docs/agents/domain.md`.
 
+### Role ownership
+
+Read `.claude/agents/` for role ownership before changing a path owned by another role. Where two roles claim one path, the narrower claim wins: a `*.controller.ts` file belongs to `api` even when it sits inside another role's module, and the module role keeps everything else under it. This resolves the overlap between `api`'s `src/**/*.controller.ts` and `identity`'s `src/modules/identity/**`.
+
 ## AIHUB engineering context
 
 ### Canonical source order
