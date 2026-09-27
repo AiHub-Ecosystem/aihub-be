@@ -16,24 +16,16 @@ import {
   type EmailSenderPort,
 } from '../application/email-sender.port';
 import {
-  AuthIdentityConflictError,
-  LOCAL_AUTH_REPOSITORY,
-  type LocalAuthRepositoryPort,
-  type LoginIdentity,
-  type PasswordResetResult,
-  type PasswordResetTarget,
-  type RefreshTokenRecord,
-  type VerificationOutcome,
-} from '../application/local-auth-repository.port';
-import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
 } from '../application/password-hasher.port';
+import { PASSWORD_RESET_TOKEN_REPOSITORY } from '../application/password-reset-token-repository.port';
 import {
   type IssuedPasswordResetToken,
   PASSWORD_RESET_TOKEN,
   type PasswordResetTokenPort,
 } from '../application/password-reset-token.port';
+import { REFRESH_SESSION_REPOSITORY } from '../application/refresh-session-repository.port';
 import {
   type IssuedRefreshToken,
   REFRESH_TOKEN_ISSUER,
@@ -43,188 +35,26 @@ import {
   USER_ACCESS_TOKEN_ISSUER,
   type UserAccessTokenIssuerPort,
 } from '../application/user-access-token.port';
+import { USER_ACCOUNT_REPOSITORY } from '../application/user-account.port';
+import { VERIFICATION_TOKEN_REPOSITORY } from '../application/verification-token-repository.port';
 import {
   type IssuedVerificationToken,
   VERIFICATION_TOKEN,
   type VerificationTokenPort,
 } from '../application/verification-token.port';
+import {
+  type InMemoryAccount,
+  type InMemoryAuthState,
+  createInMemoryAuthState,
+  seedAccount,
+} from '../testing/in-memory-auth.state';
+import { InMemoryPasswordResetTokenAdapter } from '../testing/in-memory-password-reset-token.adapter';
+import { InMemoryRefreshSessionAdapter } from '../testing/in-memory-refresh-session.adapter';
+import { InMemoryUserAccountAdapter } from '../testing/in-memory-user-account.adapter';
+import { InMemoryVerificationTokenAdapter } from '../testing/in-memory-verification-token.adapter';
 
-class RepositoryFake implements LocalAuthRepositoryPort {
-  consumed = true;
-  target = { email: 'person@example.com' };
-  registerConflict = false;
-  loginIdentity: LoginIdentity | undefined = {
-    userId: 'usr_01J00000000000000000000000',
-    passwordHash: '$argon2id$fake',
-    status: 'active' as const,
-  };
-  refreshTokens = new Map<string, RefreshTokenRecord>();
-  failCreateRefreshSession = false;
-  passwordResetTarget: PasswordResetTarget | undefined = {
-    email: 'person@example.com',
-  };
-  passwordResetResult: PasswordResetResult = {
-    kind: 'reset',
-  };
-
-  registeredBindingHashes: (string | undefined)[] = [];
-  resentBindingHashes: (string | undefined)[] = [];
-  /** The binding hash the fake's open token was issued to, if any. */
-  boundBindingHash: string | undefined;
-  signedIn = false;
-
-  async register(input: {
-    readonly browserBindingHash?: string;
-  }): Promise<void> {
-    if (this.registerConflict) {
-      throw new AuthIdentityConflictError();
-    }
-    this.registeredBindingHashes.push(input.browserBindingHash);
-  }
-
-  async rotateVerificationToken(input: {
-    readonly browserBindingHash?: string;
-  }) {
-    this.resentBindingHashes.push(input.browserBindingHash);
-    return this.target;
-  }
-
-  async consumeVerificationToken(input: {
-    readonly browserBindingHash?: string;
-  }): Promise<VerificationOutcome> {
-    if (!this.consumed) {
-      return { kind: 'invalid' };
-    }
-    if (
-      !this.signedIn &&
-      input.browserBindingHash !== undefined &&
-      input.browserBindingHash === this.boundBindingHash
-    ) {
-      this.signedIn = true;
-      return { kind: 'signed_in', userId: 'usr_01J00000000000000000000000' };
-    }
-    return { kind: 'verified' };
-  }
-
-  async checkPasswordResetToken() {
-    return this.passwordResetResult.kind === 'reset'
-      ? { kind: 'valid' as const }
-      : this.passwordResetResult;
-  }
-
-  async issuePasswordResetToken(): Promise<PasswordResetTarget | undefined> {
-    return this.passwordResetTarget;
-  }
-
-  async consumePasswordReset(input: {
-    readonly passwordHash: string;
-  }): Promise<PasswordResetResult> {
-    if (this.passwordResetResult.kind === 'invalid') {
-      return this.passwordResetResult;
-    }
-    if (this.loginIdentity !== undefined) {
-      this.loginIdentity = {
-        ...this.loginIdentity,
-        passwordHash: input.passwordHash,
-      };
-    }
-    for (const [hash, token] of this.refreshTokens) {
-      this.refreshTokens.set(hash, {
-        ...token,
-        revokedAt: new Date('2026-09-20T00:00:00.000Z'),
-      });
-    }
-    this.passwordResetResult = { kind: 'invalid', reason: 'consumed' };
-    return { kind: 'reset' };
-  }
-
-  async findLoginIdentityByEmail() {
-    return this.loginIdentity;
-  }
-
-  async findUserAccountStatus() {
-    return this.loginIdentity?.status;
-  }
-
-  async createRefreshSession(input: {
-    readonly userId: string;
-    readonly token: IssuedRefreshToken;
-    readonly issuedAt: Date;
-  }): Promise<void> {
-    if (this.failCreateRefreshSession) {
-      throw new Error('durable store unavailable');
-    }
-    this.refreshTokens.set(input.token.hash, {
-      tokenId: input.token.id,
-      familyId: input.token.familyId,
-      userId: input.userId,
-      expiresAt: input.token.expiresAt,
-      usedAt: undefined,
-      revokedAt: undefined,
-    });
-  }
-
-  async findRefreshTokenByHash(tokenHash: string) {
-    return this.refreshTokens.get(tokenHash);
-  }
-
-  async rotateRefreshToken(input: {
-    readonly tokenId: string;
-    readonly tokenHash: string;
-    readonly successor: IssuedRefreshToken;
-    readonly now: Date;
-  }) {
-    const current = this.refreshTokens.get(input.tokenHash);
-    if (current === undefined) {
-      return { kind: 'invalid' as const, reason: 'missing' as const };
-    }
-    if (this.loginIdentity?.status !== 'active') {
-      return { kind: 'invalid' as const, reason: 'inactive' as const };
-    }
-    if (current.usedAt !== undefined) {
-      await this.revokeRefreshFamilyByTokenHash({
-        tokenHash: input.tokenHash,
-        now: input.now,
-      });
-      return { kind: 'invalid' as const, reason: 'used' as const };
-    }
-    if (current.revokedAt !== undefined) {
-      await this.revokeRefreshFamilyByTokenHash({
-        tokenHash: input.tokenHash,
-        now: input.now,
-      });
-      return { kind: 'invalid' as const, reason: 'revoked' as const };
-    }
-    if (current.expiresAt <= input.now) {
-      return { kind: 'invalid' as const, reason: 'expired' as const };
-    }
-    this.refreshTokens.set(input.tokenHash, { ...current, usedAt: input.now });
-    this.refreshTokens.set(input.successor.hash, {
-      tokenId: input.successor.id,
-      familyId: input.successor.familyId,
-      userId: current.userId,
-      expiresAt: input.successor.expiresAt,
-      usedAt: undefined,
-      revokedAt: undefined,
-    });
-    return { kind: 'rotated' as const, userId: current.userId };
-  }
-
-  async revokeRefreshFamilyByTokenHash(input: {
-    readonly tokenHash: string;
-    readonly now: Date;
-  }): Promise<void> {
-    const current = this.refreshTokens.get(input.tokenHash);
-    if (current === undefined) {
-      return;
-    }
-    for (const [hash, token] of this.refreshTokens) {
-      if (token.familyId === current.familyId) {
-        this.refreshTokens.set(hash, { ...token, revokedAt: input.now });
-      }
-    }
-  }
-}
+const USER_ID = 'usr_01J00000000000000000000000';
+const EMAIL = 'person@example.com';
 
 class SenderFake implements EmailSenderPort {
   fail = false;
@@ -272,13 +102,25 @@ class HasherFake implements PasswordHasherPort {
 }
 
 class TokenFake implements VerificationTokenPort {
+  issued: IssuedVerificationToken[] = [];
+  private sequence = 0;
+
+  reset(): void {
+    this.issued = [];
+    this.sequence = 0;
+  }
+
   issue(now: Date): IssuedVerificationToken {
-    return {
-      id: 'evt_01J00000000000000000000000',
-      raw: 'opaque-token',
-      hash: 'hash-token',
+    this.sequence += 1;
+    const raw = `opaque-token-${this.sequence}`;
+    const token = {
+      id: `evt_${this.sequence}`,
+      raw,
+      hash: this.hash(raw),
       expiresAt: new Date(now.getTime() + 86_400_000),
     };
+    this.issued.push(token);
+    return token;
   }
 
   hash(raw: string): string {
@@ -287,13 +129,25 @@ class TokenFake implements VerificationTokenPort {
 }
 
 class PasswordResetTokenFake implements PasswordResetTokenPort {
+  issued: IssuedPasswordResetToken[] = [];
+  private sequence = 0;
+
+  reset(): void {
+    this.issued = [];
+    this.sequence = 0;
+  }
+
   issue(now: Date): IssuedPasswordResetToken {
-    return {
-      id: 'prt_01J00000000000000000000000',
-      raw: 'reset-token',
-      hash: 'reset-hash',
+    this.sequence += 1;
+    const raw = `reset-token-${this.sequence}`;
+    const token = {
+      id: `prt_${this.sequence}`,
+      raw,
+      hash: this.hash(raw),
       expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
     };
+    this.issued.push(token);
+    return token;
   }
 
   hash(raw: string): string {
@@ -325,7 +179,11 @@ class AccessTokenIssuerFake implements UserAccessTokenIssuerPort {
 }
 
 class RefreshTokenIssuerFake implements RefreshTokenIssuerPort {
-  sequence = 0;
+  private sequence = 0;
+
+  reset(): void {
+    this.sequence = 0;
+  }
 
   issue(now: Date, familyId?: string): IssuedRefreshToken {
     this.sequence += 1;
@@ -346,33 +204,51 @@ class RefreshTokenIssuerFake implements RefreshTokenIssuerPort {
 
 describe('local auth HTTP boundary', () => {
   let app: NestFastifyApplication;
-  let repository: RepositoryFake;
+  let state: InMemoryAuthState;
+  let userAccounts: InMemoryUserAccountAdapter;
+  let verificationTokens: InMemoryVerificationTokenAdapter;
+  let passwordResetTokens: InMemoryPasswordResetTokenAdapter;
+  let refreshSessions: InMemoryRefreshSessionAdapter;
   let sender: SenderFake;
   let hasher: HasherFake;
   let limiter: LimiterFake;
+  let tokenIssuer: TokenFake;
+  let passwordResetTokenIssuer: PasswordResetTokenFake;
   let refreshTokenIssuer: RefreshTokenIssuerFake;
   let accessTokenIssuer: AccessTokenIssuerFake;
 
   beforeAll(async () => {
-    repository = new RepositoryFake();
+    state = createInMemoryAuthState();
+    userAccounts = new InMemoryUserAccountAdapter(state);
+    verificationTokens = new InMemoryVerificationTokenAdapter(state);
+    passwordResetTokens = new InMemoryPasswordResetTokenAdapter(state);
+    refreshSessions = new InMemoryRefreshSessionAdapter(state);
     sender = new SenderFake();
     hasher = new HasherFake();
     limiter = new LimiterFake();
+    tokenIssuer = new TokenFake();
+    passwordResetTokenIssuer = new PasswordResetTokenFake();
     refreshTokenIssuer = new RefreshTokenIssuerFake();
     accessTokenIssuer = new AccessTokenIssuerFake();
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
-      .overrideProvider(LOCAL_AUTH_REPOSITORY)
-      .useValue(repository)
+      .overrideProvider(USER_ACCOUNT_REPOSITORY)
+      .useValue(userAccounts)
+      .overrideProvider(VERIFICATION_TOKEN_REPOSITORY)
+      .useValue(verificationTokens)
+      .overrideProvider(PASSWORD_RESET_TOKEN_REPOSITORY)
+      .useValue(passwordResetTokens)
+      .overrideProvider(REFRESH_SESSION_REPOSITORY)
+      .useValue(refreshSessions)
       .overrideProvider(EMAIL_SENDER)
       .useValue(sender)
       .overrideProvider(PASSWORD_HASHER)
       .useValue(hasher)
       .overrideProvider(VERIFICATION_TOKEN)
-      .useClass(TokenFake)
+      .useValue(tokenIssuer)
       .overrideProvider(PASSWORD_RESET_TOKEN)
-      .useClass(PasswordResetTokenFake)
+      .useValue(passwordResetTokenIssuer)
       .overrideProvider(AUTH_RATE_LIMITER)
       .useValue(limiter)
       .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
@@ -393,6 +269,69 @@ describe('local auth HTTP boundary', () => {
   afterAll(async () => {
     await app.close();
   });
+
+  beforeEach(() => {
+    state.reset();
+    sender.fail = false;
+    sender.passwordResetEmails = [];
+    hasher.result = true;
+    hasher.verifyByHash = false;
+    limiter.allowed = true;
+    limiter.calls = [];
+    accessTokenIssuer.fail = false;
+    refreshSessions.failCreateRefreshSession = false;
+    refreshSessions.failFindRefreshToken = false;
+    tokenIssuer.reset();
+    passwordResetTokenIssuer.reset();
+    refreshTokenIssuer.reset();
+  });
+
+  /** An account holder who already verified their email. */
+  function seedActiveAccount(): void {
+    seedAccount(state, {
+      userId: USER_ID,
+      email: EMAIL,
+      passwordHash: '$argon2id$fake',
+    });
+  }
+
+  function account(): InMemoryAccount {
+    const stored = state.accounts.get(USER_ID);
+    if (stored === undefined) {
+      throw new Error('the account was never seeded');
+    }
+    return stored;
+  }
+
+  function issuedVerificationToken(index = 0): string {
+    const token = tokenIssuer.issued[index];
+    if (token === undefined) {
+      throw new Error(`no verification token was issued at position ${index}`);
+    }
+    return token.raw;
+  }
+
+  /** A password reset token the account holder received by email. */
+  async function openResetToken(): Promise<string> {
+    const now = new Date();
+    const issued = passwordResetTokenIssuer.issue(now);
+    await passwordResetTokens.issuePasswordResetToken({
+      email: EMAIL,
+      tokenId: issued.id,
+      tokenHash: issued.hash,
+      tokenExpiresAt: issued.expiresAt,
+      now,
+    });
+    return issued.raw;
+  }
+
+  function cookieOf(response: { headers: Record<string, unknown> }): string {
+    const setCookie = response.headers['set-cookie'];
+    if (setCookie === undefined) {
+      throw new Error('the response set no refresh cookie');
+    }
+    return String(setCookie).split(';', 1)[0] ?? '';
+  }
 
   it('registers and acknowledges first and repeated verification through HTTP', async () => {
     const register = await app.inject({
@@ -416,66 +355,78 @@ describe('local auth HTTP boundary', () => {
       meta: { request_id: expect.stringMatching(/^req_/) },
     });
     expect(register.payload).not.toContain('argon2');
+    const token = issuedVerificationToken();
 
     const verify = await app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
       headers: { 'content-type': 'application/json' },
-      payload: { token: 'opaque-token' },
+      payload: { token },
     });
     expect(verify.statusCode).toBe(204);
     expect(verify.payload).toBe('');
+    expect(verify.headers['set-cookie']).toBeUndefined();
 
     const replay = await app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
       headers: { 'content-type': 'application/json' },
-      payload: { token: 'opaque-token' },
+      payload: { token },
     });
     expect(replay.statusCode).toBe(204);
     expect(replay.payload).toBe('');
+    expect(replay.headers['set-cookie']).toBeUndefined();
   });
 
   describe('Verification Sign-in', () => {
     const binding = 'b'.repeat(43);
 
-    beforeEach(() => {
-      repository.consumed = true;
-      repository.signedIn = false;
-      repository.boundBindingHash = `hash:${binding}`;
-      repository.registeredBindingHashes = [];
-      repository.resentBindingHashes = [];
-    });
-
-    it('stores only the hash of the binding sent with register and resend', async () => {
+    async function registerBound(): Promise<string> {
       await app.inject({
         method: 'POST',
         url: '/v1/auth/register',
         headers: { 'content-type': 'application/json' },
         payload: {
-          email: 'bound@example.com',
-          username: 'bound_01',
+          email: EMAIL,
+          username: 'person_01',
           password: 'correct horse battery',
           browser_binding: binding,
         },
       });
+      return issuedVerificationToken();
+    }
+
+    it('stores only the hash of the binding sent with register and resend', async () => {
+      const token = await registerBound();
       await app.inject({
         method: 'POST',
         url: '/v1/auth/resend-verification',
         headers: { 'content-type': 'application/json' },
-        payload: { email: 'bound@example.com', browser_binding: binding },
+        payload: { email: EMAIL, browser_binding: binding },
+      });
+      await app.inject({
+        method: 'POST',
+        url: '/v1/auth/verify-email',
+        headers: { 'content-type': 'application/json' },
+        payload: { token, browser_binding: binding },
       });
 
-      expect(repository.registeredBindingHashes).toEqual([`hash:${binding}`]);
-      expect(repository.resentBindingHashes).toEqual([`hash:${binding}`]);
+      const stored = [...state.verificationTokens.values()];
+      expect(stored).toHaveLength(2);
+      for (const persisted of stored) {
+        expect(persisted.browserBindingHash).toBe(`hash:${binding}`);
+      }
+      expect(JSON.stringify(stored)).not.toContain(`"${binding}"`);
     });
 
     it('signs in the signup browser once when the binding matches', async () => {
+      const token = await registerBound();
+
       const first = await app.inject({
         method: 'POST',
         url: '/v1/auth/verify-email',
         headers: { 'content-type': 'application/json' },
-        payload: { token: 'opaque-token', browser_binding: binding },
+        payload: { token, browser_binding: binding },
       });
 
       expect(first.statusCode).toBe(200);
@@ -497,44 +448,43 @@ describe('local auth HTTP boundary', () => {
         ]),
       );
       expect(first.payload).not.toContain(binding);
+      expect(state.refreshTokens.size).toBe(1);
 
       const replay = await app.inject({
         method: 'POST',
         url: '/v1/auth/verify-email',
         headers: { 'content-type': 'application/json' },
-        payload: { token: 'opaque-token', browser_binding: binding },
+        payload: { token, browser_binding: binding },
       });
       expect(replay.statusCode).toBe(204);
       expect(replay.headers['set-cookie']).toBeUndefined();
+      expect(state.refreshTokens.size).toBe(1);
     });
 
     it.each([
       ['no binding', {}],
       ['another browser binding', { browser_binding: 'c'.repeat(43) }],
     ])('only verifies with %s', async (_name, extra) => {
+      const token = await registerBound();
       const response = await app.inject({
         method: 'POST',
         url: '/v1/auth/verify-email',
         headers: { 'content-type': 'application/json' },
-        payload: { token: 'opaque-token', ...extra },
+        payload: { token, ...extra },
       });
 
       expect(response.statusCode).toBe(204);
       expect(response.payload).toBe('');
       expect(response.headers['set-cookie']).toBeUndefined();
+      expect(state.refreshTokens.size).toBe(0);
     });
 
     it.each([
-      ['/v1/auth/verify-email', { token: 'opaque-token' }],
-      ['/v1/auth/resend-verification', { email: 'bound@example.com' }],
       [
         '/v1/auth/register',
-        {
-          email: 'bound@example.com',
-          username: 'bound_01',
-          password: 'correct horse battery',
-        },
+        { email: 'bound@example.com', username: 'bound_01' },
       ],
+      ['/v1/auth/resend-verification', { email: 'bound@example.com' }],
     ])('rejects a malformed binding on %s', async (url, body) => {
       const response = await app.inject({
         method: 'POST',
@@ -552,22 +502,19 @@ describe('local auth HTTP boundary', () => {
     {
       name: 'register',
       url: '/v1/auth/register',
-      body: {
-        email: 'person@example.com',
-        username: 'person_01',
-      },
+      body: { email: EMAIL, username: 'person_01' },
       validStatus: 201,
     },
     {
       name: 'login',
       url: '/v1/auth/login',
-      body: { email: 'person@example.com' },
+      body: { email: EMAIL },
       validStatus: 200,
     },
     {
       name: 'reset-password',
       url: '/v1/auth/reset-password',
-      body: { token: 'reset-token' },
+      body: {},
       validStatus: 204,
     },
   ];
@@ -589,15 +536,22 @@ describe('local auth HTTP boundary', () => {
   it.each(validPasswordBoundaryCases)(
     '$request.name accepts a $length-code-point password',
     async ({ request, password }) => {
-      if (request.name === 'reset-password') {
-        repository.passwordResetResult = { kind: 'reset' };
+      if (request.name !== 'register') {
+        seedActiveAccount();
       }
+      const body = {
+        ...request.body,
+        ...(request.name === 'reset-password'
+          ? { token: await openResetToken() }
+          : {}),
+        password,
+      };
 
       const response = await app.inject({
         method: 'POST',
         url: request.url,
         headers: { 'content-type': 'application/json' },
-        payload: { ...request.body, password },
+        payload: body,
       });
 
       expect(response.statusCode).toBe(request.validStatus);
@@ -627,39 +581,36 @@ describe('local auth HTTP boundary', () => {
   );
 
   it('keeps an identity conflict distinct from an invalid password length', async () => {
-    repository.registerConflict = true;
+    seedActiveAccount();
 
-    try {
-      const conflict = await app.inject({
-        method: 'POST',
-        url: '/v1/auth/register',
-        headers: { 'content-type': 'application/json' },
-        payload: {
-          email: 'person@example.com',
-          username: 'person_01',
-          password: 'a'.repeat(12),
-        },
-      });
-      const invalid = await app.inject({
-        method: 'POST',
-        url: '/v1/auth/register',
-        headers: { 'content-type': 'application/json' },
-        payload: {
-          email: 'person@example.com',
-          username: 'person_01',
-          password: 'a'.repeat(11),
-        },
-      });
+    const conflict = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/register',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        email: EMAIL,
+        username: 'person_01',
+        password: 'a'.repeat(12),
+      },
+    });
+    const invalid = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/register',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        email: EMAIL,
+        username: 'person_01',
+        password: 'a'.repeat(11),
+      },
+    });
 
-      expect([
-        conflict.statusCode,
-        conflict.json().error.code,
-        invalid.statusCode,
-        invalid.json().error.code,
-      ]).toEqual([409, 'AUTH_IDENTITY_UNAVAILABLE', 400, 'INVALID_REQUEST']);
-    } finally {
-      repository.registerConflict = false;
-    }
+    expect([
+      conflict.statusCode,
+      conflict.json().error.code,
+      invalid.statusCode,
+      invalid.json().error.code,
+    ]).toEqual([409, 'AUTH_IDENTITY_UNAVAILABLE', 400, 'INVALID_REQUEST']);
+    expect(state.accounts.size).toBe(1);
   });
 
   it('keeps malformed input generic and provider failures non-sensitive', async () => {
@@ -667,10 +618,11 @@ describe('local auth HTTP boundary', () => {
       method: 'POST',
       url: '/v1/auth/register',
       headers: { 'content-type': 'application/json' },
-      payload: { email: 'person@example.com' },
+      payload: { email: EMAIL },
     });
     expect(malformed.statusCode).toBe(400);
     expect(malformed.json().error).toMatchObject({ code: 'INVALID_REQUEST' });
+    expect(state.accounts.size).toBe(0);
 
     sender.fail = true;
     const failed = await app.inject({
@@ -691,8 +643,6 @@ describe('local auth HTTP boundary', () => {
   });
 
   it('returns the generic invalid-token error over HTTP', async () => {
-    repository.consumed = false;
-
     const response = await app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
@@ -717,15 +667,17 @@ describe('local auth HTTP boundary', () => {
 
     expect(response.statusCode).toBe(202);
     expect(response.payload).toBe('');
+    expect(state.verificationTokens.size).toBe(0);
   });
 
   it('returns a generic password-recovery envelope even when delivery fails', async () => {
+    seedActiveAccount();
     sender.fail = true;
     const response = await app.inject({
       method: 'POST',
       url: '/v1/auth/forgot-password',
       headers: { 'content-type': 'application/json' },
-      payload: { email: 'person@example.com' },
+      payload: { email: EMAIL },
     });
 
     expect(response.statusCode).toBe(202);
@@ -739,9 +691,7 @@ describe('local auth HTTP boundary', () => {
   });
 
   it('delivers reset instructions without exposing the token in the response', async () => {
-    sender.fail = false;
-    sender.passwordResetEmails = [];
-    repository.passwordResetTarget = { email: 'person@example.com' };
+    seedActiveAccount();
 
     const response = await app.inject({
       method: 'POST',
@@ -756,23 +706,23 @@ describe('local auth HTTP boundary', () => {
     });
     expect(sender.passwordResetEmails).toHaveLength(1);
     expect(sender.passwordResetEmails[0]).toEqual({
-      email: 'person@example.com',
-      token: 'reset-token',
+      email: EMAIL,
+      token: 'reset-token-1',
       expiresAt: expect.any(Date),
     });
     expect(response.payload).not.toContain('reset-token');
   });
 
   it('resets the password with a bodyless no-store response and clears refresh state', async () => {
-    repository.passwordResetResult = {
-      kind: 'reset',
-    };
+    seedActiveAccount();
+    const token = await openResetToken();
+
     const response = await app.inject({
       method: 'POST',
       url: '/v1/auth/reset-password',
       headers: { 'content-type': 'application/json' },
       payload: {
-        token: 'reset-token',
+        token,
         password: 'new password that works',
       },
     });
@@ -784,44 +734,36 @@ describe('local auth HTTP boundary', () => {
   });
 
   it('changes the password and revokes every existing refresh session', async () => {
-    sender.fail = false;
-    hasher.result = true;
     hasher.verifyByHash = true;
-    repository.loginIdentity = {
-      userId: 'usr_01J00000000000000000000000',
+    seedAccount(state, {
+      userId: USER_ID,
+      email: EMAIL,
       passwordHash: await hasher.hash('old password'),
-      status: 'active',
-    };
-    repository.passwordResetResult = { kind: 'reset' };
+    });
+    const token = await openResetToken();
 
     const firstLogin = await app.inject({
       method: 'POST',
       url: '/v1/auth/login',
       headers: { 'content-type': 'application/json' },
-      payload: { email: 'person@example.com', password: 'old password' },
+      payload: { email: EMAIL, password: 'old password' },
     });
     const secondLogin = await app.inject({
       method: 'POST',
       url: '/v1/auth/login',
       headers: { 'content-type': 'application/json' },
-      payload: { email: 'person@example.com', password: 'old password' },
+      payload: { email: EMAIL, password: 'old password' },
     });
     expect(firstLogin.statusCode).toBe(200);
     expect(secondLogin.statusCode).toBe(200);
-    const firstCookie = String(firstLogin.headers['set-cookie']).split(
-      ';',
-      1,
-    )[0];
-    const secondCookie = String(secondLogin.headers['set-cookie']).split(
-      ';',
-      1,
-    )[0];
+    const firstCookie = cookieOf(firstLogin);
+    const secondCookie = cookieOf(secondLogin);
 
     const reset = await app.inject({
       method: 'POST',
       url: '/v1/auth/reset-password',
       headers: { 'content-type': 'application/json' },
-      payload: { token: 'reset-token', password: 'new password that works' },
+      payload: { token, password: 'new password that works' },
     });
     expect(reset.statusCode).toBe(204);
 
@@ -829,7 +771,7 @@ describe('local auth HTTP boundary', () => {
       method: 'POST',
       url: '/v1/auth/login',
       headers: { 'content-type': 'application/json' },
-      payload: { email: 'person@example.com', password: 'old password' },
+      payload: { email: EMAIL, password: 'old password' },
     });
     expect(oldPassword.statusCode).toBe(401);
 
@@ -837,10 +779,7 @@ describe('local auth HTTP boundary', () => {
       method: 'POST',
       url: '/v1/auth/login',
       headers: { 'content-type': 'application/json' },
-      payload: {
-        email: 'person@example.com',
-        password: 'new password that works',
-      },
+      payload: { email: EMAIL, password: 'new password that works' },
     });
     expect(newPassword.statusCode).toBe(200);
 
@@ -856,41 +795,35 @@ describe('local auth HTTP boundary', () => {
     });
     expect(firstRefresh.statusCode).toBe(401);
     expect(secondRefresh.statusCode).toBe(401);
-
-    hasher.result = true;
-    hasher.verifyByHash = false;
-    repository.loginIdentity = {
-      userId: 'usr_01J00000000000000000000000',
-      passwordHash: '$argon2id$fake',
-      status: 'active',
-    };
   });
 
-  it('maps replayed reset tokens to the public invalid-token error', async () => {
-    repository.passwordResetResult = {
-      kind: 'invalid',
-      reason: 'consumed',
-    };
-    const response = await app.inject({
-      method: 'POST',
+  it('maps a replayed reset token to the public invalid-token error', async () => {
+    seedActiveAccount();
+    const token = await openResetToken();
+    const payload = {
+      method: 'POST' as const,
       url: '/v1/auth/reset-password',
       headers: { 'content-type': 'application/json' },
-      payload: {
-        token: 'reset-token',
-        password: 'new password that works',
-      },
-    });
+    };
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error).toEqual(
+    const first = await app.inject({
+      ...payload,
+      payload: { token, password: 'new password that works' },
+    });
+    expect(first.statusCode).toBe(204);
+
+    const replay = await app.inject({
+      ...payload,
+      payload: { token, password: 'another password here' },
+    });
+    expect(replay.statusCode).toBe(400);
+    expect(replay.json().error).toEqual(
       expect.objectContaining({ code: 'AUTH_PASSWORD_RESET_TOKEN_INVALID' }),
     );
-    repository.passwordResetResult = {
-      kind: 'reset',
-    };
   });
 
   it('logs in through the real HTTP stack with a narrow no-store response', async () => {
+    seedActiveAccount();
     const response = await app.inject({
       method: 'POST',
       url: '/v1/auth/login',
@@ -922,22 +855,29 @@ describe('local auth HTTP boundary', () => {
   });
 
   it('keeps unknown and inactive login failures generic', async () => {
-    repository.loginIdentity = undefined;
     hasher.result = false;
 
-    const response = await app.inject({
+    const unknown = await app.inject({
       method: 'POST',
       url: '/v1/auth/login',
       headers: { 'content-type': 'application/json' },
       payload: { email: 'nobody@example.com', password: 'wrong password' },
     });
-
-    expect(response.statusCode).toBe(401);
-    expect(response.json().error).toEqual(
+    expect(unknown.statusCode).toBe(401);
+    expect(unknown.json().error).toEqual(
       expect.objectContaining({ code: 'AUTH_CREDENTIALS_INVALID' }),
     );
-    expect(response.payload).not.toContain('nobody@example.com');
-    expect(response.payload).not.toContain('pending_verification');
+    expect(unknown.payload).not.toContain('nobody@example.com');
+
+    seedActiveAccount();
+    const pending = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: EMAIL, password: 'correct horse battery' },
+    });
+    expect(pending.statusCode).toBe(401);
+    expect(pending.payload).not.toContain('pending_verification');
   });
 
   it('rejects extra login fields at the boundary', async () => {
@@ -946,7 +886,7 @@ describe('local auth HTTP boundary', () => {
       url: '/v1/auth/login',
       headers: { 'content-type': 'application/json' },
       payload: {
-        email: 'person@example.com',
+        email: EMAIL,
         password: 'correct horse battery',
         remember_me: true,
       },
@@ -957,20 +897,14 @@ describe('local auth HTTP boundary', () => {
   });
 
   it('rotates the refresh cookie and revokes a reused family', async () => {
-    repository.loginIdentity = {
-      userId: 'usr_01J00000000000000000000000',
-      passwordHash: '$argon2id$fake',
-      status: 'active',
-    };
-    hasher.result = true;
-
+    seedActiveAccount();
     const login = await app.inject({
       method: 'POST',
       url: '/v1/auth/login',
       headers: { 'content-type': 'application/json' },
-      payload: { email: 'person@example.com', password: 'correct password' },
+      payload: { email: EMAIL, password: 'correct password' },
     });
-    const loginCookie = String(login.headers['set-cookie']).split(';', 1)[0];
+    const loginCookie = cookieOf(login);
 
     const refresh = await app.inject({
       method: 'POST',
@@ -992,10 +926,7 @@ describe('local auth HTTP boundary', () => {
       },
       meta: { request_id: expect.stringMatching(/^req_/) },
     });
-    const rotatedCookie = String(refresh.headers['set-cookie']).split(
-      ';',
-      1,
-    )[0];
+    const rotatedCookie = cookieOf(refresh);
     expect(rotatedCookie).not.toBe(loginCookie);
 
     const replay = await app.inject({
@@ -1018,13 +949,14 @@ describe('local auth HTTP boundary', () => {
   });
 
   it('serializes concurrent refresh attempts so only one token rotates', async () => {
+    seedActiveAccount();
     const login = await app.inject({
       method: 'POST',
       url: '/v1/auth/login',
       headers: { 'content-type': 'application/json' },
-      payload: { email: 'person@example.com', password: 'correct password' },
+      payload: { email: EMAIL, password: 'correct password' },
     });
-    const loginCookie = String(login.headers['set-cookie']).split(';', 1)[0];
+    const loginCookie = cookieOf(login);
 
     const [first, second] = await Promise.all([
       app.inject({
@@ -1043,26 +975,21 @@ describe('local auth HTTP boundary', () => {
   });
 
   it('rejects an expired or disabled refresh session over HTTP', async () => {
+    seedActiveAccount();
     const login = await app.inject({
       method: 'POST',
       url: '/v1/auth/login',
       headers: { 'content-type': 'application/json' },
-      payload: { email: 'person@example.com', password: 'correct password' },
+      payload: { email: EMAIL, password: 'correct password' },
     });
-    const loginCookie = String(login.headers['set-cookie']).split(';', 1)[0];
-    if (loginCookie === undefined) {
-      throw new Error('login did not set a refresh cookie');
-    }
+    const loginCookie = cookieOf(login);
     const rawToken = loginCookie.slice(loginCookie.indexOf('=') + 1);
     const tokenHash = refreshTokenIssuer.hash(rawToken);
-    const stored = repository.refreshTokens.get(tokenHash);
+    const stored = state.refreshTokens.get(tokenHash);
     if (stored === undefined) {
       throw new Error('refresh session was not persisted');
     }
-    repository.refreshTokens.set(tokenHash, {
-      ...stored,
-      expiresAt: new Date(0),
-    });
+    state.refreshTokens.set(tokenHash, { ...stored, expiresAt: new Date(0) });
 
     const expired = await app.inject({
       method: 'POST',
@@ -1075,65 +1002,52 @@ describe('local auth HTTP boundary', () => {
       method: 'POST',
       url: '/v1/auth/login',
       headers: { 'content-type': 'application/json' },
-      payload: { email: 'person@example.com', password: 'correct password' },
+      payload: { email: EMAIL, password: 'correct password' },
     });
-    const activeCookie = String(activeLogin.headers['set-cookie']).split(
-      ';',
-      1,
-    )[0];
-    repository.loginIdentity = {
-      userId: 'usr_01J00000000000000000000000',
-      passwordHash: '$argon2id$fake',
-      status: 'disabled',
-    };
+    const activeCookie = cookieOf(activeLogin);
+    account().status = 'disabled';
+
     const disabled = await app.inject({
       method: 'POST',
       url: '/v1/auth/refresh',
       headers: { cookie: activeCookie },
     });
     expect(disabled.statusCode).toBe(401);
-    repository.loginIdentity = {
-      userId: 'usr_01J00000000000000000000000',
-      passwordHash: '$argon2id$fake',
-      status: 'active',
-    };
   });
 
   it('fails closed without a cookie when durable session persistence fails', async () => {
-    repository.failCreateRefreshSession = true;
+    seedActiveAccount();
+    refreshSessions.failCreateRefreshSession = true;
     const response = await app.inject({
       method: 'POST',
       url: '/v1/auth/login',
       headers: { 'content-type': 'application/json' },
-      payload: { email: 'person@example.com', password: 'correct password' },
+      payload: { email: EMAIL, password: 'correct password' },
     });
-    repository.failCreateRefreshSession = false;
+    refreshSessions.failCreateRefreshSession = false;
 
     expect(response.statusCode).toBe(500);
     expect(response.headers['set-cookie']).toBeUndefined();
     expect(response.payload).not.toContain('ey.fake.access');
+    expect(state.refreshTokens.size).toBe(0);
   });
 
   it('logs out idempotently and only revokes the selected login family', async () => {
-    repository.loginIdentity = {
-      userId: 'usr_01J00000000000000000000000',
-      passwordHash: '$argon2id$fake',
-      status: 'active',
-    };
+    seedActiveAccount();
     const first = await app.inject({
       method: 'POST',
       url: '/v1/auth/login',
       headers: { 'content-type': 'application/json' },
-      payload: { email: 'person@example.com', password: 'correct password' },
+      payload: { email: EMAIL, password: 'correct password' },
     });
     const second = await app.inject({
       method: 'POST',
       url: '/v1/auth/login',
       headers: { 'content-type': 'application/json' },
-      payload: { email: 'person@example.com', password: 'correct password' },
+      payload: { email: EMAIL, password: 'correct password' },
     });
-    const firstCookie = String(first.headers['set-cookie']).split(';', 1)[0];
-    const secondCookie = String(second.headers['set-cookie']).split(';', 1)[0];
+    const firstCookie = cookieOf(first);
+    const secondCookie = cookieOf(second);
 
     const logout = await app.inject({
       method: 'POST',
@@ -1184,16 +1098,15 @@ describe('local auth HTTP boundary', () => {
     expect(body.statusCode).toBe(400);
     expect(body.json().error.code).toBe('INVALID_REQUEST');
 
+    seedActiveAccount();
     const login = await app.inject({
       method: 'POST',
       url: '/v1/auth/login',
       headers: { 'content-type': 'application/json' },
-      payload: { email: 'person@example.com', password: 'correct password' },
+      payload: { email: EMAIL, password: 'correct password' },
     });
-    const validCookie = String(login.headers['set-cookie']).split(';', 1)[0];
-    if (validCookie === undefined) {
-      throw new Error('login did not set a refresh cookie');
-    }
+    const validCookie = cookieOf(login);
+
     const extraCookie = await app.inject({
       method: 'POST',
       url: '/v1/auth/refresh',
@@ -1230,13 +1143,14 @@ describe('local auth HTTP boundary', () => {
   });
 
   it('clears a rotated cookie when access-token issuance fails after commit', async () => {
+    seedActiveAccount();
     const login = await app.inject({
       method: 'POST',
       url: '/v1/auth/login',
       headers: { 'content-type': 'application/json' },
-      payload: { email: 'person@example.com', password: 'correct password' },
+      payload: { email: EMAIL, password: 'correct password' },
     });
-    const loginCookie = String(login.headers['set-cookie']).split(';', 1)[0];
+    const loginCookie = cookieOf(login);
 
     accessTokenIssuer.fail = true;
     const failed = await app.inject({

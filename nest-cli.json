@@ -9,7 +9,7 @@
       "type": "swc",
       "options": {
         "stripLeadingPaths": true,
-        "ignore": ["**/*.spec.ts"]
+        "ignore": ["**/*.spec.ts", "src/modules/*/testing/**"]
       }
     }
   }

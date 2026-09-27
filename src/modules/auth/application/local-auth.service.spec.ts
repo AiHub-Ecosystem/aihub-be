@@ -1,19 +1,19 @@
 import type { LocalAccountStatus } from '../domain/local-auth';
+import {
+  type InMemoryAuthState,
+  createInMemoryAuthState,
+  seedAccount,
+} from '../testing/in-memory-auth.state';
+import { InMemoryPasswordResetTokenAdapter } from '../testing/in-memory-password-reset-token.adapter';
+import { InMemoryRefreshSessionAdapter } from '../testing/in-memory-refresh-session.adapter';
+import { InMemoryUserAccountAdapter } from '../testing/in-memory-user-account.adapter';
+import { InMemoryVerificationTokenAdapter } from '../testing/in-memory-verification-token.adapter';
 import type { AuthRateLimiterPort } from './auth-rate-limiter.port';
 import type {
   EmailSenderPort,
   PasswordResetEmailInput,
   VerificationEmailInput,
 } from './email-sender.port';
-import type {
-  LocalAuthRepositoryPort,
-  LoginIdentity,
-  PasswordResetResult,
-  PasswordResetTarget,
-  RefreshTokenRecord,
-  ResendVerificationTarget,
-  VerificationOutcome,
-} from './local-auth-repository.port';
 import { LocalAuthService } from './local-auth.service';
 import type { PasswordHasherPort } from './password-hasher.port';
 import type {
@@ -33,143 +33,13 @@ import type {
   VerificationTokenPort,
 } from './verification-token.port';
 
-class FakeRepository implements LocalAuthRepositoryPort {
-  registered: unknown[] = [];
-  resendTarget: ResendVerificationTarget | undefined = {
-    email: 'person@example.com',
-  };
-  consumed = true;
-  loginIdentity: LoginIdentity | undefined = {
-    userId: 'usr_01J00000000000000000000000',
-    passwordHash: 'argon2:correct horse battery',
-    status: 'active' as const,
-  };
-  statusByUserId = new Map<string, LocalAccountStatus>([
-    ['usr_01J00000000000000000000000', 'active' as const],
-  ]);
-  refreshTokens = new Map<string, RefreshTokenRecord>();
-  refreshLookupFailure = false;
-  passwordResetTarget: PasswordResetTarget | undefined = {
-    email: 'person@example.com',
-  };
-  passwordResetResult: PasswordResetResult = {
-    kind: 'reset',
-  };
-  passwordResetInputs: unknown[] = [];
+const USER_ID = 'usr_01J00000000000000000000000';
+const EMAIL = 'person@example.com';
+const NOW = new Date('2026-09-20T00:00:00.000Z');
 
-  async register(input: unknown): Promise<void> {
-    this.registered.push(input);
-  }
-
-  resendInputs: unknown[] = [];
-  verificationInputs: unknown[] = [];
-  verificationOutcome: VerificationOutcome = { kind: 'verified' };
-
-  async rotateVerificationToken(
-    input: unknown,
-  ): Promise<ResendVerificationTarget | undefined> {
-    this.resendInputs.push(input);
-    return this.resendTarget;
-  }
-
-  async consumeVerificationToken(input: unknown): Promise<VerificationOutcome> {
-    this.verificationInputs.push(input);
-    return this.consumed ? this.verificationOutcome : { kind: 'invalid' };
-  }
-
-  async checkPasswordResetToken() {
-    return this.passwordResetResult.kind === 'reset'
-      ? { kind: 'valid' as const }
-      : this.passwordResetResult;
-  }
-
-  async issuePasswordResetToken(): Promise<PasswordResetTarget | undefined> {
-    return this.passwordResetTarget;
-  }
-
-  async consumePasswordReset(input: unknown): Promise<PasswordResetResult> {
-    this.passwordResetInputs.push(input);
-    return this.passwordResetResult;
-  }
-
-  async findLoginIdentityByEmail() {
-    return this.loginIdentity;
-  }
-
-  async findUserAccountStatus(userId: string) {
-    return this.statusByUserId.get(userId);
-  }
-
-  async createRefreshSession(input: {
-    readonly userId: string;
-    readonly token: IssuedRefreshToken;
-    readonly issuedAt: Date;
-  }): Promise<void> {
-    this.refreshTokens.set(input.token.hash, {
-      tokenId: input.token.id,
-      familyId: input.token.familyId,
-      userId: input.userId,
-      expiresAt: input.token.expiresAt,
-      usedAt: undefined,
-      revokedAt: undefined,
-    });
-  }
-
-  async findRefreshTokenByHash(tokenHash: string) {
-    if (this.refreshLookupFailure) {
-      throw new Error('durable store unavailable');
-    }
-    return this.refreshTokens.get(tokenHash);
-  }
-
-  async rotateRefreshToken(input: {
-    readonly tokenId: string;
-    readonly tokenHash: string;
-    readonly successor: IssuedRefreshToken;
-    readonly now: Date;
-  }) {
-    const current = this.refreshTokens.get(input.tokenHash);
-    if (current === undefined) {
-      return { kind: 'invalid' as const, reason: 'missing' as const };
-    }
-    if (this.statusByUserId.get(current.userId) !== 'active') {
-      return { kind: 'invalid' as const, reason: 'inactive' as const };
-    }
-    if (current.usedAt !== undefined) {
-      return { kind: 'invalid' as const, reason: 'used' as const };
-    }
-    if (current.revokedAt !== undefined) {
-      return { kind: 'invalid' as const, reason: 'revoked' as const };
-    }
-    if (current.expiresAt <= input.now) {
-      return { kind: 'invalid' as const, reason: 'expired' as const };
-    }
-    this.refreshTokens.set(input.tokenHash, { ...current, usedAt: input.now });
-    this.refreshTokens.set(input.successor.hash, {
-      tokenId: input.successor.id,
-      familyId: input.successor.familyId,
-      userId: current.userId,
-      expiresAt: input.successor.expiresAt,
-      usedAt: undefined,
-      revokedAt: undefined,
-    });
-    return { kind: 'rotated' as const, userId: current.userId };
-  }
-
-  async revokeRefreshFamilyByTokenHash(input: {
-    readonly tokenHash: string;
-    readonly now: Date;
-  }): Promise<void> {
-    const current = this.refreshTokens.get(input.tokenHash);
-    if (current === undefined) {
-      return;
-    }
-    for (const [hash, token] of this.refreshTokens) {
-      if (token.familyId === current.familyId) {
-        this.refreshTokens.set(hash, { ...token, revokedAt: input.now });
-      }
-    }
-  }
+interface SeededAccount {
+  readonly userId: string;
+  readonly status: LocalAccountStatus;
 }
 
 class FakeHasher implements PasswordHasherPort {
@@ -189,13 +59,20 @@ class FakeHasher implements PasswordHasherPort {
 }
 
 class FakeTokenIssuer implements VerificationTokenPort {
+  issued: IssuedVerificationToken[] = [];
+  private sequence = 0;
+
   issue(now: Date): IssuedVerificationToken {
-    return {
-      id: 'evt_01J00000000000000000000000',
-      raw: 'opaque-token',
-      hash: 'hash-token',
+    this.sequence += 1;
+    const raw = `opaque-token-${this.sequence}`;
+    const token = {
+      id: `evt_${this.sequence}`,
+      raw,
+      hash: this.hash(raw),
       expiresAt: new Date(now.getTime() + 86_400_000),
     };
+    this.issued.push(token);
+    return token;
   }
 
   hash(raw: string): string {
@@ -204,13 +81,20 @@ class FakeTokenIssuer implements VerificationTokenPort {
 }
 
 class FakePasswordResetTokenIssuer implements PasswordResetTokenPort {
+  issued: IssuedPasswordResetToken[] = [];
+  private sequence = 0;
+
   issue(now: Date): IssuedPasswordResetToken {
-    return {
-      id: 'prt_01J00000000000000000000000',
-      raw: 'reset-token',
-      hash: 'reset-hash',
+    this.sequence += 1;
+    const raw = `reset-token-${this.sequence}`;
+    const token = {
+      id: `prt_${this.sequence}`,
+      raw,
+      hash: this.hash(raw),
       expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
     };
+    this.issued.push(token);
+    return token;
   }
 
   hash(raw: string): string {
@@ -254,7 +138,7 @@ class FakeAccessTokenIssuer implements UserAccessTokenIssuerPort {
 }
 
 class FakeRefreshTokenIssuer implements RefreshTokenIssuerPort {
-  sequence = 0;
+  private sequence = 0;
 
   issue(now: Date, familyId?: string): IssuedRefreshToken {
     this.sequence += 1;
@@ -284,7 +168,7 @@ class FakeLimiter implements AuthRateLimiterPort {
 }
 
 class FakeClock {
-  value = new Date('2026-09-20T00:00:00.000Z');
+  value = new Date(NOW.getTime());
 
   now(): Date {
     return new Date(this.value);
@@ -292,37 +176,81 @@ class FakeClock {
 }
 
 function service() {
-  const repository = new FakeRepository();
+  const state = createInMemoryAuthState();
+  const userAccounts = new InMemoryUserAccountAdapter(state);
+  const verificationTokens = new InMemoryVerificationTokenAdapter(state);
+  const passwordResetTokens = new InMemoryPasswordResetTokenAdapter(state);
+  const refreshSessions = new InMemoryRefreshSessionAdapter(state);
+  const tokenIssuer = new FakeTokenIssuer();
+  const passwordResetTokenIssuer = new FakePasswordResetTokenIssuer();
   const sender = new FakeSender();
   const limiter = new FakeLimiter();
   const hasher = new FakeHasher();
-  const refreshTokenIssuer = new FakeRefreshTokenIssuer();
   const clock = new FakeClock();
+
   const local = new LocalAuthService(
-    repository,
+    userAccounts,
+    verificationTokens,
+    passwordResetTokens,
+    refreshSessions,
     hasher,
-    new FakeTokenIssuer(),
-    new FakePasswordResetTokenIssuer(),
+    tokenIssuer,
+    passwordResetTokenIssuer,
     sender,
     limiter,
     new FakeAccessTokenIssuer(),
-    refreshTokenIssuer,
+    new FakeRefreshTokenIssuer(),
     clock,
   );
   return {
     local,
-    repository,
+    state,
+    tokenIssuer,
+    passwordResetTokenIssuer,
+    passwordResetTokens,
+    refreshSessions,
     sender,
     limiter,
     hasher,
-    refreshTokenIssuer,
     clock,
   };
 }
 
+/** An active account holder who already verified their email. */
+function seedActiveAccount(state: InMemoryAuthState): void {
+  seedAccount(state, {
+    userId: USER_ID,
+    email: EMAIL,
+    username: 'person_01',
+    passwordHash: 'argon2:correct horse battery',
+  });
+}
+
+function setStatus(
+  state: InMemoryAuthState,
+  status: 'active' | 'disabled',
+): void {
+  const account = state.accounts.get(USER_ID);
+  if (account === undefined) {
+    throw new Error('the account was never seeded');
+  }
+  account.status = status;
+}
+
+function issuedToken(
+  issued: readonly { readonly raw: string }[] | undefined,
+  index = 0,
+): string {
+  const token = issued?.[index];
+  if (token === undefined) {
+    throw new Error(`no token was issued at position ${index}`);
+  }
+  return token.raw;
+}
+
 describe('LocalAuthService', () => {
   it('registers a canonical pending account and sends only the opaque token', async () => {
-    const { local, repository, sender, limiter } = service();
+    const { local, state, sender, limiter, tokenIssuer } = service();
 
     await expect(
       local.register(
@@ -338,31 +266,55 @@ describe('LocalAuthService', () => {
       username: 'person_01',
       status: 'pending_verification',
     });
-    expect(repository.registered[0]).toMatchObject({
-      email: 'person@example.com',
-      username: 'person_01',
-      passwordHash: 'argon2:  exact password  ',
-      tokenHash: 'hash-token',
-    });
+    expect([...state.accounts.values()]).toEqual([
+      expect.objectContaining({
+        email: 'person@example.com',
+        username: 'person_01',
+        status: 'pending_verification',
+        passwordHash: 'argon2:  exact password  ',
+      }),
+    ]);
+    expect([...state.verificationTokens.keys()]).toEqual([
+      tokenIssuer.hash('opaque-token-1'),
+    ]);
     expect(sender.sent[0]).toMatchObject({
       email: 'person@example.com',
-      token: 'opaque-token',
+      token: 'opaque-token-1',
     });
     expect(limiter.calls).toHaveLength(2);
   });
 
+  it('reports a taken email or username as the one generic identity conflict', async () => {
+    const { local, state, sender } = service();
+    const input = {
+      email: 'person@example.com',
+      username: 'person_01',
+      password: 'correct horse battery',
+    };
+    await local.register(input, '203.0.113.7');
+
+    await expect(local.register(input, '203.0.113.7')).rejects.toMatchObject({
+      code: 'AUTH_IDENTITY_UNAVAILABLE',
+      httpStatus: 409,
+    });
+    expect(state.accounts.size).toBe(1);
+    expect(sender.sent).toHaveLength(1);
+  });
+
   it('returns a generic resend result for unknown addresses', async () => {
-    const { local, repository, sender } = service();
-    repository.resendTarget = undefined;
+    const { local, state, sender } = service();
 
     await expect(
       local.resend('nobody@example.com', '203.0.113.7'),
     ).resolves.toBe(undefined);
+    expect(state.verificationTokens.size).toBe(0);
     expect(sender.sent).toHaveLength(0);
   });
 
   it('returns one recovery message, sends only for an active target, and swallows provider failure', async () => {
-    const { local, repository, sender, limiter } = service();
+    const { local, state, sender, limiter, passwordResetTokenIssuer } =
+      service();
+    seedActiveAccount(state);
     sender.fail = true;
 
     await expect(
@@ -370,7 +322,9 @@ describe('LocalAuthService', () => {
     ).resolves.toEqual({
       message: 'If the account exists, reset instructions have been sent.',
     });
-    expect(repository.passwordResetTarget).toBeDefined();
+    expect([...state.passwordResetTokens.keys()]).toEqual([
+      passwordResetTokenIssuer.hash('reset-token-1'),
+    ]);
     expect(limiter.calls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -386,12 +340,12 @@ describe('LocalAuthService', () => {
       ]),
     );
 
-    repository.passwordResetTarget = undefined;
     await expect(
       local.forgotPassword({ email: 'nobody@example.com' }, '203.0.113.7'),
     ).resolves.toEqual({
       message: 'If the account exists, reset instructions have been sent.',
     });
+    expect(state.passwordResetTokens.size).toBe(1);
   });
 
   it.each([11, 129])(
@@ -401,7 +355,7 @@ describe('LocalAuthService', () => {
 
       await expect(
         local.resetPassword(
-          { token: 'reset-token', password: 'a'.repeat(length) },
+          { token: 'reset-token-1', password: 'a'.repeat(length) },
           '203.0.113.7',
         ),
       ).rejects.toMatchObject({
@@ -411,20 +365,40 @@ describe('LocalAuthService', () => {
     },
   );
 
-  it('maps every unusable reset token to one public error and counts only failures', async () => {
-    const { local, repository, limiter, hasher } = service();
-    repository.passwordResetResult = { kind: 'invalid', reason: 'consumed' };
+  it('resets once, then maps the replayed token to one public error that counts as a failure', async () => {
+    const { local, state, limiter, hasher, passwordResetTokenIssuer } =
+      service();
+    seedActiveAccount(state);
+    await local.forgotPassword({ email: EMAIL }, '203.0.113.7');
+    const token = issuedToken(passwordResetTokenIssuer.issued);
 
     await expect(
       local.resetPassword(
-        { token: 'reset-token', password: 'new password that works' },
+        { token, password: 'new password that works' },
+        '203.0.113.7',
+      ),
+    ).resolves.toBeUndefined();
+    expect(hasher.hashed).toEqual(['new password that works']);
+    expect(limiter.calls).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ scope: 'reset_ip' }),
+        expect.objectContaining({ scope: 'reset_token' }),
+      ]),
+    );
+    expect(state.accounts.get(USER_ID)?.passwordHash).toBe(
+      'argon2:new password that works',
+    );
+
+    await expect(
+      local.resetPassword(
+        { token, password: 'another password here' },
         '203.0.113.7',
       ),
     ).rejects.toMatchObject({
       code: 'AUTH_PASSWORD_RESET_TOKEN_INVALID',
       httpStatus: 400,
     });
-    expect(hasher.hashed).toHaveLength(0);
+    expect(hasher.hashed).toHaveLength(1);
     expect(limiter.calls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -439,20 +413,10 @@ describe('LocalAuthService', () => {
         }),
       ]),
     );
-
-    const successful = service();
-    await expect(
-      successful.local.resetPassword(
-        { token: 'reset-token', password: 'new password that works' },
-        '203.0.113.7',
-      ),
-    ).resolves.toBeUndefined();
-    expect(successful.hasher.hashed).toEqual(['new password that works']);
-    expect(successful.limiter.calls).toHaveLength(0);
   });
 
   it('maps provider failure on registration without rolling back persistence', async () => {
-    const { local, sender, repository } = service();
+    const { local, state, sender } = service();
     sender.fail = true;
 
     await expect(
@@ -465,12 +429,12 @@ describe('LocalAuthService', () => {
         '203.0.113.7',
       ),
     ).rejects.toMatchObject({ code: 'AUTH_EMAIL_DELIVERY_UNAVAILABLE' });
-    expect(repository.registered).toHaveLength(1);
+    expect(state.accounts.size).toBe(1);
+    expect(state.verificationTokens.size).toBe(1);
   });
 
-  it('uses one generic invalid result for replay/expiry/unknown verification tokens', async () => {
-    const { local, repository } = service();
-    repository.consumed = false;
+  it('uses one generic invalid result for an unknown verification token', async () => {
+    const { local } = service();
 
     await expect(
       local.verify('bad-token', '203.0.113.7'),
@@ -482,65 +446,88 @@ describe('LocalAuthService', () => {
   describe('Verification Sign-in', () => {
     const binding = 'b'.repeat(43);
 
-    it('passes only the hash of the Signup Browser Binding to storage', async () => {
-      const { local, repository } = service();
-
-      await local.register(
+    async function registerBound(context: ReturnType<typeof service>) {
+      await context.local.register(
         {
-          email: 'person@example.com',
+          email: EMAIL,
           username: 'person_01',
           password: 'correct horse battery',
         },
         '203.0.113.7',
         binding,
       );
-      await local.resend('person@example.com', '203.0.113.7', binding);
-      await local.verify('opaque-token', '203.0.113.7', binding);
+      return issuedToken(context.tokenIssuer.issued);
+    }
 
-      for (const input of [
-        repository.registered[0],
-        repository.resendInputs[0],
-        repository.verificationInputs[0],
-      ]) {
-        expect(input).toMatchObject({ browserBindingHash: `hash:${binding}` });
-        expect(JSON.stringify(input)).not.toContain(`"${binding}"`);
+    it('stores only the hash of the Signup Browser Binding', async () => {
+      const context = service();
+      await registerBound(context);
+      await context.local.resend(EMAIL, '203.0.113.7', binding);
+      const resend = issuedToken(context.tokenIssuer.issued, 1);
+      await context.local.verify(resend, '203.0.113.7', binding);
+
+      const stored = [...context.state.verificationTokens.values()];
+      expect(stored).toHaveLength(2);
+      for (const persisted of stored) {
+        expect(persisted.browserBindingHash).toBe(`hash:${binding}`);
       }
+      expect(JSON.stringify(stored)).not.toContain(`"${binding}"`);
     });
 
-    it('returns no session when storage only verifies', async () => {
-      const { local, repository } = service();
+    it('returns no session when the browser binding does not match', async () => {
+      const context = service();
+      const token = await registerBound(context);
 
       await expect(
-        local.verify('opaque-token', '203.0.113.7'),
+        context.local.verify(token, '203.0.113.7'),
       ).resolves.toBeUndefined();
-      expect(repository.verificationInputs[0]).not.toHaveProperty(
-        'browserBindingHash',
-      );
-      expect(repository.refreshTokens.size).toBe(0);
+      expect(context.state.refreshTokens.size).toBe(0);
+      expect(
+        [...context.state.verificationTokens.values()][0]?.signedInAt,
+      ).toBeUndefined();
     });
 
-    it('issues a login-equivalent session when storage grants the sign-in', async () => {
-      const { local, repository } = service();
-      repository.verificationOutcome = {
-        kind: 'signed_in',
-        userId: 'usr_01J00000000000000000000000',
-      };
+    it('leaves the bound browser its sign-in after another device verifies', async () => {
+      const context = service();
+      const token = await registerBound(context);
 
       await expect(
-        local.verify('opaque-token', '203.0.113.7', binding),
+        context.local.verify(token, '203.0.113.7'),
+      ).resolves.toBeUndefined();
+      await expect(
+        context.local.verify(token, '203.0.113.7', binding),
       ).resolves.toEqual({
-        accessToken: 'jwt-for-usr_01J00000000000000000000000',
+        accessToken: 'jwt-for-usr_in_memory_1',
+        expiresIn: 900,
+        refreshToken: 'refresh-2',
+      });
+    });
+
+    it('issues a login-equivalent session once, committed with the claim', async () => {
+      const context = service();
+      const token = await registerBound(context);
+
+      await expect(
+        context.local.verify(token, '203.0.113.7', binding),
+      ).resolves.toEqual({
+        accessToken: 'jwt-for-usr_in_memory_1',
         expiresIn: 900,
         refreshToken: 'refresh-1',
       });
-      expect([...repository.refreshTokens.values()]).toEqual([
-        expect.objectContaining({ userId: 'usr_01J00000000000000000000000' }),
+      expect([...context.state.refreshTokens.values()]).toEqual([
+        expect.objectContaining({ userId: 'usr_in_memory_1' }),
       ]);
+
+      await expect(
+        context.local.verify(token, '203.0.113.7', binding),
+      ).resolves.toBeUndefined();
+      expect(context.state.refreshTokens.size).toBe(1);
     });
   });
 
   it('issues an access token only for an active account and does not count success', async () => {
-    const { local, limiter, hasher } = service();
+    const { local, state, limiter, hasher } = service();
+    seedActiveAccount(state);
 
     await expect(
       local.login(
@@ -548,7 +535,7 @@ describe('LocalAuthService', () => {
         '203.0.113.7',
       ),
     ).resolves.toEqual({
-      accessToken: 'jwt-for-usr_01J00000000000000000000000',
+      accessToken: `jwt-for-${USER_ID}`,
       expiresIn: 900,
       refreshToken: 'refresh-1',
     });
@@ -561,87 +548,77 @@ describe('LocalAuthService', () => {
     );
   });
 
-  it.each([
+  it.each<[string, SeededAccount | undefined]>([
     ['unknown email', undefined],
     [
       'pending account',
-      {
-        userId: 'usr_pending',
-        passwordHash: 'hash',
-        status: 'pending_verification' as const,
-      },
+      { userId: 'usr_pending', status: 'pending_verification' },
     ],
-    [
-      'disabled account',
-      {
-        userId: 'usr_disabled',
+    ['disabled account', { userId: 'usr_disabled', status: 'disabled' }],
+  ])('returns one generic credential error for %s', async (_label, seeded) => {
+    const { local, state, limiter, hasher } = service();
+    if (seeded !== undefined) {
+      seedAccount(state, {
+        userId: seeded.userId,
+        email: EMAIL,
+        username: 'person_01',
         passwordHash: 'hash',
-        status: 'disabled' as const,
-      },
-    ],
-  ])(
-    'returns one generic credential error for %s',
-    async (_label, identity) => {
-      const { local, repository, limiter, hasher } = service();
-      repository.loginIdentity = identity;
-      hasher.result = false;
-
-      await expect(
-        local.login(
-          { email: 'person@example.com', password: 'wrong password' },
-          '203.0.113.7',
-        ),
-      ).rejects.toMatchObject({
-        code: 'AUTH_CREDENTIALS_INVALID',
-        httpStatus: 401,
+        status: seeded.status,
       });
-      expect(hasher.verified).toHaveLength(1);
-      expect(limiter.calls).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            scope: 'login_ip',
-            limit: 20,
-            windowMs: 300000,
-          }),
-          expect.objectContaining({
-            scope: 'login_email',
-            limit: 5,
-            windowMs: 900000,
-          }),
-        ]),
-      );
-    },
-  );
+    }
+    hasher.result = false;
+
+    await expect(
+      local.login({ email: EMAIL, password: 'wrong password' }, '203.0.113.7'),
+    ).rejects.toMatchObject({
+      code: 'AUTH_CREDENTIALS_INVALID',
+      httpStatus: 401,
+    });
+    expect(hasher.verified).toHaveLength(1);
+    expect(limiter.calls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scope: 'login_ip',
+          limit: 20,
+          windowMs: 300000,
+        }),
+        expect.objectContaining({
+          scope: 'login_email',
+          limit: 5,
+          windowMs: 900000,
+        }),
+      ]),
+    );
+  });
 
   it('returns a rate-limit error after a failed credential attempt when the limiter denies it', async () => {
-    const { local, limiter, hasher } = service();
+    const { local, state, limiter, hasher } = service();
+    seedActiveAccount(state);
     limiter.allowed = false;
     hasher.result = false;
 
     await expect(
-      local.login(
-        { email: 'person@example.com', password: 'wrong password' },
-        '203.0.113.7',
-      ),
+      local.login({ email: EMAIL, password: 'wrong password' }, '203.0.113.7'),
     ).rejects.toMatchObject({ code: 'RATE_LIMITED', httpStatus: 429 });
   });
 
   it('rotates a valid refresh credential and does not count successful refreshes', async () => {
-    const { local, repository, limiter } = service();
+    const { local, state, limiter } = service();
+    seedActiveAccount(state);
     const login = await local.login(
-      { email: 'person@example.com', password: 'correct horse battery' },
+      { email: EMAIL, password: 'correct horse battery' },
       '203.0.113.7',
     );
 
     await expect(
       local.refresh(login.refreshToken, '203.0.113.7'),
     ).resolves.toEqual({
-      accessToken: 'jwt-for-usr_01J00000000000000000000000',
+      accessToken: `jwt-for-${USER_ID}`,
       expiresIn: 900,
       refreshToken: 'refresh-2',
     });
-    expect(repository.refreshTokens.get('hash:refresh-1')).toMatchObject({
-      usedAt: new Date('2026-09-20T00:00:00.000Z'),
+    expect(state.refreshTokens.get('hash:refresh-1')).toMatchObject({
+      usedAt: NOW,
     });
     expect(limiter.calls).not.toEqual(
       expect.arrayContaining([
@@ -649,6 +626,44 @@ describe('LocalAuthService', () => {
         expect.objectContaining({ scope: 'refresh_token' }),
       ]),
     );
+  });
+
+  it('revokes the whole family when a rotated token is replayed', async () => {
+    const { local, state } = service();
+    seedActiveAccount(state);
+    const login = await local.login(
+      { email: EMAIL, password: 'correct horse battery' },
+      '203.0.113.7',
+    );
+    const rotated = await local.refresh(login.refreshToken, '203.0.113.7');
+
+    await expect(
+      local.refresh(login.refreshToken, '203.0.113.7'),
+    ).rejects.toMatchObject({ code: 'AUTH_REFRESH_TOKEN_INVALID' });
+    expect(state.refreshTokens.get('hash:refresh-2')?.revokedAt).toEqual(NOW);
+    await expect(
+      local.refresh(rotated.refreshToken, '203.0.113.7'),
+    ).rejects.toMatchObject({ code: 'AUTH_REFRESH_TOKEN_INVALID' });
+  });
+
+  it('logs out idempotently and leaves another login usable', async () => {
+    const { local, state } = service();
+    seedActiveAccount(state);
+    const first = await local.login(
+      { email: EMAIL, password: 'correct horse battery' },
+      '203.0.113.7',
+    );
+    const second = await local.login(
+      { email: EMAIL, password: 'correct horse battery' },
+      '203.0.113.7',
+    );
+
+    await expect(local.logout(first.refreshToken)).resolves.toBeUndefined();
+    await expect(local.logout(first.refreshToken)).resolves.toBeUndefined();
+    expect(state.refreshTokens.get('hash:refresh-1')?.revokedAt).toEqual(NOW);
+    await expect(
+      local.refresh(second.refreshToken, '203.0.113.7'),
+    ).resolves.toMatchObject({ accessToken: `jwt-for-${USER_ID}` });
   });
 
   it('uses only the IP failure limit when the cookie is missing', async () => {
@@ -669,9 +684,10 @@ describe('LocalAuthService', () => {
   });
 
   it('uses the strict expiry boundary and leaves the family available for audit', async () => {
-    const { local, repository, clock } = service();
+    const { local, state, clock } = service();
+    seedActiveAccount(state);
     const login = await local.login(
-      { email: 'person@example.com', password: 'correct horse battery' },
+      { email: EMAIL, password: 'correct horse battery' },
       '203.0.113.7',
     );
     clock.value = new Date('2026-10-20T00:00:00.000Z');
@@ -681,19 +697,20 @@ describe('LocalAuthService', () => {
     ).rejects.toMatchObject({
       code: 'AUTH_REFRESH_TOKEN_INVALID',
     });
-    expect(repository.refreshTokens.get('hash:refresh-1')).toMatchObject({
+    expect(state.refreshTokens.get('hash:refresh-1')).toMatchObject({
       usedAt: undefined,
       revokedAt: undefined,
     });
   });
 
   it('rejects disabled accounts without consuming a failure limit for infrastructure errors', async () => {
-    const { local, repository, limiter } = service();
+    const { local, state, limiter } = service();
+    seedActiveAccount(state);
     const login = await local.login(
-      { email: 'person@example.com', password: 'correct horse battery' },
+      { email: EMAIL, password: 'correct horse battery' },
       '203.0.113.7',
     );
-    repository.statusByUserId.set('usr_01J00000000000000000000000', 'disabled');
+    setStatus(state, 'disabled');
 
     await expect(
       local.refresh(login.refreshToken, '203.0.113.7'),
@@ -708,7 +725,7 @@ describe('LocalAuthService', () => {
     );
 
     const unavailable = service();
-    unavailable.repository.refreshLookupFailure = true;
+    unavailable.refreshSessions.failFindRefreshToken = true;
     await expect(
       unavailable.local.refresh('refresh-unknown', '203.0.113.7'),
     ).rejects.toThrow('durable store unavailable');

@@ -14,6 +14,8 @@ export interface PostgresAuthClient extends PostgresAuthQueryClient {
   close(): Promise<void>;
 }
 
+export const POSTGRES_AUTH_CLIENT = Symbol('POSTGRES_AUTH_CLIENT');
+
 export function createPostgresAuthClient(
   databaseUrl: string,
 ): PostgresAuthClient {

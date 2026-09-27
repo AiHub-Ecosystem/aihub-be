@@ -8,14 +8,14 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { AppError } from '../../../common/errors/app-error';
 import {
-  LOCAL_AUTH_REPOSITORY,
-  type LocalAuthRepositoryPort,
-} from '../application/local-auth-repository.port';
-import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
   type VerifiedUserAccessToken,
 } from '../application/user-access-token.port';
+import {
+  USER_ACCOUNT_REPOSITORY,
+  type UserAccountRepositoryPort,
+} from '../application/user-account.port';
 import type { LocalAccountStatus } from '../domain/local-auth';
 
 declare module 'fastify' {
@@ -82,9 +82,9 @@ export class UserAccessJwtGuard implements CanActivate {
   constructor(
     @Inject(USER_ACCESS_TOKEN_VERIFIER)
     private readonly verifier: UserAccessTokenVerifierPort,
-    @Inject(LOCAL_AUTH_REPOSITORY)
-    private readonly repository: Pick<
-      LocalAuthRepositoryPort,
+    @Inject(USER_ACCOUNT_REPOSITORY)
+    private readonly userAccounts: Pick<
+      UserAccountRepositoryPort,
       'findUserAccountStatus'
     >,
   ) {}
@@ -128,7 +128,7 @@ export class UserAccessJwtGuard implements CanActivate {
 
     let status: LocalAccountStatus | undefined;
     try {
-      status = await this.repository.findUserAccountStatus(verified.userId);
+      status = await this.userAccounts.findUserAccountStatus(verified.userId);
     } catch (error) {
       throw configurationError(error);
     }

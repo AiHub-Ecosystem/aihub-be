@@ -1,20 +1,33 @@
 import { ulid } from 'ulid';
 
-import {
-  AuthIdentityConflictError,
-  type CreateRefreshSessionInput,
-  type LocalAuthRepositoryPort,
-  type LoginIdentity,
-  type PasswordResetResult,
-  type PasswordResetTarget,
-  type PasswordResetTokenCheckResult,
-  type RefreshTokenRecord,
-  type RefreshTokenRotationResult,
-  type RegisterLocalAccountInput,
-  type ResendVerificationTarget,
-  type RotateRefreshTokenInput,
-  type VerificationOutcome,
-} from '../application/local-auth-repository.port';
+import { AuthIdentityConflictError } from '../application/auth-identity-conflict.error';
+import type {
+  IssuePasswordResetTokenInput,
+  PasswordResetResult,
+  PasswordResetTarget,
+  PasswordResetTokenCheckResult,
+  PasswordResetTokenRepositoryPort,
+} from '../application/password-reset-token-repository.port';
+import type {
+  CreateRefreshSessionInput,
+  RefreshSessionRepositoryPort,
+  RefreshTokenRecord,
+  RefreshTokenRotationResult,
+  RotateRefreshTokenInput,
+} from '../application/refresh-session-repository.port';
+import type {
+  LoginIdentity,
+  RegisterLocalAccountInput,
+  UserAccountRepositoryPort,
+} from '../application/user-account.port';
+import type {
+  ConsumeVerificationTokenInput,
+  ResendVerificationTarget,
+  RotateVerificationTokenInput,
+  VerificationOutcome,
+  VerificationTokenRepositoryPort,
+} from '../application/verification-token-repository.port';
+import type { LocalAccountStatus } from '../domain/local-auth';
 import type {
   PostgresAuthClient,
   PostgresAuthQueryClient,
@@ -72,7 +85,13 @@ function inspectPasswordResetToken(
   return { kind: 'valid', id: row.id, userId: row.user_account_id };
 }
 
-export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
+export class PostgresLocalAuthRepository
+  implements
+    UserAccountRepositoryPort,
+    VerificationTokenRepositoryPort,
+    PasswordResetTokenRepositoryPort,
+    RefreshSessionRepositoryPort
+{
   constructor(private readonly client: PostgresAuthClient) {}
 
   async register(input: RegisterLocalAccountInput): Promise<void> {
@@ -128,14 +147,9 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
     }
   }
 
-  async rotateVerificationToken(input: {
-    readonly email: string;
-    readonly tokenId: string;
-    readonly tokenHash: string;
-    readonly tokenExpiresAt: Date;
-    readonly browserBindingHash?: string;
-    readonly now: Date;
-  }): Promise<ResendVerificationTarget | undefined> {
+  async rotateVerificationToken(
+    input: RotateVerificationTokenInput,
+  ): Promise<ResendVerificationTarget | undefined> {
     try {
       return await this.client.transaction(async (transaction) => {
         const rows = await transaction.query(
@@ -193,13 +207,9 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
     }
   }
 
-  async issuePasswordResetToken(input: {
-    readonly email: string;
-    readonly tokenId: string;
-    readonly tokenHash: string;
-    readonly tokenExpiresAt: Date;
-    readonly now: Date;
-  }): Promise<PasswordResetTarget | undefined> {
+  async issuePasswordResetToken(
+    input: IssuePasswordResetTokenInput,
+  ): Promise<PasswordResetTarget | undefined> {
     return this.client.transaction(async (transaction) => {
       const rows = await transaction.query(
         `
@@ -248,11 +258,9 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
     });
   }
 
-  async consumeVerificationToken(input: {
-    readonly tokenHash: string;
-    readonly browserBindingHash?: string;
-    readonly now: Date;
-  }): Promise<VerificationOutcome> {
+  async consumeVerificationToken(
+    input: ConsumeVerificationTokenInput,
+  ): Promise<VerificationOutcome> {
     return this.client.transaction(async (transaction) => {
       const accounts = await transaction.query(
         `
@@ -328,9 +336,18 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
           `,
           [token.id, input.now],
         );
-        return claimed.length > 0
-          ? { kind: 'signed_in', userId: accountId }
-          : VERIFIED;
+        if (claimed.length === 0) {
+          return VERIFIED;
+        }
+        // The claim, its Refresh Session, and the verification above commit
+        // together, so a failed insert rolls all of them back and the request
+        // stays retryable while the token is unexpired.
+        await this.insertRefreshSession(transaction, {
+          userId: accountId,
+          token: input.signInSession.token,
+          issuedAt: input.signInSession.issuedAt,
+        });
+        return { kind: 'signed_in', userId: accountId };
       };
 
       if (account.status === 'active') {
@@ -487,7 +504,9 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
     };
   }
 
-  async findUserAccountStatus(userId: string) {
+  async findUserAccountStatus(
+    userId: string,
+  ): Promise<LocalAccountStatus | undefined> {
     const rows = await this.client.query(
       'SELECT status FROM user_accounts WHERE id = $1',
       [userId],
@@ -507,22 +526,7 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
   }
 
   async createRefreshSession(input: CreateRefreshSessionInput): Promise<void> {
-    await this.client.query(
-      `
-        INSERT INTO refresh_tokens (
-          id, family_id, user_account_id, token_hash, issued_at, expires_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6)
-      `,
-      [
-        input.token.id,
-        input.token.familyId,
-        input.userId,
-        input.token.hash,
-        input.issuedAt,
-        input.token.expiresAt,
-      ],
-    );
+    await this.insertRefreshSession(this.client, input);
   }
 
   async findRefreshTokenByHash(
@@ -592,22 +596,11 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
         `,
         [input.tokenId, input.now],
       );
-      await transaction.query(
-        `
-          INSERT INTO refresh_tokens (
-            id, family_id, user_account_id, token_hash, issued_at, expires_at
-          )
-          VALUES ($1, $2, $3, $4, $5, $6)
-        `,
-        [
-          input.successor.id,
-          input.successor.familyId,
-          record.userId,
-          input.successor.hash,
-          input.now,
-          input.successor.expiresAt,
-        ],
-      );
+      await this.insertRefreshSession(transaction, {
+        userId: record.userId,
+        token: input.successor,
+        issuedAt: input.now,
+      });
       return { kind: 'rotated', userId: record.userId };
     });
   }
@@ -632,6 +625,29 @@ export class PostgresLocalAuthRepository implements LocalAuthRepositoryPort {
       }
       await this.revokeFamily(transaction, familyId, input.now);
     });
+  }
+
+  /** Stores only the token hash, on the client or inside a transaction. */
+  private async insertRefreshSession(
+    client: PostgresAuthQueryClient,
+    input: CreateRefreshSessionInput,
+  ): Promise<void> {
+    await client.query(
+      `
+        INSERT INTO refresh_tokens (
+          id, family_id, user_account_id, token_hash, issued_at, expires_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `,
+      [
+        input.token.id,
+        input.token.familyId,
+        input.userId,
+        input.token.hash,
+        input.issuedAt,
+        input.token.expiresAt,
+      ],
+    );
   }
 
   private refreshTokenRecord(

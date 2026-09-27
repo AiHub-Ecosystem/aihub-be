@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
+import type { IssuedRefreshToken } from '../../src/modules/auth/application/refresh-token.port';
 import { createPostgresAuthClient } from '../../src/modules/auth/infrastructure/postgres-auth.client';
 import { PostgresLocalAuthRepository } from '../../src/modules/auth/infrastructure/postgres-local-auth.repository';
 
@@ -84,9 +85,22 @@ async function insertToken(options: {
 async function verify(hash: string, now = NOW): Promise<boolean> {
   const outcome = await repository.consumeVerificationToken({
     tokenHash: hash,
+    signInSession: signInSession(tokenHash()),
     now,
   });
   return outcome.kind !== 'invalid';
+}
+
+/** The pre-issued session a Verification Sign-in commits with its claim. */
+function signInSession(tokenHash: string) {
+  const token: IssuedRefreshToken = {
+    id: `rft_${ulid()}`,
+    familyId: `rfs_${ulid()}`,
+    raw: 'raw-refresh-token',
+    hash: tokenHash,
+    expiresAt: EXPIRES_AT,
+  };
+  return { token, issuedAt: NOW };
 }
 
 async function beginLockHolderTransaction() {
@@ -408,6 +422,29 @@ describe('local email verification against PostgreSQL', () => {
       ]);
     });
 
+    it('leaves no session behind when the request only verifies', async () => {
+      const userId = await seedAccount();
+      const hash = tokenHash();
+      await insertToken({ userId, hash, bindingHash: tokenHash() });
+
+      // Another browser presents the link, so it verifies without a binding
+      // that could claim the sign-in.
+      await expect(
+        repository.consumeVerificationToken({
+          tokenHash: hash,
+          browserBindingHash: tokenHash(),
+          signInSession: signInSession(tokenHash()),
+          now: NOW,
+        }),
+      ).resolves.toEqual({ kind: 'verified' });
+      expect(
+        await pool.query(
+          'SELECT 1 FROM refresh_tokens WHERE user_account_id = $1',
+          [userId],
+        ),
+      ).toMatchObject({ rows: [] });
+    });
+
     it('signs in once, only with the matching binding, even after an earlier verification', async () => {
       const userId = await seedAccount();
       const hash = tokenHash();
@@ -415,12 +452,17 @@ describe('local email verification against PostgreSQL', () => {
       await insertToken({ userId, hash, bindingHash: binding });
 
       await expect(
-        repository.consumeVerificationToken({ tokenHash: hash, now: NOW }),
+        repository.consumeVerificationToken({
+          tokenHash: hash,
+          signInSession: signInSession(tokenHash()),
+          now: NOW,
+        }),
       ).resolves.toEqual({ kind: 'verified' });
       await expect(
         repository.consumeVerificationToken({
           tokenHash: hash,
           browserBindingHash: tokenHash(),
+          signInSession: signInSession(tokenHash()),
           now: NOW,
         }),
       ).resolves.toEqual({ kind: 'verified' });
@@ -428,6 +470,7 @@ describe('local email verification against PostgreSQL', () => {
         repository.consumeVerificationToken({
           tokenHash: hash,
           browserBindingHash: binding,
+          signInSession: signInSession(tokenHash()),
           now: NOW,
         }),
       ).resolves.toEqual({ kind: 'signed_in', userId });
@@ -435,9 +478,79 @@ describe('local email verification against PostgreSQL', () => {
         repository.consumeVerificationToken({
           tokenHash: hash,
           browserBindingHash: binding,
+          signInSession: signInSession(tokenHash()),
           now: NOW,
         }),
       ).resolves.toEqual({ kind: 'verified' });
+
+      const sessions = await pool.query<{ token_hash: string }>(
+        'SELECT token_hash FROM refresh_tokens WHERE user_account_id = $1',
+        [userId],
+      );
+      expect(sessions.rows).toHaveLength(1);
+    });
+
+    it('keeps the one-time sign-in available when the Refresh Session write fails, then signs in on retry', async () => {
+      const userId = await seedAccount();
+      const hash = tokenHash();
+      const binding = tokenHash();
+      await insertToken({ userId, hash, bindingHash: binding });
+
+      // A stored session with the sign-in's token hash makes the insert fail.
+      const blocked = tokenHash();
+      await pool.query(
+        `INSERT INTO refresh_tokens (
+           id, family_id, user_account_id, token_hash, issued_at, expires_at
+         ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [`rft_${ulid()}`, `rfs_${ulid()}`, userId, blocked, NOW, EXPIRES_AT],
+      );
+
+      await expect(
+        repository.consumeVerificationToken({
+          tokenHash: hash,
+          browserBindingHash: binding,
+          signInSession: signInSession(blocked),
+          now: NOW,
+        }),
+      ).rejects.toMatchObject({ code: '23505' });
+
+      // The claim shares one transaction with the verification it follows, so
+      // the failed insert rolls all of it back (ADR-0055). The same link
+      // therefore verifies and signs in on the retry, and is not half-applied.
+      const rolledBack = await pool.query<{
+        signed_in_at: Date | null;
+        consumed_at: Date | null;
+        consumed_reason: string | null;
+        status: string;
+      }>(
+        `SELECT token.signed_in_at, token.consumed_at, token.consumed_reason,
+                account.status
+         FROM email_verification_tokens token
+         JOIN user_accounts account ON account.id = token.user_account_id
+         WHERE token.token_hash = $1`,
+        [hash],
+      );
+      expect(rolledBack.rows[0]).toEqual({
+        signed_in_at: null,
+        consumed_at: null,
+        consumed_reason: null,
+        status: 'pending_verification',
+      });
+
+      await expect(
+        repository.consumeVerificationToken({
+          tokenHash: hash,
+          browserBindingHash: binding,
+          signInSession: signInSession(tokenHash()),
+          now: NOW,
+        }),
+      ).resolves.toEqual({ kind: 'signed_in', userId });
+
+      const sessions = await pool.query<{ token_hash: string }>(
+        'SELECT token_hash FROM refresh_tokens WHERE user_account_id = $1 ORDER BY issued_at',
+        [userId],
+      );
+      expect(sessions.rows).toHaveLength(2);
     });
 
     it('lets exactly one of two concurrent matching requests sign in', async () => {
@@ -450,11 +563,13 @@ describe('local email verification against PostgreSQL', () => {
         repository.consumeVerificationToken({
           tokenHash: hash,
           browserBindingHash: binding,
+          signInSession: signInSession(tokenHash()),
           now: NOW,
         }),
         repository.consumeVerificationToken({
           tokenHash: hash,
           browserBindingHash: binding,
+          signInSession: signInSession(tokenHash()),
           now: NOW,
         }),
       ]);
@@ -489,6 +604,7 @@ describe('local email verification against PostgreSQL', () => {
         repository.consumeVerificationToken({
           tokenHash: oldHash,
           browserBindingHash: binding,
+          signInSession: signInSession(tokenHash()),
           now: NOW,
         }),
       ).resolves.toEqual({ kind: 'invalid' });
@@ -507,6 +623,7 @@ describe('local email verification against PostgreSQL', () => {
         repository.consumeVerificationToken({
           tokenHash: expiredHash,
           browserBindingHash: binding,
+          signInSession: signInSession(tokenHash()),
           now: EXPIRES_AT,
         }),
       ).resolves.toEqual({ kind: 'invalid' });
@@ -521,6 +638,7 @@ describe('local email verification against PostgreSQL', () => {
         repository.consumeVerificationToken({
           tokenHash: unboundHash,
           browserBindingHash: binding,
+          signInSession: signInSession(tokenHash()),
           now: NOW,
         }),
       ).resolves.toEqual({ kind: 'verified' });
@@ -536,6 +654,7 @@ describe('local email verification against PostgreSQL', () => {
         repository.consumeVerificationToken({
           tokenHash: disabledHash,
           browserBindingHash: binding,
+          signInSession: signInSession(tokenHash()),
           now: NOW,
         }),
       ).resolves.toEqual({ kind: 'invalid' });

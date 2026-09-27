@@ -59,6 +59,17 @@ module.exports = {
       },
       to: { path: '^src/modules/[^/]+/infrastructure/' },
     },
+    {
+      name: 'no-test-helpers-in-production-code',
+      severity: 'error',
+      comment:
+        'In-memory adapters under a module testing/ folder are test doubles; production code must depend on ports instead.',
+      from: {
+        path: '^src/',
+        pathNot: ['[.]spec[.]ts$', '^src/modules/[^/]+/testing/'],
+      },
+      to: { path: '^src/modules/[^/]+/testing/' },
+    },
   ],
   options: {
     tsPreCompilationDeps: true,

@@ -11,16 +11,12 @@ import {
   normalizeRegistration,
   validatePassword,
 } from '../domain/local-auth';
+import { AuthIdentityConflictError } from './auth-identity-conflict.error';
 import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from './auth-rate-limiter.port';
 import { EMAIL_SENDER, type EmailSenderPort } from './email-sender.port';
-import {
-  AuthIdentityConflictError,
-  LOCAL_AUTH_REPOSITORY,
-  type LocalAuthRepositoryPort,
-} from './local-auth-repository.port';
 import {
   type IssuedSession,
   RefreshRotationCommittedError,
@@ -30,10 +26,19 @@ import {
   type PasswordHasherPort,
 } from './password-hasher.port';
 import {
+  PASSWORD_RESET_TOKEN_REPOSITORY,
+  type PasswordResetTokenRepositoryPort,
+} from './password-reset-token-repository.port';
+import {
   PASSWORD_RESET_TOKEN,
   type PasswordResetTokenPort,
 } from './password-reset-token.port';
 import {
+  REFRESH_SESSION_REPOSITORY,
+  type RefreshSessionRepositoryPort,
+} from './refresh-session-repository.port';
+import {
+  type IssuedRefreshToken,
   REFRESH_TOKEN_ISSUER,
   type RefreshTokenIssuerPort,
 } from './refresh-token.port';
@@ -42,6 +47,14 @@ import {
   USER_ACCESS_TOKEN_ISSUER,
   type UserAccessTokenIssuerPort,
 } from './user-access-token.port';
+import {
+  USER_ACCOUNT_REPOSITORY,
+  type UserAccountRepositoryPort,
+} from './user-account.port';
+import {
+  VERIFICATION_TOKEN_REPOSITORY,
+  type VerificationTokenRepositoryPort,
+} from './verification-token-repository.port';
 import {
   VERIFICATION_TOKEN,
   type VerificationTokenPort,
@@ -102,8 +115,14 @@ export class LocalAuthService {
   private readonly clock: LocalAuthServiceClock;
 
   constructor(
-    @Inject(LOCAL_AUTH_REPOSITORY)
-    private readonly repository: LocalAuthRepositoryPort,
+    @Inject(USER_ACCOUNT_REPOSITORY)
+    private readonly userAccounts: UserAccountRepositoryPort,
+    @Inject(VERIFICATION_TOKEN_REPOSITORY)
+    private readonly verificationTokens: VerificationTokenRepositoryPort,
+    @Inject(PASSWORD_RESET_TOKEN_REPOSITORY)
+    private readonly passwordResetTokens: PasswordResetTokenRepositoryPort,
+    @Inject(REFRESH_SESSION_REPOSITORY)
+    private readonly refreshSessions: RefreshSessionRepositoryPort,
     @Inject(PASSWORD_HASHER)
     private readonly passwordHasher: PasswordHasherPort,
     @Inject(VERIFICATION_TOKEN)
@@ -157,7 +176,7 @@ export class LocalAuthService {
     const passwordHash = await this.passwordHasher.hash(normalized.password);
 
     try {
-      await this.repository.register({
+      await this.userAccounts.register({
         email: normalized.email,
         username: normalized.username,
         passwordHash,
@@ -210,9 +229,14 @@ export class LocalAuthService {
     ]);
 
     const now = this.clock.now();
-    const outcome = await this.repository.consumeVerificationToken({
+    // Pre-issued so Verification Sign-in commits the one-time claim and its
+    // Refresh Session together (ADR-0054). A write failure rolls the claim
+    // back, leaving the sign-in available while the token is unexpired.
+    const refreshToken = this.refreshTokenIssuer.issue(now);
+    const outcome = await this.verificationTokens.consumeVerificationToken({
       tokenHash: this.tokenIssuer.hash(token),
       ...this.bindingHash(browserBinding),
+      signInSession: { token: refreshToken, issuedAt: now },
       now,
     });
     if (outcome.kind === 'invalid') {
@@ -226,11 +250,7 @@ export class LocalAuthService {
       return undefined;
     }
 
-    // ponytail: the sign-in is claimed before the session is written, so a
-    // failure here spends it; the customer can still log in with a password.
-    // Upgrade: pass a pre-issued refresh token to the repository so the claim
-    // and the refresh-session insert commit in one transaction.
-    return this.issueSession(outcome.userId, now);
+    return this.toIssuedSession(outcome.userId, refreshToken);
   }
 
   async resend(
@@ -262,7 +282,7 @@ export class LocalAuthService {
 
     const now = this.clock.now();
     const issued = this.tokenIssuer.issue(now);
-    const target = await this.repository.rotateVerificationToken({
+    const target = await this.verificationTokens.rotateVerificationToken({
       email: normalizedEmail,
       tokenId: issued.id,
       tokenHash: issued.hash,
@@ -316,7 +336,7 @@ export class LocalAuthService {
 
     const now = this.clock.now();
     const issued = this.passwordResetTokenIssuer.issue(now);
-    const target = await this.repository.issuePasswordResetToken({
+    const target = await this.passwordResetTokens.issuePasswordResetToken({
       email: normalizedEmail,
       tokenId: issued.id,
       tokenHash: issued.hash,
@@ -349,7 +369,7 @@ export class LocalAuthService {
     }
 
     const tokenHash = this.passwordResetTokenIssuer.hash(input.token);
-    const tokenCheck = await this.repository.checkPasswordResetToken({
+    const tokenCheck = await this.passwordResetTokens.checkPasswordResetToken({
       tokenHash,
       now: this.clock.now(),
     });
@@ -359,7 +379,7 @@ export class LocalAuthService {
     }
 
     const passwordHash = await this.passwordHasher.hash(password);
-    const result = await this.repository.consumePasswordReset({
+    const result = await this.passwordResetTokens.consumePasswordReset({
       tokenHash,
       passwordHash,
       now: this.clock.now(),
@@ -382,7 +402,7 @@ export class LocalAuthService {
       throw invalidRequest(error);
     }
 
-    const identity = await this.repository.findLoginIdentityByEmail(
+    const identity = await this.userAccounts.findLoginIdentityByEmail(
       normalized.email,
     );
     const passwordHash = identity?.passwordHash ?? DUMMY_PASSWORD_HASH;
@@ -417,21 +437,38 @@ export class LocalAuthService {
       });
     }
 
-    return this.issueSession(identity.userId, this.clock.now());
+    return this.startLoginSession(identity.userId, this.clock.now());
   }
 
-  /** The one way a Refresh Session is created: login or Verification Sign-in. */
-  private async issueSession(
+  /**
+   * Login mints both tokens and then persists the Refresh Session. The access
+   * token is minted first, so a session write failure reaches the client
+   * without an access token it could not pair with a cookie.
+   */
+  private async startLoginSession(
     userId: string,
     now: Date,
   ): Promise<IssuedSession> {
-    const accessToken = await this.accessTokenIssuer.issue(userId);
     const refreshToken = this.refreshTokenIssuer.issue(now);
-    await this.repository.createRefreshSession({
+    const session = await this.toIssuedSession(userId, refreshToken);
+    await this.refreshSessions.createRefreshSession({
       userId,
       token: refreshToken,
       issuedAt: now,
     });
+    return session;
+  }
+
+  /**
+   * The one way a session reaches a client. Verification Sign-in passes the
+   * Refresh Session its claim already stored; login stores it afterwards.
+   */
+  private async toIssuedSession(
+    userId: string,
+    refreshToken: IssuedRefreshToken,
+  ): Promise<IssuedSession> {
+    const accessToken: IssuedUserAccessToken =
+      await this.accessTokenIssuer.issue(userId);
     return {
       accessToken: accessToken.token,
       expiresIn: accessToken.expiresIn,
@@ -458,7 +495,8 @@ export class LocalAuthService {
     }
 
     const tokenHash = this.refreshTokenIssuer.hash(rawToken);
-    const current = await this.repository.findRefreshTokenByHash(tokenHash);
+    const current =
+      await this.refreshSessions.findRefreshTokenByHash(tokenHash);
     if (current === undefined) {
       await this.enforceRefreshFailureLimits(ip, tokenHash);
       throw invalidRefreshToken();
@@ -466,7 +504,7 @@ export class LocalAuthService {
 
     const now = this.clock.now();
     const successor = this.refreshTokenIssuer.issue(now, current.familyId);
-    const rotation = await this.repository.rotateRefreshToken({
+    const rotation = await this.refreshSessions.rotateRefreshToken({
       tokenId: current.tokenId,
       tokenHash,
       successor,
@@ -495,7 +533,7 @@ export class LocalAuthService {
       return;
     }
 
-    await this.repository.revokeRefreshFamilyByTokenHash({
+    await this.refreshSessions.revokeRefreshFamilyByTokenHash({
       tokenHash: this.refreshTokenIssuer.hash(rawToken),
       now: this.clock.now(),
     });

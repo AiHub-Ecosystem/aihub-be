@@ -105,6 +105,73 @@ describe('PostgresLocalAuthRepository', () => {
     );
   });
 
+  it('leaves no session behind when a request only verifies', async () => {
+    const client = new FakeClient();
+    client.responses = [
+      [{ id: 'usr_01J00000000000000000000000', status: 'active' }],
+      [
+        {
+          id: 'evt_01J00000000000000000000000',
+          expires_at: input.tokenExpiresAt,
+          consumed_at: input.now,
+          consumed_reason: 'verified',
+          browser_binding_hash: 'binding-hash',
+          signed_in_at: null,
+        },
+      ],
+    ];
+
+    await expect(
+      new PostgresLocalAuthRepository(client).consumeVerificationToken({
+        tokenHash: input.tokenHash,
+        signInSession: { token: refreshToken, issuedAt: input.now },
+        now: input.now,
+      }),
+    ).resolves.toEqual({ kind: 'verified' });
+
+    const sql = client.queries.map((query) => query.text).join('\n');
+    expect(sql).not.toContain('SET signed_in_at');
+    expect(sql).not.toContain('INSERT INTO refresh_tokens');
+  });
+
+  it('commits the Verification Sign-in claim and its Refresh Session in one transaction', async () => {
+    const client = new FakeClient();
+    client.responses = [
+      [{ id: 'usr_01J00000000000000000000000', status: 'active' }],
+      [
+        {
+          id: 'evt_01J00000000000000000000000',
+          expires_at: input.tokenExpiresAt,
+          consumed_at: input.now,
+          consumed_reason: 'verified',
+          browser_binding_hash: 'binding-hash',
+          signed_in_at: null,
+        },
+      ],
+      [{ id: 'evt_01J00000000000000000000000' }],
+    ];
+
+    await expect(
+      new PostgresLocalAuthRepository(client).consumeVerificationToken({
+        tokenHash: input.tokenHash,
+        browserBindingHash: 'binding-hash',
+        signInSession: { token: refreshToken, issuedAt: input.now },
+        now: input.now,
+      }),
+    ).resolves.toEqual({
+      kind: 'signed_in',
+      userId: 'usr_01J00000000000000000000000',
+    });
+
+    const sql = client.queries.map((query) => query.text).join('\n');
+    expect(sql).toContain('SET signed_in_at');
+    expect(sql).toContain('INSERT INTO refresh_tokens');
+    expect(client.queries[3]?.values).toEqual(
+      expect.arrayContaining([refreshToken.hash, refreshToken.id]),
+    );
+    expect(JSON.stringify(client.queries)).not.toContain(refreshToken.raw);
+  });
+
   it('issues a reset token only for an active password identity and supersedes open tokens', async () => {
     const client = new FakeClient();
     client.responses = [

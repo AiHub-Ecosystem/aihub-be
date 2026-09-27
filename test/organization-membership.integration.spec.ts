@@ -6,13 +6,11 @@ import { Test } from '@nestjs/testing';
 
 import { AppModule } from '../src/app.module';
 import {
-  LOCAL_AUTH_REPOSITORY,
-  type LocalAuthRepositoryPort,
-} from '../src/modules/auth/application/local-auth-repository.port';
-import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
 } from '../src/modules/auth/application/user-access-token.port';
+import { USER_ACCOUNT_REPOSITORY } from '../src/modules/auth/application/user-account.port';
+import { userAccountStatus } from '../src/modules/auth/testing/user-account-status.stub';
 import type { OrganizationMembershipMutationAction } from '../src/modules/identity/application/organization-membership.mutation-policy';
 import {
   ORGANIZATION_MEMBERSHIP,
@@ -168,12 +166,7 @@ describe('Organization membership HTTP/application/repository integration', () =
         return { userId: USER_ID, jti: 'jti_01' };
       },
     };
-    const localAuthRepository: Pick<
-      LocalAuthRepositoryPort,
-      'findUserAccountStatus'
-    > = {
-      findUserAccountStatus: async () => 'active',
-    };
+    const userAccounts = userAccountStatus();
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -182,8 +175,8 @@ describe('Organization membership HTTP/application/repository integration', () =
       .useValue(membership)
       .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
       .useValue(verifier)
-      .overrideProvider(LOCAL_AUTH_REPOSITORY)
-      .useValue(localAuthRepository)
+      .overrideProvider(USER_ACCOUNT_REPOSITORY)
+      .useValue(userAccounts)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(

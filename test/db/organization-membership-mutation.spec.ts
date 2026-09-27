@@ -9,13 +9,11 @@ import type { Pool } from 'pg';
 
 import { AppModule } from '../../src/app.module';
 import {
-  LOCAL_AUTH_REPOSITORY,
-  type LocalAuthRepositoryPort,
-} from '../../src/modules/auth/application/local-auth-repository.port';
-import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
 } from '../../src/modules/auth/application/user-access-token.port';
+import { USER_ACCOUNT_REPOSITORY } from '../../src/modules/auth/application/user-account.port';
+import { userAccountStatus } from '../../src/modules/auth/testing/user-account-status.stub';
 import { ORGANIZATION_MEMBERSHIP } from '../../src/modules/identity/application/organization-membership.port';
 import { createPostgresIdentityClient } from '../../src/modules/identity/infrastructure/postgres-identity.client';
 import { PostgresOrganizationMembershipRepository } from '../../src/modules/identity/infrastructure/postgres-organization-membership.repository';
@@ -512,26 +510,21 @@ beforeAll(async () => {
       jti: 'jti_01',
     }),
   };
-  const localAuthRepository: Pick<
-    LocalAuthRepositoryPort,
-    'findUserAccountStatus'
-  > = {
-    findUserAccountStatus: async (userId) => {
-      const result = await pool.query<{ status: 'active' | 'disabled' }>(
-        'SELECT status FROM user_accounts WHERE id = $1',
-        [userId],
-      );
-      return result.rows[0]?.status;
-    },
-  };
+  const userAccounts = userAccountStatus(async (userId) => {
+    const result = await pool.query<{ status: 'active' | 'disabled' }>(
+      'SELECT status FROM user_accounts WHERE id = $1',
+      [userId],
+    );
+    return result.rows[0]?.status;
+  });
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(ORGANIZATION_MEMBERSHIP)
     .useValue(membership)
     .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
     .useValue(verifier)
-    .overrideProvider(LOCAL_AUTH_REPOSITORY)
-    .useValue(localAuthRepository)
+    .overrideProvider(USER_ACCOUNT_REPOSITORY)
+    .useValue(userAccounts)
     .compile();
 
   app = moduleRef.createNestApplication<NestFastifyApplication>(

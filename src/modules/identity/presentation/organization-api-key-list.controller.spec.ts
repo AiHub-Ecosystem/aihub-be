@@ -8,15 +8,13 @@ import { Value } from '@sinclair/typebox/value';
 import { AppModule } from '../../../app.module';
 import { ListOrganizationApiKeysResponseSchema } from '../../../contracts/organization/api-key';
 import {
-  LOCAL_AUTH_REPOSITORY,
-  type LocalAuthRepositoryPort,
-} from '../../auth/application/local-auth-repository.port';
-import {
   USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenIssuerPort,
   type UserAccessTokenVerifierPort,
 } from '../../auth/application/user-access-token.port';
+import { USER_ACCOUNT_REPOSITORY } from '../../auth/application/user-account.port';
+import { userAccountStatus } from '../../auth/testing/user-account-status.stub';
 import {
   type ListOrganizationApiKeysInput,
   ORGANIZATION_API_KEY,
@@ -110,12 +108,7 @@ describe('Organization API key listing HTTP flow', () => {
         return { userId: USER_ID, jti: 'jti_01' };
       },
     };
-    const localAuthRepository: Pick<
-      LocalAuthRepositoryPort,
-      'findUserAccountStatus'
-    > = {
-      findUserAccountStatus: async () => 'active',
-    };
+    const userAccounts = userAccountStatus();
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -128,8 +121,8 @@ describe('Organization API key listing HTTP flow', () => {
       .useValue(verifier)
       .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
       .useValue(tokenIssuer)
-      .overrideProvider(LOCAL_AUTH_REPOSITORY)
-      .useValue(localAuthRepository)
+      .overrideProvider(USER_ACCOUNT_REPOSITORY)
+      .useValue(userAccounts)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(

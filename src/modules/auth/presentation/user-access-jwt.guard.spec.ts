@@ -1,10 +1,14 @@
 import type { ExecutionContext } from '@nestjs/common';
 
-import type { LocalAuthRepositoryPort } from '../application/local-auth-repository.port';
 import type {
   UserAccessTokenVerifierPort,
   VerifiedUserAccessToken,
 } from '../application/user-access-token.port';
+import {
+  createInMemoryAuthState,
+  seedAccount,
+} from '../testing/in-memory-auth.state';
+import { InMemoryUserAccountAdapter } from '../testing/in-memory-user-account.adapter';
 import { UserAccessJwtGuard } from './user-access-jwt.guard';
 
 function context(
@@ -19,37 +23,35 @@ function context(
   } as unknown as ExecutionContext;
 }
 
-class RepositoryFake
-  implements Pick<LocalAuthRepositoryPort, 'findUserAccountStatus'>
-{
-  status: 'active' | 'disabled' | undefined = 'active';
-
-  async findUserAccountStatus(): Promise<'active' | 'disabled' | undefined> {
-    return this.status;
-  }
-}
-
 describe('UserAccessJwtGuard', () => {
   const verified: VerifiedUserAccessToken = {
     userId: 'usr_01J00000000000000000000000',
     jti: 'jti_01',
   };
 
+  /** The guard reads the account status, so the case composes that adapter. */
   function makeGuard(
     verifier: UserAccessTokenVerifierPort = { verify: async () => verified },
-    repository = new RepositoryFake(),
-  ) {
-    return {
-      guard: new UserAccessJwtGuard(verifier, repository),
-      repository,
-    };
+    status: 'active' | 'disabled' = 'active',
+  ): UserAccessJwtGuard {
+    const state = createInMemoryAuthState();
+    seedAccount(state, {
+      userId: verified.userId,
+      email: 'person@example.com',
+      passwordHash: '$argon2id$fake',
+      status,
+    });
+    return new UserAccessJwtGuard(
+      verifier,
+      new InMemoryUserAccountAdapter(state),
+    );
   }
 
   it('accepts exactly one case-insensitive bearer token and stores only user identity', async () => {
     const request: Record<string, unknown> = {
       headers: { authorization: 'bEaReR compact.token.value' },
     };
-    const { guard } = makeGuard();
+    const guard = makeGuard();
 
     await expect(guard.canActivate(context(request))).resolves.toBe(true);
     expect(request.aihubUser).toEqual({ userId: verified.userId });
@@ -64,7 +66,7 @@ describe('UserAccessJwtGuard', () => {
     'rejects %s with the correct generic boundary error',
     async (_label, headers) => {
       const response = { header: jest.fn() };
-      const { guard } = makeGuard();
+      const guard = makeGuard();
 
       await expect(
         guard.canActivate(context({ headers }, response)),
@@ -87,7 +89,7 @@ describe('UserAccessJwtGuard', () => {
     ['cookie', { cookies: { access_token: 'compact.token.value' } }],
   ])('rejects a %s token source', async (_label, source) => {
     const response = { header: jest.fn() };
-    const { guard } = makeGuard();
+    const guard = makeGuard();
 
     await expect(
       guard.canActivate(
@@ -107,9 +109,24 @@ describe('UserAccessJwtGuard', () => {
   });
 
   it('rejects a validly signed token when the durable account is no longer active', async () => {
-    const repository = new RepositoryFake();
-    repository.status = 'disabled';
-    const { guard } = makeGuard(undefined, repository);
+    const guard = makeGuard(undefined, 'disabled');
+
+    await expect(
+      guard.canActivate(
+        context({ headers: { authorization: 'Bearer compact.token.value' } }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
+      httpStatus: 401,
+    });
+  });
+
+  it('rejects a validly signed token whose account no longer exists', async () => {
+    const state = createInMemoryAuthState();
+    const guard = new UserAccessJwtGuard(
+      { verify: async () => verified },
+      new InMemoryUserAccountAdapter(state),
+    );
 
     await expect(
       guard.canActivate(
