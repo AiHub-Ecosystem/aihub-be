@@ -1,7 +1,8 @@
 import { OPERATION_CATALOG } from '../catalog/operation-catalog';
-import { OPERATION_IDS } from '../catalog/operation-id';
-import { ORGANIZATION_ROSTER_PATH } from '../contracts/organization/membership';
+import { OPERATION_IDS, isOperationId } from '../catalog/operation-id';
+import { PUBLIC_ROUTES, isPublicRouteId } from '../catalog/public-routes';
 import { buildOpenApiDocument } from './build-openapi-document';
+import { toOpenApiPath } from './openapi-path';
 
 interface OpenApiResponse {
   readonly headers?: Record<string, { readonly schema?: unknown }>;
@@ -63,12 +64,14 @@ function requestProperty(
 const SANDBOX_MINT_PATH = '/v1/sandbox/assertions';
 const SPEAKING_QUESTIONS_PATH = '/v1/ielts/speaking/questions';
 const SANDBOX_MINT_OPERATION_ID = 'sandbox.assertions.mint';
-const ORGANIZATION_PATH = '/v1/organizations';
-const ORGANIZATION_CREATE_OPERATION_ID = 'organizations.create';
 const ORGANIZATION_ITEM_PATH = '/v1/organizations/{organization_id}';
 const ORGANIZATION_ROSTER_OPERATION_ID = 'organizations.me.members.list';
-const ORGANIZATION_MEMBERSHIP_LIST_PATH =
-  '/v1/organizations/{organization_id}/members';
+const ORGANIZATION_ROSTER_PATH = toOpenApiPath(
+  PUBLIC_ROUTES[ORGANIZATION_ROSTER_OPERATION_ID].path,
+);
+const ORGANIZATION_MEMBERSHIP_LIST_PATH = toOpenApiPath(
+  PUBLIC_ROUTES['organizations.members.list'].path,
+);
 const ORGANIZATION_MEMBERSHIP_LIST_OPERATION_ID = 'organizations.members.list';
 const ORGANIZATION_INVITATION_PATH =
   '/v1/organizations/{organization_id}/invitations';
@@ -108,26 +111,6 @@ const ORGANIZATION_MEMBER_DISABLE_OPERATION_ID =
   'organizations.members.disable';
 const ORGANIZATION_MEMBER_TRANSFER_OPERATION_ID =
   'organizations.members.transfer';
-const AUTH_PATHS = [
-  '/v1/auth/register',
-  '/v1/auth/login',
-  '/v1/auth/verify-email',
-  '/v1/auth/resend-verification',
-  '/v1/auth/forgot-password',
-  '/v1/auth/reset-password',
-  '/v1/auth/refresh',
-  '/v1/auth/logout',
-] as const;
-const AUTH_OPERATION_IDS = [
-  'auth.register',
-  'auth.login',
-  'auth.verify_email',
-  'auth.resend_verification',
-  'auth.forgot_password',
-  'auth.reset_password',
-  'auth.refresh',
-  'auth.logout',
-] as const;
 
 function build(): OpenApiDocument {
   return buildOpenApiDocument('0.0.0-test') as OpenApiDocument;
@@ -140,58 +123,149 @@ describe('buildOpenApiDocument', () => {
 
   it('has exactly one path entry per catalogued operation, so adding an operation without regenerating fails', () => {
     const doc = build();
-    const operationIds = Object.values(doc.paths)
-      .flatMap((item) =>
-        item.post === undefined ? [] : [item.post.operationId],
-      )
-      .filter(
-        (operationId) =>
-          operationId !== SANDBOX_MINT_OPERATION_ID &&
-          operationId !== ORGANIZATION_CREATE_OPERATION_ID &&
-          operationId !== ORGANIZATION_INVITATION_OPERATION_ID &&
-          operationId !== ORGANIZATION_INVITATION_ACCEPT_OPERATION_ID &&
-          operationId !== ORGANIZATION_MEMBER_TRANSFER_OPERATION_ID &&
-          operationId !== ORGANIZATION_API_KEY_OPERATION_ID &&
-          operationId !== ORGANIZATION_API_KEY_ROTATE_OPERATION_ID &&
-          !AUTH_OPERATION_IDS.includes(
-            operationId as (typeof AUTH_OPERATION_IDS)[number],
-          ),
-      );
+    const postOperationIds = Object.values(doc.paths).flatMap((item) =>
+      item.post === undefined ? [] : [item.post.operationId],
+    );
 
-    expect(operationIds.sort()).toEqual([...OPERATION_IDS].sort());
-    expect(operationIds).toHaveLength(OPERATION_IDS.length);
+    // The two registries partition the Public API Routes, so deciding which
+    // document operation is which needs no hand-written list. A post operation
+    // declared in neither registry is the drift this catches.
+    const undeclared = postOperationIds.filter(
+      (operationId) =>
+        !isOperationId(operationId) && !isPublicRouteId(operationId),
+    );
+    const dispatchOperationIds = postOperationIds.filter((operationId) =>
+      isOperationId(operationId),
+    );
+
+    expect(undeclared).toEqual([]);
+    expect(dispatchOperationIds.sort()).toEqual([...OPERATION_IDS].sort());
+    expect(dispatchOperationIds).toHaveLength(OPERATION_IDS.length);
   });
 
-  it('publishes the explicit sandbox and local-auth paths off the catalog', () => {
+  it('documents every non-dispatch route from the registry, and nothing else off the catalog', () => {
     const doc = build();
-    const catalogued = new Set<string>(
+    const dispatchPaths = new Set<string>(
       OPERATION_IDS.map((operationId) => OPERATION_CATALOG[operationId].path),
+    );
+    const declared = new Set(
+      Object.values(PUBLIC_ROUTES).map((route) => toOpenApiPath(route.path)),
     );
 
     expect(
-      Object.keys(doc.paths).filter((path) => !catalogued.has(path)),
-    ).toEqual([
-      SANDBOX_MINT_PATH,
-      SPEAKING_QUESTIONS_PATH,
-      ORGANIZATION_PATH,
-      ORGANIZATION_ITEM_PATH,
-      ORGANIZATION_ROSTER_PATH,
-      ORGANIZATION_MEMBERSHIP_LIST_PATH,
-      ORGANIZATION_INVITATION_PATH,
-      ORGANIZATION_INVITATION_ITEM_PATH,
-      ORGANIZATION_INVITATION_ACCEPT_PATH,
-      ORGANIZATION_MEMBER_PATH,
-      ORGANIZATION_MEMBER_TRANSFER_PATH,
-      ORGANIZATION_API_KEY_PATH,
-      ORGANIZATION_API_KEY_ITEM_PATH,
-      ORGANIZATION_API_KEY_ROTATE_PATH,
-      ORGANIZATION_IDENTITY_CONFIG_PATH,
-      ORGANIZATION_AUDIT_EVENT_PATH,
-      ...AUTH_PATHS,
-    ]);
+      Object.keys(doc.paths)
+        .filter((path) => !dispatchPaths.has(path))
+        .sort(),
+    ).toEqual([...declared].sort());
     expect(doc.paths[SANDBOX_MINT_PATH]?.post?.operationId).toBe(
       SANDBOX_MINT_OPERATION_ID,
     );
+  });
+
+  /**
+   * `callerAuth` and the published `security` entry are declared in two places:
+   * the registry, and the path item the builder renders. The auth, sandbox, and
+   * Speaking-question path items derive `security` from the registry, so for
+   * those eleven the comparison below re-states `routeSecurityOf` and proves
+   * nothing. Its value is the eighteen organization path items, which still
+   * hand-write `security: [{ BearerAuth: [] }]`; nothing else joins the two, so
+   * changing an organization route's `callerAuth` would have published a
+   * document still claiming BearerAuth.
+   *
+   * `security` must be present and explicit, not merely correct when present.
+   * The document declares a root-level default of `[{ ApiKeyAuth: [] }]`, which
+   * OpenAPI makes every operation inherit unless it declares its own. A
+   * `callerAuth: 'none'` route whose explicit `security: []` went missing
+   * would therefore publish as ApiKeyAuth while reading as unset here, so both
+   * the missing route and the missing key fail this test.
+   */
+  /**
+   * `x-identity-scope` used to be twenty hand-written literals in this builder.
+   * The registry now records what the document publishes, and the builder
+   * derives the extension from it.
+   *
+   * This test therefore does **not** prove the recorded value is the right one:
+   * for the twenty-seven routes whose path item calls `routeIdentityScopeOf`,
+   * changing the registry changes the document too, and the two agree by
+   * construction. What it proves is that no path item has stopped calling the
+   * helper — the one route that omits the extension on purpose
+   * (`speaking.questions`, recorded as `null`) fails this test the moment it
+   * starts publishing one. That is the drift mode worth catching; whether the
+   * recorded values should change is a separate decision, and ADR-0059 leaves
+   * it open.
+   */
+  it('publishes the x-identity-scope value the registry records', () => {
+    const doc = build();
+    const mismatches: Record<string, unknown> = {};
+
+    for (const [routeId, route] of Object.entries(PUBLIC_ROUTES)) {
+      const pathItem = doc.paths[toOpenApiPath(route.path)];
+      const operation = pathItem?.[
+        route.method.toLowerCase() as keyof OpenApiPathItem
+      ] as (OpenApiOperation & Record<string, unknown>) | undefined;
+
+      const published =
+        operation === undefined
+          ? 'missing-route'
+          : (operation['x-identity-scope'] ?? null);
+
+      if (published !== route.publishedIdentityScope) {
+        mismatches[routeId] = {
+          declared: route.publishedIdentityScope,
+          published,
+        };
+      }
+    }
+
+    expect(mismatches).toEqual({});
+  });
+
+  it('publishes an explicit security scheme matching each route callerAuth', () => {
+    const schemeFor: Record<string, string> = {
+      bearer: 'BearerAuth',
+      'api-key': 'ApiKeyAuth',
+      'refresh-cookie': 'RefreshCookie',
+      none: '',
+    };
+
+    const doc = build();
+    const mismatches: Record<string, unknown> = {};
+
+    for (const [routeId, route] of Object.entries(PUBLIC_ROUTES)) {
+      const pathItem = doc.paths[toOpenApiPath(route.path)];
+      const operation = pathItem?.[
+        route.method.toLowerCase() as keyof OpenApiPathItem
+      ] as (OpenApiOperation & { security?: unknown }) | undefined;
+
+      if (operation === undefined) {
+        mismatches[routeId] = { reason: 'route is missing from the document' };
+        continue;
+      }
+      if (operation.security === undefined) {
+        mismatches[routeId] = {
+          reason: 'inherits the root ApiKeyAuth default',
+        };
+        continue;
+      }
+
+      const published = operation.security as readonly Record<
+        string,
+        readonly string[]
+      >[];
+      const expected = schemeFor[route.callerAuth];
+      const actual = published
+        .map((entry) => Object.keys(entry)[0] ?? '')
+        .join(',');
+
+      if (actual !== expected) {
+        mismatches[routeId] = {
+          callerAuth: route.callerAuth,
+          published: actual,
+        };
+      }
+    }
+
+    expect(mismatches).toEqual({});
   });
 
   it('documents the bearer-authenticated invitation acceptance route', () => {

@@ -1,6 +1,10 @@
 import { convert } from 'openapi-to-postmanv2';
 
-import { ORGANIZATION_ROSTER_PATH } from '../contracts/organization/membership';
+import { PUBLIC_ROUTES } from '../catalog/public-routes';
+import { toOpenApiPath } from '../openapi/openapi-path';
+
+const ORGANIZATION_ROSTER_PATH =
+  PUBLIC_ROUTES['organizations.me.members.list'].path;
 
 /**
  * D2 handover artifact, not a regression suite (see issue #6): every request
@@ -726,9 +730,12 @@ function addOrganizationRosterCheck(items: unknown[]): void {
 
     const url = item.request.url;
     const path = isRecord(url) ? url.path : undefined;
+    // The OpenAPI document renders `:param` as `{param}`, so compare against
+    // the OpenAPI spelling. A roster path carrying a parameter would otherwise
+    // stop matching here without anything failing.
     if (
       !Array.isArray(path) ||
-      path.join('/') !== ORGANIZATION_ROSTER_PATH.slice(1)
+      path.join('/') !== toOpenApiPath(ORGANIZATION_ROSTER_PATH).slice(1)
     ) {
       continue;
     }

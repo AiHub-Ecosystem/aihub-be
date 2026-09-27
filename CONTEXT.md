@@ -75,7 +75,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Public grading result:** the normalized `{ data, meta }` envelope safe for the Customer Web; provider-only identifiers, timing, credentials, assertions, audio, and raw downstream detail are excluded.
 - **API key:** an organization credential presented with `X-API-Key`; AIHUB stores only its SHA-256 hash and metadata.
 - **Public API Route:** an endpoint in AIHUB's externally documented API contract, whether or not it requires authentication; health probes and reference pages are operational endpoints, not Public API Routes.
-- **Scope:** the permission an API key carries for one class of operation, written as `<entitlement>.<action>` such as `writing.grade`; the Operation Catalog owns the scope each public operation requires.
+- **Scope:** the permission an API key carries for one class of operation, written as `<entitlement>.<action>` such as `writing.grade`; the Operation Catalog owns the scope each dispatch operation requires, and a Control-plane operation requires none.
 - **Entitlement:** a service capability configured for an Organization, such as `writing` or `speaking`, which bounds the scopes its API keys may carry. Effective use also requires an active Organization and a matching API key scope.
 - **API key status:** the lifecycle an API key is in — `active` while it may authenticate, `expired` once its expiry moment has passed, `revoked` once it has been withdrawn; expiry arrives on its own without anyone acting, revocation does not.
 - **API key rotation:** replacing an API key's credential while preserving the authority it carried; the replacement is a new key, the old one is withdrawn in the same act, and no window exists in which both work.
@@ -93,7 +93,10 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **AI Service:** a downstream domain service behind AIHUB, such as AI Writing or AI Speaking.
 - **Model Provider:** an upstream foundational model service invoked by an AI Service; this term does not mean an AI Writing or AI Speaking service.
 - **Usage-reporting declaration:** the current contract expectation for one AI Service to return complete token usage; it distinguishes an unreported value that is expected from missing evidence that is an anomaly, and can change independently per service.
-- **Operation Catalog:** the typed code-owned mapping of public path, scope, identity mode, limits, timeout, and downstream operation.
+- **Operation Catalog:** the typed code-owned mapping of a **dispatch operation's** public path, scope, identity mode, limits, timeout, and downstream operation. It holds only operations that reach an AI Service. _Avoid_: reading it as the registry of all Public API Routes.
+- **Dispatch operation:** a Public API Route authenticated by an API key and Scope that dispatches one typed request to an AI Service; every dispatch operation is in the Operation Catalog, and no non-dispatch Public API Route is.
+- **Control-plane operation:** a Public API Route that acts on an Organization under the Bearer boundary. It carries no API-key Scope, resolves no User Identity, dispatches nothing to an AI Service, and takes no body limit or timeout from the Operation Catalog, because the body-limit and timeout hooks key on a static path and would silently skip it.
+- **Public API Route registry:** the code-owned list of every Public API Route that does not dispatch, in `src/catalog/public-routes.ts`; it partitions the Public API Routes with the Operation Catalog rather than duplicating them ([ADR-0059](docs/adr/0059-non-dispatch-public-api-routes-have-their-own-registry.md)). _Avoid_: reading it as a second Operation Catalog, or either registry as the registry of all Public API Routes.
 - **Downstream Adapter:** a pure mapper between a public operation and a private AI service contract; it never performs network I/O.
 - **Speaking grading proxy:** the synchronous D2 integration path used to prove the AI Speaking handoff; it is not the public async Speaking contract.
 - **Approved audio URL:** an HTTPS reference to an audio object on the exact

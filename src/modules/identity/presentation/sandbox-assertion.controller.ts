@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { Value } from '@sinclair/typebox/value';
 
+import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import { createRequestContext } from '../../../common/request-context/request-context.factory';
 import { isRequestId } from '../../../common/request-context/request-id';
@@ -73,8 +74,8 @@ export class SandboxAssertionController {
     private readonly minter: SandboxAssertionMinterPort,
   ) {}
 
-  @Post('/v1/sandbox/assertions')
-  @HttpCode(200)
+  @Post(PUBLIC_ROUTES['sandbox.assertions.mint'].path)
+  @HttpCode(PUBLIC_ROUTES['sandbox.assertions.mint'].successStatus)
   async mint(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,

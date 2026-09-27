@@ -14,11 +14,10 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyRequest } from 'fastify';
 
+import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
   EmptyOrganizationMembershipMutationRequestSchema,
-  ORGANIZATION_MEMBERSHIP_LIST_PATH,
-  ORGANIZATION_ROSTER_PATH,
   type OrganizationMembershipListQuery,
   OrganizationMembershipListQuerySchema,
   type OrganizationMembershipListResponse,
@@ -51,8 +50,8 @@ export class OrganizationMembershipController {
     private readonly membershipList: ListOrganizationMemberships,
   ) {}
 
-  @Get(ORGANIZATION_MEMBERSHIP_LIST_PATH)
-  @HttpCode(200)
+  @Get(PUBLIC_ROUTES['organizations.members.list'].path)
+  @HttpCode(PUBLIC_ROUTES['organizations.members.list'].successStatus)
   async listOrganizationMembers(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,
@@ -86,8 +85,8 @@ export class OrganizationMembershipController {
     };
   }
 
-  @Get(ORGANIZATION_ROSTER_PATH)
-  @HttpCode(200)
+  @Get(PUBLIC_ROUTES['organizations.me.members.list'].path)
+  @HttpCode(PUBLIC_ROUTES['organizations.me.members.list'].successStatus)
   async roster(
     @Req() request: FastifyRequest,
   ): Promise<OrganizationRosterResponse> {
@@ -113,8 +112,8 @@ export class OrganizationMembershipController {
     };
   }
 
-  @Patch('/v1/organizations/:organizationId/members/:username')
-  @HttpCode(200)
+  @Patch(PUBLIC_ROUTES['organizations.members.change_role'].path)
+  @HttpCode(PUBLIC_ROUTES['organizations.members.change_role'].successStatus)
   async changeRole(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,
@@ -141,8 +140,8 @@ export class OrganizationMembershipController {
     return mutationResponse(result, requestId);
   }
 
-  @Delete('/v1/organizations/:organizationId/members/:username')
-  @HttpCode(200)
+  @Delete(PUBLIC_ROUTES['organizations.members.disable'].path)
+  @HttpCode(PUBLIC_ROUTES['organizations.members.disable'].successStatus)
   async disable(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,
@@ -165,8 +164,8 @@ export class OrganizationMembershipController {
     return mutationResponse(result, requestId);
   }
 
-  @Post('/v1/organizations/:organizationId/members/:username/transfer')
-  @HttpCode(200)
+  @Post(PUBLIC_ROUTES['organizations.members.transfer'].path)
+  @HttpCode(PUBLIC_ROUTES['organizations.members.transfer'].successStatus)
   async transfer(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,

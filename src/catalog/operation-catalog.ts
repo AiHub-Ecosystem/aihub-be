@@ -13,8 +13,13 @@ import {
 import type { DownstreamId } from '../downstream/downstream.types';
 import type { OperationId } from './operation-id';
 
-// ponytail: 'organization' scope removed while no operation uses it (#168);
-// the first organization-scoped operation brings it back with a guard test.
+// 'organization' is not an identity scope here and is not coming back.
+// Identity scope describes which User Identity form an operation consumes, and
+// no non-dispatch Public API Route consumes one: they authenticate with a Bearer
+// User Access JWT, a refresh cookie, an API key, or nothing, and take their
+// Organization from the route. A route that dispatches nothing lives in
+// `public-routes.ts` instead, because widening `OperationId` with non-dispatch
+// ids would force a `dispatch()` overload per route (ADR-0059).
 type IdentityScope = 'user';
 export type IdempotencyMode = 'none' | 'optional' | 'required';
 export type MeteringMode = 'model' | 'none';

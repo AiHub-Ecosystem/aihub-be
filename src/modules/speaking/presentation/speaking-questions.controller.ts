@@ -2,6 +2,7 @@ import { Controller, Get, Header, Inject, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
 import { Value } from '@sinclair/typebox/value';
+import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
   type SpeakingPart,
@@ -48,14 +49,14 @@ function parsePart(value: unknown): SpeakingPart | undefined {
   }
 }
 
-@Controller('/v1/ielts/speaking/questions')
+@Controller()
 export class SpeakingQuestionsController {
   constructor(
     @Inject(SPEAKING_AUDIO_STORAGE)
     private readonly storage: SpeakingAudioStoragePort,
   ) {}
 
-  @Get()
+  @Get(PUBLIC_ROUTES['speaking.questions'].path)
   @Header('Cache-Control', 'no-store')
   async list(
     @Req() request: FastifyRequest,

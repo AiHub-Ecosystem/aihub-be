@@ -12,6 +12,7 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyRequest } from 'fastify';
 
+import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
 import { AppError } from '../../../common/errors/app-error';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
@@ -66,8 +67,8 @@ export class OrganizationIdentityConfigController {
     private readonly setIdentityConfig: SetOrganizationIdentityConfigPort,
   ) {}
 
-  @Get('/v1/organizations/:organizationId/identity-config')
-  @HttpCode(200)
+  @Get(PUBLIC_ROUTES['organizations.identityConfig.read'].path)
+  @HttpCode(PUBLIC_ROUTES['organizations.identityConfig.read'].successStatus)
   async read(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,
@@ -96,8 +97,8 @@ export class OrganizationIdentityConfigController {
     };
   }
 
-  @Put('/v1/organizations/:organizationId/identity-config')
-  @HttpCode(200)
+  @Put(PUBLIC_ROUTES['organizations.identityConfig.set'].path)
+  @HttpCode(PUBLIC_ROUTES['organizations.identityConfig.set'].successStatus)
   async set(
     @Req() request: FastifyRequest,
     @Param('organizationId') organizationId: string,

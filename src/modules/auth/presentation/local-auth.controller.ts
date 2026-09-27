@@ -11,6 +11,7 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
 import { AppError } from '../../../common/errors/app-error';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
@@ -118,15 +119,15 @@ function isInvalidRefreshToken(error: unknown): boolean {
   );
 }
 
-@Controller('/v1/auth')
+@Controller()
 export class LocalAuthController {
   constructor(
     @Inject(LOCAL_AUTH_SERVICE)
     private readonly service: LocalAuthServicePort,
   ) {}
 
-  @Post('register')
-  @HttpCode(201)
+  @Post(PUBLIC_ROUTES['auth.register'].path)
+  @HttpCode(PUBLIC_ROUTES['auth.register'].successStatus)
   async register(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
@@ -143,8 +144,8 @@ export class LocalAuthController {
     };
   }
 
-  @Post('login')
-  @HttpCode(200)
+  @Post(PUBLIC_ROUTES['auth.login'].path)
+  @HttpCode(PUBLIC_ROUTES['auth.login'].successStatus)
   @Header('Cache-Control', 'no-store')
   async login(
     @Req() request: FastifyRequest,
@@ -156,8 +157,8 @@ export class LocalAuthController {
     return sessionEnvelope(request, reply, result);
   }
 
-  @Post('refresh')
-  @HttpCode(200)
+  @Post(PUBLIC_ROUTES['auth.refresh'].path)
+  @HttpCode(PUBLIC_ROUTES['auth.refresh'].successStatus)
   @Header('Cache-Control', 'no-store')
   async refresh(
     @Req() request: FastifyRequest,
@@ -183,8 +184,8 @@ export class LocalAuthController {
     }
   }
 
-  @Post('logout')
-  @HttpCode(204)
+  @Post(PUBLIC_ROUTES['auth.logout'].path)
+  @HttpCode(PUBLIC_ROUTES['auth.logout'].successStatus)
   @Header('Cache-Control', 'no-store')
   async logout(
     @Req() request: FastifyRequest,
@@ -199,7 +200,10 @@ export class LocalAuthController {
     clearRefreshCookie(reply);
   }
 
-  @Post('verify-email')
+  // No `@HttpCode`: the status is the request's answer, not a fixed success
+  // status. Verification Sign-in returns 200, a verify without a binding
+  // returns 204, so the registry's primary success status would be a lie here.
+  @Post(PUBLIC_ROUTES['auth.verify_email'].path)
   @Header('Cache-Control', 'no-store')
   async verify(
     @Req() request: FastifyRequest,
@@ -222,8 +226,8 @@ export class LocalAuthController {
     return sessionEnvelope(request, reply, session);
   }
 
-  @Post('resend-verification')
-  @HttpCode(202)
+  @Post(PUBLIC_ROUTES['auth.resend_verification'].path)
+  @HttpCode(PUBLIC_ROUTES['auth.resend_verification'].successStatus)
   async resend(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
@@ -239,8 +243,8 @@ export class LocalAuthController {
     );
   }
 
-  @Post('forgot-password')
-  @HttpCode(202)
+  @Post(PUBLIC_ROUTES['auth.forgot_password'].path)
+  @HttpCode(PUBLIC_ROUTES['auth.forgot_password'].successStatus)
   async forgotPassword(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
@@ -256,8 +260,8 @@ export class LocalAuthController {
     };
   }
 
-  @Post('reset-password')
-  @HttpCode(204)
+  @Post(PUBLIC_ROUTES['auth.reset_password'].path)
+  @HttpCode(PUBLIC_ROUTES['auth.reset_password'].successStatus)
   @Header('Cache-Control', 'no-store')
   async resetPassword(
     @Req() request: FastifyRequest,
