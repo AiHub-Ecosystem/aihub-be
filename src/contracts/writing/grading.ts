@@ -1,4 +1,5 @@
 import { type Static, Type } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
 
 import { ChartTypeSchema } from './task1';
 
@@ -104,5 +105,12 @@ export const GradeResponseSchema = Type.Object(
 );
 
 export type GradeResponse = Static<typeof GradeResponseSchema>;
+
+export function decodeGradeResponse(value: unknown): GradeResponse {
+  if (!Value.Check(GradeResponseSchema, value)) {
+    throw new Error('stored Writing grading response is malformed');
+  }
+  return Value.Parse(GradeResponseSchema, value);
+}
 
 export { BandSchema, CriterionIdSchema, LanguageSchema };

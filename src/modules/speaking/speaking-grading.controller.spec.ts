@@ -15,6 +15,10 @@ import { AppError } from '../../common/errors/app-error';
 import { registerBodySizeGuard } from '../../common/http/body-size.hook';
 import { registerRequestLifecycle } from '../../common/http/request-lifecycle.hook';
 import { generateRequestId } from '../../common/request-context/request-id';
+import {
+  GRADING_ORCHESTRATOR,
+  type GradingOrchestratorPort,
+} from '../gateway/application/grading-orchestrator.port';
 import { DownstreamHttpClient } from '../gateway/infrastructure/downstream-http.client';
 import {
   SPEAKING_MULTIPART_PARSER,
@@ -331,6 +335,69 @@ describe('Speaking grading HTTP flow', () => {
       test_code: 'TEST-001',
       transcript: null,
     });
+  });
+
+  it('passes decoded Speaking inputs and the upload signal to the orchestrator', async () => {
+    const parser = app.get<SpeakingMultipartParserPort>(
+      SPEAKING_MULTIPART_PARSER,
+    );
+    const orchestrator = app.get<GradingOrchestratorPort>(GRADING_ORCHESTRATOR);
+    const parse = jest.spyOn(parser, 'parse');
+    const execute = jest.spyOn(orchestrator, 'execute');
+
+    try {
+      const multipart = multipartPayload(
+        { part: '1', question_id: 'p1_hometown' },
+        Buffer.alloc(200, 1),
+      );
+      const upload = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/speaking/grading',
+        headers: { 'content-type': multipart.contentType },
+        payload: multipart.payload,
+      });
+      expect(upload.statusCode).toBe(200);
+      expect(execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operation: 'speaking.grading',
+          input: expect.objectContaining({
+            part: 1,
+            questionId: 'p1_hometown',
+          }),
+          signal: parse.mock.calls[0]?.[1],
+          receivedAt: expect.any(Date),
+          userId: 'local-development',
+        }),
+      );
+
+      execute.mockClear();
+      const json = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/speaking/grading-json',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          audio_url: 'https://s3.wispace.app/audio/sample.mp3',
+          part: 1,
+          question_id: 'p1_hometown',
+        },
+      });
+      expect(json.statusCode).toBe(200);
+      expect(execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operation: 'speaking.grading-json',
+          input: expect.objectContaining({
+            audioUrl: 'https://s3.wispace.app/audio/sample.mp3',
+            testType: 'Practice',
+          }),
+          receivedAt: expect.any(Date),
+          signal: expect.any(AbortSignal),
+          userId: 'local-development',
+        }),
+      );
+    } finally {
+      parse.mockRestore();
+      execute.mockRestore();
+    }
   });
 
   it('maps a JSON upload deadline that expires while parsing to 504', async () => {

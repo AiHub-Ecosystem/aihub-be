@@ -4,6 +4,9 @@ import { speakingGradingJsonAdapter } from '../../downstream/speaking/speaking-g
 import { speakingGradingAdapter } from '../../downstream/speaking/speaking-grading.adapter';
 import { task1GradeAdapter } from '../../downstream/writing/task1-grade.adapter';
 import { task2GradeAdapter } from '../../downstream/writing/task2-grade.adapter';
+import { IDEMPOTENCY_SERVICE } from '../idempotency/application/idempotency-service.port';
+import type { IdempotencyServicePort } from '../idempotency/application/idempotency-service.port';
+import { IdempotencyModule } from '../idempotency/idempotency.module';
 import {
   RUNTIME_SECRET_PROVIDER,
   type RuntimeSecretProvider,
@@ -13,8 +16,13 @@ import {
   CONCURRENCY_LIMITER,
   type ConcurrencyLimiterPort,
 } from './application/concurrency-limiter.port';
+import { GradingOrchestrator } from './application/grading-orchestrator';
+import { GRADING_ORCHESTRATOR } from './application/grading-orchestrator.port';
 import { INTERNAL_TOKEN_ISSUER } from './application/internal-token-issuer.port';
-import { OPERATION_DISPATCHER } from './application/operation-dispatcher.port';
+import {
+  OPERATION_DISPATCHER,
+  type OperationDispatcherPort,
+} from './application/operation-dispatcher.port';
 import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
@@ -36,13 +44,12 @@ import {
 } from './infrastructure/redis-gateway.client';
 import { RedisQuotaCounter } from './infrastructure/redis-quota-counter';
 import { RedisRateLimiter } from './infrastructure/redis-rate-limiter';
-import { ConcurrencyReleaseInterceptor } from './presentation/concurrency-release.interceptor';
-import { ConcurrencyGuard } from './presentation/concurrency.guard';
+import { ConcurrencyPermitInterceptor } from './presentation/concurrency-permit.interceptor';
 import { QuotaGuard } from './presentation/quota.guard';
 import { RateLimitGuard } from './presentation/rate-limit.guard';
 
 @Module({
-  imports: [SecretsModule],
+  imports: [SecretsModule, IdempotencyModule],
   providers: [
     {
       provide: REDIS_GATEWAY_CLIENT,
@@ -127,21 +134,29 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
         SANDBOX_DISPATCH_BUDGET,
       ],
     },
+    {
+      provide: GRADING_ORCHESTRATOR,
+      useFactory: (
+        dispatcher: OperationDispatcherPort,
+        idempotency: IdempotencyServicePort,
+      ): GradingOrchestrator =>
+        new GradingOrchestrator(dispatcher, idempotency),
+      inject: [OPERATION_DISPATCHER, IDEMPOTENCY_SERVICE],
+    },
     RateLimitGuard,
     QuotaGuard,
-    ConcurrencyGuard,
-    ConcurrencyReleaseInterceptor,
+    ConcurrencyPermitInterceptor,
   ],
   exports: [
     OPERATION_DISPATCHER,
+    GRADING_ORCHESTRATOR,
     DownstreamHttpClient,
     RATE_LIMITER,
     RateLimitGuard,
     QUOTA_COUNTER,
     QuotaGuard,
     CONCURRENCY_LIMITER,
-    ConcurrencyGuard,
-    ConcurrencyReleaseInterceptor,
+    ConcurrencyPermitInterceptor,
   ],
 })
 export class GatewayModule {}

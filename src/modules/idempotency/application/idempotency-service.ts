@@ -188,6 +188,15 @@ export class IdempotencyService implements IdempotencyServicePort {
     requestId: string,
     work: IdempotencyWork<T>,
   ): Promise<IdempotencyExecution<T>> {
+    const remainingResponseMs = input.deadlineAt.getTime() - this.now();
+    if (remainingResponseMs <= 0) {
+      await this.releaseAfterFailure(
+        input,
+        requestId,
+        new ResponseDeadlineReached(),
+      );
+      throw timeoutError();
+    }
     const hardTimeoutMs = input.timeoutMs * 2;
     const hardDeadlineAt = new Date(this.now() + hardTimeoutMs);
     const controller = new AbortController();
@@ -211,7 +220,7 @@ export class IdempotencyService implements IdempotencyServicePort {
       const responseDeadline = new Promise<never>((_, reject) => {
         responseTimer = setTimeout(
           () => reject(new ResponseDeadlineReached()),
-          input.timeoutMs,
+          remainingResponseMs,
         );
       });
       const result = await Promise.race([workPromise, responseDeadline]);
