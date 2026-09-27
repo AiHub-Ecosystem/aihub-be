@@ -9,6 +9,7 @@ import { Test } from '@nestjs/testing';
 import { MockAgent } from 'undici';
 
 import { AppModule } from '../../app.module';
+import { registerRequestLifecycle } from '../../common/http/request-lifecycle.hook';
 import { generateRequestId } from '../../common/request-context/request-id';
 import { DownstreamHttpClient } from '../gateway/infrastructure/downstream-http.client';
 import { IDEMPOTENCY_REPOSITORY } from '../idempotency/application/idempotency-repository.port';
@@ -101,6 +102,7 @@ describe('Writing grading HTTP flow', () => {
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({ genReqId: () => generateRequestId() }),
     );
+    registerRequestLifecycle(app.getHttpAdapter().getInstance());
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });

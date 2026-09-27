@@ -7,6 +7,7 @@ import { SignJWT, exportJWK, generateKeyPair } from 'jose';
 
 import { AppModule } from '../../app.module';
 import { AppError } from '../../common/errors/app-error';
+import { registerRequestLifecycle } from '../../common/http/request-lifecycle.hook';
 import type { RequestContext } from '../../common/request-context/request-context';
 import { generateRequestId } from '../../common/request-context/request-id';
 import type {
@@ -163,6 +164,7 @@ describe('Writing user identity HTTP flow', () => {
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({ genReqId: () => generateRequestId() }),
     );
+    registerRequestLifecycle(app.getHttpAdapter().getInstance());
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });
