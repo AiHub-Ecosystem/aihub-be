@@ -47,6 +47,7 @@ import {
   MintSandboxAssertionRequestSchema,
   MintSandboxAssertionResponseSchema,
 } from '../contracts/sandbox/assertion';
+import { SpeakingQuestionsResponseSchema } from '../contracts/speaking/questions';
 import type { IdempotencyMode } from './operation-catalog';
 
 /**
@@ -109,9 +110,9 @@ export interface PublicRouteDef {
   /** `null` for a route that takes no body, not an optional field. */
   readonly requestSchema: TSchema | null;
   /**
-   * `null` when the success response has no body, or when no contract schema
-   * exists to name. `speaking.questions` is the latter: its envelope is built
-   * where the document is built and has never had a contract module.
+   * `null` when the success response has no body. Every route that returns a
+   * body names its contract schema, including the routes that were once the
+   * only exception.
    */
   readonly responseSchema: TSchema | null;
   readonly errorStatuses: ErrorStatuses;
@@ -470,7 +471,7 @@ export const PUBLIC_ROUTES = {
     publishedIdentityScope: null,
     idempotency: 'none',
     requestSchema: null,
-    responseSchema: null,
+    responseSchema: SpeakingQuestionsResponseSchema,
     errorStatuses: [400, 500],
   },
 } as const satisfies Record<string, PublicRouteDef>;

@@ -1,6 +1,6 @@
 import { type Static, Type } from '@sinclair/typebox';
 
-const SpeakingPartSchema = Type.Integer({ minimum: 1, maximum: 3 });
+export const SpeakingPartSchema = Type.Integer({ minimum: 1, maximum: 3 });
 
 export type SpeakingPart = 1 | 2 | 3;
 
@@ -23,4 +23,31 @@ export const SpeakingQuestionSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type SpeakingQuestionContract = Static<typeof SpeakingQuestionSchema>;
+/**
+ * The unfiltered listing answers with `part: null` rather than omitting the
+ * field, so a client can tell an all-parts response from a filtered one.
+ */
+export const SpeakingQuestionsResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        part: Type.Union([SpeakingPartSchema, Type.Null()]),
+        questions: Type.Array(SpeakingQuestionSchema),
+      },
+      { additionalProperties: false },
+    ),
+    meta: Type.Object(
+      {
+        request_id: Type.String({ pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$' }),
+        service: Type.Literal('speaking'),
+        operation: Type.Literal('speaking.questions'),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export type SpeakingQuestionsResponse = Static<
+  typeof SpeakingQuestionsResponseSchema
+>;

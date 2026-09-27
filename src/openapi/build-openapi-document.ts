@@ -27,10 +27,7 @@ import {
   ORGANIZATION_AUDIT_OUTCOMES,
 } from '../contracts/organization/audit-event';
 import { MintSandboxAssertionResponseSchema } from '../contracts/sandbox/assertion';
-import {
-  SpeakingQuestionSchema,
-  SpeakingQuestionsQuerySchema,
-} from '../contracts/speaking/questions';
+import { SpeakingQuestionsQuerySchema } from '../contracts/speaking/questions';
 import {
   PASSWORD_MAX_CODE_POINTS,
   PASSWORD_MIN_CODE_POINTS,
@@ -1392,33 +1389,7 @@ function speakingQuestionsPathItem(): Record<string, unknown> {
             },
           },
           content: {
-            'application/json': {
-              schema: Type.Object(
-                {
-                  data: Type.Object(
-                    {
-                      part: Type.Union([
-                        SpeakingQuestionSchema.properties.part,
-                        Type.Null(),
-                      ]),
-                      questions: Type.Array(SpeakingQuestionSchema),
-                    },
-                    { additionalProperties: false },
-                  ),
-                  meta: Type.Object(
-                    {
-                      request_id: Type.String({
-                        pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
-                      }),
-                      service: Type.Literal('speaking'),
-                      operation: Type.Literal('speaking.questions'),
-                    },
-                    { additionalProperties: false },
-                  ),
-                },
-                { additionalProperties: false },
-              ),
-            },
+            'application/json': { schema: routeSchemaOf(id, 'response') },
           },
         },
         ...routeErrorResponsesOf(id),
