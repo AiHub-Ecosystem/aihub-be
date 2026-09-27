@@ -6,26 +6,14 @@ import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
 import { invalidRequest } from '../../../common/errors/invalid-request';
 import {
   type SpeakingPart,
-  type SpeakingQuestionContract,
   SpeakingQuestionsQuerySchema,
+  type SpeakingQuestionsResponse,
 } from '../../../contracts/speaking/questions';
 import {
   SPEAKING_AUDIO_STORAGE,
   type SpeakingAudioStoragePort,
 } from '../application/speaking-audio-storage.port';
 import { listSpeakingQuestions } from '../application/speaking-question-catalog';
-
-type SpeakingQuestionsEnvelope = {
-  readonly data: {
-    readonly part: SpeakingPart | null;
-    readonly questions: readonly SpeakingQuestionContract[];
-  };
-  readonly meta: {
-    readonly request_id: string;
-    readonly service: 'speaking';
-    readonly operation: 'speaking.questions';
-  };
-};
 
 function parsePart(value: unknown): SpeakingPart | undefined {
   if (value === undefined) {
@@ -61,7 +49,7 @@ export class SpeakingQuestionsController {
   async list(
     @Req() request: FastifyRequest,
     @Query('part') partValue?: unknown,
-  ): Promise<SpeakingQuestionsEnvelope> {
+  ): Promise<SpeakingQuestionsResponse> {
     const part = parsePart(partValue);
     const questions = await listSpeakingQuestions(this.storage, part);
 

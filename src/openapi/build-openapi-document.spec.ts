@@ -277,6 +277,44 @@ describe('buildOpenApiDocument', () => {
     expect(mismatches).toEqual({});
   });
 
+  /**
+   * A `null` response schema means a bodyless success, and a non-null one means
+   * the document publishes that schema as the success content. Neither may
+   * mean "no contract module was written yet": that is how
+   * `speaking.questions` spent its life, with its envelope inlined in this
+   * builder and its shape restated as a TypeScript interface in a controller,
+   * so the registry could not name the response it published.
+   *
+   * Checked here rather than in the catalog spec because the rule is about the
+   * document: a 202 may or may not carry a body, so the status alone cannot
+   * decide it, but whether the path item emitted `content` can.
+   */
+  it('publishes a success body exactly when the registry declares a response schema', () => {
+    const doc = build();
+    const mismatches: Record<string, string> = {};
+
+    for (const [routeId, route] of Object.entries(PUBLIC_ROUTES)) {
+      const pathItem = doc.paths[toOpenApiPath(route.path)];
+      const operation = pathItem?.[
+        route.method.toLowerCase() as keyof OpenApiPathItem
+      ] as
+        | (OpenApiOperation & { responses?: Record<string, unknown> })
+        | undefined;
+
+      const success = operation?.responses?.[String(route.successStatus)] as
+        | { content?: unknown }
+        | undefined;
+      const publishesBody = success?.content !== undefined;
+
+      if (publishesBody !== (route.responseSchema !== null)) {
+        mismatches[routeId] =
+          `publishesBody=${publishesBody} declaresSchema=${route.responseSchema !== null}`;
+      }
+    }
+
+    expect(mismatches).toEqual({});
+  });
+
   it('publishes an explicit security scheme matching each route callerAuth', () => {
     const schemeFor: Record<string, string> = {
       bearer: 'BearerAuth',
