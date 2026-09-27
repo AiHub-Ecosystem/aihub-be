@@ -4,6 +4,9 @@ import { speakingGradingJsonAdapter } from '../../downstream/speaking/speaking-g
 import { speakingGradingAdapter } from '../../downstream/speaking/speaking-grading.adapter';
 import { task1GradeAdapter } from '../../downstream/writing/task1-grade.adapter';
 import { task2GradeAdapter } from '../../downstream/writing/task2-grade.adapter';
+import { IDEMPOTENCY_SERVICE } from '../idempotency/application/idempotency-service.port';
+import type { IdempotencyServicePort } from '../idempotency/application/idempotency-service.port';
+import { IdempotencyModule } from '../idempotency/idempotency.module';
 import {
   RUNTIME_SECRET_PROVIDER,
   type RuntimeSecretProvider,
@@ -13,8 +16,13 @@ import {
   CONCURRENCY_LIMITER,
   type ConcurrencyLimiterPort,
 } from './application/concurrency-limiter.port';
+import { GradingOrchestrator } from './application/grading-orchestrator';
+import { GRADING_ORCHESTRATOR } from './application/grading-orchestrator.port';
 import { INTERNAL_TOKEN_ISSUER } from './application/internal-token-issuer.port';
-import { OPERATION_DISPATCHER } from './application/operation-dispatcher.port';
+import {
+  OPERATION_DISPATCHER,
+  type OperationDispatcherPort,
+} from './application/operation-dispatcher.port';
 import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
@@ -41,7 +49,7 @@ import { QuotaGuard } from './presentation/quota.guard';
 import { RateLimitGuard } from './presentation/rate-limit.guard';
 
 @Module({
-  imports: [SecretsModule],
+  imports: [SecretsModule, IdempotencyModule],
   providers: [
     {
       provide: REDIS_GATEWAY_CLIENT,
@@ -126,12 +134,22 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
         SANDBOX_DISPATCH_BUDGET,
       ],
     },
+    {
+      provide: GRADING_ORCHESTRATOR,
+      useFactory: (
+        dispatcher: OperationDispatcherPort,
+        idempotency: IdempotencyServicePort,
+      ): GradingOrchestrator =>
+        new GradingOrchestrator(dispatcher, idempotency),
+      inject: [OPERATION_DISPATCHER, IDEMPOTENCY_SERVICE],
+    },
     RateLimitGuard,
     QuotaGuard,
     ConcurrencyPermitInterceptor,
   ],
   exports: [
     OPERATION_DISPATCHER,
+    GRADING_ORCHESTRATOR,
     DownstreamHttpClient,
     RATE_LIMITER,
     RateLimitGuard,
