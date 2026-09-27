@@ -49,6 +49,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+const OPENAPI_METHODS = new Set([
+  'delete',
+  'get',
+  'head',
+  'options',
+  'patch',
+  'post',
+  'put',
+  'trace',
+]);
+
 function requestProperty(
   operation: OpenApiOperation | undefined,
   property: string,
@@ -194,6 +205,52 @@ describe('buildOpenApiDocument', () => {
    * recorded values should change is a separate decision, and ADR-0059 leaves
    * it open.
    */
+  /**
+   * The rule the extension has to obey, asserted against the document rather
+   * than against the registry: an operation publishes `x-identity-scope:
+   * user` if and only if it publishes the `X-User-Identity` parameter.
+   *
+   * This is the check that would have caught the drift it now guards. The
+   * eighteen Organization routes used to publish `user` while consuming no User
+   * Identity at all, telling a generated client to send a header the route
+   * rejects. Unlike the test above, nothing here re-states a registry value, so
+   * it fails when the document and the header disagree — which is the whole
+   * point of publishing the extension.
+   */
+  it('publishes x-identity-scope user only where it also publishes the User Identity parameter', () => {
+    const doc = build();
+    const violations: Record<string, string> = {};
+
+    for (const [path, pathItem] of Object.entries(doc.paths)) {
+      if (!isRecord(pathItem)) {
+        continue;
+      }
+
+      for (const [method, operation] of Object.entries(pathItem)) {
+        if (!OPENAPI_METHODS.has(method) || !isRecord(operation)) {
+          continue;
+        }
+
+        const parameters = Array.isArray(operation.parameters)
+          ? operation.parameters
+          : [];
+        const consumesUserIdentity = parameters.some(
+          (parameter) =>
+            isRecord(parameter) &&
+            parameter.$ref === '#/components/parameters/UserIdentity',
+        );
+        const claimsUser = operation['x-identity-scope'] === 'user';
+
+        if (claimsUser !== consumesUserIdentity) {
+          violations[`${method.toUpperCase()} ${path}`] =
+            `claims=${claimsUser} consumes=${consumesUserIdentity}`;
+        }
+      }
+    }
+
+    expect(violations).toEqual({});
+  });
+
   it('publishes the x-identity-scope value the registry records', () => {
     const doc = build();
     const mismatches: Record<string, unknown> = {};
