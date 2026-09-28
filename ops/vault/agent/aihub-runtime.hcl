@@ -13,6 +13,18 @@ auto_auth {
   }
 }
 
+# Keep this unauthenticated metrics-only listener inside the container.
+listener "tcp" {
+  address     = "127.0.0.1:8220"
+  tls_disable = true
+  role        = "metrics_only"
+}
+
+telemetry {
+  disable_hostname          = true
+  prometheus_retention_time = "1m"
+}
+
 template {
   source      = "/etc/aihub/vault/runtime-secrets.json.ctmpl"
   destination = "/run/secrets/aihub/runtime-secrets.json"

@@ -333,6 +333,11 @@ docker compose --env-file .env.production \
   -f docker-compose.production.yml config --quiet
 ```
 
+Before a rollout that changes the Vault Agent configuration or healthcheck,
+manually create and stage a fresh one-use AppRole SecretID. Compose recreates
+the Agent when its service configuration changes, and the existing SecretID
+has already been consumed. CD does not issue SecretIDs.
+
 Build or pull the release, start dependencies and Vault Agent, run migrations once,
 then start the app:
 
@@ -348,6 +353,31 @@ curl --fail https://api.example.com/health
 ```
 
 Run the two Sandbox-profile commands only when `AIHUB_SANDBOX_ENABLED=true`.
+
+The `vault-agent` healthcheck requires both rendered bundles and the live
+`vault.agent.authenticated` gauge to equal `1`. The gauge is exposed through an
+unauthenticated `metrics_only` listener bound to the Agent container's loopback;
+it does not add capabilities to the runtime AppRole. Healthcheck output names
+the failure without printing metric payloads or credentials.
+
+To confirm a live session manually, check the Compose health state and its
+diagnostic output, then verify both files and the gauge:
+
+```sh
+vault_container_id="$(sudo -n docker compose --env-file .env.production \
+  -f docker-compose.production.yml ps -q vault-agent)"
+sudo -n docker inspect --format '{{json .State.Health}}' "$vault_container_id"
+sudo -n docker exec "$vault_container_id" sh -ec \
+  "test -s /run/secrets/aihub/runtime-secrets.json && \
+   test -s /run/secrets/aihub/connection-secrets.json && \
+   wget -q -T 2 -O - 'http://127.0.0.1:8220/agent/v1/metrics?format=prometheus' | \
+   grep -E '^vault_agent_authenticated([[:space:]]|[{][^}]*[}][[:space:]])+1([.]0+)?([[:space:]]|$)'"
+```
+
+The last command prints only the authenticated gauge line. A successful
+`vault status` is not evidence of Agent authentication; it reports Vault server
+state. The CD workflow keeps its 60-second health wait and authentication-log
+guard, so a healthy Agent does not add deploy delay.
 
 The migration container is one-shot. Do not run `docker compose down -v`; the
 Postgres and Redis data belong to the existing VPS stacks. Back up the existing
