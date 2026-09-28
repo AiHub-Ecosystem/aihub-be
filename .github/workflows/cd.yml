@@ -184,7 +184,11 @@ jobs:
             exit 1
           fi
 
-          "${compose[@]}" up -d --force-recreate vault-agent
+          # Not --force-recreate: the AppRole secret_id is single-use, so a
+          # recreated Agent has to re-authenticate and needs a new secret_id
+          # issued by hand. An unchanged container keeps its session and renews
+          # its own token, which is what makes this step unattended.
+          "${compose[@]}" up -d vault-agent
           vault_container_id="$("${compose[@]}" ps -q vault-agent)"
           test -n "$vault_container_id"
           vault_healthy=0
@@ -203,6 +207,19 @@ jobs:
           if [ "$vault_healthy" -ne 1 ]; then
             "${compose[@]}" ps
             printf 'vault-agent health status: %s\n' "$vault_status" >&2
+            "${compose[@]}" logs --no-color --tail=100 vault-agent >&2 || true
+            exit 1
+          fi
+          # The healthcheck above only proves the rendered files exist, and they
+          # outlive a failed auto-auth. Compare them against the moment this
+          # deploy started: an Agent that could not re-authenticate leaves the
+          # previous render in place, which is the exact failure this catches.
+          agent_started_at="$(sudo -n docker inspect --format '{{.State.StartedAt}}' "$vault_container_id")"
+          rendered_at="$(sudo -n docker exec "$vault_container_id" stat -c %Y /run/secrets/aihub/connection-secrets.json)"
+          agent_started_epoch="$(date -d "$agent_started_at" +%s)"
+          if [ "$rendered_at" -lt "$agent_started_epoch" ]; then
+            printf 'vault-agent did not render secrets after start (%s); auto-auth is failing\n' \
+              "$agent_started_at" >&2
             "${compose[@]}" logs --no-color --tail=100 vault-agent >&2 || true
             exit 1
           fi

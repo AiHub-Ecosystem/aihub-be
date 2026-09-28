@@ -46,8 +46,15 @@ the Vault CLI, never secret values:
 $env:AIHUB_VAULT_PROVISION_ALLOW = 'true'
 $env:AIHUB_VAULT_ENVIRONMENT = 'staging'
 $env:AIHUB_VAULT_CREDENTIALS_DIR = 'C:\secure\aihub-vault\staging'
+$env:AIHUB_VAULT_AGENT_CIDR = '172.16.2.1/32'
 pnpm vault:provision
 ```
+
+`AIHUB_VAULT_AGENT_CIDR` is the address the Agent authenticates from. Vault
+only issues a `secret_id` when `bind_secret_id` is on, and that setting pins the
+`secret_id` to the address that requested it. Both the operator and the Agent
+reach Vault over the deployment network, so the role is provisioned with that
+network as `secret_id_bound_cidrs`.
 
 The helper writes the selected policy, creates an AppRole with a short token
 TTL and bounded maximum TTL, and writes all eight KV bundles. The credential

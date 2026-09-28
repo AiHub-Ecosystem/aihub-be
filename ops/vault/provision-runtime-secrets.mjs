@@ -29,6 +29,16 @@ if (
   fail('AIHUB_VAULT_CREDENTIALS_DIR is required');
 }
 
+// bind_secret_id=false lets the Agent use a secret_id minted elsewhere, and
+// Vault then still requires a constraint. Binding to the deployment network
+// keeps a stolen secret_id usable only from the Agent's own host.
+const agentCidr = process.env.AIHUB_VAULT_AGENT_CIDR?.trim();
+if (agentCidr === undefined || !/^[\d./]+$/.test(agentCidr)) {
+  fail(
+    'AIHUB_VAULT_AGENT_CIDR must be the Agent host CIDR, for example 172.16.2.1/32',
+  );
+}
+
 function runVault(args, label) {
   const result = spawnSync('vault', args, {
     encoding: 'utf8',
@@ -100,6 +110,12 @@ runVault(
     'secret_id_num_uses=1',
     'token_ttl=1h',
     'token_max_ttl=24h',
+    // Vault only mints a secret_id when bind_secret_id is on, and the default
+    // pins it to the single address that asked. Both the operator and the Agent
+    // reach Vault from the deployment network, so listing that network as the
+    // bound CIDR is what makes a one-time secret_id usable by the Agent.
+    'bind_secret_id=true',
+    `secret_id_bound_cidrs=${agentCidr}`,
   ],
   'AppRole provision',
 );

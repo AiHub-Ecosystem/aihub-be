@@ -255,12 +255,20 @@ eight production KV paths and never prints secret values:
 AIHUB_VAULT_PROVISION_ALLOW=true \
 AIHUB_VAULT_ENVIRONMENT=production \
 AIHUB_VAULT_CREDENTIALS_DIR=/secure/aihub/production \
+AIHUB_VAULT_AGENT_CIDR=172.16.2.1/32 \
   node ops/vault/provision-runtime-secrets.mjs
 ```
 
 The directory contains `ai-speaking.json`, `ai-writing.json`, `resend.json`,
 `user-access-jwt.json`, `seaweedfs.json`, `database.json`, `redis.json`, and
 `sandbox-assertion.json`. Keep it mode `0700` and remove it after provisioning.
+
+`AIHUB_VAULT_AGENT_CIDR` is the address the Vault Agent authenticates from,
+read from the deployment's Docker network (the Vault audit log records it as
+the request source). Vault only issues a `secret_id` when `bind_secret_id` is
+on, and that setting pins the `secret_id` to the requesting address, so the role
+is provisioned with the deployment network as `secret_id_bound_cidrs`. Both the
+operator and the Agent sit on that network.
 
 Provisioning requires a non-root operator identity. Create/rotate the AppRole
 `secret_id` after provisioning, then copy the one-use value to the host. Validate
