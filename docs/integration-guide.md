@@ -554,16 +554,20 @@ credentials, fragments, other hosts/schemes/ports, and unknown fields before
 dispatch. AIHUB validates but does not download the URL; the provider owns
 retrieval and does not follow redirects.
 
+This public sample is a candidate's answer to the matching Part 1 question,
+not audio of the examiner reading the prompt. Its URL has no signature or
+credentials and can be fetched without authentication.
+
 ```bash
 curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/speaking/grading-json" \
   -H "X-API-Key: $AIHUB_API_KEY" \
   -H "X-User-Identity: $AIHUB_ASSERTION" \
   -H 'Content-Type: application/json' \
   -d '{
-    "audio_url": "https://s3.wispace.app/audio/sample.mp3?signature=demo",
+    "audio_url": "https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm",
     "part": 1,
-    "question_id": "p1_hometown",
-    "prompt_text": "Do you enjoy living in your hometown?",
+    "question_id": "p1_do-you-enjoy-living-in-your-city-or-hometown",
+    "prompt_text": "Do you enjoy living in your city or hometown?",
     "test_type": "Practice"
   }'
 ```

@@ -20,7 +20,7 @@ const ALLOWED_FILES = [
   'docs/adr/0060-writing-task1-sample-image-is-published-not-signed.md', // records it
 ];
 
-const OBJECT_PATH = 'ielts-task1/';
+const OBJECT_PATH = 'ielts-task1/ca95bd4ab522946d';
 const SELF = 'src/catalog/task1-sample-image.spec.ts';
 const SKIP_DIRECTORIES = new Set(['.git', 'coverage', 'dist', 'node_modules']);
 

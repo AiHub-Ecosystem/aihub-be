@@ -3336,6 +3336,54 @@
           ]
         }
       ]
+    },
+    {
+      "name": "Speaking sample answer",
+      "item": [
+        {
+          "name": "Grade the published Speaking sample answer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              },
+              {
+                "key": "X-User-Identity",
+                "value": "{{userIdentity}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"audio_url\": \"https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm\",\n  \"part\": 1,\n  \"question_id\": \"p1_do-you-enjoy-living-in-your-city-or-hometown\",\n  \"prompt_text\": \"Do you enjoy living in your city or hometown?\",\n  \"test_type\": \"Practice\"\n}"
+            },
+            "url": "{{baseUrl}}/v1/ielts/speaking/grading-json",
+            "description": "Grades the public Part 1 candidate-answer recording with its matching question metadata. The audio URL is stable, unsigned, and publicly readable."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('success envelope identifies the Speaking JSON operation and question', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.meta.operation).to.eql('speaking.grading-json');",
+                  "  pm.expect(body.meta.service).to.eql('speaking');",
+                  "  pm.expect(body.data.question_id).to.eql('p1_do-you-enjoy-living-in-your-city-or-hometown');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "event": [],

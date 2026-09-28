@@ -2,6 +2,7 @@ import { convert } from 'openapi-to-postmanv2';
 
 import { TASK1_SAMPLE_IMAGE_URL } from '../catalog/operation-catalog';
 import { PUBLIC_ROUTES } from '../catalog/public-routes';
+import { SPEAKING_SAMPLE_ANSWER } from '../modules/speaking/application/speaking-question-catalog';
 import { toOpenApiPath } from '../openapi/openapi-path';
 
 const ORGANIZATION_ROSTER_PATH =
@@ -37,6 +38,7 @@ const USER_IDENTITY_HEADER = {
 
 const TASK1_GRADE_PATH = '/v1/ielts/writing/task1/grade';
 const TASK2_GRADE_PATH = '/v1/ielts/writing/task2/grade';
+const SPEAKING_GRADE_JSON_PATH = '/v1/ielts/speaking/grading-json';
 const ORGANIZATION_INVITATION_PATH =
   '/v1/organizations/{{organizationId}}/invitations';
 
@@ -60,6 +62,14 @@ const TASK2_GRADE_BODY = {
 const ORGANIZATION_INVITATION_BODY = {
   email: 'invitee@example.com',
   role: 'member',
+};
+
+const SPEAKING_SAMPLE_ANSWER_BODY = {
+  audio_url: SPEAKING_SAMPLE_ANSWER.audioUrl,
+  part: SPEAKING_SAMPLE_ANSWER.part,
+  question_id: SPEAKING_SAMPLE_ANSWER.questionId,
+  prompt_text: SPEAKING_SAMPLE_ANSWER.promptText,
+  test_type: 'Practice',
 };
 
 function assertStatus(status: number): string {
@@ -488,6 +498,26 @@ const INVITATION_SCENARIOS: readonly Scenario[] = [
   },
 ];
 
+const SPEAKING_SAMPLE_ANSWER_SCENARIOS: readonly Scenario[] = [
+  {
+    name: 'Grade the published Speaking sample answer',
+    description:
+      'Grades the public Part 1 candidate-answer recording with its matching question metadata. The audio URL is stable, unsigned, and publicly readable.',
+    path: SPEAKING_GRADE_JSON_PATH,
+    headers: [JSON_HEADER, VALID_KEY_HEADER, USER_IDENTITY_HEADER],
+    body: SPEAKING_SAMPLE_ANSWER_BODY,
+    testScript: [
+      assertStatus(200),
+      "pm.test('success envelope identifies the Speaking JSON operation and question', function () {",
+      '  const body = pm.response.json();',
+      "  pm.expect(body.meta.operation).to.eql('speaking.grading-json');",
+      "  pm.expect(body.meta.service).to.eql('speaking');",
+      `  pm.expect(body.data.question_id).to.eql('${SPEAKING_SAMPLE_ANSWER.questionId}');`,
+      '});',
+    ],
+  },
+];
+
 /**
  * Deep-removes every property named `key`. Used to drop the `response`
  * arrays openapi-to-postmanv2 attaches to each auto-converted operation —
@@ -886,6 +916,10 @@ export async function buildPostmanCollection(
       {
         name: 'Organization invitation examples',
         item: INVITATION_SCENARIOS.map(scenarioToItem),
+      },
+      {
+        name: 'Speaking sample answer',
+        item: SPEAKING_SAMPLE_ANSWER_SCENARIOS.map(scenarioToItem),
       },
     ],
   };

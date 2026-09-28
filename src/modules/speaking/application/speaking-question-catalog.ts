@@ -23,12 +23,14 @@ export interface SpeakingQuestionWithAudio
 
 const AUDIO_PREFIX = 'speaking-samples';
 
+const SAMPLE_ANSWER_QUESTION: SpeakingQuestionDefinition = {
+  part: 1,
+  text: 'Do you enjoy living in your city or hometown',
+  extension: 'webm',
+};
+
 const DEFINITIONS: readonly SpeakingQuestionDefinition[] = [
-  {
-    part: 1,
-    text: 'Do you enjoy living in your city or hometown',
-    extension: 'webm',
-  },
+  SAMPLE_ANSWER_QUESTION,
   {
     part: 1,
     text: 'How often do you use public transport',
@@ -126,6 +128,16 @@ function catalogEntry(
     audioObjectKey: `${AUDIO_PREFIX}/part-${definition.part}/${normalized}.${definition.extension}`,
   };
 }
+
+const SAMPLE_ANSWER_CATALOG_ENTRY = catalogEntry(SAMPLE_ANSWER_QUESTION);
+
+export const SPEAKING_SAMPLE_ANSWER = Object.freeze({
+  audioUrl:
+    'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
+  part: SAMPLE_ANSWER_CATALOG_ENTRY.part,
+  questionId: SAMPLE_ANSWER_CATALOG_ENTRY.id,
+  promptText: SAMPLE_ANSWER_CATALOG_ENTRY.promptText,
+});
 
 const CATALOG = Object.freeze(DEFINITIONS.map(catalogEntry));
 
