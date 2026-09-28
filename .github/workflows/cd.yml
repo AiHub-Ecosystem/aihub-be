@@ -210,19 +210,21 @@ jobs:
             "${compose[@]}" logs --no-color --tail=100 vault-agent >&2 || true
             exit 1
           fi
-          # The healthcheck above only proves the rendered files exist, and they
-          # outlive a failed auto-auth. Compare them against the moment this
-          # deploy started: an Agent that could not re-authenticate leaves the
-          # previous render in place, which is the exact failure this catches.
-          agent_started_at="$(sudo -n docker inspect --format '{{.State.StartedAt}}' "$vault_container_id")"
-          rendered_at="$(sudo -n docker exec "$vault_container_id" stat -c %Y /run/secrets/aihub/connection-secrets.json)"
-          agent_started_epoch="$(date -d "$agent_started_at" +%s)"
-          if [ "$rendered_at" -lt "$agent_started_epoch" ]; then
-            printf 'vault-agent did not render secrets after start (%s); auto-auth is failing\n' \
-              "$agent_started_at" >&2
-            "${compose[@]}" logs --no-color --tail=100 vault-agent >&2 || true
-            exit 1
-          fi
+          # Render timestamps prove nothing here: the Agent only rewrites a
+          # template when its rendered bytes change, and the Agent is not
+          # recreated, so an unchanged secret correctly keeps an old mtime.
+          # What must hold is that the live AppRole session still works. The
+          # role issues one-hour tokens, so a success or renewal inside the
+          # last hour means the deploy never needed a hand-issued secret_id.
+          vault_logs="$("${compose[@]}" logs --no-color --since 1h vault-agent 2>&1 || true)"
+          case "$vault_logs" in
+            *"authentication successful"* | *"renewed auth token"*) ;;
+            *)
+              printf 'vault-agent has not authenticated in the last hour; auto-auth is failing\n' >&2
+              printf '%s\n' "$vault_logs" | tail -100 >&2
+              exit 1
+              ;;
+          esac
 
           services=(app)
           compose_runtime=("${compose[@]}")
