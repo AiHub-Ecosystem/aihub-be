@@ -82,7 +82,15 @@ try {
 
   console.log('Database migration complete');
 } catch (error) {
-  console.error(error instanceof Error ? error.message : 'Migration failed');
+  // A migration wraps the driver error in `cause`; without it the log names
+  // the file that failed and nothing about why.
+  console.error(
+    error instanceof Error
+      ? `${error.message}${
+          error.cause instanceof Error ? `: ${error.cause.message}` : ''
+        }`
+      : 'Migration failed',
+  );
   process.exitCode = 1;
 } finally {
   await pool.end();

@@ -30,7 +30,12 @@ async function main() {
   await import(targetUrl);
 }
 
-main().catch(() => {
-  console.error('runtime configuration failed');
+main().catch((error) => {
+  // The message is what an operator reads in the deploy log, so it has to name
+  // the failing field or file. "runtime configuration failed" on its own sent
+  // every failed sandbox deploy back to the Vault runbook.
+  console.error(
+    `runtime configuration failed: ${error instanceof Error ? error.message : String(error)}`,
+  );
   process.exitCode = 1;
 });
