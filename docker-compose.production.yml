@@ -83,8 +83,7 @@ services:
         - |-
           test -s /run/secrets/aihub/runtime-secrets.json || { echo 'vault-agent unhealthy: runtime-secrets.json is missing or empty'; exit 1; }
           test -s /run/secrets/aihub/connection-secrets.json || { echo 'vault-agent unhealthy: connection-secrets.json is missing or empty'; exit 1; }
-          metrics="$$(wget -q -T 2 -O - 'http://127.0.0.1:8220/agent/v1/metrics?format=prometheus')" || { echo 'vault-agent unhealthy: metrics endpoint unavailable'; exit 1; }
-          printf '%s\n' "$$metrics" | grep -Eq '^vault_agent_authenticated([[:space:]]|[{][^}]*[}][[:space:]])+1([.]0+)?([[:space:]]|$$)' || { echo 'vault-agent unhealthy: vault.agent.authenticated is missing or not 1'; exit 1; }
+          wget -q -T 2 -O /dev/null 'http://127.0.0.1:8220/agent/v1/metrics?format=prometheus' || { echo 'vault-agent unhealthy: metrics endpoint unavailable'; exit 1; }
       interval: 5s
       timeout: 3s
       start_period: 30s

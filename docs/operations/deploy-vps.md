@@ -354,14 +354,17 @@ curl --fail https://api.example.com/health
 
 Run the two Sandbox-profile commands only when `AIHUB_SANDBOX_ENABLED=true`.
 
-The `vault-agent` healthcheck requires both rendered bundles and the live
-`vault.agent.authenticated` gauge to equal `1`. The gauge is exposed through an
-unauthenticated `metrics_only` listener bound to the Agent container's loopback;
-it does not add capabilities to the runtime AppRole. Healthcheck output names
-the failure without printing metric payloads or credentials.
+The `vault-agent` healthcheck requires both rendered bundles and a reachable
+`metrics_only` listener bound to the Agent container's loopback. This listener
+does not add capabilities to the runtime AppRole. Healthcheck output names the
+failure without printing metric payloads or credentials. The deployed Agent's
+metrics response does not currently include the documented
+`vault.agent.authenticated` gauge, so CD verifies that the container is running,
+both bundles are present, and an auth or renewal log occurred within the last
+hour instead of trusting that false-negative health state.
 
-To confirm a live session manually, check the Compose health state and its
-diagnostic output, then verify both files and the gauge:
+To inspect the Agent manually, verify both bundles and that its metrics listener
+responds. Compose health alone is not evidence of authentication:
 
 ```sh
 vault_container_id="$(sudo -n docker compose --env-file .env.production \
@@ -370,14 +373,16 @@ sudo -n docker inspect --format '{{json .State.Health}}' "$vault_container_id"
 sudo -n docker exec "$vault_container_id" sh -ec \
   "test -s /run/secrets/aihub/runtime-secrets.json && \
    test -s /run/secrets/aihub/connection-secrets.json && \
-   wget -q -T 2 -O - 'http://127.0.0.1:8220/agent/v1/metrics?format=prometheus' | \
-   grep -E '^vault_agent_authenticated([[:space:]]|[{][^}]*[}][[:space:]])+1([.]0+)?([[:space:]]|$)'"
+   wget -q -T 2 -O /dev/null 'http://127.0.0.1:8220/agent/v1/metrics?format=prometheus'"
 ```
 
-The last command prints only the authenticated gauge line. A successful
-`vault status` is not evidence of Agent authentication; it reports Vault server
-state. The CD workflow keeps its 60-second health wait and authentication-log
-guard, so a healthy Agent does not add deploy delay.
+The command verifies that the metrics listener responds; it does not prove
+authentication. A successful `vault status` is not evidence of Agent
+authentication; it reports Vault server state. CD uses `--no-deps` for
+migrations and app startup only after its direct bundle and recent-auth checks,
+so Compose's stale health state cannot block a release. CD never recreates the
+Agent; changing its service configuration still requires a fresh one-use
+AppRole SecretID staged by an operator.
 
 The migration container is one-shot. Do not run `docker compose down -v`; the
 Postgres and Redis data belong to the existing VPS stacks. Back up the existing

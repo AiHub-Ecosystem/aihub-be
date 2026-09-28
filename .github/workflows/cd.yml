@@ -184,29 +184,25 @@ jobs:
             exit 1
           fi
 
-          # Not --force-recreate: the AppRole secret_id is single-use, so a
-          # recreated Agent has to re-authenticate and needs a new secret_id
-          # issued by hand. An unchanged container keeps its session and renews
-          # its own token, which is what makes this step unattended.
-          "${compose[@]}" up -d vault-agent
+          # Do not recreate the Agent during CD: its AppRole secret_id is
+          # single-use, and a fresh one must be staged by an operator.
           vault_container_id="$("${compose[@]}" ps -q vault-agent)"
-          test -n "$vault_container_id"
-          vault_healthy=0
-          vault_status=""
-          for attempt in $(seq 1 30); do
-            vault_status="$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$vault_container_id" 2>/dev/null || true)"
-            if [ "$vault_status" = healthy ]; then
-              vault_healthy=1
-              break
-            fi
-            if [ "$vault_status" = unhealthy ]; then
-              break
-            fi
-            sleep 2
-          done
-          if [ "$vault_healthy" -ne 1 ]; then
-            "${compose[@]}" ps
-            printf 'vault-agent health status: %s\n' "$vault_status" >&2
+          if [ -z "$vault_container_id" ]; then
+            printf 'vault-agent container is missing; refusing to create it without a fresh AppRole secret_id\n' >&2
+            exit 1
+          fi
+          vault_running="$(sudo -n docker inspect --format '{{.State.Running}}' "$vault_container_id" 2>/dev/null || true)"
+          if [ "$vault_running" != true ]; then
+            printf 'vault-agent is not running; refusing to recreate it without a fresh AppRole secret_id\n' >&2
+            "${compose[@]}" logs --no-color --tail=100 vault-agent >&2 || true
+            exit 1
+          fi
+          if ! sudo -n docker exec "$vault_container_id" sh -ec '
+            test -s /run/secrets/aihub/runtime-secrets.json || { echo "runtime-secrets.json is missing or empty" >&2; exit 1; }
+            test -s /run/secrets/aihub/connection-secrets.json || { echo "connection-secrets.json is missing or empty" >&2; exit 1; }
+            wget -q -T 2 -O /dev/null "http://127.0.0.1:8220/agent/v1/metrics?format=prometheus"
+          '; then
+            printf 'vault-agent is running but its rendered bundles or metrics endpoint failed checks\n' >&2
             "${compose[@]}" logs --no-color --tail=100 vault-agent >&2 || true
             exit 1
           fi
@@ -216,6 +212,9 @@ jobs:
           # What must hold is that the live AppRole session still works. The
           # role issues one-hour tokens, so a success or renewal inside the
           # last hour means the deploy never needed a hand-issued secret_id.
+          # The deployed metrics endpoint does not expose the authenticated
+          # gauge, so the direct checks above and this auth-log guard replace
+          # the Compose service_healthy gate for this rollout.
           vault_logs="$("${compose[@]}" logs --no-color --since 1h vault-agent 2>&1 || true)"
           case "$vault_logs" in
             *"authentication successful"* | *"renewed auth token"*) ;;
@@ -243,12 +242,12 @@ jobs:
             "${compose[@]}" pull app
           fi
 
-          "${compose[@]}" --profile migration run --rm migrate </dev/null
+          "${compose[@]}" --profile migration run --no-deps --rm migrate </dev/null
           if [ "$sandbox_enabled" = true ]; then
-            "${compose[@]}" --profile migration --profile sandbox run --rm migrate-sandbox </dev/null
+            "${compose[@]}" --profile migration --profile sandbox run --no-deps --rm migrate-sandbox </dev/null
           fi
 
-          "${compose_runtime[@]}" up -d --no-build "${services[@]}"
+          "${compose_runtime[@]}" up -d --no-deps --no-build "${services[@]}"
 
           for service in "${services[@]}"; do
             container_id="$("${compose_runtime[@]}" ps -q "$service")"
