@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 
-import { SuccessEnvelopeInterceptor } from '../../common/http/success-envelope.interceptor';
 import { GatewayModule } from '../gateway/gateway.module';
 import { IdentityModule } from '../identity/identity.module';
 import { MeteringModule } from '../metering/metering.module';
+import { SuccessEnvelopeInterceptor } from '../metering/presentation/success-envelope.interceptor';
 import {
   RUNTIME_SECRET_PROVIDER,
   type RuntimeSecretProvider,

@@ -8,13 +8,10 @@ import {
 
 import { AppError } from '../../../common/errors/app-error';
 import {
-  setRequestMeteringQuotaTracked,
-  setRequestMeteringQuotaUnverified,
-} from '../../../common/request-metering/request-metering-state';
-import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
 } from '../../identity/presentation/authenticated-request';
+import { addMeteringEvidence } from '../../metering/application/metering-evidence';
 import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
@@ -53,13 +50,13 @@ export class QuotaGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const authenticated = getAuthenticatedApiKey(request);
     if (authenticated.environment === 'sandbox') {
-      setRequestMeteringQuotaTracked(request, false);
+      addMeteringEvidence(request, { quotaTracked: false });
       return true;
     }
 
     const quota = authenticated.monthlyRequestQuota;
 
-    setRequestMeteringQuotaTracked(request, quota !== null);
+    addMeteringEvidence(request, { quotaTracked: quota !== null });
     if (quota === null) {
       return true;
     }
@@ -77,7 +74,7 @@ export class QuotaGuard implements CanActivate {
         throw quotaExceeded(this.now());
       }
 
-      setRequestMeteringQuotaUnverified(request);
+      addMeteringEvidence(request, { quotaUnverified: true });
       return true;
     }
 

@@ -2,15 +2,15 @@ import {
   type MeteringMode,
   OPERATION_CATALOG,
 } from '../../../catalog/operation-catalog';
+import type { DownstreamId } from '../../../downstream/downstream.types';
+import type { QuotaCounterPort } from '../../gateway/application/quota-counter.port';
 import type {
   MeteringFinalizeInput,
   MeteringFinalizerPort,
-} from '../../../common/request-metering/metering-finalizer.port';
-import type { MeteringStatus } from '../../../common/request-metering/metering.types';
-import { normalizeMeteringTelemetry } from '../../../common/request-metering/telemetry';
-import type { DownstreamId } from '../../../downstream/downstream.types';
-import type { QuotaCounterPort } from '../../gateway/application/quota-counter.port';
+  MeteringStatus,
+} from './metering-finalizer.port';
 import type { MeteringFailureLoggerPort } from './metering-logger.port';
+import { normalizeMeteringTelemetry } from './metering.telemetry';
 import type { UsageRecord, UsageRepositoryPort } from './usage-repository.port';
 
 export const DOWNSTREAM_USAGE_REPORTING = {

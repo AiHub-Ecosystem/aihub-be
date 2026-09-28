@@ -10,7 +10,7 @@ import { Reflector } from '@nestjs/core';
 import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
-import { setRequestMeteringIdentity } from '../../../common/request-metering/request-metering-state';
+import { openMeteringEvidence } from '../../metering/application/metering-evidence';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
@@ -87,7 +87,7 @@ export class ApiKeyGuard implements CanActivate {
     ) {
       const authenticated = localDevelopmentIdentity(operation, environment);
       request.aihubAuth = authenticated;
-      setRequestMeteringIdentity(request, {
+      openMeteringEvidence(request, {
         operation: operationId,
         organizationId: authenticated.organizationId,
         apiKeyId: authenticated.apiKeyId,
@@ -111,7 +111,7 @@ export class ApiKeyGuard implements CanActivate {
           }
         : authenticated;
     request.aihubAuth = authorized;
-    setRequestMeteringIdentity(request, {
+    openMeteringEvidence(request, {
       operation: operationId,
       organizationId: authorized.organizationId,
       apiKeyId: authorized.apiKeyId,

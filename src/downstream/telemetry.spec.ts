@@ -1,4 +1,4 @@
-import { extractDownstreamTelemetry } from '../common/request-metering/telemetry';
+import { extractDownstreamTelemetry } from '../modules/metering/application/metering.telemetry';
 
 describe('extractDownstreamTelemetry', () => {
   it('reads the additive internal usage envelope without touching business data', () => {

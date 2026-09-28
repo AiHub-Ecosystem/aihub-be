@@ -1,29 +1,40 @@
+import type { ArgumentsHost, ExecutionContext } from '@nestjs/common';
 import { firstValueFrom, of } from 'rxjs';
 
-import { AppError } from '../errors/app-error';
-import { HttpExceptionFilter } from '../errors/http-exception.filter';
-import { SuccessEnvelopeInterceptor } from '../http/success-envelope.interceptor';
+import { AppError } from '../../../common/errors/app-error';
+import {
+  addMeteringEvidence,
+  openMeteringEvidence,
+} from '../application/metering-evidence';
 import type {
   MeteringFinalizeInput,
   MeteringFinalizerPort,
-} from './metering-finalizer.port';
-import {
-  initializeRequestMetering,
-  setRequestMeteringIdentity,
-  setRequestMeteringQuotaTracked,
-  setRequestMeteringQuotaUnverified,
-} from './request-metering-state';
+} from '../application/metering-finalizer.port';
+import { HttpExceptionFilter } from './http-exception.filter';
+import { SuccessEnvelopeInterceptor } from './success-envelope.interceptor';
 
-function contextFor(
+function httpContextFor(
   request: Record<string, unknown>,
   response: Record<string, unknown>,
-): Parameters<SuccessEnvelopeInterceptor['intercept']>[0] {
+): ArgumentsHost {
   return {
     switchToHttp: () => ({
       getRequest: () => request,
       getResponse: () => response,
     }),
-  } as Parameters<SuccessEnvelopeInterceptor['intercept']>[0];
+  } as ArgumentsHost;
+}
+
+function contextFor(
+  request: Record<string, unknown>,
+  response: Record<string, unknown>,
+): ExecutionContext {
+  return {
+    switchToHttp: () => ({
+      getRequest: () => request,
+      getResponse: () => response,
+    }),
+  } as ExecutionContext;
 }
 
 class FakeFinalizer implements MeteringFinalizerPort {
@@ -38,22 +49,21 @@ function authenticatedRequest(
   quotaTracked = false,
   quotaUnverified = false,
 ): Record<string, unknown> {
-  const request = {
+  const request: Record<string, unknown> = {
     id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
     headers: {},
   };
-  initializeRequestMetering(request, new Date(), 0);
-  setRequestMeteringIdentity(request, {
+  openMeteringEvidence(request, {
     operation: 'writing.task1.grade',
     organizationId: 'org_acme',
     apiKeyId: 'ak_backend',
     environment: 'production',
   });
   if (quotaTracked) {
-    setRequestMeteringQuotaTracked(request, true);
+    addMeteringEvidence(request, { quotaTracked: true });
   }
   if (quotaUnverified) {
-    setRequestMeteringQuotaUnverified(request);
+    addMeteringEvidence(request, { quotaUnverified: true });
   }
   return request;
 }
@@ -94,7 +104,7 @@ describe('metering request boundary', () => {
     const request = authenticatedRequest();
     const send = jest.fn();
     const filter = new HttpExceptionFilter(finalizer);
-    const context = contextFor(request, { status: () => ({ send }) });
+    const context = httpContextFor(request, { status: () => ({ send }) });
     const error = new AppError({
       code: 'AI_SERVICE_TIMEOUT',
       message: 'AI service request timed out',
@@ -143,7 +153,7 @@ describe('metering request boundary', () => {
     const finalizer = new FakeFinalizer();
     const request = authenticatedRequest(true, true);
     const filter = new HttpExceptionFilter(finalizer);
-    const context = contextFor(request, {
+    const context = httpContextFor(request, {
       status: () => ({ send: jest.fn() }),
     });
 

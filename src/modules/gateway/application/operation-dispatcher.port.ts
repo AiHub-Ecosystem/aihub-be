@@ -1,10 +1,6 @@
 import type { OperationId } from '../../../catalog/operation-id';
 import type { RequestContext } from '../../../common/request-context/request-context';
 import type {
-  MeteringModel,
-  MeteringUsage,
-} from '../../../common/request-metering/metering.types';
-import type {
   SpeakingGradeInput,
   SpeakingGradeJsonInput,
   SpeakingGradeResponse,
@@ -14,6 +10,10 @@ import type {
   GradeTask1Request,
   GradeTask2Request,
 } from '../../../contracts/writing/grading';
+import type {
+  MeteringModel,
+  MeteringUsage,
+} from '../../metering/application/metering-finalizer.port';
 
 export interface DispatchResult<TOutput> {
   readonly operation: OperationId;

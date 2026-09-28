@@ -4,7 +4,6 @@ import type { OperationId } from '../../../catalog/operation-id';
 import { AppError } from '../../../common/errors/app-error';
 import type { ErrorCode } from '../../../common/errors/error-code';
 import type { RequestContext } from '../../../common/request-context/request-context';
-import { extractDownstreamTelemetry } from '../../../common/request-metering/telemetry';
 import type {
   SpeakingGradeInput,
   SpeakingGradeJsonInput,
@@ -17,6 +16,7 @@ import type {
 } from '../../../contracts/writing/grading';
 import type { DownstreamAdapter } from '../../../downstream/downstream-adapter';
 import type { InternalAIServiceResponse } from '../../../downstream/downstream.types';
+import { extractDownstreamTelemetry } from '../../metering/application/metering.telemetry';
 import type { InternalTokenIssuerPort } from '../application/internal-token-issuer.port';
 import type {
   DispatchResult,

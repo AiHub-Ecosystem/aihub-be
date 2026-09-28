@@ -1,9 +1,33 @@
-import type { OperationId } from '../../catalog/operation-id';
-import type {
-  MeteringModel,
-  MeteringOutcome,
-  MeteringUsage,
-} from './metering.types';
+import type { OperationId } from '../../../catalog/operation-id';
+
+export type MeteringOutcome =
+  | 'success'
+  | 'client_error'
+  | 'downstream_error'
+  | 'internal_error';
+
+export type MeteringStatus =
+  | 'complete'
+  | 'missing_usage'
+  | 'not_applicable'
+  | 'quota_unverified';
+
+export interface MeteringUsage {
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+  readonly totalTokens?: number;
+}
+
+export interface MeteringModel {
+  readonly provider: string;
+  readonly name: string;
+}
+
+export interface MeteringTelemetry {
+  readonly usage?: MeteringUsage;
+  readonly models?: readonly MeteringModel[];
+  readonly aiProcessingMs?: number;
+}
 
 export interface MeteringFinalizeInput {
   readonly requestId: string;

@@ -1,14 +1,14 @@
 import { Module } from '@nestjs/common';
 
 import {
-  METERING_FINALIZER,
-  type MeteringFinalizerPort,
-} from '../../common/request-metering/metering-finalizer.port';
-import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
 } from '../gateway/application/quota-counter.port';
 import { GatewayModule } from '../gateway/gateway.module';
+import {
+  METERING_FINALIZER,
+  type MeteringFinalizerPort,
+} from './application/metering-finalizer.port';
 import {
   METERING_FAILURE_LOGGER,
   type MeteringFailureLoggerPort,
@@ -23,6 +23,8 @@ import {
   PostgresUsageRepository,
   createPostgresMeteringClient,
 } from './infrastructure/postgres-usage.repository';
+import { HttpExceptionFilter } from './presentation/http-exception.filter';
+import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.interceptor';
 
 @Module({
   imports: [GatewayModule],
@@ -48,7 +50,14 @@ import {
         new MeteringService(repository, logger, quotaCounter),
       inject: [USAGE_REPOSITORY, METERING_FAILURE_LOGGER, QUOTA_COUNTER],
     },
+    HttpExceptionFilter,
+    SuccessEnvelopeInterceptor,
   ],
-  exports: [METERING_FINALIZER, USAGE_REPOSITORY],
+  exports: [
+    METERING_FINALIZER,
+    USAGE_REPOSITORY,
+    HttpExceptionFilter,
+    SuccessEnvelopeInterceptor,
+  ],
 })
 export class MeteringModule {}

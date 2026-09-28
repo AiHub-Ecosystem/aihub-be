@@ -1,9 +1,9 @@
-import type { MeteringTelemetry } from '../../../common/request-metering/metering.types';
+import type { MeteringTelemetry } from '../../metering/application/metering-finalizer.port';
 import {
   normalizeMeteringModels,
   normalizeMeteringTelemetry,
   normalizeMeteringUsage,
-} from '../../../common/request-metering/telemetry';
+} from '../../metering/application/metering.telemetry';
 import type { DispatchResult } from './operation-dispatcher.port';
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -2,7 +2,7 @@ import type {
   MeteringModel,
   MeteringTelemetry,
   MeteringUsage,
-} from './metering.types';
+} from './metering-finalizer.port';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

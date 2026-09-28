@@ -70,6 +70,14 @@ module.exports = {
       },
       to: { path: '^src/modules/[^/]+/testing/' },
     },
+    {
+      name: 'common-no-business-module-import',
+      severity: 'error',
+      comment:
+        'Cross-cutting primitives do not depend on a business module. A port, vocabulary, or rule a single module owns belongs to that module, not to the cross-cutting tree (ADR-0061).',
+      from: { path: '^src/common/' },
+      to: { path: '^src/modules/' },
+    },
   ],
   options: {
     tsPreCompilationDeps: true,

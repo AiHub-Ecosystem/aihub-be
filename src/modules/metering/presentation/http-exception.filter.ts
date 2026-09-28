@@ -7,23 +7,21 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
-import { isRequestId } from '../request-context/request-id';
-import { finalizeRequestMetering } from '../request-metering/finalize-request-metering';
-import {
-  METERING_FINALIZER,
-  type MeteringFinalizerPort,
-} from '../request-metering/metering-finalizer.port';
-import {
-  elapsedRequestMs,
-  getRequestMeteringState,
-} from '../request-metering/request-metering-state';
-import { AppError } from './app-error';
-import type { ErrorCode } from './error-code';
+import { AppError } from '../../../common/errors/app-error';
+import type { ErrorCode } from '../../../common/errors/error-code';
 import {
   type ErrorEnvelope,
   createErrorEnvelope,
   createInternalErrorEnvelope,
-} from './error-envelope';
+} from '../../../common/errors/error-envelope';
+import { isRequestId } from '../../../common/request-context/request-id';
+import { completeRequestMetering } from '../application/metering-completion';
+import { getMeteringEvidence } from '../application/metering-evidence';
+import {
+  METERING_FINALIZER,
+  type MeteringFinalizerPort,
+  type MeteringOutcome,
+} from '../application/metering-finalizer.port';
 
 interface FrameworkError {
   readonly code: ErrorCode;
@@ -64,10 +62,7 @@ function isDownstreamFailure(exception: unknown): boolean {
   );
 }
 
-function meteringOutcome(
-  exception: unknown,
-  status: number,
-): 'client_error' | 'downstream_error' | 'internal_error' {
+function meteringOutcome(exception: unknown, status: number): MeteringOutcome {
   if (isDownstreamFailure(exception)) {
     return 'downstream_error';
   }
@@ -85,17 +80,33 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const http = host.switchToHttp();
     const request = http.getRequest<FastifyRequest>();
     const response = http.getResponse<FastifyReply>();
-    const requestId = isRequestId(request.id) ? request.id : 'unknown';
+    const requestId = isRequestId(request.id) ? request.id : undefined;
 
-    const { status, envelope } = this.resolve(exception, requestId);
+    const { status, envelope } = this.resolve(
+      exception,
+      requestId ?? 'unknown',
+    );
 
-    const state = getRequestMeteringState(request);
-    await finalizeRequestMetering(request, this.metering, {
-      outcome: meteringOutcome(exception, status),
-      httpStatus: status,
-      errorCode: envelope.error.code,
-      totalMs: state === undefined ? 0 : elapsedRequestMs(state),
-    });
+    // A request whose id never validated cannot be identified, so there is
+    // nothing to write a record against.
+    if (requestId !== undefined) {
+      await completeRequestMetering(
+        getMeteringEvidence(request),
+        this.metering,
+        {
+          requestId,
+          outcome: meteringOutcome(exception, status),
+          httpStatus: status,
+          errorCode: envelope.error.code,
+          // Fastify's own response window, which starts once the reply is being
+          // sent and so excludes body-parse time. The request-start metering
+          // hook that used to supply a wider number is gone, and the number
+          // now comes from the transport rather than from a store this filter
+          // would have had to read (ADR-0061).
+          totalMs: Math.max(0, Math.round(response.elapsedTime)),
+        },
+      );
+    }
 
     response.status(status).send(envelope);
   }

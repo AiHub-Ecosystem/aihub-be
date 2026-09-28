@@ -8,21 +8,21 @@ import {
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { type Observable, mergeMap } from 'rxjs';
 
-import { isOperationId } from '../../catalog/operation-id';
-import { isRequestId } from '../request-context/request-id';
-import { finalizeRequestMetering } from '../request-metering/finalize-request-metering';
+import { isOperationId } from '../../../catalog/operation-id';
+import { isRequestId } from '../../../common/request-context/request-id';
+import { completeRequestMetering } from '../application/metering-completion';
+import {
+  addMeteringEvidence,
+  getMeteringEvidence,
+} from '../application/metering-evidence';
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
-} from '../request-metering/metering-finalizer.port';
+} from '../application/metering-finalizer.port';
 import type {
   MeteringModel,
   MeteringUsage,
-} from '../request-metering/metering.types';
-import {
-  getRequestMeteringState,
-  setRequestMeteringTelemetry,
-} from '../request-metering/request-metering-state';
+} from '../application/metering-finalizer.port';
 
 interface DispatchResultLike {
   readonly operation: string;
@@ -90,10 +90,10 @@ export class SuccessEnvelopeInterceptor implements NestInterceptor {
 
         const downstreamMs = Math.max(0, Math.round(value.downstreamMs));
         if (
-          getRequestMeteringState(request) !== undefined &&
+          getMeteringEvidence(request) !== undefined &&
           isOperationId(value.operation)
         ) {
-          setRequestMeteringTelemetry(request, value.operation, {
+          addMeteringEvidence(request, {
             downstreamMs,
             ...(value.usage === undefined ? {} : { usage: value.usage }),
             ...(value.models === undefined ? {} : { models: value.models }),
@@ -127,11 +127,21 @@ export class SuccessEnvelopeInterceptor implements NestInterceptor {
           },
         };
 
-        await finalizeRequestMetering(request, this.metering, {
-          outcome: 'success',
-          httpStatus: 200,
-          totalMs,
-        });
+        // A request whose id never validated cannot be identified, so there is
+        // nothing to write a record against; the envelope below still carries
+        // the raw id exactly as it did before.
+        if (isRequestId(request.id)) {
+          await completeRequestMetering(
+            getMeteringEvidence(request),
+            this.metering,
+            {
+              requestId: request.id,
+              outcome: 'success',
+              httpStatus: 200,
+              totalMs,
+            },
+          );
+        }
 
         return { data: value.data, meta };
       }),

@@ -2,18 +2,15 @@ import type { ArgumentsHost, ExecutionContext } from '@nestjs/common';
 import { firstValueFrom, of } from 'rxjs';
 
 import { AppError } from '../../../common/errors/app-error';
-import { HttpExceptionFilter } from '../../../common/errors/http-exception.filter';
-import { SuccessEnvelopeInterceptor } from '../../../common/http/success-envelope.interceptor';
-import {
-  initializeRequestMetering,
-  setRequestMeteringIdentity,
-} from '../../../common/request-metering/request-metering-state';
 import type { AuthenticatedApiKey } from '../../identity/application/api-key-authenticator.port';
+import { openMeteringEvidence } from '../../metering/application/metering-evidence';
 import { MeteringService } from '../../metering/application/metering.service';
 import type {
   UsageRecord,
   UsageRepositoryPort,
 } from '../../metering/application/usage-repository.port';
+import { HttpExceptionFilter } from '../../metering/presentation/http-exception.filter';
+import { SuccessEnvelopeInterceptor } from '../../metering/presentation/success-envelope.interceptor';
 import type {
   QuotaCounterPort,
   QuotaCounterRequest,
@@ -74,8 +71,7 @@ function requestFor(
   };
   const authenticated = { ...baseAuthenticated, ...overrides };
   request.aihubAuth = authenticated;
-  initializeRequestMetering(request, new Date('2026-09-16T12:00:00Z'), 0);
-  setRequestMeteringIdentity(request, {
+  openMeteringEvidence(request, {
     operation: 'writing.task1.grade',
     organizationId: authenticated.organizationId,
     apiKeyId: authenticated.apiKeyId,

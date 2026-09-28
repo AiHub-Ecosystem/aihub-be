@@ -7,8 +7,6 @@ import { Test } from '@nestjs/testing';
 import { AppModule } from '../../app.module';
 import { registerRequestLifecycle } from '../../common/http/request-lifecycle.hook';
 import { generateRequestId } from '../../common/request-context/request-id';
-import { METERING_FINALIZER } from '../../common/request-metering/metering-finalizer.port';
-import type { MeteringFinalizeInput } from '../../common/request-metering/metering-finalizer.port';
 import { OPERATION_DISPATCHER } from '../gateway/application/operation-dispatcher.port';
 import type {
   IdempotencyExecution,
@@ -18,6 +16,8 @@ import type {
   IdempotencyWork,
 } from '../idempotency/application/idempotency-service.port';
 import { IDEMPOTENCY_SERVICE } from '../idempotency/application/idempotency-service.port';
+import { METERING_FINALIZER } from './application/metering-finalizer.port';
+import type { MeteringFinalizeInput } from './application/metering-finalizer.port';
 
 class FakeFinalizer {
   readonly inputs: MeteringFinalizeInput[] = [];
@@ -128,5 +128,31 @@ describe('authenticated metering HTTP boundary', () => {
         httpStatus: 400,
       }),
     );
+  });
+
+  it('writes no record for a request that never authenticated', async () => {
+    const before = finalizer.inputs.length;
+    // The dev bypass authenticates a keyless local request, so it has to be
+    // off for the case this test is about: a key that never resolves.
+    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'false';
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/writing/task1/grade',
+        payload: {
+          question: 'Describe the chart.',
+          chart_type: 'Bar Chart',
+          essay: 'A clear essay.',
+          image_url: 'https://example.com/chart.png',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    } finally {
+      process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'true';
+    }
+
+    expect(finalizer.inputs).toHaveLength(before);
   });
 });

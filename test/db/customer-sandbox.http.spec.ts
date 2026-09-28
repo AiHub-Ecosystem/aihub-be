@@ -14,7 +14,6 @@ import { ulid } from 'ulid';
 import { AppModule } from '../../src/app.module';
 import { migrateSandboxOrganization } from '../../src/cli/sandbox-control-plane-migration';
 import { registerRequestLifecycle } from '../../src/common/http/request-lifecycle.hook';
-import { registerRequestMeteringStart } from '../../src/common/request-metering/request-metering-state';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
@@ -292,7 +291,6 @@ beforeAll(async () => {
     new FastifyAdapter(),
   );
   const fastify = app.getHttpAdapter().getInstance();
-  registerRequestMeteringStart(fastify);
   registerRequestLifecycle(fastify);
   await app.init();
   await fastify.ready();

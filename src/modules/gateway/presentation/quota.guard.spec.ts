@@ -1,8 +1,12 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
-import { getRequestMeteringState } from '../../../common/request-metering/request-metering-state';
 import type { AuthenticatedApiKey } from '../../identity/application/api-key-authenticator.port';
+import {
+  type MeteringEvidence,
+  getMeteringEvidence,
+  openMeteringEvidence,
+} from '../../metering/application/metering-evidence';
 import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
@@ -45,10 +49,23 @@ function contextFor(request: Record<string, unknown>): ExecutionContext {
   } as ExecutionContext;
 }
 
-function requestFor(
-  authenticated: AuthenticatedApiKey = baseAuthenticated,
-): Record<string, unknown> {
-  return { aihubAuth: authenticated };
+function requestFor(authenticated: AuthenticatedApiKey = baseAuthenticated): {
+  aihubAuth: AuthenticatedApiKey;
+  aihubMetering?: MeteringEvidence;
+} {
+  const request: {
+    aihubAuth: AuthenticatedApiKey;
+    aihubMetering?: MeteringEvidence;
+  } = { aihubAuth: authenticated };
+  // The authenticating guard opens the evidence before QuotaGuard runs; this
+  // mirrors that order so the guard's writes land on real evidence.
+  openMeteringEvidence(request, {
+    operation: 'writing.task1.grade',
+    organizationId: authenticated.organizationId,
+    apiKeyId: authenticated.apiKeyId,
+    environment: authenticated.environment,
+  });
+  return request;
 }
 
 describe('QuotaGuard', () => {
@@ -65,7 +82,7 @@ describe('QuotaGuard', () => {
     await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
 
     expect(counter.reads).toEqual([]);
-    expect(getRequestMeteringState(request)).toEqual(
+    expect(getMeteringEvidence(request)).toEqual(
       expect.objectContaining({ quotaTracked: false }),
     );
   });
@@ -83,7 +100,7 @@ describe('QuotaGuard', () => {
     await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
 
     expect(counter.reads).toEqual([]);
-    expect(getRequestMeteringState(request)).toEqual(
+    expect(getMeteringEvidence(request)).toEqual(
       expect.objectContaining({ quotaTracked: false }),
     );
   });
@@ -97,7 +114,7 @@ describe('QuotaGuard', () => {
     await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
 
     expect(counter.reads).toEqual(['org_acme']);
-    expect(getRequestMeteringState(request)).toEqual(
+    expect(getMeteringEvidence(request)).toEqual(
       expect.objectContaining({ quotaTracked: true }),
     );
   });
@@ -167,12 +184,10 @@ describe('QuotaGuard', () => {
       retryAfterMs: 1_252_800_000,
     });
 
-    expect(getRequestMeteringState(request)).toEqual(
+    expect(getMeteringEvidence(request)).toEqual(
       expect.objectContaining({ quotaTracked: true }),
     );
-    expect(getRequestMeteringState(request)).not.toHaveProperty(
-      'quotaUnverified',
-    );
+    expect(getMeteringEvidence(request)).not.toHaveProperty('quotaUnverified');
   });
 
   it('allows a soft-fail organization and marks quota verification as unavailable', async () => {
@@ -183,7 +198,7 @@ describe('QuotaGuard', () => {
 
     await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
 
-    expect(getRequestMeteringState(request)).toEqual(
+    expect(getMeteringEvidence(request)).toEqual(
       expect.objectContaining({ quotaTracked: true, quotaUnverified: true }),
     );
   });
@@ -196,7 +211,7 @@ describe('QuotaGuard', () => {
 
     await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
 
-    expect(getRequestMeteringState(request)).toEqual(
+    expect(getMeteringEvidence(request)).toEqual(
       expect.objectContaining({ quotaTracked: true, quotaUnverified: true }),
     );
   });

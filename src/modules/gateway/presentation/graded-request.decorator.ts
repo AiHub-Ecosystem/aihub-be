@@ -1,9 +1,9 @@
 import { UseGuards, UseInterceptors } from '@nestjs/common';
 
 import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
-import { SuccessEnvelopeInterceptor } from '../../../common/http/success-envelope.interceptor';
 import { ApiKeyGuard } from '../../identity/presentation/api-key.guard';
 import { UserIdentityGuard } from '../../identity/presentation/user-identity.guard';
+import { SuccessEnvelopeInterceptor } from '../../metering/presentation/success-envelope.interceptor';
 import { ConcurrencyPermitInterceptor } from './concurrency-permit.interceptor';
 import { QuotaGuard } from './quota.guard';
 import { RateLimitGuard } from './rate-limit.guard';

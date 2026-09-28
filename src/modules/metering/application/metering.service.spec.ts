@@ -1,7 +1,9 @@
 import type { MeteringMode } from '../../../catalog/operation-catalog';
-import type { MeteringFinalizeInput } from '../../../common/request-metering/metering-finalizer.port';
-import type { MeteringStatus } from '../../../common/request-metering/metering.types';
 import type { QuotaCounterPort } from '../../gateway/application/quota-counter.port';
+import type {
+  MeteringFinalizeInput,
+  MeteringStatus,
+} from './metering-finalizer.port';
 import type { MeteringFailureLoggerPort } from './metering-logger.port';
 import {
   DOWNSTREAM_USAGE_REPORTING,
