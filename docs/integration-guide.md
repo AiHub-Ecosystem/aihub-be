@@ -119,10 +119,16 @@ AIHUB and your team complete these steps in order:
    need (`writing.grade`, `speaking.grade`, or both) and whether you are setting
    up staging, production, or the separate Writing Sandbox in section 3b. Use a
    key authorized for that environment and scope.
-2. **Create or access your Organization and API key.** An Organization owner
-   or admin manages API keys in the AIHUB control plane. A key is shown only
-   once; save it in your server-side secret manager immediately. Keep each
-   environment's key and base URL paired.
+2. **Create your Organization and API key.** Register an AIHUB account, then
+   create your Organization through `POST /v1/organizations`. A new
+   Organization receives every currently available capability, so no sales
+   conversation or emailed request is needed. Create a key under
+   `/v1/organizations/{organization_id}/api-keys`; a key is shown only once,
+   so save it in your server-side secret manager immediately. Keep each
+   environment's key and base URL paired. Inviting teammates and recovering
+   access are self-serve too, so you only need an AIHUB administrator when
+   you want commercial limits or an entitlement changed on an existing
+   Organization.
 3. **Choose an identity mode.** Declared User IDs need no identity
    configuration, issuer, signing key, or JWKS. To use Signed User Assertions,
    an active Organization owner configures the issuer and one public-key
@@ -144,32 +150,22 @@ API key are ready and your team has saved a successful staging `request_id` for
 support. An identity configuration is required only if you chose Signed User
 Assertions.
 
-### Information to prepare for onboarding
+### Details to have ready
 
-Prepare the general onboarding information for every integration. Issuer and
-JWKS details are needed only if you choose Signed User Assertions; they are
-Organization settings, not headers that change from request to request.
+Registering an Organization and creating a key are self-serve, so nothing here
+is sent to AIHUB by email. These are the values you supply to those endpoints.
 
 | Item                        | Required for         | Rule                                                                                                   |
 | --------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------ |
 | Organization name           | Every integration    | Your display or legal name                                                                             |
-| Capabilities                | Every integration    | `writing.grade`, `speaking.grade`, or both                                                             |
+| Capabilities                | Every integration    | Granted automatically to a new Organization; ask an operator to change them on an existing one         |
 | Environment                 | Every integration    | Staging, production, or Sandbox for Writing; each uses its matching key and base URL                   |
-| Technical contact           | Every integration    | Integration owner and incident contact                                                                 |
 | Issuer (`iss`)              | Signed mode only     | Exact string; it must match the assertion character for character                                      |
 | JWKS source                 | Signed mode only     | Configure exactly one: a publicly reachable HTTPS URL or a public JWKS document                        |
 | Signing algorithm and `kid` | First signed request | Use a supported algorithm (`RS256` or `ES256`) and a `kid` identifying exactly one matching public key |
 
-General onboarding template. Do not include API keys or private keys:
-
-```text
-Organization name: <name>
-Environment: staging
-Capabilities: writing.grade, speaking.grade
-Technical contact: <name and secure contact>
-```
-
-Add these fields only when enabling Signed User Assertions:
+For a new Organization, the name is the only field that is really yours to
+choose. Signed User Assertion values:
 
 ```text
 Identity mode: signed
@@ -421,7 +417,7 @@ sandbox hostname:
 ```bash
 ASSERTION=$(curl -sS -X POST 'https://sandbox.aihubproduction.com/v1/sandbox/assertions'   -H "X-API-Key: $SANDBOX_API_KEY" -H 'Content-Type: application/json'   -d '{"user_id":"student_456"}' | python -c 'import json,sys; print(json.load(sys.stdin)["data"]["assertion"])')
 
-curl -sS -X POST 'https://sandbox.aihubproduction.com/v1/ielts/speaking/grading'   -H "X-API-Key: $SANDBOX_API_KEY"   -H "X-User-Identity: $ASSERTION"   -F 'audio=@/path/to/sample.wav'   -F 'part=1'   -F 'question_id=p1_hometown'   -F 'prompt_text=Do you enjoy living in your hometown?'   -F 'test_type=Practice'
+curl -sS -X POST 'https://sandbox.aihubproduction.com/v1/ielts/speaking/grading'   -H "X-API-Key: $SANDBOX_API_KEY"   -H "X-User-Identity: $ASSERTION"   -F 'audio=@/path/to/sample.wav'   -F 'part=1'   -F 'question_id=p1_do-you-enjoy-living-in-your-city-or-hometown'   -F 'prompt_text=Do you enjoy living in your city or hometown?'   -F 'test_type=Practice'
 ```
 
 Note the path. Grading operations live under `/v1/ielts/...`, not `/v1/...`;
@@ -492,15 +488,18 @@ JSON-by-URL use `Content-Type: application/json`; Speaking file grading uses
 | `/v1/ielts/speaking/grading`      | Required; plain ID or JWT by Organization mode | None              |   26 MiB |           60s |
 | `/v1/ielts/speaking/grading-json` | Required; plain ID or JWT by Organization mode | None              |   256 KB |           30s |
 
-One route is not a grading operation and appears here only so the list is
+Two routes are not grading operations and appear here only so the list is
 complete:
 
-| Path                     | `X-User-Identity` | `Idempotency-Key` | Notes                                            |
-| ------------------------ | ----------------- | ----------------- | ------------------------------------------------ |
-| `/v1/sandbox/assertions` | Not used          | None              | Dedicated demo Organization only; see section 3a |
+| Path                           | `X-User-Identity` | `Idempotency-Key` | Notes                                            |
+| ------------------------------ | ----------------- | ----------------- | ------------------------------------------------ |
+| `/v1/sandbox/assertions`       | Not used          | None              | Dedicated demo Organization only; see section 3a |
+| `/v1/ielts/speaking/questions` | Not used          | None              | Public question catalog; no API key needed       |
 
-It takes an API key and a `user_id` in its body; it does not take
-`X-User-Identity` because issuing that value is what the route does.
+`/v1/sandbox/assertions` takes an API key and a `user_id` in its body; it does
+not take `X-User-Identity` because issuing that value is what the route does.
+`/v1/ielts/speaking/questions` takes neither credential and is described in
+the Speaking grading section.
 
 ### Enumerated values
 
@@ -548,6 +547,28 @@ for the full schema.
 
 ### Speaking grading
 
+Speaking questions come from AIHUB, not from you. Fetch the catalog, pick one,
+and send the `question_id` it returns back with the audio. The route is public:
+it needs no API key and no assertion.
+
+```bash
+curl -sS "$AIHUB_BASE_URL/v1/ielts/speaking/questions?part=1"
+```
+
+```json
+{ "data": { "part": 1, "questions": [
+  { "question_id": "p1_do-you-enjoy-living-in-your-city-or-hometown",
+    "part": 1,
+    "prompt_text": "Do you enjoy living in your city or hometown?",
+    "audio_url": "https://..." }
+] }, "meta": { ... } }
+```
+
+Each entry also carries a signed `audio_url` for the sample answer, and
+`prompt_text` is the exact prompt to show your learner. Send both the
+`question_id` and the `prompt_text` from the same entry. Omit `part` to list
+all parts at once.
+
 `POST /v1/ielts/speaking/grading` accepts one audio file and the fields below. The
 route is synchronous, user-scoped, and does not currently provide an
 idempotent replay. A client retry can therefore start another grading run.
@@ -556,7 +577,7 @@ idempotent replay. A client retry can therefore start another grading run.
 | ------------- | -------- | ------------------------------------------------------------------------------------- |
 | `audio`       | Yes      | One `wav`, `mp3`, `m4a`, `webm`, or `ogg` file; at least 100 bytes and at most 25 MiB |
 | `part`        | Yes      | Integer `1`, `2`, or `3`                                                              |
-| `question_id` | Yes      | Non-empty question-bank identifier                                                    |
+| `question_id` | Yes      | Non-empty id copied from `GET /v1/ielts/speaking/questions`                           |
 | `prompt_text` | No       | Prompt used for relevance analysis                                                    |
 | `test_type`   | No       | `Practice` or `Full-test`                                                             |
 | `test_code`   | No       | Identifier shared by questions in one full test                                       |
@@ -757,7 +778,8 @@ not a longer delay.
 
 ### Customer onboarding
 
-- [ ] Organization name, requested capabilities, and technical contact sent to AIHUB
+- [ ] AIHUB account registered and Organization created through `POST /v1/organizations`
+- [ ] Capabilities confirmed for the Organization; any change on an existing Organization requested from an operator
 - [ ] Staging and production base URLs recorded separately
 - [ ] API key stored server-side in a secret manager, never in a client build
 - [ ] Staging and production keys stored separately and used only with their allowed environment
@@ -774,6 +796,7 @@ not a longer delay.
 - [ ] Signed: assertions minted per request, ≤ 300s lifetime, with a fresh `jti`
 - [ ] `X-User-Identity` contains the learner identity; no client-supplied `user_id` is sent
 - [ ] `Idempotency-Key` generated per Writing submission and reused across retries
+- [ ] Speaking: catalog fetched from `GET /v1/ielts/speaking/questions`; the submitted `question_id` and `prompt_text` come from the same entry
 - [ ] Speaking audio is one supported file within the documented size limit
 - [ ] Client timeout is ≥ 90s for Writing and Speaking multipart; ≥ 60s for Speaking JSON-by-URL
 - [ ] Error handling branches on `code`, not on `message` or status alone

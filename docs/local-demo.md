@@ -317,8 +317,8 @@ $headers = @{
 $form = @{
   audio = Get-Item -LiteralPath '.\sample.wav'
   part = '1'
-  question_id = 'p1_hometown'
-  prompt_text = 'Do you enjoy living in your hometown?'
+  question_id = 'p1_do-you-enjoy-living-in-your-city-or-hometown'
+  prompt_text = 'Do you enjoy living in your city or hometown?'
   test_type = 'Practice'
 }
 
@@ -338,8 +338,8 @@ curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/speaking/grading" \
   -H "X-User-Identity: $AIHUB_ASSERTION" \
   -F "audio=@sample.wav;type=audio/wav" \
   -F 'part=1' \
-  -F 'question_id=p1_hometown' \
-  -F 'prompt_text=Do you enjoy living in your hometown?' \
+  -F 'question_id=p1_do-you-enjoy-living-in-your-city-or-hometown' \
+  -F 'prompt_text=Do you enjoy living in your city or hometown?' \
   -F 'test_type=Practice'
 ```
 
@@ -365,8 +365,8 @@ PowerShell 7:
 $json = @{
   audio_url = 'https://s3.wispace.app/audio/sample.mp3?signature=demo'
   part = 1
-  question_id = 'p1_hometown'
-  prompt_text = 'Do you enjoy living in your hometown?'
+  question_id = 'p1_do-you-enjoy-living-in-your-city-or-hometown'
+  prompt_text = 'Do you enjoy living in your city or hometown?'
   test_type = 'Practice'
 } | ConvertTo-Json
 
@@ -389,8 +389,8 @@ curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/speaking/grading-json" \
   -d '{
     "audio_url": "https://s3.wispace.app/audio/sample.mp3?signature=demo",
     "part": 1,
-    "question_id": "p1_hometown",
-    "prompt_text": "Do you enjoy living in your hometown?",
+    "question_id": "p1_do-you-enjoy-living-in-your-city-or-hometown",
+    "prompt_text": "Do you enjoy living in your city or hometown?",
     "test_type": "Practice"
   }'
 ```
