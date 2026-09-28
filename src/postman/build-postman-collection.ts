@@ -1,5 +1,6 @@
 import { convert } from 'openapi-to-postmanv2';
 
+import { TASK1_SAMPLE_IMAGE_URL } from '../catalog/operation-catalog';
 import { PUBLIC_ROUTES } from '../catalog/public-routes';
 import { toOpenApiPath } from '../openapi/openapi-path';
 
@@ -43,7 +44,7 @@ const TASK1_GRADE_BODY = {
   question:
     'The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.',
   chart_type: 'Bar Chart',
-  image_url: 'https://s3.wispace.app/ielts-task1/ca95bd4ab522946d',
+  image_url: TASK1_SAMPLE_IMAGE_URL,
   essay:
     'The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.',
 };

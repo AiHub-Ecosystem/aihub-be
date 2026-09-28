@@ -25,6 +25,14 @@ export type IdempotencyMode = 'none' | 'optional' | 'required';
 export type MeteringMode = 'model' | 'none';
 type ResponseContract = TSchema | 'unresolved';
 
+// The one canonical Task 1 sample chart URL. The AI Writing service fetches
+// the image itself, outside the customer's request, so it is published rather
+// than signed (ADR-0060). Postman, the integration guide, and the drift guard
+// in `operation-catalog.spec.ts` all name this constant; nobody repeats the
+// literal.
+export const TASK1_SAMPLE_IMAGE_URL =
+  'https://s3.wispace.app/ielts-task1/ca95bd4ab522946d';
+
 export interface OperationDef {
   readonly method: 'POST';
   readonly path: string;

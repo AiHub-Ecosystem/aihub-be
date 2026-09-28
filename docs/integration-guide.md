@@ -509,6 +509,12 @@ fetches the chart itself, outside your request, so the image URL must be
 publicly readable with no signature and no credential. Replace it with your
 own chart's URL when you supply your own essay.
 
+The `image_url` above points at a sample chart AIHUB hosts, showing UK
+telephone call minutes from 1995 to 2002, and the question and essay in that
+request describe that same chart. Task 1 grading always needs an image you can
+reach: it is graded on the chart and the essay together, so a mismatched or
+missing image makes the result meaningless. Send a URL for your own chart.
+
 The grading response carries `overall_band`, exactly four `criteria` entries in
 a fixed order, `summary`, `suggestions`, `next_steps`, and `annotations` that
 quote the essay. Bands are whole or half numbers between 0 and 9. See `/docs`
