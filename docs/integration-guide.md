@@ -8,12 +8,19 @@ timeouts, and errors.
 The endpoint reference lives at `GET /docs`, generated from the same schemas
 the server validates against. This guide is the surrounding context.
 
-The fastest start is section 1a: with only an organization API key you can
-grade by sending your own user id in `X-User-Identity`. When you are ready to
-prove to AIHUB which user is acting, register a JWKS and switch to Signed User
-Assertions (section 3). Before making production calls, complete the onboarding
-flow in section 2. Customer Web users evaluating Writing can use the separate
-Customer Sandbox tier in section 3b once issue #182 is deployed.
+Every grading request needs an `X-User-Identity` value, but a JWKS is optional.
+Choose the identity mode saved for your Organization:
+
+| Mode                  | When it applies                            | Value in `X-User-Identity`               | JWKS needed?                                      |
+| --------------------- | ------------------------------------------ | ---------------------------------------- | ------------------------------------------------- |
+| Declared User ID      | No active identity configuration           | Your stable user ID as plain text        | No                                                |
+| Signed User Assertion | An owner has enabled identity verification | A short-lived JWT signed by your backend | Yes: configure a JWKS URL or public JWKS document |
+
+Start with section 1a if you do not need signed verification. Read section 3
+only when you choose Signed User Assertions. Section 2 explains the shared
+onboarding steps and the optional signed-mode setup. The Customer Sandbox for
+Writing is a separate environment with its own key and allowance; see section
+3b.
 
 ---
 
@@ -28,7 +35,7 @@ Your user  →  your app  →  YOUR BACKEND  →  AIHUB  →  AI service
                            API key lives here, and nowhere else
 ```
 
-Two credentials travel on every graded request, and they answer different
+Two headers travel on every grading request, and they answer different
 questions:
 
 | Header            | Answers                       | Who creates it         |
@@ -39,28 +46,35 @@ questions:
 **The API key must stay on your server.** Embedding it in a mobile app, a
 single-page app, or anything else a user can read hands your organization's
 credential to that user. AIHUB has no way to detect this, and rate limits,
-quotas, and billing are all attributed to the key.
+quotas, and usage attribution depend on the key.
 
-Your users sign in to _your_ system, however you already do it — password,
-Google, SSO. AIHUB has no login, no user accounts, and no sessions. It learns
-who the user is only from `X-User-Identity`.
+Your learners sign in to _your_ product, however you already do it — password,
+Google, SSO, or another provider. AIHUB also has accounts and sessions for its
+Organization control plane, but grading does not use those to identify your
+learners. For grading, AIHUB gets the learner identity only from
+`X-User-Identity`.
 
-`X-User-Identity` takes one of two forms. Your organization's saved identity
-configuration decides which one, never the shape of the value:
+`X-User-Identity` is required on every grading request. Its value takes one of
+two forms. Your Organization's saved identity configuration decides which one,
+never the shape of the value:
 
 | Your organization                | `X-User-Identity` carries                               |
 | -------------------------------- | ------------------------------------------------------- |
 | No active identity configuration | A **Declared User ID**: your own user id, as plain text |
 | Active identity configuration    | A **Signed User Assertion**: a short-lived JWT you sign |
 
-Once an identity configuration is active, a plain value is rejected with
-`401 INVALID_USER_IDENTITY`. There is no fallback.
+Without an active identity configuration, AIHUB treats the value as a Declared
+User ID and does not need a JWKS. With an active configuration, AIHUB requires
+a valid Signed User Assertion; a plain value is rejected with
+`401 INVALID_USER_IDENTITY`. There is no fallback after signed verification is
+enabled.
 
 ---
 
 ## 1a. Quick start: identify users without signing
 
-A new organization can grade as soon as it has an API key. Send your own
+A new Organization can grade as soon as it has an API key and the operation's
+scope. If it has no active identity configuration, send your own stable
 identifier for the end user in `X-User-Identity`:
 
 ```bash
@@ -69,7 +83,11 @@ curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/writing/task2/grade" \
   -H "X-User-Identity: student_456" \
   -H "Idempotency-Key: $(uuidgen)" \
   -H "Content-Type: application/json" \
-  -d '{"question": "...", "essay": "..."}'
+  -d '{
+        "question": "Should schools provide more arts education?",
+        "topic": "education",
+        "essay": "..."
+      }'
 ```
 
 Rules for a Declared User ID (the same rule applies to a signed assertion's
@@ -83,10 +101,11 @@ Rules for a Declared User ID (the same rule applies to a signed assertion's
   becomes personal data held by AIHUB.
 
 **The trade-off.** AIHUB trusts a Declared User ID exactly as far as it trusts
-your API key. Anyone holding the key can name any user in your organization, so
+your API key. Anyone holding the key can name any user in your Organization, so
 usage attributed per user is only as reliable as your key handling. Other
-organizations are never affected: the organization always comes from the API
-key. When per-user attribution matters, move to Signed User Assertions.
+Organizations are never affected: the Organization always comes from the API
+key. Enable Signed User Assertions if you need AIHUB to verify that your
+backend vouched for each user.
 
 ---
 
@@ -96,76 +115,93 @@ key. When per-user attribution matters, move to Signed User Assertions.
 
 AIHUB and your team complete these steps in order:
 
-1. **Choose the capabilities and environment.** Tell AIHUB which operations you
-   need (`writing.grade`, `speaking.grade`, or both) and whether the request is
-   for staging or production. Customer Web users may separately evaluate
-   Writing through the Customer Sandbox tier in section 3b; a Sandbox API key
-   is separate from production and staging credentials. Do not build a client
-   around a production credential before staging has passed.
-2. **AIHUB creates the organization and API credential.** AIHUB creates or
-   confirms your organization, enables the requested entitlements, and issues an
-   API key with explicit environment and scope permissions. The raw key is shown
-   once. Store it in your server-side secret manager immediately.
-3. **Optional: provide signing identity metadata.** Skip this step to use
-   Declared User IDs (section 1a). To verify end users, send AIHUB the exact issuer and
-   either a publicly reachable HTTPS JWKS URL or the public JWKS document. AIHUB
-   registers this identity configuration against your organization. Never send a
-   private key. Keep the issuer stable; if staging and production use different
-   issuers or JWKS documents, tell AIHUB before registration because the identity
-   configuration is part of the organization trust boundary.
-4. **Run the staging verification.** Publish the JWKS, mint a short-lived
-   assertion from your backend, and call each requested operation with the
-   staging base URL and staging-authorized API key. Verify both a successful
-   response and expected failures such as a missing assertion, an expired
-   assertion, a wrong issuer, and an unknown `kid`.
-5. **Approve production and switch credentials.** After staging passes, AIHUB
-   confirms the production organization/key, scopes, and base URL. Change only
-   environment configuration in your backend: use the production API key and
-   base URL, keep the private signing key server-side, and send a fresh
-   assertion. A staging key must never be used against production.
+1. **Choose the capabilities and environment.** Decide which operations you
+   need (`writing.grade`, `speaking.grade`, or both) and whether you are setting
+   up staging, production, or the separate Writing Sandbox in section 3b. Use a
+   key authorized for that environment and scope.
+2. **Create or access your Organization and API key.** An Organization owner
+   or admin manages API keys in the AIHUB control plane. A key is shown only
+   once; save it in your server-side secret manager immediately. Keep each
+   environment's key and base URL paired.
+3. **Choose an identity mode.** Declared User IDs need no identity
+   configuration, issuer, signing key, or JWKS. To use Signed User Assertions,
+   an active Organization owner configures the issuer and one public-key
+   source, then your backend signs assertions with the corresponding private
+   key. The configuration applies to the Organization in every environment;
+   do not alternate issuer values between requests.
+4. **Verify staging.** Make at least one successful request for each enabled
+   operation with the staging key and base URL. Send a Declared User ID if the
+   Organization has no active identity configuration; otherwise send a fresh
+   Signed User Assertion. In signed mode, also check expected failures such as
+   a missing or expired assertion, a wrong issuer, and an unknown `kid`.
+5. **Move to production.** After staging works, use the production key and
+   production base URL. Keep the same Organization identity mode and send the
+   matching form of `X-User-Identity`. Never use a staging key against
+   production.
 
-The onboarding is complete when AIHUB has confirmed the organization, scopes,
-identity configuration, and environment-specific key, and your team has saved a
-successful staging request id for support traceability.
+Onboarding is complete when the required Organization, scope, environment, and
+API key are ready and your team has saved a successful staging `request_id` for
+support. An identity configuration is required only if you chose Signed User
+Assertions.
 
-### Information to send AIHUB
+### Information to prepare for onboarding
 
-Send one onboarding record per organization. The issuer and JWKS values are
-configuration, not headers that change from request to request.
+Prepare the general onboarding information for every integration. Issuer and
+JWKS details are needed only if you choose Signed User Assertions; they are
+Organization settings, not headers that change from request to request.
 
-| Item                   | Required value                               | Rule                                                                |
-| ---------------------- | -------------------------------------------- | ------------------------------------------------------------------- |
-| Organization name      | Your display or legal name                   | Used by AIHUB to identify the tenant                                |
-| Capabilities           | `writing.grade`, `speaking.grade`, or both   | AIHUB maps these to entitlements and API-key scopes                 |
-| Environment            | Staging or production for integration        | Customer Sandbox is a separate Writing test tier; see section 3b    |
-| Issuer (`iss`)         | Exact string, for example `https://acme.edu` | Must match the assertion character for character                    |
-| JWKS URL               | HTTPS URL serving public keys                | Preferred; must be reachable by AIHUB without a private network hop |
-| Public JWKS            | JWKS JSON document                           | Fallback when you cannot host a JWKS URL                            |
-| Current key id (`kid`) | The `kid` used by your signer                | Must identify exactly one usable key in the JWKS                    |
-| Signing algorithm      | `RS256` or `ES256`                           | `HS256` and `none` are rejected                                     |
-| Technical contact      | Integration owner and incident contact       | Needed for staging failures and key rotation notices                |
+| Item                        | Required for         | Rule                                                                                                   |
+| --------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------ |
+| Organization name           | Every integration    | Your display or legal name                                                                             |
+| Capabilities                | Every integration    | `writing.grade`, `speaking.grade`, or both                                                             |
+| Environment                 | Every integration    | Staging, production, or Sandbox for Writing; each uses its matching key and base URL                   |
+| Technical contact           | Every integration    | Integration owner and incident contact                                                                 |
+| Issuer (`iss`)              | Signed mode only     | Exact string; it must match the assertion character for character                                      |
+| JWKS source                 | Signed mode only     | Configure exactly one: a publicly reachable HTTPS URL or a public JWKS document                        |
+| Signing algorithm and `kid` | First signed request | Use a supported algorithm (`RS256` or `ES256`) and a `kid` identifying exactly one matching public key |
 
-You can use this template in the onboarding ticket. Leave credentials out of the
-ticket:
+General onboarding template. Do not include API keys or private keys:
 
 ```text
 Organization name: <name>
 Environment: staging
 Capabilities: writing.grade, speaking.grade
+Technical contact: <name and secure contact>
+```
+
+Add these fields only when enabling Signed User Assertions:
+
+```text
+Identity mode: signed
 Issuer: https://<your-domain>
 JWKS URL: https://<your-domain>/.well-known/jwks.json
 Current kid: <key-id>
 Signing algorithm: RS256
-Technical contact: <name and secure contact>
 ```
 
 Do not send API keys, signing private keys, or user passwords in an email,
 ticket, request body, or source repository. Exchange credentials through the
 agreed secure channel and store them in a secret manager.
 
-Identity registration is a control-plane onboarding action handled by AIHUB. It
-is not a public grading call, and you do not send the issuer or JWKS as a
-per-request header.
+### Configure Signed User Assertions (optional)
+
+An active Organization owner can configure identity verification through the
+Organization control-plane API. This uses an AIHUB User Access JWT, not the
+Organization API key used for grading:
+
+```http
+PUT /v1/organizations/{organization_id}/identity-config
+Authorization: Bearer <AIHUB_USER_ACCESS_TOKEN>
+Content-Type: application/json
+```
+
+The request must include an `issuer` and exactly one key source: `jwks_url` or
+`public_keys_jwks`. A remote URL must use publicly reachable HTTPS. The
+supported algorithms are `RS256` and `ES256`; the default maximum assertion
+lifetime is 300 seconds and can be configured from 1 to 3,600 seconds. See
+`GET /docs` for the complete request schema and validation rules. Never send a
+private key. This setting is saved once for the Organization; do not send
+issuer or JWKS values as grading headers.
 
 ### What AIHUB gives you
 
@@ -174,20 +210,16 @@ per-request header.
 - the base URL for your environment
 - the enabled capabilities, scopes, and environment binding for the key
 
-You give AIHUB:
+**Declared mode:** no issuer or JWKS is sent to AIHUB. Your backend sends the
+stable user ID in `X-User-Identity` on each grading request.
 
-- an **issuer** string identifying your organization, conventionally a URL you
-  control, e.g. `https://acme.edu`
-- a **JWKS URL** serving your public keys, e.g.
-  `https://acme.edu/.well-known/jwks.json`
-
-Only the public half of your signing key ever leaves your infrastructure.
-AIHUB verifies assertions but cannot create them — by design, so a compromise
-of AIHUB cannot impersonate your users.
-
-If you cannot host a JWKS endpoint, you may send the JWKS document itself and
-AIHUB will store it. Prefer the URL: it lets you rotate keys without
-contacting us.
+**Signed mode:** configure an issuer and either a JWKS URL or the public JWKS
+document through the control-plane API above. Only public keys leave your
+infrastructure. AIHUB does not hold your Organization's private signing key,
+so it cannot create assertions for your learners. The separate demo-only
+Sandbox mint route creates assertions only for the dedicated demo Organization.
+A JWKS URL lets you rotate keys without updating the saved document; with an
+inline JWKS, update the saved configuration before signing with a new key.
 
 ### Staging and production rules
 
@@ -197,11 +229,12 @@ select it with a request header. Keep staging and production credentials in
 separate secret-manager entries and configure the base URL alongside the
 matching key.
 
-The identity configuration is organization-owned. The normal setup uses the
-same issuer and JWKS URL in both environments and changes only the API key and
-base URL. If you need different signing identities for staging and production,
-raise that before onboarding so AIHUB can register the correct organization
-configuration; do not alternate `iss` values per request.
+Identity configuration is Organization-owned and applies to all of that
+Organization's environments. If using Signed User Assertions, use a compatible
+issuer and key set for staging and production; change the environment-specific
+API key and base URL, not the identity mode or issuer per request. If your
+environments cannot share one Organization-level identity configuration,
+contact your AIHUB administrator before onboarding.
 
 `DEMO_ASSERTION_ISSUER=https://demo.acme.edu`, `demo-private.pem`, and
 `demo-jwks.json` belong only to the repository's local demo. They are not
@@ -216,12 +249,13 @@ a revoke and a replacement; revocation takes effect immediately.
 
 ---
 
-## 3. Recommended: verify end users with a Signed User Assertion
+## 3. Optional: verify end users with a Signed User Assertion
 
-Declared User IDs (section 1a) are trusted as far as your API key. A Signed
-User Assertion proves that your backend's signing key, not merely your API key,
-vouched for the user. Once your identity configuration is active, every
-user-scoped call must carry one.
+Use this section only if your Organization chooses signed identity
+verification. JWKS and signed assertions are not required for grading in
+Declared User ID mode (section 1a). A Signed User Assertion proves that your
+backend's signing key, not merely your API key, vouched for the user. Once an
+identity configuration is active, every user-scoped call must carry one.
 
 An assertion is a short-lived JWT your backend signs immediately before
 calling AIHUB. It is not a session token: do not cache it for long, and never
@@ -310,14 +344,10 @@ String assertion = jwt.serialize();
 ### Which calls need one
 
 All current grading operations - Writing Task 1, Writing Task 2, and Speaking -
-are user-scoped and require `X-User-Identity`. With an active identity
-configuration, the assertion's `sub` claim is the only source of learner
-identity that AIHUB trusts.
-
-Every current operation is user-scoped. If an operation that needs no user
-identity is added later, sending one anyway will be allowed — but it must still be
-valid. AIHUB will not ignore a malformed one, because silently accepting
-broken assertions hides integration bugs until they matter.
+are user-scoped and require `X-User-Identity`. The required value is a Declared
+User ID when there is no active identity configuration, or a Signed User
+Assertion when there is one. In signed mode, the assertion's `sub` claim is the
+learner identity AIHUB accepts.
 
 ### Rotating keys
 
@@ -330,8 +360,8 @@ broken assertions hides integration bugs until they matter.
 
 This procedure applies when AIHUB reads your JWKS URL. No per-rotation approval
 is needed, but publish the new key before signing with its `kid`. If you use the
-uploaded-JWKS fallback, send the updated public JWKS to AIHUB before step 3;
-AIHUB cannot discover a new key from an old uploaded document.
+inline-JWKS option, have an active Organization owner update the saved public
+JWKS before step 3; AIHUB cannot discover a new key from an old saved document.
 
 If AIHUB sees a `kid` it does not know, it refetches a configured JWKS URL once
 — rate-limited to once every five minutes per organization. Keep both keys
@@ -413,26 +443,21 @@ ceiling bounds the number of AI calls; it is not a USD spending limit.
 
 ## 3b. Customer Sandbox Environment
 
-> **Availability:** The design is approved, but customer Sandbox keys are not
-> available until [aihub-be issue #182](https://github.com/AiHub-Ecosystem/aihub-be/issues/182)
-> is implemented and deployed. Customer Web key creation and its Sample request
-> are tracked in [AiHub-Frontend issue #27](https://github.com/AiHub-Ecosystem/AiHub-Frontend/issues/27).
+The Customer Sandbox backend supports customer Organization keys for trying
+the live Writing grading API without using the Organization's production quota
+or receiving a customer bill. An active Organization owner or admin creates a
+separate API key restricted to the `sandbox` Environment and `writing.grade`.
+Keep production and Sandbox keys separate; a Sandbox key cannot call the
+production hostname. Customer Sandbox supports Writing Task 1 and Task 2.
+Speaking remains available to the dedicated demo Organization only.
 
-The Customer Sandbox is for trying the live Writing grading API without using
-the Organization's production quota or receiving a customer bill. An active
-Organization owner or admin creates a separate API key restricted to the
-`sandbox` Environment. Keep production and Sandbox keys separate; a Sandbox key
-cannot call the production hostname. Customer Sandbox keys are initially
-limited to `writing.grade`, which supports Writing Task 1 and Task 2. Speaking
-remains available to the dedicated demo Organization only.
-
-Use `https://sandbox.aihubproduction.com` as the base URL. The Customer Web
-Sample request provides a copyable command after the Sandbox key is created.
-The request uses the same Organization Identity Configuration as production:
-send a Declared User ID when no active configuration exists, or a Signed User
-Assertion when it does. Customer Organization keys cannot call
-`POST /v1/sandbox/assertions`; that route remains restricted to the dedicated
-demo Organization.
+Use `https://sandbox.aihubproduction.com` as the base URL when Sandbox is
+enabled for your deployment. The request uses the same Organization Identity
+Configuration as production: send a Declared User ID when no active
+configuration exists, or a Signed User Assertion when it does. Customer
+Organization keys cannot call `POST /v1/sandbox/assertions`; that route remains
+restricted to the dedicated demo Organization. Use section 4 and `GET /docs`
+for the Writing request and response schemas.
 
 Sandbox dispatches are limited to 25 per Customer Organization per UTC calendar
 month and 500 across the entire Sandbox Environment per month. The global
@@ -460,21 +485,22 @@ All public grading operations are `POST` routes. Writing and Speaking
 JSON-by-URL use `Content-Type: application/json`; Speaking file grading uses
 `multipart/form-data`.
 
-| Path                              | Assertion | `Idempotency-Key` | Max body | Timeout |
-| --------------------------------- | --------- | ----------------- | -------: | ------: |
-| `/v1/ielts/writing/task1/grade`   | **Yes**   | **Required**      |   256 KB |     60s |
-| `/v1/ielts/writing/task2/grade`   | **Yes**   | **Required**      |   256 KB |     60s |
-| `/v1/ielts/speaking/grading`      | **Yes**   | **None**          |   26 MiB |     60s |
-| `/v1/ielts/speaking/grading-json` | **Yes**   | **None**          |   256 KB |     30s |
+| Path                              | `X-User-Identity`                              | `Idempotency-Key` | Max body | AIHUB timeout |
+| --------------------------------- | ---------------------------------------------- | ----------------- | -------: | ------------: |
+| `/v1/ielts/writing/task1/grade`   | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           60s |
+| `/v1/ielts/writing/task2/grade`   | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           60s |
+| `/v1/ielts/speaking/grading`      | Required; plain ID or JWT by Organization mode | None              |   26 MiB |           60s |
+| `/v1/ielts/speaking/grading-json` | Required; plain ID or JWT by Organization mode | None              |   256 KB |           30s |
 
 One route is not a grading operation and appears here only so the list is
 complete:
 
-| Path                     | Assertion | `Idempotency-Key` | Notes                               |
-| ------------------------ | --------- | ----------------- | ----------------------------------- |
-| `/v1/sandbox/assertions` | **No**    | **None**          | Sandbox organization only — see §3a |
+| Path                     | `X-User-Identity` | `Idempotency-Key` | Notes                                            |
+| ------------------------ | ----------------- | ----------------- | ------------------------------------------------ |
+| `/v1/sandbox/assertions` | Not used          | None              | Dedicated demo Organization only; see section 3a |
 
-It takes an API key and no assertion, because issuing one is what it does.
+It takes an API key and a `user_id` in its body; it does not take
+`X-User-Identity` because issuing that value is what the route does.
 
 ### Enumerated values
 
@@ -492,7 +518,7 @@ Supply the prompt and essay from your own application:
 ```bash
 curl -X POST https://api.example.com/v1/ielts/writing/task1/grade \
   -H "X-API-Key: $AIHUB_API_KEY" \
-  -H "X-User-Identity: $ASSERTION" \
+  -H "X-User-Identity: $USER_IDENTITY" \
   -H "Idempotency-Key: $(uuidgen)" \
   -H "Content-Type: application/json" \
   -d '{
@@ -532,7 +558,7 @@ idempotent replay. A client retry can therefore start another grading run.
 | `part`        | Yes      | Integer `1`, `2`, or `3`                                                              |
 | `question_id` | Yes      | Non-empty question-bank identifier                                                    |
 | `prompt_text` | No       | Prompt used for relevance analysis                                                    |
-| `test_type`   | No       | For example `Practice` or `Full-test`                                                 |
+| `test_type`   | No       | `Practice` or `Full-test`                                                             |
 | `test_code`   | No       | Identifier shared by questions in one full test                                       |
 | `transcript`  | No       | Existing transcript when the provider supports skipping STT                           |
 
@@ -561,7 +587,7 @@ credentials and can be fetched without authentication.
 ```bash
 curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/speaking/grading-json" \
   -H "X-API-Key: $AIHUB_API_KEY" \
-  -H "X-User-Identity: $AIHUB_ASSERTION" \
+  -H "X-User-Identity: $AIHUB_USER_IDENTITY" \
   -H 'Content-Type: application/json' \
   -d '{
     "audio_url": "https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm",
@@ -576,22 +602,23 @@ curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/speaking/grading-json" \
 
 ## 5. The response envelope
 
-Every successful response has the same shape:
+Every successful grading response has the same shape:
 
 ```json
 { "data": {}, "meta": {} }
 ```
 
-`data` is the operation's own contract. `meta` is identical everywhere:
+`data` is the operation's own contract. Grading responses share these `meta`
+fields:
 
-| Field                        | Meaning                                                          |
-| ---------------------------- | ---------------------------------------------------------------- |
-| `request_id`                 | AIHUB's id for this request. **Quote it in any support request** |
-| `correlation_id`             | Echoed from your `X-Correlation-Id` header, if you sent one      |
-| `service`, `operation`       | What ran                                                         |
-| `timing.downstream_ms`       | Time the AI service took                                         |
-| `timing.gateway_overhead_ms` | Time AIHUB added                                                 |
-| `timing.total_ms`            | Total                                                            |
+| Field                        | Meaning                                                           |
+| ---------------------------- | ----------------------------------------------------------------- |
+| `request_id`                 | AIHUB's id for this request. **Quote it in any support request**  |
+| `correlation_id`             | Echoed from your `X-Correlation-Id` header, if you sent one       |
+| `service`, `operation`       | What ran                                                          |
+| `timing.downstream_ms`       | Elapsed time for the downstream HTTP call, including network time |
+| `timing.gateway_overhead_ms` | Time AIHUB spent outside that downstream call                     |
+| `timing.total_ms`            | Total time measured by the grading response                       |
 
 Send `X-Correlation-Id` with your own trace id to stitch your logs to ours.
 
@@ -602,15 +629,16 @@ fails loudly instead of being silently dropped.
 
 ## 6. Idempotency
 
-Writing grading costs money and can take up to a minute. For Writing,
-`Idempotency-Key` makes a retry safe: the same key returns the stored result
-instead of grading again. The current Speaking multipart route has no
-idempotency support, so avoid retrying it automatically unless your product can
-accept another grading run.
+Writing grading can take up to a minute and may consume your plan's usage
+allowance. For Writing, `Idempotency-Key` makes a retry safe: the same key
+returns the stored result instead of grading again. The current Speaking routes
+have no idempotency support, so avoid retrying them automatically unless your
+product can accept another grading run.
 
 - Generate one key per logical submission — a UUID works.
 - Reuse the **same** key when retrying that submission. A new key means a new
-  grading run and a second charge.
+  grading run and consumes another request allowance. Sandbox requests are
+  free to the customer but use the Sandbox dispatch allowance.
 - Keys are scoped to your organization and the operation. Records are kept for
   24 hours.
 - A replayed response carries the header `Idempotent-Replay: true` and
@@ -633,12 +661,13 @@ body and reuse the same key.
 ## 7. Timeouts and cancellation
 
 Writing grading has a 60-second AIHUB budget. **Set your client timeout to at
-least 90 seconds** for Writing `/grade` calls. Speaking grading has a
-60-second budget; use a client timeout of at least 90 seconds for
-`/v1/ielts/speaking/grading`. The budget covers the upload too, so large files
-on slow links need a proportionally larger client timeout. A client timeout
-equal to the server budget is unsafe
-because connection setup and response transfer also consume time.
+least 90 seconds** for Writing `/grade` calls. Speaking multipart grading also
+has a 60-second budget; use at least 90 seconds for
+`/v1/ielts/speaking/grading`. The budget includes audio upload, so large files
+on slow links need a proportionally larger client timeout. Speaking JSON-by-URL
+has a 30-second budget; use at least 60 seconds for
+`/v1/ielts/speaking/grading-json`. A client timeout equal to the server budget
+is unsafe because connection setup and response transfer also consume time.
 
 AIHUB's per-operation budget is a single clock: it is set when the request
 arrives and is consumed as the request travels. It does not restart at any
@@ -681,26 +710,27 @@ When present, `retry_after_ms` is in the body, not in a `Retry-After` header.
 |  400 | `INVALID_REQUEST`               | Body failed validation, or carried an unknown field                                          | Fix the request. Retrying is pointless                                                                |
 |  401 | `UNAUTHORIZED`                  | Missing, unknown, revoked, or expired API key                                                | Check the credential                                                                                  |
 |  401 | `USER_IDENTITY_REQUIRED`        | User-scoped operation called without `X-User-Identity`                                       | Send `X-User-Identity`                                                                                |
-|  401 | `INVALID_USER_IDENTITY`         | Declared User ID breaks the rule, or the Signed User Assertion failed verification           | Declared: fix the value. Signed: mint a fresh assertion; check issuer and JWKS                        |
-|  403 | `FORBIDDEN`                     | Key lacks the scope for this operation                                                       | Ask AIHUB to widen the key                                                                            |
+|  401 | `INVALID_USER_IDENTITY`         | Declared User ID breaks the rule, or the Signed User Assertion failed verification           | Declared: fix the value. Signed: mint a fresh assertion; check issuer, `kid`, and JWKS                |
+|  403 | `FORBIDDEN`                     | Key lacks the scope for this operation                                                       | Ask your Organization owner or AIHUB support to enable the scope and issue an appropriate key         |
 |  403 | `ENVIRONMENT_NOT_ALLOWED`       | Key is not valid for this environment                                                        | Use the key issued for that environment                                                               |
 |  404 | `NOT_FOUND`                     | No such route                                                                                | Check path and method                                                                                 |
 |  409 | `IDEMPOTENCY_CONFLICT`          | Writing reused a key with a different body, or an identical Writing request is still running | Different body: use a new key; in-flight request: wait, then retry the same key and body              |
-|  413 | `PAYLOAD_TOO_LARGE`             | Body exceeded the operation's limit                                                          | Shorten the essay                                                                                     |
+|  413 | `PAYLOAD_TOO_LARGE`             | Request body exceeded the operation's limit                                                  | Reduce the essay or audio size to fit the route limit                                                 |
 |  429 | `RATE_LIMITED`                  | Too many requests per minute                                                                 | Back off for `retry_after_ms`, then retry                                                             |
 |  429 | `CONCURRENCY_LIMIT`             | Too many requests in flight at once                                                          | Reduce parallelism; retry in ~500ms                                                                   |
-|  429 | `QUOTA_EXCEEDED`                | Monthly quota exhausted                                                                      | Wait for the reset, or upgrade                                                                        |
+|  429 | `QUOTA_EXCEEDED`                | Monthly quota exhausted                                                                      | Wait for the reset or contact AIHUB about your quota                                                  |
 |  502 | `AI_SERVICE_ERROR`              | AI service returned an error                                                                 | Retry later if `retryable` is true                                                                    |
 |  502 | `AI_SERVICE_CONTRACT_VIOLATION` | AI service returned an unexpected shape                                                      | Do not retry. Report it with the `request_id`                                                         |
 |  503 | `AI_SERVICE_THROTTLED`          | AI service is throttling                                                                     | Back off and retry                                                                                    |
 |  503 | `AI_SERVICE_UNAVAILABLE`        | AI service unreachable                                                                       | Retry with backoff                                                                                    |
-|  503 | `IDENTITY_PROVIDER_UNAVAILABLE` | **Your** JWKS endpoint could not be reached                                                  | Check your own JWKS endpoint. The API key is fine                                                     |
+|  503 | `IDENTITY_PROVIDER_UNAVAILABLE` | AIHUB could not read identity configuration, or could not load public keys in signed mode    | Retry; if using signed mode, check the configured JWKS source. The API key is fine                    |
 |  504 | `AI_SERVICE_TIMEOUT`            | Grading exceeded the budget                                                                  | Writing: retry with the **same** `Idempotency-Key`; Speaking: retry only if another run is acceptable |
 |  500 | `INTERNAL_ERROR`                | Fault on our side                                                                            | Retry later; report with the `request_id`                                                             |
 
-`IDENTITY_PROVIDER_UNAVAILABLE` is worth singling out. It is a `503`, not a
-`401`, because nothing is wrong with your API key — AIHUB simply could not
-fetch your public keys. Regenerating credentials will not help.
+`IDENTITY_PROVIDER_UNAVAILABLE` means AIHUB could not read the Organization's
+identity configuration, or could not use its JWKS source in signed mode. A
+configuration-store outage can affect either identity mode. It is a `503`, not
+a `401`: the API key is not the problem, and regenerating it will not help.
 
 ### Retry policy that works
 
@@ -732,9 +762,9 @@ not a longer delay.
 - [ ] API key stored server-side in a secret manager, never in a client build
 - [ ] Staging and production keys stored separately and used only with their allowed environment
 - [ ] Decided between Declared User IDs and Signed User Assertions
+- [ ] `X-User-Identity` included on every grading request; its value matches the Organization's saved identity mode
 - [ ] Signed only: signing private key never leaves your infrastructure
-- [ ] Signed only: issuer agreed with AIHUB and copied exactly into the signer configuration
-- [ ] Signed only: JWKS endpoint publicly reachable over HTTPS, or public JWKS document sent to AIHUB
+- [ ] Signed only: active Organization owner configured the exact issuer and one public JWKS source
 - [ ] Signed only: current `kid` and signing algorithm match exactly one usable JWKS key
 - [ ] At least one successful staging request verified before production access
 
@@ -745,7 +775,7 @@ not a longer delay.
 - [ ] `X-User-Identity` contains the learner identity; no client-supplied `user_id` is sent
 - [ ] `Idempotency-Key` generated per Writing submission and reused across retries
 - [ ] Speaking audio is one supported file within the documented size limit
-- [ ] Client timeout is ≥ 90s for Writing and ≥ 60s for Speaking
+- [ ] Client timeout is ≥ 90s for Writing and Speaking multipart; ≥ 60s for Speaking JSON-by-URL
 - [ ] Error handling branches on `code`, not on `message` or status alone
 - [ ] Retries limited to `retryable: true`, with jittered backoff; do not blindly retry Speaking
 - [ ] `request_id` logged for every call, and `X-Correlation-Id` sent
@@ -755,8 +785,8 @@ not a longer delay.
 
 - [ ] New public key published before any assertion uses its `kid`
 - [ ] Old and new keys overlap until all old assertions have expired
-- [ ] Issuer, JWKS URL, algorithm, or rotation changes reported to AIHUB
-- [ ] Updated uploaded JWKS sent to AIHUB before switching keys when the URL fallback is used
+- [ ] Issuer, JWKS source, and allowed-algorithm changes saved in the Organization config before the signer changes
+- [ ] Updated inline JWKS saved before signing with a new `kid`
 
 ---
 
