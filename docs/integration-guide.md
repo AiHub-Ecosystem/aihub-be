@@ -496,12 +496,18 @@ curl -X POST https://api.example.com/v1/ielts/writing/task1/grade \
   -H "Idempotency-Key: $(uuidgen)" \
   -H "Content-Type: application/json" \
   -d '{
-        "question": "The graph shows estimated oil production capacity...",
+        "question": "The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.",
         "chart_type": "Bar Chart",
-        "image_url": "https://s3.example.com/ielts-task1/e9c9b064969b6492",
-        "essay": "The bar chart illustrates..."
+        "image_url": "https://s3.wispace.app/ielts-task1/ca95bd4ab522946d",
+        "essay": "The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999."
       }'
 ```
+
+The `image_url` above is a real, reachable URL; the API host is a placeholder
+for your own deployment. The difference is deliberate: the AI Writing service
+fetches the chart itself, outside your request, so the image URL must be
+publicly readable with no signature and no credential. Replace it with your
+own chart's URL when you supply your own essay.
 
 The grading response carries `overall_band`, exactly four `criteria` entries in
 a fixed order, `summary`, `suggestions`, `next_steps`, and `annotations` that

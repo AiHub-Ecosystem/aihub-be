@@ -102,6 +102,13 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Approved audio URL:** an HTTPS reference to an audio object on the exact
   S3-compatible SeaweedFS origin `s3.wispace.app` approved for Speaking
   JSON-by-URL grading; it is not an arbitrary remote URL.
+- **Published image URL:** an HTTPS reference to a Writing chart image on the
+  same `s3.wispace.app` origin, readable by a plain unauthenticated `GET`
+  because the AI Writing service retrieves it outside the customer's request
+  and cannot authenticate ([ADR-0060](docs/adr/0060-writing-task1-sample-image-is-published-not-signed.md)).
+  It is the opposite of an Approved audio URL, which is signed and private.
+  _Avoid_: calling it an approved asset URL, or reading either as a statement
+  about the origin, which is not a trust boundary.
 - **JSON-by-URL grading:** the synchronous Speaking grading transport that
   carries an approved audio URL; it is a fallback transport beside multipart
   grading, not the async grading job.
