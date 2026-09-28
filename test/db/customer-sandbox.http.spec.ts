@@ -14,6 +14,7 @@ import { ulid } from 'ulid';
 import { AppModule } from '../../src/app.module';
 import { migrateSandboxOrganization } from '../../src/cli/sandbox-control-plane-migration';
 import { registerRequestLifecycle } from '../../src/common/http/request-lifecycle.hook';
+import { generateRequestId } from '../../src/common/request-context/request-id';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
@@ -241,7 +242,7 @@ beforeAll(async () => {
     .compile();
   controlPlaneApp =
     controlPlaneModule.createNestApplication<NestFastifyApplication>(
-      new FastifyAdapter(),
+      new FastifyAdapter({ genReqId: () => generateRequestId() }),
     );
   await controlPlaneApp.init();
   await controlPlaneApp.getHttpAdapter().getInstance().ready();
@@ -288,7 +289,7 @@ beforeAll(async () => {
     .useValue(downstreamStub)
     .compile();
   app = moduleRef.createNestApplication<NestFastifyApplication>(
-    new FastifyAdapter(),
+    new FastifyAdapter({ genReqId: () => generateRequestId() }),
   );
   const fastify = app.getHttpAdapter().getInstance();
   registerRequestLifecycle(fastify);
