@@ -2,7 +2,7 @@
 
 > **Purpose:** Describes the long-term target architecture where **AIHUB is the sole public API gateway**, and downstream AI services expose only **private APIs**.
 >
-> **How to read this document:** Most of the architecture described here has been implemented. Those sections now consist of **a single line pointing to the canonical active source** — spec, code, or contract — because when two documents describe the same mechanism, the older one will silently drift. This document retains exactly three things: **unbuilt target states**, **responsibility boundaries between AIHUB and AI Services**, and **§32 — Decision Records** cited by `aihub_deliverable_1_api_contract_schema.md`.
+> **How to read this document:** Most of the architecture described here has been implemented. Those sections now consist of **a single line pointing to the canonical active source** — spec, code, or contract — because when two documents describe the same mechanism, the older one will silently drift. This document retains exactly three things: **unbuilt target states**, **responsibility boundaries between AIHUB and AI Services**, and **§32 — Decision Records** cited by the [archived D1 record](history/aihub-deliverable-1-historical-contract.md).
 >
 > **In case of conflict: implementation specs and code win.** Section numbers are preserved to avoid breaking `§32.x` references throughout D1.
 
@@ -225,7 +225,7 @@ Initial phase decision documented in [§32.10](#3210-does-the-initial-phase-need
 
 Clients depend strictly on AIHUB contracts. AIHUB abstracts field names, endpoint structures, and naming quirks of downstream AI Services.
 
-→ **The canonical contract is code, not documentation.** Schemas: `src/contracts/writing/`. Automatically generated documentation: `openapi.json` served at `GET /docs`. Detailed specification and Data Dictionary: [`aihub_deliverable_1_api_contract_schema.md`](aihub_deliverable_1_api_contract_schema.md) §10 and §20.
+→ **The active contract is code, not the D1 archive.** Schemas: `src/contracts/`. Automatically generated documentation: `openapi.json`, served at `GET /docs`. Historical D1 specification and Data Dictionary: [archived D1 record](history/aihub-deliverable-1-historical-contract.md) §10 and §20.
 
 ---
 
@@ -356,7 +356,7 @@ Default TTL confirmed in [§32.9](#329-what-is-the-retention-ttl-for-idempotency
 
 Core principles: single error envelope, centralized HTTP status assignment, and internal-only logging of raw downstream errors — preventing leakage of stack traces, internal URLs, database errors, or provider secrets.
 
-→ **Implemented.** Master matrix with Downstream Signal mappings: [`aihub_deliverable_1_api_contract_schema.md`](aihub_deliverable_1_api_contract_schema.md) §25 (US10). Error registry: `src/common/errors/error-registry.ts`. Client integration guide: [`integration-guide.md`](integration-guide.md) §8.
+→ **Implemented.** The historical US10 master matrix is preserved in the [archived D1 record](history/aihub-deliverable-1-historical-contract.md) §25. The active error registry is `src/common/errors/error-registry.ts`; customer guidance is in [`integration-guide.md`](integration-guide.md) §8.
 
 ---
 
@@ -512,7 +512,7 @@ Explicit triggers to evolve beyond this architecture: [`10-deployment-roadmap.md
 # 32. Open Decisions — Settled Records
 
 > **Status 2026-09-07: All 10 architectural decisions settled based on Recommended Defaults.**
-> Synchronized into `aihub_deliverable_1_api_contract_schema.md` and the architecture specifications under
+> Synchronized into the [archived D1 record](history/aihub-deliverable-1-historical-contract.md) and the architecture specifications under
 > [`docs/superpowers/specs/2026-09-07-aihub/`](superpowers/specs/2026-09-07-aihub/README.md).
 > **The option analyses below are preserved as historical decision records** — providing complete context on evaluated trade-offs if requirements shift.
 

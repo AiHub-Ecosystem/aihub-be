@@ -14,7 +14,7 @@
 
 > **Updated 2026-09-07:** Synchronized with the empirical survey of the live AI Writing API
 > (`api-ielts-writing.aihubproduction.com`) and architecture designs in
-> [`implementation spec index`](superpowers/specs/2026-09-07-aihub/README.md).
+> [`implementation spec index`](../superpowers/specs/2026-09-07-aihub/README.md).
 >
 > **Current Status:** D1 is frozen. The runtime source of truth is code in
 > `src/contracts/` and `src/catalog/`; `openapi.json` and Postman collections are generated
@@ -1760,7 +1760,7 @@ Invoked all 4 endpoints using credentials supplied by the team; fixtures stored 
 2. **`data.coT` leaks chain-of-thought** in responses (`layer1_errors`, `layer2_matching`, `layer3_calibration`).
 3. **Suspicious grading anomalies:** all 3 test samples produced identical integer bands across all 4 criteria (7-7-7-7 then 5-5-5-5); a Task 2 submission of 98 words (250 required) was still awarded band 5.0.
 
-Detailed rationale for each architectural change: [`implementation spec index`](superpowers/specs/2026-09-07-aihub/README.md)
+Detailed rationale for each architectural change: [`implementation spec index`](../superpowers/specs/2026-09-07-aihub/README.md)
 
 ---
 

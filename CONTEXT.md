@@ -296,9 +296,9 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - Implemented: durable internal metering evidence, missing-usage classification, replay-safe request/token aggregates, and safe failure breadcrumbs; AI Services are expected to report aggregate token usage and `metrics.ai_processing_ms`, but current provider contracts may not yet do so, while model identity is neither required nor exposed.
 - Open, but not blocking: six fixes requested from the AI Writing team (chiefly aggregate usage and `metrics.ai_processing_ms`, which make token-based billing possible at all).
 
-## Canonical documents
+## Canonical documents and historical references
 
-- [Contract](docs/aihub_deliverable_1_api_contract_schema.md)
+- [Historical D1 contract and handoff record](docs/history/aihub-deliverable-1-historical-contract.md)
 - [AI Speaking D2 TSD](docs/contracts/aihub/ai-speaking-grading-proxy-tsd-v1.md)
 - [ADR-0014: AI Speaking D2 contract boundary and evidence](docs/adr/0014-ai-speaking-d2-contract-boundary.md)
 - [Spec index](docs/superpowers/specs/2026-09-07-aihub/README.md)

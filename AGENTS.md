@@ -22,10 +22,12 @@ Read `.claude/agents/` for role ownership before changing a path owned by anothe
 
 Read the smallest relevant source before changing code:
 
-1. `docs/aihub_deliverable_1_api_contract_schema.md` for public API behavior.
+1. `src/contracts/` and `src/catalog/` for executable public API behavior; `openapi.json` and `/docs` are generated from source. Use `docs/integration-guide.md` for customer integration guidance.
 2. `docs/superpowers/specs/2026-09-07-aihub/01-context-and-stack.md` through `11-open-questions.md` for runtime decisions.
 3. `CONTEXT.md` for the short glossary and current blockers.
 4. `.claude/rules/` for path-scoped implementation constraints.
+
+The frozen D1 design and handoff record is archived at `docs/history/aihub-deliverable-1-historical-contract.md`; use it for historical rationale, not as the active runtime contract.
 
 If an older architecture draft conflicts with an implementation spec, record the conflict in the change summary and follow the implementation spec.
 

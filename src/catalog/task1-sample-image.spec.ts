@@ -14,7 +14,7 @@ const REPO_ROOT = join(__dirname, '../..');
 const ALLOWED_FILES = [
   'src/catalog/operation-catalog.ts', // the definition
   'docs/integration-guide.md', // quotes it for a reader
-  'docs/aihub_deliverable_1_api_contract_schema.md', // static deliverable
+  'docs/history/aihub-deliverable-1-historical-contract.md', // static D1 record
   'test/fixtures/ai-writing/grade-task1.request.json', // captured request
   'aihub.postman_collection.json', // generated
   'docs/adr/0060-writing-task1-sample-image-is-published-not-signed.md', // records it

@@ -76,7 +76,7 @@ All 3 tested essays yielded integer scores with identical marks across all 4 cri
 
 # Q. Changes to Feed Back to Deliverable 1
 
-Concrete action checklist for `../../../aihub_deliverable_1_api_contract_schema.md` prior to freezing.
+Historical action checklist for the D1 freeze; the original record is `../../../history/aihub-deliverable-1-historical-contract.md`.
 
 > **Superseding runtime decision 2026-09-12:** AIHUB removed both public
 > Writing question-generation operations. The active catalog contains the two

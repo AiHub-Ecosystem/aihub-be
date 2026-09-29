@@ -220,7 +220,7 @@ Internal logs retain comprehensive diagnostics for AIHUB developers, and **stric
 }
 ```
 
-**`downstream_error_code` and `downstream_message` are illustrative examples.** The live AI Writing service returns raw `{"detail": "..."}` without error codes, so `HttpOperationDispatcher` records `null` for both fields today. Populating them accurately requires a standardized downstream error contract, followed by fixture capture and implementing `parseError` in `DownstreamAdapter`. See `docs/aihub_deliverable_1_api_contract_schema.md` US10.
+**`downstream_error_code` and `downstream_message` are illustrative examples.** The live AI Writing service returns raw `{"detail": "..."}` without error codes, so `HttpOperationDispatcher` records `null` for both fields today. Populating them accurately requires a standardized downstream error contract, followed by fixture capture and implementing `parseError` in `DownstreamAdapter`. The historical D1 proposal is in `docs/history/aihub-deliverable-1-historical-contract.md` US10.
 
 ---
 

@@ -14,7 +14,7 @@
 
 ## Global constraints
 
-- Treat `docs/aihub_deliverable_1_api_contract_schema.md` and `docs/superpowers/specs/2026-09-07-aihub/01-context-and-stack.md` through `11-open-questions.md` as the canonical implementation sources.
+- Treat `src/contracts/` and `src/catalog/` as the executable public API source. Use `docs/superpowers/specs/2026-09-07-aihub/01-context-and-stack.md` through `11-open-questions.md` for runtime decisions; consult `docs/history/aihub-deliverable-1-historical-contract.md` for original D1 rationale only.
 - Preserve the existing docs-first structure; do not duplicate the full specifications in `CONTEXT.md`, `CLAUDE.md`, or ADRs.
 - Keep the repository a single application. Do not create a monorepo, frontend, Speaking/Reading modules, a dedicated proxy, a billing subsystem, dynamic routing, object storage, or an async job system in this scaffold.
 - Never put API keys, signed assertions, internal tokens, essay content, or raw downstream bodies in logs or error messages.

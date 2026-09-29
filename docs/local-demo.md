@@ -570,7 +570,7 @@ API keys, and idempotency records is acceptable.
 
 - [Repository quick start](../README.md)
 - [Customer integration guide](integration-guide.md)
-- [API contract](aihub_deliverable_1_api_contract_schema.md)
+- [Generated OpenAPI specification](../openapi.json)
 - [Request lifecycle](superpowers/specs/2026-09-07-aihub/02-request-lifecycle.md)
 - [Authentication and identity design](superpowers/specs/2026-09-07-aihub/05-auth-identity.md)
 - [Demo bootstrap script](../scripts/demo-bootstrap.mjs)

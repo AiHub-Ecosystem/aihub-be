@@ -60,7 +60,7 @@ UserIdentityResolver (application; the guard's port)
 ## Documentation to update
 
 - `docs/superpowers/specs/2026-09-07-aihub/05-auth-identity.md` G.4 (+ error list in `07-reliability-and-errors.md`)
-- `docs/aihub_deliverable_1_api_contract_schema.md`
+- `docs/history/aihub-deliverable-1-historical-contract.md`
 - `docs/contracts/aihub/ai-speaking-grading-proxy-tsd-v1.md`, `docs/contracts/ai-services/ai-speaking-grading-v1.md` (`user_id` wording)
 - `docs/integration-guide.md`, `docs/customer-web-identity-onboarding.md`, `docs/local-demo.md`, `README.md`
 - Generated `openapi.json`, `aihub.postman_collection.json`; scripts `demo-bootstrap.mjs`, `speaking-gateway-smoke.sh`, `dev-sign-assertion.mjs`

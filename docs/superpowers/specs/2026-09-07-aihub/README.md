@@ -2,7 +2,7 @@
 
 > **Status:** Approved following the brainstorm on 2026-09-07.
 > **Context:** Answers the original brainstorm brief (removed from repo) — the A–P output structure originates from §16 of that brief; refer to git history if needed.
-> **Does not replace:** `../../../aihub_long_term_architecture.md` (target architecture) and `../../../aihub_deliverable_1_api_contract_schema.md` (contract). This document serves as the **implementation strategy** to transition from D1 to D2.
+> **Does not replace:** `../../../aihub_long_term_architecture.md` (target architecture) or the [archived D1 contract and handoff record](../../../history/aihub-deliverable-1-historical-contract.md). This document serves as the **implementation strategy** to transition from D1 to D2.
 
 Scaffold status: [Clean Architecture and agent workflow design](12-agent-workflow-and-clean-architecture-design.md) is implemented in the initial NestJS/Fastify source scaffold.
 
