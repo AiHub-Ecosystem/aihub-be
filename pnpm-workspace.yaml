@@ -3,6 +3,7 @@ allowBuilds:
   "@swc/core": true
   argon2: true
   esbuild: true
+  protobufjs: false
 
 # Each override lifts a development-only dependency past an open advisory.
 # Remove one once every package named in its comment declares the patched

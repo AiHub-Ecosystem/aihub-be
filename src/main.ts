@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs';
-import { loadEnvFile } from 'node:process';
+import './config/load-local-environment';
+import { requestTracer } from './common/observability/open-telemetry';
 
 import fastifyCookie from '@fastify/cookie';
 import { NestFactory } from '@nestjs/core';
@@ -11,6 +11,7 @@ import {
 import { AppModule } from './app.module';
 import { registerBodySizeGuard } from './common/http/body-size.hook';
 import { registerRequestLifecycle } from './common/http/request-lifecycle.hook';
+import { registerRequestTracing } from './common/http/request-tracing.hook';
 import { generateRequestId } from './common/request-context/request-id';
 import {
   assertAuthBypassFlagIsSafe,
@@ -21,14 +22,7 @@ import { registerSpeakingMultipartParser } from './modules/speaking/infrastructu
 const DEFAULT_PORT = 3000;
 const MAX_BODY_BYTES = 1024 * 1024;
 
-function loadLocalEnvironment(): void {
-  if (existsSync('.env')) {
-    loadEnvFile('.env');
-  }
-}
-
 export async function bootstrap(): Promise<void> {
-  loadLocalEnvironment();
   assertAuthBypassFlagIsSafe();
   assertHostConfigurationIsSafe();
 
@@ -51,9 +45,14 @@ export async function bootstrap(): Promise<void> {
 
   registerSpeakingMultipartParser(app.getHttpAdapter().getInstance());
 
+  // Start the root span before other request hooks. Route templates keep paths
+  // bounded and prevent raw request URLs or query values entering traces.
+  if (requestTracer !== undefined) {
+    registerRequestTracing(app.getHttpAdapter().getInstance(), requestTracer);
+  }
+
   // Registered directly on the raw Fastify instance rather than through
-  // Nest's own middleware/guard pipeline, so it runs before the body is
-  // parsed instead of after.
+  // Nest's own middleware/guard pipeline, so it runs before the body is parsed.
   registerBodySizeGuard(app.getHttpAdapter().getInstance());
   registerRequestLifecycle(app.getHttpAdapter().getInstance());
 

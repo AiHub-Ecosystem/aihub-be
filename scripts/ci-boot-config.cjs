@@ -68,6 +68,8 @@ function connectionSecrets() {
 const BOOT_ENVIRONMENT = {
   NODE_ENV: 'production',
   PORT: '3000',
+  OTEL_SERVICE_NAME: 'aihub-be',
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: '',
   AIHUB_ALLOW_UNAUTHENTICATED_DEV: 'false',
   AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
   AIHUB_RUNTIME_SECRETS_FILE: `${SECRETS_MOUNT}/runtime-secrets.json`,

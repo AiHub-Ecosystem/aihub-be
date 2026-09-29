@@ -160,19 +160,22 @@ aihub_redis_unavailable_total
 
 Answers every performance question raised in brief §13.12. `gateway_overhead` **requires no dedicated metric** — it is derived directly from the delta between the first two histograms.
 
-## L.3 Observability Stack: 3 Containers, No Tempo
+## L.3 Request Tracing: OTLP Endpoint, No Bundled Collector
 
-```
-Prometheus  -> scrapes /metrics
-Loki        -> ingests JSON logs via docker log driver
-Grafana     -> dashboards + ALERTING (no dedicated Alertmanager needed)
-```
+AIHUB creates a Fastify request span and child spans for ioredis commands,
+Postgres queries, and Undici downstream calls. The request span uses the route
+template rather than the raw URL and records AIHUB's generated `request_id`.
+W3C trace context is propagated downstream; baggage is not propagated.
 
-**Tempo / Jaeger are omitted at this stage.** With exactly two active services (AIHUB → Writing), `request_id` in structured logs answers every operational question distributed tracing could answer — saving two containers for a team without dedicated DevOps.
+Set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` to an OTLP/HTTP traces receiver to
+enable tracing. Leave it empty to disable instrumentation. Traces are batched
+and exported asynchronously, so exporter availability does not gate a customer
+response. The application Compose stack does not bundle a collector or trace
+store.
 
-**However, the upgrade path remains cheap:** propagate W3C `traceparent` headers to downstreams and record `trace_id` in logs **from day one**. When Tempo is added in the future, operators merely plug in collectors without refactoring application code.
-
-Trigger to add Tempo: ≥ 3 chained downstream services in a single synchronous path, or async workers in Phase 4.
+Span data is restricted: Redis records the command name without keys or values;
+Postgres records the SQL operation name without query text or parameters;
+request bodies, credentials, and raw URLs are not attached to request spans.
 
 ## L.4 Core Alerting Thresholds
 

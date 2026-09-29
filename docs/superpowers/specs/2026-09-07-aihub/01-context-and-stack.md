@@ -6,17 +6,17 @@
 
 Every decision across this specification suite derives from the following 8 constraints. If a constraint changes, all decisions linked to it must be revisited.
 
-| #   | Constraint                                                              | Primary Impact                                                           |
-| --- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| 1   | **Real commercial product**, paying B2B customers                       | Metering/billing is an architectural constraint, not a secondary feature |
-| 2   | Only **AI Writing** currently exists; Speaking/Reading are planned      | MVP proxies 1 service, but must prove extensibility                      |
-| 3   | Team of **2–3 backend engineers, no dedicated DevOps**                  | Exclude K8s, service mesh, Kafka, Vault at this stage                    |
-| 4   | **Self-hosted VPS** infrastructure                                      | Own Postgres/Redis management + take backups seriously                   |
-| 5   | **Stage A**: few orgs, 10–50 RPS peak                                   | No partitioning, no autoscaling, no distributed tracing                  |
-| 6   | D2 within **1–2 months**, only Writing sync; Speaking immediately after | Async contract frozen early, but implementation deferred                 |
-| 7   | Customers **have strong dev teams**                                     | Asymmetric JWKS/JWT feasible from day one                                |
-| 8   | **Sales model not finalized**                                           | Record both request counts and tokens from day one                       |
-| 9   | **Admin API deferred** — onboard org/key via CLI/manual SQL             | CLI is production code, not disposable scripts                           |
+| #   | Constraint                                                              | Primary Impact                                                                                |
+| --- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 1   | **Real commercial product**, paying B2B customers                       | Metering/billing is an architectural constraint, not a secondary feature                      |
+| 2   | Only **AI Writing** currently exists; Speaking/Reading are planned      | MVP proxies 1 service, but must prove extensibility                                           |
+| 3   | Team of **2–3 backend engineers, no dedicated DevOps**                  | Exclude K8s, service mesh, Kafka, Vault at this stage                                         |
+| 4   | **Self-hosted VPS** infrastructure                                      | Own Postgres/Redis management + take backups seriously                                        |
+| 5   | **Stage A**: few orgs, 10–50 RPS peak                                   | No partitioning or autoscaling; request tracing exports to an optional external OTLP endpoint |
+| 6   | D2 within **1–2 months**, only Writing sync; Speaking immediately after | Async contract frozen early, but implementation deferred                                      |
+| 7   | Customers **have strong dev teams**                                     | Asymmetric JWKS/JWT feasible from day one                                                     |
+| 8   | **Sales model not finalized**                                           | Record both request counts and tokens from day one                                            |
+| 9   | **Admin API deferred** — onboard org/key via CLI/manual SQL             | CLI is production code, not disposable scripts                                                |
 
 ## 0.1 Current State of AI Writing (Live Survey)
 
@@ -65,38 +65,38 @@ Additionally: `url` in Task 1 is a client-supplied URL that Writing fetches dire
 
 ## B. Recommended Tech Stack Matrix
 
-| Layer            | Recommended                                | Alternatives Considered       | Rationale                                                                                                                                         |
-| ---------------- | ------------------------------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Runtime          | **Node.js 22 LTS + TypeScript**            | Go, Bun                       | At 50 RPS, AI requests are I/O-bound — Node's sweet spot. Go does not justify the learning overhead in Stage A                                    |
-| Framework        | **NestJS + Fastify adapter**               | Bare Fastify, Express, Go/chi | NestJS modules map 1-to-1 with §27 target architecture; long-lived product with multiple maintainers → DI + architectural boundaries are worth it |
-| Validation       | **TypeBox**                                | Zod, class-validator, raw AJV | Fastify natively executes JSON Schema (compilable). One definition generates three things: TS type + validator + OpenAPI 3.1                      |
-| HTTP client      | **undici (Pool)**                          | axios, native fetch, got      | Keep-alive pool, `AbortSignal`, separated headers/body timeouts, ready for streaming                                                              |
-| Primary DB       | **PostgreSQL 16**                          | MySQL, distributed SQL        | `text[]`, partial indexes, `ON CONFLICT`, JSONB, BRIN — all heavily utilized in this design                                                       |
-| DB access        | **Drizzle**                                | Prisma, TypeORM, Kysely       | Keeps SQL close to the metal; Prisma struggles with array columns, `ON CONFLICT`, partial indexes                                                 |
-| Cache / counters | **Redis 7**                                | Memcached, in-memory          | Requires atomic INCR + sorted sets + TTL. Never the source of truth                                                                               |
-| Queue            | **None in MVP** → BullMQ in Phase 4        | RabbitMQ, Kafka, SQS          | No async use case yet. BullMQ reuses existing Redis                                                                                               |
-| Object storage   | **None in MVP** → Cloudflare R2 in Phase 4 | S3, MinIO, B2                 | R2 does not charge egress — ideal for Speaking audio files                                                                                        |
-| Circuit breaker  | **opossum**                                | Custom implementation         | Proper half-open state is hard to write; homegrown implementations easily flood hundreds of requests when service barely recovers                 |
-| Proxy / TLS      | **Host nginx**                             | Traefik                       | The shared VPS already owns ports 80/443; nginx terminates TLS and certbot manages certificates                                                   |
-| Observability    | **Prometheus + Loki + Grafana**            | + Tempo/Jaeger, Datadog       | 3 containers. Drop Tempo in Stage A: with 2 services, `request_id` in logs is sufficient                                                          |
-| Deployment       | **Docker Compose on 1 VPS**                | K8s, ECS, Cloud Run           | 2–3 devs without DevOps. Exit trigger documented in [10 §N.5](10-deployment-roadmap.md#n5-triggers-to-exit-this-architecture)                     |
-| Secrets          | **`.env` chmod 600**                       | Vault, SOPS, Doppler          | Below threshold. Trigger in [05 §G.9](05-auth-identity.md#g9-secrets)                                                                             |
+| Layer            | Recommended                                                    | Alternatives Considered       | Rationale                                                                                                                                         |
+| ---------------- | -------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime          | **Node.js 22 LTS + TypeScript**                                | Go, Bun                       | At 50 RPS, AI requests are I/O-bound — Node's sweet spot. Go does not justify the learning overhead in Stage A                                    |
+| Framework        | **NestJS + Fastify adapter**                                   | Bare Fastify, Express, Go/chi | NestJS modules map 1-to-1 with §27 target architecture; long-lived product with multiple maintainers → DI + architectural boundaries are worth it |
+| Validation       | **TypeBox**                                                    | Zod, class-validator, raw AJV | Fastify natively executes JSON Schema (compilable). One definition generates three things: TS type + validator + OpenAPI 3.1                      |
+| HTTP client      | **undici (Pool)**                                              | axios, native fetch, got      | Keep-alive pool, `AbortSignal`, separated headers/body timeouts, ready for streaming                                                              |
+| Primary DB       | **PostgreSQL 16**                                              | MySQL, distributed SQL        | `text[]`, partial indexes, `ON CONFLICT`, JSONB, BRIN — all heavily utilized in this design                                                       |
+| DB access        | **Drizzle**                                                    | Prisma, TypeORM, Kysely       | Keeps SQL close to the metal; Prisma struggles with array columns, `ON CONFLICT`, partial indexes                                                 |
+| Cache / counters | **Redis 7**                                                    | Memcached, in-memory          | Requires atomic INCR + sorted sets + TTL. Never the source of truth                                                                               |
+| Queue            | **None in MVP** → BullMQ in Phase 4                            | RabbitMQ, Kafka, SQS          | No async use case yet. BullMQ reuses existing Redis                                                                                               |
+| Object storage   | **None in MVP** → Cloudflare R2 in Phase 4                     | S3, MinIO, B2                 | R2 does not charge egress — ideal for Speaking audio files                                                                                        |
+| Circuit breaker  | **opossum**                                                    | Custom implementation         | Proper half-open state is hard to write; homegrown implementations easily flood hundreds of requests when service barely recovers                 |
+| Proxy / TLS      | **Host nginx**                                                 | Traefik                       | The shared VPS already owns ports 80/443; nginx terminates TLS and certbot manages certificates                                                   |
+| Observability    | **Prometheus + Loki + Grafana; OpenTelemetry traces via OTLP** | Bundled Tempo/Jaeger, Datadog | Keep trace storage outside the app Compose stack; enable spans only when an OTLP/HTTP endpoint is configured                                      |
+| Deployment       | **Docker Compose on 1 VPS**                                    | K8s, ECS, Cloud Run           | 2–3 devs without DevOps. Exit trigger documented in [10 §N.5](10-deployment-roadmap.md#n5-triggers-to-exit-this-architecture)                     |
+| Secrets          | **`.env` chmod 600**                                           | Vault, SOPS, Doppler          | Below threshold. Trigger in [05 §G.9](05-auth-identity.md#g9-secrets)                                                                             |
 
 ### Evaluating candidate stack from brief §14
 
-| Item from brief                          | Verdict                | Notes                                                                                |
-| ---------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------ |
-| TypeScript + Node.js                     | **Keep**               | —                                                                                    |
-| NestJS + Fastify                         | **Keep**               | Fastify for schema-first performance, not raw RPS                                    |
-| undici / native fetch                    | **Keep** (undici Pool) | Pool needed for per-downstream keep-alive                                            |
-| PostgreSQL                               | **Keep**               | —                                                                                    |
-| Redis                                    | **Keep**, scoped down  | Completely removed from idempotency path                                             |
-| BullMQ                                   | **Defer** → Phase 4    | No async use case yet                                                                |
-| S3-compatible / R2                       | **Defer** → Phase 4    | Ships with Speaking                                                                  |
-| OTel + Prometheus + Grafana + Tempo/Loki | **Partial Keep**       | Omit Tempo. Keep `traceparent` propagation for future hookup                         |
-| OpenAPI 3.1 + JSON Schema                | **Keep**               | Generated from TypeBox, not handwritten                                              |
-| Docker + VPS                             | **Keep**               | —                                                                                    |
-| Kubernetes                               | **Defer**              | Trigger in [10 §N.5](10-deployment-roadmap.md#n5-triggers-to-exit-this-architecture) |
+| Item from brief                          | Verdict                | Notes                                                                                                                                 |
+| ---------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| TypeScript + Node.js                     | **Keep**               | —                                                                                                                                     |
+| NestJS + Fastify                         | **Keep**               | Fastify for schema-first performance, not raw RPS                                                                                     |
+| undici / native fetch                    | **Keep** (undici Pool) | Pool needed for per-downstream keep-alive                                                                                             |
+| PostgreSQL                               | **Keep**               | —                                                                                                                                     |
+| Redis                                    | **Keep**, scoped down  | Completely removed from idempotency path                                                                                              |
+| BullMQ                                   | **Defer** → Phase 4    | No async use case yet                                                                                                                 |
+| S3-compatible / R2                       | **Defer** → Phase 4    | Ships with Speaking                                                                                                                   |
+| OTel + Prometheus + Grafana + Tempo/Loki | **Use scoped tracing** | Instrument Fastify requests, ioredis, Postgres, and Undici; export to an optional external OTLP endpoint without bundling a collector |
+| OpenAPI 3.1 + JSON Schema                | **Keep**               | Generated from TypeBox, not handwritten                                                                                               |
+| Docker + VPS                             | **Keep**               | —                                                                                                                                     |
+| Kubernetes                               | **Defer**              | Trigger in [10 §N.5](10-deployment-roadmap.md#n5-triggers-to-exit-this-architecture)                                                  |
 
 ### Three directions evaluated for the brief's primary architectural question (§18.1, §18.2)
 

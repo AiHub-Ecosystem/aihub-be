@@ -91,7 +91,7 @@ Documented explicitly to prevent premature, speculative refactoring:
 | Apache Kafka                          | Deferred indefinitely until a third event consumer requires event log replay                               |
 | Partitioning `usage_records`          | > ~50 million rows, or retention cleanup queries take more than several minutes                            |
 | HashiCorp Vault / SOPS                | ≥ 3 deployment environments, or team member departures, or formal compliance audits                        |
-| Tempo / Jaeger tracing                | ≥ 3 chained downstream services in a single request flow, or async workers in Phase 4                      |
+| Trace storage / Tempo                 | When an operator needs a trace UI; point the optional OTLP exporter at an existing receiver                |
 | Sliding window / GCRA rate limiting   | Customer disputes regarding minute-boundary burst fairness, or contractual SLA mandates                    |
 
 <a id="n6-phases"></a>
@@ -172,20 +172,20 @@ Per D1 §G, minimum 15 automated test cases. Generated directly from OpenAPI spe
 
 # O. Architectural Decision Records (ADR)
 
-| ADR | Title                                                | Core Rationale to Preserve                                                                   |
-| --- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 001 | NestJS + Fastify; avoid Envoy/Kong as data plane     | AIHUB logic is application business logic masquerading as proxy routing                      |
-| 002 | PostgreSQL for control plane; 5 tables instead of 13 | Specific pruned tables and exact triggers for reintroduction                                 |
-| 003 | API key format + SHA-256 hashing                     | **Why we avoid** bcrypt/argon2 slow hashes                                                   |
-| 004 | Signed User Assertions + JWKS verification           | `UNIQUE(issuer)`; strict TTL caps; algorithm allowlisting                                    |
-| 005 | Internal EdDSA JWT + key rotation                    | Per-service `aud` targeting; zero-downtime 5-step rotation                                   |
-| 006 | Scoped role of Redis                                 | **Fail open during Redis outages** — passing a request can be reconciled, blocking cannot    |
-| 007 | Postgres-backed idempotency                          | `ON CONFLICT` replaces distributed locks; background execution prevents double token charges |
-| 008 | Operation catalog in code, not DB                    | SSRF defense-in-depth + static compiler type-checking                                        |
-| 009 | Pure functional adapters without I/O                 | Enables golden fixture testing without mocks                                                 |
-| 010 | Meter both request counts and token metrics          | Unfinalized pricing models; historical telemetry cannot be retroactively generated           |
-| 011 | Docker Compose on single VPS                         | Explicit exit triggers in [§N.5](#n5-triggers-to-exit-this-architecture)                     |
-| 012 | Omission of distributed tracing in Stage A           | Retain W3C `traceparent` headers for future collector integration                            |
+| ADR | Title                                                | Core Rationale to Preserve                                                                                                                        |
+| --- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 001 | NestJS + Fastify; avoid Envoy/Kong as data plane     | AIHUB logic is application business logic masquerading as proxy routing                                                                           |
+| 002 | PostgreSQL for control plane; 5 tables instead of 13 | Specific pruned tables and exact triggers for reintroduction                                                                                      |
+| 003 | API key format + SHA-256 hashing                     | **Why we avoid** bcrypt/argon2 slow hashes                                                                                                        |
+| 004 | Signed User Assertions + JWKS verification           | `UNIQUE(issuer)`; strict TTL caps; algorithm allowlisting                                                                                         |
+| 005 | Internal EdDSA JWT + key rotation                    | Per-service `aud` targeting; zero-downtime 5-step rotation                                                                                        |
+| 006 | Scoped role of Redis                                 | **Fail open during Redis outages** — passing a request can be reconciled, blocking cannot                                                         |
+| 007 | Postgres-backed idempotency                          | `ON CONFLICT` replaces distributed locks; background execution prevents double token charges                                                      |
+| 008 | Operation catalog in code, not DB                    | SSRF defense-in-depth + static compiler type-checking                                                                                             |
+| 009 | Pure functional adapters without I/O                 | Enables golden fixture testing without mocks                                                                                                      |
+| 010 | Meter both request counts and token metrics          | Unfinalized pricing models; historical telemetry cannot be retroactively generated                                                                |
+| 011 | Docker Compose on single VPS                         | Explicit exit triggers in [§N.5](#n5-triggers-to-exit-this-architecture)                                                                          |
+| 012 | Omission of distributed tracing in Stage A           | Superseded by [ADR-0063](../../../adr/0063-request-tracing-through-otlp.md): spans are opt-in via external OTLP endpoint; no collector is bundled |
 
 ADRs 003, 006, and 007 are the most vital to document first — each represents a **counter-intuitive** engineering decision that future contributors might casually "fix" back into a flawed state if the underlying reasoning is lost.
 

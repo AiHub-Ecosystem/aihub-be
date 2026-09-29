@@ -525,6 +525,31 @@ until its backup and disposal have been approved separately.
 
 ## Verify and operate
 
+### Optional request tracing
+
+Set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` in `.env.production` to an OTLP/HTTP
+traces endpoint reachable from the application container, for example
+`http://otel-collector:4318/v1/traces`. AIHUB sends traces to that receiver;
+the production Compose stack does not run a collector or trace store. Leave the
+value blank to keep instrumentation disabled. `app` and `app-sandbox` use the
+same endpoint setting.
+
+Each trace contains a Fastify request span and child spans for ioredis, Postgres,
+and Undici downstream calls. The root span records the route template, generated
+request ID, method, and response status. Redis arguments, SQL text beyond the
+operation name, downstream URL credentials and query values, request bodies,
+credentials, and baggage are not exported.
+OTLP export is batched asynchronously and is not awaited by the request path.
+
+After changing the endpoint, recreate the app containers:
+
+```sh
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml up -d --no-deps app
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml --profile sandbox up -d --no-deps app-sandbox
+```
+
 ```sh
 docker compose --env-file .env.production \
   -f docker-compose.production.yml \
