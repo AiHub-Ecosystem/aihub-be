@@ -49,7 +49,6 @@ sudo install -d -o 10001 -g 10001 -m 0700 /srv/aihub/secrets/runtime
 sudo install -d -m 0700 /srv/aihub/secrets
 sudo install -m 0600 -o 10001 -g 10001 vault-ca.pem /srv/aihub/secrets/vault-ca.pem
 sudo install -m 0600 -o 10001 -g 10001 vault-role-id /srv/aihub/secrets/vault-role-id
-sudo install -m 0600 -o 10001 -g 10001 vault-secret-id /srv/aihub/secrets/vault-secret-id
 cp .env.production.example .env.production
 chmod 600 .env.production
 ```
@@ -265,14 +264,16 @@ The directory contains `ai-speaking.json`, `ai-writing.json`, `resend.json`,
 
 `AIHUB_VAULT_AGENT_CIDR` is the address the Vault Agent authenticates from,
 read from the deployment's Docker network (the Vault audit log records it as
-the request source). Vault only issues a `secret_id` when `bind_secret_id` is
-on, and that setting pins the `secret_id` to the requesting address, so the role
-is provisioned with the deployment network as `secret_id_bound_cidrs`. Both the
-operator and the Agent sit on that network.
+the request source). The role is provisioned with `bind_secret_id=false` so the
+Agent authenticates with its role ID alone and can re-authenticate whenever it
+is restarted, and with `bound_cidr_list` set to that network so only the Agent's
+own host can log in.
 
-Provisioning requires a non-root operator identity. Create/rotate the AppRole
-`secret_id` after provisioning, then copy the one-use value to the host. Validate
-the policy with the smoke script before starting the application:
+Provisioning requires a non-root operator identity. The Agent needs no
+`secret_id`; the operator's own session does. Mint one with
+`vault write -f auth/approle/role/aihub-production-runtime/secret-id` and unset
+`VAULT_TOKEN` afterwards so the next CLI call cannot fall back to the operator
+token. Validate the policy with the smoke script before starting the application:
 
 ```sh
 AIHUB_VAULT_SMOKE_ALLOW=true \
