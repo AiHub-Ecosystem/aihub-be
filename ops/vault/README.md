@@ -50,11 +50,23 @@ $env:AIHUB_VAULT_AGENT_CIDR = '172.16.2.1/32'
 pnpm vault:provision
 ```
 
-`AIHUB_VAULT_AGENT_CIDR` is the address the Agent authenticates from. The role
-is provisioned with `bind_secret_id=false`, so the Agent's role ID is a
+`AIHUB_VAULT_AGENT_CIDR` is the address **Vault records as the login source**.
+That is not the Agent container's IP. The Agent and Vault sit on separate Docker
+networks, so Docker NATs every cross-network connection to the Vault-side
+gateway before Vault sees it. On the production host that is `172.16.2.1/32`
+while the Agent's own address is `172.16.7.x`, and no login from the Agent is
+ever attributed to `172.16.7.x`. Read this value from a rejected login in the
+Vault audit log, not from `docker inspect`.
+
+Because every container on the host is NATed to that same gateway, this
+constraint blocks logins from outside the VPS but does not distinguish one
+container on it from another. It is a network boundary, not per-container
+isolation; the policy is what limits what the resulting token can read.
+
+The role is provisioned with `bind_secret_id=false`, so the Agent's role ID is a
 complete credential and the Agent re-authenticates on its own after a restart
-or a revoked token. `bound_cidr_list` restricts that login to the deployment
-network.
+or a revoked token. `bound_cidr_list` is the constraint Vault requires when
+`bind_secret_id` is off.
 
 The helper writes the selected policy, creates an AppRole with a short token
 TTL and bounded maximum TTL, and writes all eight KV bundles. The credential

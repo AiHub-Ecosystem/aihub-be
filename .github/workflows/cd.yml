@@ -190,16 +190,20 @@ jobs:
             exit 1
           fi
 
-          # Do not recreate the Agent during CD: its AppRole secret_id is
-          # single-use, and a fresh one must be staged by an operator.
+          # Do not recreate the Agent during CD: the role ID and the rendered
+          # bundles are provisioned out of band, and recreating here would race
+          # the operator cutover that pairs a re-provisioned role with the Agent
+          # that reads it. The Agent is durable now — it holds role_id only, with
+          # bind_secret_id=false — so it re-authenticates on its own and does not
+          # need a hand-issued secret_id to come back.
           vault_container_id="$("${compose[@]}" ps -q vault-agent)"
           if [ -z "$vault_container_id" ]; then
-            printf 'vault-agent container is missing; refusing to create it without a fresh AppRole secret_id\n' >&2
+            printf 'vault-agent container is missing; refusing to create it outside the operator cutover\n' >&2
             exit 1
           fi
           vault_running="$(sudo -n docker inspect --format '{{.State.Running}}' "$vault_container_id" 2>/dev/null || true)"
           if [ "$vault_running" != true ]; then
-            printf 'vault-agent is not running; refusing to recreate it without a fresh AppRole secret_id\n' >&2
+            printf 'vault-agent is not running; refusing to recreate it outside the operator cutover\n' >&2
             "${compose[@]}" logs --no-color --tail=100 vault-agent >&2 || true
             exit 1
           fi
@@ -217,7 +221,7 @@ jobs:
           # recreated, so an unchanged secret correctly keeps an old mtime.
           # What must hold is that the live AppRole session still works. The
           # role issues one-hour tokens, so a success or renewal inside the
-          # last hour means the deploy never needed a hand-issued secret_id.
+          # last hour means the deploy never needed the operator to intervene.
           # The deployed metrics endpoint does not expose the authenticated
           # gauge, so the direct checks above and this auth-log guard replace
           # the Compose service_healthy gate for this rollout.
