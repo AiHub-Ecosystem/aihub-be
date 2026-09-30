@@ -29,9 +29,9 @@ if (
   fail('AIHUB_VAULT_CREDENTIALS_DIR is required');
 }
 
-// bind_secret_id=false lets the Agent use a secret_id minted elsewhere, and
-// Vault then still requires a constraint. Binding to the deployment network
-// keeps a stolen secret_id usable only from the Agent's own host.
+// The Agent logs in unattended, so it authenticates with role_id alone. That
+// requires bind_secret_id=false, and Vault then still requires a constraint:
+// bound_cidr_list restricts the login to the deployment network.
 const agentCidr = process.env.AIHUB_VAULT_AGENT_CIDR?.trim();
 if (agentCidr === undefined || !/^[\d./]+$/.test(agentCidr)) {
   fail(
@@ -110,12 +110,14 @@ runVault(
     'secret_id_num_uses=1',
     'token_ttl=1h',
     'token_max_ttl=24h',
-    // Vault only mints a secret_id when bind_secret_id is on, and the default
-    // pins it to the single address that asked. Both the operator and the Agent
-    // reach Vault from the deployment network, so listing that network as the
-    // bound CIDR is what makes a one-time secret_id usable by the Agent.
-    'bind_secret_id=true',
-    `secret_id_bound_cidrs=${agentCidr}`,
+    // bind_secret_id=false is what makes the Agent durable: without a
+    // secret_id there is nothing to expire or burn, so the token renews until
+    // it is revoked instead of dying at token_max_ttl. The operator still
+    // mints a short-lived one-use secret_id for hands-on sessions. Vault
+    // requires a constraint when bind_secret_id is off, so the deployment
+    // network is bound at login time instead.
+    'bind_secret_id=false',
+    `bound_cidr_list=${agentCidr}`,
   ],
   'AppRole provision',
 );

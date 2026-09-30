@@ -50,11 +50,11 @@ $env:AIHUB_VAULT_AGENT_CIDR = '172.16.2.1/32'
 pnpm vault:provision
 ```
 
-`AIHUB_VAULT_AGENT_CIDR` is the address the Agent authenticates from. Vault
-only issues a `secret_id` when `bind_secret_id` is on, and that setting pins the
-`secret_id` to the address that requested it. Both the operator and the Agent
-reach Vault over the deployment network, so the role is provisioned with that
-network as `secret_id_bound_cidrs`.
+`AIHUB_VAULT_AGENT_CIDR` is the address the Agent authenticates from. The role
+is provisioned with `bind_secret_id=false`, so the Agent's role ID is a
+complete credential and the Agent re-authenticates on its own after a restart
+or a revoked token. `bound_cidr_list` restricts that login to the deployment
+network.
 
 The helper writes the selected policy, creates an AppRole with a short token
 TTL and bounded maximum TTL, and writes all eight KV bundles. The credential
@@ -65,9 +65,8 @@ directory must also contain `database.json`, `redis.json`, and
 Postgres login for the sandbox process: it can select the Organization,
 API-key, and identity-configuration columns used for request authentication,
 and update only `api_keys.last_used_at`. It cannot change control-plane data.
-Deliver the Role
-ID and one-time Secret ID to Vault Agent through the deployment secret channel;
-never commit or paste them into an issue.
+Deliver the Role ID to Vault Agent through the deployment secret channel; never
+commit or paste it into an issue. There is no Agent `secret_id` to rotate.
 
 The AppRole policy must be read-only and must not receive `root`, `sys`, auth
 management, write, delete, or broad-list capabilities. Revoke bootstrap/root

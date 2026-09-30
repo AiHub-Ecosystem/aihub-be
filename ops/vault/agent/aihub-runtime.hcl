@@ -1,14 +1,14 @@
 # Deploy this Agent configuration outside the repository's application image.
-# The role/secret-id files are provisioned through the deployment secret
-# channel and must be readable only by the Agent service account.
+# The role-id file is provisioned through the deployment secret channel and
+# must be readable only by the Agent service account. The AppRole has
+# bind_secret_id=false, so role_id alone is a complete credential and the
+# Agent can re-authenticate whenever it is restarted or its token is revoked.
 
 auto_auth {
   method "approle" {
     mount_path = "auth/approle"
     config = {
-      role_id_file_path   = "/run/secrets/vault/role_id"
-      secret_id_file_path = "/run/secrets/vault/secret_id"
-      remove_secret_id_file_after_reading = false
+      role_id_file_path = "/run/secrets/vault/role_id"
     }
   }
 }

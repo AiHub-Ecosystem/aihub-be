@@ -71,7 +71,6 @@ services:
       SKIP_SETCAP: "true"
     volumes:
       - ${VAULT_ROLE_ID_FILE:?VAULT_ROLE_ID_FILE is required}:/run/secrets/vault/role_id:ro
-      - ${VAULT_SECRET_ID_FILE:?VAULT_SECRET_ID_FILE is required}:/run/secrets/vault/secret_id:ro
       - ${VAULT_CA_CERT_FILE:?VAULT_CA_CERT_FILE is required}:/etc/aihub/vault/ca.pem:ro
       - ./ops/vault/agent/aihub-runtime.hcl:/etc/aihub/vault/agent.hcl:ro
       - ./ops/vault/templates/runtime-secrets.json.ctmpl:/etc/aihub/vault/runtime-secrets.json.ctmpl:ro
