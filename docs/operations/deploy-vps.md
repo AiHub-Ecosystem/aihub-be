@@ -644,11 +644,13 @@ request before reopening traffic. Never roll back by deleting the database volum
 
 ## GitHub Actions CD
 
-The `CD` workflow publishes the tested `main` commit to GHCR, then deploys that
-immutable image over SSH after `CI` succeeds. The VPS must already be prepared
-using this runbook, with the Compose files and `.env.production` in the app
-directory. The deploy user must be allowed to run Docker non-interactively,
-either directly or via passwordless `sudo -n docker`.
+The `CI` workflow publishes the image it booted to GHCR under the commit sha.
+The `CD` workflow then deploys that immutable image over SSH: it resolves the
+sha, checks the registry still holds the digest `CI` published, and only then
+reaches the VPS. The VPS must already be prepared using this runbook, with the
+Compose files and `.env.production` in the app directory. The deploy user must
+be allowed to run Docker non-interactively, either directly or via
+passwordless `sudo -n docker`.
 
 Create a protected GitHub Environment named `production` and add these secrets:
 
@@ -659,9 +661,11 @@ Create a protected GitHub Environment named `production` and add these secrets:
 - `VPS_SSH_PRIVATE_KEY`
 - `VPS_SSH_KNOWN_HOSTS` (the trusted host-key line for the VPS)
 - `GHCR_USERNAME`
-- `GHCR_PULL_TOKEN` (a read-only token with `read:packages`)
+- `GHCR_PULL_TOKEN` (a read-only token with `read:packages`; the runner's own
+  GHCR login in the resolve job uses the pushing actor's name with this same
+  token, so the account must be able to authenticate as the actor)
 
-The workflow uses the commit SHA as the release tag and also updates `latest`.
-The SHA tag is what the VPS deploys, so rollback remains the immutable-image
-procedure above. Keep all runtime, database, Vault, and downstream credentials
+The workflow uses the commit SHA as the only release tag; nothing publishes
+`latest`, so a rollback remains the immutable-image procedure above pointing at
+an earlier SHA. Keep all runtime, database, Vault, and downstream credentials
 in the VPS/Vault setup; never add them to GitHub Actions or the repository.

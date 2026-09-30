@@ -1,4 +1,7 @@
-FROM node:22.23.2-bookworm-slim AS dependencies
+# Pinned by digest so two builds of one commit cannot differ by a base image
+# repoint. Bump when Node publishes a security patch for this version, or
+# monthly, whichever comes first (ADR-0064).
+FROM node:22.23.2-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 AS dependencies
 
 WORKDIR /app
 ENV COREPACK_HOME=/tmp/corepack
@@ -15,7 +18,7 @@ COPY . .
 RUN pnpm build
 RUN pnpm prune --prod --ignore-scripts
 
-FROM node:22.23.2-bookworm-slim AS runtime
+FROM node:22.23.2-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 AS runtime
 
 LABEL org.opencontainers.image.source="https://github.com/AiHub-Ecosystem/aihub-be"
 
