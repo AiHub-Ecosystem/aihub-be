@@ -262,12 +262,18 @@ The directory contains `ai-speaking.json`, `ai-writing.json`, `resend.json`,
 `user-access-jwt.json`, `seaweedfs.json`, `database.json`, `redis.json`, and
 `sandbox-assertion.json`. Keep it mode `0700` and remove it after provisioning.
 
-`AIHUB_VAULT_AGENT_CIDR` is the address the Vault Agent authenticates from,
-read from the deployment's Docker network (the Vault audit log records it as
-the request source). The role is provisioned with `bind_secret_id=false` so the
-Agent authenticates with its role ID alone and can re-authenticate whenever it
-is restarted, and with `bound_cidr_list` set to that network so only the Agent's
-own host can log in.
+`AIHUB_VAULT_AGENT_CIDR` is the address Vault records as the login source, not
+the Agent container's IP. The Agent and Vault run on separate Docker networks,
+so Docker NATs the connection to the Vault-side gateway first: on this host the
+Agent is at `172.16.7.x` but Vault sees `172.16.2.1`. Read the value from a
+rejected login in the Vault audit log.
+
+The role is provisioned with `bind_secret_id=false` so the Agent authenticates
+with its role ID alone and can re-authenticate whenever it is restarted, and
+with `bound_cidr_list` as the constraint Vault requires in that mode. Because
+every container on the host is NATed to the same gateway, that constraint blocks
+logins from outside the VPS but does not distinguish containers on it; the
+runtime policy is what limits what the token can read.
 
 Provisioning requires a non-root operator identity. The Agent needs no
 `secret_id`; the operator's own session does. Mint one with

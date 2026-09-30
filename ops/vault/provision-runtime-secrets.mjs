@@ -32,10 +32,17 @@ if (
 // The Agent logs in unattended, so it authenticates with role_id alone. That
 // requires bind_secret_id=false, and Vault then still requires a constraint:
 // bound_cidr_list restricts the login to the deployment network.
+//
+// This must be the address Vault records as the request source, not the Agent
+// container's IP. The Agent and Vault sit on different Docker networks, so
+// Docker NATs every cross-network connection to the Vault-side gateway before
+// Vault ever sees it. On the production host that is 172.16.2.1, and the
+// Agent's own 172.16.7.x address is never observed by Vault. Read the value
+// from a rejected login in the Vault audit log, not from `docker inspect`.
 const agentCidr = process.env.AIHUB_VAULT_AGENT_CIDR?.trim();
 if (agentCidr === undefined || !/^[\d./]+$/.test(agentCidr)) {
   fail(
-    'AIHUB_VAULT_AGENT_CIDR must be the Agent host CIDR, for example 172.16.2.1/32',
+    'AIHUB_VAULT_AGENT_CIDR must be the CIDR Vault records as the login source, for example 172.16.2.1/32',
   );
 }
 
