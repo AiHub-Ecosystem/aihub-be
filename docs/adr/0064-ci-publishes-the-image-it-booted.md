@@ -40,8 +40,21 @@ base-image security patches on its own; bump it when Node publishes a security
 patch for the pinned version, or monthly, whichever comes first.
 
 Publishing runs only for pushes to `main`. Pull requests still run the boot
-check against a local image and push nothing. CI's `packages: write` and
-`GITHUB_TOKEN` are sufficient to push; no new registry credential exists.
+check against a local image and push nothing. The credential is the same
+`GHCR_PULL_TOKEN` CD already uses, reached through the `production`
+environment, which declares no reviewers and no branch policy and so gates
+nothing.
+
+`GITHUB_TOKEN` would have been the better credential — it rotates itself and
+carries the narrowest scope — but it cannot write this package. The package
+belongs to the organization, and the workflow token may write to it only once
+"Allow GitHub Actions to create and update packages" is enabled in the package
+settings. It is not, and the first push after this change failed with
+`denied: permission_denied: write_package`. The registry token is named for
+reading because that is what CD used it for; it is the credential that can
+write, and it should be renamed when it is next rotated. Enabling the package
+setting is the better long-term answer and revives `GITHUB_TOKEN` with no
+secret to manage.
 
 ## Consequences
 

@@ -77,6 +77,18 @@ CI pushes `ghcr.io/aihub-be:<commit sha>` only for pushes to `main`, and only
 after the boot passes. Pull requests run the identical build and boot check and
 push nothing.
 
+The push authenticates with the `production` environment's `GHCR_USERNAME` and
+`GHCR_PULL_TOKEN`, the same credentials CD uses. The job enters that
+environment for the secret alone; it declares no reviewers and no branch
+policy. `GITHUB_TOKEN` is deliberately not used: the package belongs to the
+organization, and the workflow token may write to it only once "Allow GitHub
+Actions to create and update packages" is enabled in the package settings.
+That setting is off, so `GITHUB_TOKEN` fails with
+`denied: permission_denied: write_package`. Turning it on is the better
+long-term answer, because the workflow token rotates itself. Despite its name,
+`GHCR_PULL_TOKEN` is the token that writes here; it is named for reading
+because CD only ever read with it.
+
 The push is a separate `docker push` step rather than
 `docker/build-push-action` with `push: true`. Buildx cannot both load an image
 into a runner's daemon and emit the manifest list a push needs, so one action

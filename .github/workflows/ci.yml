@@ -279,6 +279,11 @@ jobs:
     name: Image boot
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The environment is here for its registry credential, not for protection:
+    # it declares no reviewers and no branch policy, so entering it gates
+    # nothing. See the push step for why GITHUB_TOKEN cannot do this job.
+    environment:
+      name: production
     permissions:
       contents: read
       packages: write
@@ -319,13 +324,22 @@ jobs:
       # Release images exist on the registry from here on. A pull request runs
       # the same build and boot check but pushes nothing, because no sha it
       # could tag is ever deployed.
+      #
+      # GITHUB_TOKEN is not the credential here. The package belongs to the
+      # organization, and the workflow token can only write to it once
+      # "Allow GitHub Actions to create and update packages" is enabled in the
+      # package settings, which it is not; a first push failed with
+      # `denied: permission_denied: write_package`. The registry token CD
+      # already uses is named for reading, but it is the credential that can
+      # write here: it carries write:packages and needs no such setting. Rename
+      # it when it is next rotated.
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_PULL_TOKEN }}
 
       # The digest `docker push` reports is the manifest digest of what the
       # registry now holds, which is not the image ID `docker inspect` reports
