@@ -26,7 +26,9 @@ function isSharedPrimitive(file) {
  *
  * `from.path` captures the module name as group 1 and `to.path` refers back to
  * it as `$1` inside a negative lookahead, so one rule expresses "any module to
- * a different module" without generating a rule per module pair.
+ * a different module" without generating a rule per module pair. The seam
+ * patterns in `to.pathNot` exempt the module file, application ports, and
+ * shared primitives of whichever module the target turns out to be.
  *
  * This rule is `warn`, not `error`, and it reports 21 violations that are not
  * all mistakes. NestJS already provides a public seam through each module's

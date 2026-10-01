@@ -15,11 +15,13 @@ neighbours changing.
 _Avoid_: service, package, bounded context
 
 **Module public seam**:
-What one business module is allowed to reach of another. The seam is three
-things: the module's `<module>.module.ts` composition root, its
-`application/**/*.port.ts` contracts, and a presentation primitive that
-declares `module 'fastify'` because it extends the shared request type. Anything
-else in another module is its internals (ADR-0066).
+What one business module exposes for another to use, which is exactly what its
+Nest module lists in `exports:` — plus the module class itself for wiring, and
+any file that declares `module 'fastify'` because it extends the request type
+every module shares. A dependency-cruiser rule can only see this by file path,
+so it recognises the module file, `application/**/*.port.ts`, and shared
+primitives; it cannot read an `exports:` array (ADR-0066). Anything a module
+keeps to itself is its internals.
 _Avoid_: public API, exported surface, barrel
 
 **Module internals**:
@@ -33,19 +35,6 @@ every module already agrees on, such as the accessor for `aihubAuth` or the
 evidence attached at `aihubMetering`. Being shared is a property the file
 declares, never a label someone assigns to it.
 _Avoid_: common helper, cross-cutting utility
-
-**Application port**:
-An interface a module declares in its own `application` layer to name what it
-needs from the outside, bound to a concrete implementation at its composition
-root. A port is how one business module asks another for behaviour without
-depending on how that behaviour is built.
-_Avoid_: interface, contract, adapter
-
-**Composition root**:
-The `<module>.module.ts` file where a Nest module binds its application ports to
-concrete implementations. It is the only place infrastructure is wired, and the
-only place another module is imported for wiring rather than for behaviour.
-_Avoid_: module file, bootstrap, wiring
 
 **Graded-request chain**:
 The declared order in which a graded request authenticates, resolves the
