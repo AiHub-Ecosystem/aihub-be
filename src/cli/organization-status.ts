@@ -1,13 +1,16 @@
 import Redis from 'ioredis';
 
-import type { OrganizationStatus } from '../modules/identity/application/api-key-authenticator.port';
+import {
+  type OrganizationStatus,
+  apiKeyCacheKey,
+  apiKeyCacheMissKey,
+} from '../modules/identity/application/api-key-authenticator.port';
 import type {
   OrganizationStatusPort,
   SetOrganizationStatusResult,
 } from '../modules/identity/application/organization-status.port';
 import { createPostgresIdentityClient } from '../modules/identity/infrastructure/postgres-identity.client';
 import { PostgresOrganizationStatusRepository } from '../modules/identity/infrastructure/postgres-organization-status.repository';
-import { apiKeyCacheKeys } from '../modules/identity/infrastructure/redis-identity.store';
 import { runOperatorCommand } from './operator-command-context';
 
 export interface OrganizationStatusCliInput {
@@ -49,7 +52,12 @@ async function purgeApiKeyCache(
   redis.on('error', () => undefined);
   try {
     await redis.connect();
-    await redis.del(...keyHashes.flatMap((hash) => apiKeyCacheKeys(hash)));
+    await redis.del(
+      ...keyHashes.flatMap((hash) => [
+        apiKeyCacheKey(hash),
+        apiKeyCacheMissKey(hash),
+      ]),
+    );
   } finally {
     redis.disconnect();
   }

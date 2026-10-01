@@ -65,6 +65,42 @@ function crossModuleRule() {
 }
 
 /**
+ * `src/cli` is the composition root for the Operator surface: it is where a
+ * command decides which Postgres client and which repository to construct,
+ * exactly as `*.module.ts` does for the HTTP surface. Binding infrastructure is
+ * that job, so `module-code-no-infrastructure-import` deliberately does not
+ * reach this tree and this rule does not report it either.
+ *
+ * What it does report is a command reaching past the seam into a module's
+ * application logic or domain. That logic belongs behind a port or in a
+ * surface the module publishes, and a command using it as a library is free
+ * to drift from the rule the module owns.
+ */
+function cliRule() {
+  return {
+    name: 'no-cli-module-internal-import',
+    severity: 'warn',
+    comment:
+      "An Operator command reaches a module through its public seam: the module file, an application port, a shared primitive, an exported symbol, or a decorator. Constructing infrastructure is this tree's job as a composition root, but importing a module's application logic or domain is not (ADR-0066).",
+    from: {
+      path: '^src/cli/',
+      pathNot: '[.]spec[.]ts$',
+    },
+    to: {
+      path: '^src/modules/[^/]+/',
+      pathNot: [
+        '^src/modules/[^/]+/infrastructure/',
+        '^src/modules/[^/]+/[^/]+[.]module[.]ts$',
+        '^src/modules/[^/]+/application/[^/]*[.]port[.]ts$',
+        ...sharedPrimitivePaths(),
+        ...nestExportPaths(),
+        ...nestDecoratorPaths(),
+      ],
+    },
+  };
+}
+
+/**
  * `GradedRequest` and `RequireOperation` are consumed by three modules each
  * and neither can be published through a Nest `exports:` array, because a
  * decorator runs when it is applied and is never resolved by the container.
@@ -303,6 +339,7 @@ module.exports = {
       to: { path: '^src/modules/' },
     },
     crossModuleRule(),
+    cliRule(),
   ],
   options: {
     tsPreCompilationDeps: true,

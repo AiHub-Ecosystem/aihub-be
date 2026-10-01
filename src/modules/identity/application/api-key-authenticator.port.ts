@@ -55,6 +55,21 @@ export interface ApiKeyCachePort {
 
 export const API_KEY_CACHE = Symbol('API_KEY_CACHE');
 
+/**
+ * The Redis entries one API key hash can occupy. These names are part of the
+ * cache contract rather than of the Redis adapter, so the operator commands
+ * that purge a key from outside the gateway read them from here and cannot
+ * drift from what the gateway writes.
+ */
+export function apiKeyCacheKey(hashHex: string): string {
+  return `aihub:v1:key:${hashHex}`;
+}
+
+/** The negative-lookup entry; a purge must remove it too. */
+export function apiKeyCacheMissKey(hashHex: string): string {
+  return `aihub:v1:key:miss:${hashHex}`;
+}
+
 export interface AuthFailureCounterPort {
   get(ip: string): Promise<number>;
   recordFailure(ip: string): Promise<number>;

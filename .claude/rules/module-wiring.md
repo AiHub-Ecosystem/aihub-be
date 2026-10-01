@@ -7,6 +7,7 @@ paths:
 # Module wiring rules
 
 - Nest modules are composition roots: bind application ports to infrastructure implementations here and nowhere else.
+- `src/cli` is a second composition root, for the Operator surface. A command binding a Postgres client or a repository is doing that job; a command importing a module's application logic is not, and is reported by `no-cli-module-internal-import`.
 - A module's public seam is its Nest `exports:` array. Before changing or ruling on a cross-module import, read the target module's `exports:` and confirm the symbol is listed: an exported guard is used deliberately and is not a coupling bug.
 - A Nest decorator is seam even when no `exports:` array lists it: `GradedRequest` and `RequireOperation` are applied, not resolved, so they compose across modules by import and belong to no DI container.
 - Import module public APIs, not another module's infrastructure classes or private files.

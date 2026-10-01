@@ -10,6 +10,9 @@ const rules =
 const crossModuleRule = rules.find(
   (rule) => rule.name === 'no-cross-module-internal-import',
 );
+const cliRule = rules.find(
+  (rule) => rule.name === 'no-cli-module-internal-import',
+);
 
 function matches(pattern: string | string[], path: string): boolean {
   const patterns = Array.isArray(pattern) ? pattern : [pattern];
@@ -100,6 +103,7 @@ describe('cross-module import rule', () => {
  */
 describe('cross-module import rule over the real tree', () => {
   let violations: Array<{ from: string; to: string }>;
+  let cliViolations: Array<{ from: string; to: string }>;
 
   beforeAll(() => {
     const result = spawnSync(
@@ -128,6 +132,15 @@ describe('cross-module import rule over the real tree', () => {
       .filter(
         (violation: { rule: { name: string } }) =>
           violation.rule.name === 'no-cross-module-internal-import',
+      )
+      .map((violation: { from: string; to: string }) => ({
+        from: violation.from,
+        to: violation.to,
+      }));
+    cliViolations = report.summary.violations
+      .filter(
+        (violation: { rule: { name: string } }) =>
+          violation.rule.name === 'no-cli-module-internal-import',
       )
       .map((violation: { from: string; to: string }) => ({
         from: violation.from,
@@ -213,5 +226,66 @@ describe('cross-module import rule over the real tree', () => {
     );
 
     expect(selfEdges).toEqual([]);
+  });
+
+  /**
+   * `src/cli` is the Operator composition root, so binding infrastructure
+   * there is deliberate and must stay unreported. Reaching a module's
+   * application logic is not, and that is what the second rule names. Both
+   * halves are pinned against the real tree because a carve-out that stops
+   * matching fails silently in the direction that hides a real coupling.
+   */
+  it('reports no command binding infrastructure', () => {
+    // 14 edges today. Constructing the Postgres client and repository is this
+    // tree's job, the same job `*.module.ts` does and that rule also exempts.
+    expect(
+      cliViolations.filter((edge) => edge.to.includes('/infrastructure/')),
+    ).toEqual([]);
+  });
+
+  it('reports no command reaching a port', () => {
+    // 3 edges today, and every command already injects its repository port.
+    expect(
+      cliViolations.filter((edge) => edge.to.endsWith('.port.ts')),
+    ).toEqual([]);
+  });
+
+  it('reports the 4 commands using module logic as a library', () => {
+    // No module wires these services, so nothing publishes them and a command
+    // is free to drift from the rule the module owns. Publishing them is the
+    // fix, and it changes code rather than the rule.
+    expect(cliViolations).toHaveLength(4);
+    expect(
+      [
+        ...new Set(cliViolations.map((edge) => edge.to.split('/').pop())),
+      ].sort(),
+    ).toEqual([
+      'quota-reconciliation.ts',
+      'usage-completeness-report.ts',
+      'usage-retention.ts',
+    ]);
+  });
+
+  it('reports none of them from a cli spec file', () => {
+    expect(
+      cliViolations.filter((edge) => edge.from.endsWith('.spec.ts')),
+    ).toEqual([]);
+  });
+
+  it('leaves the module-to-module count untouched', () => {
+    // Both rules read the same seam helpers, so changing what counts as
+    // published moves both counts. This pins that adding the second rule did
+    // not widen the first.
+    expect(violations).toHaveLength(11);
+  });
+
+  it('reads the cli rule from the config', () => {
+    // The real-tree assertions above would pass if the rule were silently
+    // dropped from the config, so its presence is checked directly.
+    expect(cliRule?.severity).toBe('warn');
+    expect(matches(cliRule?.from.path ?? '', 'src/cli/usage-prune.ts')).toBe(
+      true,
+    );
+    expect(matches(cliRule?.from.path ?? '', 'src/common/foo.ts')).toBe(false);
   });
 });

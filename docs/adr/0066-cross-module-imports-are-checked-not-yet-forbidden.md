@@ -68,14 +68,48 @@ unenforced today.
 
 ## Consequences
 
-`pnpm arch-check` passes with 11 warnings that grow when a new cross-module
+`pnpm arch-check` passes with 15 warnings that grow when a new cross-module
 internal import appears, which is what makes the coupling visible while the
 seam question is open. Every new import of this shape fails nothing, so nothing
-is enforced yet; the rule earns its keep by naming the problem and by making the
-11 edges measurable.
+is enforced yet; the rule earns its keep by naming the problem and by making
+the edges measurable.
 
-Nothing outside `src/modules` is covered. `src/cli` reaches three levels into
-`identity/infrastructure` today and is a separate piece of work, because this
-rule was scoped to what issue #122 describes. Spec files are excluded for the
-same reason the test-helper rule excludes them: a test double is a tool of the
-test, not a runtime dependency.
+Spec files are excluded for the same reason the test-helper rule excludes them:
+a test double is a tool of the test, not a runtime dependency.
+
+## src/cli is a composition root, and is covered separately
+
+Issue #211 asked for `src/cli` to be covered. It is, by a second rule
+(`no-cli-module-internal-import`) that reads the same five kinds of seam, and
+that answer turned on one distinction the original issue did not make.
+
+`src/cli` is the composition root for the Operator surface. Deciding which
+Postgres client to construct and which repository to bind is that tree's job,
+exactly as it is for `*.module.ts`, and 18 of the 20 edges this rule found there
+are that work. Reporting them would name correct wiring as a defect. So
+`infrastructure/` is exempt for this tree, and the same reason
+`module-code-no-infrastructure-import` already does not reach `src/cli`.
+
+What remains is a command reaching a module's application logic: 4 edges into
+`UsageRetentionService`, `QuotaReconciliationService`, and
+`UsageCompletenessReportService`. No module wires those services and no
+`exports:` array publishes them, so the CLI is their only consumer and nothing
+records that a command is using a module's logic as a library. Fixing them
+means publishing the services or moving the calls behind a port, which changes
+code; the rule reports them so each one is named.
+
+Two cache-key helpers were the one place a command was reading a module's
+internals for a name rather than binding them: `apiKeyCacheKeys` lived in
+`redis-identity.store.ts`, which the comment there described as exported for
+the operator commands. Those names are part of the cache contract that
+`ApiKeyCachePort` already declares, so they moved next to it as
+`apiKeyCacheKey` and `apiKeyCacheMissKey`, and the Redis adapter now reads them
+from there rather than redeclaring them.
+
+The CLI keeps building its own Redis client with a 5 s command timeout instead
+of going through `ApiKeyCachePort.delete`, deliberately. The port swallows
+Redis failures (`.catch(() => 0)`), which is right for a request path and wrong
+for an operator command that must report whether the purge happened; and the
+adapter's 100 ms timeout is tuned for the gateway, not for an operator
+reaching Redis through a tunnel. Routing the purge through the port would have
+changed what the operator is told, which the Operator surface cannot do.

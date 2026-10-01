@@ -5,6 +5,10 @@ import type {
   ApiKeyRecord,
   AuthFailureCounterPort,
 } from '../application/api-key-authenticator.port';
+import {
+  apiKeyCacheKey,
+  apiKeyCacheMissKey,
+} from '../application/api-key-authenticator.port';
 import type {
   JwksCacheEntry,
   JwksCachePort,
@@ -214,23 +218,6 @@ function parseCachedRecord(serialized: string): ApiKeyRecord | undefined {
   };
 }
 
-function cacheKey(hashHex: string): string {
-  return `aihub:v1:key:${hashHex}`;
-}
-
-function missKey(hashHex: string): string {
-  return `aihub:v1:key:miss:${hashHex}`;
-}
-
-/**
- * Both entries one key can occupy. Exported for the operator commands that
- * purge them from outside the gateway, so they cannot drift from the names the
- * gateway writes.
- */
-export function apiKeyCacheKeys(hashHex: string): readonly string[] {
-  return [cacheKey(hashHex), missKey(hashHex)];
-}
-
 function jwksKey(
   organizationId: string,
   configVersion: string,
@@ -290,17 +277,17 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
     }
 
     try {
-      const serialized = await this.client.get(cacheKey(hashHex));
+      const serialized = await this.client.get(apiKeyCacheKey(hashHex));
       if (serialized !== null) {
         const record = parseCachedRecord(serialized);
         if (record !== undefined) {
           return record;
         }
-        await this.client.del(cacheKey(hashHex));
+        await this.client.del(apiKeyCacheKey(hashHex));
         return undefined;
       }
 
-      const miss = await this.client.get(missKey(hashHex));
+      const miss = await this.client.get(apiKeyCacheMissKey(hashHex));
       return miss === '1' ? null : undefined;
     } catch {
       return undefined;
@@ -317,7 +304,7 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
       expiresAt: record.expiresAt?.toISOString() ?? null,
     });
     await this.client
-      .set(cacheKey(hashHex), serialized, 'EX', 60)
+      .set(apiKeyCacheKey(hashHex), serialized, 'EX', 60)
       .catch(() => undefined);
   }
 
@@ -327,7 +314,7 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
     }
 
     await this.client
-      .set(missKey(hashHex), '1', 'EX', 30)
+      .set(apiKeyCacheMissKey(hashHex), '1', 'EX', 30)
       .catch(() => undefined);
   }
 
@@ -336,7 +323,9 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
       return;
     }
 
-    await this.client.del(cacheKey(hashHex), missKey(hashHex)).catch(() => 0);
+    await this.client
+      .del(apiKeyCacheKey(hashHex), apiKeyCacheMissKey(hashHex))
+      .catch(() => 0);
   }
 
   async getJwks(
