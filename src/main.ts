@@ -17,12 +17,17 @@ import {
   assertAuthBypassFlagIsSafe,
   assertHostConfigurationIsSafe,
 } from './modules/identity/presentation/request-environment';
+import { loadRuntimeConnectionEnvironment } from './modules/secrets/infrastructure/runtime-connection.environment';
 import { registerSpeakingMultipartParser } from './modules/speaking/infrastructure/fastify-speaking-multipart.parser';
 
 const DEFAULT_PORT = 3000;
 const MAX_BODY_BYTES = 1024 * 1024;
 
 export async function bootstrap(): Promise<void> {
+  // Connection settings and the sandbox assertion signer are rendered into a
+  // secrets file that no module reads directly, so they have to be in the
+  // environment before any module is built.
+  loadRuntimeConnectionEnvironment();
   assertAuthBypassFlagIsSafe();
   assertHostConfigurationIsSafe();
 
