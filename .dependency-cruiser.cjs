@@ -1,3 +1,92 @@
+const { readdirSync, readFileSync } = require('node:fs');
+const { join, relative } = require('node:path');
+const process = require('node:process');
+
+const modulesDirectory = join(__dirname, 'src', 'modules');
+
+/**
+ * Reading file contents is deliberate: a guard or decorator is a Nest object
+ * owned by its module, not a shared primitive, so matching on its shape would
+ * silently exempt every internal guard too. Declaring `module 'fastify'` is the
+ * one signal that says "this file extends the shared request contract", and a
+ * file that does not say it stays private by default.
+ */
+function isSharedPrimitive(file) {
+  return /declare module ['"]fastify['"]/.test(readFileSync(file, 'utf8'));
+}
+
+/**
+ * A business module reaches another through its public seam and nothing else.
+ * The seam is three things (ADR-0066):
+ *
+ *   1. `<module>.module.ts`, which is Nest composition wiring.
+ *   2. `application/**\/*.port.ts`, an application port the owner declares.
+ *   3. A presentation primitive that declares `module 'fastify'`, because it
+ *      extends the shared request type every module already agrees on.
+ *
+ * `from.path` captures the module name as group 1 and `to.path` refers back to
+ * it as `$1` inside a negative lookahead, so one rule expresses "any module to
+ * a different module" without generating a rule per module pair.
+ *
+ * This rule is `warn`, not `error`, and it reports 21 violations that are not
+ * all mistakes. NestJS already provides a public seam through each module's
+ * `exports:` - `ApiKeyGuard`, `UserIdentityGuard`, `UserAccessJwtGuard`,
+ * `RateLimitGuard` and `QuotaGuard` are all exported by their owning module and
+ * consumed by the graded-request chain that ADR-0057 declares a contract. A
+ * path-based rule cannot see a Nest `exports:` array, so it cannot tell that
+ * seam from reaching into internals. Until the rule can recognise Nest DI
+ * exports, enabling it as an error would reject the graded-request chain this
+ * repository deliberately built.
+ */
+function crossModuleRule() {
+  return {
+    name: 'no-cross-module-internal-import',
+    severity: 'warn',
+    comment:
+      "A business module depends on another through its public seam: the module file, an application port, or a primitive that declares 'module fastify'. Importing another module's internals couples two modules that must be able to change apart. Reported as a warning because Nest module 'exports:' arrays are a real seam this path-based rule cannot see yet (ADR-0066).",
+    from: {
+      // Group 1 is the importing module's name.
+      path: '^src/modules/([^/]+)/',
+      pathNot: '[.]spec[.]ts$',
+    },
+    to: {
+      path: '^src/modules/(?!$1/)[^/]+/',
+      pathNot: [
+        '^src/modules/[^/]+/[^/]+[.]module[.]ts$',
+        '^src/modules/[^/]+/application/[^/]*[.]port[.]ts$',
+        ...sharedPrimitivePaths(),
+      ],
+    },
+  };
+}
+
+/**
+ * A presentation primitive that declares `module 'fastify'` extends the shared
+ * request type, so it is part of the seam rather than the owning module's
+ * internals. The paths are read from source instead of listed here, so a file
+ * that does not declare it stays private and a new file needs no edit to this
+ * config to become shared.
+ */
+function sharedPrimitivePaths() {
+  return readdirSync(modulesDirectory, { recursive: true, withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        entry.name.endsWith('.ts') &&
+        !entry.name.endsWith('.spec.ts') &&
+        isSharedPrimitive(join(entry.parentPath, entry.name)),
+    )
+    .map(
+      (entry) =>
+        // depcruise matches these against paths relative to the cruise root,
+        // so an absolute path from readdirSync would never match.
+        `^${relative(process.cwd(), join(entry.parentPath, entry.name))
+          .split(/[\\/]/)
+          .join('/')
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+    );
+}
+
 module.exports = {
   // no-orphans is intentionally omitted; orphan/liveness analysis belongs to
   // dedicated tooling and may overlap with Knip.
@@ -78,6 +167,7 @@ module.exports = {
       from: { path: '^src/common/' },
       to: { path: '^src/modules/' },
     },
+    crossModuleRule(),
   ],
   options: {
     tsPreCompilationDeps: true,
