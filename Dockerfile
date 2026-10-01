@@ -20,7 +20,16 @@ RUN pnpm prune --prod --ignore-scripts
 
 FROM node:22.23.2-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 AS runtime
 
-LABEL org.opencontainers.image.source="https://github.com/AiHub-Ecosystem/aihub-be"
+# Pinned by digest so two builds of one commit cannot differ by a base image
+# repoint. Bump when Node publishes a security patch for this version, or
+# monthly, whichever comes first (ADR-0064).
+#
+# `revision` is the commit the running image came from. The deployed checkout
+# has no `.git`, so without this label `docker inspect` cannot tell an operator
+# which commit is live, and an incident starts with guessing.
+ARG VCS_REF
+LABEL org.opencontainers.image.source="https://github.com/AiHub-Ecosystem/aihub-be" \
+      org.opencontainers.image.revision="${VCS_REF}"
 
 ENV NODE_ENV=production \
     PORT=3000

@@ -317,6 +317,11 @@ jobs:
           tags: aihub:image-boot
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Baked into the image so `docker inspect` on the VPS can name the
+          # commit that is live. The deployed checkout carries no `.git`, so
+          # there is no other place to read it from.
+          build-args: |
+            VCS_REF=${{ github.sha }}
 
       - name: Boot the image and wait for its health check
         run: bash scripts/image-boot-check.sh aihub:image-boot

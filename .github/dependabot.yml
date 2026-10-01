@@ -1,0 +1,27 @@
+# Dependabot's implicit security-update target reports this package manager as
+# `npm_and_yarn`, and its updater then fails against a pnpm workspace: the run
+# exits 1 in `update_files` before it opens a pull request. Naming the
+# ecosystem here replaces that default target with one that matches the
+# `packageManager` field in package.json.
+#
+# Dependabot reads package.json and the npm-shaped lockfile, not the `overrides`
+# block in pnpm-workspace.yaml. A bump it proposes there can therefore contradict
+# an override the repo relies on, so CI is the gate that decides, not this file.
+version: 2
+
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    # Weekly rather than daily: this repo has a long test suite, and a noisy
+    # open-pull-request-limit turns dependabot into a source of unreviewed churn.
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      # One PR for the transitive tree beats a dozen single-bump PRs that each
+      # fail CI on their own.
+      dependencies:
+        patterns:
+          - "*"
