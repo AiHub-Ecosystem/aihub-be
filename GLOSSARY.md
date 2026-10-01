@@ -18,11 +18,11 @@ _Avoid_: service, package, bounded context
 What one business module exposes for another to use, which is exactly what its
 Nest module lists in `exports:` — plus the module class itself for wiring, and
 any file that declares `module 'fastify'` because it extends the request type
-every module shares. A dependency-cruiser rule recognises a seam by file path,
-so it exempts a file that declares an exported symbol rather than the symbol
-alone; `GradedRequest` and `RequireOperation` are composed across modules while
-no module exports them, which is why composition alone does not make a seam
-(ADR-0066). Anything a module keeps to itself is its internals.
+every module shares. A Nest decorator is a seam too: `GradedRequest` and
+`RequireOperation` are composed across modules by applying them, not by
+resolving them, so no `exports:` array can ever list them. A dependency-cruiser
+rule recognises a seam by file path, so it exempts a whole file rather than one
+symbol within it (ADR-0066). Anything a module keeps to itself is its internals.
 _Avoid_: public API, exported surface, barrel
 
 **Module internals**:

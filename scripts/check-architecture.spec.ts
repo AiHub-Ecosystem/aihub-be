@@ -135,10 +135,23 @@ describe('cross-module import rule over the real tree', () => {
       }));
   });
 
-  it('reports the 15 cross-module imports ADR-0066 records', () => {
-    // Six of the 21 the rule reported before Nest exports were recognised are
-    // the graded-request chain composing guards its owning modules export.
-    expect(violations).toHaveLength(15);
+  it('reports the 11 cross-module imports ADR-0066 records', () => {
+    // Ten of the 21 the rule first reported are seam: six the graded-request
+    // chain composes from a module's `exports:`, and four decorator files that
+    // compose at import time and can never travel through DI.
+    expect(violations).toHaveLength(11);
+  });
+
+  it('reports no guard, interceptor, or decorator left', () => {
+    // What remains is pure functions and module-owned constants, which is the
+    // coupling this rule exists to name.
+    expect(
+      violations.filter(
+        (edge) =>
+          /[.](guard|interceptor|decorator)[.]ts$/.test(edge.to) ||
+          /graded-request/.test(edge.to),
+      ),
+    ).toEqual([]);
   });
 
   it('exempts a guard because its module exports it, not because of its folder', () => {
@@ -155,6 +168,33 @@ describe('cross-module import rule over the real tree', () => {
       matches(
         pathNot,
         'src/modules/identity/presentation/sandbox-api-key.guard.ts',
+      ),
+    ).toBe(false);
+  });
+
+  it('exempts a Nest decorator, which composes at import time and not through DI', () => {
+    const pathNot = crossModuleRule?.to.pathNot ?? [];
+
+    // RequireOperation is applied by three modules and no module exports it:
+    // it returns SetMetadata, so it can never be a DI provider.
+    expect(
+      matches(
+        pathNot,
+        'src/modules/identity/presentation/require-operation.decorator.ts',
+      ),
+    ).toBe(true);
+    expect(
+      matches(
+        pathNot,
+        'src/modules/gateway/presentation/graded-request.decorator.ts',
+      ),
+    ).toBe(true);
+    // A file that is neither exported nor a decorator stays private, which is
+    // what keeps the exemption from reaching the owning module's own logic.
+    expect(
+      matches(
+        pathNot,
+        'src/modules/metering/application/quota-reconciliation.ts',
       ),
     ).toBe(false);
   });

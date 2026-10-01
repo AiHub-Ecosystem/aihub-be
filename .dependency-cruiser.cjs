@@ -25,6 +25,8 @@ function isSharedPrimitive(file) {
  *      extends the shared request type every module already agrees on.
  *   4. A file whose module exports a symbol it declares, which is how NestJS
  *      publishes a guard or interceptor to the modules that compose it.
+ *   5. A file that declares a Nest decorator, which composes at import time
+ *      and so can never travel through the DI container.
  *
  * `from.path` captures the module name as group 1 and `to.path` refers back to
  * it as `$1` inside a negative lookahead, so one rule expresses "any module to
@@ -56,9 +58,38 @@ function crossModuleRule() {
         '^src/modules/[^/]+/application/[^/]*[.]port[.]ts$',
         ...sharedPrimitivePaths(),
         ...nestExportPaths(),
+        ...nestDecoratorPaths(),
       ],
     },
   };
+}
+
+/**
+ * `GradedRequest` and `RequireOperation` are consumed by three modules each
+ * and neither can be published through a Nest `exports:` array, because a
+ * decorator runs when it is applied and is never resolved by the container.
+ * Reading it as its own kind of seam keeps a deliberate composition from
+ * looking like a coupling bug, without adding either symbol to `exports:`
+ * where it does not belong.
+ */
+function nestDecoratorPaths() {
+  return readdirSync(modulesDirectory, { recursive: true, withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        entry.name.endsWith('.ts') &&
+        !entry.name.endsWith('.spec.ts') &&
+        /export function \w+\([^)]*\):\s*(Class|Method)Decorator\b/.test(
+          readFileSync(join(entry.parentPath, entry.name), 'utf8'),
+        ),
+    )
+    .map(
+      (entry) =>
+        `^${relative(process.cwd(), join(entry.parentPath, entry.name))
+          .split(/[\\/]/)
+          .join('/')
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+    );
 }
 
 /**
