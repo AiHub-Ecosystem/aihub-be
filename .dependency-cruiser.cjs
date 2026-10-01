@@ -23,6 +23,8 @@ function isSharedPrimitive(file) {
  *   2. `application/**\/*.port.ts`, an application port the owner declares.
  *   3. A presentation primitive that declares `module 'fastify'`, because it
  *      extends the shared request type every module already agrees on.
+ *   4. A file whose module exports a symbol it declares, which is how NestJS
+ *      publishes a guard or interceptor to the modules that compose it.
  *
  * `from.path` captures the module name as group 1 and `to.path` refers back to
  * it as `$1` inside a negative lookahead, so one rule expresses "any module to
@@ -30,15 +32,11 @@ function isSharedPrimitive(file) {
  * patterns in `to.pathNot` exempt the module file, application ports, and
  * shared primitives of whichever module the target turns out to be.
  *
- * This rule is `warn`, not `error`, and it reports 21 violations that are not
- * all mistakes. NestJS already provides a public seam through each module's
- * `exports:` - `ApiKeyGuard`, `UserIdentityGuard`, `UserAccessJwtGuard`,
- * `RateLimitGuard` and `QuotaGuard` are all exported by their owning module and
- * consumed by the graded-request chain that ADR-0057 declares a contract. A
- * path-based rule cannot see a Nest `exports:` array, so it cannot tell that
- * seam from reaching into internals. Until the rule can recognise Nest DI
- * exports, enabling it as an error would reject the graded-request chain this
- * repository deliberately built.
+ * This rule is `warn`, not `error`. It reads each module's `exports:` array so
+ * the Nest seam is exempt, but dependency-cruiser matches by path, so the
+ * exemption is the whole file rather than the one exported symbol. What
+ * remains are imports of pure functions and module-owned values that no module
+ * publishes, and fixing those means changing code rather than a rule.
  */
 function crossModuleRule() {
   return {
@@ -57,9 +55,113 @@ function crossModuleRule() {
         '^src/modules/[^/]+/[^/]+[.]module[.]ts$',
         '^src/modules/[^/]+/application/[^/]*[.]port[.]ts$',
         ...sharedPrimitivePaths(),
+        ...nestExportPaths(),
       ],
     },
   };
+}
+
+/**
+ * Nest publishes a symbol through its module's `exports:` array, and that array
+ * is the seam the graded-request chain is composed from (ADR-0057). Reading it
+ * from source keeps the exemption derived from the declaration rather than a
+ * list, so exporting a guard is all it takes to make it reachable.
+ */
+function nestExportPaths() {
+  const exported = new Map();
+
+  for (const entry of readdirSync(modulesDirectory, {
+    withFileTypes: true,
+  })) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const name = entry.name;
+    let source;
+    try {
+      source = readFileSync(
+        join(modulesDirectory, name, `${name}.module.ts`),
+        'utf8',
+      );
+    } catch {
+      continue;
+    }
+
+    const at = source.indexOf('exports:');
+    const open = at < 0 ? -1 : source.indexOf('[', at);
+    if (open < 0) {
+      continue;
+    }
+
+    let depth = 0;
+    let end = open;
+    for (let index = open; index < source.length; index++) {
+      if (source[index] === '[') {
+        depth++;
+      } else if (source[index] === ']') {
+        depth--;
+        if (depth === 0) {
+          end = index;
+          break;
+        }
+      }
+    }
+
+    exported.set(
+      name,
+      new Set(
+        source
+          .slice(open + 1, end)
+          .split(',')
+          .map(
+            (part) =>
+              part
+                .trim()
+                .replace(/\/\/.*$/gm, '')
+                .trim()
+                .match(/^(?:type\s+)?([A-Za-z_$][\w$]*)/)?.[1],
+          )
+          .filter(Boolean),
+      ),
+    );
+  }
+
+  const paths = [];
+
+  for (const [module, symbols] of exported) {
+    for (const entry of readdirSync(join(modulesDirectory, module), {
+      recursive: true,
+      withFileTypes: true,
+    })) {
+      if (
+        !entry.isFile() ||
+        !entry.name.endsWith('.ts') ||
+        entry.name.endsWith('.spec.ts')
+      ) {
+        continue;
+      }
+
+      const file = join(entry.parentPath, entry.name);
+      const declaresExported = [...symbols].some((symbol) =>
+        new RegExp(
+          `^(?:export\\s+(?:abstract\\s+)?(?:class|const|function|interface|type|enum)\\s+${symbol}\\b|export\\s*\\{[^}]*\\b${symbol}\\b)`,
+          'm',
+        ).test(readFileSync(file, 'utf8')),
+      );
+
+      if (declaresExported) {
+        paths.push(
+          `^${relative(process.cwd(), file)
+            .split(/[\\/]/)
+            .join('/')
+            .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+        );
+      }
+    }
+  }
+
+  return paths;
 }
 
 /**

@@ -44,7 +44,7 @@ describe('cross-module import rule', () => {
     expect(
       matches(
         crossModuleRule?.to.pathNot ?? [],
-        'src/modules/identity/presentation/api-key.guard.ts',
+        'src/modules/identity/presentation/audit-cursor.ts',
       ),
     ).toBe(false);
   });
@@ -68,7 +68,7 @@ describe('cross-module import rule', () => {
     ).toBe(false);
     expect(
       matches(pathNot, 'src/modules/gateway/presentation/quota.guard.ts'),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('treats a file declaring module fastify as shared, read from source', () => {
@@ -82,7 +82,7 @@ describe('cross-module import rule', () => {
     ).toBe(true);
     // The same presentation folder holds files that do not declare it.
     expect(
-      matches(pathNot, 'src/modules/identity/presentation/api-key.guard.ts'),
+      matches(pathNot, 'src/modules/identity/presentation/audit-cursor.ts'),
     ).toBe(false);
   });
 
@@ -135,8 +135,28 @@ describe('cross-module import rule over the real tree', () => {
       }));
   });
 
-  it('reports the 21 cross-module imports ADR-0066 records', () => {
-    expect(violations).toHaveLength(21);
+  it('reports the 15 cross-module imports ADR-0066 records', () => {
+    // Six of the 21 the rule reported before Nest exports were recognised are
+    // the graded-request chain composing guards its owning modules export.
+    expect(violations).toHaveLength(15);
+  });
+
+  it('exempts a guard because its module exports it, not because of its folder', () => {
+    const pathNot = crossModuleRule?.to.pathNot ?? [];
+
+    // ApiKeyGuard is published by IdentityModule.exports, so the file holding
+    // it is seam even though it sits under presentation/.
+    expect(
+      matches(pathNot, 'src/modules/identity/presentation/api-key.guard.ts'),
+    ).toBe(true);
+    // A file in the same folder that its module does not export stays private,
+    // which is what keeps the exemption from widening to the whole directory.
+    expect(
+      matches(
+        pathNot,
+        'src/modules/identity/presentation/sandbox-api-key.guard.ts',
+      ),
+    ).toBe(false);
   });
 
   it('reports none of them from a spec file', () => {
