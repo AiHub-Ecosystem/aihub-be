@@ -40,10 +40,20 @@ What remains is 11 imports of things no module publishes and no framework can:
 `normalizeMeteringUsage`, `extractDownstreamTelemetry`, and
 `QuotaCounterOverwritePort` from `metering`, and `canonicalJson`, the
 organization operation constants, and `resolveIdempotencyKey` from
-`idempotency`. Six target files, four owning modules. Fixing them means either
-publishing the symbol or moving the call behind a port, which changes
-behaviour; the rule reports them so each one is visible and named rather than
-assumed.
+`idempotency`. Six target files, four owning modules. The rule reports them so
+each one is visible and named rather than assumed.
+
+Every one of the eleven is a pure function, a constant, a type, or an
+interface. None is a provider, and that is what stops the obvious fix: a Nest
+`exports:` array publishes providers, so `exports: [canonicalJson]` does not
+compile. The two real ways to remove them are to move each call behind a port
+or to wrap the value in a `useValue` provider, and both are a change of
+behaviour dressed as a change of imports. Registering a pure function as a
+dependency in order to satisfy a path-based rule would also hide the fact that
+the rule cannot see this shape of seam, which is the thing the rule exists to
+report. So they are reported instead, and removing any of them is a change
+made on purpose with its own test, rather than an edit that makes a number go
+down.
 
 ## Considered options
 
