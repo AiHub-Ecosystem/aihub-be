@@ -2,11 +2,12 @@ import { OPERATION_CATALOG } from './operation-catalog';
 import { PUBLIC_ROUTES } from './public-routes';
 
 /**
- * The path segments a controller binds with `@Param`, which the registry spells
- * `:camelCaseId`.
+ * The segment that names an Organization. Other `:camelCaseId` segments, such
+ * as an Avatar's `:assetId`, name something else and say nothing about where
+ * the route learns its Organization.
  */
 function organizationSegments(path: string): string[] {
-  return path.split('/').filter((segment) => /^:[a-zA-Z]+Id$/.test(segment));
+  return path.split('/').filter((segment) => segment === ':organizationId');
 }
 
 describe('PUBLIC_ROUTES', () => {

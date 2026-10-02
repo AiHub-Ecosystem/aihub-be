@@ -457,6 +457,113 @@
       }
     },
     {
+      "id": "524c778e-de50-4fed-833a-92b201ec45d5",
+      "name": "Request an Avatar upload URL",
+      "request": {
+        "name": "Request an Avatar upload URL",
+        "description": {
+          "content": "Mints a presigned `PUT` URL that writes exactly one object for the signed-in AIHUB User Account, with the declared content type and length bound into the signature. Send the image bytes straight to that URL with the returned headers; they never pass through AIHUB. Nothing is recorded until the upload is completed. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar is refused with `AVATAR_EXISTS`.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "me", "avatar", "uploads"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content_type\": \"<string>\",\n  \"byte_size\": \"<integer>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "6b2cfc7d-cf76-4af1-814f-3b4cf79b8c96",
+      "name": "Complete an Avatar upload",
+      "request": {
+        "name": "Complete an Avatar upload",
+        "description": {
+          "content": "Checks the object that actually landed for this asset and records it as the Avatar of the signed-in AIHUB User Account. An object that is missing answers `404`; one that is larger than 2 MiB, has an unsupported type, or is empty is refused and deleted. The response describes the image and never contains its storage location.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "me", "avatar", "uploads", ":asset_id", "complete"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": [
+            {
+              "disabled": false,
+              "type": "any",
+              "value": "<string>",
+              "key": "asset_id",
+              "description": "(Required) The asset id returned when the upload URL was minted."
+            }
+          ]
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
       "id": "8cd75512-9ad3-416b-91da-739d3056c77f",
       "name": "Create a Self-serve Organization and become its first owner",
       "request": {

@@ -121,6 +121,15 @@ node scripts/upload-speaking-audio.mjs --source E:\audios
 Remove-Item Env:\SEAWEEDFS_ACCESS_KEY_ID, Env:\SEAWEEDFS_SECRET_ACCESS_KEY
 ```
 
+User Account Avatars (ADR-0068) live in their own private bucket, named by
+`SEAWEEDFS_USER_ASSET_BUCKET` (for example `aihub-user-assets`). It has no
+default and never falls back to the Speaking sample bucket: while it is unset,
+the Avatar routes answer `503 AVATAR_STORAGE_UNAVAILABLE` and nothing else is
+affected. Create the bucket private, with no public-read policy, using the same
+SeaweedFS credentials, and set the variable before deploying. Uploaded objects
+that are never completed are not cleaned up yet; see the follow-up issue linked
+from ADR-0068 (#217).
+
 The Compose file does not create a second Postgres service or volume. Verify the
 existing service before starting the gateway:
 

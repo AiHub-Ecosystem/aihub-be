@@ -1362,6 +1362,83 @@ function sandboxAssertionPathItem(
   };
 }
 
+function avatarUploadPathItem(): Record<string, unknown> {
+  const id = 'me.avatar.uploads.create' as const;
+
+  return {
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
+      operationId: id,
+      summary: 'Request an Avatar upload URL',
+      description:
+        'Mints a presigned `PUT` URL that writes exactly one object for the signed-in AIHUB User Account, with the declared content type and length bound into the signature. Send the image bytes straight to that URL with the returned headers; they never pass through AIHUB. Nothing is recorded until the upload is completed. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar is refused with `AVATAR_EXISTS`.',
+      ...routeIdentityScopeOf(id),
+      ...routeSecurityOf(id),
+      parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': { schema: routeSchemaOf(id, 'request') },
+        },
+      },
+      responses: {
+        [routeSuccessKeyOf(id)]: {
+          description:
+            'Upload URL minted. The URL is a write credential for one object and is returned only here.',
+          headers: {
+            'Cache-Control': {
+              schema: { type: 'string', enum: ['no-store'] },
+            },
+          },
+          content: {
+            'application/json': { schema: routeSchemaOf(id, 'response') },
+          },
+        },
+        ...routeErrorResponsesOf(id),
+      },
+    },
+  };
+}
+
+function avatarCompletePathItem(): Record<string, unknown> {
+  const id = 'me.avatar.uploads.complete' as const;
+  const avatarContent = {
+    'application/json': { schema: routeSchemaOf(id, 'response') },
+  };
+
+  return {
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
+      operationId: id,
+      summary: 'Complete an Avatar upload',
+      description:
+        'Checks the object that actually landed for this asset and records it as the Avatar of the signed-in AIHUB User Account. An object that is missing answers `404`; one that is larger than 2 MiB, has an unsupported type, or is empty is refused and deleted. The response describes the image and never contains its storage location.',
+      ...routeIdentityScopeOf(id),
+      ...routeSecurityOf(id),
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        {
+          name: 'asset_id',
+          in: 'path',
+          required: true,
+          description: 'The asset id returned when the upload URL was minted.',
+          schema: { type: 'string', pattern: '^ava_[0-9A-HJKMNP-TV-Z]{26}$' },
+        },
+      ],
+      responses: {
+        [routeSuccessKeyOf(id)]: {
+          description: 'Avatar recorded by this call.',
+          content: avatarContent,
+        },
+        '200': {
+          description:
+            'This asset was already recorded as the Avatar by an earlier completion; the same Avatar is returned.',
+          content: avatarContent,
+        },
+        ...routeErrorResponsesOf(id),
+      },
+    },
+  };
+}
+
 function speakingQuestionsPathItem(): Record<string, unknown> {
   const id = 'speaking.questions' as const;
 
@@ -1454,6 +1531,8 @@ export function buildOpenApiDocument(version: string): unknown {
   paths[routePathOf('sandbox.assertions.mint')] =
     sandboxAssertionPathItem(groupedErrors);
   paths[routePathOf('speaking.questions')] = speakingQuestionsPathItem();
+  paths[routePathOf('me.avatar.uploads.create')] = avatarUploadPathItem();
+  paths[routePathOf('me.avatar.uploads.complete')] = avatarCompletePathItem();
   paths[routePathOf('organizations.create')] = organizationPathItem();
   paths[routePathOf('organizations.rename')] = organizationItemPathItem();
   paths[routePathOf('organizations.me.members.list')] =

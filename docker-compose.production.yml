@@ -44,6 +44,8 @@ x-app-environment: &app-environment
   DOWNSTREAM_AI_SPEAKING_URL: ${DOWNSTREAM_AI_SPEAKING_URL:?DOWNSTREAM_AI_SPEAKING_URL is required}
   RESEND_FROM: ${RESEND_FROM:?RESEND_FROM is required}
   CUSTOMER_WEB_BASE_URL: ${CUSTOMER_WEB_BASE_URL:?CUSTOMER_WEB_BASE_URL is required}
+  # Optional: unset leaves the Avatar routes answering 503 (ADR-0068).
+  SEAWEEDFS_USER_ASSET_BUCKET: ${SEAWEEDFS_USER_ASSET_BUCKET:-}
 
 services:
   vault-agent:

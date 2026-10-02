@@ -3,6 +3,7 @@ import { APP_FILTER } from '@nestjs/core';
 
 import { HealthController } from './health/health.controller';
 import { AuthModule } from './modules/auth/auth.module';
+import { AvatarModule } from './modules/avatar/avatar.module';
 import { GatewayModule } from './modules/gateway/gateway.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { MeteringModule } from './modules/metering/metering.module';
@@ -15,6 +16,7 @@ import { OpenApiModule } from './openapi/openapi.module';
   controllers: [HealthController],
   imports: [
     AuthModule,
+    AvatarModule,
     IdentityModule,
     GatewayModule,
     WritingModule,

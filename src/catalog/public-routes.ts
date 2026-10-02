@@ -14,6 +14,11 @@ import {
   VerifyEmailRequestSchema,
 } from '@/contracts/auth/local-auth';
 import {
+  AvatarResponseSchema,
+  AvatarUploadResponseSchema,
+  CreateAvatarUploadRequestSchema,
+} from '@/contracts/avatar/avatar';
+import {
   CreateOrganizationApiKeyRequestSchema,
   ListOrganizationApiKeysResponseSchema,
   OrganizationApiKeySecretResponseSchema,
@@ -461,6 +466,32 @@ export const PUBLIC_ROUTES = {
     requestSchema: MintSandboxAssertionRequestSchema,
     responseSchema: MintSandboxAssertionResponseSchema,
     errorStatuses: 'all-except-idempotency-conflict',
+  },
+  'me.avatar.uploads.create': {
+    method: 'POST',
+    path: '/v1/me/avatar/uploads',
+    callerAuth: 'bearer',
+    organizationResolution: 'none',
+    successStatus: 201,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: CreateAvatarUploadRequestSchema,
+    responseSchema: AvatarUploadResponseSchema,
+    errorStatuses: [400, 401, 409, 413, 500, 503],
+  },
+  // `201` when this call records the Avatar; a repeated completion of the same
+  // asset answers `200` with the same body, which the path item documents.
+  'me.avatar.uploads.complete': {
+    method: 'POST',
+    path: '/v1/me/avatar/uploads/:assetId/complete',
+    callerAuth: 'bearer',
+    organizationResolution: 'none',
+    successStatus: 201,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: AvatarResponseSchema,
+    errorStatuses: [400, 401, 404, 409, 413, 500, 503],
   },
   'speaking.questions': {
     method: 'GET',

@@ -285,7 +285,7 @@
         }
       },
       "Error409": {
-        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE | ORGANIZATION_MEMBER_EXISTS | ORGANIZATION_OWNER_REQUIRED | ORGANIZATION_IDENTITY_ISSUER_CONFLICT | ORGANIZATION_CREATION_LIMIT_REACHED",
+        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE | ORGANIZATION_MEMBER_EXISTS | ORGANIZATION_OWNER_REQUIRED | ORGANIZATION_IDENTITY_ISSUER_CONFLICT | ORGANIZATION_CREATION_LIMIT_REACHED | AVATAR_EXISTS",
         "content": {
           "application/json": {
             "schema": {
@@ -322,6 +322,10 @@
                         },
                         {
                           "const": "ORGANIZATION_CREATION_LIMIT_REACHED",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AVATAR_EXISTS",
                           "type": "string"
                         }
                       ]
@@ -544,7 +548,7 @@
         }
       },
       "Error503": {
-        "description": "IDENTITY_PROVIDER_UNAVAILABLE | IDENTITY_JWKS_SOURCE_UNAVAILABLE | IDENTITY_CONFIG_CACHE_UNAVAILABLE | AUTH_EMAIL_DELIVERY_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
+        "description": "IDENTITY_PROVIDER_UNAVAILABLE | IDENTITY_JWKS_SOURCE_UNAVAILABLE | IDENTITY_CONFIG_CACHE_UNAVAILABLE | AUTH_EMAIL_DELIVERY_UNAVAILABLE | AVATAR_STORAGE_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
         "content": {
           "application/json": {
             "schema": {
@@ -573,6 +577,10 @@
                         },
                         {
                           "const": "AUTH_EMAIL_DELIVERY_UNAVAILABLE",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AVATAR_STORAGE_UNAVAILABLE",
                           "type": "string"
                         },
                         {
@@ -2987,6 +2995,348 @@
           }
         },
         "description": "Returns the same status and headers as GET without a response body."
+      }
+    },
+    "/v1/me/avatar/uploads": {
+      "post": {
+        "operationId": "me.avatar.uploads.create",
+        "summary": "Request an Avatar upload URL",
+        "description": "Mints a presigned `PUT` URL that writes exactly one object for the signed-in AIHUB User Account, with the declared content type and length bound into the signature. Send the image bytes straight to that URL with the returned headers; they never pass through AIHUB. Nothing is recorded until the upload is completed. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar is refused with `AVATAR_EXISTS`.",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["content_type", "byte_size"],
+                "properties": {
+                  "content_type": {
+                    "anyOf": [
+                      {
+                        "const": "image/jpeg",
+                        "type": "string"
+                      },
+                      {
+                        "const": "image/png",
+                        "type": "string"
+                      },
+                      {
+                        "const": "image/webp",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "byte_size": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Upload URL minted. The URL is a write credential for one object and is returned only here.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "asset_id",
+                        "upload_url",
+                        "method",
+                        "headers",
+                        "expires_at"
+                      ],
+                      "properties": {
+                        "asset_id": {
+                          "pattern": "^ava_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "upload_url": {
+                          "pattern": "^https://",
+                          "type": "string"
+                        },
+                        "method": {
+                          "const": "PUT",
+                          "type": "string"
+                        },
+                        "headers": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": ["Content-Type", "Content-Length"],
+                          "properties": {
+                            "Content-Type": {
+                              "anyOf": [
+                                {
+                                  "const": "image/jpeg",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "image/png",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "image/webp",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "Content-Length": {
+                              "pattern": "^[1-9][0-9]*$",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "expires_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/v1/me/avatar/uploads/{asset_id}/complete": {
+      "post": {
+        "operationId": "me.avatar.uploads.complete",
+        "summary": "Complete an Avatar upload",
+        "description": "Checks the object that actually landed for this asset and records it as the Avatar of the signed-in AIHUB User Account. An object that is missing answers `404`; one that is larger than 2 MiB, has an unsupported type, or is empty is refused and deleted. The response describes the image and never contains its storage location.",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "description": "The asset id returned when the upload URL was minted.",
+            "schema": {
+              "type": "string",
+              "pattern": "^ava_[0-9A-HJKMNP-TV-Z]{26}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "This asset was already recorded as the Avatar by an earlier completion; the same Avatar is returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "asset_id",
+                        "content_type",
+                        "byte_size",
+                        "accepted_at"
+                      ],
+                      "properties": {
+                        "asset_id": {
+                          "pattern": "^ava_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "content_type": {
+                          "anyOf": [
+                            {
+                              "const": "image/jpeg",
+                              "type": "string"
+                            },
+                            {
+                              "const": "image/png",
+                              "type": "string"
+                            },
+                            {
+                              "const": "image/webp",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "byte_size": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "accepted_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Avatar recorded by this call.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "asset_id",
+                        "content_type",
+                        "byte_size",
+                        "accepted_at"
+                      ],
+                      "properties": {
+                        "asset_id": {
+                          "pattern": "^ava_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "content_type": {
+                          "anyOf": [
+                            {
+                              "const": "image/jpeg",
+                              "type": "string"
+                            },
+                            {
+                              "const": "image/png",
+                              "type": "string"
+                            },
+                            {
+                              "const": "image/webp",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "byte_size": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "accepted_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
       }
     },
     "/v1/organizations": {
