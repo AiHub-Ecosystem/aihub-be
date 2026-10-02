@@ -1,4 +1,4 @@
-import type { FastifyServerOptions } from 'fastify';
+import { type FastifyServerOptions, LogController } from 'fastify';
 
 const DEFAULT_LOG_LEVEL = 'info';
 const LOG_LEVELS = [
@@ -43,7 +43,7 @@ export interface RequestLogStream {
  */
 export type RequestLogging = Pick<
   FastifyServerOptions,
-  'logger' | 'disableRequestLogging'
+  'logger' | 'logController'
 >;
 
 /**
@@ -59,14 +59,16 @@ export function createRequestLogging(
   return {
     // Fastify's own "incoming request" and "request completed" lines would
     // double every request in the log, so the Request Completion Event is the
-    // only line that describes one response. Fastify 5 steers this option
-    // towards `logController`, which it accepts only as a `LogController`
-    // instance — and `@nestjs/platform-fastify` pins its own `fastify`
-    // dependency, so that `instanceof` starts rejecting a controller built
-    // from this project's copy the moment the two stop resolving to one
-    // module. A boolean cannot fail that way; the deprecation notice Fastify
-    // prints for it is one line at boot.
-    disableRequestLogging: true,
+    // only line that describes one response. The top-level
+    // `disableRequestLogging` option does the same job but prints a
+    // deprecation notice at every boot and goes away in `fastify@6`, so a
+    // `logController` carries it instead.
+    //
+    // Fastify checks a `logController` with `instanceof`, against the copy of
+    // `fastify` that `@nestjs/platform-fastify` loads. While the two resolve to
+    // one module that holds; if they ever stop, the server refuses to boot.
+    // `request-logger.spec.ts` fails first and names the cause.
+    logController: new LogController({ disableRequestLogging: true }),
     logger: {
       // Read here rather than passed in from the bootstrap because this file is
       // the explicit boundary adapter that builds the server's logging
