@@ -20,4 +20,16 @@ Severity is set to `error` inside `.oxlintrc.json` rather than passed as `--deny
 
 Formatting ownership shifts only for JSON. `prettier` had been handed `*.{json,md,yaml,yml}` in `.lintstagedrc` while `generate:openapi` ended with `biome format --write openapi.json`, so one committed file had two formatters competing for it. JSON moves to Biome and that conflict ends. Markdown and YAML stay with prettier because Biome 1.9.4 cannot format them, which leaves those extensions formatted only on staged files and verified nowhere — a pre-existing gap this decision does not close. Closing it means reformatting every file under `docs/` in one commit, which would have buried the linter change it travelled with, so it is filed as [#125](https://github.com/AiHub-Ecosystem/aihub-be/issues/125) instead of being folded in here.
 
-CI is untouched. `pnpm verify` already calls `pnpm lint`, and the workflow already calls `pnpm verify`, so the new linter reaches CI without a workflow edit. Splitting those checks into parallel lanes is [#108](https://github.com/AiHub-Ecosystem/aihub-be/issues/108) and stays separate.
+CI is untouched. `pnpm lint` is a step in the workflow's static job, so the new linter reaches CI without a workflow edit. The workflow does not run `pnpm verify`: it invokes each gate separately, which is the parallel-lane split of [#108](https://github.com/AiHub-Ecosystem/aihub-be/issues/108) and has since landed. A step added only to `verify` therefore does not reach CI on its own.
+
+## Update: the CI route was stated wrongly and has been corrected
+
+This record originally said the workflow already called `pnpm verify`. It did not,
+and had not for some time: #108 split the gates into parallel jobs and the
+workflow invokes `pnpm knip`, `pnpm lint`, `pnpm format:check`, `pnpm type-check`,
+`pnpm check:migrations`, `pnpm arch-check`, and `pnpm validate:openapi` as
+individual steps. The conclusion above — that the linter reaches CI without a
+workflow edit — was and remains true, because `pnpm lint` is one of those steps;
+only the route was wrong. What the correction changes for a later reader is the
+assumption underneath it: `verify` is the local aggregate, not the thing CI runs,
+so a new gate has to be added to both.
