@@ -14,8 +14,15 @@ Run the command once per day at 02:00 UTC from the AIHUB application
 container:
 
 ```sh
-pnpm cli quota:reconcile
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  exec -T app node scripts/runtime-entrypoint.mjs scripts/cli.mjs quota:reconcile
 ```
+
+The production image has no `pnpm`, and `docker compose exec` skips the
+container entrypoint that loads the runtime secrets, so the command goes
+through `scripts/runtime-entrypoint.mjs`, which loads them and then hands the
+rest of the arguments to the CLI ([`deploy-vps.md`](deploy-vps.md)).
 
 The cron owner must alert on a non-zero exit and on a missed run. A missed run
 does not produce a failure line, so the monitor should use the absence of a
@@ -53,7 +60,9 @@ The default target is the current UTC calendar month. An operator may rerun a
 retained month explicitly:
 
 ```sh
-pnpm cli quota:reconcile --month 2026-09
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  exec -T app node scripts/runtime-entrypoint.mjs scripts/cli.mjs quota:reconcile --month 2026-09
 ```
 
 `--month` must be strict `YYYY-MM`, cannot name a future month, and is limited
