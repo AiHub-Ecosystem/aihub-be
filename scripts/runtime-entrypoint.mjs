@@ -21,6 +21,12 @@ async function main() {
   loadRuntimeConnectionEnvironment();
 
   const target = process.argv[2] ?? 'dist/main.js';
+  // The target sees its own arguments: `runtime-entrypoint.mjs scripts/cli.mjs
+  // avatar:sweep` must reach the CLI as `avatar:sweep`, not as the path of the
+  // script being run. Nothing else forwards arguments, so this is how an
+  // operator command gets the runtime secrets inside a deployed container.
+  process.argv.splice(2, 1);
+
   const targetUrl = new URL(
     target.startsWith('dist/') || target.startsWith('scripts/')
       ? `../${target}`

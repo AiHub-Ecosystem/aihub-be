@@ -174,16 +174,22 @@ only then enable the cron entry:
 ```sh
 docker compose --env-file .env.production \
   -f docker-compose.production.yml \
-  exec -T app pnpm cli avatar:sweep --dry-run true
+  exec -T app node scripts/runtime-entrypoint.mjs scripts/cli.mjs avatar:sweep --dry-run true
 
 docker compose --env-file .env.production \
   -f docker-compose.production.yml \
-  exec -T app pnpm cli avatar:sweep
+  exec -T app node scripts/runtime-entrypoint.mjs scripts/cli.mjs avatar:sweep
 
 docker compose --env-file .env.production \
   -f docker-compose.production.yml \
-  --profile sandbox exec -T app-sandbox pnpm cli avatar:sweep
+  --profile sandbox exec -T app-sandbox node scripts/runtime-entrypoint.mjs scripts/cli.mjs avatar:sweep
 ```
+
+The production image has no `pnpm`, and `docker compose exec` skips the
+container entrypoint that loads the runtime secrets, so the command goes
+through `scripts/runtime-entrypoint.mjs`, which loads them and then hands the
+rest of the arguments to the CLI. Detach stdin (`</dev/null`) when running it
+from a script, or `exec` consumes the script's own input.
 
 It prints one JSON line of counts (`scanned`, `unrecognised`, `orphaned`,
 `deleted`, `failed`, `dryRun`) and never an object key. It exits non-zero when
