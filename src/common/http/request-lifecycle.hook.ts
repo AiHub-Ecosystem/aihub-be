@@ -6,6 +6,7 @@ import {
   type DisconnectableRequest,
   createClientDisconnectSignal,
 } from './client-disconnect-signal';
+import { pathnameOf } from './request-path';
 
 const OPERATION_TIMEOUT_BY_PATH: ReadonlyMap<string, number> = new Map(
   Object.values(OPERATION_CATALOG).map((operation) => [
@@ -41,11 +42,6 @@ const lifecycleByRequest = new WeakMap<object, RequestLifecycleState>();
 
 function isObject(value: unknown): value is object {
   return typeof value === 'object' && value !== null;
-}
-
-function pathnameOf(url: string): string {
-  const queryIndex = url.indexOf('?');
-  return queryIndex === -1 ? url : url.slice(0, queryIndex);
 }
 
 function timeoutError(): AppError {
@@ -206,8 +202,14 @@ export function registerRequestLifecycle(
 
   Reflect.apply(instance.addHook, instance, [
     'onResponse',
-    (request: LifecycleRequest): void => {
+    // Three parameters, not one: Fastify runs this hook chain itself and only
+    // advances to the next `onResponse` hook when the previous one takes the
+    // `done` callback. A one-parameter handler looks promise-style, returns
+    // undefined, and silently ends the chain — so any hook registered after
+    // this one, such as the Request Completion Event, would never run.
+    (request: LifecycleRequest, _reply: unknown, done: () => void): void => {
       getRequestLifecycle(request.raw)?.dispose();
+      done();
     },
   ]);
 }

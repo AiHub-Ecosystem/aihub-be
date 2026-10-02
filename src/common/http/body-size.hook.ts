@@ -1,6 +1,8 @@
 import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
 import { createErrorEnvelope } from '../errors/error-envelope';
 import { isRequestId } from '../request-context/request-id';
+import { recordRequestFailure } from './request-failure.recorder';
+import { pathnameOf } from './request-path';
 
 /**
  * Path -> per-operation body limit, built once from the catalog. All current
@@ -14,14 +16,10 @@ const MAX_BODY_BYTES_BY_PATH: ReadonlyMap<string, number> = new Map(
   ]),
 );
 
-function pathnameOf(url: string): string {
-  const queryIndex = url.indexOf('?');
-  return queryIndex === -1 ? url : url.slice(0, queryIndex);
-}
-
 interface OnRequestParams {
   readonly url: string;
   readonly id: unknown;
+  readonly raw: unknown;
   readonly headers: Readonly<Record<string, string | string[] | undefined>>;
 }
 
@@ -98,6 +96,9 @@ export function registerBodySizeGuard(instance: HookableFastifyInstance): void {
 
     if (Number.isFinite(declaredBytes) && declaredBytes > limit) {
       const requestId = isRequestId(request.id) ? request.id : 'unknown';
+      // This reply never reaches the exception filter, so the rejection records
+      // its own public error code for the Request Completion Event.
+      recordRequestFailure(request.raw, 'PAYLOAD_TOO_LARGE');
       reply.code(413).send(
         createErrorEnvelope({
           code: 'PAYLOAD_TOO_LARGE',

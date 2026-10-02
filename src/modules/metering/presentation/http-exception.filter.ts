@@ -14,14 +14,15 @@ import {
   createErrorEnvelope,
   createInternalErrorEnvelope,
 } from '../../../common/errors/error-envelope';
+import { recordRequestFailure } from '../../../common/http/request-failure.recorder';
 import { isRequestId } from '../../../common/request-context/request-id';
 import { completeRequestMetering } from '../application/metering-completion';
 import { getMeteringEvidence } from '../application/metering-evidence';
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
-  type MeteringOutcome,
 } from '../application/metering-finalizer.port';
+import { meteringOutcome } from '../application/request-outcome';
 
 interface FrameworkError {
   readonly code: ErrorCode;
@@ -54,21 +55,6 @@ function fromHttpException(status: number): FrameworkError {
     : { code: 'INTERNAL_ERROR', message: 'Internal server error' };
 }
 
-function isDownstreamFailure(exception: unknown): boolean {
-  return (
-    exception instanceof AppError &&
-    (exception.downstreamStatus !== undefined ||
-      exception.code.startsWith('AI_SERVICE_'))
-  );
-}
-
-function meteringOutcome(exception: unknown, status: number): MeteringOutcome {
-  if (isDownstreamFailure(exception)) {
-    return 'downstream_error';
-  }
-  return status >= 500 ? 'internal_error' : 'client_error';
-}
-
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   constructor(
@@ -86,6 +72,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
       exception,
       requestId ?? 'unknown',
     );
+
+    // Reported for the Request Completion Event, so a failure line carries the
+    // same public error code the caller received rather than one derived from
+    // the status after the fact.
+    recordRequestFailure(request.raw, envelope.error.code);
 
     // A request whose id never validated cannot be identified, so there is
     // nothing to write a record against.

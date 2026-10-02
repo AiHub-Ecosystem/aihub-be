@@ -8,11 +8,31 @@ import {
 } from '@opentelemetry/api';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 
+import { isHealthProbe } from './request-path';
+
 interface RequestTraceState {
   readonly span: Span;
 }
 
 const traces = new WeakMap<object, RequestTraceState>();
+
+/**
+ * Kept apart from `traces` because that map is emptied the moment the span
+ * ends, while a consumer reporting after the response — the Request Completion
+ * Event — still needs the id. A `WeakMap` entry costs nothing to leave behind:
+ * the request object owns its own lifetime.
+ */
+const traceIds = new WeakMap<object, string>();
+
+/**
+ * The trace this request is running inside, for a consumer that reports once
+ * the span has ended. `undefined` when request tracing is not registered.
+ */
+export function readRequestTraceId(rawRequest: unknown): string | undefined {
+  return typeof rawRequest === 'object' && rawRequest !== null
+    ? traceIds.get(rawRequest)
+    : undefined;
+}
 
 function routeTemplate(request: FastifyRequest): string {
   return request.routeOptions.url ?? 'unmatched';
@@ -39,7 +59,7 @@ export function registerRequestTracing(
   tracer: Tracer,
 ): void {
   instance.addHook('onRequest', (request, _reply, done) => {
-    if (request.url.split('?', 1)[0] === '/health') {
+    if (isHealthProbe(request.url)) {
       done();
       return;
     }
@@ -59,6 +79,7 @@ export function registerRequestTracing(
     );
 
     traces.set(request.raw, { span });
+    traceIds.set(request.raw, span.spanContext().traceId);
     const requestContext = trace.setSpan(context.active(), span);
     context.with(requestContext, done);
   });
