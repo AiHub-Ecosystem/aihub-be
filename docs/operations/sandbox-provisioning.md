@@ -140,22 +140,23 @@ curl -sS -X POST https://<sandbox host>/v1/sandbox/assertions \
 ```bash
 pnpm cli key:create \
   --org org_... \
+  --actor <your-username> \
   --name "Minh — manual testing" \
   --scopes speaking.grade,writing.grade \
   --envs sandbox
 ```
 
-The raw key is printed **once** and never stored. Send it to that person directly, not to a group channel.
+`--actor` is the username of your own active AIHUB User Account. The issuance is recorded in the Organization Audit Trail with you as the actor, and the command refuses, exit code 2, an actor that is not an active account. The raw key is printed **once** and never stored. Send it to that person directly, not to a group channel.
 
 One key per person, named after them. A shared key cannot be revoked without disrupting everyone, and the `apiKeyId` in the mint audit line and in `usage_records` is only useful if it identifies someone.
 
 To revoke:
 
 ```bash
-pnpm cli key:revoke --key ak_...
+pnpm cli key:revoke --key ak_... --actor <your-username>
 ```
 
-This also purges the Redis cache entry, so revocation is immediate rather than waiting out the 60-second identity cache.
+Revocation is recorded in the Organization Audit Trail the same way, and repeating it records nothing more. This also purges the Redis cache entry, so revocation is immediate rather than waiting out the 60-second identity cache.
 
 ## 6. Rotating the sandbox signing key
 

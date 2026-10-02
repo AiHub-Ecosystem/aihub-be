@@ -25,12 +25,12 @@ The Admin API is deferred (team design decision), so onboarding is performed via
 ```bash
 pnpm cli org:create --name "Acme Edu" --entitlements writing
 
-pnpm cli key:create --org org_01J8... --name "Prod backend" \
+pnpm cli key:create --org org_01J8... --actor ops-alice --name "Prod backend" \
                     --scopes writing.grade \
                     --envs production
 # -> prints raw key EXACTLY ONCE to stdout; never logged, never written to disk
 
-pnpm cli key:revoke   --key ak_01J8...
+pnpm cli key:revoke   --key ak_01J8... --actor ops-alice
 
 pnpm cli identity:set --org org_01J8... --issuer https://acme.edu \
                       --jwks-url https://acme.edu/.well-known/jwks.json

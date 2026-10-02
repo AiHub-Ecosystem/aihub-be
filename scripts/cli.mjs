@@ -93,6 +93,16 @@ const quotaReconciliationDescriptor = cliRunnerDescriptor(
   'runQuotaReconciliationCommand',
   'quota reconciliation command is unavailable',
 );
+const createOperatorApiKeyDescriptor = cliRunnerDescriptor(
+  'organization-api-key',
+  'runCreateOperatorApiKeyCommand',
+  'operator API key command is unavailable',
+);
+const revokeOperatorApiKeyDescriptor = cliRunnerDescriptor(
+  'organization-api-key',
+  'runRevokeOperatorApiKeyCommand',
+  'operator API key command is unavailable',
+);
 const quotaTargetMonthDescriptor = cliRunnerDescriptor(
   'quota-reconcile',
   'parseTargetMonth',
@@ -486,107 +496,57 @@ async function createOrganization(options) {
   }
 }
 
+// Operator key issuance and revocation record an Organization Audit Event, so
+// both need `--actor`: the operator's own AIHUB User Account (ADR-0044). The
+// raw key is generated here and handed to the runner, which prints it after
+// commit; stdout stays exactly the raw key because `demo-bootstrap` captures it.
+function controlPlaneDatabaseUrl() {
+  return (
+    process.env.CONTROL_PLANE_DATABASE_URL ?? process.env.DATABASE_URL ?? ''
+  );
+}
+
 async function createKey(options) {
   const generateApiKey = await loadApiKeyGenerator();
-  const pool = await databasePool({ controlPlane: true });
-  try {
-    const organizationId = requiredOption(options, 'org');
-    const organization = await pool.query(
-      "SELECT 1 FROM organizations WHERE id = $1 AND status = 'active'",
-      [organizationId],
-    );
-    if (organization.rowCount !== 1) {
-      usageError();
-    }
+  const organizationId = requiredOption(options, 'org');
+  const actorUsername = requiredOption(options, 'actor');
+  const name = requiredOption(options, 'name');
+  const scopes = listOption(options, 'scopes', 'writing.grade');
+  const allowedEnvironments = environmentListOption(
+    options,
+    'envs',
+    'production',
+  );
+  const generated = generateApiKey(`ak_${ulid()}`);
 
-    const generated = generateApiKey();
-    await pool.query(
-      `INSERT INTO api_keys
-         (id, organization_id, key_hash, key_prefix, name, scopes, allowed_environments)
-       VALUES ($1, $2, decode($3, 'hex'), $4, $5, $6, $7)`,
-      [
-        generated.id,
-        organizationId,
-        generated.hash,
-        generated.prefix,
-        requiredOption(options, 'name'),
-        listOption(options, 'scopes', 'writing.grade'),
-        environmentListOption(options, 'envs', 'production'),
-      ],
-    );
-
-    // The raw credential is intentionally printed once and never persisted.
-    console.log(generated.raw);
-  } finally {
-    await pool.end();
+  const outcome = await runCliCommand(createOperatorApiKeyDescriptor, {
+    databaseUrl: controlPlaneDatabaseUrl(),
+    organizationId,
+    actorUsername,
+    credential: {
+      id: generated.id,
+      hash: generated.hash,
+      prefix: generated.prefix,
+      raw: generated.raw,
+    },
+    name,
+    scopes,
+    allowedEnvironments,
+  });
+  if (outcome !== 'created') {
+    usageError();
   }
 }
 
 async function revokeKey(options) {
-  const keyId = requiredOption(options, 'key');
-  const pool = await databasePool({ controlPlane: true });
-  let hashHex;
-  try {
-    const result = await pool.query(
-      "SELECT encode(key_hash, 'hex') AS hash_hex FROM api_keys WHERE id = $1",
-      [keyId],
-    );
-    const row = result.rows[0];
-    if (row === undefined || typeof row.hash_hex !== 'string') {
-      usageError();
-    }
-    hashHex = row.hash_hex;
-    await pool.query(
-      `UPDATE api_keys
-       SET status = 'revoked', revoked_at = now()
-       WHERE id = $1`,
-      [keyId],
-    );
-  } finally {
-    await pool.end();
-  }
-
-  // The row is committed by this point. What follows only closes the window
-  // where the identity cache would still admit the key, so its failure must
-  // read differently from the revocation failing — an operator revoking a
-  // leaked credential needs to know which of the two happened.
-  const redisUrl = process.env.REDIS_URL;
-  if (redisUrl === undefined || redisUrl.trim().length === 0) {
-    console.error(
-      `Revoked ${keyId}. REDIS_URL is unset, so the identity cache was not purged; the key may still be accepted for up to 60 seconds.`,
-    );
-    return;
-  }
-
-  const { default: Redis } = await import('ioredis');
-  // `lazyConnect` and an explicit `connect()` are what make this work at all.
-  // Without them ioredis dials in the background and `del` is issued before the
-  // socket is ready; with `enableOfflineQueue` off there is nowhere to hold it,
-  // so the command is rejected immediately and the purge never happened. The
-  // timeout is also deliberately looser than the gateway's 100ms: that budget
-  // belongs to a request path beside its own Redis, and this is a one-shot
-  // command that may be run from a workstation through a tunnel.
-  const redis = new Redis(redisUrl, {
-    commandTimeout: 5_000,
-    connectTimeout: 5_000,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
-    lazyConnect: true,
+  const outcome = await runCliCommand(revokeOperatorApiKeyDescriptor, {
+    databaseUrl: controlPlaneDatabaseUrl(),
+    redisUrl: process.env.REDIS_URL,
+    apiKeyId: requiredOption(options, 'key'),
+    actorUsername: requiredOption(options, 'actor'),
   });
-  redis.on('error', () => undefined);
-  try {
-    await redis.connect();
-    await redis.del(`aihub:v1:key:${hashHex}`, `aihub:v1:key:miss:${hashHex}`);
-    console.error(`Revoked ${keyId} and purged its identity cache entry.`);
-  } catch {
-    console.error(
-      `Revoked ${keyId}, but could not purge the identity cache; the key may still be accepted for up to 60 seconds.`,
-    );
-  } finally {
-    // `disconnect` rather than `quit`: a client that never finished connecting
-    // has no session to close politely, and waiting for one to answer is how
-    // this command ends up hanging instead of reporting what it did.
-    redis.disconnect();
+  if (outcome !== 'revoked' && outcome !== 'unchanged') {
+    usageError();
   }
 }
 

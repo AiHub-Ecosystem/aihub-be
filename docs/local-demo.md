@@ -146,7 +146,14 @@ docker compose logs postgres
 
 Run the one-shot bootstrap script:
 
+`demo:bootstrap` records who issued the API key in the Organization Audit
+Trail, so it needs the username of an active AIHUB User Account (see
+[ADR-0022](adr/0022-aihub-local-user-authentication.md) for local accounts).
+Set it before running the script. The script stops before creating anything
+when it is missing.
+
 ```bash
+export DEMO_OPERATOR_USERNAME=<your-username>
 pnpm demo:bootstrap "Acme Edu"
 ```
 
@@ -158,7 +165,7 @@ The script performs all of the following:
 3. Creates an organization with the `writing` and `speaking` entitlements.
 4. Registers the demo issuer and public JWKS with AIHUB.
 5. Creates a development API key scoped to `writing.grade` and
-   `speaking.grade`.
+   `speaking.grade`, recorded with `DEMO_OPERATOR_USERNAME` as the actor.
 6. Appends `DEMO_ORG_ID` and `DEMO_API_KEY` to `.env`.
 7. Prints the API key and one initial `X-User-Identity`.
 

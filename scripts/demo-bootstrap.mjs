@@ -25,6 +25,9 @@ if (existsSync(ENV_FILE)) {
 const name = process.argv[2] ?? 'Demo Org';
 const issuer = process.env.DEMO_ASSERTION_ISSUER ?? 'https://demo.acme.edu';
 const environment = process.env.DEMO_ENVIRONMENT ?? 'development';
+// The operator's own active AIHUB User Account. `key:create` records it as the
+// actor of the audit event, so it must exist before anything is created.
+const actor = process.env.DEMO_OPERATOR_USERNAME?.trim() ?? '';
 
 function run(args) {
   try {
@@ -59,6 +62,15 @@ if (
   process.exit(2);
 }
 
+if (actor.length === 0) {
+  // Checked before `org:create`, so a missing actor cannot orphan an
+  // organization that the later `key:create` would then refuse to serve.
+  console.error(
+    'DEMO_OPERATOR_USERNAME is required: the username of an active AIHUB User Account, recorded as the actor of the key issuance.',
+  );
+  process.exit(2);
+}
+
 // Signs once to force the key pair and JWKS to exist before identity:set.
 const assertion = run(['scripts/dev-sign-assertion.mjs']);
 
@@ -84,6 +96,8 @@ const apiKey = cli(
   'key:create',
   '--org',
   organizationId,
+  '--actor',
+  actor,
   '--name',
   `${name} demo`,
   '--scopes',

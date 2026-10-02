@@ -35,7 +35,7 @@ const CACHE_CEILING =
  * explicit `connect()` so the delete is not issued before the socket is ready,
  * and timeouts loose enough for a workstation reaching Redis through a tunnel.
  */
-async function purgeApiKeyCache(
+export async function purgeApiKeyCache(
   redisUrl: string,
   keyHashes: readonly string[],
 ): Promise<void> {
