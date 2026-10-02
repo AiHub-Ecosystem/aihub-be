@@ -6,18 +6,18 @@ import {
 import { Test } from '@nestjs/testing';
 import { exportPKCS8, generateKeyPair } from 'jose';
 
-import { AppModule } from '../../app.module';
-import { AppError } from '../../common/errors/app-error';
-import { generateRequestId } from '../../common/request-context/request-id';
+import { AppModule } from '../../../app.module';
+import { AppError } from '../../../common/errors/app-error';
+import { generateRequestId } from '../../../common/request-context/request-id';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
   type AuthenticatedApiKey,
-} from './application/api-key-authenticator.port';
+} from '../application/api-key-authenticator.port';
 import {
   ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
   type OrganizationIdentityConfig,
-} from './application/organization-identity-config-repository.port';
+} from '../application/organization-identity-config-repository.port';
 
 const SANDBOX_ORG = 'org_sandbox';
 

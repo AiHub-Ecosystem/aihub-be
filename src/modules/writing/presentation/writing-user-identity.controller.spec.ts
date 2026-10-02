@@ -5,35 +5,35 @@ import {
 import { Test } from '@nestjs/testing';
 import { SignJWT, exportJWK, generateKeyPair } from 'jose';
 
-import { AppModule } from '../../app.module';
-import { AppError } from '../../common/errors/app-error';
-import { registerRequestLifecycle } from '../../common/http/request-lifecycle.hook';
-import type { RequestContext } from '../../common/request-context/request-context';
-import { generateRequestId } from '../../common/request-context/request-id';
+import { AppModule } from '../../../app.module';
+import { AppError } from '../../../common/errors/app-error';
+import { registerRequestLifecycle } from '../../../common/http/request-lifecycle.hook';
+import type { RequestContext } from '../../../common/request-context/request-context';
+import { generateRequestId } from '../../../common/request-context/request-id';
 import type {
   DispatchResult,
   OperationDispatcherPort,
-} from '../gateway/application/operation-dispatcher.port';
-import { OPERATION_DISPATCHER } from '../gateway/application/operation-dispatcher.port';
-import type { RateLimiterPort } from '../gateway/application/rate-limiter.port';
-import { RATE_LIMITER } from '../gateway/application/rate-limiter.port';
+} from '../../gateway/application/operation-dispatcher.port';
+import { OPERATION_DISPATCHER } from '../../gateway/application/operation-dispatcher.port';
+import type { RateLimiterPort } from '../../gateway/application/rate-limiter.port';
+import { RATE_LIMITER } from '../../gateway/application/rate-limiter.port';
 import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,
   IdempotencyReplayDecoder,
   IdempotencyServicePort,
   IdempotencyWork,
-} from '../idempotency/application/idempotency-service.port';
-import { IDEMPOTENCY_SERVICE } from '../idempotency/application/idempotency-service.port';
+} from '../../idempotency/application/idempotency-service.port';
+import { IDEMPOTENCY_SERVICE } from '../../idempotency/application/idempotency-service.port';
 import type {
   ApiKeyAuthenticatorPort,
   AuthenticatedApiKey,
-} from '../identity/application/api-key-authenticator.port';
-import { API_KEY_AUTHENTICATOR } from '../identity/application/api-key-authenticator.port';
-import type { JwksKeyProviderPort } from '../identity/application/jwks-key-provider.port';
-import { JWKS_KEY_PROVIDER } from '../identity/application/jwks-key-provider.port';
-import type { OrganizationIdentityConfig } from '../identity/application/organization-identity-config-repository.port';
-import { ORGANIZATION_IDENTITY_CONFIG_REPOSITORY } from '../identity/application/organization-identity-config-repository.port';
+} from '../../identity/application/api-key-authenticator.port';
+import { API_KEY_AUTHENTICATOR } from '../../identity/application/api-key-authenticator.port';
+import type { JwksKeyProviderPort } from '../../identity/application/jwks-key-provider.port';
+import { JWKS_KEY_PROVIDER } from '../../identity/application/jwks-key-provider.port';
+import type { OrganizationIdentityConfig } from '../../identity/application/organization-identity-config-repository.port';
+import { ORGANIZATION_IDENTITY_CONFIG_REPOSITORY } from '../../identity/application/organization-identity-config-repository.port';
 
 const authenticatedApiKey: AuthenticatedApiKey = {
   organizationId: 'org_acme',
