@@ -206,6 +206,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The operator CLI smoke test spawns `scripts/cli.mjs`, which loads its
+      # API-key generator and command runners from the build.
+      - name: Build application
+        run: pnpm build
+
       # Runs apart from `pnpm verify`: the default lane must keep passing with
       # no database present, and this one proves the SQL those tests can only
       # describe.
