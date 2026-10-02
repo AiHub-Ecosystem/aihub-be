@@ -149,11 +149,11 @@ describe('cross-module import rule over the real tree', () => {
       }));
   });
 
-  it('reports the 11 cross-module imports ADR-0066 records', () => {
+  it('reports the 10 cross-module imports ADR-0066 records', () => {
     // Ten of the 21 the rule first reported are seam: six the graded-request
     // chain composes from a module's `exports:`, and four decorator files that
     // compose at import time and can never travel through DI.
-    expect(violations).toHaveLength(11);
+    expect(violations).toHaveLength(10);
   });
 
   it('reports no guard, interceptor, or decorator left', () => {
@@ -277,7 +277,7 @@ describe('cross-module import rule over the real tree', () => {
     // Both rules read the same seam helpers, so changing what counts as
     // published moves both counts. This pins that adding the second rule did
     // not widen the first.
-    expect(violations).toHaveLength(11);
+    expect(violations).toHaveLength(10);
   });
 
   it('reads the cli rule from the config', () => {

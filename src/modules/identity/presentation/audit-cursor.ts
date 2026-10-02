@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { canonicalJson } from '../../idempotency/application/idempotency-fingerprint';
+import { canonicalJson } from '../../../common/serialization/canonical-json';
 import type {
   OrganizationAuditEventFilter,
   OrganizationAuditEventPosition,
@@ -31,10 +31,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Reuses the canonical serializer the idempotency fingerprint already relies
- * on, so the codebase keeps one answer to "turn an object into a stable
- * string". Sorting the actions matters: the same filter typed in a different
- * order is the same filter.
+ * Uses the shared canonical serializer, so the codebase keeps one answer to
+ * "turn an object into a stable string". Sorting the actions matters: the same
+ * filter typed in a different order is the same filter.
  */
 export function auditFilterHash(filter: OrganizationAuditEventFilter): string {
   return createHash('sha256')

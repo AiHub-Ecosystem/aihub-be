@@ -55,6 +55,17 @@ report. So they are reported instead, and removing any of them is a change
 made on purpose with its own test, rather than an edit that makes a number go
 down.
 
+## Update: canonicalJson moved to src/common (#132)
+
+`canonicalJson` is no longer one of the 11. It imports nothing from a business
+module, so the objection below to moving a primitive into `src/common` does not
+apply to it: it now lives in `src/common/serialization/canonical-json.ts`, and
+both the idempotency fingerprint and the audit cursor filter hash import it
+from there. The fingerprint composition stays in `idempotency`. The rule now
+reports 10 imports and `pnpm arch-check` 14 warnings. Specs pin the digest of a
+known idempotency fingerprint and a known audit filter hash, because stored
+records and issued cursors are keyed on today's output.
+
 ## Considered options
 
 Forbidding the imports by rerouting them through application ports was
