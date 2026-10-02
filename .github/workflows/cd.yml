@@ -257,6 +257,23 @@ jobs:
             "${compose[@]}" --profile migration --profile sandbox run --no-deps --rm migrate-sandbox </dev/null
           fi
 
+          # A container's logs live and die with the container, and the next
+          # command replaces it, so what the running one logged is saved first.
+          # Without this, an error seen only in a log is gone after the next
+          # deploy. Best effort: nothing here may block a release.
+          log_dir="$APP_DIR/deploy-logs"
+          if mkdir -p "$log_dir" && chmod 700 "$log_dir"; then
+            stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+            for service in "${services[@]}"; do
+              running_id="$("${compose_runtime[@]}" ps -q "$service" 2>/dev/null || true)"
+              [ -n "$running_id" ] || continue
+              running_commit="$(sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$running_id" 2>/dev/null || true)"
+              # The last 20 MB, so a chatty container cannot fill the disk.
+              sudo -n docker logs --timestamps "$running_id" 2>&1 | tail -c 20000000 >"$log_dir/$service-${running_commit:0:7}-$stamp.log" || true
+            done
+            find "$log_dir" -name '*.log' -mtime +30 -delete 2>/dev/null || true
+          fi
+
           "${compose_runtime[@]}" up -d --no-deps --no-build "${services[@]}"
 
           for service in "${services[@]}"; do

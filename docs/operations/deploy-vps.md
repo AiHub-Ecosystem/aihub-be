@@ -662,6 +662,14 @@ include real errors such as a downstream contract violation.
 Use an SSH key for this, not a password: a credential pasted into a chat or a
 ticket stays in its history.
 
+A container's logs are deleted with the container, and every deploy replaces
+it. So before it recreates `app` and `app-sandbox`, the deploy saves what the
+running ones logged to `deploy-logs/<service>-<commit>-<time>.log` under the app
+directory (mode `700`, the last 20 MB of each, kept 30 days). To read an error
+that a later deploy has already removed from `docker logs`, open the file named
+for the commit that was running when it happened. Saving is best effort and
+never blocks a release.
+
 ### Optional request tracing
 
 Set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` in `.env.production` to an OTLP/HTTP
