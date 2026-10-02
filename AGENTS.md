@@ -64,4 +64,6 @@ pnpm verify
 
 `pnpm build` is a pure SWC transform; type ownership lives in `type-check` (via `pnpm verify`).
 
+`pnpm verify:summary` runs the same loop and prints only the result, the first failing step, and the path of a log file of its own; use it when the output is read into context.
+
 Read `.claude/agents/` for role ownership before changing a path owned by another role. Keep `CLAUDE.md` Claude-specific; shared rules belong here and in `.claude/`.

@@ -48,7 +48,9 @@
     // Hand-written types for scripts/check-migrations.cjs — same reason.
     "scripts/check-migrations.d.cts",
     // Hand-written types for scripts/ci-boot-config.cjs — same reason.
-    "scripts/ci-boot-config.d.cts"
+    "scripts/ci-boot-config.d.cts",
+    // Hand-written types for scripts/verify-summary.cjs — same reason.
+    "scripts/verify-summary.d.cts"
   ],
   "ignoreBinaries": [
     // HashiCorp Vault CLI — operator workstation/image binary, not an npm package.
