@@ -3001,7 +3001,7 @@
       "post": {
         "operationId": "me.avatar.uploads.create",
         "summary": "Request an Avatar upload URL",
-        "description": "Mints a presigned `PUT` URL that writes exactly one object for the signed-in AIHUB User Account, with the declared content type and length bound into the signature. Send the image bytes straight to that URL with the returned headers; they never pass through AIHUB. Nothing is recorded until the upload is completed. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar may request one to replace it.",
+        "description": "Mints a presigned `PUT` URL that writes exactly one object for the signed-in AIHUB User Account, with the declared content type, the length, and `Cache-Control: public, max-age=3600` bound into the signature. Send the image bytes straight to that URL with all three returned headers; they never pass through AIHUB. Nothing is recorded until the upload is completed. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar may request one to replace it.",
         "x-identity-scope": "none",
         "security": [
           {
@@ -3091,7 +3091,11 @@
                         "headers": {
                           "additionalProperties": false,
                           "type": "object",
-                          "required": ["Content-Type", "Content-Length"],
+                          "required": [
+                            "Content-Type",
+                            "Content-Length",
+                            "Cache-Control"
+                          ],
                           "properties": {
                             "Content-Type": {
                               "anyOf": [
@@ -3111,6 +3115,10 @@
                             },
                             "Content-Length": {
                               "pattern": "^[1-9][0-9]*$",
+                              "type": "string"
+                            },
+                            "Cache-Control": {
+                              "const": "public, max-age=3600",
                               "type": "string"
                             }
                           }
@@ -3159,7 +3167,7 @@
       "post": {
         "operationId": "me.avatar.uploads.complete",
         "summary": "Complete an Avatar upload",
-        "description": "Checks the object that actually landed for this asset and records it as the Avatar of the signed-in AIHUB User Account. An object that is missing answers `404`; one that is larger than 2 MiB, has an unsupported type, or is empty is refused and deleted. When the account already has a different Avatar, its image is deleted first and the new one replaces it; if that delete fails the account keeps its Avatar and the call answers `503`, and retrying finishes the replacement. `409 AVATAR_CHANGED` means another request changed the Avatar first; re-read before retrying. The response describes the image and never contains its storage location.",
+        "description": "Checks the object that actually landed for this asset and records it as the Avatar of the signed-in AIHUB User Account. An object that is missing answers `404`; one that is larger than 2 MiB, has an unsupported type, or is empty is refused and deleted. When the account already has a different Avatar, its image is deleted first and the new one replaces it; if that delete fails the account keeps its Avatar and the call answers `503`, and retrying finishes the replacement. `409 AVATAR_CHANGED` means another request changed the Avatar first; re-read before retrying. The response describes the image, including its published `url`.",
         "x-identity-scope": "none",
         "security": [
           {
@@ -3198,7 +3206,8 @@
                         "asset_id",
                         "content_type",
                         "byte_size",
-                        "accepted_at"
+                        "accepted_at",
+                        "url"
                       ],
                       "properties": {
                         "asset_id": {
@@ -3227,6 +3236,10 @@
                         },
                         "accepted_at": {
                           "format": "date-time",
+                          "type": "string"
+                        },
+                        "url": {
+                          "pattern": "^https://",
                           "type": "string"
                         }
                       }
@@ -3263,7 +3276,8 @@
                         "asset_id",
                         "content_type",
                         "byte_size",
-                        "accepted_at"
+                        "accepted_at",
+                        "url"
                       ],
                       "properties": {
                         "asset_id": {
@@ -3292,6 +3306,10 @@
                         },
                         "accepted_at": {
                           "format": "date-time",
+                          "type": "string"
+                        },
+                        "url": {
+                          "pattern": "^https://",
                           "type": "string"
                         }
                       }
@@ -3337,6 +3355,117 @@
       }
     },
     "/v1/me/avatar": {
+      "get": {
+        "operationId": "me.avatar.read",
+        "summary": "Read the Avatar",
+        "description": "Describes the Avatar of the signed-in AIHUB User Account, or answers `avatar: null` when the account has none; that is a normal state, not an error. `url` is the published origin URL of the image: load it with a plain unauthenticated `GET`, which AIHUB does not proxy. Each upload has a new URL, and a removed image may stay in caches for up to an hour.",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The Avatar, or `null` when the account has none.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["avatar"],
+                      "properties": {
+                        "avatar": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "asset_id",
+                                "content_type",
+                                "byte_size",
+                                "accepted_at",
+                                "url"
+                              ],
+                              "properties": {
+                                "asset_id": {
+                                  "pattern": "^ava_[0-9A-HJKMNP-TV-Z]{26}$",
+                                  "type": "string"
+                                },
+                                "content_type": {
+                                  "anyOf": [
+                                    {
+                                      "const": "image/jpeg",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "image/png",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "image/webp",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "byte_size": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "accepted_at": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                "url": {
+                                  "pattern": "^https://",
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
       "delete": {
         "operationId": "me.avatar.remove",
         "summary": "Remove the Avatar",
@@ -3367,6 +3496,36 @@
           },
           "503": {
             "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "head": {
+        "operationId": "me.avatar.read.head",
+        "summary": "Retrieve response headers",
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; same headers as GET, without a response body."
+          },
+          "401": {
+            "description": "Same status as GET, without a response body."
+          },
+          "500": {
+            "description": "Same status as GET, without a response body."
+          },
+          "503": {
+            "description": "Same status as GET, without a response body."
           }
         }
       }

@@ -22,8 +22,13 @@ export interface AvatarUpload {
   readonly expiresAt: Date;
 }
 
-export interface CompletedAvatar {
+/** An Avatar with the published URL it is read from (ADR-0069). */
+export interface PublishedAvatar {
   readonly avatar: Avatar;
+  readonly url: string;
+}
+
+export interface CompletedAvatar extends PublishedAvatar {
   /** `false` when an earlier completion of the same asset recorded it. */
   readonly created: boolean;
 }
@@ -96,10 +101,27 @@ export class AvatarUploadService {
     };
   }
 
+  /**
+   * `undefined` when the account has no Avatar, without touching storage: an
+   * outage must never turn an empty account into an error.
+   */
+  async readAvatar(userId: string): Promise<PublishedAvatar | undefined> {
+    const avatar = await this.avatars.findByUser(userId);
+    return avatar === undefined ? undefined : this.published(avatar);
+  }
+
   async completeUpload(input: {
     readonly userId: string;
     readonly assetId: string;
   }): Promise<CompletedAvatar> {
+    const completed = await this.recordUpload(input);
+    return { ...this.published(completed.avatar), created: completed.created };
+  }
+
+  private async recordUpload(input: {
+    readonly userId: string;
+    readonly assetId: string;
+  }): Promise<{ readonly avatar: Avatar; readonly created: boolean }> {
     if (!isAvatarAssetId(input.assetId)) {
       throw invalidRequest();
     }
@@ -154,6 +176,10 @@ export class AvatarUploadService {
     if ((await this.avatars.findByUser(userId)) !== undefined) {
       throw avatarChanged();
     }
+  }
+
+  private published(avatar: Avatar): PublishedAvatar {
+    return { avatar, url: this.storage.publicUrl(avatar.objectKey) };
   }
 
   /** Checks what landed against the rules, discarding a refused object. */

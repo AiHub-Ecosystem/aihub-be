@@ -10,6 +10,7 @@ import { AppError } from '@/common/errors/app-error';
 import {
   AvatarResponseSchema,
   AvatarUploadResponseSchema,
+  ReadAvatarResponseSchema,
 } from '@/contracts/avatar/avatar';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
@@ -36,6 +37,7 @@ const UPLOADS_URL = '/v1/me/avatar/uploads';
 const UPLOAD_URL =
   'https://s3.wispace.app/aihub-user-assets/users/usr_x/avatar/ava_x/original?X-Amz-Signature=sig';
 const MiB = 1024 * 1024;
+const PUBLIC_ORIGIN = 'https://s3.wispace.app/aihub-user-assets/';
 
 function storageUnavailable(): AppError {
   return new AppError({
@@ -67,6 +69,11 @@ class FakeAvatarStorage implements AvatarStoragePort {
       url: UPLOAD_URL,
       expiresAt: new Date('2026-10-02T10:05:00.000Z'),
     };
+  }
+
+  publicUrl(objectKey: string): string {
+    if (this.unavailable) throw storageUnavailable();
+    return `${PUBLIC_ORIGIN}${objectKey}`;
   }
 
   async describeObject(objectKey: string) {
@@ -176,7 +183,11 @@ describe('Avatar upload HTTP flow', () => {
           asset_id: expect.stringMatching(/^ava_[0-9A-HJKMNP-TV-Z]{26}$/),
           upload_url: UPLOAD_URL,
           method: 'PUT',
-          headers: { 'Content-Type': 'image/png', 'Content-Length': '1234' },
+          headers: {
+            'Content-Type': 'image/png',
+            'Content-Length': '1234',
+            'Cache-Control': 'public, max-age=3600',
+          },
           expires_at: '2026-10-02T10:05:00.000Z',
         },
         meta: { request_id: REQUEST_ID },
@@ -266,6 +277,7 @@ describe('Avatar upload HTTP flow', () => {
           content_type: 'image/png',
           byte_size: 1234,
           accepted_at: expect.any(String),
+          url: `${PUBLIC_ORIGIN}${objectKey}`,
         },
         meta: { request_id: REQUEST_ID },
       });
@@ -278,14 +290,14 @@ describe('Avatar upload HTTP flow', () => {
       });
     });
 
-    it('never exposes the object key, bucket, or a URL', async () => {
+    it('exposes nothing about storage beyond the public URL', async () => {
       const { assetId } = await uploadedAsset();
 
-      const text = (await complete(assetId)).body;
+      const { url, ...rest } = (await complete(assetId)).json().data;
 
-      expect(text).not.toContain('users/');
-      expect(text).not.toContain('aihub-user-assets');
-      expect(text).not.toContain('https://');
+      expect(JSON.stringify(rest)).not.toContain('users/');
+      expect(JSON.stringify(rest)).not.toContain('aihub-user-assets');
+      expect(url).not.toMatch(/X-Amz|Signature|Credential/);
     });
 
     it('answers a repeated completion with the same Avatar and 200', async () => {
@@ -633,6 +645,78 @@ describe('Avatar upload HTTP flow', () => {
     });
   });
 
+  describe('reading the Avatar', () => {
+    function read(token = 'valid.token.value') {
+      return app.inject({
+        method: 'GET',
+        url: '/v1/me/avatar',
+        headers: { authorization: `Bearer ${token}` },
+      });
+    }
+
+    it('answers no Avatar as a normal success without touching storage', async () => {
+      storage.unavailable = true;
+
+      const response = await read();
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(Value.Check(ReadAvatarResponseSchema, body)).toBe(true);
+      expect(body).toEqual({
+        data: { avatar: null },
+        meta: { request_id: REQUEST_ID },
+      });
+    });
+
+    it('describes the Avatar with its public URL', async () => {
+      const { assetId, objectKey } = await uploadedAsset();
+      await complete(assetId);
+
+      const response = await read();
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(Value.Check(ReadAvatarResponseSchema, body)).toBe(true);
+      expect(body.data.avatar).toEqual({
+        asset_id: assetId,
+        content_type: 'image/png',
+        byte_size: 1234,
+        accepted_at: expect.any(String),
+        url: `${PUBLIC_ORIGIN}${objectKey}`,
+      });
+    });
+
+    it('returns the same URL the completion returned', async () => {
+      const { assetId } = await uploadedAsset();
+      const completed = (await complete(assetId)).json().data;
+
+      const read_ = (await read()).json().data.avatar;
+
+      expect(read_).toEqual(completed);
+    });
+
+    it('answers storage unavailable only when there is an Avatar to describe', async () => {
+      const { assetId } = await uploadedAsset();
+      await complete(assetId);
+      storage.unavailable = true;
+
+      const response = await read();
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json().error.code).toBe('AVATAR_STORAGE_UNAVAILABLE');
+    });
+
+    it('only ever reads the caller own Avatar', async () => {
+      const { assetId } = await uploadedAsset();
+      await complete(assetId);
+
+      const response = await read('other.token.value');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.avatar).toBeNull();
+    });
+  });
+
   describe('authentication', () => {
     it.each([
       ['no token', undefined],
@@ -656,10 +740,16 @@ describe('Avatar upload HTTP flow', () => {
         url: '/v1/me/avatar',
         headers,
       });
+      const reading = await app.inject({
+        method: 'GET',
+        url: '/v1/me/avatar',
+        headers,
+      });
 
       expect(upload.statusCode).toBe(401);
       expect(completion.statusCode).toBe(401);
       expect(removal.statusCode).toBe(401);
+      expect(reading.statusCode).toBe(401);
       expect(storage.signed).toEqual([]);
       expect(storage.deleted).toEqual([]);
     });

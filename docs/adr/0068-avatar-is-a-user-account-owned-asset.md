@@ -25,10 +25,12 @@ customer-uploaded asset AIHUB builds.
    always comes from the authenticated token, never from the request, so the
    owner is provable from the key alone and no account can address another's
    object. A table constraint holds that the key names the record's owner.
-3. Avatars live in their own private bucket, named by
+3. Avatars live in their own bucket, named by
    `SEAWEEDFS_USER_ASSET_BUCKET`. It has no default and never falls back to
    the Speaking sample bucket or the public Writing chart bucket; while it is
-   unset, the Avatar routes answer `AVATAR_STORAGE_UNAVAILABLE`.
+   unset, the Avatar routes answer `AVATAR_STORAGE_UNAVAILABLE`. The bucket
+   allows anonymous read and denies listing: the Avatar is published, not
+   signed ([ADR-0069](0069-avatar-is-published-not-signed.md)).
 4. AIHUB mints the upload URL as ADR-0065 describes: a presigned `PUT` with the
    content type and length bound into the signature, so the bytes never pass
    through AIHUB.

@@ -54,6 +54,7 @@ export const AvatarUploadResponseSchema = Type.Object(
           {
             'Content-Type': AvatarContentTypeSchema,
             'Content-Length': Type.String({ pattern: '^[1-9][0-9]*$' }),
+            'Cache-Control': Type.Literal('public, max-age=3600'),
           },
           { additionalProperties: false },
         ),
@@ -68,16 +69,34 @@ export const AvatarUploadResponseSchema = Type.Object(
 
 export type AvatarUploadResponse = Static<typeof AvatarUploadResponseSchema>;
 
-/** Describes the recorded image. Never the object key, bucket, or a URL. */
+/**
+ * Describes the recorded image. `url` is its published origin URL, readable
+ * with a plain unauthenticated `GET` (ADR-0069); nothing else about storage
+ * and no credential is ever included.
+ */
+const AvatarSchema = Type.Object(
+  {
+    asset_id: AvatarAssetIdSchema,
+    content_type: AvatarContentTypeSchema,
+    byte_size: Type.Integer({ minimum: 1 }),
+    accepted_at: Type.String({ format: 'date-time' }),
+    url: Type.String({ pattern: '^https://' }),
+  },
+  { additionalProperties: false },
+);
+
 export const AvatarResponseSchema = Type.Object(
+  { data: AvatarSchema, meta: MetaSchema },
+  { additionalProperties: false },
+);
+
+export type AvatarResponse = Static<typeof AvatarResponseSchema>;
+
+/** `avatar: null` is an account with no Avatar, a normal state. */
+export const ReadAvatarResponseSchema = Type.Object(
   {
     data: Type.Object(
-      {
-        asset_id: AvatarAssetIdSchema,
-        content_type: AvatarContentTypeSchema,
-        byte_size: Type.Integer({ minimum: 1 }),
-        accepted_at: Type.String({ format: 'date-time' }),
-      },
+      { avatar: Type.Union([AvatarSchema, Type.Null()]) },
       { additionalProperties: false },
     ),
     meta: MetaSchema,
@@ -85,4 +104,4 @@ export const AvatarResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type AvatarResponse = Static<typeof AvatarResponseSchema>;
+export type ReadAvatarResponse = Static<typeof ReadAvatarResponseSchema>;

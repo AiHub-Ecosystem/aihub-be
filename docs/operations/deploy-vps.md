@@ -121,12 +121,27 @@ node scripts/upload-speaking-audio.mjs --source E:\audios
 Remove-Item Env:\SEAWEEDFS_ACCESS_KEY_ID, Env:\SEAWEEDFS_SECRET_ACCESS_KEY
 ```
 
-User Account Avatars (ADR-0068) live in their own private bucket, named by
+User Account Avatars (ADR-0068) live in their own bucket, named by
 `SEAWEEDFS_USER_ASSET_BUCKET` (for example `aihub-user-assets`). It has no
 default and never falls back to the Speaking sample bucket: while it is unset,
 the Avatar routes answer `503 AVATAR_STORAGE_UNAVAILABLE` and nothing else is
-affected. Create the bucket private, with no public-read policy, using the same
-SeaweedFS credentials, and set the variable before deploying. Uploaded objects
+affected. Create the bucket with the same SeaweedFS credentials and set the
+variable before deploying.
+
+Avatars are published, not signed (ADR-0069). The bucket must allow anonymous
+**read of objects only**: no anonymous list, write, or delete. SeaweedFS grants
+nothing to a bucket its `s3.json` does not declare, and that file belongs to
+WISPACE, so request the grant from WISPACE for this bucket alone. Until it
+exists, Avatar images answer `403` and the Customer Web shows its fallback.
+Check the grant from a client outside the AIHUB network, without credentials:
+
+- `GET https://s3.wispace.app/<bucket>/<an Avatar object key>` answers `200`
+  with the image's `Content-Type` and `Cache-Control: public, max-age=3600`;
+- `GET https://s3.wispace.app/<bucket>/` (a bucket listing) answers `403`;
+- a Speaking sample object in `aihub-speaking-samples` still answers `403`.
+
+If `Cache-Control` is missing from the first response, record that in
+ADR-0069: the one-hour cache bound then depends on browser heuristics. Uploaded objects
 that are never completed are not cleaned up yet; see the follow-up issue linked
 from ADR-0068 (#217).
 

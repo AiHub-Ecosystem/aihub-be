@@ -17,14 +17,19 @@ export interface StoredAvatarObject {
  */
 export interface AvatarStoragePort {
   /**
-   * A short-lived URL that writes exactly one object, with its content type
-   * and length bound into the signature.
+   * A short-lived URL that writes exactly one object, with its content type,
+   * length, and cache header bound into the signature.
    */
   createUploadUrl(input: {
     readonly objectKey: string;
     readonly contentType: AvatarContentType;
     readonly byteSize: number;
   }): Promise<AvatarUploadUrl>;
+  /**
+   * The published, unsigned origin URL of an object (ADR-0069). Throws
+   * `AVATAR_STORAGE_UNAVAILABLE` when storage is unconfigured.
+   */
+  publicUrl(objectKey: string): string;
   /** `undefined` when no object exists at the key. */
   describeObject(objectKey: string): Promise<StoredAvatarObject | undefined>;
   deleteObject(objectKey: string): Promise<void>;

@@ -45,9 +45,18 @@ function clientAnswering(answer: () => Promise<unknown>) {
   return { client: { send } as never, send };
 }
 
+function thrown(run: () => unknown): unknown {
+  try {
+    run();
+  } catch (error) {
+    return error;
+  }
+  throw new Error('expected the call to throw');
+}
+
 describe('S3AvatarStorage', () => {
   describe('upload URL', () => {
-    it('presigns one PUT with the content type and length in the signature', async () => {
+    it('presigns one PUT with the content type, length, and cache header in the signature', async () => {
       const { url, expiresAt } = await storage().createUploadUrl({
         objectKey: KEY,
         contentType: 'image/png',
@@ -62,7 +71,12 @@ describe('S3AvatarStorage', () => {
       expect(
         parsed.searchParams.get('X-Amz-SignedHeaders')?.split(';'),
       ).toEqual(
-        expect.arrayContaining(['content-length', 'content-type', 'host']),
+        expect.arrayContaining([
+          'cache-control',
+          'content-length',
+          'content-type',
+          'host',
+        ]),
       );
       expect(expiresAt).toEqual(new Date('2026-10-02T10:05:00.000Z'));
     });
@@ -91,6 +105,29 @@ describe('S3AvatarStorage', () => {
         }),
       ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
     });
+  });
+
+  describe('public URL', () => {
+    it('is the approved origin, then the bucket, then the key', () => {
+      expect(storage().publicUrl(KEY)).toBe(
+        `https://s3.wispace.app/aihub-user-assets/${KEY}`,
+      );
+    });
+
+    it('carries no signature or credential', () => {
+      expect(storage().publicUrl(KEY)).not.toMatch(
+        /X-Amz|Signature|access|super-secret-value/,
+      );
+    });
+
+    it.each(['../users/x', 'orgs/org_x/speaking/a/original', 'users/x?y'])(
+      'refuses the key %s',
+      (objectKey) => {
+        expect(thrown(() => storage().publicUrl(objectKey))).toMatchObject({
+          code: 'INTERNAL_ERROR',
+        });
+      },
+    );
   });
 
   describe('configuration', () => {
@@ -147,6 +184,9 @@ describe('S3AvatarStorage', () => {
           code: 'AVATAR_STORAGE_UNAVAILABLE',
         });
         await expect(unconfigured.deleteObject(KEY)).rejects.toMatchObject({
+          code: 'AVATAR_STORAGE_UNAVAILABLE',
+        });
+        expect(thrown(() => unconfigured.publicUrl(KEY))).toMatchObject({
           code: 'AVATAR_STORAGE_UNAVAILABLE',
         });
       },

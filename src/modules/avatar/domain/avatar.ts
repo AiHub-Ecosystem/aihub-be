@@ -14,6 +14,13 @@ export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 
 export const AVATAR_UPLOAD_URL_TTL_SECONDS = 5 * 60;
 
+/**
+ * Bound into the upload signature so storage serves it on every read
+ * (ADR-0069). Each upload has a new URL, so caching never shows a stale image
+ * under a current Avatar; the hour bounds how long a removed one lingers.
+ */
+export const AVATAR_CACHE_CONTROL = 'public, max-age=3600';
+
 const ASSET_ID_PATTERN = /^ava_[0-9A-HJKMNP-TV-Z]{26}$/;
 
 export interface Avatar {

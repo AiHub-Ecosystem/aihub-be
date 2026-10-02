@@ -119,7 +119,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
   grading, not the async grading job.
 - **Speaking grading job:** the future durable async operation that accepts an organization-owned audio asset and returns a job result.
 - **Audio asset:** an organization-owned reference to recorded audio; downstream URLs and partner credentials never become public request fields.
-- **Avatar:** a customer-supplied image that identifies one AIHUB User Account in the Customer Web. It is owned by the User Account, not by any Organization, and an account has at most one. _Avoid_: calling it an Organization asset or a profile photo of a member.
+- **Avatar:** a customer-supplied image that identifies one AIHUB User Account in the Customer Web. It is owned by the User Account, not by any Organization, and an account has at most one. It is published: anyone holding its URL can read it with a plain unauthenticated `GET`, and nobody can list the others ([ADR-0069](docs/adr/0069-avatar-is-published-not-signed.md)). _Avoid_: calling it an Organization asset, a profile photo of a member, or a secret.
 - **Metering record:** the durable internal evidence for one authenticated gateway request, used for usage, billing, and audit; it is not part of the public response.
 - **Request metering:** the per-request collection of context and usage evidence used to produce a Metering record; it is transient and distinct from the durable record.
 - **Metering evidence:** what one authenticated request has gathered so far on its way to becoming a Metering record; it is transient, validated in one place before the record is written, and never exposed publicly. A request that never authenticates gathers none and has no Metering record.

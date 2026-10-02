@@ -17,6 +17,7 @@ import {
   AvatarResponseSchema,
   AvatarUploadResponseSchema,
   CreateAvatarUploadRequestSchema,
+  ReadAvatarResponseSchema,
 } from '@/contracts/avatar/avatar';
 import {
   CreateOrganizationApiKeyRequestSchema,
@@ -493,6 +494,19 @@ export const PUBLIC_ROUTES = {
     requestSchema: null,
     responseSchema: AvatarResponseSchema,
     errorStatuses: [400, 401, 404, 409, 413, 500, 503],
+  },
+  // Always `200`: an account with no Avatar answers `avatar: null`.
+  'me.avatar.read': {
+    method: 'GET',
+    path: '/v1/me/avatar',
+    callerAuth: 'bearer',
+    organizationResolution: 'none',
+    successStatus: 200,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: ReadAvatarResponseSchema,
+    errorStatuses: [401, 500, 503],
   },
   // Always `204`, including for an account with no Avatar: absence is what
   // was asked for.

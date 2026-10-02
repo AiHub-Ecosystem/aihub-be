@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   Header,
   HttpCode,
   Param,
@@ -20,9 +21,14 @@ import {
   type AvatarResponse,
   type AvatarUploadResponse,
   CreateAvatarUploadRequestSchema,
+  type ReadAvatarResponse,
 } from '@/contracts/avatar/avatar';
 import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
-import { AvatarUploadService } from '@/modules/avatar/application/avatar-upload.service';
+import {
+  AvatarUploadService,
+  type PublishedAvatar,
+} from '@/modules/avatar/application/avatar-upload.service';
+import { AVATAR_CACHE_CONTROL } from '@/modules/avatar/domain/avatar';
 
 function authenticatedUser(request: FastifyRequest): {
   readonly userId: string;
@@ -37,6 +43,16 @@ function authenticatedUser(request: FastifyRequest): {
     });
   }
   return { userId, requestId: String(request.id) };
+}
+
+function avatarView({ avatar, url }: PublishedAvatar): AvatarResponse['data'] {
+  return {
+    asset_id: avatar.assetId,
+    content_type: avatar.contentType,
+    byte_size: avatar.byteSize,
+    accepted_at: avatar.acceptedAt.toISOString(),
+    url,
+  };
 }
 
 /**
@@ -75,6 +91,7 @@ export class AvatarController {
         headers: {
           'Content-Type': upload.contentType,
           'Content-Length': String(upload.byteSize),
+          'Cache-Control': AVATAR_CACHE_CONTROL,
         },
         expires_at: upload.expiresAt.toISOString(),
       },
@@ -90,21 +107,25 @@ export class AvatarController {
   ): Promise<AvatarResponse> {
     const { userId, requestId } = authenticatedUser(request);
 
-    const { avatar, created } = await this.uploads.completeUpload({
-      userId,
-      assetId,
-    });
+    const completed = await this.uploads.completeUpload({ userId, assetId });
 
     reply.status(
-      created ? PUBLIC_ROUTES['me.avatar.uploads.complete'].successStatus : 200,
+      completed.created
+        ? PUBLIC_ROUTES['me.avatar.uploads.complete'].successStatus
+        : 200,
     );
+    return { data: avatarView(completed), meta: { request_id: requestId } };
+  }
+
+  @Get(PUBLIC_ROUTES['me.avatar.read'].path)
+  @HttpCode(PUBLIC_ROUTES['me.avatar.read'].successStatus)
+  async readAvatar(
+    @Req() request: FastifyRequest,
+  ): Promise<ReadAvatarResponse> {
+    const { userId, requestId } = authenticatedUser(request);
+    const published = await this.uploads.readAvatar(userId);
     return {
-      data: {
-        asset_id: avatar.assetId,
-        content_type: avatar.contentType,
-        byte_size: avatar.byteSize,
-        accepted_at: avatar.acceptedAt.toISOString(),
-      },
+      data: { avatar: published === undefined ? null : avatarView(published) },
       meta: { request_id: requestId },
     };
   }

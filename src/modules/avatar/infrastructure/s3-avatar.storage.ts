@@ -13,6 +13,7 @@ import type {
   StoredAvatarObject,
 } from '@/modules/avatar/application/avatar-storage.port';
 import {
+  AVATAR_CACHE_CONTROL,
   AVATAR_UPLOAD_URL_TTL_SECONDS,
   type AvatarContentType,
 } from '@/modules/avatar/domain/avatar';
@@ -87,6 +88,8 @@ interface Configured {
   /** Kept apart from `client`: a test client cannot presign. */
   readonly signer: S3Client | undefined;
   readonly bucket: string;
+  /** The approved origin, without a trailing slash. */
+  readonly origin: string;
 }
 
 /**
@@ -143,6 +146,7 @@ export class S3AvatarStorage implements AvatarStoragePort {
       client: options.client ?? signer,
       signer,
       bucket,
+      origin: new URL(endpoint).origin,
     };
   }
 
@@ -166,19 +170,32 @@ export class S3AvatarStorage implements AvatarStoragePort {
           Key: input.objectKey,
           ContentType: input.contentType,
           ContentLength: input.byteSize,
+          CacheControl: AVATAR_CACHE_CONTROL,
         }),
         {
           expiresIn: AVATAR_UPLOAD_URL_TTL_SECONDS,
           // Bound into the signature so a client cannot sign one image and
           // send another. Storage may still not enforce it; completion
           // re-checks what landed.
-          signableHeaders: new Set(['content-type', 'content-length']),
+          signableHeaders: new Set([
+            'content-type',
+            'content-length',
+            'cache-control',
+          ]),
         },
       );
       return { url, expiresAt };
     } catch (error) {
       throw storageUnavailable(error);
     }
+  }
+
+  publicUrl(objectKey: string): string {
+    const { origin, bucket } = this.require(objectKey);
+    const path = [bucket, ...objectKey.split('/')]
+      .map(encodeURIComponent)
+      .join('/');
+    return `${origin}/${path}`;
   }
 
   async describeObject(

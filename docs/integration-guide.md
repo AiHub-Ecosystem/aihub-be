@@ -473,6 +473,32 @@ returns its stored result without another AI call or allowance unit, even when
 the quota has run out. These request limits cap the number of calls, not their
 exact cost in USD.
 
+## 3c. Account Avatar (Customer Web)
+
+An AIHUB User Account can have one Avatar. These routes use the signed-in
+user's access token (`Authorization: Bearer ...`), never an API key, and act
+only on that account; no route takes an account id.
+
+- `GET /v1/me/avatar` answers `200` with `data.avatar` set to `null` when the
+  account has no Avatar. That is a normal state: render the username fallback.
+  Otherwise `data.avatar.url` is the image's public origin URL on
+  `https://s3.wispace.app`. Load it with a plain `<img>` or unauthenticated
+  `GET`; AIHUB does not proxy it. An image that fails to load is a separate
+  condition from `avatar: null`.
+- To set or replace it, call `POST /v1/me/avatar/uploads` with
+  `{ "content_type": "image/png", "byte_size": 1234 }`, then `PUT` the bytes to
+  the returned `upload_url` with **all three** returned headers
+  (`Content-Type`, `Content-Length`, `Cache-Control`) unchanged, within five
+  minutes. Then call `POST /v1/me/avatar/uploads/{asset_id}/complete`, which
+  answers with the Avatar, including its `url`. JPEG, PNG, and WebP up to
+  2 MiB are accepted.
+- `DELETE /v1/me/avatar` removes it and always answers `204`.
+
+Every upload gets a new URL, so a cached image is never shown under the wrong
+Avatar. A removed or replaced image can remain in browser caches for up to an
+hour. `409 AVATAR_CHANGED` means another request changed the Avatar first:
+read it again before retrying. `503 AVATAR_STORAGE_UNAVAILABLE` is retryable.
+
 ---
 
 ## 4. Endpoints

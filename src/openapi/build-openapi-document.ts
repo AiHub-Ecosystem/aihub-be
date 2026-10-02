@@ -1370,7 +1370,7 @@ function avatarUploadPathItem(): Record<string, unknown> {
       operationId: id,
       summary: 'Request an Avatar upload URL',
       description:
-        'Mints a presigned `PUT` URL that writes exactly one object for the signed-in AIHUB User Account, with the declared content type and length bound into the signature. Send the image bytes straight to that URL with the returned headers; they never pass through AIHUB. Nothing is recorded until the upload is completed. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar may request one to replace it.',
+        'Mints a presigned `PUT` URL that writes exactly one object for the signed-in AIHUB User Account, with the declared content type, the length, and `Cache-Control: public, max-age=3600` bound into the signature. Send the image bytes straight to that URL with all three returned headers; they never pass through AIHUB. Nothing is recorded until the upload is completed. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar may request one to replace it.',
       ...routeIdentityScopeOf(id),
       ...routeSecurityOf(id),
       parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
@@ -1410,7 +1410,7 @@ function avatarCompletePathItem(): Record<string, unknown> {
       operationId: id,
       summary: 'Complete an Avatar upload',
       description:
-        'Checks the object that actually landed for this asset and records it as the Avatar of the signed-in AIHUB User Account. An object that is missing answers `404`; one that is larger than 2 MiB, has an unsupported type, or is empty is refused and deleted. When the account already has a different Avatar, its image is deleted first and the new one replaces it; if that delete fails the account keeps its Avatar and the call answers `503`, and retrying finishes the replacement. `409 AVATAR_CHANGED` means another request changed the Avatar first; re-read before retrying. The response describes the image and never contains its storage location.',
+        'Checks the object that actually landed for this asset and records it as the Avatar of the signed-in AIHUB User Account. An object that is missing answers `404`; one that is larger than 2 MiB, has an unsupported type, or is empty is refused and deleted. When the account already has a different Avatar, its image is deleted first and the new one replaces it; if that delete fails the account keeps its Avatar and the call answers `503`, and retrying finishes the replacement. `409 AVATAR_CHANGED` means another request changed the Avatar first; re-read before retrying. The response describes the image, including its published `url`.',
       ...routeIdentityScopeOf(id),
       ...routeSecurityOf(id),
       parameters: [
@@ -1440,22 +1440,41 @@ function avatarCompletePathItem(): Record<string, unknown> {
 }
 
 function avatarItemPathItem(): Record<string, unknown> {
-  const id = 'me.avatar.remove' as const;
+  const read = 'me.avatar.read' as const;
+  const remove = 'me.avatar.remove' as const;
 
   return {
-    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
-      operationId: id,
+    [PUBLIC_ROUTES[read].method.toLowerCase()]: {
+      operationId: read,
+      summary: 'Read the Avatar',
+      description:
+        'Describes the Avatar of the signed-in AIHUB User Account, or answers `avatar: null` when the account has none; that is a normal state, not an error. `url` is the published origin URL of the image: load it with a plain unauthenticated `GET`, which AIHUB does not proxy. Each upload has a new URL, and a removed image may stay in caches for up to an hour.',
+      ...routeIdentityScopeOf(read),
+      ...routeSecurityOf(read),
+      parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+      responses: {
+        [routeSuccessKeyOf(read)]: {
+          description: 'The Avatar, or `null` when the account has none.',
+          content: {
+            'application/json': { schema: routeSchemaOf(read, 'response') },
+          },
+        },
+        ...routeErrorResponsesOf(read),
+      },
+    },
+    [PUBLIC_ROUTES[remove].method.toLowerCase()]: {
+      operationId: remove,
       summary: 'Remove the Avatar',
       description:
         'Deletes the Avatar image and its record for the signed-in AIHUB User Account. Idempotent: an account with no Avatar also answers `204`. If the image cannot be deleted the account keeps its Avatar and the call answers `503`; retrying finishes the removal. `409 AVATAR_CHANGED` means another request replaced the Avatar meanwhile, and the replacement is kept.',
-      ...routeIdentityScopeOf(id),
-      ...routeSecurityOf(id),
+      ...routeIdentityScopeOf(remove),
+      ...routeSecurityOf(remove),
       parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
       responses: {
-        [routeSuccessKeyOf(id)]: {
+        [routeSuccessKeyOf(remove)]: {
           description: 'The account has no Avatar.',
         },
-        ...routeErrorResponsesOf(id),
+        ...routeErrorResponsesOf(remove),
       },
     },
   };
