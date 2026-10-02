@@ -3,7 +3,10 @@ module.exports = {
   testEnvironment: 'node',
   maxWorkers: 2,
   rootDir: '.',
-  setupFiles: ['<rootDir>/test/runtime-secret-env.ts'],
+  setupFiles: [
+    '<rootDir>/test/runtime-secret-env.ts',
+    '<rootDir>/test/silence-nest-logger.ts',
+  ],
   transform: {
     '^.+\\.(t|j)s?$': ['@swc/jest'],
   },
