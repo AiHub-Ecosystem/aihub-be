@@ -18,3 +18,7 @@ overrides:
   # random ids. Its faker 5.5.3 pin is deliberately not overridden: faker 10
   # removed the API postman-collection loads (ADR-0047).
   "uuid@<11.1.1": ^11.1.1
+  # Forced by minimatch 3.1.5, which resolved the 1.x line to 1.1.18 and does
+  # not move on its own. 1.1.21 is the first release past the advisories, and
+  # minimatch 3 still accepts it (^1.1.7).
+  "brace-expansion@<1.1.21": ^1.1.21
