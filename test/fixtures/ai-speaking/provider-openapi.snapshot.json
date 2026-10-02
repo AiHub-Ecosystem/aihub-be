@@ -1,0 +1,2549 @@
+{
+  "components": {
+    "schemas": {
+      "AnswerIn": {
+        "properties": {
+          "audio_checksum": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Audio Checksum",
+            "type": "string"
+          },
+          "audio_duration_ms": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Duration Ms"
+          },
+          "audio_size_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Size Bytes"
+          },
+          "capture_info": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Info"
+          },
+          "consent_for_training": {
+            "default": false,
+            "title": "Consent For Training",
+            "type": "boolean"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "storage_key": {
+            "minLength": 1,
+            "title": "Storage Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_id",
+          "storage_key",
+          "audio_checksum"
+        ],
+        "title": "AnswerIn",
+        "type": "object"
+      },
+      "Body_assess_speaking_file_api_v1_speaking_grading_post": {
+        "properties": {
+          "audio": {
+            "anyOf": [
+              {
+                "contentMediaType": "application/octet-stream",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "File ghi âm câu trả lời (WAV, MP3, M4A, WEBM, OGG)",
+            "title": "Audio"
+          },
+          "part": {
+            "description": "Phần thi IELTS Speaking (1, 2, hoặc 3)",
+            "title": "Part",
+            "type": "integer"
+          },
+          "prompt_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nội dung đề bài / câu hỏi tiếng Anh",
+            "title": "Prompt Text"
+          },
+          "question_id": {
+            "description": "Mã định danh câu hỏi (Ví dụ: 'p1_hometown')",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "test_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mã bài thi để gom các câu trong cùng 1 bài test",
+            "title": "Test Code"
+          },
+          "test_type": {
+            "default": "Practice",
+            "description": "Loại bài: 'Full-test' hoặc 'Practice'",
+            "title": "Test Type",
+            "type": "string"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Văn bản bài nói (tùy chọn, nếu client đã có sẵn)",
+            "title": "Transcript"
+          },
+          "user_id": {
+            "description": "ID học viên từ hệ thống đối tác (Ví dụ: 'Std0809-001')",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "part",
+          "question_id"
+        ],
+        "title": "Body_assess_speaking_file_api_v1_speaking_grading_post",
+        "type": "object"
+      },
+      "CreateSessionRequest": {
+        "properties": {
+          "dialect": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dialect"
+          },
+          "user_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "CreateSessionRequest",
+        "type": "object"
+      },
+      "CreateSessionResponse": {
+        "properties": {
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionOut"
+            },
+            "title": "Questions",
+            "type": "array"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "upload_slots": {
+            "items": {
+              "$ref": "#/components/schemas/UploadSlotOut"
+            },
+            "title": "Upload Slots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "session_id",
+          "questions",
+          "upload_slots"
+        ],
+        "title": "CreateSessionResponse",
+        "type": "object"
+      },
+      "CriteriaScore": {
+        "description": "Điểm 4 tiêu chí chuẩn IELTS do giáo viên chấm.",
+        "properties": {
+          "band_fc": {
+            "description": "Fluency & Coherence",
+            "maximum": 9,
+            "minimum": 0,
+            "title": "Band Fc",
+            "type": "number"
+          },
+          "band_gra": {
+            "description": "Grammatical Range & Accuracy",
+            "maximum": 9,
+            "minimum": 0,
+            "title": "Band Gra",
+            "type": "number"
+          },
+          "band_lr": {
+            "description": "Lexical Resource",
+            "maximum": 9,
+            "minimum": 0,
+            "title": "Band Lr",
+            "type": "number"
+          },
+          "band_pron": {
+            "description": "Pronunciation",
+            "maximum": 9,
+            "minimum": 0,
+            "title": "Band Pron",
+            "type": "number"
+          }
+        },
+        "required": [
+          "band_fc",
+          "band_lr",
+          "band_gra",
+          "band_pron"
+        ],
+        "title": "CriteriaScore",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "EstimatedBand": {
+        "properties": {
+          "fluency_coherence": {
+            "title": "Fluency Coherence",
+            "type": "number"
+          },
+          "grammatical_range_accuracy": {
+            "title": "Grammatical Range Accuracy",
+            "type": "number"
+          },
+          "lexical_resource": {
+            "title": "Lexical Resource",
+            "type": "number"
+          },
+          "overall": {
+            "title": "Overall",
+            "type": "number"
+          },
+          "pronunciation": {
+            "title": "Pronunciation",
+            "type": "number"
+          }
+        },
+        "required": [
+          "overall",
+          "fluency_coherence",
+          "lexical_resource",
+          "grammatical_range_accuracy",
+          "pronunciation"
+        ],
+        "title": "EstimatedBand",
+        "type": "object"
+      },
+      "FeedbackInfo": {
+        "properties": {
+          "action_plan_vi": {
+            "title": "Action Plan Vi",
+            "type": "string"
+          },
+          "strong_point_vi": {
+            "title": "Strong Point Vi",
+            "type": "string"
+          },
+          "summary_vi": {
+            "title": "Summary Vi",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary_vi",
+          "strong_point_vi",
+          "action_plan_vi"
+        ],
+        "title": "FeedbackInfo",
+        "type": "object"
+      },
+      "FluencyMetricsInfo": {
+        "properties": {
+          "mean_length_run_words": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Length Run Words"
+          },
+          "pause_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pause Count"
+          },
+          "speech_rate_wpm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speech Rate Wpm"
+          }
+        },
+        "title": "FluencyMetricsInfo",
+        "type": "object"
+      },
+      "GrammarErrorInfo": {
+        "properties": {
+          "correction": {
+            "title": "Correction",
+            "type": "string"
+          },
+          "error_segment": {
+            "title": "Error Segment",
+            "type": "string"
+          },
+          "error_type": {
+            "title": "Error Type",
+            "type": "string"
+          },
+          "explanation_vi": {
+            "title": "Explanation Vi",
+            "type": "string"
+          },
+          "sentence": {
+            "title": "Sentence",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sentence",
+          "error_segment",
+          "correction",
+          "error_type",
+          "explanation_vi"
+        ],
+        "title": "GrammarErrorInfo",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LanguageAnalysis": {
+        "properties": {
+          "grammar_errors": {
+            "items": {
+              "$ref": "#/components/schemas/GrammarErrorInfo"
+            },
+            "title": "Grammar Errors",
+            "type": "array"
+          },
+          "vocabulary_upgrades": {
+            "items": {
+              "$ref": "#/components/schemas/VocabUpgradeInfo"
+            },
+            "title": "Vocabulary Upgrades",
+            "type": "array"
+          }
+        },
+        "title": "LanguageAnalysis",
+        "type": "object"
+      },
+      "PartBandOut": {
+        "properties": {
+          "part": {
+            "title": "Part",
+            "type": "integer"
+          },
+          "response_count": {
+            "title": "Response Count",
+            "type": "integer"
+          },
+          "scores": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Scores",
+            "type": "object"
+          }
+        },
+        "required": [
+          "part",
+          "scores",
+          "response_count"
+        ],
+        "title": "PartBandOut",
+        "type": "object"
+      },
+      "PartnerAssessData": {
+        "properties": {
+          "estimated_band": {
+            "$ref": "#/components/schemas/EstimatedBand"
+          },
+          "feedback": {
+            "$ref": "#/components/schemas/FeedbackInfo"
+          },
+          "fluency_metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FluencyMetricsInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "language_analysis": {
+            "$ref": "#/components/schemas/LanguageAnalysis"
+          },
+          "performance_timing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PerformanceTiming"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pronunciation_detail": {
+            "$ref": "#/components/schemas/PronunciationDetailResponse"
+          },
+          "question_id": {
+            "title": "Question Id",
+            "type": "string"
+          },
+          "relevance": {
+            "$ref": "#/components/schemas/RelevanceInfo"
+          },
+          "scorability": {
+            "$ref": "#/components/schemas/ScorabilityInfo"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "test_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Id"
+          },
+          "test_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "Practice",
+            "title": "Test Type"
+          },
+          "transcript": {
+            "$ref": "#/components/schemas/TranscriptInfo"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "user_id",
+          "question_id",
+          "scorability",
+          "estimated_band",
+          "transcript",
+          "relevance",
+          "pronunciation_detail",
+          "language_analysis",
+          "feedback"
+        ],
+        "title": "PartnerAssessData",
+        "type": "object"
+      },
+      "PartnerAssessJsonRequest": {
+        "properties": {
+          "audio_url": {
+            "description": "Đường dẫn file ghi âm nếu gửi dạng JSON",
+            "title": "Audio Url",
+            "type": "string"
+          },
+          "part": {
+            "description": "IELTS Part 1, 2 hoặc 3",
+            "maximum": 3,
+            "minimum": 1,
+            "title": "Part",
+            "type": "integer"
+          },
+          "prompt_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nội dung đề bài/câu hỏi tiếng Anh",
+            "title": "Prompt Text"
+          },
+          "question_id": {
+            "description": "Mã câu hỏi (question id)",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "test_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mã bài thi để gom các câu trong cùng 1 bài test",
+            "title": "Test Code"
+          },
+          "test_type": {
+            "default": "Practice",
+            "description": "Loại bài: 'Full-test' hoặc 'Practice'",
+            "title": "Test Type",
+            "type": "string"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Văn bản bài nói (tùy chọn) nếu client đã có sẵn",
+            "title": "Transcript"
+          },
+          "user_id": {
+            "description": "ID học viên từ hệ thống Wispace",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "part",
+          "question_id",
+          "audio_url"
+        ],
+        "title": "PartnerAssessJsonRequest",
+        "type": "object"
+      },
+      "PartnerAssessResponse": {
+        "example": {
+          "data": {
+            "estimated_band": {
+              "fluency_coherence": 6.5,
+              "grammatical_range_accuracy": 6,
+              "lexical_resource": 6.5,
+              "overall": 6.5,
+              "pronunciation": 7
+            },
+            "feedback": {
+              "action_plan_vi": "Luyện tập kéo dài câu trả lời bằng cách bổ sung thêm 1 ví dụ cụ thể về nét văn hóa ở nơi bạn sống.",
+              "strong_point_vi": "Phát âm rõ ràng, sử dụng tốt mệnh đề quan hệ để phát triển ý.",
+              "summary_vi": "Bài nói mở đầu tốt, trả lời trực diện câu hỏi với tốc độ nói tự nhiên."
+            },
+            "fluency_metrics": {
+              "mean_length_run_words": 6.8,
+              "pause_count": 2,
+              "speech_rate_wpm": 125
+            },
+            "language_analysis": {
+              "grammar_errors": [
+                {
+                  "correction": "because of the friendly people",
+                  "error_segment": "because friendly people",
+                  "error_type": "preposition",
+                  "explanation_vi": "Sau liên từ 'because' cần một mệnh đề (S + V). Nếu đi kèm danh từ hoặc cụm danh từ, phải dùng giới từ 'because of'.",
+                  "sentence": "I really enjoy living there because friendly people."
+                }
+              ],
+              "vocabulary_upgrades": [
+                {
+                  "cefr_level": "B1 -> C1",
+                  "context": "because of the hospitable residents",
+                  "original_word": "friendly people",
+                  "reason_vi": "Thay vì dùng từ quen thuộc 'friendly', sử dụng 'hospitable residents' thể hiện vốn từ vựng phong phú và band cao hơn trong IELTS.",
+                  "suggested_word": "hospitable residents / warm-hearted locals"
+                }
+              ]
+            },
+            "performance_timing": {
+              "acoustic_processing_seconds": 1.85,
+              "db_seconds": 0,
+              "language_processing_seconds": 1.12,
+              "llm_seconds": 1.12,
+              "openrouter_seconds": 1.12,
+              "speechace_seconds": 1.85,
+              "storage_seconds": 0,
+              "stt_seconds": 0.38,
+              "total_seconds": 2.15
+            },
+            "pronunciation_detail": {
+              "summary": {
+                "fair_count": 2,
+                "good_count": 22,
+                "poor_count": 0
+              },
+              "words": [
+                {
+                  "phonemes": [
+                    {
+                      "audio_extent_ms": [
+                        120,
+                        180
+                      ],
+                      "char_index": [
+                        0
+                      ],
+                      "phone": "k",
+                      "quality_score": 95,
+                      "sound_most_like": "k"
+                    },
+                    {
+                      "audio_extent_ms": [
+                        180,
+                        260
+                      ],
+                      "char_index": [
+                        1
+                      ],
+                      "phone": "ae",
+                      "quality_score": 92,
+                      "sound_most_like": "ae",
+                      "stress_level": 1
+                    },
+                    {
+                      "audio_extent_ms": [
+                        260,
+                        310
+                      ],
+                      "char_index": [
+                        2
+                      ],
+                      "phone": "p",
+                      "quality_score": 94,
+                      "sound_most_like": "p"
+                    }
+                  ],
+                  "quality_class": "good",
+                  "quality_score": 92,
+                  "syllables": [
+                    {
+                      "audio_extent_ms": [
+                        120,
+                        310
+                      ],
+                      "letters": "cap",
+                      "predicted_stress": 1,
+                      "quality_score": 93,
+                      "stress_level": 1,
+                      "stress_score": 95
+                    },
+                    {
+                      "audio_extent_ms": [
+                        310,
+                        390
+                      ],
+                      "letters": "i",
+                      "predicted_stress": 0,
+                      "quality_score": 91,
+                      "stress_level": 0,
+                      "stress_score": 90
+                    },
+                    {
+                      "audio_extent_ms": [
+                        390,
+                        520
+                      ],
+                      "letters": "tal",
+                      "predicted_stress": 0,
+                      "quality_score": 92,
+                      "stress_level": 0,
+                      "stress_score": 92
+                    }
+                  ],
+                  "word": "capital"
+                }
+              ]
+            },
+            "question_id": "p1_hometown",
+            "relevance": {
+              "feedback_vi": "Câu trả lời bám sát câu hỏi, nêu rõ nơi ở và giải thích lý do thích sống ở đó.",
+              "on_topic": true,
+              "score": 1
+            },
+            "scorability": {
+              "confidence": "high",
+              "display_band": true,
+              "is_scorable": true,
+              "message_vi": "Bài nói hợp lệ và đủ điều kiện chấm điểm."
+            },
+            "session_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "test_id": "FULL-STD0809-001-TEST01",
+            "test_type": "Full-test",
+            "transcript": {
+              "duration_seconds": 11.5,
+              "text": "Well, I live in Hanoi, which is the capital of Vietnam. I really enjoy living there because of the vibrant culture and friendly people.",
+              "word_count": 24
+            },
+            "user_id": "Std0809-001"
+          },
+          "status": "success"
+        },
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PartnerAssessData"
+          },
+          "status": {
+            "default": "success",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "PartnerAssessResponse",
+        "type": "object"
+      },
+      "PerformanceTiming": {
+        "properties": {
+          "acoustic_processing_seconds": {
+            "default": 0,
+            "title": "Acoustic Processing Seconds",
+            "type": "number"
+          },
+          "db_seconds": {
+            "default": 0,
+            "title": "Db Seconds",
+            "type": "number"
+          },
+          "deepseek_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deepseek Seconds"
+          },
+          "language_processing_seconds": {
+            "default": 0,
+            "title": "Language Processing Seconds",
+            "type": "number"
+          },
+          "llm_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Seconds"
+          },
+          "openrouter_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openrouter Seconds"
+          },
+          "speechace_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speechace Seconds"
+          },
+          "storage_seconds": {
+            "default": 0,
+            "title": "Storage Seconds",
+            "type": "number"
+          },
+          "stt_seconds": {
+            "default": 0,
+            "title": "Stt Seconds",
+            "type": "number"
+          },
+          "total_seconds": {
+            "title": "Total Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "total_seconds"
+        ],
+        "title": "PerformanceTiming",
+        "type": "object"
+      },
+      "PhonemeDetail": {
+        "properties": {
+          "audio_extent_ms": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Audio Extent Ms",
+            "type": "array"
+          },
+          "char_index": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Char Index",
+            "type": "array"
+          },
+          "phone": {
+            "title": "Phone",
+            "type": "string"
+          },
+          "quality_score": {
+            "title": "Quality Score",
+            "type": "number"
+          },
+          "sound_most_like": {
+            "title": "Sound Most Like",
+            "type": "string"
+          },
+          "stress_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stress Level"
+          }
+        },
+        "required": [
+          "phone",
+          "quality_score",
+          "sound_most_like",
+          "audio_extent_ms",
+          "char_index"
+        ],
+        "title": "PhonemeDetail",
+        "type": "object"
+      },
+      "PronunciationDetailResponse": {
+        "properties": {
+          "summary": {
+            "$ref": "#/components/schemas/PronunciationSummary"
+          },
+          "words": {
+            "items": {
+              "$ref": "#/components/schemas/WordDetail"
+            },
+            "title": "Words",
+            "type": "array"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "title": "PronunciationDetailResponse",
+        "type": "object"
+      },
+      "PronunciationSummary": {
+        "properties": {
+          "fair_count": {
+            "title": "Fair Count",
+            "type": "integer"
+          },
+          "good_count": {
+            "title": "Good Count",
+            "type": "integer"
+          },
+          "poor_count": {
+            "title": "Poor Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "good_count",
+          "fair_count",
+          "poor_count"
+        ],
+        "title": "PronunciationSummary",
+        "type": "object"
+      },
+      "QuestionOut": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "max_duration_seconds": {
+            "title": "Max Duration Seconds",
+            "type": "integer"
+          },
+          "part": {
+            "title": "Part",
+            "type": "integer"
+          },
+          "scoring_context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoring Context"
+          }
+        },
+        "required": [
+          "id",
+          "part",
+          "content",
+          "scoring_context",
+          "max_duration_seconds"
+        ],
+        "title": "QuestionOut",
+        "type": "object"
+      },
+      "RelevanceInfo": {
+        "properties": {
+          "feedback_vi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback Vi"
+          },
+          "on_topic": {
+            "title": "On Topic",
+            "type": "boolean"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "on_topic",
+          "score"
+        ],
+        "title": "RelevanceInfo",
+        "type": "object"
+      },
+      "ResponseOut": {
+        "properties": {
+          "failure": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure"
+          },
+          "failure_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Message"
+          },
+          "has_pronunciation_detail": {
+            "title": "Has Pronunciation Detail",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_relevant": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Relevant"
+          },
+          "part": {
+            "title": "Part",
+            "type": "integer"
+          },
+          "question_content": {
+            "title": "Question Content",
+            "type": "string"
+          },
+          "scores": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scores"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript"
+          }
+        },
+        "required": [
+          "id",
+          "part",
+          "question_content",
+          "status",
+          "transcript",
+          "scores",
+          "is_relevant",
+          "failure",
+          "failure_message",
+          "has_pronunciation_detail"
+        ],
+        "title": "ResponseOut",
+        "type": "object"
+      },
+      "SampleDetailResponse": {
+        "description": "Chi tiết đầy đủ bài thi để giáo viên chấm mù trên phòng lab.",
+        "properties": {
+          "questions": {
+            "description": "Danh sách các câu hỏi",
+            "items": {
+              "$ref": "#/components/schemas/SampleQuestionItem"
+            },
+            "title": "Questions",
+            "type": "array"
+          },
+          "rating_count": {
+            "default": 0,
+            "description": "Số lượt giáo viên đã chấm",
+            "title": "Rating Count",
+            "type": "integer"
+          },
+          "rating_status": {
+            "description": "Trạng thái chấm",
+            "title": "Rating Status",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "UUID phiên làm bài",
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "student_id": {
+            "description": "Mã học sinh",
+            "title": "Student Id",
+            "type": "string"
+          },
+          "submitted_at": {
+            "description": "Thời gian nộp bài",
+            "format": "date-time",
+            "title": "Submitted At",
+            "type": "string"
+          },
+          "test_id": {
+            "description": "Mã bài thi",
+            "title": "Test Id",
+            "type": "string"
+          },
+          "test_type": {
+            "description": "'Full-test' hoặc 'Practice'",
+            "title": "Test Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "student_id",
+          "test_id",
+          "session_id",
+          "test_type",
+          "submitted_at",
+          "rating_status"
+        ],
+        "title": "SampleDetailResponse",
+        "type": "object"
+      },
+      "SampleItem": {
+        "description": "Thông tin tóm tắt của một bài thi/luyện tập trong danh sách chờ chấm.",
+        "properties": {
+          "part": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Part mấy nếu là bài luyện tập lẻ (1, 2, 3)",
+            "title": "Part"
+          },
+          "rating_count": {
+            "default": 0,
+            "description": "Số lượt giáo viên đã chấm",
+            "title": "Rating Count",
+            "type": "integer"
+          },
+          "rating_status": {
+            "description": "Trạng thái chấm: 'pending', 'in_progress', 'done'",
+            "title": "Rating Status",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "UUID của phiên làm bài",
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "student_id": {
+            "description": "Mã học sinh (ví dụ Std0809-001)",
+            "title": "Student Id",
+            "type": "string"
+          },
+          "submitted_at": {
+            "description": "Thời gian nộp bài",
+            "format": "date-time",
+            "title": "Submitted At",
+            "type": "string"
+          },
+          "test_id": {
+            "description": "Mã bài thi (test_code hoặc session_id)",
+            "title": "Test Id",
+            "type": "string"
+          },
+          "test_type": {
+            "description": "Loại bài: 'Full-test' hoặc 'Practice'",
+            "title": "Test Type",
+            "type": "string"
+          },
+          "total_questions": {
+            "description": "Tổng số câu hỏi trong bài",
+            "title": "Total Questions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "student_id",
+          "test_id",
+          "session_id",
+          "test_type",
+          "total_questions",
+          "submitted_at",
+          "rating_status"
+        ],
+        "title": "SampleItem",
+        "type": "object"
+      },
+      "SampleListResponse": {
+        "description": "Danh sách toàn bộ các sample nộp bài (không phân trang).",
+        "properties": {
+          "from_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mốc thời gian bắt đầu lọc (UTC)",
+            "title": "From Date"
+          },
+          "fromdate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mốc ngày bắt đầu (YYYY-MM-DD)",
+            "title": "Fromdate"
+          },
+          "items": {
+            "description": "Danh sách các bài thi",
+            "items": {
+              "$ref": "#/components/schemas/SampleItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "to_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mốc thời gian kết thúc lọc (UTC)",
+            "title": "To Date"
+          },
+          "todate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mốc ngày kết thúc (YYYY-MM-DD)",
+            "title": "Todate"
+          },
+          "total": {
+            "description": "Tổng số sample thỏa mãn bộ lọc",
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total"
+        ],
+        "title": "SampleListResponse",
+        "type": "object"
+      },
+      "SampleQuestionItem": {
+        "description": "Chi tiết từng câu hỏi và audio trả lời của học sinh (CHẤM MÙ - KHÔNG CÓ ĐIỂM AI).",
+        "properties": {
+          "audio_url": {
+            "description": "Đường dẫn file âm thanh của học sinh",
+            "title": "Audio Url",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "description": "Thời lượng bản ghi âm (giây)",
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "part": {
+            "description": "Part mấy của bài thi (1, 2, hoặc 3)",
+            "title": "Part",
+            "type": "integer"
+          },
+          "question_id": {
+            "description": "Mã câu hỏi",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "question_text": {
+            "description": "Nội dung câu hỏi hoặc chủ đề cue card",
+            "title": "Question Text",
+            "type": "string"
+          },
+          "response_id": {
+            "description": "ID câu trả lời",
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Văn bản nhận diện giọng nói nếu có",
+            "title": "Transcript"
+          }
+        },
+        "required": [
+          "response_id",
+          "part",
+          "question_id",
+          "question_text",
+          "audio_url",
+          "duration_seconds"
+        ],
+        "title": "SampleQuestionItem",
+        "type": "object"
+      },
+      "ScorabilityInfo": {
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "string"
+          },
+          "display_band": {
+            "title": "Display Band",
+            "type": "boolean"
+          },
+          "is_scorable": {
+            "title": "Is Scorable",
+            "type": "boolean"
+          },
+          "message_vi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Vi"
+          }
+        },
+        "required": [
+          "is_scorable",
+          "confidence",
+          "display_band"
+        ],
+        "title": "ScorabilityInfo",
+        "type": "object"
+      },
+      "SessionResultResponse": {
+        "properties": {
+          "band_breakdown": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Band Breakdown"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "failed_count": {
+            "title": "Failed Count",
+            "type": "integer"
+          },
+          "overall_band": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Band"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/PartBandOut"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "pending_count": {
+            "title": "Pending Count",
+            "type": "integer"
+          },
+          "responses": {
+            "items": {
+              "$ref": "#/components/schemas/ResponseOut"
+            },
+            "title": "Responses",
+            "type": "array"
+          },
+          "scored_count": {
+            "title": "Scored Count",
+            "type": "integer"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "status",
+          "overall_band",
+          "band_breakdown",
+          "parts",
+          "responses",
+          "scored_count",
+          "pending_count",
+          "failed_count",
+          "completed_at"
+        ],
+        "title": "SessionResultResponse",
+        "type": "object"
+      },
+      "SubmitGradeItemRating": {
+        "description": "Điểm chi tiết cho từng câu hỏi riêng lẻ (tùy chọn).",
+        "properties": {
+          "band_fc": {
+            "anyOf": [
+              {
+                "maximum": 9,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Band Fc"
+          },
+          "band_gra": {
+            "anyOf": [
+              {
+                "maximum": 9,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Band Gra"
+          },
+          "band_lr": {
+            "anyOf": [
+              {
+                "maximum": 9,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Band Lr"
+          },
+          "band_pron": {
+            "anyOf": [
+              {
+                "maximum": 9,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Band Pron"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nhận xét riêng cho câu này",
+            "title": "Notes"
+          },
+          "response_id": {
+            "description": "ID câu trả lời tương ứng",
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response_id"
+        ],
+        "title": "SubmitGradeItemRating",
+        "type": "object"
+      },
+      "SubmitGradeRequest": {
+        "description": "Yêu cầu nộp điểm chấm của giáo viên.",
+        "properties": {
+          "criteria": {
+            "$ref": "#/components/schemas/CriteriaScore",
+            "description": "Điểm 4 tiêu chí"
+          },
+          "item_ratings": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SubmitGradeItemRating"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Chấm chi tiết từng câu",
+            "title": "Item Ratings"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nhận xét sư phạm tổng quát của giáo viên",
+            "title": "Notes"
+          },
+          "overall_band": {
+            "anyOf": [
+              {
+                "maximum": 9,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Điểm overall (nếu bỏ trống hệ thống tự tính)",
+            "title": "Overall Band"
+          },
+          "rater_id": {
+            "description": "Mã định danh của giáo viên/rater",
+            "title": "Rater Id",
+            "type": "string"
+          },
+          "test_id": {
+            "description": "Mã bài thi (test_code) hoặc session_id",
+            "title": "Test Id",
+            "type": "string"
+          },
+          "time_spent_sec": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Thời gian chấm (giây)",
+            "title": "Time Spent Sec"
+          }
+        },
+        "required": [
+          "test_id",
+          "rater_id",
+          "criteria"
+        ],
+        "title": "SubmitGradeRequest",
+        "type": "object"
+      },
+      "SubmitGradeResponse": {
+        "description": "Kết quả phản hồi sau khi lưu điểm giáo viên thành công.",
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "overall_band": {
+            "title": "Overall Band",
+            "type": "number"
+          },
+          "rating_id": {
+            "title": "Rating Id",
+            "type": "integer"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "success",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "rating_id",
+          "session_id",
+          "overall_band"
+        ],
+        "title": "SubmitGradeResponse",
+        "type": "object"
+      },
+      "SubmitRequest": {
+        "properties": {
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/AnswerIn"
+            },
+            "minItems": 1,
+            "title": "Answers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "answers"
+        ],
+        "title": "SubmitRequest",
+        "type": "object"
+      },
+      "SubmitResponse": {
+        "properties": {
+          "accepted_count": {
+            "title": "Accepted Count",
+            "type": "integer"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "accepted_count",
+          "status"
+        ],
+        "title": "SubmitResponse",
+        "type": "object"
+      },
+      "SyllableDetail": {
+        "properties": {
+          "audio_extent_ms": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Audio Extent Ms",
+            "type": "array"
+          },
+          "letters": {
+            "title": "Letters",
+            "type": "string"
+          },
+          "predicted_stress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predicted Stress"
+          },
+          "quality_score": {
+            "title": "Quality Score",
+            "type": "number"
+          },
+          "stress_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stress Level"
+          },
+          "stress_score": {
+            "title": "Stress Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "letters",
+          "stress_score",
+          "quality_score",
+          "audio_extent_ms"
+        ],
+        "title": "SyllableDetail",
+        "type": "object"
+      },
+      "TranscriptInfo": {
+        "properties": {
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "word_count": {
+            "title": "Word Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "text",
+          "word_count",
+          "duration_seconds"
+        ],
+        "title": "TranscriptInfo",
+        "type": "object"
+      },
+      "UploadSlotOut": {
+        "properties": {
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "storage_key": {
+            "title": "Storage Key",
+            "type": "string"
+          },
+          "upload_url": {
+            "title": "Upload Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_id",
+          "upload_url",
+          "storage_key"
+        ],
+        "title": "UploadSlotOut",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VocabUpgradeInfo": {
+        "properties": {
+          "cefr_level": {
+            "title": "Cefr Level",
+            "type": "string"
+          },
+          "context": {
+            "title": "Context",
+            "type": "string"
+          },
+          "original_word": {
+            "title": "Original Word",
+            "type": "string"
+          },
+          "reason_vi": {
+            "title": "Reason Vi",
+            "type": "string"
+          },
+          "suggested_word": {
+            "title": "Suggested Word",
+            "type": "string"
+          }
+        },
+        "required": [
+          "original_word",
+          "suggested_word",
+          "cefr_level",
+          "context",
+          "reason_vi"
+        ],
+        "title": "VocabUpgradeInfo",
+        "type": "object"
+      },
+      "WordDetail": {
+        "properties": {
+          "phonemes": {
+            "items": {
+              "$ref": "#/components/schemas/PhonemeDetail"
+            },
+            "title": "Phonemes",
+            "type": "array"
+          },
+          "quality_class": {
+            "title": "Quality Class",
+            "type": "string"
+          },
+          "quality_score": {
+            "title": "Quality Score",
+            "type": "number"
+          },
+          "syllables": {
+            "items": {
+              "$ref": "#/components/schemas/SyllableDetail"
+            },
+            "title": "Syllables",
+            "type": "array"
+          },
+          "word": {
+            "title": "Word",
+            "type": "string"
+          }
+        },
+        "required": [
+          "word",
+          "quality_score",
+          "quality_class"
+        ],
+        "title": "WordDetail",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "\n## 🎙️ Hệ thống Chấm điểm & Đánh giá IELTS Speaking ứng dụng AI\n\nHệ thống cung cấp dịch vụ chấm điểm tự động cho kỹ năng **IELTS Speaking** (Part 1, Part 2, Part 3) với độ trễ cực thấp (~2.0s - 2.5s) bằng kiến trúc xử lý song song:\n- **Phân tích Âm học (SpeechAce):** Bóc tách sóng âm, phát âm chi tiết 3 tầng (Word -> Syllable -> Phoneme), trọng âm (Stress), và độ trôi chảy (Fluency / WPM).\n- **Phân tích Ngôn ngữ & Sư phạm (LLM):** Phát hiện & giải thích chi tiết lỗi ngữ pháp, gợi ý nâng cấp từ vựng CEFR, và viết nhận xét sư phạm bằng tiếng Việt.\n- **Tính toán Band chuẩn Cambridge IELTS:** Quy đổi 4 tiêu chí (FC, LR, GRA, PR) và làm tròn 0.5 band chính quy.\n\n### 🔐 Xác thực API Đối tác (Partner Authentication)\nTất cả các API trong nhóm `partner-speaking` yêu cầu cung cấp 2 HTTP Headers:\n- `x-client-id`: Mã định danh đối tác (ví dụ: `wispace_prod_01`)\n- `x-secret-key`: Khóa bí mật đối tác (ví dụ: `sk_live_wispace_2026_xyz`)\n        ",
+    "title": "AiSpeaking - IELTS Speaking AI Scoring API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/speaking/grading": {
+      "post": {
+        "description": "### API Chấm điểm IELTS Speaking Đồng bộ Siêu tốc dành cho Đối tác\n\n**Quy trình xử lý song song (~2.0s - 2.5s):**\n1. **Tiếp nhận file ghi âm** (WAV, MP3, M4A, WEBM, OGG dung lượng tối đa 25MB).\n2. **Kích hoạt 2 nhánh xử lý song song (Parallel Pipeline):**\n   - **Nhánh A (Acoustic - SpeechAce):** Bóc tách sóng âm, đo phát âm chi tiết 3 tầng (Word -> Syllable -> Phoneme), trọng âm (Stress), và độ trôi chảy (Fluency / WPM).\n   - **Nhánh B (Language - LLM):** Gỡ băng siêu tốc (~0.3s với Groq Whisper), sau đó LLM phân tích lỗi ngữ pháp, gợi ý từ vựng band cao và viết nhận xét sư phạm tiếng Việt.\n3. **Tổng hợp kết quả:** Tính toán Band Cambridge IELTS 4 tiêu chí (FC, LR, GRA, PR) và làm tròn 0.5 band chính quy.\n\n**Headers bắt buộc:**\n- `x-client-id`: Mã định danh đối tác (ví dụ: `wispace_prod_01`)\n- `x-secret-key`: Khóa bảo mật đối tác (ví dụ: `sk_live_wispace_2026_xyz`)",
+        "operationId": "assess_speaking_file_api_v1_speaking_grading_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-client-id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-secret-key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_assess_speaking_file_api_v1_speaking_grading_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerAssessResponse"
+                }
+              }
+            },
+            "description": "Chấm điểm thành công, trả về kết quả toàn diện kèm phân tích ngữ pháp, từ vựng và phát âm 3 tầng."
+          },
+          "400": {
+            "description": "Lỗi dữ liệu đầu vào (thiếu thông tin bắt buộc, part không hợp lệ, hoặc file âm thanh rỗng)."
+          },
+          "401": {
+            "description": "Xác thực thất bại (sai hoặc thiếu header 'x-client-id' / 'x-secret-key')."
+          },
+          "413": {
+            "description": "Kích thước file ghi âm vượt quá giới hạn cho phép (tối đa 25MB)."
+          },
+          "422": {
+            "description": "Lỗi định dạng tham số đầu vào (Unprocessable Entity - validation error)."
+          },
+          "429": {
+            "description": "Provider rate limit / throttling (quá tải số lượng request đồng thời)."
+          },
+          "500": {
+            "description": "Lỗi hệ thống trong quá trình xử lý luồng chấm điểm."
+          }
+        },
+        "summary": "IELTS Speaking AI Grading (Upload file âm thanh trực tiếp)",
+        "tags": [
+          "partner-speaking"
+        ]
+      }
+    },
+    "/api/v1/speaking/grading-json": {
+      "post": {
+        "description": "### API Chấm điểm IELTS Speaking qua Đường dẫn File Âm thanh (Audio URL)\n\nDành cho các trường hợp đối tác đã lưu file âm thanh trên Cloud/S3 và muốn gửi request dạng `application/json`.\n\nHệ thống sẽ tải file âm thanh từ `audio_url` và chạy luồng chấm điểm song song tương tự như `/grading`.\n\n**Headers bắt buộc:**\n- `x-client-id`: Mã định danh đối tác (ví dụ: `wispace_prod_01`)\n- `x-secret-key`: Khóa bảo mật đối tác (ví dụ: `sk_live_wispace_2026_xyz`)",
+        "operationId": "assess_speaking_json_api_v1_speaking_grading_json_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-client-id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-secret-key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartnerAssessJsonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerAssessResponse"
+                }
+              }
+            },
+            "description": "Chấm điểm thành công, trả về kết quả toàn diện kèm phân tích ngữ pháp, từ vựng và phát âm 3 tầng."
+          },
+          "400": {
+            "description": "Lỗi dữ liệu đầu vào hoặc không tải được file âm thanh từ audio_url."
+          },
+          "401": {
+            "description": "Xác thực thất bại (sai hoặc thiếu header 'x-client-id' / 'x-secret-key')."
+          },
+          "413": {
+            "description": "Kích thước file ghi âm vượt quá giới hạn cho phép (tối đa 25MB)."
+          },
+          "422": {
+            "description": "Lỗi định dạng tham số đầu vào (Unprocessable Entity - validation error)."
+          },
+          "429": {
+            "description": "Provider rate limit / throttling (quá tải số lượng request đồng thời)."
+          },
+          "500": {
+            "description": "Lỗi hệ thống trong quá trình xử lý luồng chấm điểm."
+          }
+        },
+        "summary": "IELTS Speaking AI Grading qua Audio URL (JSON Payload)",
+        "tags": [
+          "partner-speaking"
+        ]
+      }
+    },
+    "/api/v1/speaking/sample": {
+      "get": {
+        "description": "Trả về toàn bộ danh sách các sample để giáo viên chọn bài chấm.\n\nKhông phân trang; chỉ lọc theo 2 tham số ngày đơn giản: fromdate và todate (định dạng YYYY-MM-DD).",
+        "operationId": "list_speaking_samples_api_v1_speaking_sample_get",
+        "parameters": [
+          {
+            "description": "Mốc ngày bắt đầu (định dạng YYYY-MM-DD, ví dụ: 2026-09-01)",
+            "in": "query",
+            "name": "fromdate",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Mốc ngày bắt đầu (định dạng YYYY-MM-DD, ví dụ: 2026-09-01)",
+              "title": "Fromdate"
+            }
+          },
+          {
+            "description": "Mốc ngày kết thúc (định dạng YYYY-MM-DD, ví dụ: 2026-09-08)",
+            "in": "query",
+            "name": "todate",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Mốc ngày kết thúc (định dạng YYYY-MM-DD, ví dụ: 2026-09-08)",
+              "title": "Todate"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SampleListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Lấy danh sách bài thi/luyện tập cần chấm cho phòng lab giáo viên",
+        "tags": [
+          "teacher-lab"
+        ]
+      }
+    },
+    "/api/v1/speaking/sample-detail": {
+      "get": {
+        "description": "Truy vấn danh sách các câu hỏi và file ghi âm câu trả lời của học sinh để giáo viên chấm bài.\n\nTUYỆT ĐỐI KHÔNG TRẢ VỀ ĐIỂM AI để bảo đảm nguyên tắc chấm mù (Blind Scoring).",
+        "operationId": "get_sample_detail_api_v1_speaking_sample_detail_get",
+        "parameters": [
+          {
+            "description": "Mã bài thi (test_code) hoặc session UUID",
+            "in": "query",
+            "name": "test_id",
+            "required": true,
+            "schema": {
+              "description": "Mã bài thi (test_code) hoặc session UUID",
+              "title": "Test Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Mã học sinh (tùy chọn)",
+            "in": "query",
+            "name": "student_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Mã học sinh (tùy chọn)",
+              "title": "Student Id"
+            }
+          },
+          {
+            "description": "Loại bài (tùy chọn)",
+            "in": "query",
+            "name": "test_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Loại bài (tùy chọn)",
+              "title": "Test Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SampleDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chi tiết bài thi để giáo viên chấm (CHẤM MÙ - KHÔNG CÓ ĐIỂM AI)",
+        "tags": [
+          "teacher-lab"
+        ]
+      }
+    },
+    "/api/v1/speaking/sample-grade": {
+      "post": {
+        "description": "Lưu trữ kết quả chấm điểm của giáo viên ở chế độ chấm mù.\n\nTự động tính band overall theo chuẩn IELTS nếu giáo viên không chỉ định.\nCập nhật trạng thái bài thi thành 'done'.",
+        "operationId": "submit_teacher_grade_api_v1_speaking_sample_grade_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitGradeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmitGradeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Nộp điểm chấm 4 tiêu chí của giáo viên cho bài thi",
+        "tags": [
+          "teacher-lab"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/responses/{response_id}/pronunciation-detail": {
+      "get": {
+        "description": "Điểm phát âm tới từng từ và từng âm của một câu trả lời.\n\nChỉ đọc lại thứ đã lưu: dữ liệu này về cùng lượt chấm band nên không phải\ngọi thêm lượt nào nữa, và người học bấm xem là hiện ngay.",
+        "operationId": "get_pronunciation_detail_responses__response_id__pronunciation_detail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "response_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Response Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Pronunciation Detail Responses  Response Id  Pronunciation Detail Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Pronunciation Detail",
+        "tags": [
+          "responses"
+        ]
+      }
+    },
+    "/sessions": {
+      "post": {
+        "operationId": "create_session_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/sessions/{session_id}/result": {
+      "get": {
+        "operationId": "get_result_sessions__session_id__result_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Result",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/sessions/{session_id}/submit": {
+      "post": {
+        "operationId": "submit_responses_sessions__session_id__submit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmitResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Responses",
+        "tags": [
+          "sessions"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "Tuyến API chính chấm điểm IELTS Speaking đồng bộ cho Đối tác (Wispace).",
+      "name": "partner-speaking"
+    },
+    {
+      "description": "Phòng thí nghiệm dành cho giáo viên chấm thử và tinh chỉnh prompt.",
+      "name": "teacher-lab"
+    },
+    {
+      "description": "Vận hành hệ thống & kiểm tra sức khỏe (Healthcheck).",
+      "name": "ops"
+    }
+  ]
+}

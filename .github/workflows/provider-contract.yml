@@ -1,0 +1,45 @@
+name: Provider contract
+
+# AI Speaking publishes its own OpenAPI document. The drift check compares a
+# committed snapshot of it with the schema AIHUB checks responses against
+# (test/provider-contract-drift.spec.ts). A snapshot only helps while it is
+# current, so once a week this re-fetches the live document and fails when it
+# differs from the committed one. Failing is the signal: read the diff, run
+# `pnpm provider:refresh`, then the drift spec, and either change the schema or
+# record the difference with its reason.
+#
+# Separate from CI on purpose: CD triggers on CI completing, and a provider
+# changing its contract must not redeploy anything.
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    name: Snapshot is current
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Fetch the published contract
+        run: node scripts/refresh-provider-contract.mjs
+
+      - name: Fail when the provider's contract has moved
+        run: |
+          if ! git diff --exit-code --stat -- test/fixtures; then
+            echo "::error::A provider's published OpenAPI document differs from the committed snapshot. Run 'pnpm provider:refresh', read the diff, then run test/provider-contract-drift.spec.ts."
+            git diff -- test/fixtures | head -200
+            exit 1
+          fi

@@ -159,3 +159,29 @@ secret headers or raw audio.
   approved fixture before deployment.
 - The AI Speaking service owner, WISPACE, and AIHUB must approve the fixture and update this file,
   the machine schema, and the integration tests together.
+
+## 9. Drift check
+
+AI Speaking publishes its own OpenAPI document. A snapshot of it is committed
+at `test/fixtures/ai-speaking/provider-openapi.snapshot.json`, and
+`test/provider-contract-drift.spec.ts` compares it with the schema AIHUB checks
+a grading response against. It reports only the places where a response that
+obeys the provider's contract would be refused here, and each is a customer's
+`502 AI_SERVICE_CONTRACT_VIOLATION`:
+
+- the provider allows `null` and AIHUB does not (`nullable`);
+- the provider may omit a field that AIHUB requires (`optional`);
+- the two disagree on a type or an enum value, or the provider has a key that a
+  closed AIHUB object rejects (`type`, `enum`, `extra-key`).
+
+AIHUB being looser than the provider, and AIHUB tightening a numeric bound the
+provider does not publish, are not reported. Differences already known are
+listed, each with its reason, in `provider-drift.allowed.json`; a new one fails
+the spec, and so does an entry that no longer applies.
+
+Once a week a workflow re-fetches the live document and fails when it differs
+from the snapshot. Then run `pnpm provider:refresh`, read the diff, and run the
+drift spec: either change the schema, which section 8 says needs a versioned
+review and an approved fixture, or record the difference with its reason. AI
+Writing is not covered, because its document declares no response schema for
+its grading endpoints.

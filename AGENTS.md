@@ -45,7 +45,7 @@ If an older architecture draft conflicts with an implementation spec, record the
 - Never log API keys, signed user assertions, internal JWTs, essay text, raw request bodies, or raw downstream responses.
 - API-key hashes, identity configuration, usage, and idempotency records are durable control-plane data; Redis is only cache/counter/protection state.
 - Downstream adapters are pure. Dispatcher/HTTP infrastructure owns hosts, timeouts, cancellation, internal tokens, and error translation.
-- Never invent a downstream response shape. Map only from a captured fixture; if none exists, stop at the contract boundary and surface the blocker rather than guessing. The Writing grading contract is resolved and its fixtures live in `test/fixtures/ai-writing/`, so this rule now applies to the next service, not to Writing.
+- Never invent a downstream response shape. Map only from a captured fixture; if none exists, stop at the contract boundary and surface the blocker rather than guessing. The Writing grading contract is resolved and its fixtures live in `test/fixtures/ai-writing/`, so this rule now applies to the next service, not to Writing. `test/provider-contract-drift.spec.ts` compares the Speaking schema with the contract the provider publishes (`docs/contracts/ai-services/ai-speaking-grading-v1.md`, section 9).
 
 ### Deployed state
 

@@ -1,0 +1,77 @@
+[
+  {
+    "kind": "optional",
+    "path": "data.fluency_metrics",
+    "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
+  },
+  {
+    "kind": "optional",
+    "path": "data.fluency_metrics.mean_length_run_words",
+    "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
+  },
+  {
+    "kind": "optional",
+    "path": "data.fluency_metrics.pause_count",
+    "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
+  },
+  {
+    "kind": "optional",
+    "path": "data.fluency_metrics.speech_rate_wpm",
+    "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
+  },
+  {
+    "kind": "optional",
+    "path": "data.language_analysis.grammar_errors",
+    "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
+  },
+  {
+    "kind": "optional",
+    "path": "data.language_analysis.vocabulary_upgrades",
+    "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
+  },
+  {
+    "kind": "optional",
+    "path": "data.pronunciation_detail.words",
+    "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
+  },
+  {
+    "kind": "optional",
+    "path": "data.pronunciation_detail.words[].phonemes",
+    "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
+  },
+  {
+    "kind": "optional",
+    "path": "data.pronunciation_detail.words[].phonemes[].stress_level",
+    "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
+  },
+  {
+    "kind": "optional",
+    "path": "data.pronunciation_detail.words[].syllables",
+    "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
+  },
+  {
+    "kind": "nullable",
+    "path": "data.pronunciation_detail.words[].syllables[].predicted_stress",
+    "reason": "The provider's schema allows null here and AIHUB requires a value. Suspected cause of AI_SERVICE_CONTRACT_VIOLATION on speaking.grading. Accepting null changes the public response, so it needs a decision, not a quiet edit."
+  },
+  {
+    "kind": "optional",
+    "path": "data.pronunciation_detail.words[].syllables[].predicted_stress",
+    "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
+  },
+  {
+    "kind": "optional",
+    "path": "data.pronunciation_detail.words[].syllables[].stress_level",
+    "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
+  },
+  {
+    "kind": "optional",
+    "path": "data.relevance.feedback_vi",
+    "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
+  },
+  {
+    "kind": "optional",
+    "path": "data.scorability.message_vi",
+    "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
+  }
+]
