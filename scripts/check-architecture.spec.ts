@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { join } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, relative } from 'node:path';
 
 import architectureConfig from '../.dependency-cruiser.cjs';
 
@@ -287,5 +288,41 @@ describe('cross-module import rule over the real tree', () => {
       true,
     );
     expect(matches(cliRule?.from.path ?? '', 'src/common/foo.ts')).toBe(false);
+  });
+});
+
+function commonFilesReadingEnvironment(): string[] {
+  const commonDirectory = join(__dirname, '..', 'src', 'common');
+
+  return readdirSync(commonDirectory, { recursive: true, withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        entry.name.endsWith('.ts') &&
+        !entry.name.endsWith('.spec.ts'),
+    )
+    .map((entry) => join(entry.parentPath, entry.name))
+    .filter((file) => /\bprocess\.env\b/.test(readFileSync(file, 'utf8')))
+    .map((file) => relative(commonDirectory, file).split(/[\\/]/).join('/'))
+    .sort();
+}
+
+/**
+ * `.claude/rules/common.md` lets a file under `src/common` read the
+ * environment only when it is an explicit boundary adapter, and
+ * `check-architecture.mjs` fails the build for one that is not on its list.
+ *
+ * That list is the decision, so it is pinned here too: a new common file that
+ * reads `process.env` has to add a visible line to the rule and to this
+ * expectation, rather than pass by sitting next to a file that already does.
+ * Comparing the whole list also catches the other direction - a boundary
+ * adapter that stopped reading anything - which a rule alone would not notice.
+ */
+describe('common layer environment boundary', () => {
+  it('has exactly the boundary adapters that read the environment', () => {
+    expect(commonFilesReadingEnvironment()).toEqual([
+      'observability/open-telemetry.ts',
+      'observability/request-logger.ts',
+    ]);
   });
 });

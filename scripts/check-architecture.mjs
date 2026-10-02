@@ -82,6 +82,41 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
   }
 }
 
+/**
+ * `.claude/rules/common.md` lets a file under `src/common` read the
+ * environment only when it is an explicit boundary adapter. The request
+ * logger is the second such file, and an unnamed exception is one nobody
+ * re-checks: the next file to read `process.env` down there would pass by
+ * pointing at the two that already do.
+ *
+ * The list is written out rather than inferred, because a scan cannot tell a
+ * boundary adapter from a module that merely wanted an env var. Adding a file
+ * to it is a decision, and this check then fails until that decision is made.
+ */
+const commonDirectory = join(srcDirectory, 'common');
+const environmentBoundaryAdapters = [
+  'observability/open-telemetry.ts',
+  'observability/request-logger.ts',
+];
+
+for (const file of collectTypeScriptFiles(commonDirectory)) {
+  if (file.endsWith('.spec.ts')) {
+    continue;
+  }
+
+  const source = readFileSync(file, 'utf8');
+  if (!/\bprocess\.env\b/.test(source)) {
+    continue;
+  }
+
+  const inCommon = relative(commonDirectory, file).split(/[\\/]/).join('/');
+  if (!environmentBoundaryAdapters.includes(inCommon)) {
+    fail(
+      `${relative(root, file)} reads the environment; under src/common only an explicit boundary adapter may, and these are the ones: ${environmentBoundaryAdapters.join(', ')}`,
+    );
+  }
+}
+
 if (process.exitCode !== undefined) {
   process.exit(process.exitCode);
 }
