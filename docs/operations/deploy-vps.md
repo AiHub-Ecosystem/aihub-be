@@ -137,20 +137,46 @@ is unset, Sandbox Avatar routes answer `503 AVATAR_STORAGE_UNAVAILABLE`, and
 Sandbox never falls back to the production bucket. The Sandbox bucket needs the
 same anonymous read-only grant as the production one.
 
-Avatars are published, not signed (ADR-0069). The bucket must allow anonymous
-**read of objects only**: no anonymous list, write, or delete. SeaweedFS grants
-nothing to a bucket its `s3.json` does not declare, and that file belongs to
-WISPACE, so request the grant from WISPACE for this bucket alone. Until it
-exists, Avatar images answer `403` and the Customer Web shows its fallback.
-Check the grant from a client outside the AIHUB network, without credentials:
+Avatars are published, not signed (ADR-0069). Each Avatar bucket must allow
+anonymous **read of objects only**: no anonymous list, write, or delete. That is
+a per-bucket S3 policy set through the S3 API with the existing SeaweedFS
+identity; the host's `s3.json` is not touched. Create the bucket and apply the
+policy once per bucket (on 2026-10-02 this was done for `aihub-user-assets` and
+`aihub-sandbox-user-assets`):
+
+```python
+import json, boto3
+
+s3 = boto3.client("s3", endpoint_url="http://127.0.0.1:8333",
+                  aws_access_key_id=..., aws_secret_access_key=...)
+bucket = "aihub-user-assets"  # and aihub-sandbox-user-assets
+s3.create_bucket(Bucket=bucket)
+s3.put_bucket_policy(Bucket=bucket, Policy=json.dumps({
+    "Version": "2012-10-17",
+    "Statement": [{
+        "Sid": "PublicReadGetObject", "Effect": "Allow", "Principal": "*",
+        "Action": "s3:GetObject", "Resource": f"arn:aws:s3:::{bucket}/*",
+    }],
+}))
+```
+
+Run it on the SeaweedFS host against the local S3 port, with the identity's
+credentials read from the host's secret store, never typed into a shell history
+or committed. Until a bucket carries the policy, its Avatar images answer `403`
+and the Customer Web shows its fallback. Check the grant from a client outside
+the AIHUB network, without credentials, against an uploaded probe object that
+you delete afterwards:
 
 - `GET https://s3.wispace.app/<bucket>/<an Avatar object key>` answers `200`
   with the image's `Content-Type` and `Cache-Control: public, max-age=3600`;
 - `GET https://s3.wispace.app/<bucket>/` (a bucket listing) answers `403`;
+- an anonymous `PUT` and `DELETE` of an object answer `403`;
 - a Speaking sample object in `aihub-speaking-samples` still answers `403`.
 
-If `Cache-Control` is missing from the first response, record that in
-ADR-0069: the one-hour cache bound then depends on browser heuristics. An upload must be
+Both Avatar buckets passed every check on 2026-10-02, including the
+`Cache-Control` header (ADR-0069). If it is ever missing from the first
+response, record that in ADR-0069: the one-hour cache bound then depends on
+browser heuristics. An upload must be
 completed within one hour; a completion older than that answers `404` and
 deletes the object.
 
@@ -190,6 +216,12 @@ container entrypoint that loads the runtime secrets, so the command goes
 through `scripts/runtime-entrypoint.mjs`, which loads them and then hands the
 rest of the arguments to the CLI. Detach stdin (`</dev/null`) when running it
 from a script, or `exec` consumes the script's own input.
+
+The daily run is a user crontab entry on the host, `30 3 * * *` in the server's
+UTC clock, which calls a small script that runs the command above for production
+and then for Sandbox, with stdin detached, and appends one line per environment
+to a log. The script exits non-zero when either run failed; alert on that and on
+a missing line for either environment.
 
 It prints one JSON line of counts (`scanned`, `unrecognised`, `orphaned`,
 `deleted`, `failed`, `dryRun`) and never an object key. It exits non-zero when

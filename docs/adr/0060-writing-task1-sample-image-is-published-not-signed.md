@@ -66,3 +66,16 @@ essay used by the Postman collection and the captured grading fixture.
 - Anyone who can reach the origin can read every object in `ielts-task1`. That
   is the accepted cost of publishing the sample, and it is why the Speaking
   bucket must remain a different bucket.
+
+## Correction (2026-10-02)
+
+The fourth considered option above says a separate public bucket needs an edit
+to the host's `s3.json`, which is WISPACE's to change. That is not how the
+public buckets are published. `s3.json` declares one identity and no anonymous
+one; public read comes from a per-bucket S3 policy allowing `s3:GetObject` for
+any principal, stored on the bucket and set through the S3 API with the
+existing identity. `ielts-task1`, `ielts-task1-storage`, `aihub-audio`, and
+`wispace` carry such a policy, and `aihub-speaking-samples` carries none, which
+is why it stays private. A new public bucket therefore needs no change to the
+shared host's configuration. [ADR-0069](0069-avatar-is-published-not-signed.md)
+uses this for the Avatar buckets.

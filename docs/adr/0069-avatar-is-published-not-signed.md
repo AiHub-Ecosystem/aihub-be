@@ -41,17 +41,23 @@ sensitive asset.
 ## Consequences
 
 - No URL minting per render, and a stable URL the browser can cache.
-- The anonymous read grant is a WISPACE-side change. SeaweedFS grants nothing
-  to a bucket its S3 configuration does not declare, and that configuration
-  belongs to WISPACE (ADR-0060). Until the grant exists, every Avatar image
-  answers `403` and the Customer Web shows its username fallback; the API is
-  correct either way.
+- The anonymous read grant is a per-bucket S3 policy that allows
+  `s3:GetObject` for any principal and nothing else, the same mechanism the
+  public WISPACE buckets (`ielts-task1`, `aihub-audio`) already use. It is set
+  through the S3 API with the existing SeaweedFS identity, so it needs no change
+  to the host's `s3.json` and no one outside the team. ADR-0060 and this
+  ADR's first draft assumed `s3.json` had to change; it does not. Until a
+  bucket carries the policy, its images answer `403` and the Customer Web shows
+  its username fallback; the API is correct either way.
 - The grant is checked by hand, as ADR-0060's was: an anonymous `GET` of an
   Avatar answers `200` with the cache header, an anonymous list of the bucket
-  answers `403`, and a Speaking sample object still answers `403`.
-- Whether SeaweedFS stores `Cache-Control` from the upload and serves it back is
-  unverified until that check. If it does not, the one-hour bound below
-  becomes the browser's own heuristic.
+  answers `403`, an anonymous write or delete answers `403`, and a Speaking
+  sample object still answers `403`.
+- Verified on 2026-10-02 against both Avatar buckets, from outside the network:
+  SeaweedFS stores `Cache-Control: public, max-age=3600` from the upload and
+  serves it back on every read, and each of the checks above held. Whether it
+  enforces a signed `Content-Length` is still untested; completion's own check
+  of the stored object is what guarantees the size.
 - A removed or replaced image can stay in caches for up to an hour. Removal
   deletes the object at the origin at once; it cannot recall copies.
 - Anyone holding an Avatar URL learns its owner's account id, because the key
@@ -64,7 +70,7 @@ sensitive asset.
 
 - **A presigned read URL in each description.** Rejected: a new URL per
   mint defeats caching, and signing protects nothing an Avatar needs
-  protected. It would avoid the WISPACE dependency and the cache window, which
+  protected. It would avoid the cache window and the public bucket, which
   is why this was the close alternative.
 - **Proxying the image through AIHUB.** Rejected for the reason ADR-0060 and
   ADR-0065 give: it makes the gateway a media server.
