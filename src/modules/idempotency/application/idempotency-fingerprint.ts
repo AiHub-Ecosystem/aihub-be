@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { canonicalJson } from '../../../common/serialization/canonical-json';
+import { canonicalJson } from '@/common/serialization/canonical-json';
 import type { IdempotencyOperation } from './idempotency-operation';
 
 export interface IdempotencyFingerprintInput {

@@ -3,18 +3,18 @@ import { Module } from '@nestjs/common';
 import {
   OPAQUE_TOKEN_BINDINGS,
   opaqueTokenIssuer,
-} from '../../common/security/opaque-token-issuer';
+} from '@/common/security/opaque-token-issuer';
 import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
-} from '../auth/application/auth-rate-limiter.port';
+} from '@/modules/auth/application/auth-rate-limiter.port';
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
-} from '../auth/application/email-sender.port';
-import { AuthModule } from '../auth/auth.module';
-import { GatewayModule } from '../gateway/gateway.module';
-import { IdempotencyModule } from '../idempotency/idempotency.module';
+} from '@/modules/auth/application/email-sender.port';
+import { AuthModule } from '@/modules/auth/auth.module';
+import { GatewayModule } from '@/modules/gateway/gateway.module';
+import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
 
 import { AcceptOrganizationInvitation } from './application/accept-organization-invitation';
 import { ACCEPT_ORGANIZATION_INVITATION } from './application/accept-organization-invitation.port';

@@ -1,9 +1,9 @@
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   OrganizationStatusPort,
   SetOrganizationStatusInput,
   SetOrganizationStatusResult,
-} from '../application/organization-status.port';
+} from '@/modules/identity/application/organization-status.port';
 
 import { findActiveAccountId } from './active-account';
 import {

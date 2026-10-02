@@ -4,18 +4,18 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 
-import { AppModule } from '../../app.module';
-import { registerRequestLifecycle } from '../../common/http/request-lifecycle.hook';
-import { generateRequestId } from '../../common/request-context/request-id';
-import { OPERATION_DISPATCHER } from '../gateway/application/operation-dispatcher.port';
+import { AppModule } from '@/app.module';
+import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { generateRequestId } from '@/common/request-context/request-id';
+import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
 import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,
   IdempotencyReplayDecoder,
   IdempotencyServicePort,
   IdempotencyWork,
-} from '../idempotency/application/idempotency-service.port';
-import { IDEMPOTENCY_SERVICE } from '../idempotency/application/idempotency-service.port';
+} from '@/modules/idempotency/application/idempotency-service.port';
+import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
 import { METERING_FINALIZER } from './application/metering-finalizer.port';
 import type { MeteringFinalizeInput } from './application/metering-finalizer.port';
 

@@ -1,4 +1,4 @@
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import {
   AUTH_FAILURE_LIMIT,
   ApiKeyAuthenticator,

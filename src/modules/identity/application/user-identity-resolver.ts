@@ -1,4 +1,4 @@
-import { isEndUserId } from '../domain/end-user-id';
+import { isEndUserId } from '@/modules/identity/domain/end-user-id';
 import type {
   OrganizationIdentityConfig,
   OrganizationIdentityConfigRepositoryPort,

@@ -1,4 +1,4 @@
-import type { RequestContext } from '../../../common/request-context/request-context';
+import type { RequestContext } from '@/common/request-context/request-context';
 
 export interface RenameOrganizationRecordInput {
   readonly context: RequestContext;

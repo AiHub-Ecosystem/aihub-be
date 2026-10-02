@@ -1,17 +1,17 @@
 import {
   ORGANIZATION_AUDIT_ACTIONS,
   ORGANIZATION_AUDIT_OUTCOMES,
-} from '../../../contracts/organization/audit-event';
+} from '@/contracts/organization/audit-event';
 import type {
   ListOrganizationAuditEventsInput,
   OrganizationAuditEventReadPort,
   OrganizationAuditEventRecord,
-} from '../application/organization-audit-event-read.port';
+} from '@/modules/identity/application/organization-audit-event-read.port';
 import type {
   OrganizationAuditAction,
   OrganizationAuditOutcome,
   OrganizationAuditTargetType,
-} from '../domain/organization-audit-event';
+} from '@/modules/identity/domain/organization-audit-event';
 
 import { identityStoreError, isRecord, stringValue } from './identity-row';
 import type { PostgresIdentityQueryClient } from './postgres-identity.client';

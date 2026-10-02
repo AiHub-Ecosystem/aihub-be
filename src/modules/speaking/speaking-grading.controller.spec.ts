@@ -9,17 +9,17 @@ import {
 import { Test } from '@nestjs/testing';
 import { MockAgent, FormData as UndiciFormData } from 'undici';
 
-import { AppModule } from '../../app.module';
-import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
-import { AppError } from '../../common/errors/app-error';
-import { registerBodySizeGuard } from '../../common/http/body-size.hook';
-import { registerRequestLifecycle } from '../../common/http/request-lifecycle.hook';
-import { generateRequestId } from '../../common/request-context/request-id';
+import { AppModule } from '@/app.module';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { AppError } from '@/common/errors/app-error';
+import { registerBodySizeGuard } from '@/common/http/body-size.hook';
+import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { generateRequestId } from '@/common/request-context/request-id';
 import {
   GRADING_ORCHESTRATOR,
   type GradingOrchestratorPort,
-} from '../gateway/application/grading-orchestrator.port';
-import { DownstreamHttpClient } from '../gateway/infrastructure/downstream-http.client';
+} from '@/modules/gateway/application/grading-orchestrator.port';
+import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
 import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,

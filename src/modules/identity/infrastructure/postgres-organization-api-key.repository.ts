@@ -1,4 +1,4 @@
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   CreateOrganizationApiKeyRecordInput,
   CreateOrganizationApiKeyRecordResult,
@@ -9,7 +9,7 @@ import type {
   RevokeOrganizationApiKeyRecordResult,
   RotateOrganizationApiKeyRecordInput,
   RotateOrganizationApiKeyRecordResult,
-} from '../application/organization-api-key.port';
+} from '@/modules/identity/application/organization-api-key.port';
 
 import {
   auditStamp,

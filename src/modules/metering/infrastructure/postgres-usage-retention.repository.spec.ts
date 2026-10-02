@@ -1,7 +1,7 @@
 import type {
   UsageRetentionBatchRequest,
   UsageRetentionPort,
-} from '../application/usage-retention';
+} from '@/modules/metering/application/usage-retention';
 import {
   PostgresUsageRetentionRepository,
   USAGE_RETENTION_BATCH_SQL,

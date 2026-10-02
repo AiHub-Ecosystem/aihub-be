@@ -1,5 +1,5 @@
-import type { RequestContext } from '../../../common/request-context/request-context';
-import { apiKeyStatus } from '../domain/api-key';
+import type { RequestContext } from '@/common/request-context/request-context';
+import { apiKeyStatus } from '@/modules/identity/domain/api-key';
 
 import type { OrganizationApiKeyView } from './organization-api-key-view';
 

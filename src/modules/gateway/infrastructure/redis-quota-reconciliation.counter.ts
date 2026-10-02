@@ -1,7 +1,7 @@
 import type {
   QuotaCounterOverwritePort,
   QuotaCounterOverwriteRequest,
-} from '../../metering/application/quota-reconciliation';
+} from '@/modules/metering/application/quota-reconciliation';
 import type { RedisGatewayClient } from './redis-gateway.client';
 import { QUOTA_TTL_SECONDS, quotaKeyForMonth } from './redis-quota-counter';
 

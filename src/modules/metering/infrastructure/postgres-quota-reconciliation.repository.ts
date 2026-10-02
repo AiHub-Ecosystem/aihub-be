@@ -2,7 +2,7 @@ import type {
   QuotaOrganizationSnapshot,
   QuotaReconciliationSnapshotPort,
   QuotaReconciliationTarget,
-} from '../application/quota-reconciliation';
+} from '@/modules/metering/application/quota-reconciliation';
 import {
   type PostgresMeteringClient,
   createPostgresMeteringClient,

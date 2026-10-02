@@ -5,15 +5,15 @@ import {
   Injectable,
 } from '@nestjs/common';
 
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
-} from '../application/api-key-authenticator.port';
+} from '@/modules/identity/application/api-key-authenticator.port';
 import {
   SANDBOX_ASSERTION_POLICY,
   type SandboxAssertionPolicyPort,
-} from '../application/sandbox-assertion-policy.port';
+} from '@/modules/identity/application/sandbox-assertion-policy.port';
 import { authenticateApiKey, forbidden } from './authenticate-api-key';
 import type { AuthenticatedRequest } from './authenticated-request';
 

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { SPEAKING_SAMPLE_ANSWER } from '../modules/speaking/application/speaking-question-catalog';
+import { SPEAKING_SAMPLE_ANSWER } from '@/modules/speaking/application/speaking-question-catalog';
 
 const REPO_ROOT = join(__dirname, '../..');
 

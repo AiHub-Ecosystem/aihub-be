@@ -32,9 +32,11 @@
     "lint": "oxlint . && biome check .",
     "format:check": "prettier --check \"**/*.{md,yaml,yml}\"",
     "arch-check": "node scripts/check-architecture.mjs",
+    "check:imports": "tsx scripts/check-import-style.ts",
+    "check:imports:dist": "tsx scripts/check-import-style.ts --dist",
     "check:migrations": "node scripts/check-migrations.mjs",
     "knip": "node scripts/knip.mjs",
-    "verify": "pnpm knip && pnpm lint && pnpm format:check && pnpm type-check && pnpm test && pnpm build && pnpm check:migrations && pnpm arch-check && pnpm validate:openapi",
+    "verify": "pnpm knip && pnpm lint && pnpm format:check && pnpm type-check && pnpm test && pnpm build && pnpm check:imports:dist && pnpm check:migrations && pnpm arch-check && pnpm check:imports && pnpm validate:openapi",
     "prepare": "husky"
   },
   "dependencies": {

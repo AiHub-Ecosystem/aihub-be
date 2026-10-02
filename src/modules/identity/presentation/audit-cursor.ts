@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 
-import { canonicalJson } from '../../../common/serialization/canonical-json';
+import { canonicalJson } from '@/common/serialization/canonical-json';
 import type {
   OrganizationAuditEventFilter,
   OrganizationAuditEventPosition,
-} from '../application/organization-audit-event-read.port';
+} from '@/modules/identity/application/organization-audit-event-read.port';
 
 /**
  * Bumped when the payload shape changes, so a cursor minted by an older

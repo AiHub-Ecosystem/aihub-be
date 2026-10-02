@@ -1,10 +1,10 @@
-import { AppError } from '../../../common/errors/app-error';
-import { invalidRequest } from '../../../common/errors/invalid-request';
-import type { RequestContext } from '../../../common/request-context/request-context';
+import { AppError } from '@/common/errors/app-error';
+import { invalidRequest } from '@/common/errors/invalid-request';
+import type { RequestContext } from '@/common/request-context/request-context';
 import {
   IDENTITY_CONFIG_ALGORITHMS,
   parsePublicJsonWebKeySet,
-} from '../domain/organization-identity-config';
+} from '@/modules/identity/domain/organization-identity-config';
 
 import type { JwksCachePort } from './jwks-cache.port';
 import type { JwksKeyProviderPort } from './jwks-key-provider.port';

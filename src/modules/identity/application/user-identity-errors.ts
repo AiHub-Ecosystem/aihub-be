@@ -1,4 +1,4 @@
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 
 /** A header that is not a usable string, before the mode is known. */
 export function invalidUserIdentity(): AppError {

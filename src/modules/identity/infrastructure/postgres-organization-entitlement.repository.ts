@@ -1,9 +1,9 @@
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   GrantOrganizationEntitlementInput,
   GrantOrganizationEntitlementResult,
   OrganizationEntitlementPort,
-} from '../application/organization-entitlement.port';
+} from '@/modules/identity/application/organization-entitlement.port';
 import { findActiveAccountId } from './active-account';
 import { identityStoreError, isRecord, stringValue } from './identity-row';
 import {

@@ -1,12 +1,12 @@
 import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
 
-import { RedisConcurrencyLimiter } from '../../../src/modules/gateway/infrastructure/redis-concurrency-limiter';
+import { RedisConcurrencyLimiter } from '@/modules/gateway/infrastructure/redis-concurrency-limiter';
 import {
   RedisQuotaCounter,
   quotaKeyForMonth,
-} from '../../../src/modules/gateway/infrastructure/redis-quota-counter';
-import { QuotaGuard } from '../../../src/modules/gateway/presentation/quota.guard';
-import { generateOrganizationApiKey } from '../../../src/modules/identity/application/organization-api-key-generator';
+} from '@/modules/gateway/infrastructure/redis-quota-counter';
+import { QuotaGuard } from '@/modules/gateway/presentation/quota.guard';
+import { generateOrganizationApiKey } from '@/modules/identity/application/organization-api-key-generator';
 
 import { createTestPool } from '../database';
 

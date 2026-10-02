@@ -3,8 +3,8 @@ import type {
   UsageRetentionBatchRequest,
   UsageRetentionCursor,
   UsageRetentionPort,
-} from '../application/usage-retention';
-import { compareUsageRetentionCursor } from '../application/usage-retention';
+} from '@/modules/metering/application/usage-retention';
+import { compareUsageRetentionCursor } from '@/modules/metering/application/usage-retention';
 import {
   type PostgresMeteringClient,
   createPostgresMeteringClient,

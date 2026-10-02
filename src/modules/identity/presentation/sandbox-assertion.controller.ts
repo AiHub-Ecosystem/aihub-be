@@ -10,20 +10,20 @@ import {
 } from '@nestjs/common';
 import { Value } from '@sinclair/typebox/value';
 
-import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
-import { invalidRequest } from '../../../common/errors/invalid-request';
-import { createRequestContext } from '../../../common/request-context/request-context.factory';
-import { isRequestId } from '../../../common/request-context/request-id';
+import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { invalidRequest } from '@/common/errors/invalid-request';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
+import { isRequestId } from '@/common/request-context/request-id';
 import {
   type MintSandboxAssertionRequest,
   MintSandboxAssertionRequestSchema,
   type MintSandboxAssertionResponse,
-} from '../../../contracts/sandbox/assertion';
-import { RateLimitGuard } from '../../gateway/presentation/rate-limit.guard';
+} from '@/contracts/sandbox/assertion';
+import { RateLimitGuard } from '@/modules/gateway/presentation/rate-limit.guard';
 import {
   SANDBOX_ASSERTION_MINTER,
   type SandboxAssertionMinterPort,
-} from '../application/sandbox-assertion-minter.port';
+} from '@/modules/identity/application/sandbox-assertion-minter.port';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,

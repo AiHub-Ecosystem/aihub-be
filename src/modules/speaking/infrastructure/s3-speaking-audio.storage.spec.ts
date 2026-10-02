@@ -1,7 +1,7 @@
 import type {
   RuntimeSecretProvider,
   RuntimeSecretSnapshot,
-} from '../../secrets/application/runtime-secret-provider.port';
+} from '@/modules/secrets/application/runtime-secret-provider.port';
 import { S3SpeakingAudioStorage } from './s3-speaking-audio.storage';
 
 function provider(

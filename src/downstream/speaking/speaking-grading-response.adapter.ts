@@ -1,10 +1,10 @@
 import { Value } from '@sinclair/typebox/value';
 
-import { AppError } from '../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import {
   type SpeakingGradeResponse,
   SpeakingGradeResponseSchema,
-} from '../../contracts/speaking/grading';
+} from '@/contracts/speaking/grading';
 
 function contractViolation(reason: string): AppError {
   return new AppError({

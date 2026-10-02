@@ -4,13 +4,13 @@ import { join } from 'node:path';
 
 import { Test, type TestingModule } from '@nestjs/testing';
 
-import { createRequestContext } from '../../common/request-context/request-context.factory';
-import type { SpeakingGradeInput } from '../../contracts/speaking/grading';
-import type { GradeTask1Request } from '../../contracts/writing/grading';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
+import type { SpeakingGradeInput } from '@/contracts/speaking/grading';
+import type { GradeTask1Request } from '@/contracts/writing/grading';
 import {
   RUNTIME_SECRET_PROVIDER,
   type RuntimeSecretProvider,
-} from '../secrets/application/runtime-secret-provider.port';
+} from '@/modules/secrets/application/runtime-secret-provider.port';
 import {
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,

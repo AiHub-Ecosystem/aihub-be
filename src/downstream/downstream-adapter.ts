@@ -1,5 +1,5 @@
-import type { OperationId } from '../catalog/operation-id';
-import type { RequestContext } from '../common/request-context/request-context';
+import type { OperationId } from '@/catalog/operation-id';
+import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   DownstreamErrorHint,
   DownstreamId,

@@ -1,16 +1,16 @@
 import { Logger } from '@nestjs/common';
 import { MockAgent } from 'undici';
 
-import { AppError } from '../../../common/errors/app-error';
-import { createRequestContext } from '../../../common/request-context/request-context.factory';
+import { AppError } from '@/common/errors/app-error';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type {
   GradeResponse,
   GradeTask1Request,
-} from '../../../contracts/writing/grading';
-import type { DownstreamAdapter } from '../../../downstream/downstream-adapter';
-import type { DownstreamRequest } from '../../../downstream/downstream.types';
-import type { InternalTokenIssuerPort } from '../application/internal-token-issuer.port';
-import type { SandboxDispatchBudgetPort } from '../application/sandbox-dispatch-budget.port';
+} from '@/contracts/writing/grading';
+import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
+import type { DownstreamRequest } from '@/downstream/downstream.types';
+import type { InternalTokenIssuerPort } from '@/modules/gateway/application/internal-token-issuer.port';
+import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import { DownstreamHttpClient } from './downstream-http.client';
 import { HttpOperationDispatcher } from './http-operation-dispatcher';
 

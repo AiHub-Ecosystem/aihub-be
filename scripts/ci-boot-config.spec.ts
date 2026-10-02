@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseEnv } from 'node:util';
 
-import { ConfiguredRuntimeSecretProvider } from '../src/modules/secrets/infrastructure/configured-runtime-secret.provider';
-import { loadRuntimeConnectionEnvironment } from '../src/modules/secrets/infrastructure/runtime-connection.environment';
+import { ConfiguredRuntimeSecretProvider } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
+import { loadRuntimeConnectionEnvironment } from '@/modules/secrets/infrastructure/runtime-connection.environment';
 import { writeBootConfig } from './ci-boot-config.cjs';
 
 function readBootEnv(directory: string): NodeJS.Dict<string> {

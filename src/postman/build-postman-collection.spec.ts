@@ -1,7 +1,7 @@
 import type { CollectionDefinition } from 'postman-collection';
 import { Collection } from 'postman-collection';
 
-import { buildOpenApiDocument } from '../openapi/build-openapi-document';
+import { buildOpenApiDocument } from '@/openapi/build-openapi-document';
 import {
   buildPostmanCollection,
   preservePostmanIds,

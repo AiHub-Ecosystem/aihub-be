@@ -4,22 +4,22 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 
-import { AppModule } from '../src/app.module';
+import { AppModule } from '@/app.module';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
-} from '../src/modules/auth/application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '../src/modules/auth/application/user-account.port';
-import { userAccountStatus } from '../src/modules/auth/testing/user-account-status.stub';
-import type { OrganizationMembershipMutationAction } from '../src/modules/identity/application/organization-membership.mutation-policy';
+} from '@/modules/auth/application/user-access-token.port';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
+import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
+import type { OrganizationMembershipMutationAction } from '@/modules/identity/application/organization-membership.mutation-policy';
 import {
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
   type OrganizationMembershipRole,
-} from '../src/modules/identity/application/organization-membership.port';
-import type { PostgresIdentityClient } from '../src/modules/identity/infrastructure/postgres-api-key.repository';
-import type { PostgresIdentityTransactionalClient } from '../src/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationMembershipRepository } from '../src/modules/identity/infrastructure/postgres-organization-membership.repository';
+} from '@/modules/identity/application/organization-membership.port';
+import type { PostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-api-key.repository';
+import type { PostgresIdentityTransactionalClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+import { PostgresOrganizationMembershipRepository } from '@/modules/identity/infrastructure/postgres-organization-membership.repository';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';

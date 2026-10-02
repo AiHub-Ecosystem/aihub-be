@@ -1,10 +1,10 @@
 import { monotonicFactory } from 'ulid';
 
-import { opaqueTokenIssuer } from '../../../common/security/opaque-token-issuer';
+import { opaqueTokenIssuer } from '@/common/security/opaque-token-issuer';
 import type {
   IssuedRefreshToken,
   RefreshTokenIssuerPort,
-} from '../application/refresh-token.port';
+} from '@/modules/auth/application/refresh-token.port';
 
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** Same-millisecond order, limited to this process. */

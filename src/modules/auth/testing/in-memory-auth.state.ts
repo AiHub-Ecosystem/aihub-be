@@ -1,5 +1,5 @@
-import type { RefreshTokenRecord } from '../application/refresh-session-repository.port';
-import type { LocalAccountStatus } from '../domain/local-auth';
+import type { RefreshTokenRecord } from '@/modules/auth/application/refresh-session-repository.port';
+import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 
 export interface InMemoryAccount {
   readonly userId: string;

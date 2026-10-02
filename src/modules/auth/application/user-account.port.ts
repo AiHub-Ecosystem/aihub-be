@@ -1,4 +1,4 @@
-import type { LocalAccountStatus } from '../domain/local-auth';
+import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 
 export interface RegisterLocalAccountInput {
   readonly email: string;

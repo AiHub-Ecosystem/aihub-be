@@ -1,9 +1,9 @@
 import {
   type MeteringMode,
   OPERATION_CATALOG,
-} from '../../../catalog/operation-catalog';
-import type { DownstreamId } from '../../../downstream/downstream.types';
-import type { QuotaCounterPort } from '../../gateway/application/quota-counter.port';
+} from '@/catalog/operation-catalog';
+import type { DownstreamId } from '@/downstream/downstream.types';
+import type { QuotaCounterPort } from '@/modules/gateway/application/quota-counter.port';
 import type {
   MeteringFinalizeInput,
   MeteringFinalizerPort,

@@ -2,10 +2,10 @@ import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable } from '@nestjs/common';
 
-import { AppError } from '../../../common/errors/app-error';
-import type { RuntimeSecretProvider } from '../../secrets/application/runtime-secret-provider.port';
-import type { SpeakingAudioStoragePort } from '../application/speaking-audio-storage.port';
-import { SPEAKING_AUDIO_URL_HOST } from '../application/speaking-audio-url.policy';
+import { AppError } from '@/common/errors/app-error';
+import type { RuntimeSecretProvider } from '@/modules/secrets/application/runtime-secret-provider.port';
+import type { SpeakingAudioStoragePort } from '@/modules/speaking/application/speaking-audio-storage.port';
+import { SPEAKING_AUDIO_URL_HOST } from '@/modules/speaking/application/speaking-audio-url.policy';
 
 export const DEFAULT_SEAWEEDFS_ENDPOINT = `https://${SPEAKING_AUDIO_URL_HOST}`;
 export const DEFAULT_SEAWEEDFS_BUCKET = 'aihub-speaking-samples';

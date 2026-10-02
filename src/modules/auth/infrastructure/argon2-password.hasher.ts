@@ -1,6 +1,6 @@
 import argon2 from 'argon2';
 
-import type { PasswordHasherPort } from '../application/password-hasher.port';
+import type { PasswordHasherPort } from '@/modules/auth/application/password-hasher.port';
 
 export const ARGON2ID_OPTIONS = Object.freeze({
   type: argon2.argon2id,

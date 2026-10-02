@@ -4,13 +4,13 @@ import {
   SpeakingGradeJsonRequestSchema,
   SpeakingGradeRequestSchema,
   SpeakingGradeResponseSchema,
-} from '../contracts/speaking/grading';
+} from '@/contracts/speaking/grading';
 import {
   GradeResponseSchema,
   GradeTask1RequestSchema,
   GradeTask2RequestSchema,
-} from '../contracts/writing/grading';
-import type { DownstreamId } from '../downstream/downstream.types';
+} from '@/contracts/writing/grading';
+import type { DownstreamId } from '@/downstream/downstream.types';
 import type { OperationId } from './operation-id';
 
 // 'organization' is not an identity scope here and is not coming back.

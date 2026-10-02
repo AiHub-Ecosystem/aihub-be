@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import type {
   QuotaCounterPort,
   QuotaCounterRequest,
-} from '../application/quota-counter.port';
+} from '@/modules/gateway/application/quota-counter.port';
 import type { RedisGatewayClient } from './redis-gateway.client';
 
 export const QUOTA_TTL_SECONDS = 40 * 24 * 60 * 60;

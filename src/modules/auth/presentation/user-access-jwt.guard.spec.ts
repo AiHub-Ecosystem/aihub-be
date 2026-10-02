@@ -3,12 +3,12 @@ import type { ExecutionContext } from '@nestjs/common';
 import type {
   UserAccessTokenVerifierPort,
   VerifiedUserAccessToken,
-} from '../application/user-access-token.port';
+} from '@/modules/auth/application/user-access-token.port';
 import {
   createInMemoryAuthState,
   seedAccount,
-} from '../testing/in-memory-auth.state';
-import { InMemoryUserAccountAdapter } from '../testing/in-memory-user-account.adapter';
+} from '@/modules/auth/testing/in-memory-auth.state';
+import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
 import { UserAccessJwtGuard } from './user-access-jwt.guard';
 
 function context(

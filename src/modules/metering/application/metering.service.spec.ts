@@ -1,5 +1,5 @@
-import type { MeteringMode } from '../../../catalog/operation-catalog';
-import type { QuotaCounterPort } from '../../gateway/application/quota-counter.port';
+import type { MeteringMode } from '@/catalog/operation-catalog';
+import type { QuotaCounterPort } from '@/modules/gateway/application/quota-counter.port';
 import type {
   MeteringFinalizeInput,
   MeteringStatus,

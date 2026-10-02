@@ -1,4 +1,4 @@
-import type { RequestContext } from '../../../common/request-context/request-context';
+import type { RequestContext } from '@/common/request-context/request-context';
 import { admitOrganizationRead } from './organization-admission';
 import type { OrganizationIdentityConfigRepositoryPort } from './organization-identity-config-repository.port';
 import type { StoredOrganizationIdentityConfig } from './organization-identity-config-repository.port';

@@ -1,4 +1,4 @@
-import { createRequestContext } from '../../../common/request-context/request-context.factory';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
 
 import {
   ORGANIZATION_READ_ADMISSION,

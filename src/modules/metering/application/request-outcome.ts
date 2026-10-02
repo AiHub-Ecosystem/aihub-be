@@ -1,4 +1,4 @@
-import type { ErrorCode } from '../../../common/errors/error-code';
+import type { ErrorCode } from '@/common/errors/error-code';
 import type { MeteringOutcome } from './metering-finalizer.port';
 
 /**

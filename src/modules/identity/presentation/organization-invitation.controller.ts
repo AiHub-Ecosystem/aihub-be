@@ -14,8 +14,8 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
-import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
-import { invalidRequest } from '../../../common/errors/invalid-request';
+import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { invalidRequest } from '@/common/errors/invalid-request';
 import {
   type AcceptOrganizationInvitationRequest,
   AcceptOrganizationInvitationRequestSchema,
@@ -24,32 +24,32 @@ import {
   CreateOrganizationInvitationRequestSchema,
   type CreateOrganizationInvitationResponse,
   type ListOpenOrganizationInvitationsResponse,
-} from '../../../contracts/organization/invitation';
-import { normalizeEmail } from '../../auth/domain/local-auth';
-import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
-import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '../../idempotency/application/idempotency-operation';
+} from '@/contracts/organization/invitation';
+import { normalizeEmail } from '@/modules/auth/domain/local-auth';
+import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
+import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '@/modules/idempotency/application/idempotency-operation';
 import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyServicePort,
-} from '../../idempotency/application/idempotency-service.port';
-import { resolveIdempotencyKey } from '../../idempotency/presentation/idempotency-key';
+} from '@/modules/idempotency/application/idempotency-service.port';
+import { resolveIdempotencyKey } from '@/modules/idempotency/presentation/idempotency-key';
 import {
   ACCEPT_ORGANIZATION_INVITATION,
   type AcceptOrganizationInvitationPort,
-} from '../application/accept-organization-invitation.port';
-import type { InvitedOrganizationMember } from '../application/invite-organization-member';
+} from '@/modules/identity/application/accept-organization-invitation.port';
+import type { InvitedOrganizationMember } from '@/modules/identity/application/invite-organization-member';
 import {
   INVITE_ORGANIZATION_MEMBER,
   type InviteOrganizationMemberPort,
-} from '../application/invite-organization-member.port';
+} from '@/modules/identity/application/invite-organization-member.port';
 import {
   LIST_OPEN_ORGANIZATION_INVITATIONS,
   type ListOpenOrganizationInvitationsPort,
-} from '../application/list-open-organization-invitations.port';
+} from '@/modules/identity/application/list-open-organization-invitations.port';
 import {
   REVOKE_ORGANIZATION_INVITATION,
   type RevokeOrganizationInvitationPort,
-} from '../application/revoke-organization-invitation.port';
+} from '@/modules/identity/application/revoke-organization-invitation.port';
 
 import { bearerRequestContext } from './bearer-request-context';
 

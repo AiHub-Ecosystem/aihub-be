@@ -1,4 +1,4 @@
-import { createRequestContext } from '../../common/request-context/request-context.factory';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
 import { requiredSpeakingUserId } from './speaking-grading.adapter';
 
 function context(userId?: string) {

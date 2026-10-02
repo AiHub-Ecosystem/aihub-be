@@ -1,6 +1,6 @@
 import { MockAgent } from 'undici';
 
-import type { AppError } from '../../../common/errors/app-error';
+import type { AppError } from '@/common/errors/app-error';
 import { DownstreamHttpClient } from './downstream-http.client';
 
 describe('DownstreamHttpClient', () => {

@@ -8,7 +8,7 @@ import {
   importJWK,
 } from 'jose';
 
-import type { PublicJsonWebKey } from '../domain/organization-identity-config';
+import type { PublicJsonWebKey } from '@/modules/identity/domain/organization-identity-config';
 import type { JwksKeyProviderPort } from './jwks-key-provider.port';
 import type { OrganizationIdentityConfig } from './organization-identity-config-repository.port';
 import type {

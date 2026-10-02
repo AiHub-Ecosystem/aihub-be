@@ -7,22 +7,22 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
-import { AppError } from '../../../common/errors/app-error';
-import type { ErrorCode } from '../../../common/errors/error-code';
+import { AppError } from '@/common/errors/app-error';
+import type { ErrorCode } from '@/common/errors/error-code';
 import {
   type ErrorEnvelope,
   createErrorEnvelope,
   createInternalErrorEnvelope,
-} from '../../../common/errors/error-envelope';
-import { recordRequestFailure } from '../../../common/http/request-failure.recorder';
-import { isRequestId } from '../../../common/request-context/request-id';
-import { completeRequestMetering } from '../application/metering-completion';
-import { getMeteringEvidence } from '../application/metering-evidence';
+} from '@/common/errors/error-envelope';
+import { recordRequestFailure } from '@/common/http/request-failure.recorder';
+import { isRequestId } from '@/common/request-context/request-id';
+import { completeRequestMetering } from '@/modules/metering/application/metering-completion';
+import { getMeteringEvidence } from '@/modules/metering/application/metering-evidence';
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
-} from '../application/metering-finalizer.port';
-import { requestOutcome } from '../application/request-outcome';
+} from '@/modules/metering/application/metering-finalizer.port';
+import { requestOutcome } from '@/modules/metering/application/request-outcome';
 
 interface FrameworkError {
   readonly code: ErrorCode;

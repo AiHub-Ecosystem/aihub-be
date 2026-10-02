@@ -1,6 +1,6 @@
-import { invalidRequest } from '../../../common/errors/invalid-request';
-import type { RequestContext } from '../../../common/request-context/request-context';
-import { organizationName } from '../domain/organization-name';
+import { invalidRequest } from '@/common/errors/invalid-request';
+import type { RequestContext } from '@/common/request-context/request-context';
+import { organizationName } from '@/modules/identity/domain/organization-name';
 
 import { forbidden } from './organization-membership.authorization';
 import type { OrganizationRenamePort } from './organization-rename.port';

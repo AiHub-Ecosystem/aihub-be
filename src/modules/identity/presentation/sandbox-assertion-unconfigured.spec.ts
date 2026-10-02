@@ -4,13 +4,13 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 
-import { AppModule } from '../../../app.module';
-import { generateRequestId } from '../../../common/request-context/request-id';
+import { AppModule } from '@/app.module';
+import { generateRequestId } from '@/common/request-context/request-id';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
   type AuthenticatedApiKey,
-} from '../application/api-key-authenticator.port';
+} from '@/modules/identity/application/api-key-authenticator.port';
 
 const authenticatedApiKey: AuthenticatedApiKey = {
   organizationId: 'org_acme',

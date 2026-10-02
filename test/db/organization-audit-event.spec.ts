@@ -1,14 +1,14 @@
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import { createRequestContext } from '../../src/common/request-context/request-context.factory';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type {
   ListOrganizationAuditEventsInput,
   OrganizationAuditEventFilter,
   OrganizationAuditEventPosition,
-} from '../../src/modules/identity/application/organization-audit-event-read.port';
-import { organizationAuditEventId } from '../../src/modules/identity/infrastructure/organization-audit-event.store';
-import { PostgresOrganizationAuditReadRepository } from '../../src/modules/identity/infrastructure/postgres-organization-audit-read.repository';
+} from '@/modules/identity/application/organization-audit-event-read.port';
+import { organizationAuditEventId } from '@/modules/identity/infrastructure/organization-audit-event.store';
+import { PostgresOrganizationAuditReadRepository } from '@/modules/identity/infrastructure/postgres-organization-audit-read.repository';
 
 import { createTestPool, resetIdentityTables } from './database';
 

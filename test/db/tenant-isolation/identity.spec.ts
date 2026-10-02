@@ -1,19 +1,19 @@
 import { Response } from 'undici';
 
-import { ApiKeyAuthenticator } from '../../../src/modules/identity/application/api-key-authenticator';
-import { generateOrganizationApiKey } from '../../../src/modules/identity/application/organization-api-key-generator';
-import { UserAssertionVerifier } from '../../../src/modules/identity/application/user-assertion-verifier';
-import { UserIdentityResolver } from '../../../src/modules/identity/application/user-identity-resolver';
-import { hashApiKey } from '../../../src/modules/identity/domain/api-key';
-import { JoseUserAssertionCrypto } from '../../../src/modules/identity/infrastructure/jose-user-assertion-crypto';
-import { JwksKeyProvider } from '../../../src/modules/identity/infrastructure/jwks-key-provider';
-import { PostgresApiKeyRepository } from '../../../src/modules/identity/infrastructure/postgres-api-key.repository';
-import { createPostgresIdentityClient } from '../../../src/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationIdentityConfigRepository } from '../../../src/modules/identity/infrastructure/postgres-organization-identity-config.repository';
+import { ApiKeyAuthenticator } from '@/modules/identity/application/api-key-authenticator';
+import { generateOrganizationApiKey } from '@/modules/identity/application/organization-api-key-generator';
+import { UserAssertionVerifier } from '@/modules/identity/application/user-assertion-verifier';
+import { UserIdentityResolver } from '@/modules/identity/application/user-identity-resolver';
+import { hashApiKey } from '@/modules/identity/domain/api-key';
+import { JoseUserAssertionCrypto } from '@/modules/identity/infrastructure/jose-user-assertion-crypto';
+import { JwksKeyProvider } from '@/modules/identity/infrastructure/jwks-key-provider';
+import { PostgresApiKeyRepository } from '@/modules/identity/infrastructure/postgres-api-key.repository';
+import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/infrastructure/postgres-organization-identity-config.repository';
 import {
   RedisAuthFailureCounter,
   RedisIdentityStore,
-} from '../../../src/modules/identity/infrastructure/redis-identity.store';
+} from '@/modules/identity/infrastructure/redis-identity.store';
 
 import { createTestPool, testDatabaseUrl } from '../database';
 

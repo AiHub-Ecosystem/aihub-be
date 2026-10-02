@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 
-import { GatewayModule } from '../gateway/gateway.module';
-import { IdempotencyModule } from '../idempotency/idempotency.module';
-import { IdentityModule } from '../identity/identity.module';
-import { MeteringModule } from '../metering/metering.module';
-import { SuccessEnvelopeInterceptor } from '../metering/presentation/success-envelope.interceptor';
+import { GatewayModule } from '@/modules/gateway/gateway.module';
+import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
+import { IdentityModule } from '@/modules/identity/identity.module';
+import { MeteringModule } from '@/modules/metering/metering.module';
+import { SuccessEnvelopeInterceptor } from '@/modules/metering/presentation/success-envelope.interceptor';
 import { WritingGradingController } from './presentation/writing-grading.controller';
 
 @Module({

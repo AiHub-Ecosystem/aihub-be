@@ -1,4 +1,4 @@
-import type { ApiKeyRecord } from '../application/api-key-authenticator.port';
+import type { ApiKeyRecord } from '@/modules/identity/application/api-key-authenticator.port';
 import {
   RedisAuthFailureCounter,
   type RedisIdentityClient,

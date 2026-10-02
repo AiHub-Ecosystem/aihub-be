@@ -1,11 +1,11 @@
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   CompleteIdempotencyInput,
   IdempotencyAttemptInput,
   IdempotencyRepositoryPort,
   IdempotencyReservation,
   ReserveIdempotencyInput,
-} from '../application/idempotency-repository.port';
+} from '@/modules/idempotency/application/idempotency-repository.port';
 import type { PostgresIdempotencyClient } from './postgres-idempotency.client';
 
 /**

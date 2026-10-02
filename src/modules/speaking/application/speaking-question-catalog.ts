@@ -1,4 +1,4 @@
-import type { SpeakingPart } from '../../../contracts/speaking/questions';
+import type { SpeakingPart } from '@/contracts/speaking/questions';
 import type { SpeakingAudioStoragePort } from './speaking-audio-storage.port';
 
 type AudioExtension = 'mp3' | 'webm';

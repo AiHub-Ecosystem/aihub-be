@@ -9,7 +9,7 @@ import type {
   RuntimeSecretSnapshot,
   SeaweedFsRuntimeSecrets,
   UserAccessJwtRuntimeSecrets,
-} from '../application/runtime-secret-provider.port';
+} from '@/modules/secrets/application/runtime-secret-provider.port';
 
 type RuntimeSecretSource = 'env' | 'agent-file';
 type SecretValues = Readonly<Record<string, string | undefined>>;

@@ -5,15 +5,15 @@ import {
   Injectable,
 } from '@nestjs/common';
 
-import { AppError } from '../../../common/errors/app-error';
-import {
-  type AuthenticatedRequest,
-  getAuthenticatedApiKey,
-} from '../../identity/presentation/authenticated-request';
+import { AppError } from '@/common/errors/app-error';
 import {
   RATE_LIMITER,
   type RateLimiterPort,
-} from '../application/rate-limiter.port';
+} from '@/modules/gateway/application/rate-limiter.port';
+import {
+  type AuthenticatedRequest,
+  getAuthenticatedApiKey,
+} from '@/modules/identity/presentation/authenticated-request';
 
 function rateLimited(retryAfterMs: number | undefined): AppError {
   return new AppError({

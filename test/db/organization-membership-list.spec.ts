@@ -7,16 +7,16 @@ import {
 import { Test } from '@nestjs/testing';
 import type { Pool } from 'pg';
 
-import { AppModule } from '../../src/app.module';
+import { AppModule } from '@/app.module';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
-} from '../../src/modules/auth/application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '../../src/modules/auth/application/user-account.port';
-import { userAccountStatus } from '../../src/modules/auth/testing/user-account-status.stub';
-import { ORGANIZATION_MEMBERSHIP } from '../../src/modules/identity/application/organization-membership.port';
-import { createPostgresIdentityClient } from '../../src/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationMembershipRepository } from '../../src/modules/identity/infrastructure/postgres-organization-membership.repository';
+} from '@/modules/auth/application/user-access-token.port';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
+import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
+import { ORGANIZATION_MEMBERSHIP } from '@/modules/identity/application/organization-membership.port';
+import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+import { PostgresOrganizationMembershipRepository } from '@/modules/identity/infrastructure/postgres-organization-membership.repository';
 
 import {
   createTestPool,

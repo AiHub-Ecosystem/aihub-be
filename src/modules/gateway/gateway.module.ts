@@ -1,17 +1,17 @@
 import { Module } from '@nestjs/common';
 
-import { speakingGradingJsonAdapter } from '../../downstream/speaking/speaking-grading-json.adapter';
-import { speakingGradingAdapter } from '../../downstream/speaking/speaking-grading.adapter';
-import { task1GradeAdapter } from '../../downstream/writing/task1-grade.adapter';
-import { task2GradeAdapter } from '../../downstream/writing/task2-grade.adapter';
-import { IDEMPOTENCY_SERVICE } from '../idempotency/application/idempotency-service.port';
-import type { IdempotencyServicePort } from '../idempotency/application/idempotency-service.port';
-import { IdempotencyModule } from '../idempotency/idempotency.module';
+import { speakingGradingJsonAdapter } from '@/downstream/speaking/speaking-grading-json.adapter';
+import { speakingGradingAdapter } from '@/downstream/speaking/speaking-grading.adapter';
+import { task1GradeAdapter } from '@/downstream/writing/task1-grade.adapter';
+import { task2GradeAdapter } from '@/downstream/writing/task2-grade.adapter';
+import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
+import type { IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
+import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
 import {
   RUNTIME_SECRET_PROVIDER,
   type RuntimeSecretProvider,
-} from '../secrets/application/runtime-secret-provider.port';
-import { SecretsModule } from '../secrets/secrets.module';
+} from '@/modules/secrets/application/runtime-secret-provider.port';
+import { SecretsModule } from '@/modules/secrets/secrets.module';
 import {
   CONCURRENCY_LIMITER,
   type ConcurrencyLimiterPort,

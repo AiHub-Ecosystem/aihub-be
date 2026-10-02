@@ -5,32 +5,32 @@ import {
 import { Test } from '@nestjs/testing';
 import { Value } from '@sinclair/typebox/value';
 
-import { AppModule } from '../../../app.module';
-import { AppError } from '../../../common/errors/app-error';
-import { ReadOrganizationIdentityConfigResponseSchema } from '../../../contracts/organization/identity-config';
+import { AppModule } from '@/app.module';
+import { AppError } from '@/common/errors/app-error';
+import { ReadOrganizationIdentityConfigResponseSchema } from '@/contracts/organization/identity-config';
 import {
   USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenIssuerPort,
   type UserAccessTokenVerifierPort,
-} from '../../auth/application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '../../auth/application/user-account.port';
-import { userAccountStatus } from '../../auth/testing/user-account-status.stub';
-import { JWKS_CACHE } from '../application/jwks-cache.port';
-import { JWKS_KEY_PROVIDER } from '../application/jwks-key-provider.port';
+} from '@/modules/auth/application/user-access-token.port';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
+import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
+import { JWKS_CACHE } from '@/modules/identity/application/jwks-cache.port';
+import { JWKS_KEY_PROVIDER } from '@/modules/identity/application/jwks-key-provider.port';
 import {
   ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
   type OrganizationIdentityConfigRepositoryPort,
   type SaveOrganizationIdentityConfigInput,
   type StoredOrganizationIdentityConfig,
-} from '../application/organization-identity-config-repository.port';
+} from '@/modules/identity/application/organization-identity-config-repository.port';
 import {
   type ListRosterInput,
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
   type OrganizationMembershipRole,
   type OrganizationMembershipStatus,
-} from '../application/organization-membership.port';
+} from '@/modules/identity/application/organization-membership.port';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';

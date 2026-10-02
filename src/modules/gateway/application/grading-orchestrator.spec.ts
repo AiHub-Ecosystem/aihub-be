@@ -1,15 +1,15 @@
-import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
-import type { OperationId } from '../../../catalog/operation-id';
-import type { RequestContext } from '../../../common/request-context/request-context';
-import type { SpeakingGradeResponse } from '../../../contracts/speaking/grading';
-import type { GradeResponse } from '../../../contracts/writing/grading';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import type { OperationId } from '@/catalog/operation-id';
+import type { RequestContext } from '@/common/request-context/request-context';
+import type { SpeakingGradeResponse } from '@/contracts/speaking/grading';
+import type { GradeResponse } from '@/contracts/writing/grading';
 import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,
   IdempotencyReplayDecoder,
   IdempotencyServicePort,
   IdempotencyWork,
-} from '../../idempotency/application/idempotency-service.port';
+} from '@/modules/idempotency/application/idempotency-service.port';
 import { GradingOrchestrator } from './grading-orchestrator';
 import type {
   GradingOrchestratorPort,

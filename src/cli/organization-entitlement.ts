@@ -1,15 +1,15 @@
-import Redis from 'ioredis';
-import { publishedEntitlements } from '../catalog/operation-catalog';
+import { publishedEntitlements } from '@/catalog/operation-catalog';
 import {
   apiKeyCacheKey,
   apiKeyCacheMissKey,
-} from '../modules/identity/application/api-key-authenticator.port';
+} from '@/modules/identity/application/api-key-authenticator.port';
 import type {
   GrantOrganizationEntitlementResult,
   OrganizationEntitlementPort,
-} from '../modules/identity/application/organization-entitlement.port';
-import { createPostgresIdentityClient } from '../modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationEntitlementRepository } from '../modules/identity/infrastructure/postgres-organization-entitlement.repository';
+} from '@/modules/identity/application/organization-entitlement.port';
+import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+import { PostgresOrganizationEntitlementRepository } from '@/modules/identity/infrastructure/postgres-organization-entitlement.repository';
+import Redis from 'ioredis';
 import { runOperatorCommand } from './operator-command-context';
 
 export interface GrantOrganizationEntitlementCliInput {

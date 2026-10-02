@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 
-import type { MeteringFailureLoggerPort } from '../application/metering-logger.port';
-import type { UsageRecord } from '../application/usage-repository.port';
+import type { MeteringFailureLoggerPort } from '@/modules/metering/application/metering-logger.port';
+import type { UsageRecord } from '@/modules/metering/application/usage-repository.port';
 
 function safeUsage(
   usage: UsageRecord['usage'],

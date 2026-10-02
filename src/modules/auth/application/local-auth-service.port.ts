@@ -3,7 +3,7 @@ import type {
   LoginRequest,
   RegisterRequest,
   ResetPasswordRequest,
-} from '../../../contracts/auth/local-auth';
+} from '@/contracts/auth/local-auth';
 
 export interface IssuedSession {
   readonly accessToken: string;

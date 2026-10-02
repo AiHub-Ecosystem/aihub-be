@@ -3,7 +3,7 @@ import { Pool } from 'pg';
 import type {
   SandboxDispatchBudgetPort,
   SandboxDispatchReservation,
-} from '../application/sandbox-dispatch-budget.port';
+} from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 
 export const SANDBOX_ENVIRONMENT_MONTHLY_LIMIT = 500;
 

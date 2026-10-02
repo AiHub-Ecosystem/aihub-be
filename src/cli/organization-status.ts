@@ -4,13 +4,13 @@ import {
   type OrganizationStatus,
   apiKeyCacheKey,
   apiKeyCacheMissKey,
-} from '../modules/identity/application/api-key-authenticator.port';
+} from '@/modules/identity/application/api-key-authenticator.port';
 import type {
   OrganizationStatusPort,
   SetOrganizationStatusResult,
-} from '../modules/identity/application/organization-status.port';
-import { createPostgresIdentityClient } from '../modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationStatusRepository } from '../modules/identity/infrastructure/postgres-organization-status.repository';
+} from '@/modules/identity/application/organization-status.port';
+import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+import { PostgresOrganizationStatusRepository } from '@/modules/identity/infrastructure/postgres-organization-status.repository';
 import { runOperatorCommand } from './operator-command-context';
 
 export interface OrganizationStatusCliInput {

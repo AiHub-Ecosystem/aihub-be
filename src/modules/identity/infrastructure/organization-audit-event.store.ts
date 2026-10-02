@@ -5,7 +5,7 @@ import {
   type OrganizationAuditDraft,
   type OrganizationAuditStamp,
   organizationAuditEvent,
-} from '../domain/organization-audit-event';
+} from '@/modules/identity/domain/organization-audit-event';
 
 import type { PostgresIdentityQueryClient } from './postgres-identity.client';
 

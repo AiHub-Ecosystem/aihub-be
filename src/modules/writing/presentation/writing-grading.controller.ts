@@ -1,34 +1,34 @@
 import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
 import { Value } from '@sinclair/typebox/value';
 
-import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
-import { invalidRequest } from '../../../common/errors/invalid-request';
-import { userIdentityRequired } from '../../../common/errors/user-identity-required';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { invalidRequest } from '@/common/errors/invalid-request';
+import { userIdentityRequired } from '@/common/errors/user-identity-required';
 import {
   type RequestLifecycleState,
   getRequestLifecycle,
-} from '../../../common/http/request-lifecycle.hook';
+} from '@/common/http/request-lifecycle.hook';
 import {
   type GradeResponse,
   GradeTask1RequestSchema,
   GradeTask2RequestSchema,
   type GradeTask1Request as Task1Request,
   type GradeTask2Request as Task2Request,
-} from '../../../contracts/writing/grading';
+} from '@/contracts/writing/grading';
 import {
   GRADING_ORCHESTRATOR,
   type GradingOrchestratorPort,
   type GradingRequestMetadata,
-} from '../../gateway/application/grading-orchestrator.port';
-import type { DispatchResult } from '../../gateway/application/operation-dispatcher.port';
-import { getConcurrencyBackgroundLifecycle } from '../../gateway/presentation/concurrency-permit';
-import { GradedRequest } from '../../gateway/presentation/graded-request.decorator';
-import { resolveIdempotencyKey } from '../../idempotency/presentation/idempotency-key';
+} from '@/modules/gateway/application/grading-orchestrator.port';
+import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
+import { getConcurrencyBackgroundLifecycle } from '@/modules/gateway/presentation/concurrency-permit';
+import { GradedRequest } from '@/modules/gateway/presentation/graded-request.decorator';
+import { resolveIdempotencyKey } from '@/modules/idempotency/presentation/idempotency-key';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
-} from '../../identity/presentation/authenticated-request';
-import { RequireOperation } from '../../identity/presentation/require-operation.decorator';
+} from '@/modules/identity/presentation/authenticated-request';
+import { RequireOperation } from '@/modules/identity/presentation/require-operation.decorator';
 
 const TASK1_OPERATION = 'writing.task1.grade' as const;
 const TASK2_OPERATION = 'writing.task2.grade' as const;

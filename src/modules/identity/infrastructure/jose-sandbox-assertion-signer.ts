@@ -1,10 +1,10 @@
 import { type KeyLike, SignJWT, importPKCS8 } from 'jose';
 
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   SandboxAssertionClaims,
   SandboxAssertionSignerPort,
-} from '../application/sandbox-assertion-signer.port';
+} from '@/modules/identity/application/sandbox-assertion-signer.port';
 import {
   type SandboxSigningMaterial,
   readSandboxSigningMaterial,

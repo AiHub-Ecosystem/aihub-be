@@ -3,18 +3,18 @@ import { isIP } from 'node:net';
 
 import { Agent, type Dispatcher, fetch as undiciFetch } from 'undici';
 
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   JwksCacheEntry,
   JwksCachePort,
-} from '../application/jwks-cache.port';
-import type { JwksKeyProviderPort } from '../application/jwks-key-provider.port';
+} from '@/modules/identity/application/jwks-cache.port';
+import type { JwksKeyProviderPort } from '@/modules/identity/application/jwks-key-provider.port';
 import type {
   OrganizationIdentityConfig,
   PublicJsonWebKeySet,
-} from '../application/organization-identity-config-repository.port';
-import { identityProviderUnavailable } from '../application/user-identity-errors';
-import { parsePublicJsonWebKeySet } from '../domain/organization-identity-config';
+} from '@/modules/identity/application/organization-identity-config-repository.port';
+import { identityProviderUnavailable } from '@/modules/identity/application/user-identity-errors';
+import { parsePublicJsonWebKeySet } from '@/modules/identity/domain/organization-identity-config';
 
 export const JWKS_FRESH_TTL_MS = 15 * 60 * 1_000;
 export const JWKS_STALE_TTL_MS = 24 * 60 * 60 * 1_000;

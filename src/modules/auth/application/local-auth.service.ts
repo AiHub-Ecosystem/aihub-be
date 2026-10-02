@@ -1,8 +1,8 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 
-import { AppError } from '../../../common/errors/app-error';
-import { invalidRequest } from '../../../common/errors/invalid-request';
-import type { ResetPasswordRequest } from '../../../contracts/auth/local-auth';
+import { AppError } from '@/common/errors/app-error';
+import { invalidRequest } from '@/common/errors/invalid-request';
+import type { ResetPasswordRequest } from '@/contracts/auth/local-auth';
 import {
   type NormalizedRegistration,
   type RegistrationInput,
@@ -10,7 +10,7 @@ import {
   normalizeLogin,
   normalizeRegistration,
   validatePassword,
-} from '../domain/local-auth';
+} from '@/modules/auth/domain/local-auth';
 import { AuthIdentityConflictError } from './auth-identity-conflict.error';
 import {
   AUTH_RATE_LIMITER,

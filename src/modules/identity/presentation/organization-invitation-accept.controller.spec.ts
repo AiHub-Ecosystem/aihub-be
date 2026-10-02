@@ -4,27 +4,27 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 
-import { AppModule } from '../../../app.module';
+import { AppModule } from '@/app.module';
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
   type OrganizationInviteEmailInput,
   type PasswordResetEmailInput,
   type VerificationEmailInput,
-} from '../../auth/application/email-sender.port';
+} from '@/modules/auth/application/email-sender.port';
 import {
   USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenIssuerPort,
   type UserAccessTokenVerifierPort,
-} from '../../auth/application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '../../auth/application/user-account.port';
-import { userAccountStatus } from '../../auth/testing/user-account-status.stub';
+} from '@/modules/auth/application/user-access-token.port';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
+import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
   type AcceptOrganizationInvitationInput,
   ORGANIZATION_INVITATION,
   type OrganizationInvitationPort,
-} from '../application/organization-invitation.port';
+} from '@/modules/identity/application/organization-invitation.port';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const REQUEST_ID = 'req_01J00000000000000000000000';

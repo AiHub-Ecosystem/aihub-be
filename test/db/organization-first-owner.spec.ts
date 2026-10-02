@@ -3,17 +3,17 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import { createRequestContext } from '../../src/common/request-context/request-context.factory';
-import { generateOrganizationApiKey } from '../../src/modules/identity/application/organization-api-key-generator';
-import type { AttachFirstOwnerInput } from '../../src/modules/identity/application/organization-first-owner.port';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
+import { generateOrganizationApiKey } from '@/modules/identity/application/organization-api-key-generator';
+import type { AttachFirstOwnerInput } from '@/modules/identity/application/organization-first-owner.port';
 import {
   type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,
-} from '../../src/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationApiKeyRepository } from '../../src/modules/identity/infrastructure/postgres-organization-api-key.repository';
-import { PostgresOrganizationFirstOwnerRepository } from '../../src/modules/identity/infrastructure/postgres-organization-first-owner.repository';
-import { PostgresOrganizationInvitationRepository } from '../../src/modules/identity/infrastructure/postgres-organization-invitation.repository';
-import { PostgresOrganizationMembershipRepository } from '../../src/modules/identity/infrastructure/postgres-organization-membership.repository';
+} from '@/modules/identity/infrastructure/postgres-identity.client';
+import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/infrastructure/postgres-organization-api-key.repository';
+import { PostgresOrganizationFirstOwnerRepository } from '@/modules/identity/infrastructure/postgres-organization-first-owner.repository';
+import { PostgresOrganizationInvitationRepository } from '@/modules/identity/infrastructure/postgres-organization-invitation.repository';
+import { PostgresOrganizationMembershipRepository } from '@/modules/identity/infrastructure/postgres-organization-membership.repository';
 
 import {
   createTestPool,

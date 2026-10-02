@@ -1,4 +1,4 @@
-import type { UsageRecord } from '../application/usage-repository.port';
+import type { UsageRecord } from '@/modules/metering/application/usage-repository.port';
 import {
   type PostgresMeteringClient,
   PostgresUsageRepository,

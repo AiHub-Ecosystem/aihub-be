@@ -1,6 +1,6 @@
 import type { FastifyRequest } from 'fastify';
 
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import {
   assertAuthBypassFlagIsSafe,
   assertHostConfigurationIsSafe,

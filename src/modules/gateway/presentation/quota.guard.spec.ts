@@ -1,16 +1,16 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
-import type { AuthenticatedApiKey } from '../../identity/application/api-key-authenticator.port';
+import {
+  QUOTA_COUNTER,
+  type QuotaCounterPort,
+} from '@/modules/gateway/application/quota-counter.port';
+import type { AuthenticatedApiKey } from '@/modules/identity/application/api-key-authenticator.port';
 import {
   type MeteringEvidence,
   getMeteringEvidence,
   openMeteringEvidence,
-} from '../../metering/application/metering-evidence';
-import {
-  QUOTA_COUNTER,
-  type QuotaCounterPort,
-} from '../application/quota-counter.port';
+} from '@/modules/metering/application/metering-evidence';
 import { QuotaGuard } from './quota.guard';
 
 class FakeQuotaCounter implements QuotaCounterPort {

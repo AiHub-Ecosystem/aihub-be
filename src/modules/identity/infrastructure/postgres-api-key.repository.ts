@@ -1,10 +1,10 @@
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   ApiKeyRecord,
   ApiKeyRepositoryPort,
   DurableApiKeyStatus,
   OrganizationStatus,
-} from '../application/api-key-authenticator.port';
+} from '@/modules/identity/application/api-key-authenticator.port';
 
 export interface PostgresIdentityClient {
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;

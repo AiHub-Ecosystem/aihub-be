@@ -1,4 +1,4 @@
-import type { SandboxAssertionPolicyPort } from '../application/sandbox-assertion-policy.port';
+import type { SandboxAssertionPolicyPort } from '@/modules/identity/application/sandbox-assertion-policy.port';
 import {
   readSandboxOrganizationIds,
   readSandboxSigningMaterial,

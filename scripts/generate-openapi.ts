@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { buildOpenApiDocument } from '../src/openapi/build-openapi-document';
+import { buildOpenApiDocument } from '@/openapi/build-openapi-document';
 
 const packageJson = JSON.parse(
   readFileSync(join(__dirname, '../package.json'), 'utf8'),

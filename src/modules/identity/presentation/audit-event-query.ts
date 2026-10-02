@@ -1,15 +1,15 @@
-import { invalidRequest } from '../../../common/errors/invalid-request';
-import { parseUtcTimestamp } from '../../../common/time/parse-utc-timestamp';
+import { invalidRequest } from '@/common/errors/invalid-request';
+import { parseUtcTimestamp } from '@/common/time/parse-utc-timestamp';
 import {
   DEFAULT_ORGANIZATION_AUDIT_PAGE_SIZE,
   MAX_ORGANIZATION_AUDIT_PAGE_SIZE,
   ORGANIZATION_AUDIT_ACTIONS,
   ORGANIZATION_AUDIT_OUTCOMES,
-} from '../../../contracts/organization/audit-event';
+} from '@/contracts/organization/audit-event';
 import type {
   OrganizationAuditEventFilter,
   OrganizationAuditEventPosition,
-} from '../application/organization-audit-event-read.port';
+} from '@/modules/identity/application/organization-audit-event-read.port';
 
 import { decodeAuditCursor } from './audit-cursor';
 

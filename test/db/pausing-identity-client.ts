@@ -1,8 +1,8 @@
 import type {
   PostgresIdentityQueryClient,
   PostgresIdentityTransactionalClient,
-} from '../../src/modules/identity/infrastructure/postgres-identity.client';
-import { createPostgresIdentityClient } from '../../src/modules/identity/infrastructure/postgres-identity.client';
+} from '@/modules/identity/infrastructure/postgres-identity.client';
+import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
 
 export interface QueryPause {
   readonly captured: Promise<void>;

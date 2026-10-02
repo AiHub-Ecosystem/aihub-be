@@ -1,4 +1,4 @@
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type { PostgresIdentityClient } from './postgres-api-key.repository';
 import type { PostgresIdentityQueryClient } from './postgres-identity.client';
 import { PostgresOrganizationIdentityConfigRepository } from './postgres-organization-identity-config.repository';

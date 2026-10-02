@@ -1,5 +1,5 @@
-import { AppError } from '../../../common/errors/app-error';
-import { createRequestContext } from '../../../common/request-context/request-context.factory';
+import { AppError } from '@/common/errors/app-error';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
 import { requireActiveMembership } from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
 

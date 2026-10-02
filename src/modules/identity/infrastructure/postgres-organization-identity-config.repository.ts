@@ -1,17 +1,17 @@
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   OrganizationIdentityConfig,
   OrganizationIdentityConfigRepositoryPort,
   SaveOrganizationIdentityConfigInput,
   SaveOrganizationIdentityConfigResult,
   StoredOrganizationIdentityConfig,
-} from '../application/organization-identity-config-repository.port';
+} from '@/modules/identity/application/organization-identity-config-repository.port';
 import {
   IDENTITY_CONFIG_ALGORITHMS,
   type IdentityConfigAlgorithm,
   type IdentityConfigStatus,
   parsePublicJsonWebKeySet,
-} from '../domain/organization-identity-config';
+} from '@/modules/identity/domain/organization-identity-config';
 import {
   identityStoreError,
   isRecord,

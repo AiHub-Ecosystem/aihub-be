@@ -4,25 +4,25 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 
-import { AppModule } from '../../../app.module';
-import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
-import { AppError } from '../../../common/errors/app-error';
+import { AppModule } from '@/app.module';
+import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { AppError } from '@/common/errors/app-error';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
-} from '../../auth/application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '../../auth/application/user-account.port';
-import { userAccountStatus } from '../../auth/testing/user-account-status.stub';
+} from '@/modules/auth/application/user-access-token.port';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
+import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
   ORGANIZATION_MEMBERSHIP_MUTATION,
   type OrganizationMembershipMutationPort,
-} from '../application/organization-membership-mutation.port';
+} from '@/modules/identity/application/organization-membership-mutation.port';
 import {
   type ListRosterInput,
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
   type OrganizationRosterOrganization,
-} from '../application/organization-membership.port';
+} from '@/modules/identity/application/organization-membership.port';
 
 const ORGANIZATION_ROSTER_PATH =
   PUBLIC_ROUTES['organizations.me.members.list'].path;

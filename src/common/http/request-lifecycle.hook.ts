@@ -1,7 +1,7 @@
 import { Transform } from 'node:stream';
 
-import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
-import { AppError } from '../errors/app-error';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { AppError } from '@/common/errors/app-error';
 import {
   type DisconnectableRequest,
   createClientDisconnectSignal,

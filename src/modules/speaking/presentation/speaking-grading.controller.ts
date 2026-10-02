@@ -1,36 +1,36 @@
 import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
 
-import { Value } from '@sinclair/typebox/value';
-import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
-import { AppError } from '../../../common/errors/app-error';
-import { invalidRequest } from '../../../common/errors/invalid-request';
-import { userIdentityRequired } from '../../../common/errors/user-identity-required';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { AppError } from '@/common/errors/app-error';
+import { invalidRequest } from '@/common/errors/invalid-request';
+import { userIdentityRequired } from '@/common/errors/user-identity-required';
 import {
   type RequestLifecycleState,
   getRequestLifecycle,
-} from '../../../common/http/request-lifecycle.hook';
+} from '@/common/http/request-lifecycle.hook';
 import {
   type SpeakingGradeJsonInput,
   SpeakingGradeJsonRequestSchema,
   type SpeakingGradeResponse,
-} from '../../../contracts/speaking/grading';
+} from '@/contracts/speaking/grading';
 import {
   GRADING_ORCHESTRATOR,
   type GradingOrchestratorPort,
   type GradingRequestMetadata,
-} from '../../gateway/application/grading-orchestrator.port';
-import type { DispatchResult } from '../../gateway/application/operation-dispatcher.port';
-import { GradedRequest } from '../../gateway/presentation/graded-request.decorator';
+} from '@/modules/gateway/application/grading-orchestrator.port';
+import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
+import { GradedRequest } from '@/modules/gateway/presentation/graded-request.decorator';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
-} from '../../identity/presentation/authenticated-request';
-import { RequireOperation } from '../../identity/presentation/require-operation.decorator';
-import { isApprovedSpeakingAudioUrl } from '../application/speaking-audio-url.policy';
+} from '@/modules/identity/presentation/authenticated-request';
+import { RequireOperation } from '@/modules/identity/presentation/require-operation.decorator';
+import { isApprovedSpeakingAudioUrl } from '@/modules/speaking/application/speaking-audio-url.policy';
 import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,
-} from '../application/speaking-multipart-parser.port';
+} from '@/modules/speaking/application/speaking-multipart-parser.port';
+import { Value } from '@sinclair/typebox/value';
 import { createFastifySpeakingMultipartSource } from './fastify-speaking-multipart.source';
 
 const OPERATION = 'speaking.grading' as const;

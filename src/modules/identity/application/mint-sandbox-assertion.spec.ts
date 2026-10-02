@@ -1,4 +1,4 @@
-import { createRequestContext } from '../../../common/request-context/request-context.factory';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
 import { MintSandboxAssertion } from './mint-sandbox-assertion';
 import type {
   OrganizationIdentityConfig,

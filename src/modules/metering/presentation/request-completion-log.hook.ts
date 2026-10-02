@@ -1,12 +1,12 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import type { OperationId } from '../../../catalog/operation-id';
-import type { ErrorCode } from '../../../common/errors/error-code';
-import { isHealthProbe } from '../../../common/http/request-path';
-import { routeTemplate } from '../../../common/http/request-tracing.hook';
-import { getMeteringEvidence } from '../application/metering-evidence';
-import type { MeteringOutcome } from '../application/metering-finalizer.port';
-import { requestOutcome } from '../application/request-outcome';
+import type { OperationId } from '@/catalog/operation-id';
+import type { ErrorCode } from '@/common/errors/error-code';
+import { isHealthProbe } from '@/common/http/request-path';
+import { routeTemplate } from '@/common/http/request-tracing.hook';
+import { getMeteringEvidence } from '@/modules/metering/application/metering-evidence';
+import type { MeteringOutcome } from '@/modules/metering/application/metering-finalizer.port';
+import { requestOutcome } from '@/modules/metering/application/request-outcome';
 
 const COMPLETION_EVENT = 'request_completed';
 

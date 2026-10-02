@@ -1,4 +1,4 @@
-import type { PublicJsonWebKey } from '../domain/organization-identity-config';
+import type { PublicJsonWebKey } from '@/modules/identity/domain/organization-identity-config';
 
 export interface UserAssertionProtectedHeader {
   readonly alg: unknown;

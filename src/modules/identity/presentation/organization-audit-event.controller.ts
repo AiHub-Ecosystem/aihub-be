@@ -9,13 +9,13 @@ import {
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
-import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
-import type { ListOrganizationAuditEventsResponse } from '../../../contracts/organization/audit-event';
-import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
+import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import type { ListOrganizationAuditEventsResponse } from '@/contracts/organization/audit-event';
+import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
 import {
   READ_ORGANIZATION_AUDIT_EVENTS,
   type ReadOrganizationAuditEventsPort,
-} from '../application/read-organization-audit-events.port';
+} from '@/modules/identity/application/read-organization-audit-events.port';
 
 import { encodeAuditCursor } from './audit-cursor';
 import { parseOrganizationAuditQuery } from './audit-event-query';

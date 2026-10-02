@@ -8,21 +8,21 @@ import {
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { type Observable, mergeMap } from 'rxjs';
 
-import { isOperationId } from '../../../catalog/operation-id';
-import { isRequestId } from '../../../common/request-context/request-id';
-import { completeRequestMetering } from '../application/metering-completion';
+import { isOperationId } from '@/catalog/operation-id';
+import { isRequestId } from '@/common/request-context/request-id';
+import { completeRequestMetering } from '@/modules/metering/application/metering-completion';
 import {
   addMeteringEvidence,
   getMeteringEvidence,
-} from '../application/metering-evidence';
+} from '@/modules/metering/application/metering-evidence';
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
-} from '../application/metering-finalizer.port';
+} from '@/modules/metering/application/metering-finalizer.port';
 import type {
   MeteringModel,
   MeteringUsage,
-} from '../application/metering-finalizer.port';
+} from '@/modules/metering/application/metering-finalizer.port';
 
 interface DispatchResultLike {
   readonly operation: string;

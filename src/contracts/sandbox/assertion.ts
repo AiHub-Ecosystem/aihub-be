@@ -3,7 +3,7 @@ import { type Static, Type } from '@sinclair/typebox';
 import {
   SANDBOX_USER_ID_MAX_LENGTH,
   SANDBOX_USER_ID_PATTERN,
-} from '../../modules/identity/domain/sandbox-user-id';
+} from '@/modules/identity/domain/sandbox-user-id';
 
 /**
  * The end-user identifier is the only value the caller controls. Its bounds

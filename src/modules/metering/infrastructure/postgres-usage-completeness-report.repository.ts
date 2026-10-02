@@ -3,7 +3,7 @@ import {
   UsageReportSnapshotError,
   type UsageReportSnapshotQuery,
   type UsageReportSnapshotRow,
-} from '../application/usage-completeness-report';
+} from '@/modules/metering/application/usage-completeness-report';
 import {
   type PostgresMeteringClient,
   createPostgresMeteringClient,

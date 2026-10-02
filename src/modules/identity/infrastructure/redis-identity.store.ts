@@ -4,18 +4,18 @@ import type {
   ApiKeyCachePort,
   ApiKeyRecord,
   AuthFailureCounterPort,
-} from '../application/api-key-authenticator.port';
+} from '@/modules/identity/application/api-key-authenticator.port';
 import {
   apiKeyCacheKey,
   apiKeyCacheMissKey,
-} from '../application/api-key-authenticator.port';
+} from '@/modules/identity/application/api-key-authenticator.port';
 import type {
   JwksCacheEntry,
   JwksCachePort,
   JwksCacheSnapshot,
   JwksRefreshLock,
-} from '../application/jwks-cache.port';
-import { parsePublicJsonWebKeySet } from '../domain/organization-identity-config';
+} from '@/modules/identity/application/jwks-cache.port';
+import { parsePublicJsonWebKeySet } from '@/modules/identity/domain/organization-identity-config';
 
 export interface RedisIdentityClient {
   get(key: string): Promise<string | null>;

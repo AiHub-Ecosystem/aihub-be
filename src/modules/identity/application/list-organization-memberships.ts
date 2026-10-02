@@ -1,4 +1,4 @@
-import type { RequestContext } from '../../../common/request-context/request-context';
+import type { RequestContext } from '@/common/request-context/request-context';
 
 import { ORGANIZATION_READ_ADMISSION } from './organization-admission';
 import type {

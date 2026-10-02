@@ -3,8 +3,8 @@ import { Module } from '@nestjs/common';
 import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
-} from '../gateway/application/quota-counter.port';
-import { GatewayModule } from '../gateway/gateway.module';
+} from '@/modules/gateway/application/quota-counter.port';
+import { GatewayModule } from '@/modules/gateway/gateway.module';
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,

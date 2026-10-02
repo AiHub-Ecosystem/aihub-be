@@ -6,17 +6,17 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
   type VerifiedUserAccessToken,
-} from '../application/user-access-token.port';
+} from '@/modules/auth/application/user-access-token.port';
 import {
   USER_ACCOUNT_REPOSITORY,
   type UserAccountRepositoryPort,
-} from '../application/user-account.port';
-import type { LocalAccountStatus } from '../domain/local-auth';
+} from '@/modules/auth/application/user-account.port';
+import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 
 declare module 'fastify' {
   interface FastifyRequest {

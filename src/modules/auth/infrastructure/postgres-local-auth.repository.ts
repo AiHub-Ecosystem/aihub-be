@@ -1,33 +1,33 @@
 import { ulid } from 'ulid';
 
-import { AuthIdentityConflictError } from '../application/auth-identity-conflict.error';
+import { AuthIdentityConflictError } from '@/modules/auth/application/auth-identity-conflict.error';
 import type {
   IssuePasswordResetTokenInput,
   PasswordResetResult,
   PasswordResetTarget,
   PasswordResetTokenCheckResult,
   PasswordResetTokenRepositoryPort,
-} from '../application/password-reset-token-repository.port';
+} from '@/modules/auth/application/password-reset-token-repository.port';
 import type {
   CreateRefreshSessionInput,
   RefreshSessionRepositoryPort,
   RefreshTokenRecord,
   RefreshTokenRotationResult,
   RotateRefreshTokenInput,
-} from '../application/refresh-session-repository.port';
+} from '@/modules/auth/application/refresh-session-repository.port';
 import type {
   LoginIdentity,
   RegisterLocalAccountInput,
   UserAccountRepositoryPort,
-} from '../application/user-account.port';
+} from '@/modules/auth/application/user-account.port';
 import type {
   ConsumeVerificationTokenInput,
   ResendVerificationTarget,
   RotateVerificationTokenInput,
   VerificationOutcome,
   VerificationTokenRepositoryPort,
-} from '../application/verification-token-repository.port';
-import type { LocalAccountStatus } from '../domain/local-auth';
+} from '@/modules/auth/application/verification-token-repository.port';
+import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 import type {
   PostgresAuthClient,
   PostgresAuthQueryClient,

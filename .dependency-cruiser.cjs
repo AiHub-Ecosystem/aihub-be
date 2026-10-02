@@ -343,6 +343,12 @@ module.exports = {
   ],
   options: {
     tsPreCompilationDeps: true,
+    // Required for the `@/*` alias: dependency-cruiser reads tsconfig `paths`
+    // only when a config file is named, and has no default. Without it every
+    // aliased import is `not-to-unresolvable`, which is an error (ADR-0067).
+    tsConfig: {
+      fileName: 'tsconfig.json',
+    },
     doNotFollow: {
       path: 'node_modules',
     },

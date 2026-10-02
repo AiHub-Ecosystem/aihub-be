@@ -1,12 +1,12 @@
 import type { Pool } from 'pg';
 
-import { ORGANIZATION_CREATE_OPERATION } from '../../src/modules/idempotency/application/idempotency-operation';
+import { ORGANIZATION_CREATE_OPERATION } from '@/modules/idempotency/application/idempotency-operation';
 import type {
   CompleteIdempotencyInput,
   ReserveIdempotencyInput,
-} from '../../src/modules/idempotency/application/idempotency-repository.port';
-import type { PostgresIdempotencyClient } from '../../src/modules/idempotency/infrastructure/postgres-idempotency.client';
-import { PostgresIdempotencyRepository } from '../../src/modules/idempotency/infrastructure/postgres-idempotency.repository';
+} from '@/modules/idempotency/application/idempotency-repository.port';
+import type { PostgresIdempotencyClient } from '@/modules/idempotency/infrastructure/postgres-idempotency.client';
+import { PostgresIdempotencyRepository } from '@/modules/idempotency/infrastructure/postgres-idempotency.repository';
 
 import { createTestPool } from './database';
 

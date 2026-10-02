@@ -11,9 +11,9 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
-import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
-import { AppError } from '../../../common/errors/app-error';
-import { invalidRequest } from '../../../common/errors/invalid-request';
+import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { AppError } from '@/common/errors/app-error';
+import { invalidRequest } from '@/common/errors/invalid-request';
 import {
   EmptyAuthRequestSchema,
   type ForgotPasswordRequest,
@@ -28,13 +28,13 @@ import {
   ResetPasswordRequestSchema,
   type VerifyEmailRequest,
   VerifyEmailRequestSchema,
-} from '../../../contracts/auth/local-auth';
+} from '@/contracts/auth/local-auth';
 import {
   type IssuedSession,
   LOCAL_AUTH_SERVICE,
   type LocalAuthServicePort,
   RefreshRotationCommittedError,
-} from '../application/local-auth-service.port';
+} from '@/modules/auth/application/local-auth-service.port';
 import {
   REFRESH_COOKIE_CLEAR_OPTIONS,
   REFRESH_COOKIE_NAME,

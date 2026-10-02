@@ -1,5 +1,5 @@
-import { AppError } from '../../../common/errors/app-error';
-import type { RequestContext } from '../../../common/request-context/request-context';
+import { AppError } from '@/common/errors/app-error';
+import type { RequestContext } from '@/common/request-context/request-context';
 
 import type { OrganizationInvitationPort } from './organization-invitation.port';
 import type { OrganizationInviteTokenPort } from './organization-invite-token.port';

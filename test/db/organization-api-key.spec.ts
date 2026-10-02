@@ -1,15 +1,15 @@
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import { createRequestContext } from '../../src/common/request-context/request-context.factory';
-import { ApiKeyAuthenticator } from '../../src/modules/identity/application/api-key-authenticator';
-import type { ApiKeyCachePort } from '../../src/modules/identity/application/api-key-authenticator.port';
-import { generateOrganizationApiKey } from '../../src/modules/identity/application/organization-api-key-generator';
-import type { CreateOrganizationApiKeyRecordResult } from '../../src/modules/identity/application/organization-api-key.port';
-import { PostgresApiKeyRepository } from '../../src/modules/identity/infrastructure/postgres-api-key.repository';
-import type { PostgresIdentityTransactionalClient } from '../../src/modules/identity/infrastructure/postgres-identity.client';
-import { createPostgresIdentityClient } from '../../src/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationApiKeyRepository } from '../../src/modules/identity/infrastructure/postgres-organization-api-key.repository';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
+import { ApiKeyAuthenticator } from '@/modules/identity/application/api-key-authenticator';
+import type { ApiKeyCachePort } from '@/modules/identity/application/api-key-authenticator.port';
+import { generateOrganizationApiKey } from '@/modules/identity/application/organization-api-key-generator';
+import type { CreateOrganizationApiKeyRecordResult } from '@/modules/identity/application/organization-api-key.port';
+import { PostgresApiKeyRepository } from '@/modules/identity/infrastructure/postgres-api-key.repository';
+import type { PostgresIdentityTransactionalClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/infrastructure/postgres-organization-api-key.repository';
 
 import {
   createTestPool,

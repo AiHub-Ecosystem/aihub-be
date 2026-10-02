@@ -1,4 +1,4 @@
-import type { ConcurrencyLease } from '../application/concurrency-limiter.port';
+import type { ConcurrencyLease } from '@/modules/gateway/application/concurrency-limiter.port';
 
 export interface ConcurrencyPermit {
   holdForBackground(): void;

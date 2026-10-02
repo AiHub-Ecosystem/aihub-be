@@ -1,14 +1,14 @@
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import { AppError } from '../../src/common/errors/app-error';
-import { createRequestContext } from '../../src/common/request-context/request-context.factory';
-import type { SaveOrganizationIdentityConfigInput } from '../../src/modules/identity/application/organization-identity-config-repository.port';
+import { AppError } from '@/common/errors/app-error';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
+import type { SaveOrganizationIdentityConfigInput } from '@/modules/identity/application/organization-identity-config-repository.port';
 import {
   type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,
-} from '../../src/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationIdentityConfigRepository } from '../../src/modules/identity/infrastructure/postgres-organization-identity-config.repository';
+} from '@/modules/identity/infrastructure/postgres-identity.client';
+import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/infrastructure/postgres-organization-identity-config.repository';
 
 import { createTestPool, resetIdentityTables } from './database';
 

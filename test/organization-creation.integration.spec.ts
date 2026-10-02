@@ -4,13 +4,13 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 
-import { AppModule } from '../src/app.module';
+import { AppModule } from '@/app.module';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
-} from '../src/modules/auth/application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '../src/modules/auth/application/user-account.port';
-import { userAccountStatus } from '../src/modules/auth/testing/user-account-status.stub';
+} from '@/modules/auth/application/user-access-token.port';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
+import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
   type CompleteIdempotencyInput,
   IDEMPOTENCY_REPOSITORY,
@@ -18,13 +18,13 @@ import {
   type IdempotencyRepositoryPort,
   type IdempotencyReservation,
   type ReserveIdempotencyInput,
-} from '../src/modules/idempotency/application/idempotency-repository.port';
+} from '@/modules/idempotency/application/idempotency-repository.port';
 import {
   type CreateOrganizationRecordInput,
   type CreateOrganizationRecordResult,
   ORGANIZATION_CREATION,
   type OrganizationCreationPort,
-} from '../src/modules/identity/application/organization-creation.port';
+} from '@/modules/identity/application/organization-creation.port';
 
 const OWNER_TOKEN = 'owner.token.value';
 const OTHER_TOKEN = 'other.token.value';

@@ -2,13 +2,13 @@ import type {
   SpeakingGradeInput,
   SpeakingGradeJsonInput,
   SpeakingGradeResponse,
-} from '../../../contracts/speaking/grading';
+} from '@/contracts/speaking/grading';
 import type {
   GradeResponse,
   GradeTask1Request,
   GradeTask2Request,
-} from '../../../contracts/writing/grading';
-import type { IdempotencyBackgroundLifecycle } from '../../idempotency/application/idempotency-service.port';
+} from '@/contracts/writing/grading';
+import type { IdempotencyBackgroundLifecycle } from '@/modules/idempotency/application/idempotency-service.port';
 import type { DispatchResult } from './operation-dispatcher.port';
 
 export interface GradingRequestMetadata {

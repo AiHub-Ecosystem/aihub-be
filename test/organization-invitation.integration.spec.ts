@@ -4,32 +4,32 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 
-import { AppModule } from '../src/app.module';
+import { AppModule } from '@/app.module';
 import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
-} from '../src/modules/auth/application/auth-rate-limiter.port';
+} from '@/modules/auth/application/auth-rate-limiter.port';
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
   type OrganizationInviteEmailInput,
-} from '../src/modules/auth/application/email-sender.port';
+} from '@/modules/auth/application/email-sender.port';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
-} from '../src/modules/auth/application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '../src/modules/auth/application/user-account.port';
-import { userAccountStatus } from '../src/modules/auth/testing/user-account-status.stub';
+} from '@/modules/auth/application/user-access-token.port';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
+import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
   ORGANIZATION_INVITATION,
   type OrganizationInvitationPort,
-} from '../src/modules/identity/application/organization-invitation.port';
+} from '@/modules/identity/application/organization-invitation.port';
 import {
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
-} from '../src/modules/identity/application/organization-membership.port';
-import type { PostgresIdentityTransactionalClient } from '../src/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationInvitationRepository } from '../src/modules/identity/infrastructure/postgres-organization-invitation.repository';
+} from '@/modules/identity/application/organization-membership.port';
+import type { PostgresIdentityTransactionalClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+import { PostgresOrganizationInvitationRepository } from '@/modules/identity/infrastructure/postgres-organization-invitation.repository';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';

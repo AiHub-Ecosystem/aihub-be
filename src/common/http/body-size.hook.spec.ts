@@ -2,8 +2,8 @@ import { Readable } from 'node:stream';
 
 import Fastify, { type FastifyInstance } from 'fastify';
 
-import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
-import { PUBLIC_ROUTES } from '../../catalog/public-routes';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { registerBodySizeGuard } from './body-size.hook';
 
 const CATALOGUED_PATH = OPERATION_CATALOG['writing.task1.grade'].path;

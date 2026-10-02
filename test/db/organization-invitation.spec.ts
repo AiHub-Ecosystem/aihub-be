@@ -3,16 +3,16 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import { createRequestContext } from '../../src/common/request-context/request-context.factory';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type {
   AcceptOrganizationInvitationResult,
   CreateOrganizationInvitationResult,
   RevokeOrganizationInvitationResult,
-} from '../../src/modules/identity/application/organization-invitation.port';
-import type { OrganizationMembershipRole } from '../../src/modules/identity/application/organization-membership.port';
-import type { PostgresIdentityTransactionalClient } from '../../src/modules/identity/infrastructure/postgres-identity.client';
-import { createPostgresIdentityClient } from '../../src/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationInvitationRepository } from '../../src/modules/identity/infrastructure/postgres-organization-invitation.repository';
+} from '@/modules/identity/application/organization-invitation.port';
+import type { OrganizationMembershipRole } from '@/modules/identity/application/organization-membership.port';
+import type { PostgresIdentityTransactionalClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+import { PostgresOrganizationInvitationRepository } from '@/modules/identity/infrastructure/postgres-organization-invitation.repository';
 
 import {
   createTestPool,

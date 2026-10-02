@@ -1,4 +1,4 @@
-import { generateRequestId } from '../common/request-context/request-id';
+import { generateRequestId } from '@/common/request-context/request-id';
 
 export interface OperatorCommandContext {
   readonly requestId: string;

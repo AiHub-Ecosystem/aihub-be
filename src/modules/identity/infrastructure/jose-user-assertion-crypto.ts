@@ -8,8 +8,8 @@ import {
 import type {
   UserAssertionCryptoPort,
   UserAssertionProtectedHeader,
-} from '../application/user-assertion-crypto.port';
-import type { PublicJsonWebKey } from '../domain/organization-identity-config';
+} from '@/modules/identity/application/user-assertion-crypto.port';
+import type { PublicJsonWebKey } from '@/modules/identity/domain/organization-identity-config';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

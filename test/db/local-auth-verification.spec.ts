@@ -3,9 +3,9 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import type { IssuedRefreshToken } from '../../src/modules/auth/application/refresh-token.port';
-import { createPostgresAuthClient } from '../../src/modules/auth/infrastructure/postgres-auth.client';
-import { PostgresLocalAuthRepository } from '../../src/modules/auth/infrastructure/postgres-local-auth.repository';
+import type { IssuedRefreshToken } from '@/modules/auth/application/refresh-token.port';
+import { createPostgresAuthClient } from '@/modules/auth/infrastructure/postgres-auth.client';
+import { PostgresLocalAuthRepository } from '@/modules/auth/infrastructure/postgres-local-auth.repository';
 
 import {
   createTestPool,

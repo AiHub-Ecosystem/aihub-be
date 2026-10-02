@@ -1,8 +1,8 @@
 import {
   type IdempotencyMode,
   OPERATION_CATALOG,
-} from '../../../catalog/operation-catalog';
-import { type OperationId, isOperationId } from '../../../catalog/operation-id';
+} from '@/catalog/operation-catalog';
+import { type OperationId, isOperationId } from '@/catalog/operation-id';
 
 export const ORGANIZATION_INVITATION_CREATE_OPERATION =
   'organizations.invitations.create' as const;

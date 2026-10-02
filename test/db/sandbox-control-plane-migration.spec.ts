@@ -1,11 +1,11 @@
 import { ulid } from 'ulid';
 
-import { migrateSandboxOrganization } from '../../src/cli/sandbox-control-plane-migration';
-import { PostgresSandboxDispatchBudget } from '../../src/modules/gateway/infrastructure/postgres-sandbox-dispatch-budget';
-import { ApiKeyAuthenticator } from '../../src/modules/identity/application/api-key-authenticator';
-import { generateApiKey } from '../../src/modules/identity/domain/api-key';
-import { PostgresApiKeyRepository } from '../../src/modules/identity/infrastructure/postgres-api-key.repository';
-import { createPostgresIdentityClient } from '../../src/modules/identity/infrastructure/postgres-identity.client';
+import { migrateSandboxOrganization } from '@/cli/sandbox-control-plane-migration';
+import { PostgresSandboxDispatchBudget } from '@/modules/gateway/infrastructure/postgres-sandbox-dispatch-budget';
+import { ApiKeyAuthenticator } from '@/modules/identity/application/api-key-authenticator';
+import { generateApiKey } from '@/modules/identity/domain/api-key';
+import { PostgresApiKeyRepository } from '@/modules/identity/infrastructure/postgres-api-key.repository';
+import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
 import {
   createSandboxTestPool,
   createTestPool,

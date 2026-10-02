@@ -1,6 +1,6 @@
-import { AppError } from '../../../common/errors/app-error';
-import type { AuthenticatedApiKey } from '../application/api-key-authenticator.port';
-import type { ResolvedUserIdentity } from '../application/user-identity-resolver.port';
+import { AppError } from '@/common/errors/app-error';
+import type { AuthenticatedApiKey } from '@/modules/identity/application/api-key-authenticator.port';
+import type { ResolvedUserIdentity } from '@/modules/identity/application/user-identity-resolver.port';
 
 declare module 'fastify' {
   interface FastifyRequest {

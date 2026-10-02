@@ -4,38 +4,38 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 
-import { AppModule } from '../../../app.module';
-import { registerRequestLifecycle } from '../../../common/http/request-lifecycle.hook';
-import { generateRequestId } from '../../../common/request-context/request-id';
-import type { GradeResponse } from '../../../contracts/writing/grading';
+import { AppModule } from '@/app.module';
+import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { generateRequestId } from '@/common/request-context/request-id';
+import type { GradeResponse } from '@/contracts/writing/grading';
 import {
   CONCURRENCY_LIMITER,
   type ConcurrencyDecision,
   type ConcurrencyLimiterPort,
-} from '../../gateway/application/concurrency-limiter.port';
+} from '@/modules/gateway/application/concurrency-limiter.port';
 import {
   type DispatchResult,
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
-} from '../../gateway/application/operation-dispatcher.port';
+} from '@/modules/gateway/application/operation-dispatcher.port';
 import {
   RATE_LIMITER,
   type RateLimiterPort,
-} from '../../gateway/application/rate-limiter.port';
+} from '@/modules/gateway/application/rate-limiter.port';
 import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,
   IdempotencyReplayDecoder,
   IdempotencyServicePort,
   IdempotencyWork,
-} from '../../idempotency/application/idempotency-service.port';
-import { IDEMPOTENCY_SERVICE } from '../../idempotency/application/idempotency-service.port';
+} from '@/modules/idempotency/application/idempotency-service.port';
+import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
   type ApiKeyCredential,
   type AuthenticatedApiKey,
-} from '../../identity/application/api-key-authenticator.port';
+} from '@/modules/identity/application/api-key-authenticator.port';
 
 const VALID_API_KEY = `aihub_sk_${'C'.repeat(43)}`;
 

@@ -1,9 +1,9 @@
-import { AppError } from '../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import {
   CRITERION_IDS,
   type CriterionId,
   type GradeResponse,
-} from '../../contracts/writing/grading';
+} from '@/contracts/writing/grading';
 
 const CRITERION_NAMES: Readonly<Record<CriterionId, string>> = {
   task_achievement: 'Task Achievement',

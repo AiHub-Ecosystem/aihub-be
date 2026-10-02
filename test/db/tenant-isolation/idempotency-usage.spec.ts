@@ -1,10 +1,10 @@
 import type { Pool } from 'pg';
 
-import { createPostgresIdempotencyClient } from '../../../src/modules/idempotency/infrastructure/postgres-idempotency.client';
-import { PostgresIdempotencyRepository } from '../../../src/modules/idempotency/infrastructure/postgres-idempotency.repository';
-import { generateOrganizationApiKey } from '../../../src/modules/identity/application/organization-api-key-generator';
-import { createPostgresMeteringClient } from '../../../src/modules/metering/infrastructure/postgres-usage.repository';
-import { PostgresUsageRepository } from '../../../src/modules/metering/infrastructure/postgres-usage.repository';
+import { createPostgresIdempotencyClient } from '@/modules/idempotency/infrastructure/postgres-idempotency.client';
+import { PostgresIdempotencyRepository } from '@/modules/idempotency/infrastructure/postgres-idempotency.repository';
+import { generateOrganizationApiKey } from '@/modules/identity/application/organization-api-key-generator';
+import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/postgres-usage.repository';
+import { PostgresUsageRepository } from '@/modules/metering/infrastructure/postgres-usage.repository';
 
 import { createTestPool, testDatabaseUrl } from '../database';
 

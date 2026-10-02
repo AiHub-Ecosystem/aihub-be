@@ -1,4 +1,4 @@
-import type { SpeakingGradeInput } from '../../../contracts/speaking/grading';
+import type { SpeakingGradeInput } from '@/contracts/speaking/grading';
 
 export const SPEAKING_MULTIPART_PARSER = Symbol('SPEAKING_MULTIPART_PARSER');
 

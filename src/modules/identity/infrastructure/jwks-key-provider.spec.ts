@@ -3,8 +3,8 @@ import type {
   JwksCachePort,
   JwksCacheSnapshot,
   JwksRefreshLock,
-} from '../application/jwks-cache.port';
-import type { OrganizationIdentityConfig } from '../application/organization-identity-config-repository.port';
+} from '@/modules/identity/application/jwks-cache.port';
+import type { OrganizationIdentityConfig } from '@/modules/identity/application/organization-identity-config-repository.port';
 import { JWKS_MAX_RESPONSE_BYTES, JwksKeyProvider } from './jwks-key-provider';
 
 const jwks = {

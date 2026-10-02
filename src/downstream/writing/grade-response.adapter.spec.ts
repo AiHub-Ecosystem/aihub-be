@@ -3,8 +3,8 @@ import { join } from 'node:path';
 
 import { Value } from '@sinclair/typebox/value';
 
-import { AppError } from '../../common/errors/app-error';
-import { GradeResponseSchema } from '../../contracts/writing/grading';
+import { AppError } from '@/common/errors/app-error';
+import { GradeResponseSchema } from '@/contracts/writing/grading';
 import { parseGradeResponse } from './grade-response.adapter';
 
 const FIXTURES = join(__dirname, '../../../test/fixtures/ai-writing');

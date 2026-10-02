@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import {
   buildPostmanCollection,
   preservePostmanIds,
-} from '../src/postman/build-postman-collection';
+} from '@/postman/build-postman-collection';
 
 const packageJson = JSON.parse(
   readFileSync(join(__dirname, '../package.json'), 'utf8'),

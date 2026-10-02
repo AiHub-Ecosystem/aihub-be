@@ -1,6 +1,6 @@
 import type { TSchema } from '@sinclair/typebox';
 
-import type { HttpStatus } from '../common/errors/error-registry';
+import type { HttpStatus } from '@/common/errors/error-registry';
 import {
   EmptyAuthRequestSchema,
   ForgotPasswordRequestSchema,
@@ -12,42 +12,42 @@ import {
   ResendVerificationRequestSchema,
   ResetPasswordRequestSchema,
   VerifyEmailRequestSchema,
-} from '../contracts/auth/local-auth';
+} from '@/contracts/auth/local-auth';
 import {
   CreateOrganizationApiKeyRequestSchema,
   ListOrganizationApiKeysResponseSchema,
   OrganizationApiKeySecretResponseSchema,
   RevokeOrganizationApiKeyResponseSchema,
-} from '../contracts/organization/api-key';
-import { ListOrganizationAuditEventsResponseSchema } from '../contracts/organization/audit-event';
+} from '@/contracts/organization/api-key';
+import { ListOrganizationAuditEventsResponseSchema } from '@/contracts/organization/audit-event';
 import {
   ReadOrganizationIdentityConfigResponseSchema,
   SetOrganizationIdentityConfigRequestSchema,
-} from '../contracts/organization/identity-config';
+} from '@/contracts/organization/identity-config';
 import {
   AcceptOrganizationInvitationRequestSchema,
   AcceptOrganizationInvitationResponseSchema,
   CreateOrganizationInvitationRequestSchema,
   CreateOrganizationInvitationResponseSchema,
   ListOpenOrganizationInvitationsResponseSchema,
-} from '../contracts/organization/invitation';
+} from '@/contracts/organization/invitation';
 import {
   OrganizationMembershipListResponseSchema,
   OrganizationMembershipMutationRequestSchema,
   OrganizationMembershipMutationResponseSchema,
   OrganizationRosterResponseSchema,
-} from '../contracts/organization/membership';
+} from '@/contracts/organization/membership';
 import {
   CreateOrganizationRequestSchema,
   CreateOrganizationResponseSchema,
   RenameOrganizationRequestSchema,
   RenameOrganizationResponseSchema,
-} from '../contracts/organization/organization';
+} from '@/contracts/organization/organization';
 import {
   MintSandboxAssertionRequestSchema,
   MintSandboxAssertionResponseSchema,
-} from '../contracts/sandbox/assertion';
-import { SpeakingQuestionsResponseSchema } from '../contracts/speaking/questions';
+} from '@/contracts/sandbox/assertion';
+import { SpeakingQuestionsResponseSchema } from '@/contracts/speaking/questions';
 import type { IdempotencyMode } from './operation-catalog';
 
 /**

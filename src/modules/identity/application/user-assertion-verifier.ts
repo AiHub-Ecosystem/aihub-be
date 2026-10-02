@@ -1,9 +1,9 @@
-import { AppError } from '../../../common/errors/app-error';
-import { isEndUserId } from '../domain/end-user-id';
+import { AppError } from '@/common/errors/app-error';
+import { isEndUserId } from '@/modules/identity/domain/end-user-id';
 import {
   type PublicJsonWebKey,
   parsePublicJsonWebKeySet,
-} from '../domain/organization-identity-config';
+} from '@/modules/identity/domain/organization-identity-config';
 import type { JwksKeyProviderPort } from './jwks-key-provider.port';
 import type { OrganizationIdentityConfig } from './organization-identity-config-repository.port';
 import type {

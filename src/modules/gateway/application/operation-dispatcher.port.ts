@@ -1,19 +1,19 @@
-import type { OperationId } from '../../../catalog/operation-id';
-import type { RequestContext } from '../../../common/request-context/request-context';
+import type { OperationId } from '@/catalog/operation-id';
+import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   SpeakingGradeInput,
   SpeakingGradeJsonInput,
   SpeakingGradeResponse,
-} from '../../../contracts/speaking/grading';
+} from '@/contracts/speaking/grading';
 import type {
   GradeResponse,
   GradeTask1Request,
   GradeTask2Request,
-} from '../../../contracts/writing/grading';
+} from '@/contracts/writing/grading';
 import type {
   MeteringModel,
   MeteringUsage,
-} from '../../metering/application/metering-finalizer.port';
+} from '@/modules/metering/application/metering-finalizer.port';
 
 export interface DispatchResult<TOutput> {
   readonly operation: OperationId;

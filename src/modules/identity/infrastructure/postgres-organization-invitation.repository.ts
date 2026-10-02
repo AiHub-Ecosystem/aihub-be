@@ -1,4 +1,4 @@
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   AcceptOrganizationInvitationInput,
   AcceptOrganizationInvitationResult,
@@ -9,9 +9,9 @@ import type {
   OrganizationInvitationPort,
   RevokeOrganizationInvitationInput,
   RevokeOrganizationInvitationResult,
-} from '../application/organization-invitation.port';
-import { forbidden } from '../application/organization-membership.authorization';
-import type { OrganizationAuditDraft } from '../domain/organization-audit-event';
+} from '@/modules/identity/application/organization-invitation.port';
+import { forbidden } from '@/modules/identity/application/organization-membership.authorization';
+import type { OrganizationAuditDraft } from '@/modules/identity/domain/organization-audit-event';
 
 import {
   identityStoreError,

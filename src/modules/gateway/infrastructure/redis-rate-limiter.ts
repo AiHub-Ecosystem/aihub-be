@@ -4,7 +4,7 @@ import type {
   RateLimitDecision,
   RateLimitRequest,
   RateLimiterPort,
-} from '../application/rate-limiter.port';
+} from '@/modules/gateway/application/rate-limiter.port';
 import {
   type RedisGatewayClient,
   createRedisGatewayClient,

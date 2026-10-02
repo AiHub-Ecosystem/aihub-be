@@ -4,7 +4,7 @@ import type {
   IdempotencyRepositoryPort,
   IdempotencyReservation,
   ReserveIdempotencyInput,
-} from '../application/idempotency-repository.port';
+} from '@/modules/idempotency/application/idempotency-repository.port';
 
 interface StoredIdempotencyRecord {
   fingerprintHex: string;

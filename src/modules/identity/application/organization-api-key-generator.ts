@@ -1,6 +1,9 @@
 import { monotonicFactory } from 'ulid';
 
-import { type GeneratedApiKey, generateApiKey } from '../domain/api-key';
+import {
+  type GeneratedApiKey,
+  generateApiKey,
+} from '@/modules/identity/domain/api-key';
 
 /** Same-millisecond `ak_` order follows mint order within this process only. */
 const nextOrganizationApiKeyId = monotonicFactory();

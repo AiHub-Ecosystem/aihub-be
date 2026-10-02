@@ -1,7 +1,7 @@
-import { AppError } from '../../../common/errors/app-error';
-import { invalidRequest } from '../../../common/errors/invalid-request';
-import type { RequestContext } from '../../../common/request-context/request-context';
-import { organizationName } from '../domain/organization-name';
+import { AppError } from '@/common/errors/app-error';
+import { invalidRequest } from '@/common/errors/invalid-request';
+import type { RequestContext } from '@/common/request-context/request-context';
+import { organizationName } from '@/modules/identity/domain/organization-name';
 
 import type {
   OrganizationCreationPort,

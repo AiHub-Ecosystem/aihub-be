@@ -1,8 +1,8 @@
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import {
   type IdempotencyOperation,
   idempotencyMode,
-} from '../application/idempotency-operation';
+} from '@/modules/idempotency/application/idempotency-operation';
 
 function invalidIdempotencyKey(): AppError {
   return new AppError({

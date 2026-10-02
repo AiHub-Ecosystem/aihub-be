@@ -2,11 +2,11 @@ import Redis from 'ioredis';
 import { type KeyLike, SignJWT, exportJWK, generateKeyPair } from 'jose';
 import { ulid } from 'ulid';
 
-import type { RedisGatewayClient } from '../../../src/modules/gateway/infrastructure/redis-gateway.client';
-import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '../../../src/modules/idempotency/application/idempotency-operation';
-import type { PublicJsonWebKeySet } from '../../../src/modules/identity/application/organization-identity-config-repository.port';
-import type { GeneratedApiKey } from '../../../src/modules/identity/domain/api-key';
-import type { RedisIdentityClient } from '../../../src/modules/identity/infrastructure/redis-identity.store';
+import type { RedisGatewayClient } from '@/modules/gateway/infrastructure/redis-gateway.client';
+import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '@/modules/idempotency/application/idempotency-operation';
+import type { PublicJsonWebKeySet } from '@/modules/identity/application/organization-identity-config-repository.port';
+import type { GeneratedApiKey } from '@/modules/identity/domain/api-key';
+import type { RedisIdentityClient } from '@/modules/identity/infrastructure/redis-identity.store';
 
 export const TEST_NOW = new Date('2026-09-15T12:00:00.000Z');
 export const ORGANIZATION_A = 'org_tenant_a';

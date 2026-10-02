@@ -1,7 +1,7 @@
-import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
-import type { ErrorCode } from '../errors/error-code';
-import { createErrorEnvelope } from '../errors/error-envelope';
-import { isRequestId } from '../request-context/request-id';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import type { ErrorCode } from '@/common/errors/error-code';
+import { createErrorEnvelope } from '@/common/errors/error-envelope';
+import { isRequestId } from '@/common/request-context/request-id';
 import { recordRequestFailure } from './request-failure.recorder';
 import { pathnameOf } from './request-path';
 

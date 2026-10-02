@@ -5,7 +5,7 @@ import Redis from 'ioredis';
 import type {
   AuthRateLimitScope,
   AuthRateLimiterPort,
-} from '../application/auth-rate-limiter.port';
+} from '@/modules/auth/application/auth-rate-limiter.port';
 
 const WINDOW_SCRIPT = `
 local current = redis.call('INCR', KEYS[1])

@@ -1,19 +1,19 @@
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import { createRequestContext } from '../../src/common/request-context/request-context.factory';
-import { generateOrganizationApiKey } from '../../src/modules/identity/application/organization-api-key-generator';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
+import { generateOrganizationApiKey } from '@/modules/identity/application/organization-api-key-generator';
 import type {
   CreateOrganizationRecordInput,
   CreateOrganizationRecordResult,
-} from '../../src/modules/identity/application/organization-creation.port';
+} from '@/modules/identity/application/organization-creation.port';
 import {
   type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,
-} from '../../src/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationApiKeyRepository } from '../../src/modules/identity/infrastructure/postgres-organization-api-key.repository';
-import { PostgresOrganizationCreationRepository } from '../../src/modules/identity/infrastructure/postgres-organization-creation.repository';
-import { PostgresOrganizationMembershipRepository } from '../../src/modules/identity/infrastructure/postgres-organization-membership.repository';
+} from '@/modules/identity/infrastructure/postgres-identity.client';
+import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/infrastructure/postgres-organization-api-key.repository';
+import { PostgresOrganizationCreationRepository } from '@/modules/identity/infrastructure/postgres-organization-creation.repository';
+import { PostgresOrganizationMembershipRepository } from '@/modules/identity/infrastructure/postgres-organization-membership.repository';
 
 import {
   createTestPool,

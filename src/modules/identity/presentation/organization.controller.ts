@@ -13,8 +13,8 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
-import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
-import { invalidRequest } from '../../../common/errors/invalid-request';
+import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { invalidRequest } from '@/common/errors/invalid-request';
 import {
   type CreateOrganizationRequest,
   CreateOrganizationRequestSchema,
@@ -22,23 +22,23 @@ import {
   type RenameOrganizationRequest,
   RenameOrganizationRequestSchema,
   type RenameOrganizationResponse,
-} from '../../../contracts/organization/organization';
-import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
-import { ORGANIZATION_CREATE_OPERATION } from '../../idempotency/application/idempotency-operation';
+} from '@/contracts/organization/organization';
+import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
+import { ORGANIZATION_CREATE_OPERATION } from '@/modules/idempotency/application/idempotency-operation';
 import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyServicePort,
-} from '../../idempotency/application/idempotency-service.port';
-import { resolveIdempotencyKey } from '../../idempotency/presentation/idempotency-key';
-import type { CreatedOrganization } from '../application/create-organization';
+} from '@/modules/idempotency/application/idempotency-service.port';
+import { resolveIdempotencyKey } from '@/modules/idempotency/presentation/idempotency-key';
+import type { CreatedOrganization } from '@/modules/identity/application/create-organization';
 import {
   CREATE_ORGANIZATION,
   type CreateOrganizationPort,
-} from '../application/create-organization.port';
+} from '@/modules/identity/application/create-organization.port';
 import {
   RENAME_ORGANIZATION,
   type RenameOrganizationPort,
-} from '../application/rename-organization.port';
+} from '@/modules/identity/application/rename-organization.port';
 
 import { bearerRequestContext } from './bearer-request-context';
 

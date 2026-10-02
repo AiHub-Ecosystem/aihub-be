@@ -2,8 +2,8 @@ import { Readable } from 'node:stream';
 
 import Fastify, { type FastifyInstance } from 'fastify';
 
-import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
-import { AppError } from '../errors/app-error';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { AppError } from '@/common/errors/app-error';
 import {
   getRequestLifecycle,
   registerRequestLifecycle,

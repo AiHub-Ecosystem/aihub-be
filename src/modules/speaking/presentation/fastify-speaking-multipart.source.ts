@@ -1,9 +1,9 @@
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   SpeakingMultipartLimits,
   SpeakingMultipartPart,
   SpeakingMultipartSource,
-} from '../application/speaking-multipart-parser.port';
+} from '@/modules/speaking/application/speaking-multipart-parser.port';
 
 interface FastifyFileStream {
   readonly truncated?: boolean;

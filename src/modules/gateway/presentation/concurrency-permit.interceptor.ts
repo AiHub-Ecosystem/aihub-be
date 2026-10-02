@@ -8,15 +8,15 @@ import {
 import type { FastifyReply } from 'fastify';
 import { type Observable, finalize } from 'rxjs';
 
-import { AppError } from '../../../common/errors/app-error';
-import {
-  type AuthenticatedRequest,
-  getAuthenticatedApiKey,
-} from '../../identity/presentation/authenticated-request';
+import { AppError } from '@/common/errors/app-error';
 import {
   CONCURRENCY_LIMITER,
   type ConcurrencyLimiterPort,
-} from '../application/concurrency-limiter.port';
+} from '@/modules/gateway/application/concurrency-limiter.port';
+import {
+  type AuthenticatedRequest,
+  getAuthenticatedApiKey,
+} from '@/modules/identity/presentation/authenticated-request';
 import { createConcurrencyPermit } from './concurrency-permit';
 
 function concurrencyLimited(retryAfterMs: number): AppError {

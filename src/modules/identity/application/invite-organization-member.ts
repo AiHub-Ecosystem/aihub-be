@@ -1,9 +1,9 @@
-import { AppError } from '../../../common/errors/app-error';
-import { invalidRequest } from '../../../common/errors/invalid-request';
-import type { RequestContext } from '../../../common/request-context/request-context';
-import { type AuthRateLimiterPort } from '../../auth/application/auth-rate-limiter.port';
-import type { EmailSenderPort } from '../../auth/application/email-sender.port';
-import { normalizeEmail } from '../../auth/domain/local-auth';
+import { AppError } from '@/common/errors/app-error';
+import { invalidRequest } from '@/common/errors/invalid-request';
+import type { RequestContext } from '@/common/request-context/request-context';
+import { type AuthRateLimiterPort } from '@/modules/auth/application/auth-rate-limiter.port';
+import type { EmailSenderPort } from '@/modules/auth/application/email-sender.port';
+import { normalizeEmail } from '@/modules/auth/domain/local-auth';
 
 import type { OrganizationInvitationPort } from './organization-invitation.port';
 import type { OrganizationInviteTokenPort } from './organization-invite-token.port';

@@ -1,6 +1,6 @@
-import { AppError } from '../../../common/errors/app-error';
-import type { RequestContext } from '../../../common/request-context/request-context';
-import { apiKeyStatus } from '../domain/api-key';
+import { AppError } from '@/common/errors/app-error';
+import type { RequestContext } from '@/common/request-context/request-context';
+import { apiKeyStatus } from '@/modules/identity/domain/api-key';
 
 import type { ApiKeyCachePort } from './api-key-authenticator.port';
 import type { OrganizationApiKeyView } from './organization-api-key-view';

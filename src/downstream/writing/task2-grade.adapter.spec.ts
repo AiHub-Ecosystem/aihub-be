@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { createRequestContext } from '../../common/request-context/request-context.factory';
-import type { GradeTask2Request } from '../../contracts/writing/grading';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
+import type { GradeTask2Request } from '@/contracts/writing/grading';
 import { task2GradeAdapter } from './task2-grade.adapter';
 
 const FIXTURES = join(__dirname, '../../../test/fixtures/ai-writing');

@@ -1,10 +1,10 @@
-import type { ResendRuntimeSecrets } from '../../secrets/application/runtime-secret-provider.port';
 import type {
   EmailSenderPort,
   OrganizationInviteEmailInput,
   PasswordResetEmailInput,
   VerificationEmailInput,
-} from '../application/email-sender.port';
+} from '@/modules/auth/application/email-sender.port';
+import type { ResendRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 const DELIVERY_TIMEOUT_MS = 5_000;

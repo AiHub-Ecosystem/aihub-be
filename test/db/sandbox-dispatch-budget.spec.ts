@@ -1,4 +1,4 @@
-import { PostgresSandboxDispatchBudget } from '../../src/modules/gateway/infrastructure/postgres-sandbox-dispatch-budget';
+import { PostgresSandboxDispatchBudget } from '@/modules/gateway/infrastructure/postgres-sandbox-dispatch-budget';
 import { createSandboxTestPool, sandboxTestDatabaseUrl } from './database';
 
 const ORGANIZATION_ID = 'org_budget_customer';

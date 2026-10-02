@@ -6,7 +6,7 @@ import { Subject, firstValueFrom, of } from 'rxjs';
 import type {
   ConcurrencyLease,
   ConcurrencyLimiterPort,
-} from '../application/concurrency-limiter.port';
+} from '@/modules/gateway/application/concurrency-limiter.port';
 import { ConcurrencyPermitInterceptor } from './concurrency-permit.interceptor';
 
 const authenticated = {

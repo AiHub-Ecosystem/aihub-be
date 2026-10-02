@@ -2,7 +2,7 @@ import type {
   OrganizationStatusPort,
   SetOrganizationStatusInput,
   SetOrganizationStatusResult,
-} from '../modules/identity/application/organization-status.port';
+} from '@/modules/identity/application/organization-status.port';
 
 import {
   type OrganizationStatusCliInput,

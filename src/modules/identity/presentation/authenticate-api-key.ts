@@ -1,8 +1,8 @@
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   ApiKeyAuthenticatorPort,
   AuthenticatedApiKey,
-} from '../application/api-key-authenticator.port';
+} from '@/modules/identity/application/api-key-authenticator.port';
 import type { AuthenticatedRequest } from './authenticated-request';
 import { resolveAihubEnvironment } from './request-environment';
 

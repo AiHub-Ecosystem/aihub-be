@@ -1,15 +1,15 @@
-import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
-import type { RequestContext } from '../../../common/request-context/request-context';
-import { createRequestContext } from '../../../common/request-context/request-context.factory';
-import type { SpeakingGradeResponse } from '../../../contracts/speaking/grading';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import type { RequestContext } from '@/common/request-context/request-context';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
+import type { SpeakingGradeResponse } from '@/contracts/speaking/grading';
 import {
   type GradeResponse,
   decodeGradeResponse,
-} from '../../../contracts/writing/grading';
+} from '@/contracts/writing/grading';
 import type {
   IdempotencyServicePort,
   IdempotencyWorkContext,
-} from '../../idempotency/application/idempotency-service.port';
+} from '@/modules/idempotency/application/idempotency-service.port';
 import {
   readDispatchTelemetry,
   withDispatchTelemetry,

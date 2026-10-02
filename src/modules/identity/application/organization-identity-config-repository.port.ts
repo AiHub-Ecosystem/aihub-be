@@ -1,9 +1,9 @@
-import type { RequestContext } from '../../../common/request-context/request-context';
+import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   IdentityConfigAlgorithm,
   IdentityConfigStatus,
   PublicJsonWebKeySet,
-} from '../domain/organization-identity-config';
+} from '@/modules/identity/domain/organization-identity-config';
 
 export type {
   IdentityConfigAlgorithm,

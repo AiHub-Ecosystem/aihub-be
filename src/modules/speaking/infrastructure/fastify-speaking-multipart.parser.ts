@@ -2,17 +2,17 @@ import multipart from '@fastify/multipart';
 import { Injectable } from '@nestjs/common';
 import { Value } from '@sinclair/typebox/value';
 
-import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
-import { AppError } from '../../../common/errors/app-error';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { AppError } from '@/common/errors/app-error';
 import {
   type SpeakingGradeInput,
   SpeakingGradeRequestSchema,
-} from '../../../contracts/speaking/grading';
+} from '@/contracts/speaking/grading';
 import type {
   SpeakingMultipartFilePart,
   SpeakingMultipartParserPort,
   SpeakingMultipartSource,
-} from '../application/speaking-multipart-parser.port';
+} from '@/modules/speaking/application/speaking-multipart-parser.port';
 
 /**
  * Audio-file ceiling. Mirrors the AI Speaking provider contract (v1 section

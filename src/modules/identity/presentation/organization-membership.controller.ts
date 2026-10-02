@@ -14,8 +14,8 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyRequest } from 'fastify';
 
-import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
-import { invalidRequest } from '../../../common/errors/invalid-request';
+import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { invalidRequest } from '@/common/errors/invalid-request';
 import {
   EmptyOrganizationMembershipMutationRequestSchema,
   type OrganizationMembershipListQuery,
@@ -25,17 +25,17 @@ import {
   OrganizationMembershipMutationRequestSchema,
   type OrganizationMembershipMutationResponse,
   type OrganizationRosterResponse,
-} from '../../../contracts/organization/membership';
-import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
-import { ListOrganizationMemberships } from '../application/list-organization-memberships';
+} from '@/contracts/organization/membership';
+import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
+import { ListOrganizationMemberships } from '@/modules/identity/application/list-organization-memberships';
 import {
   ORGANIZATION_MEMBERSHIP_MUTATION,
   type OrganizationMembershipMutationPort,
-} from '../application/organization-membership-mutation.port';
+} from '@/modules/identity/application/organization-membership-mutation.port';
 import {
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
-} from '../application/organization-membership.port';
+} from '@/modules/identity/application/organization-membership.port';
 
 import { bearerRequestContext } from './bearer-request-context';
 

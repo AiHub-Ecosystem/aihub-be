@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 
-import type { UsageRecord } from '../application/usage-repository.port';
+import type { UsageRecord } from '@/modules/metering/application/usage-repository.port';
 import { NestMeteringFailureLogger } from './nest-metering-failure.logger';
 
 const forbiddenEssay = 'essay content must never appear in logs';

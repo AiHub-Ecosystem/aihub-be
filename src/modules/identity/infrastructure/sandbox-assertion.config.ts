@@ -1,4 +1,4 @@
-import type { IdentityConfigAlgorithm } from '../domain/organization-identity-config';
+import type { IdentityConfigAlgorithm } from '@/modules/identity/domain/organization-identity-config';
 
 /**
  * The key this deployment signs sandbox assertions with.

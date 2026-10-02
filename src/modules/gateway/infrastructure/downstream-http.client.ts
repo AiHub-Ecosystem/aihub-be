@@ -2,13 +2,13 @@ import { File } from 'node:buffer';
 
 import { type Dispatcher, Pool, FormData as UndiciFormData } from 'undici';
 
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   DownstreamId,
   DownstreamMultipartBody,
   DownstreamRequest,
   InternalAIServiceResponse,
-} from '../../../downstream/downstream.types';
+} from '@/downstream/downstream.types';
 
 export interface DownstreamHttpRequestOptions {
   readonly authorization?: string;

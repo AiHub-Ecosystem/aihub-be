@@ -1,12 +1,12 @@
 import { Logger } from '@nestjs/common';
 import { ulid } from 'ulid';
 
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   CreateOrganizationRecordInput,
   CreateOrganizationRecordResult,
   OrganizationCreationPort,
-} from '../application/organization-creation.port';
+} from '@/modules/identity/application/organization-creation.port';
 
 import { identityStoreError, isRecord } from './identity-row';
 import {

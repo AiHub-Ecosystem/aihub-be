@@ -1,4 +1,4 @@
-import type { OperationId } from '../../../catalog/operation-id';
+import type { OperationId } from '@/catalog/operation-id';
 import type { MeteringModel, MeteringUsage } from './metering-finalizer.port';
 
 /**

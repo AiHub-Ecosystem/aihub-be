@@ -1,15 +1,15 @@
-import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
-import { userIdentityRequired } from '../../common/errors/user-identity-required';
-import type { RequestContext } from '../../common/request-context/request-context';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { userIdentityRequired } from '@/common/errors/user-identity-required';
+import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   SpeakingGradeInput,
   SpeakingGradeResponse,
-} from '../../contracts/speaking/grading';
-import type { DownstreamAdapter } from '../downstream-adapter';
+} from '@/contracts/speaking/grading';
+import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type {
   DownstreamMultipartBody,
   DownstreamRequest,
-} from '../downstream.types';
+} from '@/downstream/downstream.types';
 import { parseSpeakingGradeResponse } from './speaking-grading-response.adapter';
 
 export function requiredSpeakingUserId(context: RequestContext): string {

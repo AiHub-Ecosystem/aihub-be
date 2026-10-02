@@ -2,13 +2,13 @@ import { createPrivateKey, createPublicKey, randomUUID } from 'node:crypto';
 
 import { type KeyLike, SignJWT, decodeProtectedHeader, jwtVerify } from 'jose';
 
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   IssuedUserAccessToken,
   UserAccessTokenIssuerPort,
   UserAccessTokenVerifierPort,
   VerifiedUserAccessToken,
-} from '../application/user-access-token.port';
+} from '@/modules/auth/application/user-access-token.port';
 
 export interface UserAccessTokenConfig {
   readonly privateKeyPem: string;

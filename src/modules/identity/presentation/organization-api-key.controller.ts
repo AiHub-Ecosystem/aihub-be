@@ -14,32 +14,32 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyRequest } from 'fastify';
 
-import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
-import { invalidRequest } from '../../../common/errors/invalid-request';
+import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { invalidRequest } from '@/common/errors/invalid-request';
 import {
   type CreateOrganizationApiKeyRequest,
   CreateOrganizationApiKeyRequestSchema,
   type ListOrganizationApiKeysResponse,
   type OrganizationApiKeySecretResponse,
   type RevokeOrganizationApiKeyResponse,
-} from '../../../contracts/organization/api-key';
-import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
+} from '@/contracts/organization/api-key';
+import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
 import {
   CREATE_ORGANIZATION_API_KEY,
   type CreateOrganizationApiKeyPort,
-} from '../application/create-organization-api-key.port';
+} from '@/modules/identity/application/create-organization-api-key.port';
 import {
   LIST_ORGANIZATION_API_KEYS,
   type ListOrganizationApiKeysPort,
-} from '../application/list-organization-api-keys.port';
+} from '@/modules/identity/application/list-organization-api-keys.port';
 import {
   REVOKE_ORGANIZATION_API_KEY,
   type RevokeOrganizationApiKeyPort,
-} from '../application/revoke-organization-api-key.port';
+} from '@/modules/identity/application/revoke-organization-api-key.port';
 import {
   ROTATE_ORGANIZATION_API_KEY,
   type RotateOrganizationApiKeyPort,
-} from '../application/rotate-organization-api-key.port';
+} from '@/modules/identity/application/rotate-organization-api-key.port';
 
 import { bearerRequestContext } from './bearer-request-context';
 

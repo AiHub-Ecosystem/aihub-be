@@ -5,7 +5,7 @@ import type {
   UsageAggregateQuery,
   UsageRecord,
   UsageRepositoryPort,
-} from '../application/usage-repository.port';
+} from '@/modules/metering/application/usage-repository.port';
 
 export interface PostgresTransactionClient {
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;

@@ -1,6 +1,6 @@
 import type { FastifyRequest } from 'fastify';
 
-import type { SpeakingAudioStoragePort } from '../application/speaking-audio-storage.port';
+import type { SpeakingAudioStoragePort } from '@/modules/speaking/application/speaking-audio-storage.port';
 import { SpeakingQuestionsController } from './speaking-questions.controller';
 
 describe('SpeakingQuestionsController', () => {

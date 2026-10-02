@@ -1,7 +1,7 @@
 import type { ExecutionContext } from '@nestjs/common';
 
-import type { AuthenticatedApiKey } from '../application/api-key-authenticator.port';
-import type { UserIdentityResolverPort } from '../application/user-identity-resolver.port';
+import type { AuthenticatedApiKey } from '@/modules/identity/application/api-key-authenticator.port';
+import type { UserIdentityResolverPort } from '@/modules/identity/application/user-identity-resolver.port';
 import { UserIdentityGuard } from './user-identity.guard';
 
 const authenticated: AuthenticatedApiKey = {

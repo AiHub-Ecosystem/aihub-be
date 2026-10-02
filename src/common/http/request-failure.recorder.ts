@@ -1,4 +1,4 @@
-import type { ErrorCode } from '../errors/error-code';
+import type { ErrorCode } from '@/common/errors/error-code';
 
 declare module 'fastify' {
   interface FastifyRequest {

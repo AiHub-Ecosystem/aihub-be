@@ -3,7 +3,7 @@ import type {
   UsageReportRepositoryPort,
   UsageReportSnapshotQuery,
   UsageReportSnapshotRow,
-} from '../modules/metering/application/usage-completeness-report';
+} from '@/modules/metering/application/usage-completeness-report';
 import {
   formatUsageReportResult,
   parseUsageReportWindow,

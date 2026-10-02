@@ -11,18 +11,18 @@ import type { LightMyRequestResponse } from 'fastify';
 import { exportPKCS8 } from 'jose';
 import { ulid } from 'ulid';
 
-import { AppModule } from '../../src/app.module';
-import { migrateSandboxOrganization } from '../../src/cli/sandbox-control-plane-migration';
-import { registerRequestLifecycle } from '../../src/common/http/request-lifecycle.hook';
-import { generateRequestId } from '../../src/common/request-context/request-id';
+import { AppModule } from '@/app.module';
+import { migrateSandboxOrganization } from '@/cli/sandbox-control-plane-migration';
+import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { generateRequestId } from '@/common/request-context/request-id';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
-} from '../../src/modules/auth/application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '../../src/modules/auth/application/user-account.port';
-import { userAccountStatus } from '../../src/modules/auth/testing/user-account-status.stub';
-import { DownstreamHttpClient } from '../../src/modules/gateway/infrastructure/downstream-http.client';
-import { generateApiKey } from '../../src/modules/identity/domain/api-key';
+} from '@/modules/auth/application/user-access-token.port';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
+import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
+import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
+import { generateApiKey } from '@/modules/identity/domain/api-key';
 import {
   createSandboxTestPool,
   createSandboxTestRedis,

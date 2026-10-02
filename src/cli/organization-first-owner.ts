@@ -1,9 +1,9 @@
 import type {
   AttachFirstOwnerResult,
   OrganizationFirstOwnerPort,
-} from '../modules/identity/application/organization-first-owner.port';
-import { createPostgresIdentityClient } from '../modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationFirstOwnerRepository } from '../modules/identity/infrastructure/postgres-organization-first-owner.repository';
+} from '@/modules/identity/application/organization-first-owner.port';
+import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+import { PostgresOrganizationFirstOwnerRepository } from '@/modules/identity/infrastructure/postgres-organization-first-owner.repository';
 import { runOperatorCommand } from './operator-command-context';
 
 export interface AttachFirstOwnerCliInput {

@@ -1,21 +1,21 @@
-import type { RequestContext } from '../../../common/request-context/request-context';
+import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   AuthRateLimitScope,
   AuthRateLimiterPort,
-} from '../../auth/application/auth-rate-limiter.port';
+} from '@/modules/auth/application/auth-rate-limiter.port';
 import type {
   EmailSenderPort,
   OrganizationInviteEmailInput,
-} from '../../auth/application/email-sender.port';
-import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '../../idempotency/application/idempotency-operation';
+} from '@/modules/auth/application/email-sender.port';
+import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '@/modules/idempotency/application/idempotency-operation';
 import type {
   CompleteIdempotencyInput,
   IdempotencyAttemptInput,
   IdempotencyRepositoryPort,
   IdempotencyReservation,
   ReserveIdempotencyInput,
-} from '../../idempotency/application/idempotency-repository.port';
-import { IdempotencyService } from '../../idempotency/application/idempotency-service';
+} from '@/modules/idempotency/application/idempotency-repository.port';
+import { IdempotencyService } from '@/modules/idempotency/application/idempotency-service';
 import {
   InviteOrganizationMember,
   type InvitedOrganizationMember,

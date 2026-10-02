@@ -1,9 +1,9 @@
 import type {
   GradeResponse,
   GradeTask2Request,
-} from '../../contracts/writing/grading';
-import type { DownstreamAdapter } from '../downstream-adapter';
-import type { DownstreamRequest } from '../downstream.types';
+} from '@/contracts/writing/grading';
+import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
+import type { DownstreamRequest } from '@/downstream/downstream.types';
 import { parseGradeResponse } from './grade-response.adapter';
 
 export const task2GradeAdapter: DownstreamAdapter<

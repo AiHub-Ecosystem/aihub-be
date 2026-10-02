@@ -14,30 +14,30 @@ import {
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
 
-import { AppModule } from '../../../app.module';
-import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
-import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
-import { AppError } from '../../../common/errors/app-error';
-import { createRequestLogging } from '../../../common/observability/request-logger';
-import { generateRequestId } from '../../../common/request-context/request-id';
-import { registerRequestHooks } from '../../../register-request-hooks';
-import type { DispatchResult } from '../../gateway/application/operation-dispatcher.port';
-import { OPERATION_DISPATCHER } from '../../gateway/application/operation-dispatcher.port';
-import { QUOTA_COUNTER } from '../../gateway/application/quota-counter.port';
+import { AppModule } from '@/app.module';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { AppError } from '@/common/errors/app-error';
+import { createRequestLogging } from '@/common/observability/request-logger';
+import { generateRequestId } from '@/common/request-context/request-id';
+import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
+import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
+import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
 import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,
   IdempotencyReplayDecoder,
   IdempotencyServicePort,
   IdempotencyWork,
-} from '../../idempotency/application/idempotency-service.port';
-import { IDEMPOTENCY_SERVICE } from '../../idempotency/application/idempotency-service.port';
+} from '@/modules/idempotency/application/idempotency-service.port';
+import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
 import type {
   UsageAggregate,
   UsageAggregateQuery,
   UsageRecord,
-} from '../application/usage-repository.port';
-import { USAGE_REPOSITORY } from '../application/usage-repository.port';
+} from '@/modules/metering/application/usage-repository.port';
+import { USAGE_REPOSITORY } from '@/modules/metering/application/usage-repository.port';
+import { registerRequestHooks } from '@/register-request-hooks';
 
 const GRADE_OPERATION = OPERATION_CATALOG['writing.task1.grade'];
 const GRADE_URL = GRADE_OPERATION.path;

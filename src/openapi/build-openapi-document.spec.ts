@@ -1,6 +1,6 @@
-import { OPERATION_CATALOG } from '../catalog/operation-catalog';
-import { OPERATION_IDS, isOperationId } from '../catalog/operation-id';
-import { PUBLIC_ROUTES, isPublicRouteId } from '../catalog/public-routes';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { OPERATION_IDS, isOperationId } from '@/catalog/operation-id';
+import { PUBLIC_ROUTES, isPublicRouteId } from '@/catalog/public-routes';
 import { buildOpenApiDocument } from './build-openapi-document';
 import { toOpenApiPath } from './openapi-path';
 

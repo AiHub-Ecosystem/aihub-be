@@ -1,15 +1,15 @@
 import type { ArgumentsHost, ExecutionContext } from '@nestjs/common';
 import { firstValueFrom, of } from 'rxjs';
 
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import {
   addMeteringEvidence,
   openMeteringEvidence,
-} from '../application/metering-evidence';
+} from '@/modules/metering/application/metering-evidence';
 import type {
   MeteringFinalizeInput,
   MeteringFinalizerPort,
-} from '../application/metering-finalizer.port';
+} from '@/modules/metering/application/metering-finalizer.port';
 import { HttpExceptionFilter } from './http-exception.filter';
 import { SuccessEnvelopeInterceptor } from './success-envelope.interceptor';
 

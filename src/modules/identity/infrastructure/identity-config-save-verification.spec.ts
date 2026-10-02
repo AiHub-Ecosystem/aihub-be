@@ -1,21 +1,21 @@
-import { createRequestContext } from '../../../common/request-context/request-context.factory';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type {
   JwksCacheEntry,
   JwksCachePort,
   JwksCacheSnapshot,
   JwksRefreshLock,
-} from '../application/jwks-cache.port';
+} from '@/modules/identity/application/jwks-cache.port';
 import type {
   OrganizationIdentityConfigRepositoryPort,
   SaveOrganizationIdentityConfigInput,
   StoredOrganizationIdentityConfig,
-} from '../application/organization-identity-config-repository.port';
-import type { OrganizationMembershipPort } from '../application/organization-membership.port';
-import { SetOrganizationIdentityConfig } from '../application/set-organization-identity-config';
-import type { UserAssertionCryptoPort } from '../application/user-assertion-crypto.port';
-import { UserAssertionVerifier } from '../application/user-assertion-verifier';
-import { UserIdentityResolver } from '../application/user-identity-resolver';
-import type { PublicJsonWebKey } from '../domain/organization-identity-config';
+} from '@/modules/identity/application/organization-identity-config-repository.port';
+import type { OrganizationMembershipPort } from '@/modules/identity/application/organization-membership.port';
+import { SetOrganizationIdentityConfig } from '@/modules/identity/application/set-organization-identity-config';
+import type { UserAssertionCryptoPort } from '@/modules/identity/application/user-assertion-crypto.port';
+import { UserAssertionVerifier } from '@/modules/identity/application/user-assertion-verifier';
+import { UserIdentityResolver } from '@/modules/identity/application/user-identity-resolver';
+import type { PublicJsonWebKey } from '@/modules/identity/domain/organization-identity-config';
 import { JwksKeyProvider } from './jwks-key-provider';
 
 const ORGANIZATION_ID = 'org_acme';

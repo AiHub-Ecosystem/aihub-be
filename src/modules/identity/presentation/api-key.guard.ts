@@ -7,20 +7,20 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
-import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
-import type { OperationId } from '../../../catalog/operation-id';
-import { AppError } from '../../../common/errors/app-error';
-import { openMeteringEvidence } from '../../metering/application/metering-evidence';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import type { OperationId } from '@/catalog/operation-id';
+import { AppError } from '@/common/errors/app-error';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
   type AuthenticatedApiKey,
-} from '../application/api-key-authenticator.port';
-import { hasRequiredScope } from '../application/authorization';
+} from '@/modules/identity/application/api-key-authenticator.port';
+import { hasRequiredScope } from '@/modules/identity/application/authorization';
 import {
   SANDBOX_ASSERTION_POLICY,
   type SandboxAssertionPolicyPort,
-} from '../application/sandbox-assertion-policy.port';
+} from '@/modules/identity/application/sandbox-assertion-policy.port';
+import { openMeteringEvidence } from '@/modules/metering/application/metering-evidence';
 import { authenticateApiKey, forbidden } from './authenticate-api-key';
 import type { AuthenticatedRequest } from './authenticated-request';
 import {

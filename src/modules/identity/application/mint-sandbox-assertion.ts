@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
-import { AppError } from '../../../common/errors/app-error';
-import { invalidRequest } from '../../../common/errors/invalid-request';
-import { isSandboxUserId } from '../domain/sandbox-user-id';
+import { AppError } from '@/common/errors/app-error';
+import { invalidRequest } from '@/common/errors/invalid-request';
+import { isSandboxUserId } from '@/modules/identity/domain/sandbox-user-id';
 import type {
   OrganizationIdentityConfig,
   OrganizationIdentityConfigRepositoryPort,

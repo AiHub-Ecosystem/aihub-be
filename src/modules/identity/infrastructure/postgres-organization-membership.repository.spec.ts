@@ -1,5 +1,5 @@
-import { AppError } from '../../../common/errors/app-error';
-import { createRequestContext } from '../../../common/request-context/request-context.factory';
+import { AppError } from '@/common/errors/app-error';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { PostgresIdentityClient } from './postgres-api-key.repository';
 import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
 import { PostgresOrganizationMembershipRepository } from './postgres-organization-membership.repository';

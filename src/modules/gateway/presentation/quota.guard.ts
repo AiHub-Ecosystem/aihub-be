@@ -6,16 +6,16 @@ import {
   Optional,
 } from '@nestjs/common';
 
-import { AppError } from '../../../common/errors/app-error';
-import {
-  type AuthenticatedRequest,
-  getAuthenticatedApiKey,
-} from '../../identity/presentation/authenticated-request';
-import { addMeteringEvidence } from '../../metering/application/metering-evidence';
+import { AppError } from '@/common/errors/app-error';
 import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
-} from '../application/quota-counter.port';
+} from '@/modules/gateway/application/quota-counter.port';
+import {
+  type AuthenticatedRequest,
+  getAuthenticatedApiKey,
+} from '@/modules/identity/presentation/authenticated-request';
+import { addMeteringEvidence } from '@/modules/metering/application/metering-evidence';
 
 function nextMonthRetryAfterMs(now: Date): number {
   const nextMonth = new Date(

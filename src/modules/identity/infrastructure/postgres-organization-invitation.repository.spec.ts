@@ -1,11 +1,11 @@
-import { AppError } from '../../../common/errors/app-error';
-import { createRequestContext } from '../../../common/request-context/request-context.factory';
+import { AppError } from '@/common/errors/app-error';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type {
   AcceptOrganizationInvitationInput,
   CreateOrganizationInvitationInput,
   ListOpenOrganizationInvitationsInput,
   RevokeOrganizationInvitationInput,
-} from '../application/organization-invitation.port';
+} from '@/modules/identity/application/organization-invitation.port';
 
 import type {
   PostgresIdentityQueryClient,

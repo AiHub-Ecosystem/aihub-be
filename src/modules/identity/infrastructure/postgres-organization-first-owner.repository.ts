@@ -1,9 +1,9 @@
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   AttachFirstOwnerInput,
   AttachFirstOwnerResult,
   OrganizationFirstOwnerPort,
-} from '../application/organization-first-owner.port';
+} from '@/modules/identity/application/organization-first-owner.port';
 
 import { findActiveAccountId } from './active-account';
 import {

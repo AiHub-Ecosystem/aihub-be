@@ -1,19 +1,19 @@
-import { AppError } from '../../../common/errors/app-error';
-import type { OrganizationStatus } from '../application/api-key-authenticator.port';
-import { ORGANIZATION_READ_ADMISSION } from '../application/organization-admission';
+import { AppError } from '@/common/errors/app-error';
+import type { OrganizationStatus } from '@/modules/identity/application/api-key-authenticator.port';
+import { ORGANIZATION_READ_ADMISSION } from '@/modules/identity/application/organization-admission';
 import type {
   ListOrganizationMembersInput,
   ListedOrganizationMember,
   OrganizationMembershipListPort,
   OrganizationMembershipListResult,
-} from '../application/organization-membership-list.port';
-import { forbidden } from '../application/organization-membership.authorization';
+} from '@/modules/identity/application/organization-membership-list.port';
+import { forbidden } from '@/modules/identity/application/organization-membership.authorization';
 import {
   ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL,
   ORGANIZATION_MEMBERSHIP_TARGET_REFUSAL,
   authorizeOrganizationMembershipMutation,
   hasOrganizationMembershipRouteAuthority,
-} from '../application/organization-membership.mutation-policy';
+} from '@/modules/identity/application/organization-membership.mutation-policy';
 import type {
   ChangeOrganizationMemberRoleInput,
   ListRosterInput,
@@ -26,11 +26,11 @@ import type {
   OrganizationMembershipStatus,
   OrganizationRosterOrganization,
   ResolveMembershipInput,
-} from '../application/organization-membership.port';
+} from '@/modules/identity/application/organization-membership.port';
 import type {
   OrganizationAuditDenial,
   OrganizationAuditDraft,
-} from '../domain/organization-audit-event';
+} from '@/modules/identity/domain/organization-audit-event';
 
 import {
   identityStoreError,

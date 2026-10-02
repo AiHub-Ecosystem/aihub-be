@@ -1,28 +1,28 @@
 import { Logger } from '@nestjs/common';
 
-import type { OperationId } from '../../../catalog/operation-id';
-import { AppError } from '../../../common/errors/app-error';
-import type { ErrorCode } from '../../../common/errors/error-code';
-import type { RequestContext } from '../../../common/request-context/request-context';
+import type { OperationId } from '@/catalog/operation-id';
+import { AppError } from '@/common/errors/app-error';
+import type { ErrorCode } from '@/common/errors/error-code';
+import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   SpeakingGradeInput,
   SpeakingGradeJsonInput,
   SpeakingGradeResponse,
-} from '../../../contracts/speaking/grading';
+} from '@/contracts/speaking/grading';
 import type {
   GradeResponse,
   GradeTask1Request,
   GradeTask2Request,
-} from '../../../contracts/writing/grading';
-import type { DownstreamAdapter } from '../../../downstream/downstream-adapter';
-import type { InternalAIServiceResponse } from '../../../downstream/downstream.types';
-import { extractDownstreamTelemetry } from '../../metering/application/metering.telemetry';
-import type { InternalTokenIssuerPort } from '../application/internal-token-issuer.port';
+} from '@/contracts/writing/grading';
+import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
+import type { InternalAIServiceResponse } from '@/downstream/downstream.types';
+import type { InternalTokenIssuerPort } from '@/modules/gateway/application/internal-token-issuer.port';
 import type {
   DispatchResult,
   OperationDispatcherPort,
-} from '../application/operation-dispatcher.port';
-import type { SandboxDispatchBudgetPort } from '../application/sandbox-dispatch-budget.port';
+} from '@/modules/gateway/application/operation-dispatcher.port';
+import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
+import { extractDownstreamTelemetry } from '@/modules/metering/application/metering.telemetry';
 import {
   type DownstreamHttpClient,
   isDefinitelyNotDispatched,

@@ -5,53 +5,53 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 
-import { AppModule } from '../../../app.module';
-import { generateRequestId } from '../../../common/request-context/request-id';
+import { AppModule } from '@/app.module';
+import { generateRequestId } from '@/common/request-context/request-id';
 import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
-} from '../application/auth-rate-limiter.port';
+} from '@/modules/auth/application/auth-rate-limiter.port';
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
-} from '../application/email-sender.port';
+} from '@/modules/auth/application/email-sender.port';
 import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
-} from '../application/password-hasher.port';
-import { PASSWORD_RESET_TOKEN_REPOSITORY } from '../application/password-reset-token-repository.port';
+} from '@/modules/auth/application/password-hasher.port';
+import { PASSWORD_RESET_TOKEN_REPOSITORY } from '@/modules/auth/application/password-reset-token-repository.port';
 import {
   type IssuedPasswordResetToken,
   PASSWORD_RESET_TOKEN,
   type PasswordResetTokenPort,
-} from '../application/password-reset-token.port';
-import { REFRESH_SESSION_REPOSITORY } from '../application/refresh-session-repository.port';
+} from '@/modules/auth/application/password-reset-token.port';
+import { REFRESH_SESSION_REPOSITORY } from '@/modules/auth/application/refresh-session-repository.port';
 import {
   type IssuedRefreshToken,
   REFRESH_TOKEN_ISSUER,
   type RefreshTokenIssuerPort,
-} from '../application/refresh-token.port';
+} from '@/modules/auth/application/refresh-token.port';
 import {
   USER_ACCESS_TOKEN_ISSUER,
   type UserAccessTokenIssuerPort,
-} from '../application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '../application/user-account.port';
-import { VERIFICATION_TOKEN_REPOSITORY } from '../application/verification-token-repository.port';
+} from '@/modules/auth/application/user-access-token.port';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
+import { VERIFICATION_TOKEN_REPOSITORY } from '@/modules/auth/application/verification-token-repository.port';
 import {
   type IssuedVerificationToken,
   VERIFICATION_TOKEN,
   type VerificationTokenPort,
-} from '../application/verification-token.port';
+} from '@/modules/auth/application/verification-token.port';
 import {
   type InMemoryAccount,
   type InMemoryAuthState,
   createInMemoryAuthState,
   seedAccount,
-} from '../testing/in-memory-auth.state';
-import { InMemoryPasswordResetTokenAdapter } from '../testing/in-memory-password-reset-token.adapter';
-import { InMemoryRefreshSessionAdapter } from '../testing/in-memory-refresh-session.adapter';
-import { InMemoryUserAccountAdapter } from '../testing/in-memory-user-account.adapter';
-import { InMemoryVerificationTokenAdapter } from '../testing/in-memory-verification-token.adapter';
+} from '@/modules/auth/testing/in-memory-auth.state';
+import { InMemoryPasswordResetTokenAdapter } from '@/modules/auth/testing/in-memory-password-reset-token.adapter';
+import { InMemoryRefreshSessionAdapter } from '@/modules/auth/testing/in-memory-refresh-session.adapter';
+import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
+import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const EMAIL = 'person@example.com';

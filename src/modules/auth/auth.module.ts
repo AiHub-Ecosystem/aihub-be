@@ -3,12 +3,12 @@ import { Module } from '@nestjs/common';
 import {
   OPAQUE_TOKEN_BINDINGS,
   opaqueTokenIssuer,
-} from '../../common/security/opaque-token-issuer';
+} from '@/common/security/opaque-token-issuer';
 import {
   RUNTIME_SECRET_PROVIDER,
   type RuntimeSecretProvider,
-} from '../secrets/application/runtime-secret-provider.port';
-import { SecretsModule } from '../secrets/secrets.module';
+} from '@/modules/secrets/application/runtime-secret-provider.port';
+import { SecretsModule } from '@/modules/secrets/secrets.module';
 import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,

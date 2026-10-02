@@ -20,13 +20,13 @@ import { loadEnvFile } from 'node:process';
 
 import { ulid } from 'ulid';
 
-import { AppError } from '../src/common/errors/app-error';
-import type { RequestContext } from '../src/common/request-context/request-context';
-import { task1GradeAdapter } from '../src/downstream/writing/task1-grade.adapter';
-import { task2GradeAdapter } from '../src/downstream/writing/task2-grade.adapter';
-import type { DownstreamHttpRequestOptions } from '../src/modules/gateway/infrastructure/downstream-http.client';
-import { DownstreamHttpClient } from '../src/modules/gateway/infrastructure/downstream-http.client';
-import { createRuntimeSecretProviderFromProcessEnvironment } from '../src/modules/secrets/infrastructure/configured-runtime-secret.provider';
+import { AppError } from '@/common/errors/app-error';
+import type { RequestContext } from '@/common/request-context/request-context';
+import { task1GradeAdapter } from '@/downstream/writing/task1-grade.adapter';
+import { task2GradeAdapter } from '@/downstream/writing/task2-grade.adapter';
+import type { DownstreamHttpRequestOptions } from '@/modules/gateway/infrastructure/downstream-http.client';
+import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
+import { createRuntimeSecretProviderFromProcessEnvironment } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
 
 // ---------------------------------------------------------------------------
 // Public types

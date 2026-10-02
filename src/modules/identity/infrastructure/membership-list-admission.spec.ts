@@ -1,8 +1,8 @@
 import {
   ORGANIZATION_READ_ADMISSION,
   type OrganizationReadSurface,
-} from '../application/organization-admission';
-import type { OrganizationMembershipRole } from '../application/organization-membership.port';
+} from '@/modules/identity/application/organization-admission';
+import type { OrganizationMembershipRole } from '@/modules/identity/application/organization-membership.port';
 
 import { admittedRoles } from './postgres-organization-membership.repository';
 

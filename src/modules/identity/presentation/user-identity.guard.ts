@@ -6,16 +6,16 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
-import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
-import type { OperationId } from '../../../catalog/operation-id';
-import { AppError } from '../../../common/errors/app-error';
-import { userIdentityRequired } from '../../../common/errors/user-identity-required';
-import { addMeteringEvidence } from '../../metering/application/metering-evidence';
-import { invalidUserIdentity } from '../application/user-identity-errors';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import type { OperationId } from '@/catalog/operation-id';
+import { AppError } from '@/common/errors/app-error';
+import { userIdentityRequired } from '@/common/errors/user-identity-required';
+import { invalidUserIdentity } from '@/modules/identity/application/user-identity-errors';
 import {
   USER_IDENTITY_RESOLVER,
   type UserIdentityResolverPort,
-} from '../application/user-identity-resolver.port';
+} from '@/modules/identity/application/user-identity-resolver.port';
+import { addMeteringEvidence } from '@/modules/metering/application/metering-evidence';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,

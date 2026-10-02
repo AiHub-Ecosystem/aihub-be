@@ -1,4 +1,4 @@
-import type { RequestContext } from '../../../common/request-context/request-context';
+import type { RequestContext } from '@/common/request-context/request-context';
 import type { OrganizationStatus } from './api-key-authenticator.port';
 
 export type OrganizationMembershipMutationRole = 'admin' | 'member';

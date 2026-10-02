@@ -1,10 +1,10 @@
-import { AuthIdentityConflictError } from '../application/auth-identity-conflict.error';
+import { AuthIdentityConflictError } from '@/modules/auth/application/auth-identity-conflict.error';
 import type {
   LoginIdentity,
   RegisterLocalAccountInput,
   UserAccountRepositoryPort,
-} from '../application/user-account.port';
-import type { LocalAccountStatus } from '../domain/local-auth';
+} from '@/modules/auth/application/user-account.port';
+import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 import type { InMemoryAuthState } from './in-memory-auth.state';
 
 export class InMemoryUserAccountAdapter implements UserAccountRepositoryPort {

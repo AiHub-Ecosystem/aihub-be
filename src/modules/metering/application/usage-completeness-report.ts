@@ -1,5 +1,5 @@
-import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
-import type { DownstreamId } from '../../../downstream/downstream.types';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import type { DownstreamId } from '@/downstream/downstream.types';
 import { DOWNSTREAM_USAGE_REPORTING } from './metering.service';
 
 export interface UsageReportWindow {

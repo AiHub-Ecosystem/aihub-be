@@ -12,25 +12,25 @@ import {
 import { Value } from '@sinclair/typebox/value';
 import type { FastifyRequest } from 'fastify';
 
-import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
-import { AppError } from '../../../common/errors/app-error';
-import { invalidRequest } from '../../../common/errors/invalid-request';
+import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { AppError } from '@/common/errors/app-error';
+import { invalidRequest } from '@/common/errors/invalid-request';
 import {
   PublicJsonWebKeySetSchema,
   type ReadOrganizationIdentityConfigResponse,
   type SetOrganizationIdentityConfigRequest,
   SetOrganizationIdentityConfigRequestSchema,
-} from '../../../contracts/organization/identity-config';
-import { UserAccessJwtGuard } from '../../auth/presentation/user-access-jwt.guard';
-import type { StoredOrganizationIdentityConfig } from '../application/organization-identity-config-repository.port';
+} from '@/contracts/organization/identity-config';
+import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
+import type { StoredOrganizationIdentityConfig } from '@/modules/identity/application/organization-identity-config-repository.port';
 import {
   READ_ORGANIZATION_IDENTITY_CONFIG,
   type ReadOrganizationIdentityConfigPort,
-} from '../application/read-organization-identity-config.port';
+} from '@/modules/identity/application/read-organization-identity-config.port';
 import {
   SET_ORGANIZATION_IDENTITY_CONFIG,
   type SetOrganizationIdentityConfigPort,
-} from '../application/set-organization-identity-config.port';
+} from '@/modules/identity/application/set-organization-identity-config.port';
 
 import { bearerRequestContext } from './bearer-request-context';
 

@@ -1,5 +1,5 @@
-import { createRequestContext } from '../../../common/request-context/request-context.factory';
-import type { ListOrganizationAuditEventsInput } from '../application/organization-audit-event-read.port';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
+import type { ListOrganizationAuditEventsInput } from '@/modules/identity/application/organization-audit-event-read.port';
 
 import type { PostgresIdentityQueryClient } from './postgres-identity.client';
 import { PostgresOrganizationAuditReadRepository } from './postgres-organization-audit-read.repository';

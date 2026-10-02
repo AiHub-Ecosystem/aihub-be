@@ -1,4 +1,4 @@
-import type { ApiKeyStatus } from '../domain/api-key';
+import type { ApiKeyStatus } from '@/modules/identity/domain/api-key';
 
 /**
  * One key as the management surface presents it: the durable columns plus the

@@ -1,7 +1,7 @@
 import type {
   UsageRetentionBatch,
   UsageRetentionPort,
-} from '../modules/metering/application/usage-retention';
+} from '@/modules/metering/application/usage-retention';
 import { formatUsageRetentionEvent, runUsagePruneCommand } from './usage-prune';
 
 class FakeUsageRetentionPort implements UsageRetentionPort {

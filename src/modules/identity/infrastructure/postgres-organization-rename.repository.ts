@@ -1,10 +1,10 @@
-import { AppError } from '../../../common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import type {
   OrganizationRenamePort,
   RenameOrganizationRecordInput,
   RenameOrganizationRecordResult,
-} from '../application/organization-rename.port';
-import type { OrganizationAuditDraft } from '../domain/organization-audit-event';
+} from '@/modules/identity/application/organization-rename.port';
+import type { OrganizationAuditDraft } from '@/modules/identity/domain/organization-audit-event';
 
 import {
   identityStoreError,

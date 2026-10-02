@@ -1,5 +1,5 @@
-import { AppError } from '../../../common/errors/app-error';
-import type { RequestContext } from '../../../common/request-context/request-context';
+import { AppError } from '@/common/errors/app-error';
+import type { RequestContext } from '@/common/request-context/request-context';
 
 import type { ApiKeyCachePort } from './api-key-authenticator.port';
 import { generateOrganizationApiKey } from './organization-api-key-generator';

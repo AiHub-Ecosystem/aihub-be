@@ -4,19 +4,19 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 
-import { AppModule } from '../src/app.module';
+import { AppModule } from '@/app.module';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
-} from '../src/modules/auth/application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '../src/modules/auth/application/user-account.port';
-import { userAccountStatus } from '../src/modules/auth/testing/user-account-status.stub';
+} from '@/modules/auth/application/user-access-token.port';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
+import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
   ORGANIZATION_RENAME,
   type OrganizationRenamePort,
   type RenameOrganizationRecordInput,
   type RenameOrganizationRecordResult,
-} from '../src/modules/identity/application/organization-rename.port';
+} from '@/modules/identity/application/organization-rename.port';
 
 const OWNER_TOKEN = 'owner.token.value';
 const ADMIN_TOKEN = 'admin.token.value';

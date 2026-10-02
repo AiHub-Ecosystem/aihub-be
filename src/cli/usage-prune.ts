@@ -6,8 +6,8 @@ import {
   type UsageRetentionPort,
   UsageRetentionService,
   type UsageRetentionSummary,
-} from '../modules/metering/application/usage-retention';
-import { createPostgresUsageRetentionRepository } from '../modules/metering/infrastructure/postgres-usage-retention.repository';
+} from '@/modules/metering/application/usage-retention';
+import { createPostgresUsageRetentionRepository } from '@/modules/metering/infrastructure/postgres-usage-retention.repository';
 
 export interface UsagePruneCliInput {
   readonly databaseUrl: string;

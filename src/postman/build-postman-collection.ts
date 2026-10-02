@@ -1,9 +1,9 @@
 import { convert } from 'openapi-to-postmanv2';
 
-import { TASK1_SAMPLE_IMAGE_URL } from '../catalog/operation-catalog';
-import { PUBLIC_ROUTES } from '../catalog/public-routes';
-import { SPEAKING_SAMPLE_ANSWER } from '../modules/speaking/application/speaking-question-catalog';
-import { toOpenApiPath } from '../openapi/openapi-path';
+import { TASK1_SAMPLE_IMAGE_URL } from '@/catalog/operation-catalog';
+import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { SPEAKING_SAMPLE_ANSWER } from '@/modules/speaking/application/speaking-question-catalog';
+import { toOpenApiPath } from '@/openapi/openapi-path';
 
 const ORGANIZATION_ROSTER_PATH =
   PUBLIC_ROUTES['organizations.me.members.list'].path;

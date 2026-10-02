@@ -1,5 +1,5 @@
-import { AppError } from '../../../common/errors/app-error';
-import { hashApiKey, isApiKeyFormat } from '../domain/api-key';
+import { AppError } from '@/common/errors/app-error';
+import { hashApiKey, isApiKeyFormat } from '@/modules/identity/domain/api-key';
 
 import type {
   ApiKeyAuthenticatorPort,
@@ -14,7 +14,7 @@ import type {
 // The credential format lives in the domain so that the self-service endpoint,
 // this authenticator, and the operator CLI share one definition. Only
 // `isApiKeyFormat` is re-exported: the spec suite asserts through this module.
-export { isApiKeyFormat } from '../domain/api-key';
+export { isApiKeyFormat } from '@/modules/identity/domain/api-key';
 
 export const AUTH_FAILURE_LIMIT = 20;
 const AUTH_FAILURE_WINDOW_MS = 5 * 60 * 1_000;

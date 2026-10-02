@@ -1,13 +1,13 @@
-import type { LocalAccountStatus } from '../domain/local-auth';
+import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 import {
   type InMemoryAuthState,
   createInMemoryAuthState,
   seedAccount,
-} from '../testing/in-memory-auth.state';
-import { InMemoryPasswordResetTokenAdapter } from '../testing/in-memory-password-reset-token.adapter';
-import { InMemoryRefreshSessionAdapter } from '../testing/in-memory-refresh-session.adapter';
-import { InMemoryUserAccountAdapter } from '../testing/in-memory-user-account.adapter';
-import { InMemoryVerificationTokenAdapter } from '../testing/in-memory-verification-token.adapter';
+} from '@/modules/auth/testing/in-memory-auth.state';
+import { InMemoryPasswordResetTokenAdapter } from '@/modules/auth/testing/in-memory-password-reset-token.adapter';
+import { InMemoryRefreshSessionAdapter } from '@/modules/auth/testing/in-memory-refresh-session.adapter';
+import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
+import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
 import type { AuthRateLimiterPort } from './auth-rate-limiter.port';
 import type {
   EmailSenderPort,

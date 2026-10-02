@@ -1,19 +1,19 @@
 import { Controller, Get, Header, Inject, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
-import { Value } from '@sinclair/typebox/value';
-import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
-import { invalidRequest } from '../../../common/errors/invalid-request';
+import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { invalidRequest } from '@/common/errors/invalid-request';
 import {
   type SpeakingPart,
   SpeakingQuestionsQuerySchema,
   type SpeakingQuestionsResponse,
-} from '../../../contracts/speaking/questions';
+} from '@/contracts/speaking/questions';
 import {
   SPEAKING_AUDIO_STORAGE,
   type SpeakingAudioStoragePort,
-} from '../application/speaking-audio-storage.port';
-import { listSpeakingQuestions } from '../application/speaking-question-catalog';
+} from '@/modules/speaking/application/speaking-audio-storage.port';
+import { listSpeakingQuestions } from '@/modules/speaking/application/speaking-question-catalog';
+import { Value } from '@sinclair/typebox/value';
 
 function parsePart(value: unknown): SpeakingPart | undefined {
   if (value === undefined) {

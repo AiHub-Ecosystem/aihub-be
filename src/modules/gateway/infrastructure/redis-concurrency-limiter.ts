@@ -5,7 +5,7 @@ import type {
   ConcurrencyLease,
   ConcurrencyLimiterPort,
   ConcurrencyRequest,
-} from '../application/concurrency-limiter.port';
+} from '@/modules/gateway/application/concurrency-limiter.port';
 import type { RedisGatewayClient } from './redis-gateway.client';
 
 export type RedisConcurrencyClient = Pick<

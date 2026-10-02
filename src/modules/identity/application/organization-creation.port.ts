@@ -1,4 +1,4 @@
-import type { RequestContext } from '../../../common/request-context/request-context';
+import type { RequestContext } from '@/common/request-context/request-context';
 
 /**
  * The commercial terms a Self-serve Organization starts on. They are never

@@ -1,4 +1,4 @@
-import type { RequestContext } from '../../../common/request-context/request-context';
+import type { RequestContext } from '@/common/request-context/request-context';
 
 import type { DurableApiKeyStatus } from './api-key-authenticator.port';
 

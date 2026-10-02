@@ -1,20 +1,20 @@
 import type { ArgumentsHost, ExecutionContext } from '@nestjs/common';
 import { firstValueFrom, of } from 'rxjs';
 
-import { AppError } from '../../../common/errors/app-error';
-import type { AuthenticatedApiKey } from '../../identity/application/api-key-authenticator.port';
-import { openMeteringEvidence } from '../../metering/application/metering-evidence';
-import { MeteringService } from '../../metering/application/metering.service';
-import type {
-  UsageRecord,
-  UsageRepositoryPort,
-} from '../../metering/application/usage-repository.port';
-import { HttpExceptionFilter } from '../../metering/presentation/http-exception.filter';
-import { SuccessEnvelopeInterceptor } from '../../metering/presentation/success-envelope.interceptor';
+import { AppError } from '@/common/errors/app-error';
 import type {
   QuotaCounterPort,
   QuotaCounterRequest,
-} from '../application/quota-counter.port';
+} from '@/modules/gateway/application/quota-counter.port';
+import type { AuthenticatedApiKey } from '@/modules/identity/application/api-key-authenticator.port';
+import { openMeteringEvidence } from '@/modules/metering/application/metering-evidence';
+import { MeteringService } from '@/modules/metering/application/metering.service';
+import type {
+  UsageRecord,
+  UsageRepositoryPort,
+} from '@/modules/metering/application/usage-repository.port';
+import { HttpExceptionFilter } from '@/modules/metering/presentation/http-exception.filter';
+import { SuccessEnvelopeInterceptor } from '@/modules/metering/presentation/success-envelope.interceptor';
 import { QuotaGuard } from './quota.guard';
 
 class FakeQuotaCounter implements QuotaCounterPort {

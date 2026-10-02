@@ -1,9 +1,9 @@
-import type { RequestContext } from '../../../common/request-context/request-context';
+import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   OrganizationAuditAction,
   OrganizationAuditOutcome,
   OrganizationAuditTargetType,
-} from '../domain/organization-audit-event';
+} from '@/modules/identity/domain/organization-audit-event';
 
 /** The position a cursor resolves to: the last event of the previous page. */
 export interface OrganizationAuditEventPosition {

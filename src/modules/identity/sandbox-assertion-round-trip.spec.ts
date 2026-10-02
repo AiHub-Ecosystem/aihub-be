@@ -1,7 +1,7 @@
 import { exportJWK, exportPKCS8, generateKeyPair } from 'jose';
 
-import { AppError } from '../../common/errors/app-error';
-import { createRequestContext } from '../../common/request-context/request-context.factory';
+import { AppError } from '@/common/errors/app-error';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { JwksKeyProviderPort } from './application/jwks-key-provider.port';
 import { MintSandboxAssertion } from './application/mint-sandbox-assertion';
 import type {

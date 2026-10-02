@@ -3,36 +3,36 @@ import { type TObject, type TSchema, Type } from '@sinclair/typebox';
 import type {
   IdempotencyMode,
   OperationDef,
-} from '../catalog/operation-catalog';
-import { OPERATION_CATALOG } from '../catalog/operation-catalog';
-import { OPERATION_IDS } from '../catalog/operation-id';
-import type { OperationId } from '../catalog/operation-id';
-import type { PublicRouteId } from '../catalog/public-routes';
-import { PUBLIC_ROUTES } from '../catalog/public-routes';
-import { ERROR_CODES, type ErrorCode } from '../common/errors/error-code';
+} from '@/catalog/operation-catalog';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { OPERATION_IDS } from '@/catalog/operation-id';
+import type { OperationId } from '@/catalog/operation-id';
+import type { PublicRouteId } from '@/catalog/public-routes';
+import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { ERROR_CODES, type ErrorCode } from '@/common/errors/error-code';
 import {
   type HttpStatus,
   httpStatusForErrorCode,
-} from '../common/errors/error-registry';
+} from '@/common/errors/error-registry';
 import {
   ForgotPasswordResponseSchema,
   LoginResponseSchema,
   PASSWORD_POLICY_DESCRIPTION,
   RegisterResponseSchema,
-} from '../contracts/auth/local-auth';
+} from '@/contracts/auth/local-auth';
 import {
   DEFAULT_ORGANIZATION_AUDIT_PAGE_SIZE,
   MAX_ORGANIZATION_AUDIT_PAGE_SIZE,
   ORGANIZATION_AUDIT_ACTIONS,
   ORGANIZATION_AUDIT_OUTCOMES,
-} from '../contracts/organization/audit-event';
-import { MintSandboxAssertionResponseSchema } from '../contracts/sandbox/assertion';
-import { SpeakingQuestionsQuerySchema } from '../contracts/speaking/questions';
+} from '@/contracts/organization/audit-event';
+import { MintSandboxAssertionResponseSchema } from '@/contracts/sandbox/assertion';
+import { SpeakingQuestionsQuerySchema } from '@/contracts/speaking/questions';
 import {
   PASSWORD_MAX_CODE_POINTS,
   PASSWORD_MIN_CODE_POINTS,
-} from '../modules/auth/domain/local-auth';
-import { REFRESH_COOKIE_NAME } from '../modules/auth/presentation/refresh-cookie';
+} from '@/modules/auth/domain/local-auth';
+import { REFRESH_COOKIE_NAME } from '@/modules/auth/presentation/refresh-cookie';
 import { toOpenApiPath } from './openapi-path';
 
 /**

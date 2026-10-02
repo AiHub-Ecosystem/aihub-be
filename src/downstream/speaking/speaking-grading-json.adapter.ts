@@ -1,11 +1,11 @@
-import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
-import type { RequestContext } from '../../common/request-context/request-context';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   SpeakingGradeJsonInput,
   SpeakingGradeResponse,
-} from '../../contracts/speaking/grading';
-import type { DownstreamAdapter } from '../downstream-adapter';
-import type { DownstreamRequest } from '../downstream.types';
+} from '@/contracts/speaking/grading';
+import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
+import type { DownstreamRequest } from '@/downstream/downstream.types';
 import { parseSpeakingGradeResponse } from './speaking-grading-response.adapter';
 import { requiredSpeakingUserId } from './speaking-grading.adapter';
 

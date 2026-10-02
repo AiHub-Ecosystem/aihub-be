@@ -1,9 +1,9 @@
-import { AppError } from '../../../common/errors/app-error';
-import type { OrganizationStatus } from '../application/api-key-authenticator.port';
+import { AppError } from '@/common/errors/app-error';
+import type { OrganizationStatus } from '@/modules/identity/application/api-key-authenticator.port';
 import type {
   OrganizationMembershipRole,
   OrganizationMembershipStatus,
-} from '../application/organization-membership.port';
+} from '@/modules/identity/application/organization-membership.port';
 
 /**
  * Shared row readers for the identity repositories. Every durable value that

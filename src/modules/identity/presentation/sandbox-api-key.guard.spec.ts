@@ -3,8 +3,8 @@ import type { ExecutionContext } from '@nestjs/common';
 import type {
   ApiKeyAuthenticatorPort,
   AuthenticatedApiKey,
-} from '../application/api-key-authenticator.port';
-import type { SandboxAssertionPolicyPort } from '../application/sandbox-assertion-policy.port';
+} from '@/modules/identity/application/api-key-authenticator.port';
+import type { SandboxAssertionPolicyPort } from '@/modules/identity/application/sandbox-assertion-policy.port';
 import { SandboxApiKeyGuard } from './sandbox-api-key.guard';
 
 const authenticated: AuthenticatedApiKey = {

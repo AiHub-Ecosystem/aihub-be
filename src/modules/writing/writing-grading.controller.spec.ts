@@ -8,12 +8,12 @@ import {
 import { Test } from '@nestjs/testing';
 import { MockAgent } from 'undici';
 
-import { AppModule } from '../../app.module';
-import { registerRequestLifecycle } from '../../common/http/request-lifecycle.hook';
-import { generateRequestId } from '../../common/request-context/request-id';
-import { DownstreamHttpClient } from '../gateway/infrastructure/downstream-http.client';
-import { IDEMPOTENCY_REPOSITORY } from '../idempotency/application/idempotency-repository.port';
-import { InMemoryIdempotencyRepository } from '../idempotency/testing/in-memory-idempotency.repository';
+import { AppModule } from '@/app.module';
+import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { generateRequestId } from '@/common/request-context/request-id';
+import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
+import { IDEMPOTENCY_REPOSITORY } from '@/modules/idempotency/application/idempotency-repository.port';
+import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
 
 const FIXTURES = join(__dirname, '../../../test/fixtures/ai-writing');
 

@@ -4,41 +4,41 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 
-import { AppModule } from '../../../app.module';
+import { AppModule } from '@/app.module';
 import {
   USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenIssuerPort,
   type UserAccessTokenVerifierPort,
-} from '../../auth/application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '../../auth/application/user-account.port';
-import { userAccountStatus } from '../../auth/testing/user-account-status.stub';
+} from '@/modules/auth/application/user-access-token.port';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
+import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
   ORGANIZATION_READ_ADMISSION,
   type OrganizationReadSurface,
-} from '../application/organization-admission';
+} from '@/modules/identity/application/organization-admission';
 import {
   type ListOrganizationAuditEventsInput,
   ORGANIZATION_AUDIT_EVENT_READ,
   type OrganizationAuditEventReadPort,
-} from '../application/organization-audit-event-read.port';
+} from '@/modules/identity/application/organization-audit-event-read.port';
 import {
   ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
   type OrganizationIdentityConfigRepositoryPort,
-} from '../application/organization-identity-config-repository.port';
+} from '@/modules/identity/application/organization-identity-config-repository.port';
 import {
   type ListOpenOrganizationInvitationsInput,
   ORGANIZATION_INVITATION,
   type OpenOrganizationInvitationRecord,
   type OrganizationInvitationPort,
-} from '../application/organization-invitation.port';
+} from '@/modules/identity/application/organization-invitation.port';
 import {
   type ListRosterInput,
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
   type OrganizationMembershipRole,
   type OrganizationMembershipStatus,
-} from '../application/organization-membership.port';
+} from '@/modules/identity/application/organization-membership.port';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';

@@ -1,7 +1,7 @@
-import type { OperationId } from '../../../catalog/operation-id';
-import { AppError } from '../../../common/errors/app-error';
-import type { RequestContext } from '../../../common/request-context/request-context';
-import type { InternalTokenIssuerPort } from '../application/internal-token-issuer.port';
+import type { OperationId } from '@/catalog/operation-id';
+import { AppError } from '@/common/errors/app-error';
+import type { RequestContext } from '@/common/request-context/request-context';
+import type { InternalTokenIssuerPort } from '@/modules/gateway/application/internal-token-issuer.port';
 
 /**
  * Phase 1 credential provider. Phase 2 can replace this implementation with
