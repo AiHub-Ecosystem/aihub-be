@@ -14,6 +14,14 @@ export interface AppErrorOptions {
   readonly details?: Readonly<Record<string, unknown>>;
   readonly downstreamStatus?: number;
   readonly cause?: unknown;
+  /**
+   * What an operator needs to find the fault, written for the log and never
+   * for the client: it is not part of the envelope. It may name fields and
+   * kinds of mismatch and must never contain a value from a request or a
+   * downstream response. Unlike `cause`, which can carry anything and is never
+   * logged, this is vetted by whoever sets it.
+   */
+  readonly diagnostic?: string;
 }
 
 export class AppError extends Error {
@@ -23,6 +31,7 @@ export class AppError extends Error {
   readonly retryAfterMs?: number;
   readonly details?: Readonly<Record<string, unknown>>;
   readonly downstreamStatus?: number;
+  readonly diagnostic?: string;
 
   constructor(options: AppErrorOptions) {
     super(
@@ -40,6 +49,10 @@ export class AppError extends Error {
 
     if (options.downstreamStatus !== undefined) {
       this.downstreamStatus = options.downstreamStatus;
+    }
+
+    if (options.diagnostic !== undefined) {
+      this.diagnostic = options.diagnostic;
     }
 
     if (options.details !== undefined) {

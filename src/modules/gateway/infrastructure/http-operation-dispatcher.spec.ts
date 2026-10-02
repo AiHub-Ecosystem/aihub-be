@@ -490,4 +490,78 @@ describe('HttpOperationDispatcher', () => {
     expect(logLine).not.toContain(responseMarker);
     expect(downstreamMs(logLine)).toBeGreaterThanOrEqual(0);
   });
+
+  describe('a contract violation that carries a diagnostic', () => {
+    async function dispatchViolation(error: AppError): Promise<string> {
+      mockAgent
+        .get('https://ai-writing.test')
+        .intercept({ method: 'POST', path: '/grade' })
+        .reply(200, { unexpected: true });
+      const dispatcher = new HttpOperationDispatcher(
+        new DownstreamHttpClient('https://ai-writing.test', mockAgent),
+        new FakeTokenIssuer('token'),
+        [fakeGradeAdapter('/grade', error)],
+      );
+
+      await expect(
+        dispatcher.dispatch(
+          'writing.task1.grade',
+          {
+            question: 'question marker',
+            chart_type: 'Bar Chart',
+            essay: 'essay marker',
+            image_url: 'https://example.com/chart.png',
+          },
+          context(),
+        ),
+      ).rejects.toBe(error);
+      return readLogLine(loggerError);
+    }
+
+    it('logs it as the reason, and still never logs the cause', async () => {
+      const causeMarker = 'private cause marker';
+      const logLine = await dispatchViolation(
+        new AppError({
+          code: 'AI_SERVICE_CONTRACT_VIOLATION',
+          message: 'AI service returned an unexpected response shape',
+          retryable: false,
+          diagnostic:
+            '/pronunciation_detail/words/3/syllables/1/predicted_stress (Integer)',
+          cause: new Error(`contains ${causeMarker}`),
+        }),
+      );
+
+      expect(JSON.parse(logLine)).toMatchObject({
+        error_code: 'AI_SERVICE_CONTRACT_VIOLATION',
+        reason:
+          '/pronunciation_detail/words/3/syllables/1/predicted_stress (Integer)',
+      });
+      expect(logLine).not.toContain(causeMarker);
+    });
+
+    it('caps the reason, so an adapter cannot flood the log', async () => {
+      const logLine = await dispatchViolation(
+        new AppError({
+          code: 'AI_SERVICE_CONTRACT_VIOLATION',
+          message: 'AI service returned an unexpected response shape',
+          retryable: false,
+          diagnostic: 'x'.repeat(5_000),
+        }),
+      );
+
+      expect(JSON.parse(logLine).reason).toHaveLength(400);
+    });
+
+    it('omits the reason when the error carries none', async () => {
+      const logLine = await dispatchViolation(
+        new AppError({
+          code: 'AI_SERVICE_CONTRACT_VIOLATION',
+          message: 'AI service returned an unexpected response shape',
+          retryable: false,
+        }),
+      );
+
+      expect(JSON.parse(logLine)).not.toHaveProperty('reason');
+    });
+  });
 });

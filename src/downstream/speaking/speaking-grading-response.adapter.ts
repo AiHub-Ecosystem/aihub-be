@@ -1,4 +1,7 @@
+import { ValueErrorType } from '@sinclair/typebox/errors';
 import { Value } from '@sinclair/typebox/value';
+
+import type { TSchema } from '@sinclair/typebox';
 
 import { AppError } from '@/common/errors/app-error';
 import {
@@ -6,13 +9,43 @@ import {
   SpeakingGradeResponseSchema,
 } from '@/contracts/speaking/grading';
 
+/**
+ * `reason` reaches the log as the violation's diagnostic, so it names fields
+ * and kinds of mismatch and never a value from the provider's response.
+ */
 function contractViolation(reason: string): AppError {
   return new AppError({
     code: 'AI_SERVICE_CONTRACT_VIOLATION',
     message: 'AI service returned an unexpected response shape',
     retryable: false,
+    diagnostic: reason,
     cause: new Error(reason),
   });
+}
+
+const MAX_REPORTED_FAILURES = 3;
+const MAX_PATH_LENGTH = 120;
+
+/**
+ * The first few places `body` breaks `schema`, as `path (Kind)`: the JSON
+ * pointer to the field and the schema's own name for the mismatch, such as
+ * `Integer` for a null where a number belongs. Both come from the schema and
+ * the shape of the response, never from a value in it.
+ */
+function schemaFailures(schema: TSchema, body: unknown): string {
+  const failures: string[] = [];
+  for (const error of Value.Errors(schema, body)) {
+    // A key is provider-chosen text, so anything outside a plain field name is
+    // replaced rather than copied into the log.
+    const path = error.path.replace(/[^A-Za-z0-9_/.[\]-]/g, '?');
+    failures.push(
+      `${path.slice(0, MAX_PATH_LENGTH) || '/'} (${ValueErrorType[error.type] ?? 'Invalid'})`,
+    );
+    if (failures.length === MAX_REPORTED_FAILURES) {
+      break;
+    }
+  }
+  return failures.join('; ');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -146,7 +179,10 @@ export function parseSpeakingGradeResponse(
   };
 
   if (!Value.Check(SpeakingGradeResponseSchema, normalized)) {
-    throw contractViolation('normalized Speaking response failed validation');
+    throw contractViolation(
+      schemaFailures(SpeakingGradeResponseSchema, normalized) ||
+        'normalized Speaking response failed validation',
+    );
   }
 
   return Value.Parse(SpeakingGradeResponseSchema, normalized);

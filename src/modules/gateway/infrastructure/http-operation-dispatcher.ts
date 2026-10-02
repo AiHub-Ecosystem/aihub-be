@@ -83,6 +83,23 @@ function loggedDownstreamErrorCode(
   }
 }
 
+const MAX_LOGGED_REASON_LENGTH = 400;
+
+/**
+ * Only a diagnostic an adapter vetted for the log, never the error's `cause`,
+ * which can carry anything. Capped so no adapter can flood a log line.
+ */
+function contractViolationReason(error: unknown): string | undefined {
+  if (
+    !(error instanceof AppError) ||
+    error.code !== 'AI_SERVICE_CONTRACT_VIOLATION' ||
+    error.diagnostic === undefined
+  ) {
+    return undefined;
+  }
+  return error.diagnostic.slice(0, MAX_LOGGED_REASON_LENGTH);
+}
+
 function downstreamFailureMessage(
   code: LoggedDownstreamErrorCode,
   status: number | null,
@@ -300,6 +317,8 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
           Math.round(performance.now() - startedAt),
         );
 
+        const reason = contractViolationReason(error);
+
         this.logger.error(
           JSON.stringify({
             event: 'downstream_failed',
@@ -313,6 +332,7 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
             downstream_ms: downstreamMs,
             error_code: errorCode,
             message: downstreamFailureMessage(errorCode, downstreamStatus),
+            ...(reason === undefined ? {} : { reason }),
           }),
         );
       }
