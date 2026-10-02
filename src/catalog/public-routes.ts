@@ -477,10 +477,11 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: CreateAvatarUploadRequestSchema,
     responseSchema: AvatarUploadResponseSchema,
-    errorStatuses: [400, 401, 409, 413, 500, 503],
+    errorStatuses: [400, 401, 413, 500, 503],
   },
-  // `201` when this call records the Avatar; a repeated completion of the same
-  // asset answers `200` with the same body, which the path item documents.
+  // `201` when this call records the Avatar, first or replacement; a repeated
+  // completion of the same asset answers `200` with the same body, which the
+  // path item documents.
   'me.avatar.uploads.complete': {
     method: 'POST',
     path: '/v1/me/avatar/uploads/:assetId/complete',
@@ -492,6 +493,20 @@ export const PUBLIC_ROUTES = {
     requestSchema: null,
     responseSchema: AvatarResponseSchema,
     errorStatuses: [400, 401, 404, 409, 413, 500, 503],
+  },
+  // Always `204`, including for an account with no Avatar: absence is what
+  // was asked for.
+  'me.avatar.remove': {
+    method: 'DELETE',
+    path: '/v1/me/avatar',
+    callerAuth: 'bearer',
+    organizationResolution: 'none',
+    successStatus: 204,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: null,
+    errorStatuses: [401, 409, 500, 503],
   },
   'speaking.questions': {
     method: 'GET',

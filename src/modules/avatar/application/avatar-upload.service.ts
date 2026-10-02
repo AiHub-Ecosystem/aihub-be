@@ -36,10 +36,10 @@ function payloadTooLarge(): AppError {
   });
 }
 
-function avatarExists(): AppError {
+function avatarChanged(): AppError {
   return new AppError({
-    code: 'AVATAR_EXISTS',
-    message: 'This account already has an Avatar',
+    code: 'AVATAR_CHANGED',
+    message: 'The Avatar was changed by another request',
     retryable: false,
   });
 }
@@ -53,9 +53,13 @@ function uploadNotFound(): AppError {
 }
 
 /**
- * Mints an upload URL and records the Avatar once the upload has landed. No
- * upload intent is stored: completion rebuilds the key from the authenticated
- * account, so nothing exists between the two calls but the object itself.
+ * Sets, replaces, and removes the one Avatar an account holds (ADR-0068).
+ *
+ * No upload intent is stored: completion rebuilds the key from the
+ * authenticated account. A previous object is always deleted before the
+ * record stops naming it, so a failed delete changes nothing and a retry
+ * finishes the job; every record change is conditional on the Avatar this
+ * request read, so a concurrent change is reported rather than overwritten.
  */
 export class AvatarUploadService {
   constructor(
@@ -75,9 +79,6 @@ export class AvatarUploadService {
     }
     if (byteSize > AVATAR_MAX_BYTES) {
       throw payloadTooLarge();
-    }
-    if ((await this.avatars.findByUser(input.userId)) !== undefined) {
-      throw avatarExists();
     }
 
     const assetId = `ava_${ulid()}`;
@@ -103,15 +104,64 @@ export class AvatarUploadService {
       throw invalidRequest();
     }
 
-    const existing = await this.avatars.findByUser(input.userId);
-    if (existing !== undefined) {
-      if (existing.assetId === input.assetId) {
-        return { avatar: existing, created: false };
-      }
-      throw avatarExists();
+    const previous = await this.avatars.findByUser(input.userId);
+    if (previous?.assetId === input.assetId) {
+      return { avatar: previous, created: false };
     }
 
-    const objectKey = avatarObjectKey(input.userId, input.assetId);
+    const avatar = await this.verifiedUpload(input.userId, input.assetId);
+
+    if (previous === undefined) {
+      const result = await this.avatars.record(avatar);
+      if (result.kind === 'exists') {
+        await this.discard(avatar.objectKey);
+        throw avatarChanged();
+      }
+      return { avatar: result.avatar, created: result.kind === 'recorded' };
+    }
+
+    // Deleted before the record stops naming it: if this fails, nothing has
+    // changed, and retrying the completion retries the delete.
+    await this.storage.deleteObject(previous.objectKey);
+    if (await this.avatars.replace(previous.assetId, avatar)) {
+      return { avatar, created: true };
+    }
+
+    // Lost to another change. A concurrent completion of this same asset is a
+    // repeat, and its object is now the Avatar, so it must not be discarded.
+    const current = await this.avatars.findByUser(input.userId);
+    if (current?.assetId === input.assetId) {
+      return { avatar: current, created: false };
+    }
+    await this.discard(avatar.objectKey);
+    throw avatarChanged();
+  }
+
+  async removeAvatar(userId: string): Promise<void> {
+    const current = await this.avatars.findByUser(userId);
+    if (current === undefined) {
+      return;
+    }
+
+    // The object goes first: a failed delete leaves the Avatar as it was.
+    await this.storage.deleteObject(current.objectKey);
+    if (await this.avatars.remove(userId, current.assetId)) {
+      return;
+    }
+
+    // Another request changed it. Gone is what was asked for; a different
+    // Avatar swapped in meanwhile is not this request's to delete.
+    if ((await this.avatars.findByUser(userId)) !== undefined) {
+      throw avatarChanged();
+    }
+  }
+
+  /** Checks what landed against the rules, discarding a refused object. */
+  private async verifiedUpload(
+    userId: string,
+    assetId: string,
+  ): Promise<Avatar> {
+    const objectKey = avatarObjectKey(userId, assetId);
     const stored = await this.storage.describeObject(objectKey);
     if (stored === undefined) {
       throw uploadNotFound();
@@ -133,18 +183,14 @@ export class AvatarUploadService {
       throw invalidRequest();
     }
 
-    const result = await this.avatars.record({
-      assetId: input.assetId,
-      userId: input.userId,
+    return {
+      assetId,
+      userId,
       objectKey,
       contentType,
       byteSize,
       acceptedAt: this.now(),
-    });
-    if (result.kind === 'exists') {
-      throw avatarExists();
-    }
-    return { avatar: result.avatar, created: result.kind === 'recorded' };
+    };
   }
 
   /** Best-effort: a failed delete never changes why the upload was refused. */

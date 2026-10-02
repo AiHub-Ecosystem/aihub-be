@@ -285,7 +285,7 @@
         }
       },
       "Error409": {
-        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE | ORGANIZATION_MEMBER_EXISTS | ORGANIZATION_OWNER_REQUIRED | ORGANIZATION_IDENTITY_ISSUER_CONFLICT | ORGANIZATION_CREATION_LIMIT_REACHED | AVATAR_EXISTS",
+        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE | ORGANIZATION_MEMBER_EXISTS | ORGANIZATION_OWNER_REQUIRED | ORGANIZATION_IDENTITY_ISSUER_CONFLICT | ORGANIZATION_CREATION_LIMIT_REACHED | AVATAR_CHANGED",
         "content": {
           "application/json": {
             "schema": {
@@ -325,7 +325,7 @@
                           "type": "string"
                         },
                         {
-                          "const": "AVATAR_EXISTS",
+                          "const": "AVATAR_CHANGED",
                           "type": "string"
                         }
                       ]
@@ -3001,7 +3001,7 @@
       "post": {
         "operationId": "me.avatar.uploads.create",
         "summary": "Request an Avatar upload URL",
-        "description": "Mints a presigned `PUT` URL that writes exactly one object for the signed-in AIHUB User Account, with the declared content type and length bound into the signature. Send the image bytes straight to that URL with the returned headers; they never pass through AIHUB. Nothing is recorded until the upload is completed. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar is refused with `AVATAR_EXISTS`.",
+        "description": "Mints a presigned `PUT` URL that writes exactly one object for the signed-in AIHUB User Account, with the declared content type and length bound into the signature. Send the image bytes straight to that URL with the returned headers; they never pass through AIHUB. Nothing is recorded until the upload is completed. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar may request one to replace it.",
         "x-identity-scope": "none",
         "security": [
           {
@@ -3143,9 +3143,6 @@
           "401": {
             "$ref": "#/components/responses/Error401"
           },
-          "409": {
-            "$ref": "#/components/responses/Error409"
-          },
           "413": {
             "$ref": "#/components/responses/Error413"
           },
@@ -3162,7 +3159,7 @@
       "post": {
         "operationId": "me.avatar.uploads.complete",
         "summary": "Complete an Avatar upload",
-        "description": "Checks the object that actually landed for this asset and records it as the Avatar of the signed-in AIHUB User Account. An object that is missing answers `404`; one that is larger than 2 MiB, has an unsupported type, or is empty is refused and deleted. The response describes the image and never contains its storage location.",
+        "description": "Checks the object that actually landed for this asset and records it as the Avatar of the signed-in AIHUB User Account. An object that is missing answers `404`; one that is larger than 2 MiB, has an unsupported type, or is empty is refused and deleted. When the account already has a different Avatar, its image is deleted first and the new one replaces it; if that delete fails the account keeps its Avatar and the call answers `503`, and retrying finishes the replacement. `409 AVATAR_CHANGED` means another request changed the Avatar first; re-read before retrying. The response describes the image and never contains its storage location.",
         "x-identity-scope": "none",
         "security": [
           {
@@ -3251,7 +3248,7 @@
             }
           },
           "201": {
-            "description": "Avatar recorded by this call.",
+            "description": "Avatar recorded by this call, first or replacement.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3329,6 +3326,41 @@
           },
           "413": {
             "$ref": "#/components/responses/Error413"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/v1/me/avatar": {
+      "delete": {
+        "operationId": "me.avatar.remove",
+        "summary": "Remove the Avatar",
+        "description": "Deletes the Avatar image and its record for the signed-in AIHUB User Account. Idempotent: an account with no Avatar also answers `204`. If the image cannot be deleted the account keeps its Avatar and the call answers `503`; retrying finishes the removal. `409 AVATAR_CHANGED` means another request replaced the Avatar meanwhile, and the replacement is kept.",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The account has no Avatar."
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
           },
           "500": {
             "$ref": "#/components/responses/Error500"

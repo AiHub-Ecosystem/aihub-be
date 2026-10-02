@@ -26,6 +26,24 @@ const INSERT_SQL = `
   RETURNING id
 `;
 
+// Conditional on the asset the caller read: a concurrent change makes these
+// match nothing, and the caller learns it lost rather than overwriting.
+const REPLACE_SQL = `
+  UPDATE user_avatars
+  SET id = $3, object_key = $4, content_type = $5, byte_size = $6,
+      accepted_at = $7
+  WHERE user_account_id = $1
+    AND id = $2
+  RETURNING id
+`;
+
+const DELETE_SQL = `
+  DELETE FROM user_avatars
+  WHERE user_account_id = $1
+    AND id = $2
+  RETURNING id
+`;
+
 export interface AvatarQueryClient {
   query(
     text: string,
@@ -72,29 +90,18 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
   constructor(private readonly client: AvatarQueryClient) {}
 
   async findByUser(userId: string): Promise<Avatar | undefined> {
-    let rows: readonly Record<string, unknown>[];
-    try {
-      ({ rows } = await this.client.query(FIND_BY_USER_SQL, [userId]));
-    } catch (error) {
-      throw storeError(error);
-    }
-    return mapRow(rows[0]);
+    return mapRow((await this.run(FIND_BY_USER_SQL, [userId]))[0]);
   }
 
   async record(avatar: Avatar): Promise<RecordAvatarResult> {
-    let inserted: readonly Record<string, unknown>[];
-    try {
-      ({ rows: inserted } = await this.client.query(INSERT_SQL, [
-        avatar.assetId,
-        avatar.userId,
-        avatar.objectKey,
-        avatar.contentType,
-        avatar.byteSize,
-        avatar.acceptedAt,
-      ]));
-    } catch (error) {
-      throw storeError(error);
-    }
+    const inserted = await this.run(INSERT_SQL, [
+      avatar.assetId,
+      avatar.userId,
+      avatar.objectKey,
+      avatar.contentType,
+      avatar.byteSize,
+      avatar.acceptedAt,
+    ]);
     if (inserted.length === 1) {
       return { kind: 'recorded', avatar };
     }
@@ -104,6 +111,34 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
       return { kind: 'already_recorded', avatar: existing };
     }
     return { kind: 'exists' };
+  }
+
+  async replace(previousAssetId: string, avatar: Avatar): Promise<boolean> {
+    const updated = await this.run(REPLACE_SQL, [
+      avatar.userId,
+      previousAssetId,
+      avatar.assetId,
+      avatar.objectKey,
+      avatar.contentType,
+      avatar.byteSize,
+      avatar.acceptedAt,
+    ]);
+    return updated.length === 1;
+  }
+
+  async remove(userId: string, assetId: string): Promise<boolean> {
+    return (await this.run(DELETE_SQL, [userId, assetId])).length === 1;
+  }
+
+  private async run(
+    sql: string,
+    values: readonly unknown[],
+  ): Promise<readonly Record<string, unknown>[]> {
+    try {
+      return (await this.client.query(sql, values)).rows;
+    } catch (error) {
+      throw storeError(error);
+    }
   }
 }
 

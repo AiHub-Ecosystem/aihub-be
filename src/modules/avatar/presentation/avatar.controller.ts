@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Header,
   HttpCode,
   Param,
@@ -106,5 +107,12 @@ export class AvatarController {
       },
       meta: { request_id: requestId },
     };
+  }
+
+  @Delete(PUBLIC_ROUTES['me.avatar.remove'].path)
+  @HttpCode(PUBLIC_ROUTES['me.avatar.remove'].successStatus)
+  async removeAvatar(@Req() request: FastifyRequest): Promise<void> {
+    const { userId } = authenticatedUser(request);
+    await this.uploads.removeAvatar(userId);
   }
 }

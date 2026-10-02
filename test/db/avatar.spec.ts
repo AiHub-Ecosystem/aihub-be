@@ -119,3 +119,87 @@ describe('Avatar records against PostgreSQL', () => {
     await expect(repository.findByUser(userId)).resolves.toBeUndefined();
   });
 });
+
+describe('Avatar replacement and removal against PostgreSQL', () => {
+  let current: Avatar;
+
+  beforeEach(async () => {
+    current = avatar(userId);
+    await repository.record(current);
+  });
+
+  it('replaces the Avatar while the record still names the previous asset', async () => {
+    const next = avatar(userId, { contentType: 'image/webp', byteSize: 99 });
+
+    await expect(repository.replace(current.assetId, next)).resolves.toBe(true);
+    await expect(repository.findByUser(userId)).resolves.toEqual(next);
+  });
+
+  it('changes nothing when the record no longer names the previous asset', async () => {
+    const stale = `ava_${ulid()}`;
+
+    await expect(repository.replace(stale, avatar(userId))).resolves.toBe(
+      false,
+    );
+    await expect(repository.findByUser(userId)).resolves.toEqual(current);
+  });
+
+  it('lets exactly one of two concurrent replacements apply', async () => {
+    const results = await Promise.all([
+      repository.replace(current.assetId, avatar(userId)),
+      repository.replace(current.assetId, avatar(userId)),
+    ]);
+
+    expect(results.filter(Boolean)).toHaveLength(1);
+    const rows = await pool.query(
+      'SELECT id FROM user_avatars WHERE user_account_id = $1',
+      [userId],
+    );
+    expect(rows.rowCount).toBe(1);
+  });
+
+  it('still refuses a replacement whose key does not name its owner', async () => {
+    const other = await seedAccount();
+
+    await expect(
+      repository.replace(
+        current.assetId,
+        avatar(userId, { objectKey: avatarObjectKey(other, `ava_${ulid()}`) }),
+      ),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+    await expect(repository.findByUser(userId)).resolves.toEqual(current);
+  });
+
+  it('removes the record while it still names the asset', async () => {
+    await expect(repository.remove(userId, current.assetId)).resolves.toBe(
+      true,
+    );
+    await expect(repository.findByUser(userId)).resolves.toBeUndefined();
+  });
+
+  it('keeps a record that no longer names the asset', async () => {
+    await expect(repository.remove(userId, `ava_${ulid()}`)).resolves.toBe(
+      false,
+    );
+    await expect(repository.findByUser(userId)).resolves.toEqual(current);
+  });
+
+  it('never removes another account record', async () => {
+    const other = await seedAccount();
+
+    await expect(repository.remove(other, current.assetId)).resolves.toBe(
+      false,
+    );
+    await expect(repository.findByUser(userId)).resolves.toEqual(current);
+  });
+
+  it('records a new first Avatar after removal', async () => {
+    await repository.remove(userId, current.assetId);
+    const next = avatar(userId);
+
+    await expect(repository.record(next)).resolves.toEqual({
+      kind: 'recorded',
+      avatar: next,
+    });
+  });
+});

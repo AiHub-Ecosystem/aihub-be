@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-02
-- Related issue: [#214](https://github.com/AiHub-Ecosystem/aihub-be/issues/214)
+- Related issues: [#214](https://github.com/AiHub-Ecosystem/aihub-be/issues/214), [#215](https://github.com/AiHub-Ecosystem/aihub-be/issues/215)
 - Related: [ADR-0065](0065-aihub-owns-audio-asset-catalog-and-playback-urls.md), [ADR-0066](0066-cross-module-imports-are-checked-not-yet-forbidden.md), [ADR-0060](0060-writing-task1-sample-image-is-published-not-signed.md)
 
 ## Context
@@ -36,6 +36,16 @@ customer-uploaded asset AIHUB builds.
    AIHUB has checked the stored object's size and type. No upload intent is
    stored between the two calls; completion rebuilds the key from the
    authenticated account.
+6. Replacing goes through the same upload. When the account already has a
+   different Avatar, completion deletes the previous object first and then
+   changes the record. Removing deletes the object first and then the record.
+   A failed object delete therefore changes nothing and answers
+   `AVATAR_STORAGE_UNAVAILABLE`, and retrying finishes the job, because
+   deleting a missing object succeeds.
+7. Every record change is conditional on the Avatar the request read. When
+   another request changed it first, the change does not apply, the request
+   deletes the object it uploaded, and it answers `AVATAR_CHANGED`. A
+   concurrent completion of the same asset is a repeat, not a lost race.
 
 Everything else in ADR-0065, including AIHUB minting every URL and the gateway
 never proxying bytes, applies unchanged.
@@ -48,6 +58,10 @@ never proxying bytes, applies unchanged.
   to the account with `ON DELETE RESTRICT`.
 - The completion check is the guarantee. Whether SeaweedFS enforces a signed
   `Content-Length` is unverified, and the check holds either way.
+- If the database fails between deleting the previous object and changing
+  the record, the record briefly names an object that no longer exists, until
+  the completion is retried. This is the price of having no pending-deletion
+  state: no orphan object and no queue to drain.
 - An object that is uploaded but never completed stays in the bucket with no
   record. This is accepted for the first slice and tracked in
   [#217](https://github.com/AiHub-Ecosystem/aihub-be/issues/217).
@@ -64,5 +78,8 @@ never proxying bytes, applies unchanged.
 - **Reuse the Speaking sample bucket.** Rejected: ADR-0065 keeps
   customer-uploaded data out of the sample bucket, and a missing setting must
   never put a customer image into it.
+- **Change the record first, then delete the previous object.** Rejected: a
+  failed delete would leave the previous object with nothing naming it, and
+  saving it would need a durable pending-deletion table and a retry loop.
 - **A generic asset module now.** Rejected for the same reason ADR-0065 gave:
   generalise when the Audio asset exists, with two real shapes to compare.

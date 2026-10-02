@@ -1370,7 +1370,7 @@ function avatarUploadPathItem(): Record<string, unknown> {
       operationId: id,
       summary: 'Request an Avatar upload URL',
       description:
-        'Mints a presigned `PUT` URL that writes exactly one object for the signed-in AIHUB User Account, with the declared content type and length bound into the signature. Send the image bytes straight to that URL with the returned headers; they never pass through AIHUB. Nothing is recorded until the upload is completed. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar is refused with `AVATAR_EXISTS`.',
+        'Mints a presigned `PUT` URL that writes exactly one object for the signed-in AIHUB User Account, with the declared content type and length bound into the signature. Send the image bytes straight to that URL with the returned headers; they never pass through AIHUB. Nothing is recorded until the upload is completed. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar may request one to replace it.',
       ...routeIdentityScopeOf(id),
       ...routeSecurityOf(id),
       parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
@@ -1410,7 +1410,7 @@ function avatarCompletePathItem(): Record<string, unknown> {
       operationId: id,
       summary: 'Complete an Avatar upload',
       description:
-        'Checks the object that actually landed for this asset and records it as the Avatar of the signed-in AIHUB User Account. An object that is missing answers `404`; one that is larger than 2 MiB, has an unsupported type, or is empty is refused and deleted. The response describes the image and never contains its storage location.',
+        'Checks the object that actually landed for this asset and records it as the Avatar of the signed-in AIHUB User Account. An object that is missing answers `404`; one that is larger than 2 MiB, has an unsupported type, or is empty is refused and deleted. When the account already has a different Avatar, its image is deleted first and the new one replaces it; if that delete fails the account keeps its Avatar and the call answers `503`, and retrying finishes the replacement. `409 AVATAR_CHANGED` means another request changed the Avatar first; re-read before retrying. The response describes the image and never contains its storage location.',
       ...routeIdentityScopeOf(id),
       ...routeSecurityOf(id),
       parameters: [
@@ -1425,13 +1425,35 @@ function avatarCompletePathItem(): Record<string, unknown> {
       ],
       responses: {
         [routeSuccessKeyOf(id)]: {
-          description: 'Avatar recorded by this call.',
+          description: 'Avatar recorded by this call, first or replacement.',
           content: avatarContent,
         },
         '200': {
           description:
             'This asset was already recorded as the Avatar by an earlier completion; the same Avatar is returned.',
           content: avatarContent,
+        },
+        ...routeErrorResponsesOf(id),
+      },
+    },
+  };
+}
+
+function avatarItemPathItem(): Record<string, unknown> {
+  const id = 'me.avatar.remove' as const;
+
+  return {
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
+      operationId: id,
+      summary: 'Remove the Avatar',
+      description:
+        'Deletes the Avatar image and its record for the signed-in AIHUB User Account. Idempotent: an account with no Avatar also answers `204`. If the image cannot be deleted the account keeps its Avatar and the call answers `503`; retrying finishes the removal. `409 AVATAR_CHANGED` means another request replaced the Avatar meanwhile, and the replacement is kept.',
+      ...routeIdentityScopeOf(id),
+      ...routeSecurityOf(id),
+      parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+      responses: {
+        [routeSuccessKeyOf(id)]: {
+          description: 'The account has no Avatar.',
         },
         ...routeErrorResponsesOf(id),
       },
@@ -1533,6 +1555,7 @@ export function buildOpenApiDocument(version: string): unknown {
   paths[routePathOf('speaking.questions')] = speakingQuestionsPathItem();
   paths[routePathOf('me.avatar.uploads.create')] = avatarUploadPathItem();
   paths[routePathOf('me.avatar.uploads.complete')] = avatarCompletePathItem();
+  paths[routePathOf('me.avatar.remove')] = avatarItemPathItem();
   paths[routePathOf('organizations.create')] = organizationPathItem();
   paths[routePathOf('organizations.rename')] = organizationItemPathItem();
   paths[routePathOf('organizations.me.members.list')] =

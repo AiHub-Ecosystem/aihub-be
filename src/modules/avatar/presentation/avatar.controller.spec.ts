@@ -130,6 +130,7 @@ describe('Avatar upload HTTP flow', () => {
     storage.unavailable = false;
     storage.deleteFails = false;
     repository.avatars.clear();
+    repository.beforeNextChange = undefined;
   });
 
   function requestUpload(
@@ -228,14 +229,13 @@ describe('Avatar upload HTTP flow', () => {
       expect(response.statusCode).toBe(201);
     });
 
-    it('refuses an account that already has an Avatar', async () => {
+    it('mints a URL for an account that already has an Avatar, to replace it', async () => {
       const { assetId } = await uploadedAsset();
       await complete(assetId);
 
       const response = await requestUpload();
 
-      expect(response.statusCode).toBe(409);
-      expect(response.json().error.code).toBe('AVATAR_EXISTS');
+      expect(response.statusCode).toBe(201);
     });
 
     it('answers a retryable storage-unavailable error when storage fails', async () => {
@@ -371,22 +371,6 @@ describe('Avatar upload HTTP flow', () => {
       expect(response.json().error.code).toBe('INVALID_REQUEST');
     });
 
-    it('refuses a second, different Avatar', async () => {
-      const first = await uploadedAsset();
-      await complete(first.assetId);
-      const secondAssetId = 'ava_01J00000000000000000000077';
-      storage.objects.set(`users/${USER_ID}/avatar/${secondAssetId}/original`, {
-        contentType: 'image/png',
-        byteSize: 10,
-      });
-
-      const response = await complete(secondAssetId);
-
-      expect(response.statusCode).toBe(409);
-      expect(response.json().error.code).toBe('AVATAR_EXISTS');
-      expect(repository.avatars.get(USER_ID)?.assetId).toBe(first.assetId);
-    });
-
     it('answers a retryable storage-unavailable error when storage fails', async () => {
       const { assetId } = await uploadedAsset();
       storage.unavailable = true;
@@ -399,11 +383,261 @@ describe('Avatar upload HTTP flow', () => {
     });
   });
 
+  describe('replacing an Avatar', () => {
+    async function currentAvatar(): Promise<{
+      assetId: string;
+      objectKey: string;
+    }> {
+      const uploaded = await uploadedAsset();
+      await complete(uploaded.assetId);
+      storage.deleted.length = 0;
+      return uploaded;
+    }
+
+    it('swaps in the new Avatar and deletes the previous object', async () => {
+      const previous = await currentAvatar();
+      const next = await uploadedAsset({
+        contentType: 'image/webp',
+        byteSize: 99,
+      });
+
+      const response = await complete(next.assetId);
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json().data).toMatchObject({
+        asset_id: next.assetId,
+        content_type: 'image/webp',
+        byte_size: 99,
+      });
+      expect(repository.avatars.get(USER_ID)?.assetId).toBe(next.assetId);
+      expect(storage.deleted).toEqual([previous.objectKey]);
+      expect(storage.objects.has(previous.objectKey)).toBe(false);
+      expect(storage.objects.has(next.objectKey)).toBe(true);
+    });
+
+    it('keeps the previous Avatar when the replacement is refused', async () => {
+      const previous = await currentAvatar();
+      const next = await uploadedAsset({
+        contentType: 'image/svg+xml',
+        byteSize: 10,
+      });
+
+      const response = await complete(next.assetId);
+
+      expect(response.statusCode).toBe(400);
+      expect(repository.avatars.get(USER_ID)?.assetId).toBe(previous.assetId);
+      expect(storage.deleted).toEqual([next.objectKey]);
+      expect(storage.objects.has(previous.objectKey)).toBe(true);
+    });
+
+    it('changes nothing when the previous object cannot be deleted, and a retry finishes', async () => {
+      const previous = await currentAvatar();
+      const next = await uploadedAsset();
+      storage.deleteFails = true;
+
+      const failed = await complete(next.assetId);
+
+      expect(failed.statusCode).toBe(503);
+      expect(failed.json().error.code).toBe('AVATAR_STORAGE_UNAVAILABLE');
+      expect(repository.avatars.get(USER_ID)?.assetId).toBe(previous.assetId);
+      expect(storage.objects.has(previous.objectKey)).toBe(true);
+      expect(storage.objects.has(next.objectKey)).toBe(true);
+
+      storage.deleteFails = false;
+      const retried = await complete(next.assetId);
+
+      expect(retried.statusCode).toBe(201);
+      expect(repository.avatars.get(USER_ID)?.assetId).toBe(next.assetId);
+      expect(storage.objects.has(previous.objectKey)).toBe(false);
+    });
+
+    it('answers not found for an asset that was already replaced', async () => {
+      const previous = await currentAvatar();
+      const next = await uploadedAsset();
+      await complete(next.assetId);
+
+      const response = await complete(previous.assetId);
+
+      expect(response.statusCode).toBe(404);
+      expect(repository.avatars.get(USER_ID)?.assetId).toBe(next.assetId);
+    });
+
+    it('answers AVATAR_CHANGED and deletes its own object when another change wins', async () => {
+      await currentAvatar();
+      const next = await uploadedAsset();
+      const winner = await uploadedAsset();
+      repository.beforeNextChange = () => {
+        const current = repository.avatars.get(USER_ID);
+        if (current !== undefined) {
+          repository.avatars.set(USER_ID, {
+            ...current,
+            assetId: winner.assetId,
+            objectKey: winner.objectKey,
+          });
+        }
+      };
+
+      const response = await complete(next.assetId);
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.code).toBe('AVATAR_CHANGED');
+      expect(repository.avatars.get(USER_ID)?.assetId).toBe(winner.assetId);
+      expect(storage.objects.has(next.objectKey)).toBe(false);
+      expect(storage.objects.has(winner.objectKey)).toBe(true);
+    });
+
+    it('treats a concurrent completion of the same asset as a repeat, not a lost race', async () => {
+      const previous = await currentAvatar();
+      const next = await uploadedAsset();
+      repository.beforeNextChange = () => {
+        const current = repository.avatars.get(USER_ID);
+        if (current !== undefined) {
+          repository.avatars.set(USER_ID, {
+            ...current,
+            assetId: next.assetId,
+            objectKey: next.objectKey,
+          });
+        }
+      };
+
+      const response = await complete(next.assetId);
+
+      expect(response.statusCode).toBe(200);
+      expect(repository.avatars.get(USER_ID)?.assetId).toBe(next.assetId);
+      expect(storage.objects.has(next.objectKey)).toBe(true);
+      expect(storage.objects.has(previous.objectKey)).toBe(false);
+    });
+
+    it('answers AVATAR_CHANGED when two first uploads race', async () => {
+      const mine = await uploadedAsset();
+      const winner = await uploadedAsset();
+      repository.beforeNextChange = () => {
+        repository.avatars.set(USER_ID, {
+          assetId: winner.assetId,
+          userId: USER_ID,
+          objectKey: winner.objectKey,
+          contentType: 'image/png',
+          byteSize: 1234,
+          acceptedAt: new Date(),
+        });
+      };
+
+      const response = await complete(mine.assetId);
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.code).toBe('AVATAR_CHANGED');
+      expect(storage.objects.has(mine.objectKey)).toBe(false);
+      expect(storage.objects.has(winner.objectKey)).toBe(true);
+    });
+  });
+
+  describe('removing an Avatar', () => {
+    function remove(token = 'valid.token.value') {
+      return app.inject({
+        method: 'DELETE',
+        url: '/v1/me/avatar',
+        headers: { authorization: `Bearer ${token}` },
+      });
+    }
+
+    it('deletes the object and the record', async () => {
+      const { assetId, objectKey } = await uploadedAsset();
+      await complete(assetId);
+
+      const response = await remove();
+
+      expect(response.statusCode).toBe(204);
+      expect(response.body).toBe('');
+      expect(repository.avatars.size).toBe(0);
+      expect(storage.objects.has(objectKey)).toBe(false);
+    });
+
+    it('succeeds for an account without an Avatar', async () => {
+      const response = await remove();
+
+      expect(response.statusCode).toBe(204);
+      expect(storage.deleted).toEqual([]);
+    });
+
+    it('is idempotent', async () => {
+      const { assetId } = await uploadedAsset();
+      await complete(assetId);
+
+      expect((await remove()).statusCode).toBe(204);
+      expect((await remove()).statusCode).toBe(204);
+      expect(repository.avatars.size).toBe(0);
+    });
+
+    it('keeps the Avatar when the object cannot be deleted, and a retry finishes', async () => {
+      const { assetId, objectKey } = await uploadedAsset();
+      await complete(assetId);
+      storage.deleteFails = true;
+
+      const failed = await remove();
+
+      expect(failed.statusCode).toBe(503);
+      expect(failed.json().error.code).toBe('AVATAR_STORAGE_UNAVAILABLE');
+      expect(repository.avatars.get(USER_ID)?.assetId).toBe(assetId);
+      expect(storage.objects.has(objectKey)).toBe(true);
+
+      storage.deleteFails = false;
+      expect((await remove()).statusCode).toBe(204);
+      expect(repository.avatars.size).toBe(0);
+    });
+
+    it('answers AVATAR_CHANGED and keeps an Avatar swapped in meanwhile', async () => {
+      const { assetId } = await uploadedAsset();
+      await complete(assetId);
+      const winner = await uploadedAsset();
+      repository.beforeNextChange = () => {
+        const current = repository.avatars.get(USER_ID);
+        if (current !== undefined) {
+          repository.avatars.set(USER_ID, {
+            ...current,
+            assetId: winner.assetId,
+            objectKey: winner.objectKey,
+          });
+        }
+      };
+
+      const response = await remove();
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.code).toBe('AVATAR_CHANGED');
+      expect(repository.avatars.get(USER_ID)?.assetId).toBe(winner.assetId);
+      expect(storage.objects.has(winner.objectKey)).toBe(true);
+    });
+
+    it('treats a concurrent removal as done', async () => {
+      const { assetId } = await uploadedAsset();
+      await complete(assetId);
+      repository.beforeNextChange = () => {
+        repository.avatars.delete(USER_ID);
+      };
+
+      const response = await remove();
+
+      expect(response.statusCode).toBe(204);
+      expect(repository.avatars.size).toBe(0);
+    });
+
+    it('only ever removes the caller own Avatar', async () => {
+      const { assetId } = await uploadedAsset();
+      await complete(assetId);
+
+      const response = await remove('other.token.value');
+
+      expect(response.statusCode).toBe(204);
+      expect(repository.avatars.get(USER_ID)?.assetId).toBe(assetId);
+      expect(storage.deleted).toEqual([]);
+    });
+  });
+
   describe('authentication', () => {
     it.each([
       ['no token', undefined],
       ['an invalid token', 'Bearer nope'],
-    ])('refuses %s on both routes', async (_, authorization) => {
+    ])('refuses %s on every route', async (_, authorization) => {
       const headers = authorization === undefined ? {} : { authorization };
       const upload = await app.inject({
         method: 'POST',
@@ -417,9 +651,17 @@ describe('Avatar upload HTTP flow', () => {
         headers,
       });
 
+      const removal = await app.inject({
+        method: 'DELETE',
+        url: '/v1/me/avatar',
+        headers,
+      });
+
       expect(upload.statusCode).toBe(401);
       expect(completion.statusCode).toBe(401);
+      expect(removal.statusCode).toBe(401);
       expect(storage.signed).toEqual([]);
+      expect(storage.deleted).toEqual([]);
     });
 
     it('refuses an account that is not active before any URL is minted', async () => {
@@ -429,6 +671,22 @@ describe('Avatar upload HTTP flow', () => {
 
       expect(response.statusCode).toBe(401);
       expect(storage.signed).toEqual([]);
+    });
+
+    it('refuses an account that is not active before anything is deleted', async () => {
+      const { assetId } = await uploadedAsset();
+      await complete(assetId);
+      accountStatus = 'disabled';
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/v1/me/avatar',
+        headers: { authorization: 'Bearer valid.token.value' },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(repository.avatars.size).toBe(1);
+      expect(storage.deleted).toEqual([]);
     });
   });
 });
