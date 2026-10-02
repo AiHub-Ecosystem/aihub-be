@@ -20,8 +20,36 @@ updates:
     labels:
       - "dependencies"
     groups:
-      # One PR for the transitive tree beats a dozen single-bump PRs that each
-      # fail CI on their own.
-      dependencies:
+      # Minor and patch bumps share one PR: they rarely break anything, and one
+      # PR beats a dozen single-bump PRs that each fail CI on their own.
+      #
+      # Major bumps are deliberately left out of the group. Folded into it, one
+      # major that needs a migration turns the whole PR red and hides the rest
+      # (PR #218 bundled ten majors and failed at install, lint, type-check, and
+      # test, each for a different reason). Ungrouped, each major arrives as its
+      # own PR that can be reviewed, migrated, and merged or closed alone.
+      minor-and-patch:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Majors that need a migration of this repository's own tooling first.
+      # Each one is ignored only for major versions, so minor and patch fixes
+      # still flow through the group above. Remove an entry once its migration
+      # is done, then let Dependabot propose the major on its own.
+      #
+      # typescript 7 drops the compiler API that scripts/check-import-style.ts
+      # reads; jest 30 and biome 2 change their configuration formats; and
+      # @types/node must follow the Node major the image actually runs.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/jest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@biomejs/biome"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
