@@ -640,6 +640,28 @@ until its backup and disposal have been approved separately.
 
 ## Verify and operate
 
+### Checking deployed state
+
+`ops/status.sh` reports, for the production and Sandbox containers, the commit
+each runs, its state and health, a `/health` probe from inside the container, its
+restart count, and the number of error-like log lines since it started. It
+changes nothing. Nothing is installed on the host; the script travels over
+stdin, and the host user needs the same `sudo -n docker` access the deploy uses:
+
+```sh
+ssh <user>@<host> 'bash -s -- <expected-commit-sha>' < ops/status.sh
+```
+
+Pass the commit you expect (for example `git rev-parse origin/main`) and a
+container on any other commit is reported `FAIL`, so "is the latest code live?"
+has a yes-or-no answer. The exit status is 1 when any container is missing, not
+running, not healthy, failing its probe, or on another commit. A non-zero
+`errors=` count is not a failure by itself: read those lines, because they
+include real errors such as a downstream contract violation.
+
+Use an SSH key for this, not a password: a credential pasted into a chat or a
+ticket stays in its history.
+
 ### Optional request tracing
 
 Set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` in `.env.production` to an OTLP/HTTP

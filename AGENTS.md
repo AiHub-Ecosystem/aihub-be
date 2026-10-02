@@ -47,6 +47,10 @@ If an older architecture draft conflicts with an implementation spec, record the
 - Downstream adapters are pure. Dispatcher/HTTP infrastructure owns hosts, timeouts, cancellation, internal tokens, and error translation.
 - Never invent a downstream response shape. Map only from a captured fixture; if none exists, stop at the contract boundary and surface the blocker rather than guessing. The Writing grading contract is resolved and its fixtures live in `test/fixtures/ai-writing/`, so this rule now applies to the next service, not to Writing.
 
+### Deployed state
+
+To check what is live on the production host (commit, health, errors since start), run `ops/status.sh` as `docs/operations/deploy-vps.md` describes under "Checking deployed state".
+
 ### Required verification
 
 Use the narrowest check while iterating, then run the full loop before handoff:
