@@ -1,5 +1,5 @@
 import { request as httpRequest } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import type { AddressInfo, Socket } from 'node:net';
 
 import { Logger } from '@nestjs/common';
 import {
@@ -450,6 +450,16 @@ describe('request completion log over the HTTP boundary', () => {
     const { port }: AddressInfo = address;
     const body = JSON.stringify(VALID_BODY);
 
+    // The server must have seen the connection close before the handler is
+    // released; otherwise it can still write the reply, and the event is then
+    // legitimate.
+    const serverSawClose = new Promise<void>((resolve) => {
+      app
+        .getHttpServer()
+        .once('connection', (socket: Socket) =>
+          socket.once('close', () => resolve()),
+        );
+    });
     const clientLeft = new Promise<void>((resolve) => {
       const outgoing = httpRequest(
         {
@@ -474,6 +484,7 @@ describe('request completion log over the HTTP boundary', () => {
     });
 
     await clientLeft;
+    await serverSawClose;
     stalled.release();
     // The server's late reply has nowhere to go; give it time to finish.
     await new Promise((resolve) => setTimeout(resolve, 50));
