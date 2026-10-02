@@ -44,6 +44,10 @@ When your output names a domain concept (in an issue title, a refactor proposal,
 
 If the concept you need isn't in the glossary yet, that's a signal: either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 
+## Check what an ADR says about the world
+
+An ADR's statements about an external system (a host, a bucket, a vendor's behaviour) are claims as of its date, and nothing re-checks them. Before a spec or another ADR builds on one, check the system itself, or record the claim as unverified. ADR-0060 said a public bucket needs a change to the host's `s3.json`; it does not, and three later documents had repeated it.
+
 ## Flag ADR conflicts
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
