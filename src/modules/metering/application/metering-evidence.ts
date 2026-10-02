@@ -19,6 +19,8 @@ export interface MeteringEvidence {
   actorId?: string;
   downstreamMs?: number;
   aiProcessingMs?: number;
+  /** The total time the Metering record was written with; also the one the Request Completion Event reports. */
+  totalMs?: number;
   usage?: MeteringUsage;
   models?: readonly MeteringModel[];
   idempotentReplay?: boolean;

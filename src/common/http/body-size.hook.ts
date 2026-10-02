@@ -1,4 +1,5 @@
 import { OPERATION_CATALOG } from '../../catalog/operation-catalog';
+import type { ErrorCode } from '../errors/error-code';
 import { createErrorEnvelope } from '../errors/error-envelope';
 import { isRequestId } from '../request-context/request-id';
 import { recordRequestFailure } from './request-failure.recorder';
@@ -19,7 +20,7 @@ const MAX_BODY_BYTES_BY_PATH: ReadonlyMap<string, number> = new Map(
 interface OnRequestParams {
   readonly url: string;
   readonly id: unknown;
-  readonly raw: unknown;
+  aihubFailureCode?: ErrorCode;
   readonly headers: Readonly<Record<string, string | string[] | undefined>>;
 }
 
@@ -98,7 +99,7 @@ export function registerBodySizeGuard(instance: HookableFastifyInstance): void {
       const requestId = isRequestId(request.id) ? request.id : 'unknown';
       // This reply never reaches the exception filter, so the rejection records
       // its own public error code for the Request Completion Event.
-      recordRequestFailure(request.raw, 'PAYLOAD_TOO_LARGE');
+      recordRequestFailure(request, 'PAYLOAD_TOO_LARGE');
       reply.code(413).send(
         createErrorEnvelope({
           code: 'PAYLOAD_TOO_LARGE',

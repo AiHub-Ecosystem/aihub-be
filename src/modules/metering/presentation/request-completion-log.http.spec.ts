@@ -1,3 +1,6 @@
+import { request as httpRequest } from 'node:http';
+import type { AddressInfo } from 'node:net';
+
 import { Logger } from '@nestjs/common';
 import {
   FastifyAdapter,
@@ -15,11 +18,9 @@ import { AppModule } from '../../../app.module';
 import { OPERATION_CATALOG } from '../../../catalog/operation-catalog';
 import { PUBLIC_ROUTES } from '../../../catalog/public-routes';
 import { AppError } from '../../../common/errors/app-error';
-import { registerBodySizeGuard } from '../../../common/http/body-size.hook';
-import { registerRequestLifecycle } from '../../../common/http/request-lifecycle.hook';
-import { registerRequestTracing } from '../../../common/http/request-tracing.hook';
 import { createRequestLogging } from '../../../common/observability/request-logger';
 import { generateRequestId } from '../../../common/request-context/request-id';
+import { registerRequestHooks } from '../../../register-request-hooks';
 import type { DispatchResult } from '../../gateway/application/operation-dispatcher.port';
 import { OPERATION_DISPATCHER } from '../../gateway/application/operation-dispatcher.port';
 import { QUOTA_COUNTER } from '../../gateway/application/quota-counter.port';
@@ -34,9 +35,9 @@ import { IDEMPOTENCY_SERVICE } from '../../idempotency/application/idempotency-s
 import type {
   UsageAggregate,
   UsageAggregateQuery,
+  UsageRecord,
 } from '../application/usage-repository.port';
 import { USAGE_REPOSITORY } from '../application/usage-repository.port';
-import { registerRequestCompletionLog } from './request-completion-log.hook';
 
 const GRADE_OPERATION = OPERATION_CATALOG['writing.task1.grade'];
 const GRADE_URL = GRADE_OPERATION.path;
@@ -53,6 +54,10 @@ const VALID_BODY = {
 const REQUEST_ID_PATTERN = /^req_[0-9A-HJKMNP-TV-Z]{26}$/;
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /** Stands in for container stdout, so assertions read the real log lines. */
 class CapturedLog {
   private readonly lines: string[] = [];
@@ -66,9 +71,14 @@ class CapturedLog {
   }
 
   all(): Record<string, unknown>[] {
-    return this.lines.map(
-      (line) => JSON.parse(line) as Record<string, unknown>,
-    );
+    return this.lines.map((line) => {
+      const parsed: unknown = JSON.parse(line);
+      if (!isRecord(parsed)) {
+        throw new Error('expected every log line to be a JSON object');
+      }
+
+      return parsed;
+    });
   }
 
   completions(): Record<string, unknown>[] {
@@ -82,13 +92,14 @@ class CapturedLog {
    */
   only(): Record<string, unknown> {
     const completions = this.completions();
-    if (completions.length !== 1) {
+    const [completion] = completions;
+    if (completions.length !== 1 || completion === undefined) {
       throw new Error(
         `expected exactly one request_completed line, wrote ${completions.length}`,
       );
     }
 
-    return completions[0] as Record<string, unknown>;
+    return completion;
   }
 }
 
@@ -111,11 +122,31 @@ class ScriptedDispatcher {
     this.behaviour = () => Promise.resolve(GRADED_RESPONSE);
   }
 
+  /** Holds the next dispatch until `release` is called, so a client can leave first. */
+  stall(): { readonly started: Promise<void>; readonly release: () => void } {
+    let release: () => void = () => undefined;
+    let started: () => void = () => undefined;
+    const startedPromise = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.behaviour = async () => {
+      started();
+      await gate;
+      return GRADED_RESPONSE;
+    };
+
+    return { started: startedPromise, release };
+  }
+
   dispatch = (): Promise<DispatchResult<unknown>> => this.behaviour();
 }
 
 /** A metering repository that can be armed to reject, so the real MeteringService runs. */
 class ScriptedUsageRepository {
+  readonly records: UsageRecord[] = [];
   private failing = false;
 
   failInserts(): void {
@@ -126,10 +157,13 @@ class ScriptedUsageRepository {
     this.failing = false;
   }
 
-  insert(): Promise<void> {
-    return this.failing
-      ? Promise.reject(new Error('metering store unavailable'))
-      : Promise.resolve();
+  insert(record: UsageRecord): Promise<void> {
+    if (this.failing) {
+      return Promise.reject(new Error('metering store unavailable'));
+    }
+
+    this.records.push(record);
+    return Promise.resolve();
   }
 
   aggregate(_query: UsageAggregateQuery): Promise<UsageAggregate> {
@@ -166,6 +200,17 @@ describe('request completion log over the HTTP boundary', () => {
   const usageRepository = new ScriptedUsageRepository();
   const originalAllowBypass = process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV;
   const originalNodeEnv = process.env.NODE_ENV;
+
+  function restoreEnvironment(
+    name: string,
+    original: string | undefined,
+  ): void {
+    if (original === undefined) {
+      delete process.env[name];
+    } else {
+      process.env[name] = original;
+    }
+  }
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
@@ -205,28 +250,26 @@ describe('request completion log over the HTTP boundary', () => {
       }),
     );
 
-    // The hooks the application bootstrap registers, in the order it registers
-    // them, so the test proves the shape that actually ships.
+    // The same hooks, in the same order, as the application bootstrap.
     const fastify = app.getHttpAdapter().getInstance();
-    registerRequestTracing(fastify, trace.getTracer('aihub.request.test'));
-    registerBodySizeGuard(fastify);
-    registerRequestLifecycle(fastify);
-    registerRequestCompletionLog(fastify);
+    registerRequestHooks(fastify, trace.getTracer('aihub.request.test'));
 
     await app.init();
     await fastify.ready();
+    await app.listen(0, '127.0.0.1');
   });
 
   afterAll(async () => {
     await app.close();
     await sdk.shutdown();
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = originalAllowBypass;
-    process.env.NODE_ENV = originalNodeEnv;
+    restoreEnvironment('AIHUB_ALLOW_UNAUTHENTICATED_DEV', originalAllowBypass);
+    restoreEnvironment('NODE_ENV', originalNodeEnv);
   });
 
   beforeEach(() => {
     dispatcher.succeed();
     usageRepository.succeed();
+    usageRepository.records.length = 0;
     log.reset();
     exporter.reset();
   });
@@ -240,6 +283,9 @@ describe('request completion log over the HTTP boundary', () => {
     });
 
     expect(response.statusCode).toBe(200);
+    // Fastify's own per-request lines are off, so the completion event is the
+    // only line the request writes.
+    expect(log.all()).toHaveLength(1);
     expect(log.only()).toEqual({
       level: 'info',
       time: expect.any(Number),
@@ -255,6 +301,19 @@ describe('request completion log over the HTTP boundary', () => {
       operation: 'writing.task1.grade',
       environment: 'development',
     });
+  });
+
+  it('reports the same total time the Metering record was written with', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: GRADE_URL,
+      headers: { 'idempotency-key': 'completion-total' },
+      payload: VALID_BODY,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(usageRepository.records).toHaveLength(1);
+    expect(log.only()['total_ms']).toBe(usageRepository.records[0]?.totalMs);
   });
 
   it('writes one event with the public error code for a validation failure', async () => {
@@ -380,6 +439,46 @@ describe('request completion log over the HTTP boundary', () => {
     expect(Object.keys(event)).not.toContain('org_id');
     expect(Object.keys(event)).not.toContain('operation');
     expect(Object.keys(event)).not.toContain('environment');
+  });
+
+  it('writes no event for a request the client abandoned before a response', async () => {
+    const stalled = dispatcher.stall();
+    const address = app.getHttpServer().address();
+    if (address === null || typeof address === 'string') {
+      throw new Error('expected the test server to listen on a TCP port');
+    }
+    const { port }: AddressInfo = address;
+    const body = JSON.stringify(VALID_BODY);
+
+    const clientLeft = new Promise<void>((resolve) => {
+      const outgoing = httpRequest(
+        {
+          host: '127.0.0.1',
+          port,
+          method: 'POST',
+          path: GRADE_URL,
+          headers: {
+            'content-type': 'application/json',
+            'content-length': Buffer.byteLength(body),
+            'idempotency-key': 'completion-abandoned',
+          },
+        },
+        () => undefined,
+      );
+      outgoing.on('error', () => resolve());
+      outgoing.on('close', () => resolve());
+      outgoing.end(body);
+      // The dispatcher is reached only once the request is past every hook, so
+      // the client leaves while the server is still working on it.
+      void stalled.started.then(() => outgoing.destroy());
+    });
+
+    await clientLeft;
+    stalled.release();
+    // The server's late reply has nowhere to go; give it time to finish.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(log.completions()).toHaveLength(0);
   });
 
   it('writes no event for a health probe', async () => {

@@ -38,6 +38,7 @@ export async function completeRequestMetering(
   }
 
   evidence.settled = true;
+  evidence.totalMs = completion.totalMs;
   await finalizer.finalize(record(evidence, completion)).catch(() => undefined);
 }
 

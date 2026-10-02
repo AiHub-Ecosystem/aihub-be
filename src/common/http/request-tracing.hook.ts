@@ -16,25 +16,19 @@ interface RequestTraceState {
 
 const traces = new WeakMap<object, RequestTraceState>();
 
-/**
- * Kept apart from `traces` because that map is emptied the moment the span
- * ends, while a consumer reporting after the response — the Request Completion
- * Event — still needs the id. A `WeakMap` entry costs nothing to leave behind:
- * the request object owns its own lifetime.
- */
-const traceIds = new WeakMap<object, string>();
-
-/**
- * The trace this request is running inside, for a consumer that reports once
- * the span has ended. `undefined` when request tracing is not registered.
- */
-export function readRequestTraceId(rawRequest: unknown): string | undefined {
-  return typeof rawRequest === 'object' && rawRequest !== null
-    ? traceIds.get(rawRequest)
-    : undefined;
+declare module 'fastify' {
+  interface FastifyRequest {
+    /**
+     * The trace this request runs inside. Kept on the request rather than in
+     * `traces`, which is emptied the moment the span ends, because a consumer
+     * reporting after the response — the Request Completion Event — still
+     * needs it. Absent when request tracing is not registered.
+     */
+    aihubTraceId?: string;
+  }
 }
 
-function routeTemplate(request: FastifyRequest): string {
+export function routeTemplate(request: FastifyRequest): string {
   return request.routeOptions.url ?? 'unmatched';
 }
 
@@ -79,7 +73,7 @@ export function registerRequestTracing(
     );
 
     traces.set(request.raw, { span });
-    traceIds.set(request.raw, span.spanContext().traceId);
+    request.aihubTraceId = span.spanContext().traceId;
     const requestContext = trace.setSpan(context.active(), span);
     context.with(requestContext, done);
   });

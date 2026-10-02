@@ -79,14 +79,7 @@ describe('registerRequestLifecycle', () => {
     expect(getRequestLifecycle(rawRequest)).toBeUndefined();
   });
 
-  /**
-   * Fastify advances its `onResponse` chain only when a hook takes the `done`
-   * callback. This hook disposes request state, and anything registered after
-   * it — the Request Completion Event is registered last, on purpose — is only
-   * reached if it calls `done`. A one-parameter handler looks promise-style,
-   * returns undefined, and ends the chain silently, which is a log line that
-   * never appears rather than an error anyone would see.
-   */
+  // The reason a hook must take `done` is on the hook itself.
   it('leaves the response chain open for hooks registered after it', async () => {
     const seen: number[] = [];
     app = Fastify();

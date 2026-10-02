@@ -22,7 +22,7 @@ import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
 } from '../application/metering-finalizer.port';
-import { meteringOutcome } from '../application/request-outcome';
+import { requestOutcome } from '../application/request-outcome';
 
 interface FrameworkError {
   readonly code: ErrorCode;
@@ -76,7 +76,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // Reported for the Request Completion Event, so a failure line carries the
     // same public error code the caller received rather than one derived from
     // the status after the fact.
-    recordRequestFailure(request.raw, envelope.error.code);
+    recordRequestFailure(request, envelope.error.code);
 
     // A request whose id never validated cannot be identified, so there is
     // nothing to write a record against.
@@ -86,7 +86,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         this.metering,
         {
           requestId,
-          outcome: meteringOutcome(exception, status),
+          outcome: requestOutcome(status, envelope.error.code),
           httpStatus: status,
           errorCode: envelope.error.code,
           // Fastify's own response window, which starts once the reply is being

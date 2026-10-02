@@ -1,6 +1,31 @@
 import type { FastifyServerOptions } from 'fastify';
 
 const DEFAULT_LOG_LEVEL = 'info';
+const LOG_LEVELS = [
+  'fatal',
+  'error',
+  'warn',
+  'info',
+  'debug',
+  'trace',
+  'silent',
+] as const;
+
+/**
+ * Fails at boot, with the name of the setting, rather than letting Pino throw
+ * an error about a level nobody can trace back to `LOG_LEVEL`.
+ */
+function configuredLogLevel(): string {
+  const configured = process.env.LOG_LEVEL?.trim() || DEFAULT_LOG_LEVEL;
+  const level = LOG_LEVELS.find((candidate) => candidate === configured);
+  if (level === undefined) {
+    throw new Error(
+      `LOG_LEVEL must be one of ${LOG_LEVELS.join(', ')}; got "${configured}"`,
+    );
+  }
+
+  return level;
+}
 
 /**
  * Where the lines go. Structural rather than Pino's own type because `pino` is
@@ -46,7 +71,7 @@ export function createRequestLogging(
       // Read here rather than passed in from the bootstrap because this file is
       // the explicit boundary adapter that builds the server's logging
       // configuration, the same way `open-telemetry.ts` reads its own.
-      level: process.env.LOG_LEVEL?.trim() || DEFAULT_LOG_LEVEL,
+      level: configuredLogLevel(),
       // `null` drops the pid and hostname bindings: lines stay identical
       // across replicas and carry nothing that differs per process.
       base: null,

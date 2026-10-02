@@ -291,6 +291,11 @@ describe('cross-module import rule over the real tree', () => {
   });
 });
 
+/** Source with comments removed, so prose that mentions the variable does not count as a read. */
+function withoutComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+}
+
 function commonFilesReadingEnvironment(): string[] {
   const commonDirectory = join(__dirname, '..', 'src', 'common');
 
@@ -302,19 +307,20 @@ function commonFilesReadingEnvironment(): string[] {
         !entry.name.endsWith('.spec.ts'),
     )
     .map((entry) => join(entry.parentPath, entry.name))
-    .filter((file) => /\bprocess\.env\b/.test(readFileSync(file, 'utf8')))
+    .filter((file) =>
+      /\bprocess\.env\b/.test(withoutComments(readFileSync(file, 'utf8'))),
+    )
     .map((file) => relative(commonDirectory, file).split(/[\\/]/).join('/'))
     .sort();
 }
 
 /**
  * `.claude/rules/common.md` lets a file under `src/common` read the
- * environment only when it is an explicit boundary adapter, and
- * `check-architecture.mjs` fails the build for one that is not on its list.
+ * environment only when it is an explicit boundary adapter, and names them.
  *
- * That list is the decision, so it is pinned here too: a new common file that
- * reads `process.env` has to add a visible line to the rule and to this
- * expectation, rather than pass by sitting next to a file that already does.
+ * This list is the one place that decision is enforced: a new common file that
+ * reads `process.env` fails here until it is added to this expectation and to
+ * the rule, rather than passing by sitting next to a file that already does.
  * Comparing the whole list also catches the other direction - a boundary
  * adapter that stopped reading anything - which a rule alone would not notice.
  */
