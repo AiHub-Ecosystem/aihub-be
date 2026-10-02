@@ -55,18 +55,11 @@ describe('createRequestLogging against Fastify', () => {
   });
 
   // `logController` is checked with `instanceof` against the Fastify the Nest
-  // adapter loads, and an adapter built from a controller of another copy
-  // throws at boot with a message about a controller that looks right.
+  // adapter loads; `test/fastify-resolution.spec.ts` holds that this is the
+  // same copy, and this proves the adapter accepts the controller.
   it('is accepted by the adapter the application boots with', () => {
     expect(
       () => new FastifyAdapter({ ...createRequestLogging() }),
     ).not.toThrow();
-  });
-
-  it('resolves one copy of Fastify for the project and for the Nest adapter', () => {
-    const ours = require.resolve('fastify');
-    const adapters = require.resolve('@nestjs/platform-fastify');
-
-    expect(require.resolve('fastify', { paths: [adapters] })).toBe(ours);
   });
 });

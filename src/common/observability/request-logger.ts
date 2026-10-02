@@ -67,7 +67,7 @@ export function createRequestLogging(
     // Fastify checks a `logController` with `instanceof`, against the copy of
     // `fastify` that `@nestjs/platform-fastify` loads. While the two resolve to
     // one module that holds; if they ever stop, the server refuses to boot.
-    // `request-logger.spec.ts` fails first and names the cause.
+    // `test/fastify-resolution.spec.ts` fails first and names the cause.
     logController: new LogController({ disableRequestLogging: true }),
     logger: {
       // Read here rather than passed in from the bootstrap because this file is
