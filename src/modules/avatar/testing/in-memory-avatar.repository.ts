@@ -17,6 +17,15 @@ export class InMemoryAvatarRepository implements AvatarRepositoryPort {
     return this.avatars.get(userId);
   }
 
+  async recordedObjectKeys(
+    objectKeys: readonly string[],
+  ): Promise<ReadonlySet<string>> {
+    const recorded = new Set(
+      [...this.avatars.values()].map((avatar) => avatar.objectKey),
+    );
+    return new Set(objectKeys.filter((key) => recorded.has(key)));
+  }
+
   async record(avatar: Avatar): Promise<RecordAvatarResult> {
     this.runConcurrentChange();
     const existing = this.avatars.get(avatar.userId);

@@ -159,6 +159,10 @@ services:
       <<: *app-environment
       AIHUB_RUNTIME_DATABASE_SCOPE: sandbox
       CUSTOMER_WEB_BASE_URL: ${CUSTOMER_WEB_SANDBOX_BASE_URL:-}
+      # Its own Avatar bucket: the records live in the Sandbox database, so a
+      # shared bucket would make each deployment's sweep delete the other's
+      # live Avatars. Unset leaves the Sandbox Avatar routes at 503 (ADR-0068).
+      SEAWEEDFS_USER_ASSET_BUCKET: ${SEAWEEDFS_SANDBOX_USER_ASSET_BUCKET:-}
     networks: *app-database-networks
     ports:
       - "127.0.0.1:${AIHUB_SANDBOX_APP_PORT:-3022}:3000"

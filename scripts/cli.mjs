@@ -83,6 +83,11 @@ const usagePruneDescriptor = cliRunnerDescriptor(
   'runUsagePruneCommand',
   'usage prune command is unavailable',
 );
+const avatarSweepDescriptor = cliRunnerDescriptor(
+  'avatar-sweep',
+  'runAvatarSweepCommand',
+  'avatar sweep command is unavailable',
+);
 const usageReportDescriptor = cliRunnerDescriptor(
   'usage-report',
   'runUsageReportCommand',
@@ -729,6 +734,26 @@ async function attachFirstOwnerCommand(options) {
   }
 }
 
+// Deletes Avatar objects that no record names once they are old enough
+// (ADR-0068). `--dry-run true` reports without deleting. The summary is one
+// JSON line, and any failed delete makes the exit status non-zero so cron
+// alerts on a partial run. Run it once per deployment, like `usage:prune`.
+async function sweepAvatarsCommand(options) {
+  for (const name of options.keys()) {
+    if (name !== 'dry-run') {
+      usageError();
+    }
+  }
+
+  const summary = await runCliCommand(avatarSweepDescriptor, {
+    databaseUrl: process.env.DATABASE_URL ?? '',
+    dryRun: booleanOption(options, 'dry-run'),
+  });
+  if (summary.failed > 0) {
+    throw new Error('avatar sweep could not delete every orphaned object');
+  }
+}
+
 async function pruneUsageCommand(options) {
   if (options.size > 0) {
     usageError();
@@ -795,6 +820,10 @@ async function main() {
   }
   if (command === 'org:grant-entitlement') {
     await organizationGrantEntitlementCommand(options);
+    return;
+  }
+  if (command === 'avatar:sweep') {
+    await sweepAvatarsCommand(options);
     return;
   }
   if (command === 'usage:prune') {

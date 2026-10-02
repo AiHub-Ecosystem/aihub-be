@@ -10,6 +10,9 @@ export const AVATAR_CONTENT_TYPES = [
 
 export type AvatarContentType = (typeof AVATAR_CONTENT_TYPES)[number];
 
+/** Every Avatar object key starts here. */
+export const AVATAR_OBJECT_PREFIX = 'users/';
+
 export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 
 export const AVATAR_UPLOAD_URL_TTL_SECONDS = 5 * 60;
@@ -21,7 +24,21 @@ export const AVATAR_UPLOAD_URL_TTL_SECONDS = 5 * 60;
  */
 export const AVATAR_CACHE_CONTROL = 'public, max-age=3600';
 
+/**
+ * A completion adopts only an object this young, measured from storage's own
+ * last-modified time (ADR-0068). The sweep below waits far longer, so the two
+ * can never act on the same object.
+ */
+export const AVATAR_COMPLETION_WINDOW_MS = 60 * 60 * 1000;
+
+/** How old an unrecorded object must be before the sweep deletes it. */
+export const AVATAR_SWEEP_GRACE_MS = 24 * 60 * 60 * 1000;
+
 const ASSET_ID_PATTERN = /^ava_[0-9A-HJKMNP-TV-Z]{26}$/;
+
+/** Every key `avatarObjectKey` can produce, and nothing else. */
+const OBJECT_KEY_PATTERN =
+  /^users\/usr_[0-9A-HJKMNP-TV-Z]{26}\/avatar\/ava_[0-9A-HJKMNP-TV-Z]{26}\/original$/;
 
 export interface Avatar {
   readonly assetId: string;
@@ -36,6 +53,11 @@ export function isAvatarContentType(
   value: string | undefined,
 ): value is AvatarContentType {
   return AVATAR_CONTENT_TYPES.some((type) => type === value);
+}
+
+/** The sweep deletes only keys it recognises as its own layout. */
+export function isAvatarObjectKey(value: string): boolean {
+  return OBJECT_KEY_PATTERN.test(value);
 }
 
 export function isAvatarAssetId(value: string): boolean {

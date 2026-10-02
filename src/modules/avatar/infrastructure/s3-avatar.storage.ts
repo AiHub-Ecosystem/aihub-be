@@ -1,6 +1,8 @@
 import {
   DeleteObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
+  type ListObjectsV2CommandOutput,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -10,6 +12,7 @@ import { AppError } from '@/common/errors/app-error';
 import type {
   AvatarStoragePort,
   AvatarUploadUrl,
+  ListedAvatarObject,
   StoredAvatarObject,
 } from '@/modules/avatar/application/avatar-storage.port';
 import {
@@ -206,7 +209,11 @@ export class S3AvatarStorage implements AvatarStoragePort {
       const head = await client.send(
         new HeadObjectCommand({ Bucket: bucket, Key: objectKey }),
       );
-      return { contentType: head.ContentType, byteSize: head.ContentLength };
+      return {
+        contentType: head.ContentType,
+        byteSize: head.ContentLength,
+        lastModified: head.LastModified,
+      };
     } catch (error) {
       if (isNotFound(error)) {
         return undefined;
@@ -224,6 +231,39 @@ export class S3AvatarStorage implements AvatarStoragePort {
     } catch (error) {
       throw storageUnavailable(error);
     }
+  }
+
+  async *listObjects(prefix: string): AsyncIterable<ListedAvatarObject> {
+    if (this.configured === undefined) {
+      throw storageUnavailable();
+    }
+    const { client, bucket } = this.configured;
+
+    let continuationToken: string | undefined;
+    do {
+      let page: ListObjectsV2CommandOutput;
+      try {
+        page = await client.send(
+          new ListObjectsV2Command({
+            Bucket: bucket,
+            Prefix: prefix,
+            ...(continuationToken === undefined
+              ? {}
+              : { ContinuationToken: continuationToken }),
+          }),
+        );
+      } catch (error) {
+        throw storageUnavailable(error);
+      }
+      for (const object of page.Contents ?? []) {
+        if (object.Key !== undefined) {
+          yield { objectKey: object.Key, lastModified: object.LastModified };
+        }
+      }
+      continuationToken = page.IsTruncated
+        ? page.NextContinuationToken
+        : undefined;
+    } while (continuationToken !== undefined);
   }
 
   private require(objectKey: string): Configured {

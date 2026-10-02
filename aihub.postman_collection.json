@@ -462,7 +462,7 @@
       "request": {
         "name": "Request an Avatar upload URL",
         "description": {
-          "content": "Mints a presigned `PUT` URL that writes exactly one object for the signed-in AIHUB User Account, with the declared content type, the length, and `Cache-Control: public, max-age=3600` bound into the signature. Send the image bytes straight to that URL with all three returned headers; they never pass through AIHUB. Nothing is recorded until the upload is completed. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar may request one to replace it.",
+          "content": "Mints a presigned `PUT` URL that writes exactly one object for the signed-in AIHUB User Account, with the declared content type, the length, and `Cache-Control: public, max-age=3600` bound into the signature. Send the image bytes straight to that URL with all three returned headers; they never pass through AIHUB. Nothing is recorded until the upload is completed, which must happen within one hour of the upload. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar may request one to replace it.",
           "type": "text/plain"
         },
         "url": {
@@ -518,7 +518,7 @@
       "request": {
         "name": "Complete an Avatar upload",
         "description": {
-          "content": "Checks the object that actually landed for this asset and records it as the Avatar of the signed-in AIHUB User Account. An object that is missing answers `404`; one that is larger than 2 MiB, has an unsupported type, or is empty is refused and deleted. When the account already has a different Avatar, its image is deleted first and the new one replaces it; if that delete fails the account keeps its Avatar and the call answers `503`, and retrying finishes the replacement. `409 AVATAR_CHANGED` means another request changed the Avatar first; re-read before retrying. The response describes the image, including its published `url`.",
+          "content": "Checks the object that actually landed for this asset and records it as the Avatar of the signed-in AIHUB User Account. An object that is missing, or that was stored more than an hour ago, answers `404` and an expired one is deleted; one that is larger than 2 MiB, has an unsupported type, or is empty is refused and deleted. When the account already has a different Avatar, its image is deleted first and the new one replaces it; if that delete fails the account keeps its Avatar and the call answers `503`, and retrying finishes the replacement. `409 AVATAR_CHANGED` means another request changed the Avatar first; re-read before retrying. The response describes the image, including its published `url`.",
           "type": "text/plain"
         },
         "url": {

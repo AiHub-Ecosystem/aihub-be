@@ -26,6 +26,7 @@ import {
 import {
   AVATAR_STORAGE,
   type AvatarStoragePort,
+  type ListedAvatarObject,
   type StoredAvatarObject,
 } from '@/modules/avatar/application/avatar-storage.port';
 import { InMemoryAvatarRepository } from '@/modules/avatar/testing/in-memory-avatar.repository';
@@ -85,6 +86,10 @@ class FakeAvatarStorage implements AvatarStoragePort {
     if (this.deleteFails) throw storageUnavailable();
     this.deleted.push(objectKey);
     this.objects.delete(objectKey);
+  }
+
+  async *listObjects(): AsyncIterable<ListedAvatarObject> {
+    // Not used over HTTP: only the operator sweep lists.
   }
 }
 
@@ -161,12 +166,17 @@ describe('Avatar upload HTTP flow', () => {
   }
 
   async function uploadedAsset(
-    object: StoredAvatarObject = { contentType: 'image/png', byteSize: 1234 },
+    overrides: Partial<StoredAvatarObject> = {},
   ): Promise<{ assetId: string; objectKey: string }> {
     const response = await requestUpload();
     const assetId = String(response.json().data.asset_id);
     const objectKey = `users/${USER_ID}/avatar/${assetId}/original`;
-    storage.objects.set(objectKey, object);
+    storage.objects.set(objectKey, {
+      contentType: 'image/png',
+      byteSize: 1234,
+      lastModified: new Date(),
+      ...overrides,
+    });
     return { assetId, objectKey };
   }
 
@@ -392,6 +402,88 @@ describe('Avatar upload HTTP flow', () => {
       expect(response.statusCode).toBe(503);
       expect(response.json().error.code).toBe('AVATAR_STORAGE_UNAVAILABLE');
       expect(repository.avatars.size).toBe(0);
+    });
+  });
+
+  describe('the completion window', () => {
+    const MINUTE = 60 * 1000;
+
+    it('adopts an object that is just inside the hour', async () => {
+      const { assetId } = await uploadedAsset({
+        lastModified: new Date(Date.now() - 59 * MINUTE),
+      });
+
+      const response = await complete(assetId);
+
+      expect(response.statusCode).toBe(201);
+      expect(repository.avatars.get(USER_ID)?.assetId).toBe(assetId);
+    });
+
+    it('answers not found for an object older than an hour, and deletes it', async () => {
+      const { assetId, objectKey } = await uploadedAsset({
+        lastModified: new Date(Date.now() - 61 * MINUTE),
+      });
+
+      const response = await complete(assetId);
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error.code).toBe('NOT_FOUND');
+      expect(storage.deleted).toEqual([objectKey]);
+      expect(repository.avatars.size).toBe(0);
+    });
+
+    it('answers not found when storage does not report the object age', async () => {
+      const { assetId, objectKey } = await uploadedAsset({
+        lastModified: undefined,
+      });
+
+      const response = await complete(assetId);
+
+      expect(response.statusCode).toBe(404);
+      expect(storage.deleted).toEqual([objectKey]);
+      expect(repository.avatars.size).toBe(0);
+    });
+
+    it('keeps the refusal when deleting the expired object fails', async () => {
+      const { assetId } = await uploadedAsset({
+        lastModified: new Date(Date.now() - 2 * 60 * MINUTE),
+      });
+      storage.deleteFails = true;
+
+      const response = await complete(assetId);
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('keeps the previous Avatar when a replacement has expired', async () => {
+      const previous = await uploadedAsset();
+      await complete(previous.assetId);
+      const next = await uploadedAsset({
+        lastModified: new Date(Date.now() - 3 * 60 * MINUTE),
+      });
+      storage.deleted.length = 0;
+
+      const response = await complete(next.assetId);
+
+      expect(response.statusCode).toBe(404);
+      expect(repository.avatars.get(USER_ID)?.assetId).toBe(previous.assetId);
+      expect(storage.objects.has(previous.objectKey)).toBe(true);
+      expect(storage.deleted).toEqual([next.objectKey]);
+    });
+
+    it('still answers a repeated completion of a recorded asset, however old', async () => {
+      const { assetId, objectKey } = await uploadedAsset();
+      await complete(assetId);
+      storage.objects.set(objectKey, {
+        contentType: 'image/png',
+        byteSize: 1234,
+        lastModified: new Date(0),
+      });
+
+      const response = await complete(assetId);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.asset_id).toBe(assetId);
     });
   });
 

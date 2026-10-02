@@ -64,9 +64,15 @@ never proxying bytes, applies unchanged.
   the record, the record briefly names an object that no longer exists, until
   the completion is retried. This is the price of having no pending-deletion
   state: no orphan object and no queue to drain.
-- An object that is uploaded but never completed stays in the bucket with no
-  record. This is accepted for the first slice and tracked in
-  [#217](https://github.com/AiHub-Ecosystem/aihub-be/issues/217).
+- An object that is uploaded but never completed has no record. The operator
+  command `avatar:sweep` ([#217](https://github.com/AiHub-Ecosystem/aihub-be/issues/217))
+  deletes such objects once they are more than 24 hours old by storage's own
+  clock, and only keys in the exact Avatar layout. A completion adopts an
+  object only within one hour of it being stored, or when storage does not
+  report its age, so the 23 hours between the two windows keep a sweep from
+  ever racing a completion. The sweep reads records from the database of its
+  own deployment, so production and Sandbox must use separate Avatar
+  buckets; otherwise each would delete the other's live Avatars.
 - The Avatar module builds its own S3 client beside the Speaking sample
   adapter. Sharing one is deferred until the Audio asset gives a third user.
 
@@ -77,6 +83,10 @@ never proxying bytes, applies unchanged.
   could not have one.
 - **Record a pending row at presign time.** Rejected: an upload that never
   lands would leave a record, and that state would need its own cleanup.
+- **A storage lifecycle rule.** Rejected: a rule on the Avatar prefix cannot
+  tell a recorded object from an orphan and would expire live Avatars, and a
+  staging prefix would change the upload flow and need WISPACE to configure
+  the shared host.
 - **Reuse the Speaking sample bucket.** Rejected: ADR-0065 keeps
   customer-uploaded data out of the sample bucket, and a missing setting must
   never put a customer image into it.

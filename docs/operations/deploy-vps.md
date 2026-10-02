@@ -128,6 +128,15 @@ the Avatar routes answer `503 AVATAR_STORAGE_UNAVAILABLE` and nothing else is
 affected. Create the bucket with the same SeaweedFS credentials and set the
 variable before deploying.
 
+The Sandbox deployment needs its own Avatar bucket, named by
+`SEAWEEDFS_SANDBOX_USER_ASSET_BUCKET` (for example
+`aihub-sandbox-user-assets`). Production and Sandbox keep their Avatar records
+in different databases, so a shared bucket would make each deployment's sweep
+treat the other's live Avatars as orphans and delete them. While the variable
+is unset, Sandbox Avatar routes answer `503 AVATAR_STORAGE_UNAVAILABLE`, and
+Sandbox never falls back to the production bucket. The Sandbox bucket needs the
+same anonymous read-only grant as the production one.
+
 Avatars are published, not signed (ADR-0069). The bucket must allow anonymous
 **read of objects only**: no anonymous list, write, or delete. SeaweedFS grants
 nothing to a bucket its `s3.json` does not declare, and that file belongs to
@@ -141,9 +150,46 @@ Check the grant from a client outside the AIHUB network, without credentials:
 - a Speaking sample object in `aihub-speaking-samples` still answers `403`.
 
 If `Cache-Control` is missing from the first response, record that in
-ADR-0069: the one-hour cache bound then depends on browser heuristics. Uploaded objects
-that are never completed are not cleaned up yet; see the follow-up issue linked
-from ADR-0068 (#217).
+ADR-0069: the one-hour cache bound then depends on browser heuristics. An upload must be
+completed within one hour; a completion older than that answers `404` and
+deletes the object.
+
+### Sweeping orphaned Avatar objects
+
+Objects that were uploaded but never completed, or whose immediate delete
+failed, are removed by `avatar:sweep`. It lists the Avatar prefix, keeps every
+object that an Avatar record names, and deletes the rest once they are older
+than **24 hours** by the storage server's own last-modified time. It touches
+only keys of the exact form
+`users/usr_<ULID>/avatar/ava_<ULID>/original`; any other key is left alone and
+counted as unrecognised. The one-hour completion window and the 24-hour grace
+leave a 23-hour gap in which an object can neither be completed nor swept, so
+the two can never act on the same object. Both are constants in the code, not
+settings.
+
+Run it once a day for each deployment, like `usage:prune`, after its bucket
+setting exists. **Run it with `--dry-run true` first**, check the summary, and
+only then enable the cron entry:
+
+```sh
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  exec -T app pnpm cli avatar:sweep --dry-run true
+
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  exec -T app pnpm cli avatar:sweep
+
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  --profile sandbox exec -T app-sandbox pnpm cli avatar:sweep
+```
+
+It prints one JSON line of counts (`scanned`, `unrecognised`, `orphaned`,
+`deleted`, `failed`, `dryRun`) and never an object key. It exits non-zero when
+any delete failed, or when the bucket, the storage credentials, or the
+database is not configured, in which case it has deleted nothing. Alert on a
+non-zero exit and on a missed run for either container.
 
 The Compose file does not create a second Postgres service or volume. Verify the
 existing service before starting the gateway:

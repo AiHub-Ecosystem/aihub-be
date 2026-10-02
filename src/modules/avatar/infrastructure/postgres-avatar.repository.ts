@@ -16,6 +16,12 @@ const FIND_BY_USER_SQL = `
   WHERE user_account_id = $1
 `;
 
+const RECORDED_KEYS_SQL = `
+  SELECT object_key
+  FROM user_avatars
+  WHERE object_key = ANY($1::text[])
+`;
+
 // The unique constraint on the account is what keeps one Avatar per account,
 // including under two concurrent completions.
 const INSERT_SQL = `
@@ -91,6 +97,20 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
 
   async findByUser(userId: string): Promise<Avatar | undefined> {
     return mapRow((await this.run(FIND_BY_USER_SQL, [userId]))[0]);
+  }
+
+  async recordedObjectKeys(
+    objectKeys: readonly string[],
+  ): Promise<ReadonlySet<string>> {
+    if (objectKeys.length === 0) {
+      return new Set();
+    }
+    const rows = await this.run(RECORDED_KEYS_SQL, [[...objectKeys]]);
+    return new Set(
+      rows.flatMap((row) =>
+        typeof row.object_key === 'string' ? [row.object_key] : [],
+      ),
+    );
   }
 
   async record(avatar: Avatar): Promise<RecordAvatarResult> {

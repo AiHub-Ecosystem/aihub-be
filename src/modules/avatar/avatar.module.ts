@@ -6,6 +6,7 @@ import {
   type RuntimeSecretProvider,
 } from '@/modules/secrets/application/runtime-secret-provider.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
+import { AvatarOrphanSweep } from './application/avatar-orphan-sweep';
 import {
   AVATAR_REPOSITORY,
   type AvatarRepositoryPort,
@@ -48,6 +49,16 @@ type AvatarDatabase = AvatarQueryClient & { close(): Promise<void> };
       useFactory: (secrets: RuntimeSecretProvider): AvatarStoragePort =>
         new S3AvatarStorage(secrets),
     },
+    // Published for the operator sweep (`avatar:sweep`), which builds its own
+    // instance from CLI-constructed adapters rather than booting Nest.
+    {
+      provide: AvatarOrphanSweep,
+      inject: [AVATAR_REPOSITORY, AVATAR_STORAGE],
+      useFactory: (
+        avatars: AvatarRepositoryPort,
+        storage: AvatarStoragePort,
+      ): AvatarOrphanSweep => new AvatarOrphanSweep(avatars, storage),
+    },
     {
       provide: AvatarUploadService,
       inject: [AVATAR_REPOSITORY, AVATAR_STORAGE],
@@ -57,6 +68,7 @@ type AvatarDatabase = AvatarQueryClient & { close(): Promise<void> };
       ): AvatarUploadService => new AvatarUploadService(avatars, storage),
     },
   ],
+  exports: [AvatarOrphanSweep],
 })
 export class AvatarModule implements OnModuleDestroy {
   constructor(

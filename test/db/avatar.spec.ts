@@ -203,3 +203,45 @@ describe('Avatar replacement and removal against PostgreSQL', () => {
     });
   });
 });
+
+describe('Which object keys an Avatar record names, against PostgreSQL', () => {
+  it('returns exactly the recorded keys among those asked', async () => {
+    const recorded = avatar(userId);
+    await repository.record(recorded);
+    const unrecorded = avatarObjectKey(userId, `ava_${ulid()}`);
+
+    await expect(
+      repository.recordedObjectKeys([recorded.objectKey, unrecorded]),
+    ).resolves.toEqual(new Set([recorded.objectKey]));
+  });
+
+  it('returns nothing when none are recorded, or none are asked', async () => {
+    await expect(
+      repository.recordedObjectKeys([avatarObjectKey(userId, `ava_${ulid()}`)]),
+    ).resolves.toEqual(new Set());
+    await expect(repository.recordedObjectKeys([])).resolves.toEqual(new Set());
+  });
+
+  it('stops naming a key once its Avatar is replaced', async () => {
+    const first = avatar(userId);
+    await repository.record(first);
+    const next = avatar(userId);
+    await repository.replace(first.assetId, next);
+
+    await expect(
+      repository.recordedObjectKeys([first.objectKey, next.objectKey]),
+    ).resolves.toEqual(new Set([next.objectKey]));
+  });
+
+  it('names the keys of several accounts at once', async () => {
+    const other = await seedAccount();
+    const mine = avatar(userId);
+    const theirs = avatar(other);
+    await repository.record(mine);
+    await repository.record(theirs);
+
+    await expect(
+      repository.recordedObjectKeys([mine.objectKey, theirs.objectKey]),
+    ).resolves.toEqual(new Set([mine.objectKey, theirs.objectKey]));
+  });
+});

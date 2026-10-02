@@ -17,6 +17,10 @@ export type RecordAvatarResult =
  */
 export interface AvatarRepositoryPort {
   findByUser(userId: string): Promise<Avatar | undefined>;
+  /** Which of these object keys an Avatar record currently names. */
+  recordedObjectKeys(
+    objectKeys: readonly string[],
+  ): Promise<ReadonlySet<string>>;
   /** Records an account's first Avatar. */
   record(avatar: Avatar): Promise<RecordAvatarResult>;
   /**

@@ -3,6 +3,7 @@ import { ulid } from 'ulid';
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import {
+  AVATAR_COMPLETION_WINDOW_MS,
   AVATAR_MAX_BYTES,
   type Avatar,
   type AvatarContentType,
@@ -190,6 +191,18 @@ export class AvatarUploadService {
     const objectKey = avatarObjectKey(userId, assetId);
     const stored = await this.storage.describeObject(objectKey);
     if (stored === undefined) {
+      throw uploadNotFound();
+    }
+
+    // Older than the window, or of an age storage will not state: the sweep may
+    // be about to delete it, and the gap between the two windows is what keeps
+    // a completion and a sweep from ever acting on the same object.
+    const age =
+      stored.lastModified === undefined
+        ? undefined
+        : this.now().getTime() - stored.lastModified.getTime();
+    if (age === undefined || age > AVATAR_COMPLETION_WINDOW_MS) {
+      await this.discard(objectKey);
       throw uploadNotFound();
     }
 

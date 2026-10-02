@@ -1,3 +1,4 @@
+import type { ListedAvatarObject } from '@/modules/avatar/application/avatar-storage.port';
 import type {
   RuntimeSecretProvider,
   RuntimeSecretSnapshot,
@@ -189,6 +190,13 @@ describe('S3AvatarStorage', () => {
         expect(thrown(() => unconfigured.publicUrl(KEY))).toMatchObject({
           code: 'AVATAR_STORAGE_UNAVAILABLE',
         });
+        await expect(
+          (async () => {
+            for await (const _ of unconfigured.listObjects('users/')) {
+              // never reached
+            }
+          })(),
+        ).rejects.toMatchObject({ code: 'AVATAR_STORAGE_UNAVAILABLE' });
       },
     );
 
@@ -207,14 +215,17 @@ describe('S3AvatarStorage', () => {
 
   describe('describing an object', () => {
     it('reports what landed', async () => {
+      const lastModified = new Date('2026-10-02T09:30:00.000Z');
       const { client, send } = clientAnswering(async () => ({
         ContentType: 'image/webp',
         ContentLength: 2048,
+        LastModified: lastModified,
       }));
 
       await expect(storage({ client }).describeObject(KEY)).resolves.toEqual({
         contentType: 'image/webp',
         byteSize: 2048,
+        lastModified,
       });
       expect(send.mock.calls[0]?.[0]?.input).toEqual({
         Bucket: 'aihub-user-assets',
@@ -242,6 +253,87 @@ describe('S3AvatarStorage', () => {
 
       await expect(
         storage({ client }).describeObject(KEY),
+      ).rejects.toMatchObject({
+        code: 'AVATAR_STORAGE_UNAVAILABLE',
+        retryable: true,
+      });
+    });
+  });
+
+  describe('listing objects', () => {
+    const OLD = new Date('2026-10-01T00:00:00.000Z');
+
+    async function collect(
+      objects: AsyncIterable<ListedAvatarObject>,
+    ): Promise<ListedAvatarObject[]> {
+      const all: ListedAvatarObject[] = [];
+      for await (const object of objects) {
+        all.push(object);
+      }
+      return all;
+    }
+
+    it('follows every page and carries each key with its last-modified time', async () => {
+      const pages = [
+        {
+          Contents: [
+            { Key: 'users/a', LastModified: OLD },
+            { Key: 'users/b', LastModified: OLD },
+          ],
+          IsTruncated: true,
+          NextContinuationToken: 'page-2',
+        },
+        {
+          Contents: [{ Key: 'users/c', LastModified: OLD }],
+          IsTruncated: false,
+        },
+      ];
+      const { client, send } = clientAnswering(async () => pages.shift());
+
+      const listed = await collect(storage({ client }).listObjects('users/'));
+
+      expect(listed).toEqual([
+        { objectKey: 'users/a', lastModified: OLD },
+        { objectKey: 'users/b', lastModified: OLD },
+        { objectKey: 'users/c', lastModified: OLD },
+      ]);
+      expect(send.mock.calls.map((call) => call[0]?.input)).toEqual([
+        { Bucket: 'aihub-user-assets', Prefix: 'users/' },
+        {
+          Bucket: 'aihub-user-assets',
+          Prefix: 'users/',
+          ContinuationToken: 'page-2',
+        },
+      ]);
+    });
+
+    it('lists an empty bucket as nothing', async () => {
+      const { client } = clientAnswering(async () => ({ IsTruncated: false }));
+
+      await expect(
+        collect(storage({ client }).listObjects('users/')),
+      ).resolves.toEqual([]);
+    });
+
+    it('stops at a truncated page that names no continuation token', async () => {
+      const { client, send } = clientAnswering(async () => ({
+        Contents: [{ Key: 'users/a' }],
+        IsTruncated: true,
+      }));
+
+      const listed = await collect(storage({ client }).listObjects('users/'));
+
+      expect(listed).toEqual([{ objectKey: 'users/a' }]);
+      expect(send).toHaveBeenCalledTimes(1);
+    });
+
+    it('maps a failed page to storage unavailable', async () => {
+      const { client } = clientAnswering(async () => {
+        throw new Error('connect ECONNREFUSED');
+      });
+
+      await expect(
+        collect(storage({ client }).listObjects('users/')),
       ).rejects.toMatchObject({
         code: 'AVATAR_STORAGE_UNAVAILABLE',
         retryable: true,

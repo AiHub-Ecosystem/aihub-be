@@ -489,8 +489,10 @@ only on that account; no route takes an account id.
   `{ "content_type": "image/png", "byte_size": 1234 }`, then `PUT` the bytes to
   the returned `upload_url` with **all three** returned headers
   (`Content-Type`, `Content-Length`, `Cache-Control`) unchanged, within five
-  minutes. Then call `POST /v1/me/avatar/uploads/{asset_id}/complete`, which
-  answers with the Avatar, including its `url`. JPEG, PNG, and WebP up to
+  minutes. Then call `POST /v1/me/avatar/uploads/{asset_id}/complete` within
+  one hour of the `PUT`, which answers with the Avatar, including its `url`.
+  A completion later than that answers `404` and deletes the object, so upload
+  again. JPEG, PNG, and WebP up to
   2 MiB are accepted.
 - `DELETE /v1/me/avatar` removes it and always answers `204`.
 

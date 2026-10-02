@@ -9,6 +9,13 @@ export interface AvatarUploadUrl {
 export interface StoredAvatarObject {
   readonly contentType: string | undefined;
   readonly byteSize: number | undefined;
+  /** Storage's own clock; `undefined` when storage does not report it. */
+  readonly lastModified: Date | undefined;
+}
+
+export interface ListedAvatarObject {
+  readonly objectKey: string;
+  readonly lastModified: Date | undefined;
 }
 
 /**
@@ -33,6 +40,8 @@ export interface AvatarStoragePort {
   /** `undefined` when no object exists at the key. */
   describeObject(objectKey: string): Promise<StoredAvatarObject | undefined>;
   deleteObject(objectKey: string): Promise<void>;
+  /** Every object under the prefix, across however many pages storage needs. */
+  listObjects(prefix: string): AsyncIterable<ListedAvatarObject>;
 }
 
 export const AVATAR_STORAGE = Symbol('AVATAR_STORAGE');
