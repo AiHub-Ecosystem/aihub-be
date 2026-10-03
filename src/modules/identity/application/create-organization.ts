@@ -25,13 +25,51 @@ export interface CreatedOrganization {
  * Self-serve Organizations start with every currently available capability;
  * the hard-stopped quota still caps usage under the default commercial terms.
  */
-export const SELF_SERVE_ORGANIZATION_TERMS: SelfServeOrganizationTerms = {
-  entitlements: ['writing', 'speaking'],
-  rateLimitRpm: 60,
-  maxConcurrent: 5,
-  monthlyRequestQuota: 100,
-  hardStopOnQuota: true,
-};
+export const DEFAULT_MONTHLY_REQUEST_QUOTA = 100;
+
+export class SelfServeTermsConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SelfServeTermsConfigurationError';
+  }
+}
+
+/**
+ * The default monthly request quota is deployment configuration, not a
+ * business constant: a test environment raises it without a code change.
+ */
+export function selfServeMonthlyRequestQuota(
+  value: string | undefined,
+): number {
+  const raw = value?.trim();
+  if (raw === undefined || raw.length === 0) {
+    return DEFAULT_MONTHLY_REQUEST_QUOTA;
+  }
+  if (!/^\d+$/.test(raw)) {
+    throw new SelfServeTermsConfigurationError(
+      'AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA must be a non-negative integer',
+    );
+  }
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new SelfServeTermsConfigurationError(
+      'AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA is out of range',
+    );
+  }
+  return parsed;
+}
+
+export function selfServeOrganizationTerms(
+  monthlyRequestQuota: number,
+): SelfServeOrganizationTerms {
+  return {
+    entitlements: ['writing', 'speaking'],
+    rateLimitRpm: 60,
+    maxConcurrent: 5,
+    monthlyRequestQuota,
+    hardStopOnQuota: true,
+  };
+}
 
 /** Lifetime Self-serve Organization creations per AIHUB User Account. */
 export const ORGANIZATION_CREATION_LIMIT = 3;
@@ -42,7 +80,10 @@ export const ORGANIZATION_CREATION_LIMIT = 3;
  * anything this act concerns, and the account itself is the only authority.
  */
 export class CreateOrganization {
-  constructor(private readonly organizations: OrganizationCreationPort) {}
+  constructor(
+    private readonly organizations: OrganizationCreationPort,
+    private readonly terms: SelfServeOrganizationTerms,
+  ) {}
 
   async create(input: CreateOrganizationInput): Promise<CreatedOrganization> {
     const name = organizationName(input.name);
@@ -54,7 +95,7 @@ export class CreateOrganization {
       context: input.context,
       creatorUserId: input.userId,
       name,
-      terms: SELF_SERVE_ORGANIZATION_TERMS,
+      terms: this.terms,
       creationLimit: ORGANIZATION_CREATION_LIMIT,
     });
 

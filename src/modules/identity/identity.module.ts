@@ -28,7 +28,11 @@ import {
   type ApiKeyRepositoryPort,
   type AuthFailureCounterPort,
 } from './application/api-key-authenticator.port';
-import { CreateOrganization } from './application/create-organization';
+import {
+  CreateOrganization,
+  selfServeMonthlyRequestQuota,
+  selfServeOrganizationTerms,
+} from './application/create-organization';
 import { CreateOrganizationApiKey } from './application/create-organization-api-key';
 import { CREATE_ORGANIZATION_API_KEY } from './application/create-organization-api-key.port';
 import { CREATE_ORGANIZATION } from './application/create-organization.port';
@@ -219,7 +223,14 @@ function controlPlaneReadDatabaseUrl(): string {
     {
       provide: CREATE_ORGANIZATION,
       useFactory: (organizations: OrganizationCreationPort) =>
-        new CreateOrganization(organizations),
+        new CreateOrganization(
+          organizations,
+          selfServeOrganizationTerms(
+            selfServeMonthlyRequestQuota(
+              process.env.AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA,
+            ),
+          ),
+        ),
       inject: [ORGANIZATION_CREATION],
     },
     {
