@@ -214,22 +214,22 @@ of the AI Speaking service under this contract.
 
 ### Normalized public response data
 
-| Group                                   | Required fields and constraints                                                                                                      |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| question_id                             | Non-empty string                                                                                                                     |
-| test_type                               | Optional string or null                                                                                                              |
-| scorability                             | is_scorable boolean; confidence string; display_band boolean; message_vi string or null                                              |
-| estimated_band                          | overall, fluency_coherence, lexical_resource, grammatical_range_accuracy, pronunciation; each number 0–9 in 0.5 steps                |
-| transcript                              | text string; word_count integer >= 0; duration_seconds number >= 0                                                                   |
-| relevance                               | on_topic boolean; score 0–1; feedback_vi string or null                                                                              |
-| fluency_metrics                         | Object or `null`; speech_rate_wpm, pause_count, mean_length_run_words are each non-negative or null                                  |
-| pronunciation_detail                    | summary counts (good_count, fair_count, poor_count), each integer >= 0, and words array                                              |
-| pronunciation_detail.words[]            | word, quality_score 0–100, quality_class, syllables[], phonemes[]                                                                    |
-| syllables[]                             | letters, nullable stress_level 0–2, predicted_stress 0–2, stress_score 0–100, quality_score 0–100, non-negative audio_extent_ms pair |
-| phonemes[]                              | phone, quality_score 0–100, sound_most_like, nullable stress_level 0–2, non-negative audio_extent_ms pair, non-negative char_index[] |
-| language_analysis.grammar_errors[]      | sentence, error_segment, correction, error_type, explanation_vi                                                                      |
-| language_analysis.vocabulary_upgrades[] | original_word, suggested_word, cefr_level, optional context, reason_vi                                                               |
-| feedback                                | summary_vi, strong_point_vi, action_plan_vi                                                                                          |
+| Group                                   | Required fields and constraints                                                                                                               |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| question_id                             | Non-empty string                                                                                                                              |
+| test_type                               | Optional string or null                                                                                                                       |
+| scorability                             | is_scorable boolean; confidence string; display_band boolean; message_vi string or null                                                       |
+| estimated_band                          | overall, fluency_coherence, lexical_resource, grammatical_range_accuracy, pronunciation; each number 0–9 in 0.5 steps                         |
+| transcript                              | text string; word_count integer >= 0; duration_seconds number >= 0                                                                            |
+| relevance                               | on_topic boolean; score 0–1; feedback_vi string or null                                                                                       |
+| fluency_metrics                         | Object or `null`; speech_rate_wpm, pause_count, mean_length_run_words are each non-negative or null                                           |
+| pronunciation_detail                    | summary counts (good_count, fair_count, poor_count), each integer >= 0, and words array                                                       |
+| pronunciation_detail.words[]            | word, quality_score 0–100, quality_class, syllables[], phonemes[]                                                                             |
+| syllables[]                             | letters, nullable stress_level 0–2, nullable predicted_stress 0–2, stress_score 0–100, quality_score 0–100, non-negative audio_extent_ms pair |
+| phonemes[]                              | phone, quality_score 0–100, sound_most_like, nullable stress_level 0–2, non-negative audio_extent_ms pair, non-negative char_index[]          |
+| language_analysis.grammar_errors[]      | sentence, error_segment, correction, error_type, explanation_vi                                                                               |
+| language_analysis.vocabulary_upgrades[] | original_word, suggested_word, cefr_level, optional context, reason_vi                                                                        |
+| feedback                                | summary_vi, strong_point_vi, action_plan_vi                                                                                                   |
 
 ## 7. Detailed AI Speaking service errors
 

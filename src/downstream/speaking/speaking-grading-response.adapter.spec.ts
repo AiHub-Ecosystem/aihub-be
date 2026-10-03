@@ -44,15 +44,38 @@ describe('parseSpeakingGradeResponse', () => {
     expect(() => parseSpeakingGradeResponse(providerResponse())).not.toThrow();
   });
 
+  // The provider's published schema allows null here, as it does for
+  // stress_level, and AIHUB's schema already accepts null for that sibling.
+  it('accepts a null predicted_stress and passes it on as null', () => {
+    const body = providerResponse();
+    const syllable = firstSyllable(body);
+    syllable.predicted_stress = null;
+
+    const parsed = parseSpeakingGradeResponse(body);
+
+    const word = parsed.pronunciation_detail.words[0];
+    expect(word?.syllables[0]?.predicted_stress).toBeNull();
+  });
+
+  it('still refuses a predicted_stress outside 0 to 2', () => {
+    const error = violation((body) => {
+      firstSyllable(body).predicted_stress = 7;
+    });
+
+    expect(error.diagnostic).toContain(
+      '/pronunciation_detail/words/0/syllables/0/predicted_stress',
+    );
+  });
+
   describe('a contract violation says where, never what', () => {
     it('names the field that broke the schema and the kind of mismatch', () => {
       const error = violation((body) => {
-        firstSyllable(body).predicted_stress = null;
+        firstSyllable(body).stress_score = null;
       });
 
       expect(error.code).toBe('AI_SERVICE_CONTRACT_VIOLATION');
       expect(error.diagnostic).toContain(
-        '/pronunciation_detail/words/0/syllables/0/predicted_stress (Integer)',
+        '/pronunciation_detail/words/0/syllables/0/stress_score (Number)',
       );
     });
 
@@ -74,7 +97,7 @@ describe('parseSpeakingGradeResponse', () => {
         (body.data.transcript as { text: string }).text,
       );
       const error = violation((mutated) => {
-        firstSyllable(mutated).predicted_stress = 'not a number';
+        firstSyllable(mutated).stress_score = 'not a number';
         (mutated.data.transcript as { text: string }).text = transcript;
       });
 
@@ -87,7 +110,7 @@ describe('parseSpeakingGradeResponse', () => {
         const detail = body.data.pronunciation_detail as { words: Json[] };
         for (const word of detail.words) {
           for (const syllable of word.syllables as Json[]) {
-            syllable.predicted_stress = null;
+            syllable.stress_score = null;
           }
         }
       });
@@ -117,14 +140,14 @@ describe('parseSpeakingGradeResponse', () => {
 
     it('keeps the public message generic', () => {
       const error = violation((body) => {
-        firstSyllable(body).predicted_stress = null;
+        firstSyllable(body).stress_score = null;
       });
 
       expect(error.message).toBe(
         'AI service returned an unexpected response shape',
       );
       expect(JSON.stringify(error.toEnvelope('req_1'))).not.toContain(
-        'predicted_stress',
+        'stress_score',
       );
     });
   });

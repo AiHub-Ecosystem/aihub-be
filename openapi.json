@@ -1747,9 +1747,16 @@
                                           ]
                                         },
                                         "predicted_stress": {
-                                          "minimum": 0,
-                                          "maximum": 2,
-                                          "type": "integer"
+                                          "anyOf": [
+                                            {
+                                              "minimum": 0,
+                                              "maximum": 2,
+                                              "type": "integer"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
                                         },
                                         "stress_score": {
                                           "minimum": 0,
@@ -2423,9 +2430,16 @@
                                           ]
                                         },
                                         "predicted_stress": {
-                                          "minimum": 0,
-                                          "maximum": 2,
-                                          "type": "integer"
+                                          "anyOf": [
+                                            {
+                                              "minimum": 0,
+                                              "maximum": 2,
+                                              "type": "integer"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
                                         },
                                         "stress_score": {
                                           "minimum": 0,

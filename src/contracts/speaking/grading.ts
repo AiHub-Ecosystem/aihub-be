@@ -162,7 +162,12 @@ const SyllableSchema = Type.Object(
       Type.Integer({ minimum: 0, maximum: 2 }),
       Type.Null(),
     ]),
-    predicted_stress: Type.Integer({ minimum: 0, maximum: 2 }),
+    // Nullable like `stress_level` beside it: the provider's published schema
+    // allows null for both, and a response that has one is otherwise refused.
+    predicted_stress: Type.Union([
+      Type.Integer({ minimum: 0, maximum: 2 }),
+      Type.Null(),
+    ]),
     stress_score: ScoreSchema,
     quality_score: ScoreSchema,
     audio_extent_ms: AudioExtentSchema,

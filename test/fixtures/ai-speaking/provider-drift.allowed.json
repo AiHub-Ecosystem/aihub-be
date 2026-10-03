@@ -50,11 +50,6 @@
     "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
   },
   {
-    "kind": "nullable",
-    "path": "data.pronunciation_detail.words[].syllables[].predicted_stress",
-    "reason": "The provider's schema allows null here and AIHUB requires a value. Suspected cause of AI_SERVICE_CONTRACT_VIOLATION on speaking.grading. Accepting null changes the public response, so it needs a decision, not a quiet edit."
-  },
-  {
     "kind": "optional",
     "path": "data.pronunciation_detail.words[].syllables[].predicted_stress",
     "reason": "The provider's schema does not list it as required, and the captured response always includes it. Whether it can be left out is unverified; if it can, AIHUB refuses that response."
