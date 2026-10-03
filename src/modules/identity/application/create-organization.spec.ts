@@ -22,17 +22,26 @@ describe('selfServeMonthlyRequestQuota', () => {
     expect(selfServeMonthlyRequestQuota('100')).toBe(100);
     expect(selfServeMonthlyRequestQuota(' 250 ')).toBe(250);
     expect(selfServeMonthlyRequestQuota('1000000')).toBe(1_000_000);
-    expect(selfServeMonthlyRequestQuota('0')).toBe(0);
+    expect(selfServeMonthlyRequestQuota('1')).toBe(1);
   });
 
-  it.each(['abc', '-1', '1.5', '1e3', '1 000', '+100', '100abc'])(
-    'refuses the invalid value %p',
-    (value) => {
-      expect(() => selfServeMonthlyRequestQuota(value)).toThrow(
-        SelfServeTermsConfigurationError,
-      );
-    },
-  );
+  it.each([
+    'abc',
+    '-1',
+    '1.5',
+    '1e3',
+    '1 000',
+    '+100',
+    '100abc',
+    '0',
+    '00',
+    '007',
+    '-0',
+  ])('refuses the invalid value %p', (value) => {
+    expect(() => selfServeMonthlyRequestQuota(value)).toThrow(
+      SelfServeTermsConfigurationError,
+    );
+  });
 
   it('refuses a value beyond exact integer range', () => {
     expect(() => selfServeMonthlyRequestQuota('99999999999999999999')).toThrow(

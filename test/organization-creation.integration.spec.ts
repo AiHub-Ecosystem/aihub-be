@@ -304,3 +304,90 @@ describe('Self-serve Organization creation over HTTP', () => {
     expect(creation.created).toHaveLength(0);
   });
 });
+
+// The suite above boots the Application once, so it only ever proves the
+// unset branch. These boot it again per case with the variable set, which is
+// what would catch a typo in the composition root: the unit tests on
+// `selfServeMonthlyRequestQuota` pass either way, and this is the only place
+// the configured value is shown reaching a stored Organization.
+describe('Self-serve Organization terms read from the environment', () => {
+  const originalQuota = process.env.AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA;
+  let app: NestFastifyApplication | undefined;
+  let creation: OrganizationCreationFake;
+  let idempotency: IdempotencyRepositoryFake;
+
+  beforeEach(() => {
+    creation = new OrganizationCreationFake();
+    idempotency = new IdempotencyRepositoryFake();
+  });
+
+  afterEach(async () => {
+    if (app !== undefined) {
+      await app.close();
+      app = undefined;
+    }
+    if (originalQuota === undefined) {
+      delete process.env.AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA;
+    } else {
+      process.env.AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA = originalQuota;
+    }
+  });
+
+  /**
+   * The composition root reads the variable while the module graph is built,
+   * so the Application has to boot after the value is already in place. That
+   * ordering is the whole point: booting first and setting the variable after
+   * would prove nothing about the wiring.
+   */
+  async function boot(): Promise<void> {
+    const verifier: UserAccessTokenVerifierPort = {
+      verify: async (token: string) => {
+        if (token === OWNER_TOKEN) {
+          return { userId: OWNER_ID, jti: 'jti_owner' };
+        }
+        throw new Error('invalid token');
+      },
+    };
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(ORGANIZATION_CREATION)
+      .useValue(creation)
+      .overrideProvider(IDEMPOTENCY_REPOSITORY)
+      .useValue(idempotency)
+      .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
+      .useValue(verifier)
+      .overrideProvider(USER_ACCOUNT_REPOSITORY)
+      .useValue(userAccountStatus(() => 'active'))
+      .compile();
+
+    app = moduleRef.createNestApplication<NestFastifyApplication>(
+      new FastifyAdapter({ genReqId: () => REQUEST_ID }),
+    );
+    await app.init();
+    await app.getHttpAdapter().getInstance().ready();
+  }
+
+  it('starts an Organization on the configured quota', async () => {
+    process.env.AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA = '1000000';
+    await boot();
+
+    const response = await app!.inject({
+      method: 'POST',
+      url: '/v1/organizations',
+      headers: { authorization: `Bearer ${OWNER_TOKEN}` },
+      payload: { name: 'Acme Learning' },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(creation.created[0]?.terms.monthlyRequestQuota).toBe(1_000_000);
+  });
+
+  it('refuses to start on a quota that is not a positive integer', async () => {
+    process.env.AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA = 'not-a-number';
+
+    await expect(boot()).rejects.toThrow(
+      /AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA/,
+    );
+  });
+});

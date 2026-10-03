@@ -72,6 +72,18 @@ Redis URLs. Serving the hostname is a separate nginx change described in
 [The public edge](#the-public-edge). Leaving the sandbox flag false keeps the
 sandbox host and container absent.
 
+`AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA` sets the monthly request quota, in
+requests, that a new Organization starts on when a customer creates one through
+`POST /v1/organizations` (ADR-0041). It has no default in Compose: leaving it
+blank uses the built-in value of 100. It must be a positive integer — zero and
+fractions stop the process at boot rather than starting an Organization that
+could not answer a single request, and "no limit" is a quota of NULL set on the
+Organization itself. The value applies only to Organizations created after the
+restart; an existing Organization keeps the quota already stored on it, and
+raising one is an operator SQL or CLI act, not this variable. The full set of
+terms is an Organization's own row, so this setting never retrofits existing
+tenants.
+
 Point the gateway at the existing production database over the shared Docker
 network. Store the URL-encoded production and sandbox URLs, plus the Sandbox
 read-only control-plane URL, in the operator-only Vault bundles. Create the
