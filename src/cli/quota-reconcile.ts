@@ -1,11 +1,14 @@
-import { createRedisGatewayClient } from '@/modules/gateway/infrastructure/redis-gateway.client';
-import { RedisQuotaReconciliationCounter } from '@/modules/gateway/infrastructure/redis-quota-reconciliation.counter';
+import {
+  type RedisQuotaReconciliationClient,
+  RedisQuotaReconciliationCounter,
+} from '@/modules/gateway/infrastructure/redis-quota-reconciliation.counter';
 import {
   type QuotaReconciliationEvent,
   QuotaReconciliationService,
   type QuotaReconciliationSummary,
 } from '@/modules/metering/application/quota-reconciliation';
 import { createPostgresQuotaReconciliationRepository } from '@/modules/metering/infrastructure/postgres-quota-reconciliation.repository';
+import Redis from 'ioredis';
 
 export { parseTargetMonth } from '@/modules/metering/application/quota-reconciliation';
 
@@ -52,6 +55,39 @@ export function formatQuotaReconciliationEvent(
   });
 }
 
+/**
+ * The gateway's request-path client gives a command 100 ms, which a Redis
+ * reached over the network can miss: the write failed on production and the
+ * process then stayed alive, because `quit()` on that client rejects without
+ * closing the socket. This one connects first, allows seconds, and always lets
+ * go of the socket.
+ */
+async function connectRedis(
+  url: string,
+): Promise<RedisQuotaReconciliationClient> {
+  const redis = new Redis(url, {
+    commandTimeout: 5_000,
+    connectTimeout: 5_000,
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+    lazyConnect: true,
+  });
+  redis.on('error', () => undefined);
+  try {
+    await redis.connect();
+  } catch (error) {
+    redis.disconnect();
+    throw error;
+  }
+  return {
+    set: (key, value, mode, seconds) => redis.set(key, value, mode, seconds),
+    quit: async () => {
+      await redis.quit().catch(() => undefined);
+      redis.disconnect();
+    },
+  };
+}
+
 export async function runQuotaReconciliationCommand(
   input: QuotaReconciliationCliInput,
 ): Promise<QuotaReconciliationSummary> {
@@ -65,10 +101,12 @@ export async function runQuotaReconciliationCommand(
   const repository = createPostgresQuotaReconciliationRepository(
     input.databaseUrl,
   );
-  const redisClient = createRedisGatewayClient(input.redisUrl);
-  if (redisClient === undefined) {
+  let redisClient: RedisQuotaReconciliationClient;
+  try {
+    redisClient = await connectRedis(input.redisUrl);
+  } catch (error) {
     await repository.close();
-    throw new Error('REDIS_URL is required');
+    throw error;
   }
 
   const counter = new RedisQuotaReconciliationCounter(redisClient);

@@ -6,8 +6,10 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import {
+  createSandboxTestRedis,
   createTestPool,
   resetIdentityTables,
+  sandboxTestRedisUrl,
   testDatabaseUrl,
 } from './database';
 
@@ -39,6 +41,10 @@ beforeEach(async () => {
 });
 
 function cli(...args: string[]) {
+  return runCli({ REDIS_URL: '' }, args);
+}
+
+function runCli(extraEnv: Record<string, string>, args: string[]) {
   const result = spawnSync(process.execPath, ['scripts/cli.mjs', ...args], {
     cwd: ROOT,
     encoding: 'utf8',
@@ -47,9 +53,9 @@ function cli(...args: string[]) {
       ...process.env,
       DATABASE_URL: testDatabaseUrl(),
       CONTROL_PLANE_DATABASE_URL: testDatabaseUrl(),
-      // Empty, so a revocation reports an unset cache instead of reaching a
-      // Redis this lane does not own.
-      REDIS_URL: '',
+      // Empty unless a test passes its own, so a revocation reports an unset
+      // cache instead of reaching a Redis this lane does not own.
+      ...extraEnv,
     },
   });
   return {
@@ -149,6 +155,34 @@ withBuild('operator CLI against PostgreSQL', () => {
         "SELECT 1 FROM organization_audit_events WHERE action = 'api_key.revoked'",
       ),
     ).toHaveLength(1);
+  });
+
+  // quota:reconcile failed on production against a remote Redis and then never
+  // exited. Locally Redis answers inside the old 100 ms limit, so this guards
+  // the happy path and the exit, not the timeout itself.
+  it('reconciles a quota into Redis and exits', async () => {
+    const organizationId = await organization();
+    await pool.query('UPDATE organizations SET monthly_request_quota = 100');
+    const month = new Date().toISOString().slice(0, 7);
+    const key = `aihub:v1:quota:${organizationId}:${month}`;
+    const redis = createSandboxTestRedis();
+    if (redis.status !== 'ready') {
+      await new Promise((resolve) => redis.once('ready', resolve));
+    }
+    try {
+      await redis.del(key);
+
+      const result = runCli({ REDIS_URL: sandboxTestRedisUrl() }, [
+        'quota:reconcile',
+      ]);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('"event":"quota_reconciled"');
+      expect(await redis.get(key)).toBe('0');
+    } finally {
+      await redis.del(key);
+      redis.disconnect();
+    }
   });
 
   it.each([
