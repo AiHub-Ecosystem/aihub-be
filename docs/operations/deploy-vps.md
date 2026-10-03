@@ -229,6 +229,27 @@ any delete failed, or when the bucket, the storage credentials, or the
 database is not configured, in which case it has deleted nothing. Alert on a
 non-zero exit and on a missed run for either container.
 
+### Scheduled operator jobs
+
+The other three scheduled operator commands run from one host script,
+`~/aihub-ops-job.sh <quota|prune|report>`, built the same way as the Avatar
+sweep (production then Sandbox, stdin detached, one log line per environment in
+`~/aihub-ops-job.log`, non-zero exit when either failed). Crontab, in the
+server's UTC clock:
+
+```text
+0 2 * * *  aihub-ops-job.sh quota    # quota:reconcile
+30 2 * * * aihub-ops-job.sh prune    # usage:prune, after the reconcile
+5 * * * *  aihub-ops-job.sh report   # usage:report for the previous whole UTC hour
+```
+
+`report` computes `--from` and `--to` as the start of the previous and of the
+current UTC hour, so `to` is never in the future. The script is not in the
+repository (it holds the host path and the `sudo` form); the three operator
+guides own the command, its exit codes, and what to alert on. Before the first
+scheduled `prune` the database was backed up with `pg_dump -Fc` and the command
+was run by hand in each container (`deleted: 0`, nothing was 13 months old).
+
 The Compose file does not create a second Postgres service or volume. Verify the
 existing service before starting the gateway:
 
