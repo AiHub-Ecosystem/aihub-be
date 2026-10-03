@@ -457,6 +457,220 @@
       }
     },
     {
+      "id": "affc5af2-e8fc-4a00-99c2-5dd7561cd424",
+      "name": "Create a Speaking Audio upload intent",
+      "request": {
+        "name": "Create a Speaking Audio upload intent",
+        "description": {
+          "content": "Creates a one-hour intent bound to the Organization and exact End-User ID resolved from `X-User-Identity`. The response contains a five-minute presigned `PUT` URL; send the audio directly to that URL with the returned `Content-Type` and `Content-Length` headers.\n\nThe URL is a write credential. Do not log, persist, or expose it. The intent is not an Audio asset until completion verifies the stored object.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "speaking", "audio", "uploads"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "disabled": false,
+            "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
+            "key": "X-User-Identity",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "apikey",
+          "apikey": [
+            {
+              "key": "key",
+              "value": "X-API-Key"
+            },
+            {
+              "key": "value",
+              "value": "{{apiKey}}"
+            },
+            {
+              "key": "in",
+              "value": "header"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content_type\": \"<string>\",\n  \"byte_size\": \"<integer>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "41805cf1-5521-4d4f-a93d-e9ea969130f8",
+      "name": "Refresh a Speaking Audio upload URL",
+      "request": {
+        "name": "Refresh a Speaking Audio upload URL",
+        "description": {
+          "content": "Issues another five-minute URL for the same open intent, key, content type, and byte size. It does not extend the original one-hour intent expiry.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": [
+            "v1",
+            "speaking",
+            "audio",
+            "uploads",
+            ":asset_id",
+            "refresh"
+          ],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": [
+            {
+              "disabled": false,
+              "type": "any",
+              "value": "<string>",
+              "key": "assetId",
+              "description": "(Required) The asset ID returned when the upload intent was created."
+            }
+          ]
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "disabled": false,
+            "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
+            "key": "X-User-Identity",
+            "value": "<string>"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "apikey",
+          "apikey": [
+            {
+              "key": "key",
+              "value": "X-API-Key"
+            },
+            {
+              "key": "value",
+              "value": "{{apiKey}}"
+            },
+            {
+              "key": "in",
+              "value": "header"
+            }
+          ]
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "97b1ee3a-8ba6-4865-bf76-5fcb7e231dbd",
+      "name": "Complete a Speaking Audio upload",
+      "request": {
+        "name": "Complete a Speaking Audio upload",
+        "description": {
+          "content": "Verifies the stored object metadata at the exact key recorded by the intent. A valid object creates the Audio asset and sets `retention_expires_at` to 30 days after acceptance; a missing object leaves the intent retryable, while invalid metadata rejects the intent.\n\nOnly the same Organization and End-User ID can complete the intent. Repeating a successful completion returns the same Audio asset.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": [
+            "v1",
+            "speaking",
+            "audio",
+            "uploads",
+            ":asset_id",
+            "complete"
+          ],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": [
+            {
+              "disabled": false,
+              "type": "any",
+              "value": "<string>",
+              "key": "assetId",
+              "description": "(Required) The asset ID returned when the upload intent was created."
+            }
+          ]
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "disabled": false,
+            "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
+            "key": "X-User-Identity",
+            "value": "<string>"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "apikey",
+          "apikey": [
+            {
+              "key": "key",
+              "value": "X-API-Key"
+            },
+            {
+              "key": "value",
+              "value": "{{apiKey}}"
+            },
+            {
+              "key": "in",
+              "value": "header"
+            }
+          ]
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
       "id": "524c778e-de50-4fed-833a-92b201ec45d5",
       "name": "Request an Avatar upload URL",
       "request": {

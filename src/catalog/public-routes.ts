@@ -53,6 +53,11 @@ import {
   MintSandboxAssertionRequestSchema,
   MintSandboxAssertionResponseSchema,
 } from '@/contracts/sandbox/assertion';
+import {
+  CreateSpeakingAudioUploadRequestSchema,
+  SpeakingAudioAssetResponseSchema,
+  SpeakingAudioUploadUrlResponseSchema,
+} from '@/contracts/speaking/audio-upload';
 import { SpeakingQuestionsResponseSchema } from '@/contracts/speaking/questions';
 import type { IdempotencyMode } from './operation-catalog';
 
@@ -533,6 +538,42 @@ export const PUBLIC_ROUTES = {
     requestSchema: null,
     responseSchema: SpeakingQuestionsResponseSchema,
     errorStatuses: [400, 500],
+  },
+  'speaking.audioUploads.create': {
+    method: 'POST',
+    path: '/v1/speaking/audio/uploads',
+    callerAuth: 'api-key',
+    organizationResolution: 'caller',
+    successStatus: 201,
+    publishedIdentityScope: 'user',
+    idempotency: 'none',
+    requestSchema: CreateSpeakingAudioUploadRequestSchema,
+    responseSchema: SpeakingAudioUploadUrlResponseSchema,
+    errorStatuses: [400, 401, 403, 413, 429, 500, 503],
+  },
+  'speaking.audioUploads.refresh': {
+    method: 'POST',
+    path: '/v1/speaking/audio/uploads/:assetId/refresh',
+    callerAuth: 'api-key',
+    organizationResolution: 'caller',
+    successStatus: 200,
+    publishedIdentityScope: 'user',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: SpeakingAudioUploadUrlResponseSchema,
+    errorStatuses: [400, 401, 403, 404, 429, 500, 503],
+  },
+  'speaking.audioUploads.complete': {
+    method: 'POST',
+    path: '/v1/speaking/audio/uploads/:assetId/complete',
+    callerAuth: 'api-key',
+    organizationResolution: 'caller',
+    successStatus: 201,
+    publishedIdentityScope: 'user',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: SpeakingAudioAssetResponseSchema,
+    errorStatuses: [400, 401, 403, 404, 413, 429, 500, 503],
   },
 } as const satisfies Record<string, PublicRouteDef>;
 

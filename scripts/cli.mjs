@@ -88,6 +88,11 @@ const avatarSweepDescriptor = cliRunnerDescriptor(
   'runAvatarSweepCommand',
   'avatar sweep command is unavailable',
 );
+const speakingAudioUploadSweepDescriptor = cliRunnerDescriptor(
+  'speaking-audio-upload-sweep',
+  'runSpeakingAudioUploadSweepCommand',
+  'Speaking Audio upload sweep command is unavailable',
+);
 const usageReportDescriptor = cliRunnerDescriptor(
   'usage-report',
   'runUsageReportCommand',
@@ -754,6 +759,24 @@ async function sweepAvatarsCommand(options) {
   }
 }
 
+async function sweepSpeakingAudioUploadsCommand(options) {
+  for (const name of options.keys()) {
+    if (name !== 'dry-run') {
+      usageError();
+    }
+  }
+
+  const summary = await runCliCommand(speakingAudioUploadSweepDescriptor, {
+    databaseUrl: process.env.DATABASE_URL ?? '',
+    dryRun: booleanOption(options, 'dry-run'),
+  });
+  if (summary.failed > 0) {
+    throw new Error(
+      'Speaking Audio upload sweep could not delete every object',
+    );
+  }
+}
+
 async function pruneUsageCommand(options) {
   if (options.size > 0) {
     usageError();
@@ -824,6 +847,10 @@ async function main() {
   }
   if (command === 'avatar:sweep') {
     await sweepAvatarsCommand(options);
+    return;
+  }
+  if (command === 'speaking:audio-upload-sweep') {
+    await sweepSpeakingAudioUploadsCommand(options);
     return;
   }
   if (command === 'usage:prune') {

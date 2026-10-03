@@ -134,6 +134,7 @@ import {
   RedisAuthFailureCounter,
   RedisIdentityStore,
 } from './infrastructure/redis-identity.store';
+import { ApiKeyUserIdentityGuard } from './presentation/api-key-user-identity.guard';
 import { ApiKeyGuard } from './presentation/api-key.guard';
 import { OrganizationApiKeyController } from './presentation/organization-api-key.controller';
 import { OrganizationAuditEventController } from './presentation/organization-audit-event.controller';
@@ -463,12 +464,14 @@ function controlPlaneReadDatabaseUrl(): string {
       ],
     },
     ApiKeyGuard,
+    ApiKeyUserIdentityGuard,
     SandboxApiKeyGuard,
     UserIdentityGuard,
   ],
   exports: [
     API_KEY_AUTHENTICATOR,
     ApiKeyGuard,
+    ApiKeyUserIdentityGuard,
     UserIdentityGuard,
     ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
     ORGANIZATION_MEMBERSHIP,

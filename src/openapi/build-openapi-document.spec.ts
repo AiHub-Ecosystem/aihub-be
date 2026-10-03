@@ -16,6 +16,7 @@ interface OpenApiOperation {
     readonly content: Record<string, { readonly schema: unknown }>;
   };
   readonly responses: Record<string, OpenApiResponse | undefined>;
+  readonly description?: string;
   readonly security?: readonly Record<string, readonly string[]>[];
   // Optional because the sandbox mint route carries no scope: it is not a
   // catalogued operation and has nothing to authorize against.
@@ -1038,6 +1039,45 @@ describe('buildOpenApiDocument', () => {
     expect(success?.headers?.['Cache-Control']).toBeDefined();
     expect(operation?.responses['400']).toBeDefined();
     expect(operation?.responses['500']).toBeDefined();
+  });
+
+  it('documents Speaking Audio intent ownership, direct upload, refresh, and completion', () => {
+    const paths = build().paths;
+    const create = paths['/v1/speaking/audio/uploads']?.post;
+    const refresh =
+      paths['/v1/speaking/audio/uploads/{asset_id}/refresh']?.post;
+    const complete =
+      paths['/v1/speaking/audio/uploads/{asset_id}/complete']?.post;
+
+    expect(create).toMatchObject({
+      operationId: 'speaking.audioUploads.create',
+      security: [{ ApiKeyAuth: [] }],
+      'x-identity-scope': 'user',
+    });
+    expect(create?.parameters).toContainEqual({
+      $ref: '#/components/parameters/UserIdentity',
+    });
+    expect(create?.description).toContain('five-minute');
+    expect(create?.responses['201']?.headers?.['Cache-Control']).toBeDefined();
+    expect(create?.responses['503']).toBeDefined();
+
+    expect(refresh).toMatchObject({
+      operationId: 'speaking.audioUploads.refresh',
+      security: [{ ApiKeyAuth: [] }],
+    });
+    expect(refresh?.parameters).toContainEqual(
+      expect.objectContaining({ name: 'assetId', in: 'path', required: true }),
+    );
+    expect(refresh?.responses['200']).toBeDefined();
+    expect(refresh?.responses['404']).toBeDefined();
+
+    expect(complete).toMatchObject({
+      operationId: 'speaking.audioUploads.complete',
+      security: [{ ApiKeyAuth: [] }],
+    });
+    expect(complete?.responses['201']).toBeDefined();
+    expect(complete?.responses['200']).toBeDefined();
+    expect(complete?.description).toContain('30 days');
   });
 
   it('documents every GET route HEAD variant without a response body', () => {

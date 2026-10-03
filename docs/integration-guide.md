@@ -519,15 +519,17 @@ JSON-by-URL use `Content-Type: application/json`; Speaking file grading uses
 Two routes are not grading operations and appear here only so the list is
 complete:
 
-| Path                           | `X-User-Identity` | `Idempotency-Key` | Notes                                            |
-| ------------------------------ | ----------------- | ----------------- | ------------------------------------------------ |
-| `/v1/sandbox/assertions`       | Not used          | None              | Dedicated demo Organization only; see section 3a |
-| `/v1/ielts/speaking/questions` | Not used          | None              | Public question catalog; no API key needed       |
+| Path                           | `X-User-Identity`                              | `Idempotency-Key` | Notes                                                         |
+| ------------------------------ | ---------------------------------------------- | ----------------- | ------------------------------------------------------------- |
+| `/v1/sandbox/assertions`       | Not used                                       | None              | Dedicated demo Organization only; see section 3a              |
+| `/v1/ielts/speaking/questions` | Not used                                       | None              | Public question catalog; no API key needed                    |
+| `/v1/speaking/audio/uploads`   | Required; plain ID or JWT by Organization mode | None              | Recording upload intent; see "Retaining a Speaking recording" |
 
 `/v1/sandbox/assertions` takes an API key and a `user_id` in its body; it does
 not take `X-User-Identity` because issuing that value is what the route does.
 `/v1/ielts/speaking/questions` takes neither credential and is described in
-the Speaking grading section.
+the Speaking grading section. The two `/v1/speaking/audio/uploads` routes take
+`X-User-Identity` because the recording is attributed to that exact End-User ID.
 
 ### Enumerated values
 
@@ -628,6 +630,63 @@ signed object URL, and may be at most 2,048 characters. AIHUB rejects embedded
 credentials, fragments, other hosts/schemes/ports, and unknown fields before
 dispatch. AIHUB validates but does not download the URL; the provider owns
 retrieval and does not follow redirects.
+
+### Retaining a Speaking recording
+
+The grading route above forwards bytes to the AI Speaking service and keeps
+nothing. To store a recording as a durable AIHUB asset, upload it directly to
+object storage instead. Audio bytes never pass through AIHUB.
+
+1. `POST /v1/speaking/audio/uploads` with
+   `{ "content_type": "audio/wav", "byte_size": 204800 }`. It answers `201`
+   with an `asset_id`, an `upload_url`, `method: "PUT"`, the two headers you
+   must send unchanged (`Content-Type`, `Content-Length`), `expires_at` for
+   that URL, and `intent_expires_at` for the upload itself.
+2. `PUT` the bytes to `upload_url` with exactly those headers, within five
+   minutes.
+3. `POST /v1/speaking/audio/uploads/{asset_id}/complete` within one hour of
+   step 1. It verifies the stored object's type and size, then answers `201`
+   with the asset and `retention_expires_at` 30 days later. Repeating a
+   successful completion answers `200` with the same asset.
+
+```bash
+curl -sS -X POST "$AIHUB_BASE_URL/v1/speaking/audio/uploads" \
+  -H "X-API-Key: $AIHUB_API_KEY" \
+  -H "X-User-Identity: $ASSERTION" \
+  -H 'Content-Type: application/json' \
+  -d '{"content_type":"audio/wav","byte_size":204800}'
+```
+
+```json
+{
+  "data": {
+    "asset_id": "aud_01JQ8Z5R3M7T2VXK4YB6HD8C0E",
+    "upload_url": "https://s3.wispace.app/orgs/org_.../original?X-Amz-...",
+    "method": "PUT",
+    "headers": { "Content-Type": "audio/wav", "Content-Length": "204800" },
+    "expires_at": "2026-10-03T12:05:00Z",
+    "intent_expires_at": "2026-10-03T13:00:00Z"
+  },
+  "meta": { "request_id": "req_..." }
+}
+```
+
+The URL is short-lived while the upload stays open for an hour. If it expires
+first, `POST /v1/speaking/audio/uploads/{asset_id}/refresh` issues a new
+five-minute URL for the same asset, key, content type, and byte size; it does
+not extend the one-hour window. AIHUB chooses the object key, so no filename
+and no Organization or End-User ID is ever taken from your request body.
+
+Accepted `content_type` values are exactly `audio/wav`, `audio/mpeg`,
+`audio/mp4`, `audio/webm`, and `audio/ogg`; aliases such as `audio/x-wav` are
+refused. `byte_size` must be from 100 bytes through 25 MiB. Completion reads
+the object's storage-reported metadata, so a `PUT` whose real bytes differ
+from what you declared is refused and its object deleted.
+
+`404` means the intent is gone, expired, or belongs to another Organization or
+End-User ID. A completion sent before storage has the object yet is retryable
+until the intent expires. `503 SPEAKING_AUDIO_STORAGE_UNAVAILABLE` is retryable
+and leaves the intent open.
 
 This public sample is a candidate's answer to the matching Part 1 question,
 not audio of the examiner reading the prompt. Its URL has no signature or
