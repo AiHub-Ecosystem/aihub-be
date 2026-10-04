@@ -242,10 +242,24 @@ export class DownstreamHttpClient {
       return existing;
     }
 
+    // `allowH2` is off in undici by default, which pins this pool to HTTP/1.1
+    // and caps it at one in-flight request per socket. Leaving `connections`
+    // at 10 makes enabling it safe either way: a provider that negotiates h2
+    // multiplexes up to `maxConcurrentStreams` per socket, and one that does
+    // not keeps exactly the concurrency it had before. Capping `connections`
+    // to 1 to force a single h2 session would cut concurrency tenfold on a
+    // provider that never negotiates h2, so it is deliberately not done.
+    //
+    // `keepAliveTimeout` was 10s, which expires a socket inside the bursts
+    // this gateway sees: production traffic runs around one request a minute
+    // for an hour and then stops for hours, so the next request of a burst
+    // was paying a fresh TCP and TLS handshake. `keepAliveMaxTimeout` stays
+    // below the ceiling a provider can ask for.
     const dispatcher = new Pool(base.origin, {
+      allowH2: true,
       connections: 10,
-      keepAliveTimeout: 10_000,
-      keepAliveMaxTimeout: 60_000,
+      keepAliveTimeout: 300_000,
+      keepAliveMaxTimeout: 600_000,
     });
     this.dispatchers.set(base.origin, dispatcher);
     return dispatcher;
