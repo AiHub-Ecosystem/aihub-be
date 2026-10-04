@@ -26,9 +26,9 @@ import {
 } from './identity-row';
 import {
   auditStamp,
-  recordOrganizationAuditEvent,
+  organizationAuditEventInsertSql,
 } from './organization-audit-event.store';
-import type { IdentityDrizzleClient } from './postgres-identity.client';
+import type { IdentityDatabaseClient } from './postgres-identity.client';
 
 /**
  * Columns are named rather than defaulted. The read replica holds a column-level
@@ -207,8 +207,8 @@ export class PostgresOrganizationIdentityConfigRepository
   implements OrganizationIdentityConfigRepositoryPort
 {
   constructor(
-    private readonly client: IdentityDrizzleClient,
-    private readonly readClient: IdentityDrizzleClient = client,
+    private readonly client: IdentityDatabaseClient,
+    private readonly readClient: IdentityDatabaseClient = client,
   ) {}
 
   async findActiveByOrganizationId(
@@ -249,9 +249,9 @@ export class PostgresOrganizationIdentityConfigRepository
     const stamp = auditStamp(input, input.userId, input.context.receivedAt);
 
     try {
-      return await this.client.transaction(async (transaction) => {
+      return await this.client.db.transaction(async (transaction) => {
         const organization = (
-          await transaction.db.execute<Record<string, unknown>>(sql`
+          await transaction.execute<Record<string, unknown>>(sql`
             SELECT status
             FROM organizations
             WHERE id = ${input.organizationId}
@@ -273,7 +273,7 @@ export class PostgresOrganizationIdentityConfigRepository
         }
 
         const membership = (
-          await transaction.db.execute<Record<string, unknown>>(sql`
+          await transaction.execute<Record<string, unknown>>(sql`
             SELECT role, status
             FROM organization_members
             WHERE organization_id = ${input.organizationId}
@@ -293,7 +293,7 @@ export class PostgresOrganizationIdentityConfigRepository
           return { kind: 'forbidden' as const };
         }
 
-        const written = await transaction.db
+        const written = await transaction
           .insert(organizationIdentityConfigs)
           .values({
             organizationId: input.organizationId,
@@ -328,7 +328,7 @@ export class PostgresOrganizationIdentityConfigRepository
         const row =
           written[0] ??
           (
-            await transaction.db
+            await transaction
               .select(STORED_CONFIG_COLUMNS)
               .from(organizationIdentityConfigs)
               .where(
@@ -345,12 +345,14 @@ export class PostgresOrganizationIdentityConfigRepository
         }
 
         if (changed) {
-          await recordOrganizationAuditEvent(transaction, stamp, {
-            action: 'organization.identity_config_set',
-            organizationId: input.organizationId,
-            issuer: input.issuer,
-            sourceKind: input.sourceKind,
-          });
+          await transaction.execute(
+            organizationAuditEventInsertSql(stamp, {
+              action: 'organization.identity_config_set',
+              organizationId: input.organizationId,
+              issuer: input.issuer,
+              sourceKind: input.sourceKind,
+            }),
+          );
         }
 
         return {
@@ -397,13 +399,6 @@ export class PostgresOrganizationIdentityConfigRepository
       return first;
     } catch {
       throw identityStoreError('Identity store is unavailable');
-    }
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    await this.client.close();
-    if (this.readClient !== this.client) {
-      await this.readClient.close();
     }
   }
 }

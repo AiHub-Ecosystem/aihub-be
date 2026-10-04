@@ -1,5 +1,7 @@
 import { type NodePgDatabase, drizzle } from 'drizzle-orm/node-postgres';
-import { Pool, type PoolClient, type PoolConfig } from 'pg';
+import { Pool, type PoolConfig } from 'pg';
+
+import { identityDrizzleSchema } from './drizzle-identity-schema';
 
 export interface PostgresIdentityClient {
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
@@ -18,11 +20,12 @@ export interface PostgresIdentityTransactionalClient
 }
 
 /**
- * One pool shape for both identity clients. Drizzle does not introduce its own
- * connection settings, so a migrated adapter keeps the read/write separation,
- * the limits, and the shutdown lifecycle it already had.
+ * Shared by raw Identity clients and Nest's Drizzle integration so both keep
+ * the same PostgreSQL pool limits and timeouts.
  */
-function identityPoolOptions(databaseUrl: string): PoolConfig {
+export function identityDrizzleConnectionOptions(
+  databaseUrl: string,
+): PoolConfig {
   return {
     connectionString: databaseUrl,
     max: 10,
@@ -52,7 +55,7 @@ export function createPostgresIdentityClient(
     };
   }
 
-  const pool = new Pool(identityPoolOptions(databaseUrl));
+  const pool = new Pool(identityDrizzleConnectionOptions(databaseUrl));
 
   return {
     async query(
@@ -97,39 +100,15 @@ export function createPostgresIdentityClient(
   };
 }
 
-export type IdentityDatabase = NodePgDatabase;
+export type IdentityDatabase = NodePgDatabase<typeof identityDrizzleSchema>;
 
-/**
- * One transaction, reachable two ways. `db` is the Drizzle surface the adapter
- * builds ordinary statements and PostgreSQL-specific ones through; `query` is
- * the seam the shared Organization Audit Event writer already speaks, so the
- * audit event and the configuration it records still commit or roll back
- * together on this same connection.
- */
-export interface IdentityTransaction {
+export interface IdentityDatabaseClient {
   readonly db: IdentityDatabase;
-  query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
 }
 
 export interface IdentityDrizzleClient {
   readonly db: IdentityDatabase;
-  transaction<T>(run: (tx: IdentityTransaction) => Promise<T>): Promise<T>;
   close(): Promise<void>;
-}
-
-function identityTransaction(client: PoolClient): IdentityTransaction {
-  return {
-    db: drizzle(client),
-    query: async (
-      text: string,
-      values: readonly unknown[],
-    ): Promise<readonly unknown[]> => {
-      const response = await client.query<Record<string, unknown>>(text, [
-        ...values,
-      ]);
-      return response.rows;
-    },
-  };
 }
 
 /**
@@ -141,7 +120,6 @@ function unconfiguredDrizzleClient(): IdentityDrizzleClient {
     get db(): never {
       return missingDatabaseUrl();
     },
-    transaction: async () => missingDatabaseUrl(),
     close: async () => undefined,
   };
 }
@@ -153,30 +131,11 @@ export function createIdentityDrizzleClient(
     return unconfiguredDrizzleClient();
   }
 
-  const pool = new Pool(identityPoolOptions(databaseUrl));
+  const pool = new Pool(identityDrizzleConnectionOptions(databaseUrl));
+  const db = drizzle(pool, { schema: identityDrizzleSchema });
 
   return {
-    db: drizzle(pool),
-    transaction: async <T>(
-      run: (tx: IdentityTransaction) => Promise<T>,
-    ): Promise<T> => {
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        const result = await run(identityTransaction(client));
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        try {
-          await client.query('ROLLBACK');
-        } catch {
-          // Preserve the original database failure.
-        }
-        throw error;
-      } finally {
-        client.release();
-      }
-    },
+    db,
     close: async () => {
       await pool.end();
     },

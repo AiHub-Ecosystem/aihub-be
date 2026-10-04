@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { DrizzleModule, getDrizzleToken } from '@nestjs/drizzle';
+import { drizzle } from 'drizzle-orm/node-postgres';
 
 import {
   OPAQUE_TOKEN_BINDINGS,
@@ -117,14 +119,16 @@ import {
 import { UserAssertionVerifier } from './application/user-assertion-verifier';
 import { UserIdentityResolver } from './application/user-identity-resolver';
 import { USER_IDENTITY_RESOLVER } from './application/user-identity-resolver.port';
+import { identityDrizzleSchema } from './infrastructure/drizzle-identity-schema';
 import { EnvSandboxAssertionPolicy } from './infrastructure/env-sandbox-assertion-policy';
 import { JoseSandboxAssertionSigner } from './infrastructure/jose-sandbox-assertion-signer';
 import { JoseUserAssertionCrypto } from './infrastructure/jose-user-assertion-crypto';
 import { JwksKeyProvider } from './infrastructure/jwks-key-provider';
 import { PostgresApiKeyRepository } from './infrastructure/postgres-api-key.repository';
 import {
-  createIdentityDrizzleClient,
+  type IdentityDatabase,
   createPostgresIdentityClient,
+  identityDrizzleConnectionOptions,
 } from './infrastructure/postgres-identity.client';
 import { PostgresOrganizationApiKeyRepository } from './infrastructure/postgres-organization-api-key.repository';
 import { PostgresOrganizationAuditReadRepository } from './infrastructure/postgres-organization-audit-read.repository';
@@ -164,9 +168,36 @@ function controlPlaneReadDatabaseUrl(): string {
   );
 }
 
+const IDENTITY_READ_DATABASE = 'identity-read';
+const IDENTITY_WRITE_DATABASE = 'identity-write';
+
+function drizzleDatabaseOptions(databaseUrl: string) {
+  if (databaseUrl.trim().length === 0) {
+    return { db: drizzle.mock({ schema: identityDrizzleSchema }) };
+  }
+
+  return {
+    drizzle,
+    connection: identityDrizzleConnectionOptions(databaseUrl),
+    schema: identityDrizzleSchema,
+  };
+}
+
 @Module({
   // `RateLimitGuard` on the sandbox route consumes the gateway's rate limiter.
-  imports: [AuthModule, GatewayModule, IdempotencyModule],
+  imports: [
+    AuthModule,
+    GatewayModule,
+    IdempotencyModule,
+    DrizzleModule.forRootAsync({
+      name: IDENTITY_READ_DATABASE,
+      useFactory: () => drizzleDatabaseOptions(controlPlaneReadDatabaseUrl()),
+    }),
+    DrizzleModule.forRootAsync({
+      name: IDENTITY_WRITE_DATABASE,
+      useFactory: () => drizzleDatabaseOptions(controlPlaneDatabaseUrl()),
+    }),
+  ],
   controllers: [
     SandboxAssertionController,
     OrganizationController,
@@ -179,18 +210,24 @@ function controlPlaneReadDatabaseUrl(): string {
   providers: [
     {
       provide: API_KEY_REPOSITORY,
-      useFactory: () =>
-        new PostgresApiKeyRepository(
-          createIdentityDrizzleClient(controlPlaneReadDatabaseUrl()),
-        ),
+      useFactory: (db: IdentityDatabase) =>
+        new PostgresApiKeyRepository({ db }),
+      inject: [getDrizzleToken(IDENTITY_READ_DATABASE)],
     },
     {
       provide: ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
-      useFactory: (): OrganizationIdentityConfigRepositoryPort =>
+      useFactory: (
+        writeDb: IdentityDatabase,
+        readDb: IdentityDatabase,
+      ): OrganizationIdentityConfigRepositoryPort =>
         new PostgresOrganizationIdentityConfigRepository(
-          createIdentityDrizzleClient(controlPlaneDatabaseUrl()),
-          createIdentityDrizzleClient(controlPlaneReadDatabaseUrl()),
+          { db: writeDb },
+          { db: readDb },
         ),
+      inject: [
+        getDrizzleToken(IDENTITY_WRITE_DATABASE),
+        getDrizzleToken(IDENTITY_READ_DATABASE),
+      ],
     },
     {
       provide: ORGANIZATION_MEMBERSHIP,

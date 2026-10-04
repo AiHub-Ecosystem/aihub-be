@@ -171,3 +171,9 @@ export const organizationIdentityConfigs = pgTable(
     uniqueIndex('oic_issuer_uq').on(table.issuer),
   ],
 );
+
+export const identityDrizzleSchema = {
+  organizations,
+  apiKeys,
+  organizationIdentityConfigs,
+};

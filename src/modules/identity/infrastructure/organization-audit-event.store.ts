@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import { type SQL, sql } from 'drizzle-orm';
 import { monotonicFactory } from 'ulid';
 
 import {
@@ -57,6 +58,34 @@ export function organizationAuditEventId(occurredAt: Date): string {
   return `oae_${nextUlid(occurredAt.getTime())}`;
 }
 
+function createOrganizationAuditEvent(
+  stamp: Omit<OrganizationAuditStamp, 'id'>,
+  draft: OrganizationAuditDraft,
+) {
+  return organizationAuditEvent(
+    { ...stamp, id: organizationAuditEventId(stamp.occurredAt) },
+    draft,
+  );
+}
+
+export function organizationAuditEventInsertSql(
+  stamp: Omit<OrganizationAuditStamp, 'id'>,
+  draft: OrganizationAuditDraft,
+): SQL {
+  const event = createOrganizationAuditEvent(stamp, draft);
+  return sql`
+    INSERT INTO organization_audit_events (
+      id, organization_id, actor_user_account_id, action, outcome,
+      target_type, target_id, target_label, detail, request_id, occurred_at
+    ) VALUES (
+      ${event.id}, ${event.organizationId}, ${event.actorUserAccountId},
+      ${event.action}, ${event.outcome}, ${event.targetType}, ${event.targetId},
+      ${event.targetLabel}, ${JSON.stringify(event.detail)}, ${event.requestId},
+      ${event.occurredAt}
+    )
+  `;
+}
+
 /**
  * Writes one Organization Audit Event through whatever client it is given.
  *
@@ -69,10 +98,7 @@ export async function recordOrganizationAuditEvent(
   stamp: Omit<OrganizationAuditStamp, 'id'>,
   draft: OrganizationAuditDraft,
 ): Promise<void> {
-  const event = organizationAuditEvent(
-    { ...stamp, id: organizationAuditEventId(stamp.occurredAt) },
-    draft,
-  );
+  const event = createOrganizationAuditEvent(stamp, draft);
 
   await client.query(INSERT_ORGANIZATION_AUDIT_EVENT_SQL, [
     event.id,

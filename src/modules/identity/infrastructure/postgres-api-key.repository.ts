@@ -9,7 +9,7 @@ import type {
 
 import { apiKeys, organizations } from './drizzle-identity-schema';
 import { identityStoreError, isRecord, stringValue } from './identity-row';
-import type { IdentityDrizzleClient } from './postgres-identity.client';
+import type { IdentityDatabaseClient } from './postgres-identity.client';
 
 function stringArrayValue(
   record: Record<string, unknown>,
@@ -152,7 +152,7 @@ export function apiKeyRecordFromRow(value: unknown): ApiKeyRecord | undefined {
 }
 
 export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
-  constructor(private readonly client: IdentityDrizzleClient) {}
+  constructor(private readonly client: IdentityDatabaseClient) {}
 
   async findByHash(hashHex: string): Promise<ApiKeyRecord | null> {
     if (!/^[0-9a-f]{64}$/.test(hashHex)) {
@@ -218,9 +218,5 @@ export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
     } catch {
       throw identityStoreError('Identity store is unavailable');
     }
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    await this.client.close();
   }
 }
