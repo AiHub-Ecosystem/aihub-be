@@ -2,15 +2,14 @@ import { AppError } from '@/common/errors/app-error';
 import type { RequestContext } from '@/common/request-context/request-context';
 
 import type { ApiKeyCachePort } from './api-key-authenticator.port';
+import {
+  ORGANIZATION_API_KEY_ADMISSION,
+  admitOrganizationApiKey,
+} from './organization-admission';
 import { generateOrganizationApiKey } from './organization-api-key-generator';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
-import {
-  forbidden,
-  requireOrganizationManager,
-} from './organization-membership.authorization';
+import { forbidden } from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
-
-const API_KEY_ROTATION_FORBIDDEN = 'Organization API key rotation is forbidden';
 
 export interface RotateOrganizationApiKeyInput {
   readonly context: RequestContext;
@@ -54,15 +53,15 @@ export class RotateOrganizationApiKey {
   async rotate(
     input: RotateOrganizationApiKeyInput,
   ): Promise<RotatedOrganizationApiKey> {
-    await requireOrganizationManager(
-      this.membership,
-      {
-        context: input.context,
-        userId: input.userId,
-        organizationId: input.organizationId,
-      },
-      API_KEY_ROTATION_FORBIDDEN,
-    );
+    const admission = await admitOrganizationApiKey(this.membership, {
+      context: input.context,
+      userId: input.userId,
+      organizationId: input.organizationId,
+      surface: 'api_key_rotate',
+    });
+    if (!admission.admitted) {
+      throw admission.refusal;
+    }
 
     const now = this.now();
     const generated = generateOrganizationApiKey(now);
@@ -90,7 +89,7 @@ export class RotateOrganizationApiKey {
       throw forbidden('API key cannot be rotated');
     }
     if (result.kind === 'organization_unavailable') {
-      throw forbidden(API_KEY_ROTATION_FORBIDDEN);
+      throw forbidden(ORGANIZATION_API_KEY_ADMISSION.api_key_rotate.refusal);
     }
 
     // The durable change is committed by this point. Purging only closes the

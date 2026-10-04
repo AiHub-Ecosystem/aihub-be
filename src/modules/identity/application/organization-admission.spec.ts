@@ -1,9 +1,12 @@
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 
 import {
+  ORGANIZATION_API_KEY_ADMISSION,
   ORGANIZATION_READ_ADMISSION,
   type OrganizationAdmissionDecision,
+  type OrganizationApiKeySurface,
   type OrganizationReadSurface,
+  admitOrganizationApiKey,
   admitOrganizationRead,
 } from './organization-admission';
 import type {
@@ -245,5 +248,132 @@ describe('admitOrganizationRead', () => {
     );
 
     expect(decision.admitted).toBe(true);
+  });
+});
+
+const API_KEY_SURFACES: readonly OrganizationApiKeySurface[] = [
+  'api_key_create',
+  'api_key_list',
+  'api_key_rotate',
+  'api_key_revoke',
+];
+
+describe('ORGANIZATION_API_KEY_ADMISSION', () => {
+  it('states a refusal for every API key surface', () => {
+    for (const surface of API_KEY_SURFACES) {
+      expect(
+        ORGANIZATION_API_KEY_ADMISSION[surface].refusal.length,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it('gives every surface at least one Membership Role', () => {
+    for (const surface of API_KEY_SURFACES) {
+      expect(
+        ORGANIZATION_API_KEY_ADMISSION[surface].admittedRoles.length,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps a distinct refusal per surface', () => {
+    const refusals = new Set(
+      API_KEY_SURFACES.map(
+        (surface) => ORGANIZATION_API_KEY_ADMISSION[surface].refusal,
+      ),
+    );
+
+    expect(refusals.size).toBe(API_KEY_SURFACES.length);
+  });
+});
+
+describe('admitOrganizationApiKey', () => {
+  async function admit(
+    resolution: OrganizationMembershipResolution,
+    surface: OrganizationApiKeySurface = 'api_key_create',
+  ): Promise<OrganizationAdmissionDecision> {
+    return admitOrganizationApiKey(portReturning(resolution), {
+      surface,
+      context,
+      userId: USER_ID,
+      organizationId: ORGANIZATION_ID,
+    });
+  }
+
+  it.each(
+    API_KEY_SURFACES.flatMap((surface) =>
+      (['owner', 'admin', 'member'] as const).map(
+        (role) => [surface, role] as const,
+      ),
+    ),
+  )('%s: active %s admission verdict', async (surface, role) => {
+    const admitted = await admit(
+      { kind: 'active', membership: record(role) },
+      surface,
+    );
+
+    expect(admitted.admitted).toBe(role !== 'member');
+    expect(refusalOf(admitted)).toBe(
+      role === 'member'
+        ? ORGANIZATION_API_KEY_ADMISSION[surface].refusal
+        : undefined,
+    );
+  });
+
+  it.each(API_KEY_SURFACES)(
+    '%s closes on Organization suspension for every Membership Role',
+    async (surface) => {
+      for (const role of ['owner', 'admin', 'member'] as const) {
+        const decision = await admit(
+          {
+            kind: 'active',
+            membership: record(role, 'suspended'),
+          },
+          surface,
+        );
+
+        expect(decision.admitted).toBe(false);
+        expect(refusalOf(decision)).toBe(
+          ORGANIZATION_API_KEY_ADMISSION[surface].refusal,
+        );
+      }
+    },
+  );
+
+  it('refuses a caller with no membership', async () => {
+    const decision = await admit({ kind: 'missing' });
+
+    expect(decision.admitted).toBe(false);
+    expect(refusalOf(decision)).toBe(
+      ORGANIZATION_API_KEY_ADMISSION.api_key_create.refusal,
+    );
+  });
+
+  it('refuses a disabled membership', async () => {
+    const decision = await admit({
+      kind: 'disabled',
+      membership: { ...record('owner'), status: 'disabled' },
+    });
+
+    expect(decision.admitted).toBe(false);
+  });
+
+  it('leaves a durable lookup failure as an internal failure, never a refusal and never an admission', async () => {
+    const failure = new Error('Identity store is unavailable');
+
+    await expect(
+      admitOrganizationApiKey(
+        {
+          resolveMembership: async () => {
+            throw failure;
+          },
+        },
+        {
+          surface: 'api_key_create',
+          context,
+          userId: USER_ID,
+          organizationId: ORGANIZATION_ID,
+        },
+      ),
+    ).rejects.toBe(failure);
   });
 });

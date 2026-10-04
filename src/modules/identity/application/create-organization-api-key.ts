@@ -1,15 +1,14 @@
 import { publishedScopes } from '@/catalog/operation-catalog';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import type { RequestContext } from '@/common/request-context/request-context';
+import {
+  ORGANIZATION_API_KEY_ADMISSION,
+  admitOrganizationApiKey,
+} from './organization-admission';
 import { generateOrganizationApiKey } from './organization-api-key-generator';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
-import {
-  forbidden,
-  requireOrganizationManager,
-} from './organization-membership.authorization';
+import { forbidden } from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
-
-const API_KEY_CREATION_FORBIDDEN = 'Organization API key creation is forbidden';
 
 /** Customer-facing request tiers. Development remains operator-only. */
 const CUSTOMER_ENVIRONMENTS: readonly string[] = [
@@ -155,15 +154,15 @@ export class CreateOrganizationApiKey {
   async create(
     input: CreateOrganizationApiKeyInput,
   ): Promise<CreatedOrganizationApiKey> {
-    await requireOrganizationManager(
-      this.membership,
-      {
-        context: input.context,
-        userId: input.userId,
-        organizationId: input.organizationId,
-      },
-      API_KEY_CREATION_FORBIDDEN,
-    );
+    const admission = await admitOrganizationApiKey(this.membership, {
+      context: input.context,
+      userId: input.userId,
+      organizationId: input.organizationId,
+      surface: 'api_key_create',
+    });
+    if (!admission.admitted) {
+      throw admission.refusal;
+    }
 
     const now = this.now();
     const scopes = validatedScopes(input.scopes);
@@ -208,7 +207,7 @@ export class CreateOrganizationApiKey {
       throw forbidden('Organization has reached its active API key limit');
     }
     if (result.kind === 'organization_unavailable') {
-      throw forbidden(API_KEY_CREATION_FORBIDDEN);
+      throw forbidden(ORGANIZATION_API_KEY_ADMISSION.api_key_create.refusal);
     }
 
     return {

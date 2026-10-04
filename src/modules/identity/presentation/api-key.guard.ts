@@ -15,7 +15,6 @@ import {
   type ApiKeyAuthenticatorPort,
   type AuthenticatedApiKey,
 } from '@/modules/identity/application/api-key-authenticator.port';
-import { hasRequiredScope } from '@/modules/identity/application/authorization';
 import {
   SANDBOX_ASSERTION_POLICY,
   type SandboxAssertionPolicyPort,
@@ -118,7 +117,7 @@ export class ApiKeyGuard implements CanActivate {
       environment: authorized.environment,
     });
 
-    if (!hasRequiredScope(authorized, operation.requiredScope)) {
+    if (!authorized.scopes.includes(operation.requiredScope)) {
       throw forbidden();
     }
 

@@ -19,7 +19,7 @@ export type OrganizationReadSurface =
   | 'audit_read'
   | 'identity_configuration';
 
-export interface OrganizationReadAdmissionRule {
+export interface OrganizationAdmissionRule {
   readonly admittedRoles: readonly OrganizationMembershipRole[];
   /** False only where a suspended Organization stays readable. */
   readonly suspensionClosesSurface: boolean;
@@ -34,7 +34,7 @@ const OWNER_ONLY = ['owner'] as const;
  * Organization-scoped surface, and whether Organization Suspension closes it.
  */
 export const ORGANIZATION_READ_ADMISSION: Readonly<
-  Record<OrganizationReadSurface, OrganizationReadAdmissionRule>
+  Record<OrganizationReadSurface, OrganizationAdmissionRule>
 > = {
   membership_list: {
     admittedRoles: OWNER_AND_ADMIN,
@@ -78,22 +78,86 @@ export interface OrganizationReadAdmissionRequest
   readonly surface: OrganizationReadSurface;
 }
 
+export type OrganizationApiKeySurface =
+  | 'api_key_create'
+  | 'api_key_list'
+  | 'api_key_rotate'
+  | 'api_key_revoke';
+
+export interface OrganizationApiKeyAdmissionRequest
+  extends ResolveMembershipInput {
+  readonly surface: OrganizationApiKeySurface;
+}
+
 /**
- * A surface's single refusal, for every caller outside its authority. Owned
- * here rather than borrowed from the membership mutation helpers, which are
- * being retired: an admitted caller and a refused caller must not be able to
- * tell those two apart from how the refusal was built.
+ * The one place that states which Membership Roles may use which
+ * Organization API key surface, and whether Organization Suspension closes it.
+ * The authority matches the settled manager-only admission of
+ * requireOrganizationManager: an active owner or admin of an active
+ * Organization, every other caller refused identically.
  */
-function refuse(surface: OrganizationReadSurface): AppError {
+export const ORGANIZATION_API_KEY_ADMISSION: Readonly<
+  Record<OrganizationApiKeySurface, OrganizationAdmissionRule>
+> = {
+  api_key_create: {
+    admittedRoles: OWNER_AND_ADMIN,
+    suspensionClosesSurface: true,
+    refusal: 'Organization API key creation is forbidden',
+  },
+  api_key_list: {
+    admittedRoles: OWNER_AND_ADMIN,
+    suspensionClosesSurface: true,
+    refusal: 'Organization API key access is forbidden',
+  },
+  api_key_rotate: {
+    admittedRoles: OWNER_AND_ADMIN,
+    suspensionClosesSurface: true,
+    refusal: 'Organization API key rotation is forbidden',
+  },
+  api_key_revoke: {
+    admittedRoles: OWNER_AND_ADMIN,
+    suspensionClosesSurface: true,
+    refusal: 'Organization API key revocation is forbidden',
+  },
+};
+
+async function admit<TSurface extends string>(
+  membership: Pick<OrganizationMembershipPort, 'resolveMembership'>,
+  rules: Readonly<Record<TSurface, OrganizationAdmissionRule>>,
+  request: ResolveMembershipInput & { readonly surface: TSurface },
+): Promise<OrganizationAdmissionDecision> {
+  const resolution = await membership.resolveMembership(request);
+
+  if (resolution.kind !== 'active') {
+    return { admitted: false, refusal: refusalFor(rules, request.surface) };
+  }
+
+  const caller = resolution.membership;
+  const rule = rules[request.surface];
+
+  if (!rule.admittedRoles.includes(caller.role)) {
+    return { admitted: false, refusal: refusalFor(rules, request.surface) };
+  }
+  if (rule.suspensionClosesSurface && caller.organizationStatus !== 'active') {
+    return { admitted: false, refusal: refusalFor(rules, request.surface) };
+  }
+
+  return { admitted: true, caller };
+}
+
+function refusalFor<TSurface extends string>(
+  rules: Readonly<Record<TSurface, OrganizationAdmissionRule>>,
+  surface: TSurface,
+): AppError {
   return new AppError({
     code: 'FORBIDDEN',
-    message: ORGANIZATION_READ_ADMISSION[surface].refusal,
+    message: rules[surface].refusal,
     retryable: false,
   });
 }
 
 /**
- * Resolves the caller's Membership and settles admission from the table above.
+ * Resolves the caller's Membership and settles admission from the read table.
  * A durable lookup failure is left to propagate: it is an internal failure,
  * never a refusal, and never an admission.
  */
@@ -101,21 +165,15 @@ export async function admitOrganizationRead(
   membership: Pick<OrganizationMembershipPort, 'resolveMembership'>,
   request: OrganizationReadAdmissionRequest,
 ): Promise<OrganizationAdmissionDecision> {
-  const resolution = await membership.resolveMembership(request);
+  return admit(membership, ORGANIZATION_READ_ADMISSION, request);
+}
 
-  if (resolution.kind !== 'active') {
-    return { admitted: false, refusal: refuse(request.surface) };
-  }
-
-  const caller = resolution.membership;
-  const rule = ORGANIZATION_READ_ADMISSION[request.surface];
-
-  if (!rule.admittedRoles.includes(caller.role)) {
-    return { admitted: false, refusal: refuse(request.surface) };
-  }
-  if (rule.suspensionClosesSurface && caller.organizationStatus !== 'active') {
-    return { admitted: false, refusal: refuse(request.surface) };
-  }
-
-  return { admitted: true, caller };
+/**
+ * The API key surfaces settle admission through the same core the reads use.
+ */
+export async function admitOrganizationApiKey(
+  membership: Pick<OrganizationMembershipPort, 'resolveMembership'>,
+  request: OrganizationApiKeyAdmissionRequest,
+): Promise<OrganizationAdmissionDecision> {
+  return admit(membership, ORGANIZATION_API_KEY_ADMISSION, request);
 }

@@ -3,11 +3,9 @@ import { apiKeyStatus } from '@/modules/identity/domain/api-key';
 
 import type { OrganizationApiKeyView } from './organization-api-key-view';
 
+import { admitOrganizationApiKey } from './organization-admission';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
-import { requireOrganizationManager } from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
-
-const API_KEY_ACCESS_FORBIDDEN = 'Organization API key access is forbidden';
 
 export interface ListOrganizationApiKeysCommand {
   readonly context: RequestContext;
@@ -37,15 +35,15 @@ export class ListOrganizationApiKeys {
   async list(
     input: ListOrganizationApiKeysCommand,
   ): Promise<readonly OrganizationApiKeyView[]> {
-    await requireOrganizationManager(
-      this.membership,
-      {
-        context: input.context,
-        userId: input.userId,
-        organizationId: input.organizationId,
-      },
-      API_KEY_ACCESS_FORBIDDEN,
-    );
+    const admission = await admitOrganizationApiKey(this.membership, {
+      context: input.context,
+      userId: input.userId,
+      organizationId: input.organizationId,
+      surface: 'api_key_list',
+    });
+    if (!admission.admitted) {
+      throw admission.refusal;
+    }
 
     const now = this.now();
     const keys = await this.apiKeys.listApiKeys({

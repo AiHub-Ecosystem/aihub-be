@@ -3,16 +3,14 @@ import type { RequestContext } from '@/common/request-context/request-context';
 import { apiKeyStatus } from '@/modules/identity/domain/api-key';
 
 import type { ApiKeyCachePort } from './api-key-authenticator.port';
+import {
+  ORGANIZATION_API_KEY_ADMISSION,
+  admitOrganizationApiKey,
+} from './organization-admission';
 import type { OrganizationApiKeyView } from './organization-api-key-view';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
-import {
-  forbidden,
-  requireOrganizationManager,
-} from './organization-membership.authorization';
+import { forbidden } from './organization-membership.authorization';
 import type { OrganizationMembershipPort } from './organization-membership.port';
-
-const API_KEY_REVOCATION_FORBIDDEN =
-  'Organization API key revocation is forbidden';
 
 export interface RevokeOrganizationApiKeyCommand {
   readonly context: RequestContext;
@@ -43,15 +41,15 @@ export class RevokeOrganizationApiKey {
   async revoke(
     input: RevokeOrganizationApiKeyCommand,
   ): Promise<OrganizationApiKeyView> {
-    await requireOrganizationManager(
-      this.membership,
-      {
-        context: input.context,
-        userId: input.userId,
-        organizationId: input.organizationId,
-      },
-      API_KEY_REVOCATION_FORBIDDEN,
-    );
+    const admission = await admitOrganizationApiKey(this.membership, {
+      context: input.context,
+      userId: input.userId,
+      organizationId: input.organizationId,
+      surface: 'api_key_revoke',
+    });
+    if (!admission.admitted) {
+      throw admission.refusal;
+    }
 
     const now = this.now();
     const result = await this.apiKeys.revokeApiKey({
@@ -71,7 +69,7 @@ export class RevokeOrganizationApiKey {
       });
     }
     if (result.kind === 'organization_unavailable') {
-      throw forbidden(API_KEY_REVOCATION_FORBIDDEN);
+      throw forbidden(ORGANIZATION_API_KEY_ADMISSION.api_key_revoke.refusal);
     }
 
     // Purged on the repeat request too, not only when this call changed
