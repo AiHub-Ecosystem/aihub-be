@@ -5,7 +5,7 @@ import { PostgresSandboxDispatchBudget } from '@/modules/gateway/infrastructure/
 import { ApiKeyAuthenticator } from '@/modules/identity/application/api-key-authenticator';
 import { generateApiKey } from '@/modules/identity/domain/api-key';
 import { PostgresApiKeyRepository } from '@/modules/identity/infrastructure/postgres-api-key.repository';
-import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+import { createIdentityDrizzleClient } from '@/modules/identity/infrastructure/postgres-identity.client';
 import {
   createSandboxTestPool,
   createTestPool,
@@ -144,7 +144,7 @@ describe('guarded Sandbox control-plane migration', () => {
         allowed_environments: ['sandbox'],
       },
     ]);
-    const identityClient = createPostgresIdentityClient(testDatabaseUrl());
+    const identityClient = createIdentityDrizzleClient(testDatabaseUrl());
     try {
       const authenticator = new ApiKeyAuthenticator(
         new PostgresApiKeyRepository(identityClient),

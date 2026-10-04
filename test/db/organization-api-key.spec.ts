@@ -7,13 +7,20 @@ import type { ApiKeyCachePort } from '@/modules/identity/application/api-key-aut
 import { generateOrganizationApiKey } from '@/modules/identity/application/organization-api-key-generator';
 import type { CreateOrganizationApiKeyRecordResult } from '@/modules/identity/application/organization-api-key.port';
 import { PostgresApiKeyRepository } from '@/modules/identity/infrastructure/postgres-api-key.repository';
-import type { PostgresIdentityTransactionalClient } from '@/modules/identity/infrastructure/postgres-identity.client';
-import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+import type {
+  IdentityDrizzleClient,
+  PostgresIdentityTransactionalClient,
+} from '@/modules/identity/infrastructure/postgres-identity.client';
+import {
+  createIdentityDrizzleClient,
+  createPostgresIdentityClient,
+} from '@/modules/identity/infrastructure/postgres-identity.client';
 import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/infrastructure/postgres-organization-api-key.repository';
 
 import {
   createTestPool,
   resetIdentityTables,
+  testDatabaseUrl,
   waitForBlockedBy,
 } from './database';
 
@@ -22,17 +29,20 @@ const OTHER_ORGANIZATION_ID = 'org_other';
 
 let pool: Pool;
 let client: PostgresIdentityTransactionalClient & { close(): Promise<void> };
+let apiKeys: IdentityDrizzleClient;
 let repository: PostgresOrganizationApiKeyRepository;
 
 beforeAll(() => {
   pool = createTestPool();
-  client = createPostgresIdentityClient(
-    (pool.options as { connectionString?: string }).connectionString ?? '',
-  );
+  const databaseUrl =
+    (pool.options as { connectionString?: string }).connectionString ?? '';
+  client = createPostgresIdentityClient(databaseUrl);
+  apiKeys = createIdentityDrizzleClient(databaseUrl);
   repository = new PostgresOrganizationApiKeyRepository(client);
 });
 
 afterAll(async () => {
+  await apiKeys.close();
   await client.close();
   await pool.end();
 });
@@ -180,7 +190,7 @@ describe('organization API key creation against PostgreSQL', () => {
 
     // The two sides encode the same hash differently (hex in, bytea out), so
     // a created key that authentication cannot find is a real failure mode.
-    const found = await new PostgresApiKeyRepository(client).findByHash(
+    const found = await new PostgresApiKeyRepository(apiKeys).findByHash(
       generated.hash,
     );
     expect(found?.apiKeyId).toBe(generated.id);
@@ -415,6 +425,99 @@ describe('organization API key listing against PostgreSQL', () => {
   });
 });
 
+describe('API-key lookup and last-used tracking against PostgreSQL', () => {
+  async function lastUsedAt(apiKeyId: string): Promise<Date | null> {
+    const result = await pool.query<{ last_used_at: Date | null }>(
+      'SELECT last_used_at FROM api_keys WHERE id = $1',
+      [apiKeyId],
+    );
+    return result.rows[0]?.last_used_at ?? null;
+  }
+
+  it('reports no key for a hash no Organization holds', async () => {
+    await seedOrganization();
+
+    await expect(
+      new PostgresApiKeyRepository(apiKeys).findByHash(
+        generateOrganizationApiKey().hash,
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it('refuses a lookup hash that is not a SHA-256 digest', async () => {
+    await seedOrganization();
+
+    await expect(
+      new PostgresApiKeyRepository(apiKeys).findByHash('not-a-digest'),
+    ).rejects.toThrow('Identity lookup hash is invalid');
+  });
+
+  it('records last use once and then throttles it to one write a minute', async () => {
+    await seedOrganization();
+    const apiKeyId = await seedKey({
+      organizationId: ORGANIZATION_ID,
+      name: 'Prod backend',
+    });
+    const store = new PostgresApiKeyRepository(apiKeys);
+
+    const first = new Date('2026-09-22T12:34:56.000Z');
+    await store.touchLastUsed(apiKeyId, first);
+    expect(await lastUsedAt(apiKeyId)).toEqual(first);
+
+    const throttled = new Date('2026-09-22T12:35:30.000Z');
+    await store.touchLastUsed(apiKeyId, throttled);
+    expect(await lastUsedAt(apiKeyId)).toEqual(first);
+
+    const pastTheWindow = new Date('2026-09-22T12:36:30.000Z');
+    await store.touchLastUsed(apiKeyId, pastTheWindow);
+    expect(await lastUsedAt(apiKeyId)).toEqual(pastTheWindow);
+  });
+
+  it('leaves another Organization key untouched', async () => {
+    await seedOrganization();
+    await seedOrganization({ id: OTHER_ORGANIZATION_ID });
+    const apiKeyId = await seedKey({
+      organizationId: ORGANIZATION_ID,
+      name: 'Prod backend',
+    });
+    const otherKeyId = await seedKey({
+      organizationId: OTHER_ORGANIZATION_ID,
+      name: 'Other backend',
+    });
+
+    await new PostgresApiKeyRepository(apiKeys).touchLastUsed(
+      apiKeyId,
+      new Date('2026-09-22T12:34:56.000Z'),
+    );
+
+    expect(await lastUsedAt(otherKeyId)).toBeNull();
+  });
+
+  it('reports an unreachable store without naming the driver failure', async () => {
+    const unreachable = createIdentityDrizzleClient(
+      `${testDatabaseUrl().replace(/\/[^/]*$/, '')}/aihub_absent_database`,
+    );
+    const store = new PostgresApiKeyRepository(unreachable);
+
+    try {
+      const error = await store
+        .findByHash('ab'.repeat(32))
+        .catch((caught: unknown) => caught);
+
+      expect(error).toMatchObject({
+        code: 'INTERNAL_ERROR',
+        message: 'Identity store is unavailable',
+      });
+      expect(JSON.stringify(error)).not.toContain('aihub_absent_database');
+      await expect(store.touchLastUsed('ak_any', new Date())).rejects.toThrow(
+        'Identity store is unavailable',
+      );
+    } finally {
+      await unreachable.close();
+    }
+  });
+});
+
 describe('organization API key rotation against PostgreSQL', () => {
   async function rotate(options: {
     readonly apiKeyId: string;
@@ -481,7 +584,7 @@ describe('organization API key rotation against PostgreSQL', () => {
     // The acceptance criterion is about authentication, and the two coincide
     // only while the authenticator reads that column the way a test assumes.
     const authenticator = new ApiKeyAuthenticator(
-      new PostgresApiKeyRepository(client),
+      new PostgresApiKeyRepository(apiKeys),
       emptyCache(),
       { get: async () => 0, recordFailure: async () => 1 },
     );
@@ -709,7 +812,7 @@ describe('organization API key revocation against PostgreSQL', () => {
     // The criterion is about authentication, not about a column: the two
     // coincide only while the authenticator reads that column as assumed.
     const authenticator = new ApiKeyAuthenticator(
-      new PostgresApiKeyRepository(client),
+      new PostgresApiKeyRepository(apiKeys),
       {
         get: async () => undefined,
         set: async () => undefined,

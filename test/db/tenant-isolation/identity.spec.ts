@@ -8,7 +8,7 @@ import { hashApiKey } from '@/modules/identity/domain/api-key';
 import { JoseUserAssertionCrypto } from '@/modules/identity/infrastructure/jose-user-assertion-crypto';
 import { JwksKeyProvider } from '@/modules/identity/infrastructure/jwks-key-provider';
 import { PostgresApiKeyRepository } from '@/modules/identity/infrastructure/postgres-api-key.repository';
-import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+import { createIdentityDrizzleClient } from '@/modules/identity/infrastructure/postgres-identity.client';
 import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/infrastructure/postgres-organization-identity-config.repository';
 import {
   RedisAuthFailureCounter,
@@ -33,7 +33,7 @@ import {
 let pool: ReturnType<typeof createTestPool>;
 let redisClients: TenantIsolationRedisClients;
 let fixture: TenantIsolationFixture;
-let identityClient: ReturnType<typeof createPostgresIdentityClient>;
+let identityClient: ReturnType<typeof createIdentityDrizzleClient>;
 let configRepository: PostgresOrganizationIdentityConfigRepository;
 let identityStore: RedisIdentityStore;
 let failureCounter: RedisAuthFailureCounter;
@@ -46,7 +46,7 @@ function nowSeconds(): number {
 beforeAll(() => {
   pool = createTestPool();
   redisClients = createTenantIsolationRedisClients();
-  identityClient = createPostgresIdentityClient(testDatabaseUrl());
+  identityClient = createIdentityDrizzleClient(testDatabaseUrl());
   configRepository = new PostgresOrganizationIdentityConfigRepository(
     identityClient,
   );

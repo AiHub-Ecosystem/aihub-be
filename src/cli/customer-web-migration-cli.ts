@@ -5,8 +5,8 @@ import { dirname, resolve } from 'node:path';
 import { ulid } from 'ulid';
 
 import { Argon2PasswordHasher } from '@/modules/auth/infrastructure/argon2-password.hasher';
-import type { PostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-api-key.repository';
 import {
+  type PostgresIdentityClient,
   type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,
 } from '@/modules/identity/infrastructure/postgres-identity.client';

@@ -1,4 +1,5 @@
-import { AppError } from '@/common/errors/app-error';
+import { and, eq, isNull, lt, or } from 'drizzle-orm';
+
 import type {
   ApiKeyRecord,
   ApiKeyRepositoryPort,
@@ -6,57 +7,9 @@ import type {
   OrganizationStatus,
 } from '@/modules/identity/application/api-key-authenticator.port';
 
-export interface PostgresIdentityClient {
-  query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
-  close(): Promise<void>;
-}
-
-const LOOKUP_SQL = `
-  SELECT
-    ak.organization_id,
-    ak.id AS api_key_id,
-    org.status AS organization_status,
-    ak.status AS api_key_status,
-    ak.scopes,
-    org.entitlements,
-    ak.allowed_environments,
-    ak.expires_at,
-    org.rate_limit_rpm,
-    org.max_concurrent,
-    org.monthly_request_quota,
-    org.hard_stop_on_quota
-  FROM api_keys AS ak
-  INNER JOIN organizations AS org ON org.id = ak.organization_id
-  WHERE ak.key_hash = decode($1, 'hex')
-  LIMIT 1
-`;
-
-const LAST_USED_SQL = `
-  UPDATE api_keys
-  SET last_used_at = $2
-  WHERE id = $1
-    AND (last_used_at IS NULL OR last_used_at < $2 - interval '1 minute')
-`;
-
-function identityStoreError(message: string): AppError {
-  return new AppError({
-    code: 'INTERNAL_ERROR',
-    message,
-    retryable: false,
-  });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function stringValue(
-  record: Record<string, unknown>,
-  key: string,
-): string | undefined {
-  const value = record[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
+import { apiKeys, organizations } from './drizzle-identity-schema';
+import { identityStoreError, isRecord, stringValue } from './identity-row';
+import type { IdentityDrizzleClient } from './postgres-identity.client';
 
 function stringArrayValue(
   record: Record<string, unknown>,
@@ -128,30 +81,42 @@ function booleanValue(
   return typeof value === 'boolean' ? value : undefined;
 }
 
-function mapRecord(value: unknown): ApiKeyRecord | undefined {
+/**
+ * Last-used telemetry is best-effort, so it is written at most once per window.
+ * The cutoff is the caller's own instant less this window, which is what the
+ * statement compared against before.
+ */
+const LAST_USED_THROTTLE_MS = 60_000;
+
+/**
+ * The row a lookup returns is whatever PostgreSQL and the driver produced, so
+ * every durable value is still read through a check rather than trusted. The
+ * projection names match these keys, which is the only thing the two share.
+ */
+export function apiKeyRecordFromRow(value: unknown): ApiKeyRecord | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
 
-  const organizationId = stringValue(value, 'organization_id');
-  const apiKeyId = stringValue(value, 'api_key_id');
+  const organizationId = stringValue(value, 'organizationId');
+  const apiKeyId = stringValue(value, 'apiKeyId');
   const organizationStatus = statusValue<OrganizationStatus>(
     value,
-    'organization_status',
+    'organizationStatus',
     ['active', 'suspended'],
   );
-  const status = statusValue<DurableApiKeyStatus>(value, 'api_key_status', [
+  const status = statusValue<DurableApiKeyStatus>(value, 'status', [
     'active',
     'revoked',
   ]);
   const scopes = stringArrayValue(value, 'scopes');
   const entitlements = stringArrayValue(value, 'entitlements');
-  const allowedEnvironments = stringArrayValue(value, 'allowed_environments');
-  const expiresAt = dateValue(value, 'expires_at');
-  const rateLimitRpm = positiveIntegerValue(value, 'rate_limit_rpm');
-  const maxConcurrent = positiveIntegerValue(value, 'max_concurrent');
-  const monthlyRequestQuota = quotaValue(value, 'monthly_request_quota');
-  const hardStopOnQuota = booleanValue(value, 'hard_stop_on_quota');
+  const allowedEnvironments = stringArrayValue(value, 'allowedEnvironments');
+  const expiresAt = dateValue(value, 'expiresAt');
+  const rateLimitRpm = positiveIntegerValue(value, 'rateLimitRpm');
+  const maxConcurrent = positiveIntegerValue(value, 'maxConcurrent');
+  const monthlyRequestQuota = quotaValue(value, 'monthlyRequestQuota');
+  const hardStopOnQuota = booleanValue(value, 'hardStopOnQuota');
 
   if (
     organizationId === undefined ||
@@ -187,26 +152,19 @@ function mapRecord(value: unknown): ApiKeyRecord | undefined {
 }
 
 export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
-  constructor(private readonly client: PostgresIdentityClient) {}
+  constructor(private readonly client: IdentityDrizzleClient) {}
 
   async findByHash(hashHex: string): Promise<ApiKeyRecord | null> {
     if (!/^[0-9a-f]{64}$/.test(hashHex)) {
       throw identityStoreError('Identity lookup hash is invalid');
     }
 
-    let rows: readonly unknown[];
-    try {
-      rows = await this.client.query(LOOKUP_SQL, [hashHex]);
-    } catch {
-      throw identityStoreError('Identity store is unavailable');
-    }
-
-    const first = rows[0];
+    const [first] = await this.lookup(hashHex);
     if (first === undefined) {
       return null;
     }
 
-    const record = mapRecord(first);
+    const record = apiKeyRecordFromRow(first);
     if (record === undefined) {
       throw identityStoreError('Identity data is invalid');
     }
@@ -214,9 +172,49 @@ export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
     return record;
   }
 
+  private async lookup(hashHex: string) {
+    try {
+      return await this.client.db
+        .select({
+          organizationId: apiKeys.organizationId,
+          apiKeyId: apiKeys.id,
+          organizationStatus: organizations.status,
+          status: apiKeys.status,
+          scopes: apiKeys.scopes,
+          entitlements: organizations.entitlements,
+          allowedEnvironments: apiKeys.allowedEnvironments,
+          expiresAt: apiKeys.expiresAt,
+          rateLimitRpm: organizations.rateLimitRpm,
+          maxConcurrent: organizations.maxConcurrent,
+          monthlyRequestQuota: organizations.monthlyRequestQuota,
+          hardStopOnQuota: organizations.hardStopOnQuota,
+        })
+        .from(apiKeys)
+        .innerJoin(organizations, eq(organizations.id, apiKeys.organizationId))
+        .where(eq(apiKeys.keyHash, Buffer.from(hashHex, 'hex')))
+        .limit(1);
+    } catch {
+      throw identityStoreError('Identity store is unavailable');
+    }
+  }
+
   async touchLastUsed(apiKeyId: string, usedAt: Date): Promise<void> {
     try {
-      await this.client.query(LAST_USED_SQL, [apiKeyId, usedAt]);
+      await this.client.db
+        .update(apiKeys)
+        .set({ lastUsedAt: usedAt })
+        .where(
+          and(
+            eq(apiKeys.id, apiKeyId),
+            or(
+              isNull(apiKeys.lastUsedAt),
+              lt(
+                apiKeys.lastUsedAt,
+                new Date(usedAt.getTime() - LAST_USED_THROTTLE_MS),
+              ),
+            ),
+          ),
+        );
     } catch {
       throw identityStoreError('Identity store is unavailable');
     }

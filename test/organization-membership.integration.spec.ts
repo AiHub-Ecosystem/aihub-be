@@ -17,8 +17,10 @@ import {
   type OrganizationMembershipPort,
   type OrganizationMembershipRole,
 } from '@/modules/identity/application/organization-membership.port';
-import type { PostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-api-key.repository';
-import type { PostgresIdentityTransactionalClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+import type {
+  PostgresIdentityClient,
+  PostgresIdentityTransactionalClient,
+} from '@/modules/identity/infrastructure/postgres-identity.client';
 import { PostgresOrganizationMembershipRepository } from '@/modules/identity/infrastructure/postgres-organization-membership.repository';
 
 const USER_ID = 'usr_01J00000000000000000000000';

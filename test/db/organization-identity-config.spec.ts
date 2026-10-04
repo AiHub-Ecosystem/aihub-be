@@ -4,21 +4,18 @@ import { ulid } from 'ulid';
 import { AppError } from '@/common/errors/app-error';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { SaveOrganizationIdentityConfigInput } from '@/modules/identity/application/organization-identity-config-repository.port';
-import {
-  type PostgresIdentityTransactionalClient,
-  createPostgresIdentityClient,
-} from '@/modules/identity/infrastructure/postgres-identity.client';
+import { createIdentityDrizzleClient } from '@/modules/identity/infrastructure/postgres-identity.client';
 import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/infrastructure/postgres-organization-identity-config.repository';
 
 import { createTestPool, resetIdentityTables } from './database';
 
 let pool: Pool;
-let client: PostgresIdentityTransactionalClient & { close(): Promise<void> };
+let client: ReturnType<typeof createIdentityDrizzleClient>;
 let repository: PostgresOrganizationIdentityConfigRepository;
 
 beforeAll(() => {
   pool = createTestPool();
-  client = createPostgresIdentityClient(
+  client = createIdentityDrizzleClient(
     (pool.options as { connectionString?: string }).connectionString ?? '',
   );
   repository = new PostgresOrganizationIdentityConfigRepository(client);
@@ -104,6 +101,87 @@ async function auditEvents(): Promise<Record<string, unknown>[]> {
 }
 
 describe('Organization identity configuration against PostgreSQL', () => {
+  it('reads back the settings an owner saved, and stops reporting a disabled one as active', async () => {
+    const saved = await repository.saveForOwner(input());
+    if (saved.kind === 'forbidden') {
+      throw new Error('Owner config saves unexpectedly forbidden');
+    }
+
+    const { updatedAt: _updatedAt, ...activeConfig } = saved.config;
+
+    await expect(
+      repository.findActiveByOrganizationId(organizationId),
+    ).resolves.toEqual(activeConfig);
+    await expect(
+      repository.findByOrganizationId(organizationId),
+    ).resolves.toEqual(saved.config);
+
+    await pool.query(
+      `UPDATE organization_identity_configs
+       SET status = 'disabled' WHERE organization_id = $1`,
+      [organizationId],
+    );
+
+    await expect(
+      repository.findActiveByOrganizationId(organizationId),
+    ).resolves.toBeNull();
+    await expect(
+      repository.findByOrganizationId(organizationId),
+    ).resolves.toMatchObject({ status: 'disabled' });
+    await expect(
+      repository.findByOrganizationId('org_absent'),
+    ).resolves.toBeNull();
+  });
+
+  it('refuses a stored row the mapping will not accept, without leaking it', async () => {
+    await repository.saveForOwner(input());
+
+    // The database accepts a repeated algorithm, so a row can reach the mapping
+    // outside the vocabulary it maps. The check belongs here because only a
+    // real engine can produce the row at all.
+    await pool.query(
+      `UPDATE organization_identity_configs
+       SET allowed_algorithms = ARRAY['RS256', 'RS256']
+       WHERE organization_id = $1`,
+      [organizationId],
+    );
+
+    const error = await repository
+      .findActiveByOrganizationId(organizationId)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'Identity data is invalid',
+    });
+    expect(JSON.stringify(error)).not.toContain('RS256');
+  });
+
+  it('reports an unreachable store without naming the driver failure', async () => {
+    const unreachable = createIdentityDrizzleClient(
+      `${(pool.options as { connectionString?: string }).connectionString?.replace(/\/[^/]*$/, '')}/aihub_absent_database`,
+    );
+
+    try {
+      const error = await new PostgresOrganizationIdentityConfigRepository(
+        unreachable,
+      )
+        .findActiveByOrganizationId(organizationId)
+        .catch((caught: unknown) => caught);
+
+      expect(error).toMatchObject({
+        code: 'INTERNAL_ERROR',
+        message: 'Identity store is unavailable',
+      });
+      expect(JSON.stringify(error)).not.toContain('aihub_absent_database');
+      await expect(repository.findByOrganizationId('  ')).rejects.toThrow(
+        'Identity organization id is invalid',
+      );
+    } finally {
+      await unreachable.close();
+    }
+  });
+
   it('creates an active config and commits only the approved audit details', async () => {
     const saved = await repository.saveForOwner(input());
 

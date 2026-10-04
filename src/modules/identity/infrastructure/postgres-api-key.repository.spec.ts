@@ -1,44 +1,23 @@
-import { AppError } from '@/common/errors/app-error';
-import {
-  PostgresApiKeyRepository,
-  type PostgresIdentityClient,
-} from './postgres-api-key.repository';
+import { apiKeyRecordFromRow } from './postgres-api-key.repository';
 
 const row = {
-  organization_id: 'org_acme',
-  api_key_id: 'ak_backend',
-  organization_status: 'active',
-  api_key_status: 'active',
+  organizationId: 'org_acme',
+  apiKeyId: 'ak_backend',
+  organizationStatus: 'active',
+  status: 'active',
   scopes: ['writing.grade'],
   entitlements: ['writing'],
-  allowed_environments: ['development', 'production'],
-  expires_at: null,
-  rate_limit_rpm: 600,
-  max_concurrent: 20,
-  monthly_request_quota: null,
-  hard_stop_on_quota: false,
+  allowedEnvironments: ['development', 'production'],
+  expiresAt: null,
+  rateLimitRpm: 600,
+  maxConcurrent: 20,
+  monthlyRequestQuota: null,
+  hardStopOnQuota: false,
 };
 
-class FakePostgres implements PostgresIdentityClient {
-  queries: Array<{ text: string; values: readonly unknown[] }> = [];
-  result: readonly unknown[] = [row];
-
-  query(text: string, values: readonly unknown[]): Promise<readonly unknown[]> {
-    this.queries.push({ text, values });
-    return Promise.resolve(this.result);
-  }
-
-  close(): Promise<void> {
-    return Promise.resolve();
-  }
-}
-
-describe('PostgresApiKeyRepository', () => {
-  it('looks up a key hash with a parameterized bytea query and maps organization policy', async () => {
-    const client = new FakePostgres();
-    const repository = new PostgresApiKeyRepository(client);
-
-    await expect(repository.findByHash('ab'.repeat(32))).resolves.toEqual({
+describe('apiKeyRecordFromRow', () => {
+  it('maps a looked-up key to its Organization and policy', () => {
+    expect(apiKeyRecordFromRow(row)).toEqual({
       organizationId: 'org_acme',
       apiKeyId: 'ak_backend',
       organizationStatus: 'active',
@@ -52,31 +31,40 @@ describe('PostgresApiKeyRepository', () => {
       monthlyRequestQuota: null,
       hardStopOnQuota: false,
     });
-
-    expect(client.queries).toHaveLength(1);
-    expect(client.queries[0]?.values).toEqual(['ab'.repeat(32)]);
-    expect(client.queries[0]?.text).toContain("decode($1, 'hex')");
   });
 
-  it('returns null for a missing durable key record', async () => {
-    const client = new FakePostgres();
-    client.result = [];
-
-    await expect(
-      new PostgresApiKeyRepository(client).findByHash('ab'.repeat(32)),
-    ).resolves.toBeNull();
+  it('keeps a revoked key and a suspended Organization distinguishable', () => {
+    expect(
+      apiKeyRecordFromRow({
+        ...row,
+        status: 'revoked',
+        organizationStatus: 'suspended',
+      }),
+    ).toMatchObject({ status: 'revoked', organizationStatus: 'suspended' });
   });
 
-  it('rejects malformed control-plane data without leaking the row', async () => {
-    const client = new FakePostgres();
-    client.result = [{ ...row, scopes: ['writing.grade', 7] }];
+  it('carries an expiry and a granted quota through unchanged', () => {
+    const expiresAt = new Date('2026-09-22T12:34:56.000Z');
 
-    const error = await new PostgresApiKeyRepository(client)
-      .findByHash('ab'.repeat(32))
-      .catch((caught: unknown) => caught);
+    expect(
+      apiKeyRecordFromRow({ ...row, expiresAt, monthlyRequestQuota: 0 }),
+    ).toMatchObject({ expiresAt, monthlyRequestQuota: 0 });
+  });
 
-    expect(error).toBeInstanceOf(AppError);
-    expect((error as AppError).code).toBe('INTERNAL_ERROR');
-    expect((error as AppError).message).toBe('Identity data is invalid');
+  it.each([
+    ['a scope that is not a string', { scopes: ['writing.grade', 7] }],
+    ['a status outside its vocabulary', { status: 'pending' }],
+    ['a limit that is not a positive integer', { rateLimitRpm: 0 }],
+    ['a negative quota', { monthlyRequestQuota: -1 }],
+    ['a hard-stop flag that is not a boolean', { hardStopOnQuota: 'yes' }],
+    ['an expiry that is not a date', { expiresAt: 'soon' }],
+    ['a missing Organization', { organizationId: '' }],
+  ])('refuses %s', (_reason, override) => {
+    expect(apiKeyRecordFromRow({ ...row, ...override })).toBeUndefined();
+  });
+
+  it('refuses a row that is not an object', () => {
+    expect(apiKeyRecordFromRow(null)).toBeUndefined();
+    expect(apiKeyRecordFromRow([row])).toBeUndefined();
   });
 });

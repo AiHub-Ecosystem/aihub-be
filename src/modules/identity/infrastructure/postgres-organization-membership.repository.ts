@@ -45,8 +45,10 @@ import {
   recordOrganizationAuditDenial,
   recordOrganizationAuditEvent,
 } from './organization-audit-event.store';
-import type { PostgresIdentityClient } from './postgres-api-key.repository';
-import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
+import type {
+  PostgresIdentityClient,
+  PostgresIdentityTransactionalClient,
+} from './postgres-identity.client';
 
 const RESOLVE_MEMBERSHIP_SQL = `
   SELECT

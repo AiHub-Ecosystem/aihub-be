@@ -122,7 +122,10 @@ import { JoseSandboxAssertionSigner } from './infrastructure/jose-sandbox-assert
 import { JoseUserAssertionCrypto } from './infrastructure/jose-user-assertion-crypto';
 import { JwksKeyProvider } from './infrastructure/jwks-key-provider';
 import { PostgresApiKeyRepository } from './infrastructure/postgres-api-key.repository';
-import { createPostgresIdentityClient } from './infrastructure/postgres-identity.client';
+import {
+  createIdentityDrizzleClient,
+  createPostgresIdentityClient,
+} from './infrastructure/postgres-identity.client';
 import { PostgresOrganizationApiKeyRepository } from './infrastructure/postgres-organization-api-key.repository';
 import { PostgresOrganizationAuditReadRepository } from './infrastructure/postgres-organization-audit-read.repository';
 import { PostgresOrganizationCreationRepository } from './infrastructure/postgres-organization-creation.repository';
@@ -178,15 +181,15 @@ function controlPlaneReadDatabaseUrl(): string {
       provide: API_KEY_REPOSITORY,
       useFactory: () =>
         new PostgresApiKeyRepository(
-          createPostgresIdentityClient(controlPlaneReadDatabaseUrl()),
+          createIdentityDrizzleClient(controlPlaneReadDatabaseUrl()),
         ),
     },
     {
       provide: ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
       useFactory: (): OrganizationIdentityConfigRepositoryPort =>
         new PostgresOrganizationIdentityConfigRepository(
-          createPostgresIdentityClient(controlPlaneDatabaseUrl()),
-          createPostgresIdentityClient(controlPlaneReadDatabaseUrl()),
+          createIdentityDrizzleClient(controlPlaneDatabaseUrl()),
+          createIdentityDrizzleClient(controlPlaneReadDatabaseUrl()),
         ),
     },
     {

@@ -1,60 +1,23 @@
-import { AppError } from '@/common/errors/app-error';
-import type { PostgresIdentityClient } from './postgres-api-key.repository';
-import type { PostgresIdentityQueryClient } from './postgres-identity.client';
-import { PostgresOrganizationIdentityConfigRepository } from './postgres-organization-identity-config.repository';
+import {
+  identityConfigFromRow,
+  storedIdentityConfigFromRow,
+} from './postgres-organization-identity-config.repository';
 
 const row = {
-  organization_id: 'org_acme',
+  organizationId: 'org_acme',
   issuer: 'https://acme.edu',
-  jwks_url: 'https://acme.edu/.well-known/jwks.json',
-  public_keys_jwks: null,
-  allowed_algorithms: ['RS256', 'ES256'],
-  max_assertion_ttl_seconds: 300,
+  jwksUrl: 'https://acme.edu/.well-known/jwks.json',
+  publicKeysJwks: null,
+  allowedAlgorithms: ['RS256', 'ES256'],
+  maxAssertionTtlSeconds: 300,
   status: 'active',
-  jwks_cache_version: '1',
-  updated_at: new Date('2026-09-22T12:34:56.000Z'),
+  jwksCacheVersion: 1n,
+  updatedAt: new Date('2026-09-22T12:34:56.000Z'),
 };
 
-class FakePostgres implements PostgresIdentityClient {
-  queries: Array<{ text: string; values: readonly unknown[] }> = [];
-  result: readonly unknown[] = [row];
-
-  query(text: string, values: readonly unknown[]): Promise<readonly unknown[]> {
-    this.queries.push({ text, values });
-    if (text.includes("status = 'active'")) {
-      return Promise.resolve(
-        this.result.filter(
-          (candidate) =>
-            typeof candidate === 'object' &&
-            candidate !== null &&
-            'status' in candidate &&
-            candidate.status === 'active',
-        ),
-      );
-    }
-    return Promise.resolve(this.result);
-  }
-
-  transaction<T>(
-    callback: (client: PostgresIdentityQueryClient) => Promise<T>,
-  ): Promise<T> {
-    return callback(this);
-  }
-
-  close(): Promise<void> {
-    return Promise.resolve();
-  }
-}
-
-describe('PostgresOrganizationIdentityConfigRepository', () => {
-  it('loads the active config for the API-key organization', async () => {
-    const client = new FakePostgres();
-
-    await expect(
-      new PostgresOrganizationIdentityConfigRepository(
-        client,
-      ).findActiveByOrganizationId('org_acme'),
-    ).resolves.toEqual({
+describe('identityConfigFromRow', () => {
+  it('maps the stored settings an Organization signed assertions against', () => {
+    expect(identityConfigFromRow(row)).toEqual({
       organizationId: 'org_acme',
       jwksCacheVersion: '1',
       issuer: 'https://acme.edu',
@@ -64,89 +27,80 @@ describe('PostgresOrganizationIdentityConfigRepository', () => {
       maxAssertionTtlSeconds: 300,
       status: 'active',
     });
-
-    expect(client.queries).toHaveLength(1);
-    expect(client.queries[0]?.values).toEqual(['org_acme']);
-    expect(client.queries[0]?.text).toContain("status = 'active'");
   });
 
-  it('excludes disabled configs from the active lookup', async () => {
-    const client = new FakePostgres();
-    client.result = [{ ...row, status: 'disabled' }];
-
-    await expect(
-      new PostgresOrganizationIdentityConfigRepository(
-        client,
-      ).findActiveByOrganizationId('org_acme'),
-    ).resolves.toBeNull();
-    expect(client.queries[0]?.text).toContain("status = 'active'");
-  });
-
-  it('reads disabled config rows and preserves their update time', async () => {
-    const client = new FakePostgres();
-    client.result = [{ ...row, status: 'disabled' }];
-
-    await expect(
-      new PostgresOrganizationIdentityConfigRepository(
-        client,
-      ).findByOrganizationId('org_acme'),
-    ).resolves.toEqual({
-      organizationId: 'org_acme',
-      jwksCacheVersion: '1',
-      issuer: 'https://acme.edu',
-      jwksUrl: 'https://acme.edu/.well-known/jwks.json',
-      publicKeysJwks: null,
-      allowedAlgorithms: ['RS256', 'ES256'],
-      maxAssertionTtlSeconds: 300,
-      status: 'disabled',
-      updatedAt: new Date('2026-09-22T12:34:56.000Z'),
-    });
-
-    expect(client.queries[0]?.values).toEqual(['org_acme']);
-    expect(client.queries[0]?.text).not.toContain("status = 'active'");
-  });
-
-  it('returns null from the all-status lookup when no row exists', async () => {
-    const client = new FakePostgres();
-    client.result = [];
-
-    await expect(
-      new PostgresOrganizationIdentityConfigRepository(
-        client,
-      ).findByOrganizationId('org_missing'),
-    ).resolves.toBeNull();
-  });
-
-  it('rejects stored private JWK members without exposing them', async () => {
-    const client = new FakePostgres();
-    client.result = [
-      {
+  it('keeps a cache version above the safe integer range exact', () => {
+    expect(
+      identityConfigFromRow({
         ...row,
-        public_keys_jwks: {
+        jwksCacheVersion: 9_007_199_254_740_993n,
+      })?.jwksCacheVersion,
+    ).toBe('9007199254740993');
+  });
+
+  it('keeps an inline key set and a disabled status', () => {
+    expect(
+      identityConfigFromRow({
+        ...row,
+        jwksUrl: null,
+        publicKeysJwks: { keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB' }] },
+        status: 'disabled',
+      }),
+    ).toMatchObject({
+      jwksUrl: null,
+      publicKeysJwks: { keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB' }] },
+      status: 'disabled',
+    });
+  });
+
+  it.each([
+    ['an algorithm outside the allowlist', { allowedAlgorithms: ['HS256'] }],
+    ['a duplicated algorithm', { allowedAlgorithms: ['RS256', 'RS256'] }],
+    ['an empty algorithm list', { allowedAlgorithms: [] }],
+    ['a non-HTTPS key URL', { jwksUrl: 'http://acme.edu/jwks.json' }],
+    [
+      'neither a key URL nor an inline key set',
+      { jwksUrl: null, publicKeysJwks: null },
+    ],
+    ['a TTL outside its bounds', { maxAssertionTtlSeconds: 3_601 }],
+    ['a status outside its vocabulary', { status: 'pending' }],
+    ['a cache version that is not a positive bigint', { jwksCacheVersion: 0n }],
+  ])('refuses %s', (_reason, override) => {
+    expect(identityConfigFromRow({ ...row, ...override })).toBeUndefined();
+  });
+
+  it('refuses stored private JWK members rather than returning part of them', () => {
+    expect(
+      identityConfigFromRow({
+        ...row,
+        publicKeysJwks: {
           keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB', d: 'private-material' }],
         },
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe('storedIdentityConfigFromRow', () => {
+  it('adds the update time a stored configuration carries', () => {
+    expect(storedIdentityConfigFromRow({ ...row, status: 'disabled' })).toEqual(
+      {
+        organizationId: 'org_acme',
+        jwksCacheVersion: '1',
+        issuer: 'https://acme.edu',
+        jwksUrl: 'https://acme.edu/.well-known/jwks.json',
+        publicKeysJwks: null,
+        allowedAlgorithms: ['RS256', 'ES256'],
+        maxAssertionTtlSeconds: 300,
+        status: 'disabled',
+        updatedAt: new Date('2026-09-22T12:34:56.000Z'),
       },
-    ];
-
-    const error = await new PostgresOrganizationIdentityConfigRepository(client)
-      .findByOrganizationId('org_acme')
-      .catch((caught: unknown) => caught);
-
-    expect(error).toBeInstanceOf(AppError);
-    expect((error as AppError).message).toBe('Identity data is invalid');
-    expect(JSON.stringify(error)).not.toContain('private-material');
+    );
   });
 
-  it('rejects malformed durable identity data without leaking the row', async () => {
-    const client = new FakePostgres();
-    client.result = [{ ...row, allowed_algorithms: ['HS256'] }];
-
-    const error = await new PostgresOrganizationIdentityConfigRepository(client)
-      .findActiveByOrganizationId('org_acme')
-      .catch((caught: unknown) => caught);
-
-    expect(error).toBeInstanceOf(AppError);
-    expect((error as AppError).code).toBe('INTERNAL_ERROR');
-    expect((error as AppError).message).toBe('Identity data is invalid');
+  it('refuses a row with no usable update time', () => {
+    expect(
+      storedIdentityConfigFromRow({ ...row, updatedAt: 'yesterday' }),
+    ).toBeUndefined();
   });
 });
