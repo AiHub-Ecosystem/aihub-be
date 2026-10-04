@@ -1516,6 +1516,105 @@ function speakingQuestionsPathItem(): Record<string, unknown> {
   };
 }
 
+function speakingAudioUploadPathItems(): Record<
+  string,
+  Record<string, unknown>
+> {
+  const create = 'speaking.audioUploads.create' as const;
+  const refresh = 'speaking.audioUploads.refresh' as const;
+  const complete = 'speaking.audioUploads.complete' as const;
+  const sharedParameters = [
+    { $ref: '#/components/parameters/CorrelationId' },
+    { $ref: '#/components/parameters/UserIdentity' },
+  ];
+  const assetIdParameter = {
+    name: 'assetId',
+    in: 'path',
+    required: true,
+    description: 'The asset ID returned when the upload intent was created.',
+    schema: { type: 'string', pattern: '^aud_[0-9A-HJKMNP-TV-Z]{26}$' },
+  };
+  const noStore = {
+    'Cache-Control': {
+      description: 'Upload URLs and Audio metadata must not be cached.',
+      schema: { type: 'string', enum: ['no-store'] },
+    },
+  };
+  const urlSchema = routeSchemaOf(create, 'response');
+  const assetSchema = routeSchemaOf(complete, 'response');
+  const urlResponses = (routeId: typeof create | typeof refresh) => ({
+    [routeSuccessKeyOf(routeId)]: {
+      description:
+        'Returns the same server-generated key and signed headers for the upload intent.',
+      headers: noStore,
+      content: { 'application/json': { schema: urlSchema } },
+    },
+    ...routeErrorResponsesOf(routeId),
+  });
+
+  return {
+    [routePathOf(create)]: {
+      post: {
+        operationId: create,
+        summary: 'Create a Speaking Audio upload intent',
+        description: [
+          'Creates a one-hour intent bound to the Organization and exact End-User ID resolved from `X-User-Identity`. The response contains a five-minute presigned `PUT` URL; send the audio directly to that URL with the returned `Content-Type` and `Content-Length` headers.',
+          'The URL is a write credential. Do not log, persist, or expose it. The intent is not an Audio asset until completion verifies the stored object.',
+        ].join('\n\n'),
+        ...routeIdentityScopeOf(create),
+        ...routeSecurityOf(create),
+        parameters: sharedParameters,
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': { schema: routeSchemaOf(create, 'request') },
+          },
+        },
+        responses: urlResponses(create),
+      },
+    },
+    [routePathOf(refresh)]: {
+      post: {
+        operationId: refresh,
+        summary: 'Refresh a Speaking Audio upload URL',
+        description:
+          'Issues another five-minute URL for the same open intent, key, content type, and byte size. It does not extend the original one-hour intent expiry.',
+        ...routeIdentityScopeOf(refresh),
+        ...routeSecurityOf(refresh),
+        parameters: [...sharedParameters, assetIdParameter],
+        responses: urlResponses(refresh),
+      },
+    },
+    [routePathOf(complete)]: {
+      post: {
+        operationId: complete,
+        summary: 'Complete a Speaking Audio upload',
+        description: [
+          'Verifies the stored object metadata at the exact key recorded by the intent. A valid object creates the Audio asset and sets `retention_expires_at` to 30 days after acceptance; a missing object leaves the intent retryable, while invalid metadata rejects the intent.',
+          'Only the same Organization and End-User ID can complete the intent. Repeating a successful completion returns the same Audio asset.',
+        ].join('\n\n'),
+        ...routeIdentityScopeOf(complete),
+        ...routeSecurityOf(complete),
+        parameters: [...sharedParameters, assetIdParameter],
+        responses: {
+          [routeSuccessKeyOf(complete)]: {
+            description: 'The verified Audio asset created by this request.',
+            headers: noStore,
+            content: { 'application/json': { schema: assetSchema } },
+          },
+          '200': {
+            description:
+              'This intent was already completed; the same Audio asset is returned.',
+            headers: noStore,
+            content: { 'application/json': { schema: assetSchema } },
+          },
+          ...routeErrorResponsesOf(complete),
+        },
+      },
+    },
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -1572,6 +1671,7 @@ export function buildOpenApiDocument(version: string): unknown {
   paths[routePathOf('sandbox.assertions.mint')] =
     sandboxAssertionPathItem(groupedErrors);
   paths[routePathOf('speaking.questions')] = speakingQuestionsPathItem();
+  Object.assign(paths, speakingAudioUploadPathItems());
   paths[routePathOf('me.avatar.uploads.create')] = avatarUploadPathItem();
   paths[routePathOf('me.avatar.uploads.complete')] = avatarCompletePathItem();
   paths[routePathOf('me.avatar.remove')] = avatarItemPathItem();

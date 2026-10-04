@@ -149,6 +149,20 @@ is unset, Sandbox Avatar routes answer `503 AVATAR_STORAGE_UNAVAILABLE`, and
 Sandbox never falls back to the production bucket. The Sandbox bucket needs the
 same anonymous read-only grant as the production one.
 
+Speaking Audio uploads use separate private buckets, `aihub-speaking-recordings`
+and `aihub-sandbox-speaking-recordings`, configured through
+`SEAWEEDFS_AUDIO_ASSET_BUCKET` and
+`SEAWEEDFS_SANDBOX_AUDIO_ASSET_BUCKET`. Both buckets were created on the VPS on
+2026-10-04. Anonymous list, read of a temporary probe object, write, and delete
+each returned `403` against both local S3 buckets; anonymous bucket listing
+through `https://s3.wispace.app` also returned `403` for both. No public policy
+was applied.
+
+Set each environment's exact bucket variable when deploying #207. Upload and
+cleanup operations fail closed when the selected environment's bucket name or
+SeaweedFS credentials are unavailable; they never use the sample or Avatar
+buckets.
+
 Avatars are published, not signed (ADR-0069). Each Avatar bucket must allow
 anonymous **read of objects only**: no anonymous list, write, or delete. That is
 a per-bucket S3 policy set through the S3 API with the existing SeaweedFS
@@ -191,6 +205,33 @@ response, record that in ADR-0069: the one-hour cache bound then depends on
 browser heuristics. An upload must be
 completed within one hour; a completion older than that answers `404` and
 deletes the object.
+
+### Sweeping Speaking Audio upload orphans
+
+`speaking:audio-upload-sweep` removes rejected uploads and incomplete intents
+whose one-hour expiry passed at least 24 hours ago. It deletes only the exact
+object key in each intent, then removes that intent. A missing object is an
+idempotent success; failed deletion keeps the intent for the next retry. Run it
+daily for Production and Sandbox after the corresponding bucket variables and
+runtime credentials are configured.
+Start with a dry run in each environment:
+
+```sh
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  exec -T app node scripts/runtime-entrypoint.mjs scripts/cli.mjs speaking:audio-upload-sweep --dry-run true
+
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  --profile sandbox exec -T app-sandbox node scripts/runtime-entrypoint.mjs scripts/cli.mjs speaking:audio-upload-sweep --dry-run true
+```
+
+After reviewing the counts, run the same commands without `--dry-run true` and
+add them to the daily operator job alongside the Avatar sweep. Each invocation
+uses that deployment's database and environment-specific bucket. It prints one
+JSON line containing only `scanned`, `eligible`, `deleted`, `failed`, and
+`dryRun`; it never prints an object key or End-User ID. Any failed delete makes
+the command exit non-zero so the next scheduled run can retry it.
 
 ### Sweeping orphaned Avatar objects
 

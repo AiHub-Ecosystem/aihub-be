@@ -548,7 +548,7 @@
         }
       },
       "Error503": {
-        "description": "IDENTITY_PROVIDER_UNAVAILABLE | IDENTITY_JWKS_SOURCE_UNAVAILABLE | IDENTITY_CONFIG_CACHE_UNAVAILABLE | AUTH_EMAIL_DELIVERY_UNAVAILABLE | AVATAR_STORAGE_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
+        "description": "IDENTITY_PROVIDER_UNAVAILABLE | IDENTITY_JWKS_SOURCE_UNAVAILABLE | IDENTITY_CONFIG_CACHE_UNAVAILABLE | AUTH_EMAIL_DELIVERY_UNAVAILABLE | AVATAR_STORAGE_UNAVAILABLE | SPEAKING_AUDIO_STORAGE_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
         "content": {
           "application/json": {
             "schema": {
@@ -581,6 +581,10 @@
                         },
                         {
                           "const": "AVATAR_STORAGE_UNAVAILABLE",
+                          "type": "string"
+                        },
+                        {
+                          "const": "SPEAKING_AUDIO_STORAGE_UNAVAILABLE",
                           "type": "string"
                         },
                         {
@@ -3009,6 +3013,585 @@
           }
         },
         "description": "Returns the same status and headers as GET without a response body."
+      }
+    },
+    "/v1/speaking/audio/uploads": {
+      "post": {
+        "operationId": "speaking.audioUploads.create",
+        "summary": "Create a Speaking Audio upload intent",
+        "description": "Creates a one-hour intent bound to the Organization and exact End-User ID resolved from `X-User-Identity`. The response contains a five-minute presigned `PUT` URL; send the audio directly to that URL with the returned `Content-Type` and `Content-Length` headers.\n\nThe URL is a write credential. Do not log, persist, or expose it. The intent is not an Audio asset until completion verifies the stored object.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/UserIdentity"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["content_type", "byte_size"],
+                "properties": {
+                  "content_type": {
+                    "anyOf": [
+                      {
+                        "const": "audio/wav",
+                        "type": "string"
+                      },
+                      {
+                        "const": "audio/mpeg",
+                        "type": "string"
+                      },
+                      {
+                        "const": "audio/mp4",
+                        "type": "string"
+                      },
+                      {
+                        "const": "audio/webm",
+                        "type": "string"
+                      },
+                      {
+                        "const": "audio/ogg",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "byte_size": {
+                    "minimum": 100,
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Returns the same server-generated key and signed headers for the upload intent.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Upload URLs and Audio metadata must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "asset_id",
+                        "upload_url",
+                        "method",
+                        "headers",
+                        "expires_at",
+                        "intent_expires_at"
+                      ],
+                      "properties": {
+                        "asset_id": {
+                          "pattern": "^aud_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "upload_url": {
+                          "pattern": "^https://",
+                          "type": "string"
+                        },
+                        "method": {
+                          "const": "PUT",
+                          "type": "string"
+                        },
+                        "headers": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": ["Content-Type", "Content-Length"],
+                          "properties": {
+                            "Content-Type": {
+                              "anyOf": [
+                                {
+                                  "const": "audio/wav",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "audio/mpeg",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "audio/mp4",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "audio/webm",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "audio/ogg",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "Content-Length": {
+                              "pattern": "^[1-9][0-9]*$",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "expires_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "intent_expires_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/v1/speaking/audio/uploads/{asset_id}/refresh": {
+      "post": {
+        "operationId": "speaking.audioUploads.refresh",
+        "summary": "Refresh a Speaking Audio upload URL",
+        "description": "Issues another five-minute URL for the same open intent, key, content type, and byte size. It does not extend the original one-hour intent expiry.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/UserIdentity"
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "description": "The asset ID returned when the upload intent was created.",
+            "schema": {
+              "type": "string",
+              "pattern": "^aud_[0-9A-HJKMNP-TV-Z]{26}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the same server-generated key and signed headers for the upload intent.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Upload URLs and Audio metadata must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "asset_id",
+                        "upload_url",
+                        "method",
+                        "headers",
+                        "expires_at",
+                        "intent_expires_at"
+                      ],
+                      "properties": {
+                        "asset_id": {
+                          "pattern": "^aud_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "upload_url": {
+                          "pattern": "^https://",
+                          "type": "string"
+                        },
+                        "method": {
+                          "const": "PUT",
+                          "type": "string"
+                        },
+                        "headers": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": ["Content-Type", "Content-Length"],
+                          "properties": {
+                            "Content-Type": {
+                              "anyOf": [
+                                {
+                                  "const": "audio/wav",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "audio/mpeg",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "audio/mp4",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "audio/webm",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "audio/ogg",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "Content-Length": {
+                              "pattern": "^[1-9][0-9]*$",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "expires_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "intent_expires_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/v1/speaking/audio/uploads/{asset_id}/complete": {
+      "post": {
+        "operationId": "speaking.audioUploads.complete",
+        "summary": "Complete a Speaking Audio upload",
+        "description": "Verifies the stored object metadata at the exact key recorded by the intent. A valid object creates the Audio asset and sets `retention_expires_at` to 30 days after acceptance; a missing object leaves the intent retryable, while invalid metadata rejects the intent.\n\nOnly the same Organization and End-User ID can complete the intent. Repeating a successful completion returns the same Audio asset.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/UserIdentity"
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "description": "The asset ID returned when the upload intent was created.",
+            "schema": {
+              "type": "string",
+              "pattern": "^aud_[0-9A-HJKMNP-TV-Z]{26}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "This intent was already completed; the same Audio asset is returned.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Upload URLs and Audio metadata must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "asset_id",
+                        "content_type",
+                        "byte_size",
+                        "accepted_at",
+                        "retention_expires_at"
+                      ],
+                      "properties": {
+                        "asset_id": {
+                          "pattern": "^aud_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "content_type": {
+                          "anyOf": [
+                            {
+                              "const": "audio/wav",
+                              "type": "string"
+                            },
+                            {
+                              "const": "audio/mpeg",
+                              "type": "string"
+                            },
+                            {
+                              "const": "audio/mp4",
+                              "type": "string"
+                            },
+                            {
+                              "const": "audio/webm",
+                              "type": "string"
+                            },
+                            {
+                              "const": "audio/ogg",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "byte_size": {
+                          "minimum": 100,
+                          "maximum": 26214400,
+                          "type": "integer"
+                        },
+                        "accepted_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "retention_expires_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The verified Audio asset created by this request.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Upload URLs and Audio metadata must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "asset_id",
+                        "content_type",
+                        "byte_size",
+                        "accepted_at",
+                        "retention_expires_at"
+                      ],
+                      "properties": {
+                        "asset_id": {
+                          "pattern": "^aud_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "content_type": {
+                          "anyOf": [
+                            {
+                              "const": "audio/wav",
+                              "type": "string"
+                            },
+                            {
+                              "const": "audio/mpeg",
+                              "type": "string"
+                            },
+                            {
+                              "const": "audio/mp4",
+                              "type": "string"
+                            },
+                            {
+                              "const": "audio/webm",
+                              "type": "string"
+                            },
+                            {
+                              "const": "audio/ogg",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "byte_size": {
+                          "minimum": 100,
+                          "maximum": 26214400,
+                          "type": "integer"
+                        },
+                        "accepted_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "retention_expires_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
       }
     },
     "/v1/me/avatar/uploads": {
