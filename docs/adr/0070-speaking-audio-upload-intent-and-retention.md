@@ -18,12 +18,14 @@ An Audio asset is created only after a client uploads directly to SeaweedFS and 
 5. An expired intent cannot be completed. A cleanup job waits 24 hours after expiry, deletes any object at the intent's exact key, and then removes the intent. Failed deletes remain retryable; deleting a missing object succeeds. Rejected intents are never made completable again and remain until their uploaded object is removed.
 6. Customer recordings use dedicated private buckets: Production uses `aihub-speaking-recordings` and Sandbox uses `aihub-sandbox-speaking-recordings`. They are separate from the public `ielts-task1` and `aihub-audio` buckets, the private `aihub-speaking-samples` bucket, and both Avatar buckets. Production and Sandbox use required `SEAWEEDFS_AUDIO_ASSET_BUCKET` and `SEAWEEDFS_SANDBOX_AUDIO_ASSET_BUCKET` settings, respectively, with no default or fallback. The buckets have no anonymous read, list, write, or delete policy. Storage operations fail closed until the selected deployment has its exact bucket setting and SeaweedFS credentials.
 7. The 25 MiB maximum is an Audio object policy aligned with the provider's grading input contract. Upload bytes still bypass AIHUB and are not subject to the synchronous grading route's request-body ceiling.
+8. Audio rows retain `organization_id` but do not have a local foreign key to `organizations`. Sandbox Organization identity is authoritative in the control plane and is intentionally not copied into the Sandbox database; the authenticated request supplies the validated Organization ID when creating and completing an intent. This follows the cross-database reference boundary established for Sandbox idempotency in migration `0023`.
 
 ## Consequences
 
 - The durable intent prevents completion from attributing a recording to a different End-User ID and gives cleanup a durable, exact key to act on.
 - Refreshing an upload URL restores upload capability after its five-minute expiry without changing the intent's identity, object key, expected metadata, or one-hour deadline.
 - The intent adds temporary database state. Audio assets themselves remain durable Postgres reference data and never enter Redis.
+- Audio Organization references are validated at the API identity boundary, not by a local foreign key, because the Sandbox database does not own Organization rows. Both environments still persist Organization ID and require it, together with the exact End-User ID and environment, to match on every intent and asset lookup.
 - The retention/deletion slice consumes the 30-day deadline selected here; it does not choose a separate duration.
 - SeaweedFS may not enforce the signed length. Completion's check of the stored object's actual size and content type is the guarantee.
 

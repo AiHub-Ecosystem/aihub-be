@@ -13,7 +13,7 @@ describe('Speaking Audio upload migration', () => {
 
     expect(sql).toContain('CREATE TABLE speaking_audio_upload_intents');
     expect(sql).toContain('CREATE TABLE speaking_audio_assets');
-    expect(sql).toContain('REFERENCES organizations(id) ON DELETE RESTRICT');
+    expect(sql).toContain('organization_id         text NOT NULL');
     expect(sql).toContain("environment IN ('production', 'sandbox')");
     expect(sql).toContain('byte_size BETWEEN 100 AND 26214400');
     expect(sql).toContain("status IN ('open', 'rejected')");
@@ -22,5 +22,23 @@ describe('Speaking Audio upload migration', () => {
     );
     expect(sql).toContain('retention_expires_at');
     expect(sql).not.toContain('redis');
+  });
+
+  it('keeps Sandbox Audio references independent of local Organization rows', () => {
+    const sql = readFileSync(
+      join(
+        __dirname,
+        '../../../../database/migrations/0026_sandbox_speaking_audio_org_reference.sql',
+      ),
+      'utf8',
+    );
+
+    expect(sql).toContain(
+      'DROP CONSTRAINT IF EXISTS speaking_audio_upload_intents_organization_id_fkey',
+    );
+    expect(sql).toContain(
+      'DROP CONSTRAINT IF EXISTS speaking_audio_assets_organization_id_fkey',
+    );
+    expect(sql).toContain('outside the control plane database');
   });
 });

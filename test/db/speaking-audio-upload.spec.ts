@@ -11,11 +11,18 @@ import {
   createSpeakingAudioQueryClient,
 } from '@/modules/speaking/infrastructure/postgres-speaking-audio-upload.repository';
 
-import { createTestPool, resetIdentityTables } from './database';
+import {
+  createSandboxTestPool,
+  createTestPool,
+  resetIdentityTables,
+} from './database';
 
 let pool: Pool;
+let sandboxPool: Pool;
 let repository: PostgresSpeakingAudioUploadRepository;
+let sandboxRepository: PostgresSpeakingAudioUploadRepository;
 let closeRepository: () => Promise<void>;
+let closeSandboxRepository: () => Promise<void>;
 let organizationId: string;
 
 beforeAll(() => {
@@ -25,11 +32,21 @@ beforeAll(() => {
   const client = createSpeakingAudioQueryClient(databaseUrl);
   repository = new PostgresSpeakingAudioUploadRepository(client);
   closeRepository = () => client.close();
+
+  sandboxPool = createSandboxTestPool();
+  const sandboxDatabaseUrl =
+    (sandboxPool.options as { connectionString?: string }).connectionString ??
+    '';
+  const sandboxClient = createSpeakingAudioQueryClient(sandboxDatabaseUrl);
+  sandboxRepository = new PostgresSpeakingAudioUploadRepository(sandboxClient);
+  closeSandboxRepository = () => sandboxClient.close();
 });
 
 afterAll(async () => {
   await closeRepository();
+  await closeSandboxRepository();
   await pool.end();
+  await sandboxPool.end();
 });
 
 beforeEach(async () => {
@@ -42,14 +59,18 @@ beforeEach(async () => {
   );
 });
 
-function intent(assetId = `aud_${ulid()}`): SpeakingAudioUploadIntent {
+function intent(
+  assetId = `aud_${ulid()}`,
+  ownerOrganizationId = organizationId,
+  environment: 'production' | 'sandbox' = 'production',
+): SpeakingAudioUploadIntent {
   const createdAt = new Date('2026-10-03T04:00:00.000Z');
   return {
     assetId,
-    organizationId,
+    organizationId: ownerOrganizationId,
     endUserId: 'student-123',
-    environment: 'production',
-    objectKey: speakingAudioObjectKey(organizationId, assetId),
+    environment,
+    objectKey: speakingAudioObjectKey(ownerOrganizationId, assetId),
     contentType: 'audio/wav',
     byteSize: 1_024,
     createdAt,
@@ -158,5 +179,37 @@ describe('Speaking Audio upload completion against PostgreSQL', () => {
       [upload.assetId],
     );
     expect(rows.rows[0]).toEqual({ intents: 1, assets: 1 });
+  });
+
+  it('stores Sandbox uploads when the Organization exists only in the control plane', async () => {
+    const sandboxOrganizationId = `org_${ulid()}`;
+    const upload = intent(`aud_${ulid()}`, sandboxOrganizationId, 'sandbox');
+    const localOrganizations = await sandboxPool.query(
+      'SELECT count(*)::int AS count FROM organizations WHERE id = $1',
+      [sandboxOrganizationId],
+    );
+    expect(localOrganizations.rows[0]).toEqual({ count: 0 });
+
+    await sandboxRepository.createIntent(upload);
+    const result = await sandboxRepository.completeIntent({
+      owner: {
+        assetId: upload.assetId,
+        organizationId: upload.organizationId,
+        endUserId: upload.endUserId,
+        environment: upload.environment,
+      },
+      now: new Date('2026-10-03T04:05:00.000Z'),
+      asset: asset(upload),
+    });
+
+    expect(result).toBe('created');
+    const rows = await sandboxPool.query(
+      `SELECT
+         (SELECT count(*)::int FROM organizations WHERE id = $1) AS organizations,
+         (SELECT count(*)::int FROM speaking_audio_upload_intents WHERE id = $2) AS intents,
+         (SELECT count(*)::int FROM speaking_audio_assets WHERE id = $2) AS assets`,
+      [sandboxOrganizationId, upload.assetId],
+    );
+    expect(rows.rows[0]).toEqual({ organizations: 0, intents: 0, assets: 1 });
   });
 });
