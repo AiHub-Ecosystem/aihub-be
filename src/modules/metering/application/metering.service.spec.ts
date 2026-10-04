@@ -227,6 +227,46 @@ describe('MeteringService', () => {
     );
   });
 
+  it('reports the status only after the quota mutation that can change it', async () => {
+    const repository = new FakeUsageRepository();
+    const counter = new FakeQuotaCounter();
+    counter.shouldFail = true;
+    const service = new MeteringService(repository, undefined, counter);
+    const statuses: string[] = [];
+
+    await service.finalize({
+      ...input,
+      outcome: 'success',
+      httpStatus: 200,
+      quotaTracked: true,
+      onStatusWritten: (status) => statuses.push(status),
+    });
+
+    // Reported once, and as the status actually persisted. A reader that
+    // learned the status before the quota counter rejected would report
+    // `missing_usage` for a record stored as `quota_unverified`.
+    expect(statuses).toEqual(['quota_unverified']);
+    expect(repository.records[0]?.meteringStatus).toBe('quota_unverified');
+  });
+
+  it('reports the resolved status when the quota counter accepts', async () => {
+    const repository = new FakeUsageRepository();
+    const counter = new FakeQuotaCounter();
+    const service = new MeteringService(repository, undefined, counter);
+    const statuses: string[] = [];
+
+    await service.finalize({
+      ...input,
+      outcome: 'success',
+      httpStatus: 200,
+      quotaTracked: true,
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      onStatusWritten: (status) => statuses.push(status),
+    });
+
+    expect(statuses).toEqual(['complete']);
+  });
+
   it('marks an authenticated failure before dispatch as not applicable', async () => {
     const repository = new FakeUsageRepository();
     const service = new MeteringService(repository);

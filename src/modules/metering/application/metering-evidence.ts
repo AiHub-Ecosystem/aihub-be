@@ -1,5 +1,9 @@
 import type { OperationId } from '@/catalog/operation-id';
-import type { MeteringModel, MeteringUsage } from './metering-finalizer.port';
+import type {
+  MeteringModel,
+  MeteringStatus,
+  MeteringUsage,
+} from './metering-finalizer.port';
 
 /**
  * What one authenticated request has gathered so far on its way to becoming a
@@ -19,6 +23,19 @@ export interface MeteringEvidence {
   actorId?: string;
   downstreamMs?: number;
   aiProcessingMs?: number;
+  /**
+   * The status the Metering record was finally written with, stamped by the
+   * finalizer after every mutation it may apply.
+   *
+   * It lives on the evidence rather than being recomputed by a reader,
+   * because the record's status is not decided in one place: the finalizer can
+   * still overwrite `missing_usage` with `quota_unverified` when the quota
+   * counter rejects. A reader that recomputed the status would report the
+   * intent rather than the persisted truth — the same distinction ADR-0026
+   * draws when it says the completeness report trusts the finalized status
+   * instead of recomputing token validity.
+   */
+  meteringStatus?: MeteringStatus;
   /** The total time the Metering record was written with; also the one the Request Completion Event reports. */
   totalMs?: number;
   usage?: MeteringUsage;
@@ -36,7 +53,14 @@ export interface MeteringEvidence {
  */
 export type MeteringGatheredEvidence = Omit<
   MeteringEvidence,
-  'operation' | 'organizationId' | 'apiKeyId' | 'environment' | 'settled'
+  | 'operation'
+  | 'organizationId'
+  | 'apiKeyId'
+  | 'environment'
+  | 'settled'
+  // The finalizer alone decides the record's status, so no gathered writer can
+  // claim to know it. The finalizer stamps it directly on the evidence.
+  | 'meteringStatus'
 >;
 
 declare module 'fastify' {

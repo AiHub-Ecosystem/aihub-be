@@ -48,6 +48,16 @@ export interface MeteringFinalizeInput {
   readonly modelCalled?: boolean;
   readonly quotaTracked?: boolean;
   readonly quotaUnverified?: boolean;
+  /**
+   * Called with the status the record was finally written with, after every
+   * mutation the finalizer applies.
+   *
+   * The port returns `void`, so without this a reader that needs the persisted
+   * status has no way to learn it and recomputes one that can disagree with
+   * the record. The callback keeps that knowledge inside metering instead of
+   * exposing the record, which stays internal (ADR-0016).
+   */
+  readonly onStatusWritten?: (status: MeteringStatus) => void;
 }
 
 export interface MeteringFinalizerPort {

@@ -1,9 +1,4 @@
-import {
-  Counter,
-  Histogram,
-  Registry,
-  collectDefaultMetrics,
-} from '@prometheus-io/client';
+import { Counter, Histogram, Registry } from '@prometheus-io/client';
 
 /**
  * The metric names spec section L.2 fixes. Issue #198 owns five of the
@@ -14,11 +9,6 @@ import {
 export const METRICS_ROUTE_PATH = '/metrics';
 
 const registry = new Registry();
-
-// Node process and event-loop metrics, so a dashboard can show what the
-// service itself was doing while a request was slow. Prefixed to keep them
-// from colliding with the `aihub_` business series below.
-collectDefaultMetrics({ register: registry, prefix: 'aihub_process_' });
 
 const requestsTotal = new Counter({
   name: 'aihub_requests_total',

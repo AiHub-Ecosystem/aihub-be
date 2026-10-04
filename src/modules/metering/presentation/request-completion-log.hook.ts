@@ -1,6 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import type { ErrorCode } from '@/common/errors/error-code';
 import { isHealthProbe } from '@/common/http/request-path';
@@ -14,10 +13,6 @@ import {
   getMeteringEvidence,
 } from '@/modules/metering/application/metering-evidence';
 import type { MeteringOutcome } from '@/modules/metering/application/metering-finalizer.port';
-import {
-  DOWNSTREAM_USAGE_REPORTING,
-  resolveMeteringStatus,
-} from '@/modules/metering/application/metering.service';
 import { requestOutcome } from '@/modules/metering/application/request-outcome';
 
 const COMPLETION_EVENT = 'request_completed';
@@ -84,12 +79,13 @@ function completionEvent(
  * The same completion, as counters. Reads the same evidence as the log line,
  * so a metric and a log line can never disagree about one request.
  *
- * A request with no operation identifier never reaches an operation: it was
+ * A request with no operation identifier never reached an operation: it was
  * rejected before authentication, or it matched no catalog route. There is no
  * bounded label value to attribute it to, and inventing one from the URL would
  * let a caller mint unbounded series by requesting arbitrary paths, so it is
- * counted nowhere rather than miscounted. Rejections that matter to an
- * operator are counted by #200 from the protection seam itself.
+ * counted nowhere rather than miscounted. Those requests are counted from the
+ * protection seam in #200, which owns their denominator as well as their
+ * reason — an error rate cannot be computed from successes alone.
  */
 function recordRequestMetrics(
   request: FastifyRequest,
@@ -101,7 +97,6 @@ function recordRequestMetrics(
   }
 
   const outcome = requestOutcome(reply.statusCode, request.aihubFailureCode);
-  const operation = OPERATION_CATALOG[evidence.operation];
   const tokens = tokensOf(evidence);
 
   recordCompletedRequest({
@@ -113,15 +108,12 @@ function recordRequestMetrics(
       ? {}
       : { downstreamMs: evidence.downstreamMs }),
     ...(tokens === undefined ? {} : { tokens }),
-    meteringStatus: resolveMeteringStatus({
-      mode: operation.meteringMode,
-      usageReportingExpected: DOWNSTREAM_USAGE_REPORTING[operation.downstream],
-      ...(evidence.usage === undefined ? {} : { usage: evidence.usage }),
-      ...(evidence.quotaUnverified === undefined
-        ? {}
-        : { quotaUnverified: evidence.quotaUnverified }),
-      modelCalled: evidence.modelCalled ?? outcome === 'success',
-    }),
+    // Read from the evidence rather than recomputed: the finalizer stamps this
+    // after applying every mutation, so it is the status the record was
+    // actually written with. Absent when the record was never finalized.
+    ...(evidence.meteringStatus === undefined
+      ? {}
+      : { meteringStatus: evidence.meteringStatus }),
   });
 }
 

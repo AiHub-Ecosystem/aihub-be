@@ -144,6 +144,11 @@ export class MeteringService implements MeteringFinalizerPort {
         record = { ...record, meteringStatus: 'quota_unverified' };
       }
     }
+    // Announced only once the record is final, after the quota mutation that
+    // can still change the status. A reader that learns the status earlier
+    // would report `missing_usage` for a record persisted as
+    // `quota_unverified`.
+    input.onStatusWritten?.(record.meteringStatus);
     try {
       await this.repository.insert(record);
     } catch {

@@ -79,5 +79,10 @@ function record(
     ...(evidence.quotaUnverified === undefined
       ? {}
       : { quotaUnverified: evidence.quotaUnverified }),
+    // The status the record was written with, handed back to the evidence so a
+    // later reader reports the persisted truth rather than recomputing one.
+    onStatusWritten: (status) => {
+      evidence.meteringStatus = status;
+    },
   };
 }

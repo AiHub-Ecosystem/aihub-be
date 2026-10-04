@@ -17,8 +17,14 @@ import {
  * reduce to a shared-secret header — the same secret the scrape config would
  * then have to hold. The endpoint exposes operation identifiers, status codes
  * and latencies, which are already visible to any caller of the API, and it
- * must be reachable by whatever scrapes it. Binding and network placement are
- * what keep it off the public edge.
+ * must be reachable by whatever scrapes it.
+ *
+ * What keeps it off the public edge is the TLS terminator in front of the
+ * application, which must not proxy this path. That configuration lives on
+ * the host rather than in this repository, so this comment records the
+ * obligation instead of claiming a guarantee this code cannot make: the
+ * container's own published port is bound to loopback, but the process
+ * itself listens on every interface.
  */
 export function registerMetricsRoute(instance: FastifyInstance): void {
   instance.get(METRICS_ROUTE_PATH, async (_request, reply) => {
