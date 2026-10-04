@@ -30,6 +30,12 @@ import {
  */
 const bytea = customType<{ data: Buffer }>({ dataType: () => 'bytea' });
 
+// Only models the FK target; user_accounts is intentionally not registered in
+// this persistence slice's Drizzle schema.
+const userAccountsReference = pgTable('user_accounts', {
+  id: text('id').primaryKey(),
+});
+
 export const organizations = pgTable(
   'organizations',
   {
@@ -47,7 +53,10 @@ export const organizations = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
-    createdByUserAccountId: text('created_by_user_account_id'),
+    createdByUserAccountId: text('created_by_user_account_id').references(
+      () => userAccountsReference.id,
+      { onDelete: 'restrict' },
+    ),
   },
   (table) => [
     check(
