@@ -152,12 +152,16 @@ same anonymous read-only grant as the production one.
 Speaking Audio uploads use separate private buckets, `aihub-speaking-recordings`
 and `aihub-sandbox-speaking-recordings`, configured through
 `SEAWEEDFS_AUDIO_ASSET_BUCKET` and
-`SEAWEEDFS_SANDBOX_AUDIO_ASSET_BUCKET`. Keep both blank until WISPACE confirms
-and provisions the buckets with anonymous read, list, write, and delete denied.
-Upload and cleanup operations fail closed when the selected environment's exact
-bucket name or SeaweedFS credentials are unavailable; they never use the sample
-or Avatar buckets. This WISPACE confirmation is an external acceptance gate for
-#207.
+`SEAWEEDFS_SANDBOX_AUDIO_ASSET_BUCKET`. Both buckets were created on the VPS on
+2026-10-04. Anonymous list, read of a temporary probe object, write, and delete
+each returned `403` against both local S3 buckets; anonymous bucket listing
+through `https://s3.wispace.app` also returned `403` for both. No public policy
+was applied.
+
+Set each environment's exact bucket variable when deploying #207. Upload and
+cleanup operations fail closed when the selected environment's bucket name or
+SeaweedFS credentials are unavailable; they never use the sample or Avatar
+buckets.
 
 Avatars are published, not signed (ADR-0069). Each Avatar bucket must allow
 anonymous **read of objects only**: no anonymous list, write, or delete. That is
@@ -208,7 +212,8 @@ deletes the object.
 whose one-hour expiry passed at least 24 hours ago. It deletes only the exact
 object key in each intent, then removes that intent. A missing object is an
 idempotent success; failed deletion keeps the intent for the next retry. Run it
-daily for Production and Sandbox after WISPACE provisions the private buckets.
+daily for Production and Sandbox after the corresponding bucket variables and
+runtime credentials are configured.
 Start with a dry run in each environment:
 
 ```sh
