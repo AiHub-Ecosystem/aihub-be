@@ -1,11 +1,23 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import type { ErrorCode } from '@/common/errors/error-code';
 import { isHealthProbe } from '@/common/http/request-path';
 import { routeTemplate } from '@/common/http/request-tracing.hook';
-import { getMeteringEvidence } from '@/modules/metering/application/metering-evidence';
+import {
+  METRICS_ROUTE_PATH,
+  recordCompletedRequest,
+} from '@/common/observability/metrics';
+import {
+  type MeteringEvidence,
+  getMeteringEvidence,
+} from '@/modules/metering/application/metering-evidence';
 import type { MeteringOutcome } from '@/modules/metering/application/metering-finalizer.port';
+import {
+  DOWNSTREAM_USAGE_REPORTING,
+  resolveMeteringStatus,
+} from '@/modules/metering/application/metering.service';
 import { requestOutcome } from '@/modules/metering/application/request-outcome';
 
 const COMPLETION_EVENT = 'request_completed';
@@ -69,6 +81,72 @@ function completionEvent(
 }
 
 /**
+ * The same completion, as counters. Reads the same evidence as the log line,
+ * so a metric and a log line can never disagree about one request.
+ *
+ * A request with no operation identifier never reaches an operation: it was
+ * rejected before authentication, or it matched no catalog route. There is no
+ * bounded label value to attribute it to, and inventing one from the URL would
+ * let a caller mint unbounded series by requesting arbitrary paths, so it is
+ * counted nowhere rather than miscounted. Rejections that matter to an
+ * operator are counted by #200 from the protection seam itself.
+ */
+function recordRequestMetrics(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): void {
+  const evidence = getMeteringEvidence(request);
+  if (evidence === undefined) {
+    return;
+  }
+
+  const outcome = requestOutcome(reply.statusCode, request.aihubFailureCode);
+  const operation = OPERATION_CATALOG[evidence.operation];
+  const tokens = tokensOf(evidence);
+
+  recordCompletedRequest({
+    operation: evidence.operation,
+    statusCode: reply.statusCode,
+    outcome,
+    totalMs: evidence.totalMs ?? Math.max(0, Math.round(reply.elapsedTime)),
+    ...(evidence.downstreamMs === undefined
+      ? {}
+      : { downstreamMs: evidence.downstreamMs }),
+    ...(tokens === undefined ? {} : { tokens }),
+    meteringStatus: resolveMeteringStatus({
+      mode: operation.meteringMode,
+      usageReportingExpected: DOWNSTREAM_USAGE_REPORTING[operation.downstream],
+      ...(evidence.usage === undefined ? {} : { usage: evidence.usage }),
+      ...(evidence.quotaUnverified === undefined
+        ? {}
+        : { quotaUnverified: evidence.quotaUnverified }),
+      modelCalled: evidence.modelCalled ?? outcome === 'success',
+    }),
+  });
+}
+
+/**
+ * The downstream reports input, output, and a total, and any one of them may
+ * be absent. `total` is authoritative when present; otherwise the reported
+ * parts are summed. A downstream that reported neither contributes nothing
+ * rather than a fabricated zero, which is what `aihub_tokens_total` would
+ * otherwise record as a real zero-token request.
+ */
+function tokensOf(evidence: MeteringEvidence): number | undefined {
+  const usage = evidence.usage;
+  if (usage === undefined) {
+    return undefined;
+  }
+
+  if (usage.totalTokens !== undefined) {
+    return usage.totalTokens;
+  }
+
+  const parts = (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
+  return parts > 0 ? parts : undefined;
+}
+
+/**
  * One event per response, from `onResponse`, which is the one lifecycle point
  * that sees every reply: matched routes, 404s, framework parse errors, and
  * rejections that happen before Nest does. A request the client abandons
@@ -82,8 +160,17 @@ export function registerRequestCompletionLog(instance: FastifyInstance): void {
   const log = instance.log;
 
   instance.addHook('onResponse', (request, reply, done) => {
-    if (!isHealthProbe(request.url)) {
+    const isProbe = isHealthProbe(request.url);
+
+    if (request.url === METRICS_ROUTE_PATH) {
+      // A scrape is not a customer request. It carries no metering evidence,
+      // so it would be skipped below anyway, but it also must not be logged.
+      return done();
+    }
+
+    if (!isProbe) {
       log.info(completionEvent(request, reply));
+      recordRequestMetrics(request, reply);
     }
 
     done();

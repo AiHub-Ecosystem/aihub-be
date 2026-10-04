@@ -18,6 +18,8 @@ import { AppModule } from '@/app.module';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { AppError } from '@/common/errors/app-error';
+import { METRICS_ROUTE_PATH } from '@/common/observability/metrics';
+import { registerMetricsRoute } from '@/common/observability/metrics.route';
 import { createRequestLogging } from '@/common/observability/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
 import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
@@ -191,6 +193,24 @@ const idempotency = {
   },
 } satisfies IdempotencyServicePort;
 
+/** Total observations of a counter family, summed across its label sets. */
+async function metricValue(
+  application: NestFastifyApplication,
+  name: string,
+): Promise<number> {
+  const body = (
+    await application.inject({ method: 'GET', url: METRICS_ROUTE_PATH })
+  ).body;
+  const lines = String(body)
+    .split('\n')
+    .filter((line) => line.startsWith(`${name}{`));
+
+  return lines.reduce((total, line) => {
+    const value = Number(line.slice(line.lastIndexOf(' ') + 1));
+    return Number.isFinite(value) ? total + value : total;
+  }, 0);
+}
+
 describe('request completion log over the HTTP boundary', () => {
   let app: NestFastifyApplication;
   let log: CapturedLog;
@@ -253,6 +273,7 @@ describe('request completion log over the HTTP boundary', () => {
     // The same hooks, in the same order, as the application bootstrap.
     const fastify = app.getHttpAdapter().getInstance();
     registerRequestHooks(fastify, trace.getTracer('aihub.request.test'));
+    registerMetricsRoute(fastify);
 
     await app.init();
     await fastify.ready();
@@ -417,6 +438,33 @@ describe('request completion log over the HTTP boundary', () => {
         error_code: 'NOT_FOUND',
       }),
     );
+  });
+
+  it('counts a graded request in the scrape endpoint', async () => {
+    await app.inject({
+      method: 'POST',
+      url: GRADE_URL,
+      headers: { 'content-type': 'application/json' },
+      payload: VALID_BODY,
+    });
+
+    const payload = (await app.inject({ method: 'GET', url: '/metrics' })).body;
+
+    // The catalog's own identifier is the only operation label value, never
+    // the URL the caller asked for.
+    expect(payload).toContain(
+      'aihub_requests_total{operation="writing.task1.grade"',
+    );
+    expect(payload).toContain('aihub_downstream_duration_seconds_count');
+    expect(payload).toContain('aihub_request_duration_seconds_count');
+  });
+
+  it('counts no scrape as a customer request', async () => {
+    const before = await metricValue(app, 'aihub_requests_total');
+
+    await app.inject({ method: 'GET', url: '/metrics' });
+
+    expect(await metricValue(app, 'aihub_requests_total')).toBe(before);
   });
 
   it('omits the organization keys entirely for a request that never authenticated', async () => {

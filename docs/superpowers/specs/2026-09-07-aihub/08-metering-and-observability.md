@@ -151,7 +151,7 @@ Essay content represents PII belonging to our customer's end-users — logging i
 aihub_requests_total{operation,status,outcome}
 aihub_request_duration_seconds{operation}          histogram
 aihub_downstream_duration_seconds{operation}       histogram
-aihub_tokens_total{operation,org_id}               counter
+aihub_tokens_total{operation}                       counter
 aihub_rejected_total{reason}                       rate_limit|quota|concurrency|auth
 aihub_breaker_state{operation}                     0 closed / 1 open / 2 half-open
 aihub_metering_incomplete_total{operation}
@@ -159,6 +159,13 @@ aihub_redis_unavailable_total
 ```
 
 Answers every performance question raised in brief §13.12. `gateway_overhead` **requires no dedicated metric** — it is derived directly from the delta between the first two histograms.
+
+`aihub_tokens_total` carries an `operation` label only. An `org_id` label was
+specified here originally and is deliberately dropped: it is unbounded, so
+every Organization would multiply the series count and no runbook could
+predict it. Per-Organization usage is still exact — it lives in the durable
+`usage_records` aggregate and in the `request_completed` structured log line,
+which is where an unbounded dimension belongs.
 
 ## L.3 Request Tracing: OTLP Endpoint, No Bundled Collector
 

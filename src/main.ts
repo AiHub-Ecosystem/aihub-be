@@ -9,6 +9,7 @@ import {
 } from '@nestjs/platform-fastify';
 
 import { AppModule } from './app.module';
+import { registerMetricsRoute } from './common/observability/metrics.route';
 import { createRequestLogging } from './common/observability/request-logger';
 import { generateRequestId } from './common/request-context/request-id';
 import {
@@ -48,6 +49,10 @@ export async function bootstrap(): Promise<void> {
   registerSpeakingMultipartParser(app.getHttpAdapter().getInstance());
 
   registerRequestHooks(app.getHttpAdapter().getInstance(), requestTracer);
+
+  // Registered after the hooks so the scrape itself is observed by the same
+  // completion path, and skipped by it: a scrape is not a customer request.
+  registerMetricsRoute(app.getHttpAdapter().getInstance());
 
   // No global prefix: the operation catalog carries the full public path
   // (`/v1/ielts/writing/task1/grade`) so it stays the single source of truth and
