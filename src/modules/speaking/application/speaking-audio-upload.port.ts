@@ -71,24 +71,32 @@ export interface SpeakingAudioAssetStoragePort {
   }): Promise<void>;
 }
 
+/**
+ * What a caller is granted for one upload: the object to send bytes to, and
+ * the two separate deadlines that bound it. `uploadUrlExpiresAt` is the
+ * signature's life and is the one a refresh replaces; `intentExpiresAt` is
+ * the intent's own life and no refresh extends it.
+ */
+export interface SpeakingAudioUploadGrant {
+  readonly assetId: string;
+  readonly objectKey: string;
+  readonly contentType: SpeakingAudioContentType;
+  readonly byteSize: number;
+  readonly uploadUrl: string;
+  readonly uploadUrlExpiresAt: Date;
+  readonly intentExpiresAt: Date;
+}
+
 export interface SpeakingAudioUploadServicePort {
   requestUpload(input: {
     readonly context: RequestContext;
     readonly contentType: string;
     readonly byteSize: number;
-  }): Promise<{
-    readonly assetId: string;
-    readonly objectKey: string;
-    readonly contentType: string;
-    readonly byteSize: number;
-    readonly uploadUrl: string;
-    readonly uploadUrlExpiresAt: Date;
-    readonly intentExpiresAt: Date;
-  }>;
+  }): Promise<SpeakingAudioUploadGrant>;
   refreshUpload(input: {
     readonly context: RequestContext;
     readonly assetId: string;
-  }): ReturnType<SpeakingAudioUploadServicePort['requestUpload']>;
+  }): Promise<SpeakingAudioUploadGrant>;
   completeUpload(input: {
     readonly context: RequestContext;
     readonly assetId: string;

@@ -30,6 +30,7 @@ import {
 } from '@/modules/identity/presentation/authenticated-request';
 import {
   SPEAKING_AUDIO_UPLOAD_SERVICE,
+  type SpeakingAudioUploadGrant,
   type SpeakingAudioUploadServicePort,
 } from '@/modules/speaking/application/speaking-audio-upload.port';
 import type { SpeakingAudioAsset } from '@/modules/speaking/domain/speaking-audio-asset';
@@ -55,7 +56,7 @@ function requestContext(request: AuthenticatedRequest) {
 
 function uploadResponse(
   requestId: string,
-  upload: Awaited<ReturnType<SpeakingAudioUploadServicePort['requestUpload']>>,
+  upload: SpeakingAudioUploadGrant,
 ): SpeakingAudioUploadUrlResponse {
   return {
     data: {
@@ -63,8 +64,7 @@ function uploadResponse(
       upload_url: upload.uploadUrl,
       method: 'PUT',
       headers: {
-        'Content-Type':
-          upload.contentType as SpeakingAudioUploadUrlResponse['data']['headers']['Content-Type'],
+        'Content-Type': upload.contentType,
         'Content-Length': String(upload.byteSize),
       },
       expires_at: upload.uploadUrlExpiresAt.toISOString(),

@@ -5,7 +5,6 @@ import { invalidRequest } from '@/common/errors/invalid-request';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   SpeakingAudioAsset,
-  SpeakingAudioContentType,
   SpeakingAudioEnvironment,
   SpeakingAudioUploadIntent,
 } from '@/modules/speaking/domain/speaking-audio-asset';
@@ -21,6 +20,7 @@ import {
 
 import type {
   SpeakingAudioAssetStoragePort,
+  SpeakingAudioUploadGrant,
   SpeakingAudioUploadOwner,
   SpeakingAudioUploadRepositoryPort,
   SpeakingAudioUploadServicePort,
@@ -78,7 +78,7 @@ function uploadContextOwner(context: RequestContext): {
   return {
     organizationId: context.organizationId,
     endUserId: context.userId,
-    environment: context.environment as SpeakingAudioEnvironment,
+    environment: context.environment,
   };
 }
 
@@ -122,7 +122,7 @@ export class SpeakingAudioUploadService
     readonly context: RequestContext;
     readonly contentType: string;
     readonly byteSize: number;
-  }): ReturnType<SpeakingAudioUploadServicePort['requestUpload']> {
+  }): Promise<SpeakingAudioUploadGrant> {
     if (
       !isSpeakingAudioContentType(input.contentType) ||
       !Number.isInteger(input.byteSize) ||
@@ -174,7 +174,7 @@ export class SpeakingAudioUploadService
   async refreshUpload(input: {
     readonly context: RequestContext;
     readonly assetId: string;
-  }): ReturnType<SpeakingAudioUploadServicePort['requestUpload']> {
+  }): Promise<SpeakingAudioUploadGrant> {
     if (!isSpeakingAudioAssetId(input.assetId)) {
       throw invalidRequest();
     }
@@ -283,7 +283,7 @@ export class SpeakingAudioUploadService
       endUserId: found.intent.endUserId,
       environment: found.intent.environment,
       objectKey: found.intent.objectKey,
-      contentType: found.intent.contentType as SpeakingAudioContentType,
+      contentType: found.intent.contentType,
       byteSize: found.intent.byteSize,
       acceptedAt,
       retentionExpiresAt: new Date(
