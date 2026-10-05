@@ -1,5 +1,5 @@
 import { METRICS_ROUTE_PATH, getMetrics } from './metrics';
-import { recordCompletedRequest } from './metrics';
+import { recordCompletedRequest, recordEmailDeliveryFailed } from './metrics';
 
 const GRADE = 'writing.task1.grade';
 
@@ -147,5 +147,23 @@ describe('request lifecycle metrics', () => {
 
     // Must not throw, and must not produce NaN in the exposition payload.
     expect(await getMetrics()).not.toContain('NaN');
+  });
+});
+
+describe('email delivery failure metric', () => {
+  it('counts an exhausted delivery request under its email kind', async () => {
+    recordEmailDeliveryFailed('organization_invite_email');
+
+    expect(
+      await sample('aihub_email_delivery_failed_total', {
+        kind: 'organization_invite_email',
+      }),
+    ).toBe('1');
+  });
+
+  it('has no series for a cancelled request, which is not a failure', async () => {
+    recordEmailDeliveryFailed('verification_email');
+
+    expect(await getMetrics()).not.toContain('cancelled');
   });
 });

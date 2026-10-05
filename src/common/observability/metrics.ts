@@ -56,6 +56,28 @@ const meteringIncompleteTotal = new Counter({
 });
 
 /**
+ * The three email kinds are the whole label domain, so this counter cannot grow
+ * a series per recipient. A cancellation is deliberately absent: ADR-0074 calls
+ * it expected lifecycle handling, so paging on it would train operators to
+ * ignore the counter that does page.
+ */
+const emailDeliveryFailedTotal = new Counter({
+  name: 'aihub_email_delivery_failed_total',
+  help: 'Email Delivery Requests that used all their attempts without provider acceptance.',
+  labelNames: ['kind'],
+  registers: [registry],
+});
+
+export type EmailDeliveryKindLabel =
+  | 'verification_email'
+  | 'password_reset_email'
+  | 'organization_invite_email';
+
+export function recordEmailDeliveryFailed(kind: EmailDeliveryKindLabel): void {
+  emailDeliveryFailedTotal.inc({ kind });
+}
+
+/**
  * Only called from the Request Completion hook, where the operation is the
  * catalog's own identifier. A label value is therefore bounded by the
  * catalog rather than by whatever a caller put in the URL.
