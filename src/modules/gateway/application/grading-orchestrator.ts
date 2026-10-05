@@ -38,7 +38,10 @@ type WritingCommand = GradeTask1Command | GradeTask2Command;
 export type CatalogLookup = Readonly<
   Record<
     string,
-    Pick<OperationDef, 'timeoutMs' | 'idempotency' | 'responseContract'>
+    Pick<
+      OperationDef,
+      'timeoutMs' | 'idempotency' | 'family' | 'responseContract'
+    >
   >
 >;
 
@@ -69,7 +72,7 @@ function backgroundLifecycleOf(
   return undefined;
 }
 
-function malformedShape(
+function isMalformed(
   value: Record<string, unknown>,
   operation: OperationId,
 ): boolean {
@@ -86,7 +89,7 @@ function decodeWritingReplay(
   value: unknown,
   operation: WritingCommand['operation'],
 ): DispatchResult<GradeResponse> {
-  if (!isRecord(value) || malformedShape(value, operation)) {
+  if (!isRecord(value) || isMalformed(value, operation)) {
     throw new Error(`stored ${operation} grading response is malformed`);
   }
 
@@ -103,9 +106,9 @@ function decodeWritingReplay(
 function decodeStoredResult<K extends OperationId>(
   value: unknown,
   operation: K,
-  responseContract: OperationDef['responseContract'],
+  def: Pick<OperationDef, 'family' | 'responseContract'>,
 ): DispatchResult<ResponseFor<K>> {
-  if (operation.startsWith('writing.')) {
+  if (def.family === 'writing') {
     return decodeWritingReplay(
       value,
       operation as WritingCommand['operation'],
@@ -114,9 +117,9 @@ function decodeStoredResult<K extends OperationId>(
 
   if (
     !isRecord(value) ||
-    malformedShape(value, operation) ||
-    responseContract === 'unresolved' ||
-    !Value.Check(responseContract, value.data)
+    isMalformed(value, operation) ||
+    def.responseContract === 'unresolved' ||
+    !Value.Check(def.responseContract, value.data)
   ) {
     throw new Error(`stored ${operation} grading response is malformed`);
   }
@@ -126,7 +129,7 @@ function decodeStoredResult<K extends OperationId>(
   return withDispatchTelemetry(
     {
       operation,
-      data: Value.Parse(responseContract, value.data),
+      data: Value.Parse(def.responseContract, value.data),
       downstreamMs: value.downstreamMs as number,
     },
     readDispatchTelemetry(value),
@@ -179,7 +182,7 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
           : { ...context, signal: work.signal, deadlineAt: work.deadlineAt },
       ) as Promise<DispatchResult<ResponseForCommand<C>>>;
 
-    if (def.idempotency !== 'required') {
+    if (def.idempotency === 'none') {
       return dispatch();
     }
 
@@ -200,11 +203,9 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
       },
       dispatch,
       (value) =>
-        decodeStoredResult(
-          value,
-          command.operation,
-          def.responseContract,
-        ) as DispatchResult<ResponseForCommand<C>>,
+        decodeStoredResult(value, command.operation, def) as DispatchResult<
+          ResponseForCommand<C>
+        >,
     );
 
     return execution.replay

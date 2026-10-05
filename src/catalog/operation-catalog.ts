@@ -40,6 +40,7 @@ export interface OperationDef {
   readonly execution: 'sync';
   readonly contentType: 'application/json' | 'multipart/form-data';
   readonly idempotency: IdempotencyMode;
+  readonly family: 'writing' | 'speaking';
   readonly meteringMode: MeteringMode;
   readonly maxBodyBytes: number;
   readonly timeoutMs: number;
@@ -58,6 +59,7 @@ export const OPERATION_CATALOG = {
     execution: 'sync',
     contentType: 'application/json',
     idempotency: 'required',
+    family: 'writing',
     meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
     timeoutMs: 60_000,
@@ -74,6 +76,7 @@ export const OPERATION_CATALOG = {
     execution: 'sync',
     contentType: 'application/json',
     idempotency: 'required',
+    family: 'writing',
     meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
     timeoutMs: 60_000,
@@ -90,6 +93,7 @@ export const OPERATION_CATALOG = {
     execution: 'sync',
     contentType: 'multipart/form-data',
     idempotency: 'none',
+    family: 'speaking',
     meteringMode: 'model',
     // Wire-body ceiling. Multipart framing rides on top of the audio file,
     // which the AI Speaking provider itself caps at 25 MiB (contract v1
@@ -111,6 +115,7 @@ export const OPERATION_CATALOG = {
     execution: 'sync',
     contentType: 'application/json',
     idempotency: 'none',
+    family: 'speaking',
     meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
     timeoutMs: 30_000,
@@ -119,11 +124,7 @@ export const OPERATION_CATALOG = {
     requestSchema: SpeakingGradeJsonRequestSchema,
     responseContract: SpeakingGradeResponseSchema,
   },
-} as const;
-
-// OperationId is `keyof typeof OPERATION_CATALOG` (see operation-id.ts), so
-// a catalog entry is the single place an operation id is declared; a stale
-// id list cannot exist by construction.
+} as const satisfies Record<string, OperationDef>;
 
 /**
  * The Scope vocabulary AIHUB publishes. Key creation validates against this so

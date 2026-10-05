@@ -1,3 +1,4 @@
+import type { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type {
@@ -26,10 +27,11 @@ export interface DispatchResult<TOutput> {
 }
 
 /**
- * Request/response types per operation. Both are pinned by the operation
- * literal; an id that follows the `writing.`/`speaking.` prefix convention
- * maps to that family's response type, and anything else yields `never` so
- * an undispatched operation cannot be given a meaningful result type.
+ * Request/response types per operation. Input types are a roster — one arm
+ * per operation — because they are the application's own command inputs, not
+ * the wire format of the catalog schemas. The response family is read off
+ * the operation's own catalog record (`family`), so a catalog entry fully
+ * determines it; an unknown family yields `never`.
  */
 export type RequestFor<K extends OperationId> = K extends 'writing.task1.grade'
   ? GradeTask1Request
@@ -41,11 +43,10 @@ export type RequestFor<K extends OperationId> = K extends 'writing.task1.grade'
         ? SpeakingGradeJsonInput
         : never;
 
-export type ResponseFor<K extends OperationId> = K extends `writing.${string}`
-  ? GradeResponse
-  : K extends `speaking.${string}`
-    ? SpeakingGradeResponse
-    : never;
+export type ResponseFor<K extends OperationId> =
+  (typeof OPERATION_CATALOG)[K]['family'] extends 'writing'
+    ? GradeResponse
+    : SpeakingGradeResponse;
 
 export interface OperationDispatcherPort {
   dispatch<O extends OperationId>(
