@@ -11,7 +11,21 @@ export interface CreateOrganizationInvitationInput {
   readonly invitedBy: string;
   readonly tokenHash: string;
   readonly expiresAt: Date;
+  readonly emailDelivery: OrganizationInviteEmailDelivery;
   readonly now: Date;
+}
+
+/**
+ * The raw Organization Invite Token leaves the process exactly once, in the
+ * Email Delivery Request the worker will send from (ADR-0074). It rides with
+ * the create command because the request is committed in the same transaction,
+ * and the repository seals it once it knows the Organization name it must name
+ * in the message.
+ */
+export interface OrganizationInviteEmailDelivery {
+  readonly id: string;
+  readonly token: string;
+  readonly createdAt: Date;
 }
 
 /**
@@ -19,10 +33,7 @@ export interface CreateOrganizationInvitationInput {
  * membership that becomes active concurrently cannot slip past the check.
  */
 export type CreateOrganizationInvitationResult =
-  | {
-      readonly kind: 'created';
-      readonly organizationName: string;
-    }
+  | { readonly kind: 'created' }
   | { readonly kind: 'member_exists' };
 
 export interface AcceptOrganizationInvitationInput {

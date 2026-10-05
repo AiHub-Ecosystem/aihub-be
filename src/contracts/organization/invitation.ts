@@ -21,6 +21,8 @@ export type CreateOrganizationInvitationRequest = Static<
 /**
  * The raw Organization Invite Token is deliberately absent: it belongs to the
  * invited person, not to the inviting caller, and only its hash is durable.
+ * `email_delivery_status` is acceptance-time only (ADR-0074): the email was
+ * accepted for dispatch, not handed to a provider and not delivered.
  */
 export const CreateOrganizationInvitationResponseSchema = Type.Object(
   {
@@ -34,6 +36,7 @@ export const CreateOrganizationInvitationResponseSchema = Type.Object(
         role: OrganizationMembershipRoleSchema,
         status: Type.Literal('pending'),
         expires_at: Type.String({ format: 'date-time' }),
+        email_delivery_status: Type.Literal('queued'),
       },
       { additionalProperties: false },
     ),

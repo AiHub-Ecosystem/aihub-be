@@ -72,7 +72,8 @@ function decodeInvitationReplay(value: unknown): InvitedOrganizationMember {
     typeof organizationId !== 'string' ||
     typeof email !== 'string' ||
     (role !== 'owner' && role !== 'admin' && role !== 'member') ||
-    typeof expiresAt !== 'string'
+    typeof expiresAt !== 'string' ||
+    value.emailDeliveryStatus !== 'queued'
   ) {
     throw new Error('stored invitation replay is invalid');
   }
@@ -88,6 +89,7 @@ function decodeInvitationReplay(value: unknown): InvitedOrganizationMember {
     email,
     role,
     expiresAt: parsedExpiresAt,
+    emailDeliveryStatus: 'queued',
   };
 }
 
@@ -215,6 +217,7 @@ export class OrganizationInvitationController {
         role: created.role,
         status: 'pending',
         expires_at: created.expiresAt.toISOString(),
+        email_delivery_status: created.emailDeliveryStatus,
       },
       meta: { request_id: requestId },
     };

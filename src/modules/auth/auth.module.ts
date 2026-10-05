@@ -180,6 +180,7 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
   ],
   exports: [
     EMAIL_SENDER,
+    EMAIL_PAYLOAD_CIPHER,
     AUTH_RATE_LIMITER,
     USER_ACCOUNT_REPOSITORY,
     VERIFICATION_TOKEN_REPOSITORY,

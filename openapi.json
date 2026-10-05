@@ -4968,7 +4968,8 @@
                         "email",
                         "role",
                         "status",
-                        "expires_at"
+                        "expires_at",
+                        "email_delivery_status"
                       ],
                       "properties": {
                         "invitation_id": {
@@ -5006,6 +5007,10 @@
                         },
                         "expires_at": {
                           "format": "date-time",
+                          "type": "string"
+                        },
+                        "email_delivery_status": {
+                          "const": "queued",
                           "type": "string"
                         }
                       }
