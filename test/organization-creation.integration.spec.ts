@@ -35,7 +35,7 @@ const DISABLED_ID = 'usr_01J00000000000000000000003';
 const REQUEST_ID = 'req_01J00000000000000000000000';
 
 /** Stands in for the durable act the database lane covers; it keeps only the limit. */
-class OrganizationCreationRecordFake implements OrganizationCreationRecordPort {
+class OrganizationCreationLimitFake implements OrganizationCreationRecordPort {
   readonly created: CreateOrganizationRecordInput[] = [];
 
   async createOrganization(
@@ -124,11 +124,11 @@ class IdempotencyRepositoryFake implements IdempotencyRepositoryPort {
 
 describe('Self-serve Organization creation over HTTP', () => {
   let app: NestFastifyApplication;
-  let creation: OrganizationCreationRecordFake;
+  let creation: OrganizationCreationLimitFake;
   let idempotency: IdempotencyRepositoryFake;
 
   beforeAll(async () => {
-    creation = new OrganizationCreationRecordFake();
+    creation = new OrganizationCreationLimitFake();
     idempotency = new IdempotencyRepositoryFake();
     const verifier: UserAccessTokenVerifierPort = {
       verify: async (token: string) => {
@@ -313,11 +313,11 @@ describe('Self-serve Organization creation over HTTP', () => {
 describe('Self-serve Organization terms read from the environment', () => {
   const originalQuota = process.env.AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA;
   let app: NestFastifyApplication | undefined;
-  let creation: OrganizationCreationRecordFake;
+  let creation: OrganizationCreationLimitFake;
   let idempotency: IdempotencyRepositoryFake;
 
   beforeEach(() => {
-    creation = new OrganizationCreationRecordFake();
+    creation = new OrganizationCreationLimitFake();
     idempotency = new IdempotencyRepositoryFake();
   });
 

@@ -38,7 +38,7 @@ const REQUEST_ID = 'req_01J00000000000000000000000';
  * matrix is decided under locks. Here it only answers the three outcomes the
  * boundary must translate.
  */
-class OrganizationRenameRecordFake implements OrganizationRenameRecordPort {
+class OrganizationRenameOutcomesFake implements OrganizationRenameRecordPort {
   readonly calls: RenameOrganizationRecordInput[] = [];
   name = 'Acme';
 
@@ -67,10 +67,10 @@ class OrganizationRenameRecordFake implements OrganizationRenameRecordPort {
 
 describe('Organization rename over HTTP', () => {
   let app: NestFastifyApplication;
-  let rename: OrganizationRenameRecordFake;
+  let rename: OrganizationRenameOutcomesFake;
 
   beforeAll(async () => {
-    rename = new OrganizationRenameRecordFake();
+    rename = new OrganizationRenameOutcomesFake();
     const verifier: UserAccessTokenVerifierPort = {
       verify: async (token: string) => {
         const userId = {

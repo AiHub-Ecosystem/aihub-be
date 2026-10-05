@@ -159,6 +159,14 @@ function controlPlaneDatabaseUrl(): string {
   );
 }
 
+// Each repository owns its client (they expose `close()` passthroughs), so
+// this names the construction rather than sharing one pool across them.
+function postgresIdentityClient(): ReturnType<
+  typeof createPostgresIdentityClient
+> {
+  return createPostgresIdentityClient(controlPlaneDatabaseUrl());
+}
+
 function controlPlaneReadDatabaseUrl(): string {
   return (
     process.env.CONTROL_PLANE_READ_DATABASE_URL ??
@@ -232,9 +240,7 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     {
       provide: ORGANIZATION_MEMBERSHIP,
       useFactory: (): OrganizationMembershipPort =>
-        new PostgresOrganizationMembershipRepository(
-          createPostgresIdentityClient(controlPlaneDatabaseUrl()),
-        ),
+        new PostgresOrganizationMembershipRepository(postgresIdentityClient()),
     },
     {
       provide: ORGANIZATION_MEMBERSHIP_LIST,
@@ -257,9 +263,7 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     {
       provide: ORGANIZATION_CREATION_RECORD,
       useFactory: (): OrganizationCreationRecordPort =>
-        new PostgresOrganizationCreationRepository(
-          createPostgresIdentityClient(controlPlaneDatabaseUrl()),
-        ),
+        new PostgresOrganizationCreationRepository(postgresIdentityClient()),
     },
     {
       provide: CREATE_ORGANIZATION,
@@ -277,9 +281,7 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     {
       provide: ORGANIZATION_RENAME_RECORD,
       useFactory: (): OrganizationRenameRecordPort =>
-        new PostgresOrganizationRenameRepository(
-          createPostgresIdentityClient(controlPlaneDatabaseUrl()),
-        ),
+        new PostgresOrganizationRenameRepository(postgresIdentityClient()),
     },
     {
       provide: RENAME_ORGANIZATION,
@@ -290,9 +292,7 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     {
       provide: ORGANIZATION_API_KEY,
       useFactory: (): OrganizationApiKeyPort =>
-        new PostgresOrganizationApiKeyRepository(
-          createPostgresIdentityClient(controlPlaneDatabaseUrl()),
-        ),
+        new PostgresOrganizationApiKeyRepository(postgresIdentityClient()),
     },
     {
       provide: CREATE_ORGANIZATION_API_KEY,
@@ -305,9 +305,7 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     {
       provide: ORGANIZATION_AUDIT_EVENT_READ,
       useFactory: (): OrganizationAuditEventReadPort =>
-        new PostgresOrganizationAuditReadRepository(
-          createPostgresIdentityClient(controlPlaneDatabaseUrl()),
-        ),
+        new PostgresOrganizationAuditReadRepository(postgresIdentityClient()),
     },
     {
       provide: READ_ORGANIZATION_AUDIT_EVENTS,
@@ -372,9 +370,7 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     {
       provide: ORGANIZATION_INVITATION,
       useFactory: (): OrganizationInvitationPort =>
-        new PostgresOrganizationInvitationRepository(
-          createPostgresIdentityClient(controlPlaneDatabaseUrl()),
-        ),
+        new PostgresOrganizationInvitationRepository(postgresIdentityClient()),
     },
     {
       provide: ORGANIZATION_INVITE_TOKEN,
