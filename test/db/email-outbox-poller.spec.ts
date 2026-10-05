@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
+import { getMetrics } from '@/common/observability/metrics';
 import { EmailDeliveryPoller } from '@/modules/auth/application/email-delivery-poller';
 import type {
   EmailDeliveryKind,
@@ -12,6 +13,7 @@ import type {
   EmailDispatchOptions,
   EmailSenderPort,
 } from '@/modules/auth/application/email-sender.port';
+import { reportTerminalEmailDeliveryFailure } from '@/modules/auth/infrastructure/email-outbox-poller.scheduler';
 import { createEmailPayloadCipher } from '@/modules/auth/infrastructure/email-payload-cipher';
 import {
   type PostgresAuthClient,
@@ -69,6 +71,9 @@ beforeEach(async () => {
 interface SeededRequest {
   readonly id: string;
   readonly tokenHash: string;
+  /** The plaintext a provider would have received, kept so tests can prove it is absent. */
+  readonly email: string;
+  readonly token: string;
 }
 
 interface SeedOptions {
@@ -167,7 +172,67 @@ async function seedRequest(options: SeedOptions = {}): Promise<SeededRequest> {
      ) VALUES ($1, $2, 'queued', $3, 0, NULL, $4)`,
     [id, kind, cipher.encrypt(JSON.stringify(payload)), NOW],
   );
-  return { id, tokenHash };
+  return { id, tokenHash, email, token };
+}
+
+/**
+ * The reporter the production wiring installs (ADR-0074). Tests that assert on
+ * its output need the real one; the count helper exists because the registry is
+ * process-wide and other cases in this lane share it.
+ */
+async function failedCountFor(kind: EmailDeliveryKind): Promise<number> {
+  const match = (await getMetrics()).match(
+    new RegExp(
+      `^aihub_email_delivery_failed_total\\{kind="${kind}"\\} (\\d+)$`,
+      'm',
+    ),
+  );
+  return match === null ? 0 : Number(match[1]);
+}
+
+/** Everything Nest printed on stderr while the callback ran. */
+async function captureStderr(run: () => Promise<void>): Promise<string> {
+  const written: string[] = [];
+  const spy = jest
+    .spyOn(process.stderr, 'write')
+    .mockImplementation((chunk: unknown) => {
+      written.push(String(chunk));
+      return true;
+    });
+  try {
+    await run();
+  } finally {
+    spy.mockRestore();
+  }
+  return written.join('');
+}
+
+/** The parts of a message body a provider SDK error tends to echo back. */
+const BODY_FRAGMENT =
+  'Dùng mã xác minh một lần này để kích hoạt tài khoản AIHUB';
+
+/**
+ * Stands in for what a provider SDK actually rejects with: the recipient, the
+ * token, a slice of the submitted body, and a raw response envelope, all in one
+ * message. Nothing downstream may forward any of it.
+ */
+function leakyProviderError(email: string, token: string): Error {
+  return new Error(
+    `Resend email delivery failed: {"statusCode":422,` +
+      `"name":"validation_error",` +
+      `"message":"The email address ${email} is not valid",` +
+      `"to":["${email}"],` +
+      `"text":"${BODY_FRAGMENT}: ${token}"}`,
+  );
+}
+
+/** Every text column an operator can read off a failed or cancelled request. */
+async function storedEvidenceOf(id: string): Promise<string> {
+  const { rows } = await pool.query<Record<string, unknown>>(
+    'SELECT * FROM email_delivery_requests WHERE id = $1',
+    [id],
+  );
+  return JSON.stringify(rows[0] ?? {});
 }
 
 function poller(
@@ -182,7 +247,7 @@ function poller(
     sender,
     now,
     { hash },
-    { owner },
+    { owner, onTerminalFailure: reportTerminalEmailDeliveryFailure },
   );
 }
 
@@ -226,6 +291,8 @@ interface Row {
   readonly payload_ciphertext: string | null;
   readonly cancel_reason: string | null;
   readonly last_error_code: string | null;
+  readonly last_attempt_at: Date | null;
+  readonly completed_at: Date | null;
   readonly lease_owner: string | null;
   readonly lease_expires_at: Date | null;
 }
@@ -233,7 +300,7 @@ interface Row {
 async function rowOf(id: string): Promise<Row> {
   const result = await pool.query<Row>(
     `SELECT status, attempts, payload_ciphertext, cancel_reason, last_error_code,
-            lease_owner, lease_expires_at
+            last_attempt_at, completed_at, lease_owner, lease_expires_at
      FROM email_delivery_requests WHERE id = $1`,
     [id],
   );
@@ -425,7 +492,7 @@ describe('email outbox dispatch poller', () => {
       });
     });
 
-    it('cancels a request whose credential was superseded, without alerting', async () => {
+    it('cancels a request whose credential was superseded', async () => {
       const seeded = await seedRequest();
       await pool.query(
         `UPDATE email_verification_tokens
@@ -596,6 +663,169 @@ describe('email outbox dispatch poller', () => {
       ).rejects.toThrow('not in a queued state');
 
       expect((await rowOf(seeded.id)).status).toBe('provider_accepted');
+    });
+  });
+
+  /**
+   * What an operator is left holding once a dispatch is given up on. The row is
+   * the durable evidence, so it must carry the bounded codes and the attempt
+   * timeline and nothing the request was addressed with.
+   */
+  describe('terminal failure evidence', () => {
+    /** Runs a request through its third attempt against a rejecting provider. */
+    async function exhaust(
+      sender: RecordingSender,
+      kind: EmailDeliveryKind = 'verification_email',
+      already?: SeededRequest,
+    ): Promise<SeededRequest> {
+      const seeded = already ?? (await seedRequest({ kind }));
+      let clock = NOW;
+      const failing = poller(OWNER_A, sender, () => clock);
+      await failing.runOnce();
+      clock = new Date(NOW.getTime() + MINUTE + 1_000);
+      await failing.runOnce();
+      clock = new Date(NOW.getTime() + 6 * MINUTE + 2_000);
+      await failing.runOnce();
+      return seeded;
+    }
+
+    function rejectingProvider(): RecordingSender {
+      const sender = new RecordingSender();
+      sender.failure = new Error('Resend email delivery failed');
+      return sender;
+    }
+
+    it('fails the request and keeps the attempt timeline, the bounded code, and no payload', async () => {
+      const sender = rejectingProvider();
+
+      const seeded = await exhaust(sender);
+
+      const row = await rowOf(seeded.id);
+      expect(row.status).toBe('failed');
+      expect(row.attempts).toBe(3);
+      expect(row.last_error_code).toBe('provider_rejected');
+      // Nothing else about the attempt is stored: cancellation has its own
+      // reason column and this request was never cancelled.
+      expect(row.cancel_reason).toBeNull();
+      expect(row.payload_ciphertext).toBeNull();
+      expect(row.lease_owner).toBeNull();
+      expect(row.lease_expires_at).toBeNull();
+      expect(row.completed_at).toEqual(
+        new Date(NOW.getTime() + 6 * MINUTE + 2_000),
+      );
+    });
+
+    it('counts the terminal failure under its email kind', async () => {
+      const before = await failedCountFor('verification_email');
+
+      await exhaust(rejectingProvider());
+
+      expect(await failedCountFor('verification_email')).toBe(before + 1);
+    });
+
+    it('raises one structured error event naming the request, its kind, and its code', async () => {
+      const emitted = await captureStderr(async () => {
+        await exhaust(rejectingProvider(), 'organization_invite_email');
+      });
+
+      // One event, not one per attempt: only the attempt that ended the request
+      // is terminal, so paging once is the whole point of the counter.
+      expect(emitted.match(/exhausted its attempts/g)).toHaveLength(1);
+      expect(emitted).toContain('ERROR');
+      expect(emitted).toContain('organization_invite_email');
+      expect(emitted).toContain('provider_rejected');
+      expect(emitted).toMatch(/edr_[0-9A-Z]{26}/);
+    });
+
+    it('raises no event and counts nothing while attempts remain', async () => {
+      const seeded = await seedRequest();
+      const sender = rejectingProvider();
+      const before = await failedCountFor('verification_email');
+
+      const emitted = await captureStderr(async () => {
+        await poller(OWNER_A, sender).runOnce();
+      });
+
+      expect(emitted).not.toContain('exhausted its attempts');
+      expect(await failedCountFor('verification_email')).toBe(before);
+      expect((await rowOf(seeded.id)).status).toBe('queued');
+    });
+
+    it.each([
+      ['a superseded credential', 'superseded'],
+      ['a revoked invitation', 'revoked'],
+    ] as const)(
+      'stays silent for a request cancelled by %s',
+      async (_label, closure) => {
+        const revoked = closure === 'revoked';
+        const kind: EmailDeliveryKind = revoked
+          ? 'organization_invite_email'
+          : 'verification_email';
+        const seeded = await seedRequest({ kind });
+        if (revoked) {
+          await pool.query(
+            'UPDATE organization_invitations SET consumed_at = $2 WHERE token_hash = $1',
+            [seeded.tokenHash, NOW],
+          );
+        } else {
+          await pool.query(
+            `UPDATE email_verification_tokens
+             SET consumed_at = $2, consumed_reason = 'superseded'
+             WHERE token_hash = $1`,
+            [seeded.tokenHash, NOW],
+          );
+        }
+        const before = await failedCountFor(kind);
+
+        const emitted = await captureStderr(async () => {
+          await poller(OWNER_A, new RecordingSender()).runOnce();
+        });
+
+        // Cancellation is expected lifecycle handling (ADR-0074): paging on it
+        // would train operators to ignore the event that does mean something.
+        expect(emitted).not.toContain('exhausted its attempts');
+        expect(emitted).not.toContain('ERROR');
+        expect(await failedCountFor(kind)).toBe(before);
+        expect(await rowOf(seeded.id)).toMatchObject({
+          status: 'cancelled',
+          cancel_reason: 'not_actionable',
+          payload_ciphertext: null,
+        });
+      },
+    );
+
+    it('keeps the recipient, the token, the message body, and the raw provider response out of every trace', async () => {
+      const sender = new RecordingSender();
+      const seeded = await seedRequest();
+      sender.failure = leakyProviderError(seeded.email, seeded.token);
+
+      const emitted = await captureStderr(async () => {
+        await exhaust(sender, 'verification_email', seeded);
+      });
+
+      // The whole trace an operator leaves with: the emitted event, the metric
+      // exposition, and every column of the row itself.
+      const trace = [
+        emitted,
+        await getMetrics(),
+        await storedEvidenceOf(seeded.id),
+      ].join('\n');
+      for (const secret of [
+        seeded.email,
+        seeded.token,
+        BODY_FRAGMENT,
+        'validation_error',
+        'statusCode',
+      ]) {
+        expect(trace).not.toContain(secret);
+      }
+      // The event itself carries three bounded fields and nothing else, so any
+      // address or field name appearing in it is a leak whatever its source.
+      expect(emitted).not.toContain('@');
+      expect(emitted).not.toMatch(/token|\bto=|\btext=|\bbody=|\bpayload/i);
+      // What is left is the bounded code, which is the only failure evidence the
+      // dispatch path is allowed to keep.
+      expect(emitted).toContain('error=provider_rejected');
     });
   });
 });
