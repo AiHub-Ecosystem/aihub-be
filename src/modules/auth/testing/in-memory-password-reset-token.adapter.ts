@@ -41,6 +41,9 @@ export class InMemoryPasswordResetTokenAdapter
       expiresAt: input.tokenExpiresAt,
       consumedAt: undefined,
     });
+    if (input.emailDelivery !== undefined) {
+      this.state.emailDeliveryRequests.push(input.emailDelivery);
+    }
     return { email: account.email };
   }
 

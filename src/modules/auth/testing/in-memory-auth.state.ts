@@ -1,3 +1,4 @@
+import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/application/email-delivery-request.port';
 import type { RefreshTokenRecord } from '@/modules/auth/application/refresh-session-repository.port';
 import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 
@@ -41,6 +42,8 @@ export interface InMemoryAuthState {
   readonly passwordResetTokens: Map<string, InMemoryPasswordResetToken>;
   /** Token hash -> refresh session token. */
   readonly refreshTokens: Map<string, RefreshTokenRecord>;
+  /** Email Delivery Requests recorded by the adapters, in call order. */
+  readonly emailDeliveryRequests: InsertEmailDeliveryRequestInput[];
   /** Empties the durable state so the next test starts from nothing. */
   reset(): void;
 }
@@ -51,11 +54,13 @@ export function createInMemoryAuthState(): InMemoryAuthState {
     verificationTokens: new Map(),
     passwordResetTokens: new Map(),
     refreshTokens: new Map(),
+    emailDeliveryRequests: [],
     reset() {
       this.accounts.clear();
       this.verificationTokens.clear();
       this.passwordResetTokens.clear();
       this.refreshTokens.clear();
+      this.emailDeliveryRequests.length = 0;
     },
   };
 }
