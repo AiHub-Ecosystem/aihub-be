@@ -57,6 +57,15 @@ export function opaqueTokenIssuer(
   };
 }
 
-function hashToken(raw: string): string {
+/**
+ * The one digest every opaque token is stored as, exposed on its own for the
+ * code that must recognise a raw token it did not issue — the outbox poller
+ * resolving the credential an Email Delivery Request names.
+ */
+export function hashOpaqueToken(raw: string): string {
   return createHash('sha256').update(raw, 'utf8').digest('hex');
+}
+
+function hashToken(raw: string): string {
+  return hashOpaqueToken(raw);
 }

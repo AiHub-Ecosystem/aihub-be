@@ -1,10 +1,14 @@
 import { AppError } from '@/common/errors/app-error';
 import type {
+  ClaimEmailDeliveryRequestsInput,
+  EmailDeliveryCancelReason,
+  EmailDeliveryErrorCode,
   EmailDeliveryKind,
+  EmailDeliveryRequestRecord,
+  EmailDeliveryRequestStatus,
+  EmailDispatchStorePort,
   InsertEmailDeliveryRequestInput,
 } from '@/modules/auth/application/email-delivery-request.port';
-
-export type { EmailDeliveryKind, InsertEmailDeliveryRequestInput };
 
 /**
  * Structural minimum for any client that can run a single statement: the auth
@@ -16,19 +20,6 @@ export interface EmailDeliveryQueryClient {
     text: string,
     values: readonly unknown[],
   ): Promise<readonly Record<string, unknown>[]>;
-}
-
-export interface EmailDeliveryRequestRecord {
-  id: string;
-  kind: EmailDeliveryKind;
-  status: 'queued' | 'provider_accepted' | 'failed' | 'cancelled';
-  payloadCiphertext: string | null;
-  attempts: number;
-  lastAttemptAt: Date | null;
-  lastErrorCode: string | null;
-  cancelReason: string | null;
-  createdAt: Date;
-  completedAt: Date | null;
 }
 
 const SELECT_ROW = `
@@ -44,9 +35,50 @@ const INSERT_SQL = `
 `;
 
 /**
+ * One statement, so the claim is atomic without a surrounding transaction: the
+ * CTE takes row locks that `SKIP LOCKED` makes per-instance, and the update that
+ * reads them can only see rows this claim actually won.
+ *
+ * A row is claimable when it is queued, still has attempts left, is not held by
+ * a live lease, and has waited out its retry delay. `last_attempt_at IS NULL`
+ * is a row that has never been attempted, which is due immediately. The delay
+ * is one minute after the first attempt and five after the second; the `attempts`
+ * cap in the table makes a fourth attempt impossible even if this predicate is
+ * wrong, which is why the two live together.
+ */
+const CLAIM_SQL = `
+  WITH claimable AS (
+    SELECT id
+    FROM email_delivery_requests
+    WHERE status = 'queued'
+      AND attempts < 3
+      AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
+      AND (
+        last_attempt_at IS NULL
+        OR last_attempt_at <= $1 - CASE attempts
+             WHEN 0 THEN interval '0 seconds'
+             WHEN 1 THEN interval '1 minute'
+             ELSE interval '5 minutes'
+           END
+      )
+    ORDER BY created_at, id
+    LIMIT $2
+    FOR UPDATE SKIP LOCKED
+  )
+  UPDATE email_delivery_requests request
+  SET lease_owner = $3, lease_expires_at = $1 + ($4 || ' milliseconds')::interval
+  FROM claimable
+  WHERE request.id = claimable.id
+  RETURNING request.id, request.kind, request.status, request.payload_ciphertext,
+            request.attempts, request.last_attempt_at, request.last_error_code,
+            request.cancel_reason, request.created_at, request.completed_at
+`;
+
+/**
  * Each marker is one attempt, except cancellation, which happens before
  * dispatch. A marker only applies while the row is still queued, so a
- * terminal state can never be overwritten or revived.
+ * terminal state can never be overwritten or revived, and every terminal
+ * marker releases the lease it still holds.
  */
 const RECORD_FAILED_ATTEMPT_SQL = `
   UPDATE email_delivery_requests
@@ -58,7 +90,8 @@ const RECORD_FAILED_ATTEMPT_SQL = `
 const MARK_PROVIDER_ACCEPTED_SQL = `
   UPDATE email_delivery_requests
   SET status = 'provider_accepted', attempts = attempts + 1,
-      last_attempt_at = $2, payload_ciphertext = NULL, completed_at = $2
+      last_attempt_at = $2, payload_ciphertext = NULL, completed_at = $2,
+      lease_owner = NULL, lease_expires_at = NULL
   WHERE id = $1 AND status = 'queued'
   RETURNING id
 `;
@@ -66,7 +99,8 @@ const MARK_PROVIDER_ACCEPTED_SQL = `
 const MARK_FAILED_SQL = `
   UPDATE email_delivery_requests
   SET status = 'failed', attempts = attempts + 1, last_attempt_at = $2,
-      last_error_code = $3, payload_ciphertext = NULL, completed_at = $2
+      last_error_code = $3, payload_ciphertext = NULL, completed_at = $2,
+      lease_owner = NULL, lease_expires_at = NULL
   WHERE id = $1 AND status = 'queued'
   RETURNING id
 `;
@@ -74,7 +108,8 @@ const MARK_FAILED_SQL = `
 const MARK_CANCELLED_SQL = `
   UPDATE email_delivery_requests
   SET status = 'cancelled', cancel_reason = $2,
-      payload_ciphertext = NULL, completed_at = $3
+      payload_ciphertext = NULL, completed_at = $3,
+      lease_owner = NULL, lease_expires_at = NULL
   WHERE id = $1 AND status = 'queued'
   RETURNING id
 `;
@@ -139,6 +174,19 @@ export class PostgresEmailDeliveryRequestRepository {
     ]);
   }
 
+  async claim(
+    client: EmailDeliveryQueryClient,
+    input: ClaimEmailDeliveryRequestsInput,
+  ): Promise<readonly EmailDeliveryRequestRecord[]> {
+    const rows = await client.query(CLAIM_SQL, [
+      input.now,
+      input.limit,
+      input.owner,
+      String(input.leaseMs),
+    ]);
+    return rows.map((row) => this.toRecord(row));
+  }
+
   private async apply(
     client: EmailDeliveryQueryClient,
     sql: string,
@@ -164,7 +212,7 @@ export class PostgresEmailDeliveryRequestRepository {
     return {
       id: row.id as string,
       kind: row.kind as EmailDeliveryKind,
-      status: row.status as EmailDeliveryRequestRecord['status'],
+      status: row.status as EmailDeliveryRequestStatus,
       payloadCiphertext: row.payload_ciphertext as string | null,
       attempts: Number(row.attempts),
       lastAttemptAt: (row.last_attempt_at as Date | null) ?? null,
@@ -173,5 +221,55 @@ export class PostgresEmailDeliveryRequestRepository {
       createdAt: row.created_at as Date,
       completedAt: (row.completed_at as Date | null) ?? null,
     };
+  }
+}
+
+/**
+ * The same statements, reached through the pool instead of a caller's open
+ * transaction. The poller owns its own transactions — it claims in one
+ * statement and dispatches outside any transaction, so nothing holds a
+ * connection while a provider call is in flight.
+ */
+export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
+  constructor(
+    private readonly client: EmailDeliveryQueryClient,
+    private readonly requests: PostgresEmailDeliveryRequestRepository = new PostgresEmailDeliveryRequestRepository(),
+  ) {}
+
+  claim(
+    input: ClaimEmailDeliveryRequestsInput,
+  ): Promise<readonly EmailDeliveryRequestRecord[]> {
+    return this.requests.claim(this.client, input);
+  }
+
+  async markProviderAccepted(input: {
+    readonly id: string;
+    readonly attemptedAt: Date;
+  }): Promise<void> {
+    await this.requests.markProviderAccepted(this.client, input);
+  }
+
+  async markFailed(input: {
+    readonly id: string;
+    readonly failedAt: Date;
+    readonly errorCode: EmailDeliveryErrorCode;
+  }): Promise<void> {
+    await this.requests.markFailed(this.client, input);
+  }
+
+  async markCancelled(input: {
+    readonly id: string;
+    readonly cancelledAt: Date;
+    readonly reason: EmailDeliveryCancelReason;
+  }): Promise<void> {
+    await this.requests.markCancelled(this.client, input);
+  }
+
+  async recordFailedAttempt(input: {
+    readonly id: string;
+    readonly attemptedAt: Date;
+    readonly errorCode: EmailDeliveryErrorCode;
+  }): Promise<void> {
+    await this.requests.recordFailedAttempt(this.client, input);
   }
 }

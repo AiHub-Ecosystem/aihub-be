@@ -1,13 +1,14 @@
 import type {
+  EmailDispatchOptions,
   EmailSenderPort,
   OrganizationInviteEmailInput,
   PasswordResetEmailInput,
   VerificationEmailInput,
 } from '@/modules/auth/application/email-sender.port';
+import { EMAIL_ATTEMPT_TIMEOUT_MS } from '@/modules/auth/application/email-sender.port';
 import type { ResendRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
-const DELIVERY_TIMEOUT_MS = 5_000;
 
 interface ResendResponse {
   readonly ok: boolean;
@@ -110,6 +111,26 @@ export class ResendEmailSender implements EmailSenderPort {
   }
 
   /**
+   * The idempotency key is the poller's, not this adapter's: it arrives already
+   * bound to one Email Delivery Request, so every attempt of that request
+   * presents the provider the same key and an attempt whose outcome nobody
+   * learned cannot produce a second email. A caller with no key sends without
+   * one, which is the synchronous behaviour this port also serves.
+   */
+  private headers(
+    options: EmailDispatchOptions | undefined,
+  ): Record<string, string> {
+    const headers: Record<string, string> = {
+      authorization: `Bearer ${this.secrets.apiKey}`,
+      'content-type': 'application/json',
+    };
+    if (options?.idempotencyKey !== undefined) {
+      headers['Idempotency-Key'] = options.idempotencyKey;
+    }
+    return headers;
+  }
+
+  /**
    * Deep links are appended only when a Customer Web base URL is configured;
    * a blank value keeps emails token-only (the API-only contract). The base
    * URL itself is validated once at construction so a misconfigured
@@ -127,7 +148,10 @@ export class ResendEmailSender implements EmailSenderPort {
     return ['', `Open AIHUB to continue: ${url}`];
   }
 
-  async sendVerificationEmail(input: VerificationEmailInput): Promise<void> {
+  async sendVerificationEmail(
+    input: VerificationEmailInput,
+    options?: EmailDispatchOptions,
+  ): Promise<void> {
     const url = this.deepLinkUrl('/verify-email', input.token);
     const expiresAt = formatVietnameseDateTime(input.expiresAt);
     const repeatVerificationCopy =
@@ -176,10 +200,7 @@ export class ResendEmailSender implements EmailSenderPort {
 
     const response = await this.fetch(RESEND_ENDPOINT, {
       method: 'POST',
-      headers: {
-        authorization: `Bearer ${this.secrets.apiKey}`,
-        'content-type': 'application/json',
-      },
+      headers: this.headers(options),
       body: JSON.stringify({
         from: this.from,
         to: [input.email],
@@ -187,7 +208,7 @@ export class ResendEmailSender implements EmailSenderPort {
         text,
         ...(html === undefined ? {} : { html }),
       }),
-      signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
+      signal: AbortSignal.timeout(EMAIL_ATTEMPT_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -195,13 +216,13 @@ export class ResendEmailSender implements EmailSenderPort {
     }
   }
 
-  async sendPasswordResetEmail(input: PasswordResetEmailInput): Promise<void> {
+  async sendPasswordResetEmail(
+    input: PasswordResetEmailInput,
+    options?: EmailDispatchOptions,
+  ): Promise<void> {
     const response = await this.fetch(RESEND_ENDPOINT, {
       method: 'POST',
-      headers: {
-        authorization: `Bearer ${this.secrets.apiKey}`,
-        'content-type': 'application/json',
-      },
+      headers: this.headers(options),
       body: JSON.stringify({
         from: this.from,
         to: [input.email],
@@ -214,7 +235,7 @@ export class ResendEmailSender implements EmailSenderPort {
           ...this.deepLinkLine('/reset-password', input.token),
         ].join('\n'),
       }),
-      signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
+      signal: AbortSignal.timeout(EMAIL_ATTEMPT_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -224,13 +245,11 @@ export class ResendEmailSender implements EmailSenderPort {
 
   async sendOrganizationInviteEmail(
     input: OrganizationInviteEmailInput,
+    options?: EmailDispatchOptions,
   ): Promise<void> {
     const response = await this.fetch(RESEND_ENDPOINT, {
       method: 'POST',
-      headers: {
-        authorization: `Bearer ${this.secrets.apiKey}`,
-        'content-type': 'application/json',
-      },
+      headers: this.headers(options),
       body: JSON.stringify({
         from: this.from,
         to: [input.email],
@@ -245,7 +264,7 @@ export class ResendEmailSender implements EmailSenderPort {
           ...this.deepLinkLine('/invite', input.token),
         ].join('\n'),
       }),
-      signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
+      signal: AbortSignal.timeout(EMAIL_ATTEMPT_TIMEOUT_MS),
     });
 
     if (!response.ok) {

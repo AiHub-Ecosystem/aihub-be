@@ -299,4 +299,55 @@ describe('ResendEmailSender', () => {
       );
     });
   });
+
+  describe('idempotency key', () => {
+    const input = {
+      email: 'person@example.com',
+      token: 'opaque-token',
+      expiresAt: new Date('2026-09-20T00:00:00.000Z'),
+    };
+
+    function recordingSender(): {
+      sender: ResendEmailSender;
+      keys: (string | undefined)[];
+    } {
+      const keys: (string | undefined)[] = [];
+      const sender = new ResendEmailSender(
+        { apiKey: 'resend-secret' },
+        'AIHUB <no-reply@example.com>',
+        async (_input, init) => {
+          keys.push(
+            (init?.headers as Record<string, string> | undefined)?.[
+              'Idempotency-Key'
+            ],
+          );
+          return { ok: true };
+        },
+      );
+      return { sender, keys };
+    }
+
+    it('presents the caller key on every email kind', async () => {
+      const { sender, keys } = recordingSender();
+
+      await sender.sendVerificationEmail(input, {
+        idempotencyKey: 'edr_one',
+      });
+      await sender.sendPasswordResetEmail(input, { idempotencyKey: 'edr_one' });
+      await sender.sendOrganizationInviteEmail(
+        { ...input, organizationName: 'Resonance', role: 'admin' },
+        { idempotencyKey: 'edr_one' },
+      );
+
+      expect(keys).toEqual(['edr_one', 'edr_one', 'edr_one']);
+    });
+
+    it('sends no key when the caller has none to send', async () => {
+      const { sender, keys } = recordingSender();
+
+      await sender.sendVerificationEmail(input);
+
+      expect(keys).toEqual([undefined]);
+    });
+  });
 });
