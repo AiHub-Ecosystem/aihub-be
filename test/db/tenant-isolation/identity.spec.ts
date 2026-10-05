@@ -1,7 +1,7 @@
 import { Response } from 'undici';
 
+import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { ApiKeyAuthenticator } from '@/modules/identity/application/api-key-authenticator';
-import { generateOrganizationApiKey } from '@/modules/identity/application/organization-api-key-generator';
 import { UserAssertionVerifier } from '@/modules/identity/application/user-assertion-verifier';
 import { UserIdentityResolver } from '@/modules/identity/application/user-identity-resolver';
 import { hashApiKey } from '@/modules/identity/domain/api-key';

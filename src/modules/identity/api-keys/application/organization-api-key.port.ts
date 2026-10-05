@@ -1,6 +1,6 @@
 import type { RequestContext } from '@/common/request-context/request-context';
 
-import type { DurableApiKeyStatus } from './api-key-authenticator.port';
+import type { DurableApiKeyStatus } from '@/modules/identity/application/api-key-authenticator.port';
 
 export interface CreateOrganizationApiKeyRecordInput {
   readonly context: RequestContext;

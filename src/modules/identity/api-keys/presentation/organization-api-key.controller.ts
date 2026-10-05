@@ -27,21 +27,21 @@ import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.
 import {
   CREATE_ORGANIZATION_API_KEY,
   type CreateOrganizationApiKeyPort,
-} from '@/modules/identity/application/create-organization-api-key.port';
+} from '@/modules/identity/api-keys/application/create-organization-api-key.port';
 import {
   LIST_ORGANIZATION_API_KEYS,
   type ListOrganizationApiKeysPort,
-} from '@/modules/identity/application/list-organization-api-keys.port';
+} from '@/modules/identity/api-keys/application/list-organization-api-keys.port';
 import {
   REVOKE_ORGANIZATION_API_KEY,
   type RevokeOrganizationApiKeyPort,
-} from '@/modules/identity/application/revoke-organization-api-key.port';
+} from '@/modules/identity/api-keys/application/revoke-organization-api-key.port';
 import {
   ROTATE_ORGANIZATION_API_KEY,
   type RotateOrganizationApiKeyPort,
-} from '@/modules/identity/application/rotate-organization-api-key.port';
+} from '@/modules/identity/api-keys/application/rotate-organization-api-key.port';
 
-import { bearerRequestContext } from './bearer-request-context';
+import { bearerRequestContext } from '@/modules/identity/presentation/bearer-request-context';
 
 @Controller()
 @UseGuards(UserAccessJwtGuard)

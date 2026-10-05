@@ -3,9 +3,9 @@ import { apiKeyStatus } from '@/modules/identity/domain/api-key';
 
 import type { OrganizationApiKeyView } from './organization-api-key-view';
 
-import { admitOrganizationApiKey } from './organization-admission';
+import { admitOrganizationApiKey } from '@/modules/identity/application/organization-admission';
+import type { OrganizationMembershipPort } from '@/modules/identity/application/organization-membership.port';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
-import type { OrganizationMembershipPort } from './organization-membership.port';
 
 export interface ListOrganizationApiKeysCommand {
   readonly context: RequestContext;

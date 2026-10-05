@@ -2,7 +2,8 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import { generateOrganizationApiKey } from '@/modules/identity/application/organization-api-key-generator';
+import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
+import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-organization-api-key.repository';
 import type {
   CreateOrganizationRecordInput,
   CreateOrganizationRecordResult,
@@ -11,7 +12,6 @@ import {
   type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,
 } from '@/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/infrastructure/postgres-organization-api-key.repository';
 import { PostgresOrganizationCreationRepository } from '@/modules/identity/infrastructure/postgres-organization-creation.repository';
 import { PostgresOrganizationMembershipRepository } from '@/modules/identity/infrastructure/postgres-organization-membership.repository';
 

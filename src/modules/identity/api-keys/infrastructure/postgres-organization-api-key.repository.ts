@@ -9,13 +9,13 @@ import type {
   RevokeOrganizationApiKeyRecordResult,
   RotateOrganizationApiKeyRecordInput,
   RotateOrganizationApiKeyRecordResult,
-} from '@/modules/identity/application/organization-api-key.port';
+} from '@/modules/identity/api-keys/application/organization-api-key.port';
 
 import {
   auditStamp,
   recordOrganizationAuditEvent,
-} from './organization-audit-event.store';
-import type { PostgresIdentityTransactionalClient } from './postgres-identity.client';
+} from '@/modules/identity/infrastructure/organization-audit-event.store';
+import type { PostgresIdentityTransactionalClient } from '@/modules/identity/infrastructure/postgres-identity.client';
 
 /**
  * Locking the Organization row is what makes the active-key limit hold: two

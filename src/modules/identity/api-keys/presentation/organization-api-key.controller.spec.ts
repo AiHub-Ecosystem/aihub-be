@@ -20,7 +20,7 @@ import {
   type ListOrganizationApiKeysInput,
   ORGANIZATION_API_KEY,
   type OrganizationApiKeyPort,
-} from '@/modules/identity/application/organization-api-key.port';
+} from '@/modules/identity/api-keys/application/organization-api-key.port';
 import {
   type ListRosterInput,
   ORGANIZATION_MEMBERSHIP,

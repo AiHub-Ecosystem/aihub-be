@@ -18,6 +18,20 @@ import { AuthModule } from '@/modules/auth/auth.module';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
 import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
 
+import { CreateOrganizationApiKey } from './api-keys/application/create-organization-api-key';
+import { CREATE_ORGANIZATION_API_KEY } from './api-keys/application/create-organization-api-key.port';
+import { ListOrganizationApiKeys } from './api-keys/application/list-organization-api-keys';
+import { LIST_ORGANIZATION_API_KEYS } from './api-keys/application/list-organization-api-keys.port';
+import {
+  ORGANIZATION_API_KEY,
+  type OrganizationApiKeyPort,
+} from './api-keys/application/organization-api-key.port';
+import { RevokeOrganizationApiKey } from './api-keys/application/revoke-organization-api-key';
+import { REVOKE_ORGANIZATION_API_KEY } from './api-keys/application/revoke-organization-api-key.port';
+import { RotateOrganizationApiKey } from './api-keys/application/rotate-organization-api-key';
+import { ROTATE_ORGANIZATION_API_KEY } from './api-keys/application/rotate-organization-api-key.port';
+import { PostgresOrganizationApiKeyRepository } from './api-keys/infrastructure/postgres-organization-api-key.repository';
+import { OrganizationApiKeyController } from './api-keys/presentation/organization-api-key.controller';
 import { AcceptOrganizationInvitation } from './application/accept-organization-invitation';
 import { ACCEPT_ORGANIZATION_INVITATION } from './application/accept-organization-invitation.port';
 import { ApiKeyAuthenticator } from './application/api-key-authenticator';
@@ -35,8 +49,6 @@ import {
   selfServeMonthlyRequestQuota,
   selfServeOrganizationTerms,
 } from './application/create-organization';
-import { CreateOrganizationApiKey } from './application/create-organization-api-key';
-import { CREATE_ORGANIZATION_API_KEY } from './application/create-organization-api-key.port';
 import { CREATE_ORGANIZATION } from './application/create-organization.port';
 import { InviteOrganizationMember } from './application/invite-organization-member';
 import { INVITE_ORGANIZATION_MEMBER } from './application/invite-organization-member.port';
@@ -47,15 +59,9 @@ import {
 } from './application/jwks-key-provider.port';
 import { ListOpenOrganizationInvitations } from './application/list-open-organization-invitations';
 import { LIST_OPEN_ORGANIZATION_INVITATIONS } from './application/list-open-organization-invitations.port';
-import { ListOrganizationApiKeys } from './application/list-organization-api-keys';
-import { LIST_ORGANIZATION_API_KEYS } from './application/list-organization-api-keys.port';
 import { ListOrganizationMemberships } from './application/list-organization-memberships';
 import { ManageOrganizationMembership } from './application/manage-organization-membership';
 import { MintSandboxAssertion } from './application/mint-sandbox-assertion';
-import {
-  ORGANIZATION_API_KEY,
-  type OrganizationApiKeyPort,
-} from './application/organization-api-key.port';
 import {
   ORGANIZATION_AUDIT_EVENT_READ,
   type OrganizationAuditEventReadPort,
@@ -98,12 +104,8 @@ import { ReadOrganizationIdentityConfig } from './application/read-organization-
 import { READ_ORGANIZATION_IDENTITY_CONFIG } from './application/read-organization-identity-config.port';
 import { RenameOrganization } from './application/rename-organization';
 import { RENAME_ORGANIZATION } from './application/rename-organization.port';
-import { RevokeOrganizationApiKey } from './application/revoke-organization-api-key';
-import { REVOKE_ORGANIZATION_API_KEY } from './application/revoke-organization-api-key.port';
 import { RevokeOrganizationInvitation } from './application/revoke-organization-invitation';
 import { REVOKE_ORGANIZATION_INVITATION } from './application/revoke-organization-invitation.port';
-import { RotateOrganizationApiKey } from './application/rotate-organization-api-key';
-import { ROTATE_ORGANIZATION_API_KEY } from './application/rotate-organization-api-key.port';
 import { SANDBOX_ASSERTION_MINTER } from './application/sandbox-assertion-minter.port';
 import { SANDBOX_ASSERTION_POLICY } from './application/sandbox-assertion-policy.port';
 import {
@@ -130,7 +132,6 @@ import {
   createPostgresIdentityClient,
   identityDrizzleConnectionOptions,
 } from './infrastructure/postgres-identity.client';
-import { PostgresOrganizationApiKeyRepository } from './infrastructure/postgres-organization-api-key.repository';
 import { PostgresOrganizationAuditReadRepository } from './infrastructure/postgres-organization-audit-read.repository';
 import { PostgresOrganizationCreationRepository } from './infrastructure/postgres-organization-creation.repository';
 import { PostgresOrganizationIdentityConfigRepository } from './infrastructure/postgres-organization-identity-config.repository';
@@ -143,7 +144,6 @@ import {
 } from './infrastructure/redis-identity.store';
 import { ApiKeyUserIdentityGuard } from './presentation/api-key-user-identity.guard';
 import { ApiKeyGuard } from './presentation/api-key.guard';
-import { OrganizationApiKeyController } from './presentation/organization-api-key.controller';
 import { OrganizationAuditEventController } from './presentation/organization-audit-event.controller';
 import { OrganizationIdentityConfigController } from './presentation/organization-identity-config.controller';
 import { OrganizationInvitationController } from './presentation/organization-invitation.controller';

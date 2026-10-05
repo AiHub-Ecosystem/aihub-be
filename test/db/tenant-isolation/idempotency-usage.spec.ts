@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 
 import { createPostgresIdempotencyClient } from '@/modules/idempotency/infrastructure/postgres-idempotency.client';
 import { PostgresIdempotencyRepository } from '@/modules/idempotency/infrastructure/postgres-idempotency.repository';
-import { generateOrganizationApiKey } from '@/modules/identity/application/organization-api-key-generator';
+import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/postgres-usage.repository';
 import { PostgresUsageRepository } from '@/modules/metering/infrastructure/postgres-usage.repository';
 

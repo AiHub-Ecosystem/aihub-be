@@ -1,11 +1,11 @@
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
+import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import type {
   CreateOperatorApiKeyInput,
   RevokeOperatorApiKeyInput,
 } from '@/modules/identity/application/operator-api-key.port';
-import { generateOrganizationApiKey } from '@/modules/identity/application/organization-api-key-generator';
 import {
   type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,

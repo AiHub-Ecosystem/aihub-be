@@ -6,7 +6,7 @@ import {
   quotaKeyForMonth,
 } from '@/modules/gateway/infrastructure/redis-quota-counter';
 import { QuotaGuard } from '@/modules/gateway/presentation/quota.guard';
-import { generateOrganizationApiKey } from '@/modules/identity/application/organization-api-key-generator';
+import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 
 import { createTestPool } from '../database';
 

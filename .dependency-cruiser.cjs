@@ -55,7 +55,7 @@ function crossModuleRule() {
       path: '^src/modules/(?!$1/)[^/]+/',
       pathNot: [
         '^src/modules/[^/]+/[^/]+[.]module[.]ts$',
-        '^src/modules/[^/]+/application/[^/]*[.]port[.]ts$',
+        '^src/modules/[^/]+/(application/|.*/application/)[^/]*[.]port[.]ts$',
         ...sharedPrimitivePaths(),
         ...nestExportPaths(),
         ...nestDecoratorPaths(),
@@ -89,9 +89,9 @@ function cliRule() {
     to: {
       path: '^src/modules/[^/]+/',
       pathNot: [
-        '^src/modules/[^/]+/infrastructure/',
+        '^src/modules/[^/]+/(infrastructure/|.*/infrastructure/)',
         '^src/modules/[^/]+/[^/]+[.]module[.]ts$',
-        '^src/modules/[^/]+/application/[^/]*[.]port[.]ts$',
+        '^src/modules/[^/]+/(application/|.*/application/)[^/]*[.]port[.]ts$',
         ...sharedPrimitivePaths(),
         ...nestExportPaths(),
         ...nestDecoratorPaths(),
@@ -315,9 +315,14 @@ module.exports = {
       comment:
         'Concrete infrastructure is bound only by module composition roots.',
       from: {
-        path: '^src/modules/[^/]+/(?!infrastructure/)(?!.*[.]spec[.]ts$)(?![^/]+[.]module[.]ts$)',
+        path: '^src/modules/[^/]+/',
+        pathNot: [
+          '^src/modules/[^/]+/(infrastructure/|.*/infrastructure/)',
+          '[.]spec[.]ts$',
+          '[.]module[.]ts$',
+        ],
       },
-      to: { path: '^src/modules/[^/]+/infrastructure/' },
+      to: { path: '^src/modules/[^/]+/(infrastructure/|.*/infrastructure/)' },
     },
     {
       name: 'no-test-helpers-in-production-code',

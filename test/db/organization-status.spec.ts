@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import { generateOrganizationApiKey } from '@/modules/identity/application/organization-api-key-generator';
+import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import type { SetOrganizationStatusInput } from '@/modules/identity/application/organization-status.port';
 import { PostgresApiKeyRepository } from '@/modules/identity/infrastructure/postgres-api-key.repository';
 import {

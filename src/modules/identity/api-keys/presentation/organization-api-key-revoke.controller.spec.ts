@@ -16,15 +16,15 @@ import {
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
-  API_KEY_CACHE,
-  type ApiKeyCachePort,
-} from '@/modules/identity/application/api-key-authenticator.port';
-import {
   type ListOrganizationApiKeysInput,
   ORGANIZATION_API_KEY,
   type OrganizationApiKeyPort,
   type RevokeOrganizationApiKeyRecordInput,
-} from '@/modules/identity/application/organization-api-key.port';
+} from '@/modules/identity/api-keys/application/organization-api-key.port';
+import {
+  API_KEY_CACHE,
+  type ApiKeyCachePort,
+} from '@/modules/identity/application/api-key-authenticator.port';
 import {
   type ListRosterInput,
   ORGANIZATION_MEMBERSHIP,
