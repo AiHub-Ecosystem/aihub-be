@@ -392,7 +392,8 @@ describe('buildOpenApiDocument', () => {
     expect(operation?.responses['403']).toBeDefined();
     expect(operation?.responses['409']).toBeDefined();
     expect(operation?.responses['429']).toBeDefined();
-    expect(operation?.responses['503']).toBeDefined();
+    // No 503: an email provider failure is no longer a synchronous result here.
+    expect(operation?.responses['503']).toBeUndefined();
     expect(operation?.['x-idempotency']).toBe('optional');
     expect(operation?.parameters).toEqual([
       { $ref: '#/components/parameters/CorrelationId' },
@@ -939,6 +940,23 @@ describe('buildOpenApiDocument', () => {
     expect(JSON.stringify(doc.components.responses.Error403)).not.toContain(
       'IDENTITY_CONFIG_REQUIRED',
     );
+  });
+
+  // The outbox took provider delivery out of the request (ADR-0074), so the
+  // code those four flows used to raise has no producer left and the two routes
+  // that advertised it have no 503 to answer with.
+  it('publishes no error code the outbox left without a producer', () => {
+    const doc = build();
+
+    expect(JSON.stringify(doc)).not.toContain(
+      'AUTH_EMAIL_DELIVERY_UNAVAILABLE',
+    );
+    expect(
+      doc.paths['/v1/auth/register']?.post?.responses['503'],
+    ).toBeUndefined();
+    expect(
+      doc.paths[ORGANIZATION_INVITATION_PATH]?.post?.responses['503'],
+    ).toBeUndefined();
   });
 
   it('documents stable retry fields on every error response', () => {

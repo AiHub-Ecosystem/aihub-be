@@ -243,7 +243,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'optional',
     requestSchema: CreateOrganizationInvitationRequestSchema,
     responseSchema: CreateOrganizationInvitationResponseSchema,
-    errorStatuses: [400, 401, 403, 409, 429, 500, 503],
+    errorStatuses: [400, 401, 403, 409, 429, 500],
   },
   'organizations.invitations.list': {
     method: 'GET',
@@ -375,7 +375,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: RegisterRequestSchema,
     responseSchema: RegisterResponseSchema,
-    errorStatuses: [400, 409, 429, 500, 503],
+    errorStatuses: [400, 409, 429, 500],
   },
   'auth.login': {
     method: 'POST',

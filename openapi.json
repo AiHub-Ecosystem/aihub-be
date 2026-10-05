@@ -548,7 +548,7 @@
         }
       },
       "Error503": {
-        "description": "IDENTITY_PROVIDER_UNAVAILABLE | IDENTITY_JWKS_SOURCE_UNAVAILABLE | IDENTITY_CONFIG_CACHE_UNAVAILABLE | AUTH_EMAIL_DELIVERY_UNAVAILABLE | AVATAR_STORAGE_UNAVAILABLE | SPEAKING_AUDIO_STORAGE_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
+        "description": "IDENTITY_PROVIDER_UNAVAILABLE | IDENTITY_JWKS_SOURCE_UNAVAILABLE | IDENTITY_CONFIG_CACHE_UNAVAILABLE | AVATAR_STORAGE_UNAVAILABLE | SPEAKING_AUDIO_STORAGE_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
         "content": {
           "application/json": {
             "schema": {
@@ -573,10 +573,6 @@
                         },
                         {
                           "const": "IDENTITY_CONFIG_CACHE_UNAVAILABLE",
-                          "type": "string"
-                        },
-                        {
-                          "const": "AUTH_EMAIL_DELIVERY_UNAVAILABLE",
                           "type": "string"
                         },
                         {
@@ -5048,9 +5044,6 @@
           },
           "500": {
             "$ref": "#/components/responses/Error500"
-          },
-          "503": {
-            "$ref": "#/components/responses/Error503"
           }
         }
       },
@@ -7740,9 +7733,6 @@
           },
           "500": {
             "$ref": "#/components/responses/Error500"
-          },
-          "503": {
-            "$ref": "#/components/responses/Error503"
           }
         }
       }
