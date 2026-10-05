@@ -299,7 +299,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - Resolved: Deliverable 1 is frozen as of 2026-09-07 — the OpenAPI 3.1 spec (`openapi.json`) and the Postman handover collection (`aihub.postman_collection.json`) are both generated from source, not hand-written.
 - Implemented: idempotency replay for completed successful attempts, the ErrorCode→httpStatus registry, and the public API docs page at `/docs` (with the raw spec at `/openapi.json`).
 - Implemented: durable internal metering evidence, missing-usage classification, replay-safe request/token aggregates, and safe failure breadcrumbs; AI Services are expected to report aggregate token usage and `metrics.ai_processing_ms`, but current provider contracts may not yet do so, while model identity is neither required nor exposed.
-- Resolved contract under issue #230 (implementation pending): registration and invitation success report email as `queued`, not delivered; verification resend and password recovery remain generic and do not confirm inbox arrival. Existing rate limits and token lifetimes remain unchanged ([ADR-0074](docs/adr/0074-transactional-email-outbox.md)).
+- Implemented: registration and invitation success report email as `queued`, not delivered; verification resend and password recovery remain generic and do not confirm inbox arrival. Existing rate limits and token lifetimes remain unchanged. Terminal failure emits `aihub_email_delivery_failed_total` and one error-level event carrying no address, token, body, or provider response; cancellation does neither, and no alert transport ships in the repository ([ADR-0074](docs/adr/0074-transactional-email-outbox.md), [email outbox runbook](docs/operations/email-outbox.md)).
 - Open, but not blocking: six fixes requested from the AI Writing team (chiefly aggregate usage and `metrics.ai_processing_ms`, which make token-based billing possible at all).
 
 ## Canonical documents and historical references
@@ -322,6 +322,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - [ADR-0039: Organization invitation send-rate boundary](docs/adr/0039-organization-invitation-send-rate-boundary.md)
 - [ADR-0024: Rotating refresh-session boundary](docs/adr/0024-rotating-refresh-session-boundary.md)
 - [ADR-0074: Transactional outbox for account and invitation email](docs/adr/0074-transactional-email-outbox.md)
+- [Email outbox terminal failure runbook](docs/operations/email-outbox.md)
 - [ADR-0053: Optional end-user identity verification per Organization](docs/adr/0053-optional-user-identity-verification.md)
 - [ADR-0054: Sign in on email verification only in the browser that signed up](docs/adr/0054-verification-sign-in-bound-to-signup-browser.md)
 - [ADR-0056: Customer API-key sandbox test tier](docs/adr/0056-customer-sandbox-test-tier.md)

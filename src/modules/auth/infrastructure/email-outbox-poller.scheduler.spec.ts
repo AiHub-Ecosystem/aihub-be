@@ -122,6 +122,37 @@ describe('EmailOutboxPollerScheduler', () => {
 });
 
 describe('reportTerminalEmailDeliveryFailure', () => {
+  /**
+   * Nest's own framing (timestamp, context, colour codes) is not the payload;
+   * what an alert channel forwards is the message after the context tag.
+   */
+  function payloadOf(written: string): string {
+    return (
+      written
+        .replace(/\[\d+m/g, '')
+        .split('[EmailOutboxDispatch] ')[1]
+        ?.trim() ?? ''
+    );
+  }
+
+  async function emit(
+    failure: Parameters<typeof reportTerminalEmailDeliveryFailure>[0],
+  ): Promise<string> {
+    const written: string[] = [];
+    const spy = jest
+      .spyOn(process.stderr, 'write')
+      .mockImplementation((chunk: unknown) => {
+        written.push(String(chunk));
+        return true;
+      });
+    try {
+      reportTerminalEmailDeliveryFailure(failure);
+    } finally {
+      spy.mockRestore();
+    }
+    return payloadOf(written.join(''));
+  }
+
   it('counts the failure under its email kind', async () => {
     reportTerminalEmailDeliveryFailure({
       id: 'edr_01J00000000000000000000000',
@@ -134,28 +165,28 @@ describe('reportTerminalEmailDeliveryFailure', () => {
     );
   });
 
-  it('names the request and its bounded codes, and nothing else', async () => {
-    const written: string[] = [];
-    const spy = jest
-      .spyOn(process.stderr, 'write')
-      .mockImplementation((chunk: unknown) => {
-        written.push(String(chunk));
-        return true;
-      });
-
-    reportTerminalEmailDeliveryFailure({
-      id: 'edr_01J00000000000000000000000',
-      kind: 'verification_email',
-      errorCode: 'provider_rejected',
-    });
-    spy.mockRestore();
-
-    const line = written.join('');
-    expect(line).toContain('edr_01J00000000000000000000000');
-    expect(line).toContain('verification_email');
-    expect(line).toContain('provider_rejected');
-    expect(line).not.toContain('@');
-  });
+  /**
+   * The alert payload is pinned whole rather than field by field: equality is
+   * what proves an address, a token, a message body, or a provider response
+   * cannot appear in it, now or after a future edit to the format.
+   */
+  it.each([
+    ['verification_email', 'provider_rejected'],
+    ['password_reset_email', 'timeout'],
+  ] as const)(
+    'emits only the request, kind=%s, and error=%s',
+    async (kind, errorCode) => {
+      expect(
+        await emit({
+          id: 'edr_01J00000000000000000000000',
+          kind,
+          errorCode,
+        }),
+      ).toBe(
+        `email delivery request edr_01J00000000000000000000000 exhausted its attempts kind=${kind} error=${errorCode}`,
+      );
+    },
+  );
 });
 
 describe('emailOutboxLeaseOwner', () => {

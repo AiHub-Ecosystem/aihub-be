@@ -558,5 +558,52 @@ describe('EmailDeliveryPoller', () => {
 
       expect(failures).toEqual([]);
     });
+
+    /**
+     * What a provider SDK rejects with, rather than with: the recipient, the
+     * token, a slice of the submitted body, and the response envelope, all in
+     * one message. None of it may reach the alert payload or the stored
+     * evidence, which are the two things an operator ever reads.
+     */
+    it('keeps the recipient, token, body, and provider response out of the reported failure', async () => {
+      const failures: unknown[] = [];
+      const { poller, store, sender } = harness({
+        onTerminalFailure: (failure) => failures.push(failure),
+      });
+      store.claimResult = [claimed({ attempts: 2 })];
+      sender.failure = new Error(
+        `Resend email delivery failed: {"statusCode":422,"name":"validation_error",` +
+          `"message":"The email address ${VERIFICATION_PAYLOAD.email} is not valid",` +
+          `"to":["${VERIFICATION_PAYLOAD.email}"],"text":"${TOKEN}"}`,
+      );
+
+      const summary = await poller.runOnce();
+
+      const evidence = JSON.stringify({
+        failures,
+        stored: store.failed,
+        summary,
+      });
+      for (const secret of [
+        VERIFICATION_PAYLOAD.email,
+        TOKEN,
+        'validation_error',
+        'statusCode',
+      ]) {
+        expect(evidence).not.toContain(secret);
+      }
+      // The bounded code is what is left, and it is the only failure evidence
+      // the dispatch path is allowed to keep.
+      expect(failures).toEqual([
+        {
+          id: ROW_ID,
+          kind: 'verification_email',
+          errorCode: 'provider_rejected',
+        },
+      ]);
+      expect(store.failed).toEqual([
+        { id: ROW_ID, errorCode: 'provider_rejected' },
+      ]);
+    });
   });
 });
