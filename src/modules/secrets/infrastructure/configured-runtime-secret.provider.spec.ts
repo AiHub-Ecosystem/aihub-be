@@ -10,6 +10,22 @@ const writingToken = 'writing-token';
 const resendApiKey = 'resend-api-key';
 const userAccessPrivateKey = 'user-access-private-key';
 const userAccessKeyId = 'user-access-key-id';
+const emailOutboxCurrentKeyId = '2026-10';
+const emailOutboxKey = Buffer.alloc(32, 7).toString('base64');
+const emailOutboxEnv = {
+  EMAIL_OUTBOX_CURRENT_KEY_ID: emailOutboxCurrentKeyId,
+  EMAIL_OUTBOX_KEYS: JSON.stringify({
+    [emailOutboxCurrentKeyId]: emailOutboxKey,
+  }),
+};
+const emailOutboxAgent = {
+  current_key_id: emailOutboxCurrentKeyId,
+  keys: { [emailOutboxCurrentKeyId]: emailOutboxKey },
+};
+const emailOutboxSnapshot = {
+  currentKeyId: emailOutboxCurrentKeyId,
+  keys: { [emailOutboxCurrentKeyId]: emailOutboxKey },
+};
 
 function options(
   overrides: Partial<RuntimeSecretProviderOptions> = {},
@@ -25,6 +41,7 @@ function options(
       RESEND_API_KEY: resendApiKey,
       AIHUB_USER_ACCESS_JWT_PRIVATE_KEY: userAccessPrivateKey,
       AIHUB_USER_ACCESS_JWT_KID: userAccessKeyId,
+      ...emailOutboxEnv,
     },
     ...overrides,
   };
@@ -45,6 +62,7 @@ describe('ConfiguredRuntimeSecretProvider', () => {
         privateKeyPem: userAccessPrivateKey,
         keyId: userAccessKeyId,
       },
+      emailOutbox: emailOutboxSnapshot,
     });
   });
 
@@ -60,6 +78,7 @@ describe('ConfiguredRuntimeSecretProvider', () => {
         private_key_pem: userAccessPrivateKey,
         key_id: userAccessKeyId,
       },
+      'email-outbox': emailOutboxAgent,
       seaweedfs: {
         access_key_id: 'storage-access',
         secret_access_key: 'storage-secret',
@@ -86,12 +105,54 @@ describe('ConfiguredRuntimeSecretProvider', () => {
         privateKeyPem: userAccessPrivateKey,
         keyId: userAccessKeyId,
       },
+      emailOutbox: emailOutboxSnapshot,
       seaweedfs: {
         accessKeyId: 'storage-access',
         secretAccessKey: 'storage-secret',
       },
     });
     expect(provider.getSnapshot()).toBe(first);
+  });
+
+  it('fails closed when the email-outbox key bundle is missing', () => {
+    expect(
+      () =>
+        new ConfiguredRuntimeSecretProvider(
+          options({
+            values: {
+              DOWNSTREAM_AI_SPEAKING_CLIENT_ID: speakingClient,
+              DOWNSTREAM_AI_SPEAKING_SECRET_KEY: speakingSecret,
+              DOWNSTREAM_AI_WRITING_TOKEN: writingToken,
+              RESEND_API_KEY: resendApiKey,
+              AIHUB_USER_ACCESS_JWT_PRIVATE_KEY: userAccessPrivateKey,
+              AIHUB_USER_ACCESS_JWT_KID: userAccessKeyId,
+            },
+          }),
+        ),
+    ).toThrow('required runtime secret is missing');
+
+    expect(
+      () =>
+        new ConfiguredRuntimeSecretProvider(
+          options({
+            source: 'agent-file',
+            secretsFile: 'runtime-secrets.json',
+            readFile: () =>
+              JSON.stringify({
+                'ai-speaking': {
+                  client_id: speakingClient,
+                  secret_key: speakingSecret,
+                },
+                'ai-writing': { token: writingToken },
+                resend: { api_key: resendApiKey },
+                'user-access-jwt': {
+                  private_key_pem: userAccessPrivateKey,
+                  key_id: userAccessKeyId,
+                },
+              }),
+          }),
+        ),
+    ).toThrow(RuntimeSecretConfigurationError);
   });
 
   it('requires an explicit env source and rejects it for production', () => {
@@ -144,6 +205,11 @@ describe('ConfiguredRuntimeSecretProvider', () => {
                 },
                 'ai-writing': { token: writingToken },
                 resend: { api_key: resendApiKey },
+                'user-access-jwt': {
+                  private_key_pem: userAccessPrivateKey,
+                  key_id: userAccessKeyId,
+                },
+                'email-outbox': emailOutboxAgent,
               }),
           }),
         ),
@@ -163,6 +229,11 @@ describe('ConfiguredRuntimeSecretProvider', () => {
                 },
                 'ai-writing': { token: writingToken },
                 resend: { api_key: resendApiKey },
+                'user-access-jwt': {
+                  private_key_pem: userAccessPrivateKey,
+                  key_id: userAccessKeyId,
+                },
+                'email-outbox': emailOutboxAgent,
                 extra: { value: 'unexpected' },
               }),
           }),
@@ -245,6 +316,7 @@ describe('ConfiguredRuntimeSecretProvider', () => {
               AIHUB_USER_ACCESS_JWT_PRIVATE_KEY: userAccessPrivateKey,
               AIHUB_USER_ACCESS_JWT_KID: userAccessKeyId,
               SEAWEEDFS_ACCESS_KEY_ID: 'storage-access',
+              ...emailOutboxEnv,
             },
           }),
         ),

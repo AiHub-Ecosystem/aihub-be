@@ -16,6 +16,7 @@ function provider(
       aiWriting: { token: 'token' },
       resend: { apiKey: 'resend-api-key' },
       userAccessJwt: { privateKeyPem: 'private-key', keyId: 'key-id' },
+      emailOutbox: { currentKeyId: 'test', keys: { test: 'k'.repeat(44) } },
       ...(seaweedfs === undefined ? {} : { seaweedfs }),
     }),
   };

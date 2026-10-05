@@ -4,6 +4,7 @@ import process from 'node:process';
 import type {
   AiSpeakingRuntimeSecrets,
   AiWritingRuntimeSecrets,
+  EmailOutboxRuntimeSecrets,
   ResendRuntimeSecrets,
   RuntimeSecretProvider,
   RuntimeSecretSnapshot,
@@ -122,12 +123,14 @@ function loadFromEnvironment(
   };
 
   const seaweedfs = loadOptionalSeaweedFs(options.values);
+  const emailOutbox = loadEmailOutboxFromEnvironment(options.values);
   return freezeSnapshot(
     aiSpeaking,
     aiWriting,
     resend,
     userAccessJwt,
     seaweedfs,
+    emailOutbox,
   );
 }
 
@@ -156,7 +159,14 @@ function loadFromAgentFile(
   const root = asRecord(parsed, 'runtime secret document');
   assertAllowedKeys(
     root,
-    ['ai-speaking', 'ai-writing', 'resend', 'user-access-jwt', 'seaweedfs'],
+    [
+      'ai-speaking',
+      'ai-writing',
+      'resend',
+      'user-access-jwt',
+      'seaweedfs',
+      'email-outbox',
+    ],
     'runtime secret document',
   );
   const aiSpeakingRecord = asRecord(
@@ -234,13 +244,82 @@ function loadFromAgentFile(
       'SeaweedFS runtime secret bundle',
     );
   }
+  const emailOutboxRecord = asRecord(
+    root['email-outbox'],
+    'email-outbox runtime secret bundle',
+  );
+  assertAllowedKeys(
+    emailOutboxRecord,
+    ['current_key_id', 'keys'],
+    'email-outbox runtime secret bundle',
+  );
+  const emailOutbox = loadEmailOutboxRecord(emailOutboxRecord);
   return freezeSnapshot(
     aiSpeaking,
     aiWriting,
     resend,
     userAccessJwt,
     seaweedfs,
+    emailOutbox,
   );
+}
+
+function loadEmailOutboxFromEnvironment(
+  values: SecretValues,
+): EmailOutboxRuntimeSecrets {
+  const currentKeyId = values.EMAIL_OUTBOX_CURRENT_KEY_ID;
+  const keysJson = values.EMAIL_OUTBOX_KEYS;
+  if (!hasValue(currentKeyId) || !hasValue(keysJson)) {
+    throw configurationError(
+      'required runtime secret is missing: email-outbox key bundle',
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(keysJson);
+  } catch {
+    throw configurationError('email-outbox keys are not valid JSON');
+  }
+  if (!isRecord(parsed)) {
+    throw configurationError('email-outbox keys have an invalid shape');
+  }
+  const keys: Record<string, string> = {};
+  for (const [keyId, value] of Object.entries(parsed)) {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      throw configurationError('email-outbox keys have an invalid shape');
+    }
+    keys[keyId] = value;
+  }
+  const bundle: EmailOutboxRuntimeSecrets = { currentKeyId, keys };
+  if (!Object.prototype.hasOwnProperty.call(keys, currentKeyId)) {
+    throw configurationError('email-outbox current key id is not provisioned');
+  }
+  return bundle;
+}
+
+function loadEmailOutboxRecord(
+  record: Record<string, unknown>,
+): EmailOutboxRuntimeSecrets {
+  const currentKeyId = requiredRecordString(
+    record,
+    'current_key_id',
+    'email-outbox current key id',
+  );
+  const keysValue = record.keys;
+  if (!isRecord(keysValue)) {
+    throw configurationError('email-outbox keys have an invalid shape');
+  }
+  const keys: Record<string, string> = {};
+  for (const [keyId, value] of Object.entries(keysValue)) {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      throw configurationError('email-outbox keys have an invalid shape');
+    }
+    keys[keyId] = value;
+  }
+  if (Object.keys(keys).length === 0 || !(currentKeyId in keys)) {
+    throw configurationError('email-outbox current key id is not provisioned');
+  }
+  return { currentKeyId, keys };
 }
 
 function loadOptionalSeaweedFs(
@@ -314,6 +393,7 @@ function freezeSnapshot(
   resend: ResendRuntimeSecrets,
   userAccessJwt: UserAccessJwtRuntimeSecrets,
   seaweedfs: SeaweedFsRuntimeSecrets | undefined,
+  emailOutbox: EmailOutboxRuntimeSecrets,
 ): RuntimeSecretSnapshot {
   const snapshot = {
     aiSpeaking: Object.freeze(aiSpeaking),
@@ -321,6 +401,10 @@ function freezeSnapshot(
     resend: Object.freeze(resend),
     userAccessJwt: Object.freeze(userAccessJwt),
     ...(seaweedfs === undefined ? {} : { seaweedfs: Object.freeze(seaweedfs) }),
+    emailOutbox: Object.freeze({
+      currentKeyId: emailOutbox.currentKeyId,
+      keys: Object.freeze({ ...emailOutbox.keys }),
+    }),
   };
   return Object.freeze(snapshot);
 }

@@ -60,6 +60,7 @@ describe('Gateway runtime-secret wiring', () => {
       privateKeyPem: 'snapshot-user-access-private-key',
       keyId: 'snapshot-user-access-key-id',
     },
+    emailOutbox: { currentKeyId: 'test', keys: { test: 'k'.repeat(44) } },
   } as const;
   const fakeProvider: RuntimeSecretProvider = {
     getSnapshot: () => snapshot,
