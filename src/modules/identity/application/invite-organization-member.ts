@@ -2,8 +2,8 @@ import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import type { RequestContext } from '@/common/request-context/request-context';
 import { type AuthRateLimiterPort } from '@/modules/auth/application/auth-rate-limiter.port';
-import type { EmailSenderPort } from '@/modules/auth/application/email-sender.port';
 import { normalizeEmail } from '@/modules/auth/domain/local-auth';
+import { ulid } from 'ulid';
 
 import type { OrganizationInvitationPort } from './organization-invitation.port';
 import type { OrganizationInviteTokenPort } from './organization-invite-token.port';
@@ -33,6 +33,8 @@ export interface InvitedOrganizationMember {
   readonly email: string;
   readonly role: OrganizationMembershipRole;
   readonly expiresAt: Date;
+  /** Acceptance-time only: the request is queued, not yet with the provider. */
+  readonly emailDeliveryStatus: 'queued';
 }
 
 export const ORGANIZATION_INVITATION_RATE_LIMITS = {
@@ -78,10 +80,6 @@ export class InviteOrganizationMember {
     >,
     private readonly invitations: OrganizationInvitationPort,
     private readonly tokenIssuer: OrganizationInviteTokenPort,
-    private readonly emailSender: Pick<
-      EmailSenderPort,
-      'sendOrganizationInviteEmail'
-    >,
     private readonly rateLimiter: AuthRateLimiterPort,
   ) {}
 
@@ -114,6 +112,14 @@ export class InviteOrganizationMember {
       invitedBy: input.userId,
       tokenHash: issued.hash,
       expiresAt: issued.expiresAt,
+      // The request that carries the credential is committed with the
+      // invitation, so a caller retrying after a delivery failure re-sends
+      // nothing: a worker dispatches the row (ADR-0074).
+      emailDelivery: {
+        id: `edr_${ulid()}`,
+        token: issued.raw,
+        createdAt: now,
+      },
       now,
     });
 
@@ -125,31 +131,13 @@ export class InviteOrganizationMember {
       });
     }
 
-    try {
-      await this.emailSender.sendOrganizationInviteEmail({
-        email,
-        organizationName: result.organizationName,
-        role: input.role,
-        token: issued.raw,
-        expiresAt: issued.expiresAt,
-      });
-    } catch (error) {
-      // The invitation stays durable. A retry supersedes this token, so the
-      // caller can act on a retryable failure without an operator.
-      throw new AppError({
-        code: 'AUTH_EMAIL_DELIVERY_UNAVAILABLE',
-        message: 'Email delivery is temporarily unavailable',
-        retryable: true,
-        cause: error,
-      });
-    }
-
     return {
       invitationId: issued.id,
       organizationId: input.organizationId,
       email,
       role: input.role,
       expiresAt: issued.expiresAt,
+      emailDeliveryStatus: 'queued',
     };
   }
 

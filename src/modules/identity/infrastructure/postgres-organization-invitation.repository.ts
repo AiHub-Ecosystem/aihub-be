@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import type { EmailPayloadCipher } from '@/modules/auth/application/email-delivery-request.port';
 import type {
   AcceptOrganizationInvitationInput,
   AcceptOrganizationInvitationResult,
@@ -89,6 +90,15 @@ const INSERT_INVITATION_SQL = `
   INSERT INTO organization_invitations (
     id, organization_id, email, role, invited_by, token_hash, expires_at, created_at
   ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+`;
+
+/**
+ * The outbox row an invitation commit owns. `queued` is the state the row takes
+ * at commit; the worker moves it on from there (ADR-0074).
+ */
+const INSERT_EMAIL_DELIVERY_REQUEST_SQL = `
+  INSERT INTO email_delivery_requests (id, kind, status, payload_ciphertext, created_at)
+  VALUES ($1, 'organization_invite_email', 'queued', $2, $3)
 `;
 
 /**
@@ -228,7 +238,10 @@ function mapOpenInvitation(
 export class PostgresOrganizationInvitationRepository
   implements OrganizationInvitationPort
 {
-  constructor(private readonly client: PostgresIdentityTransactionalClient) {}
+  constructor(
+    private readonly client: PostgresIdentityTransactionalClient,
+    private readonly payloadCipher: EmailPayloadCipher,
+  ) {}
 
   async createInvitation(
     input: CreateOrganizationInvitationInput,
@@ -296,7 +309,16 @@ export class PostgresOrganizationInvitationRepository
           },
         );
 
-        return { kind: 'created', organizationName: name };
+        // Sealed here because the Organization name is only readable in this
+        // transaction, and queued here so the invitation and the request that
+        // emails its credential commit or roll back together (ADR-0074).
+        await transaction.query(INSERT_EMAIL_DELIVERY_REQUEST_SQL, [
+          input.emailDelivery.id,
+          this.sealInvitePayload(input, name),
+          input.emailDelivery.createdAt,
+        ]);
+
+        return { kind: 'created' };
       });
     } catch (error) {
       if (error instanceof AppError) {
@@ -304,6 +326,26 @@ export class PostgresOrganizationInvitationRepository
       }
       throw identityStoreError('Identity store is unavailable');
     }
+  }
+
+  /**
+   * What the worker needs to send the message, and nothing more: the
+   * credential travels only as authenticated ciphertext under a key version it
+   * resolves itself from the envelope.
+   */
+  private sealInvitePayload(
+    input: CreateOrganizationInvitationInput,
+    name: string,
+  ): string {
+    return this.payloadCipher.encrypt(
+      JSON.stringify({
+        email: input.email,
+        organizationName: name,
+        role: input.role,
+        token: input.emailDelivery.token,
+        expiresAt: input.expiresAt.toISOString(),
+      }),
+    );
   }
 
   async listOpenInvitations(

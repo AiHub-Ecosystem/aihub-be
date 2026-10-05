@@ -9,6 +9,7 @@ import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from '@/modules/auth/application/auth-rate-limiter.port';
+import { type EmailPayloadCipher } from '@/modules/auth/application/email-delivery-request.port';
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
@@ -40,11 +41,12 @@ class FakeIdentityDatabase implements PostgresIdentityTransactionalClient {
   transactionCalls = 0;
   invitationRows = 0;
   auditEvents = 0;
+  emailDeliveryRequests = 0;
 
   async query(
     _text: string,
     _values: readonly unknown[],
-  ): Promise<readonly unknown[]> {
+  ): Promise<readonly Record<string, unknown>[]> {
     return [];
   }
 
@@ -63,6 +65,9 @@ class FakeIdentityDatabase implements PostgresIdentityTransactionalClient {
         if (text.includes('INSERT INTO organization_audit_events')) {
           this.auditEvents += 1;
         }
+        if (text.includes('INSERT INTO email_delivery_requests')) {
+          this.emailDeliveryRequests += 1;
+        }
         return [];
       },
     }) as Promise<T>;
@@ -78,6 +83,17 @@ class RateLimiterFake implements AuthRateLimiterPort {
     return this.allowed
       ? { allowed: true }
       : { allowed: false, retryAfterMs: 12_345 };
+  }
+}
+
+/** The AEAD has its own tests; this suite is about what is committed with what. */
+class StubCipher implements EmailPayloadCipher {
+  encrypt(plaintext: string): string {
+    return `sealed.${plaintext}`;
+  }
+
+  decrypt(): string {
+    throw new Error('the repository never reads a payload back');
   }
 }
 
@@ -120,7 +136,7 @@ describe('organization invitation HTTP/application/repository integration', () =
     };
     const userAccounts = userAccountStatus();
     const invitations: OrganizationInvitationPort =
-      new PostgresOrganizationInvitationRepository(database);
+      new PostgresOrganizationInvitationRepository(database, new StubCipher());
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -154,6 +170,7 @@ describe('organization invitation HTTP/application/repository integration', () =
     database.transactionCalls = 0;
     database.invitationRows = 0;
     database.auditEvents = 0;
+    database.emailDeliveryRequests = 0;
     rateLimiter.allowed = true;
     emailSender.sendOrganizationInviteEmail.mockClear();
   });
@@ -167,17 +184,22 @@ describe('organization invitation HTTP/application/repository integration', () =
     });
   }
 
-  it('persists an allowed invitation and its audit event through the repository', async () => {
+  it('persists the invitation, its audit event, and its request in one transaction', async () => {
     const response = await invite();
 
     expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      data: { email_delivery_status: 'queued' },
+    });
     expect(database.transactionCalls).toBe(1);
     expect(database.invitationRows).toBe(1);
     expect(database.auditEvents).toBe(1);
-    expect(emailSender.sendOrganizationInviteEmail).toHaveBeenCalledTimes(1);
+    expect(database.emailDeliveryRequests).toBe(1);
+    // The provider is not called in the request path; a worker claims the row.
+    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
   });
 
-  it('rejects a rate-limited invitation before durable or email side effects', async () => {
+  it('rejects a rate-limited invitation before any durable side effect', async () => {
     rateLimiter.allowed = false;
 
     const response = await invite();
@@ -192,6 +214,7 @@ describe('organization invitation HTTP/application/repository integration', () =
     expect(database.transactionCalls).toBe(0);
     expect(database.invitationRows).toBe(0);
     expect(database.auditEvents).toBe(0);
+    expect(database.emailDeliveryRequests).toBe(0);
     expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
   });
 });

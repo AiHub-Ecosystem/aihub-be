@@ -4,6 +4,8 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
+import type { EmailPayloadCipher } from '@/modules/auth/application/email-delivery-request.port';
+import { createEmailPayloadCipher } from '@/modules/auth/infrastructure/email-payload-cipher';
 import type {
   AcceptOrganizationInvitationResult,
   CreateOrganizationInvitationResult,
@@ -13,6 +15,7 @@ import type { OrganizationMembershipRole } from '@/modules/identity/application/
 import type { PostgresIdentityTransactionalClient } from '@/modules/identity/infrastructure/postgres-identity.client';
 import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
 import { PostgresOrganizationInvitationRepository } from '@/modules/identity/infrastructure/postgres-organization-invitation.repository';
+import { createRuntimeSecretProviderFromProcessEnvironment } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
 
 import {
   createTestPool,
@@ -34,6 +37,7 @@ type MembershipStatus = 'active' | 'disabled';
 let pool: Pool;
 let client: PostgresIdentityTransactionalClient & { close(): Promise<void> };
 let repository: PostgresOrganizationInvitationRepository;
+let cipher: EmailPayloadCipher;
 
 function userId(): string {
   return `usr_${ulid()}`;
@@ -147,6 +151,11 @@ async function invite(options: {
     invitedBy: options.inviterId,
     tokenHash: options.tokenHash ?? tokenHash(),
     expiresAt: EXPIRES_AT,
+    emailDelivery: {
+      id: `edr_${ulid()}`,
+      token: 'raw-invite-token',
+      createdAt: NOW,
+    },
     now: NOW,
   });
 }
@@ -259,7 +268,11 @@ async function invitationByHash(tokenHash: string) {
 beforeAll(() => {
   pool = createTestPool();
   client = createPostgresIdentityClient(testDatabaseUrl());
-  repository = new PostgresOrganizationInvitationRepository(client);
+  cipher = createEmailPayloadCipher(
+    createRuntimeSecretProviderFromProcessEnvironment().getSnapshot()
+      .emailOutbox,
+  );
+  repository = new PostgresOrganizationInvitationRepository(client, cipher);
 });
 
 afterAll(async () => {
