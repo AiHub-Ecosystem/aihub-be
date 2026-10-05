@@ -20,6 +20,26 @@ describe('local auth migration', () => {
     expect(sql).toContain('email_verification_one_open_token');
   });
 
+  it('accepts the password hash parameters in any order, still at the agreed work factor', () => {
+    const sql = readFileSync(
+      join(
+        __dirname,
+        '../../../../database/migrations/0029_auth_identity_password_hash_parameters.sql',
+      ),
+      'utf8',
+    );
+
+    expect(sql).toContain(
+      'DROP CONSTRAINT auth_identities_password_hash_check',
+    );
+    expect(sql).toContain('ADD CONSTRAINT auth_identities_password_hash_check');
+    // One assumed order is what broke this. The replacement must not name one.
+    expect(sql).not.toContain('m=65536,t=3,p=1');
+    for (const parameter of ['m=65536', 't=3', 'p=1']) {
+      expect(sql).toContain(parameter);
+    }
+  });
+
   it('adds nullable Verification Sign-in columns without touching consumption', () => {
     const sql = readFileSync(
       join(
