@@ -1,5 +1,11 @@
 import Redis from 'ioredis';
-import { type KeyLike, SignJWT, exportJWK, generateKeyPair } from 'jose';
+import {
+  type CryptoKey,
+  type KeyObject,
+  SignJWT,
+  exportJWK,
+  generateKeyPair,
+} from 'jose';
 import { ulid } from 'ulid';
 
 import type { RedisGatewayClient } from '@/modules/gateway/infrastructure/redis-gateway.client';
@@ -22,7 +28,7 @@ export interface TenantIdentity {
   readonly issuer: string;
   readonly keyId: string;
   readonly jwks: PublicJsonWebKeySet;
-  readonly privateKey: KeyLike;
+  readonly privateKey: CryptoKey | KeyObject;
 }
 
 export interface TenantFixture {

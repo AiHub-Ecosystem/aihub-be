@@ -21,7 +21,9 @@ module.exports = {
   // NestJS 12 ships ESM only. Node loads it through require(esm), but Jest's
   // own module loader does not, so SWC compiles it to CommonJS here. The two
   // alternatives cover pnpm's store path and the linked path (ADR-0047).
-  transformIgnorePatterns: ['/node_modules/(?!\\.pnpm/@nestjs\\+|@nestjs/)'],
+  transformIgnorePatterns: [
+    '/node_modules/(?!\\.pnpm/@nestjs\\+|.pnpm/jose|@nestjs/|jose/)',
+  ],
   collectCoverageFrom: ['<rootDir>/src/**/*.ts'],
   clearMocks: true,
 };

@@ -1,6 +1,12 @@
 import { createPrivateKey, createPublicKey, randomUUID } from 'node:crypto';
 
-import { type KeyLike, SignJWT, decodeProtectedHeader, jwtVerify } from 'jose';
+import {
+  type CryptoKey,
+  type KeyObject,
+  SignJWT,
+  decodeProtectedHeader,
+  jwtVerify,
+} from 'jose';
 
 import { AppError } from '@/common/errors/app-error';
 import type {
@@ -34,8 +40,8 @@ function invalidToken(): AppError {
 export class JoseUserAccessTokenService
   implements UserAccessTokenIssuerPort, UserAccessTokenVerifierPort
 {
-  private readonly privateKey: KeyLike;
-  private readonly publicKey: KeyLike;
+  private readonly privateKey: CryptoKey | KeyObject;
+  private readonly publicKey: CryptoKey | KeyObject;
 
   constructor(
     private readonly config: UserAccessTokenConfig,

@@ -91,7 +91,9 @@ class FakeKeyProvider implements JwksKeyProviderPort {
 }
 
 async function rsaFixture(kid = 'rsa-1') {
-  const { privateKey, publicKey } = await generateKeyPair('RS256');
+  const { privateKey, publicKey } = await generateKeyPair('RS256', {
+    extractable: true,
+  });
   const jwk = await exportJWK(publicKey);
   return {
     privateKey,
