@@ -91,9 +91,9 @@ class RateLimiterFake implements AuthRateLimiterPort {
 }
 
 /**
- * Argon2 emits its parameters as `m=,p=,t=`, while the `auth_identities`
- * constraint asks for `m=,t=,p=`, so a real hash cannot land in the table. The
- * suite is about the outbox pairing, so it stores the constraint's own shape.
+ * A fixed shape keeps this suite on the outbox pairing rather than on argon2's
+ * cost. The `auth_identities` constraint accepts this order, and the real
+ * hasher is exercised in registration-password-hash.spec.ts.
  */
 const STORED_PASSWORD_HASH =
   '$argon2id$v=19$m=65536,t=3,p=1$c2FsdHNhbHQ$aGFzaA';
