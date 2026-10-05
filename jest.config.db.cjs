@@ -21,7 +21,9 @@ module.exports = {
     '<rootDir>/test/db/tenant-isolation/',
   ],
   // Same reason as the unit lane: NestJS 12 is ESM only (ADR-0047).
-  transformIgnorePatterns: ['/node_modules/(?!\\.pnpm/@nestjs\\+|@nestjs/)'],
+  transformIgnorePatterns: [
+    '/node_modules/(?!\\.pnpm/@nestjs\\+|.pnpm/jose|@nestjs/|jose/)',
+  ],
   testTimeout: 30_000,
   clearMocks: true,
 };

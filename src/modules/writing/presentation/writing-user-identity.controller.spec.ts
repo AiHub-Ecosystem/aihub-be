@@ -127,7 +127,7 @@ describe('Writing user identity HTTP flow', () => {
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
     process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'false';
-    const generated = await generateKeyPair('RS256');
+    const generated = await generateKeyPair('RS256', { extractable: true });
     privateKey = generated.privateKey;
     publicJwk = {
       ...(await exportJWK(generated.publicKey)),

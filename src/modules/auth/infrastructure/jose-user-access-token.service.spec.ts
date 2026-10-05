@@ -1,5 +1,6 @@
 import {
-  type KeyLike,
+  type CryptoKey,
+  type KeyObject,
   SignJWT,
   decodeJwt,
   decodeProtectedHeader,
@@ -10,7 +11,7 @@ import {
 import { JoseUserAccessTokenService } from './jose-user-access-token.service';
 
 async function keyPair() {
-  const generated = await generateKeyPair('RS256');
+  const generated = await generateKeyPair('RS256', { extractable: true });
   return {
     privateKeyPem: await exportPKCS8(generated.privateKey),
     privateKey: generated.privateKey,
@@ -19,7 +20,7 @@ async function keyPair() {
 }
 
 async function signedToken(
-  privateKey: KeyLike,
+  privateKey: CryptoKey | KeyObject,
   overrides: {
     readonly issuer?: string;
     readonly audience?: string;

@@ -1,4 +1,4 @@
-import { type KeyLike, SignJWT, importPKCS8 } from 'jose';
+import { type CryptoKey, type KeyObject, SignJWT, importPKCS8 } from 'jose';
 
 import { AppError } from '@/common/errors/app-error';
 import type {
@@ -32,7 +32,7 @@ function notConfigured(): AppError {
  * claims and receive a token.
  */
 export class JoseSandboxAssertionSigner implements SandboxAssertionSignerPort {
-  private importedKey?: Promise<KeyLike>;
+  private importedKey?: Promise<CryptoKey | KeyObject>;
 
   constructor(
     private readonly readMaterial: () =>
@@ -66,7 +66,9 @@ export class JoseSandboxAssertionSigner implements SandboxAssertionSignerPort {
     return material;
   }
 
-  private privateKey(material: SandboxSigningMaterial): Promise<KeyLike> {
+  private privateKey(
+    material: SandboxSigningMaterial,
+  ): Promise<CryptoKey | KeyObject> {
     this.importedKey ??= importPKCS8(
       material.privateKeyPem,
       material.algorithm,
