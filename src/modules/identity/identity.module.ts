@@ -61,9 +61,9 @@ import {
   type OrganizationAuditEventReadPort,
 } from './application/organization-audit-event-read.port';
 import {
-  ORGANIZATION_CREATION,
-  type OrganizationCreationPort,
-} from './application/organization-creation.port';
+  ORGANIZATION_CREATION_RECORD,
+  type OrganizationCreationRecordPort,
+} from './application/organization-creation-record.port';
 import {
   ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
   type OrganizationIdentityConfigRepositoryPort,
@@ -89,9 +89,9 @@ import {
   type OrganizationMembershipPort,
 } from './application/organization-membership.port';
 import {
-  ORGANIZATION_RENAME,
-  type OrganizationRenamePort,
-} from './application/organization-rename.port';
+  ORGANIZATION_RENAME_RECORD,
+  type OrganizationRenameRecordPort,
+} from './application/organization-rename-record.port';
 import { ReadOrganizationAuditEvents } from './application/read-organization-audit-events';
 import { READ_ORGANIZATION_AUDIT_EVENTS } from './application/read-organization-audit-events.port';
 import { ReadOrganizationIdentityConfig } from './application/read-organization-identity-config';
@@ -255,15 +255,15 @@ function drizzleDatabaseOptions(databaseUrl: string) {
       inject: [ORGANIZATION_MEMBERSHIP],
     },
     {
-      provide: ORGANIZATION_CREATION,
-      useFactory: (): OrganizationCreationPort =>
+      provide: ORGANIZATION_CREATION_RECORD,
+      useFactory: (): OrganizationCreationRecordPort =>
         new PostgresOrganizationCreationRepository(
           createPostgresIdentityClient(controlPlaneDatabaseUrl()),
         ),
     },
     {
       provide: CREATE_ORGANIZATION,
-      useFactory: (organizations: OrganizationCreationPort) =>
+      useFactory: (organizations: OrganizationCreationRecordPort) =>
         new CreateOrganization(
           organizations,
           selfServeOrganizationTerms(
@@ -272,20 +272,20 @@ function drizzleDatabaseOptions(databaseUrl: string) {
             ),
           ),
         ),
-      inject: [ORGANIZATION_CREATION],
+      inject: [ORGANIZATION_CREATION_RECORD],
     },
     {
-      provide: ORGANIZATION_RENAME,
-      useFactory: (): OrganizationRenamePort =>
+      provide: ORGANIZATION_RENAME_RECORD,
+      useFactory: (): OrganizationRenameRecordPort =>
         new PostgresOrganizationRenameRepository(
           createPostgresIdentityClient(controlPlaneDatabaseUrl()),
         ),
     },
     {
       provide: RENAME_ORGANIZATION,
-      useFactory: (organizations: OrganizationRenamePort) =>
+      useFactory: (organizations: OrganizationRenameRecordPort) =>
         new RenameOrganization(organizations),
-      inject: [ORGANIZATION_RENAME],
+      inject: [ORGANIZATION_RENAME_RECORD],
     },
     {
       provide: ORGANIZATION_API_KEY,

@@ -4,9 +4,9 @@ import type { RequestContext } from '@/common/request-context/request-context';
 import { organizationName } from '@/modules/identity/domain/organization-name';
 
 import type {
-  OrganizationCreationPort,
+  OrganizationCreationRecordPort,
   SelfServeOrganizationTerms,
-} from './organization-creation.port';
+} from './organization-creation-record.port';
 
 export interface CreateOrganizationInput {
   readonly context: RequestContext;
@@ -88,7 +88,7 @@ export const ORGANIZATION_CREATION_LIMIT = 3;
  */
 export class CreateOrganization {
   constructor(
-    private readonly organizations: OrganizationCreationPort,
+    private readonly organizations: OrganizationCreationRecordPort,
     private readonly terms: SelfServeOrganizationTerms,
   ) {}
 

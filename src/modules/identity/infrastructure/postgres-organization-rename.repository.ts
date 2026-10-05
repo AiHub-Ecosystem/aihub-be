@@ -1,9 +1,9 @@
 import { AppError } from '@/common/errors/app-error';
 import type {
-  OrganizationRenamePort,
+  OrganizationRenameRecordPort,
   RenameOrganizationRecordInput,
   RenameOrganizationRecordResult,
-} from '@/modules/identity/application/organization-rename.port';
+} from '@/modules/identity/application/organization-rename-record.port';
 import type { OrganizationAuditDraft } from '@/modules/identity/domain/organization-audit-event';
 
 import {
@@ -50,7 +50,7 @@ const RENAME_ORGANIZATION_SQL = `
  * themselves an admin when this one proceeds (ADR-0043).
  */
 export class PostgresOrganizationRenameRepository
-  implements OrganizationRenamePort
+  implements OrganizationRenameRecordPort
 {
   constructor(private readonly client: PostgresIdentityTransactionalClient) {}
 

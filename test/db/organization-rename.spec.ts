@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import type { RenameOrganizationRecordInput } from '@/modules/identity/application/organization-rename.port';
+import type { RenameOrganizationRecordInput } from '@/modules/identity/application/organization-rename-record.port';
 import {
   type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,

@@ -5,8 +5,8 @@ import { AppError } from '@/common/errors/app-error';
 import type {
   CreateOrganizationRecordInput,
   CreateOrganizationRecordResult,
-  OrganizationCreationPort,
-} from '@/modules/identity/application/organization-creation.port';
+  OrganizationCreationRecordPort,
+} from '@/modules/identity/application/organization-creation-record.port';
 
 import { identityStoreError, isRecord } from './identity-row';
 import {
@@ -49,7 +49,7 @@ const INSERT_OWNER_SQL = `
 `;
 
 export class PostgresOrganizationCreationRepository
-  implements OrganizationCreationPort
+  implements OrganizationCreationRecordPort
 {
   constructor(private readonly client: PostgresIdentityTransactionalClient) {}
 

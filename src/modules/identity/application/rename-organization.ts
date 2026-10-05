@@ -3,7 +3,7 @@ import type { RequestContext } from '@/common/request-context/request-context';
 import { organizationName } from '@/modules/identity/domain/organization-name';
 
 import { forbidden } from './organization-membership.authorization';
-import type { OrganizationRenamePort } from './organization-rename.port';
+import type { OrganizationRenameRecordPort } from './organization-rename-record.port';
 
 /**
  * One message for every refusal, following the audit read. A suspended-specific
@@ -30,7 +30,7 @@ export interface RenamedOrganization {
  * owner-mutable attribute; commercial terms never reach this path.
  */
 export class RenameOrganization {
-  constructor(private readonly organizations: OrganizationRenamePort) {}
+  constructor(private readonly organizations: OrganizationRenameRecordPort) {}
 
   async rename(input: RenameOrganizationInput): Promise<RenamedOrganization> {
     const name = organizationName(input.name);

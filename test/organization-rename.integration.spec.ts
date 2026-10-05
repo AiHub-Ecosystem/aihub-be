@@ -12,11 +12,11 @@ import {
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
-  ORGANIZATION_RENAME,
-  type OrganizationRenamePort,
+  ORGANIZATION_RENAME_RECORD,
+  type OrganizationRenameRecordPort,
   type RenameOrganizationRecordInput,
   type RenameOrganizationRecordResult,
-} from '@/modules/identity/application/organization-rename.port';
+} from '@/modules/identity/application/organization-rename-record.port';
 
 const OWNER_TOKEN = 'owner.token.value';
 const ADMIN_TOKEN = 'admin.token.value';
@@ -38,7 +38,7 @@ const REQUEST_ID = 'req_01J00000000000000000000000';
  * matrix is decided under locks. Here it only answers the three outcomes the
  * boundary must translate.
  */
-class OrganizationRenameFake implements OrganizationRenamePort {
+class OrganizationRenameRecordFake implements OrganizationRenameRecordPort {
   readonly calls: RenameOrganizationRecordInput[] = [];
   name = 'Acme';
 
@@ -67,10 +67,10 @@ class OrganizationRenameFake implements OrganizationRenamePort {
 
 describe('Organization rename over HTTP', () => {
   let app: NestFastifyApplication;
-  let rename: OrganizationRenameFake;
+  let rename: OrganizationRenameRecordFake;
 
   beforeAll(async () => {
-    rename = new OrganizationRenameFake();
+    rename = new OrganizationRenameRecordFake();
     const verifier: UserAccessTokenVerifierPort = {
       verify: async (token: string) => {
         const userId = {
@@ -92,7 +92,7 @@ describe('Organization rename over HTTP', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
-      .overrideProvider(ORGANIZATION_RENAME)
+      .overrideProvider(ORGANIZATION_RENAME_RECORD)
       .useValue(rename)
       .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
       .useValue(verifier)

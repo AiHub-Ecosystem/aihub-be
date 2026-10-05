@@ -20,7 +20,7 @@ export type RenameOrganizationRecordResult =
     }
   | { readonly kind: 'forbidden' };
 
-export interface OrganizationRenamePort {
+export interface OrganizationRenameRecordPort {
   /**
    * Decides the caller's authority under the Organization and membership
    * locks, then renames and records `organization.renamed` in one durable act,
@@ -31,4 +31,4 @@ export interface OrganizationRenamePort {
   ): Promise<RenameOrganizationRecordResult>;
 }
 
-export const ORGANIZATION_RENAME = Symbol('ORGANIZATION_RENAME');
+export const ORGANIZATION_RENAME_RECORD = Symbol('ORGANIZATION_RENAME_RECORD');

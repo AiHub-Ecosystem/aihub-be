@@ -6,7 +6,7 @@ import { generateOrganizationApiKey } from '@/modules/identity/application/organ
 import type {
   CreateOrganizationRecordInput,
   CreateOrganizationRecordResult,
-} from '@/modules/identity/application/organization-creation.port';
+} from '@/modules/identity/application/organization-creation-record.port';
 import {
   type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,

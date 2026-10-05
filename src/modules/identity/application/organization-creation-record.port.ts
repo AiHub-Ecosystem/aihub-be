@@ -26,7 +26,7 @@ export type CreateOrganizationRecordResult =
   | { readonly kind: 'limit_reached' }
   | { readonly kind: 'account_inactive' };
 
-export interface OrganizationCreationPort {
+export interface OrganizationCreationRecordPort {
   /**
    * Creates the Organization, its creator's active `owner` membership, and the
    * `organization.created` audit event in one durable act, or none of them.
@@ -36,4 +36,6 @@ export interface OrganizationCreationPort {
   ): Promise<CreateOrganizationRecordResult>;
 }
 
-export const ORGANIZATION_CREATION = Symbol('ORGANIZATION_CREATION');
+export const ORGANIZATION_CREATION_RECORD = Symbol(
+  'ORGANIZATION_CREATION_RECORD',
+);

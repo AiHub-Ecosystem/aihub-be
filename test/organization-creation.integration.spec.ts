@@ -22,9 +22,9 @@ import {
 import {
   type CreateOrganizationRecordInput,
   type CreateOrganizationRecordResult,
-  ORGANIZATION_CREATION,
-  type OrganizationCreationPort,
-} from '@/modules/identity/application/organization-creation.port';
+  ORGANIZATION_CREATION_RECORD,
+  type OrganizationCreationRecordPort,
+} from '@/modules/identity/application/organization-creation-record.port';
 
 const OWNER_TOKEN = 'owner.token.value';
 const OTHER_TOKEN = 'other.token.value';
@@ -35,7 +35,7 @@ const DISABLED_ID = 'usr_01J00000000000000000000003';
 const REQUEST_ID = 'req_01J00000000000000000000000';
 
 /** Stands in for the durable act the database lane covers; it keeps only the limit. */
-class OrganizationCreationFake implements OrganizationCreationPort {
+class OrganizationCreationRecordFake implements OrganizationCreationRecordPort {
   readonly created: CreateOrganizationRecordInput[] = [];
 
   async createOrganization(
@@ -124,11 +124,11 @@ class IdempotencyRepositoryFake implements IdempotencyRepositoryPort {
 
 describe('Self-serve Organization creation over HTTP', () => {
   let app: NestFastifyApplication;
-  let creation: OrganizationCreationFake;
+  let creation: OrganizationCreationRecordFake;
   let idempotency: IdempotencyRepositoryFake;
 
   beforeAll(async () => {
-    creation = new OrganizationCreationFake();
+    creation = new OrganizationCreationRecordFake();
     idempotency = new IdempotencyRepositoryFake();
     const verifier: UserAccessTokenVerifierPort = {
       verify: async (token: string) => {
@@ -151,7 +151,7 @@ describe('Self-serve Organization creation over HTTP', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
-      .overrideProvider(ORGANIZATION_CREATION)
+      .overrideProvider(ORGANIZATION_CREATION_RECORD)
       .useValue(creation)
       .overrideProvider(IDEMPOTENCY_REPOSITORY)
       .useValue(idempotency)
@@ -313,11 +313,11 @@ describe('Self-serve Organization creation over HTTP', () => {
 describe('Self-serve Organization terms read from the environment', () => {
   const originalQuota = process.env.AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA;
   let app: NestFastifyApplication | undefined;
-  let creation: OrganizationCreationFake;
+  let creation: OrganizationCreationRecordFake;
   let idempotency: IdempotencyRepositoryFake;
 
   beforeEach(() => {
-    creation = new OrganizationCreationFake();
+    creation = new OrganizationCreationRecordFake();
     idempotency = new IdempotencyRepositoryFake();
   });
 
@@ -351,7 +351,7 @@ describe('Self-serve Organization terms read from the environment', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
-      .overrideProvider(ORGANIZATION_CREATION)
+      .overrideProvider(ORGANIZATION_CREATION_RECORD)
       .useValue(creation)
       .overrideProvider(IDEMPOTENCY_REPOSITORY)
       .useValue(idempotency)
