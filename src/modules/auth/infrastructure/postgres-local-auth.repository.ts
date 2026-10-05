@@ -1,6 +1,7 @@
 import { ulid } from 'ulid';
 
 import { AuthIdentityConflictError } from '@/modules/auth/application/auth-identity-conflict.error';
+import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/application/email-delivery-request.port';
 import type {
   IssuePasswordResetTokenInput,
   PasswordResetResult,
@@ -32,6 +33,7 @@ import type {
   PostgresAuthClient,
   PostgresAuthQueryClient,
 } from './postgres-auth.client';
+import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
 
 const INVALID: VerificationOutcome = { kind: 'invalid' };
 const VERIFIED: VerificationOutcome = { kind: 'verified' };
@@ -92,7 +94,10 @@ export class PostgresLocalAuthRepository
     PasswordResetTokenRepositoryPort,
     RefreshSessionRepositoryPort
 {
-  constructor(private readonly client: PostgresAuthClient) {}
+  constructor(
+    private readonly client: PostgresAuthClient,
+    private readonly emailDeliveryRequests: PostgresEmailDeliveryRequestRepository = new PostgresEmailDeliveryRequestRepository(),
+  ) {}
 
   async register(input: RegisterLocalAccountInput): Promise<void> {
     try {
@@ -138,6 +143,7 @@ export class PostgresLocalAuthRepository
             input.browserBindingHash ?? null,
           ],
         );
+        await this.insertEmailDelivery(transaction, input.emailDelivery);
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -197,6 +203,7 @@ export class PostgresLocalAuthRepository
             input.browserBindingHash ?? null,
           ],
         );
+        await this.insertEmailDelivery(transaction, input.emailDelivery);
         return { email: row.canonical_email };
       });
     } catch (error) {
@@ -254,6 +261,7 @@ export class PostgresLocalAuthRepository
           input.now,
         ],
       );
+      await this.insertEmailDelivery(transaction, input.emailDelivery);
       return { email: row.canonical_email };
     });
   }
@@ -625,6 +633,19 @@ export class PostgresLocalAuthRepository
       }
       await this.revokeFamily(transaction, familyId, input.now);
     });
+  }
+
+  /**
+   * The Email Delivery Request rides the caller's open transaction, so a
+   * failure here rolls back the mutation it serves (ADR-0074).
+   */
+  private async insertEmailDelivery(
+    transaction: PostgresAuthQueryClient,
+    emailDelivery: InsertEmailDeliveryRequestInput | undefined,
+  ): Promise<void> {
+    if (emailDelivery !== undefined) {
+      await this.emailDeliveryRequests.insert(transaction, emailDelivery);
+    }
   }
 
   /** Stores only the token hash, on the client or inside a transaction. */

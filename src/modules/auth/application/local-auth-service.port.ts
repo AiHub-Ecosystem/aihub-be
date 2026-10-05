@@ -20,6 +20,7 @@ export interface LocalAuthServicePort {
     readonly email: string;
     readonly username: string;
     readonly status: 'pending_verification';
+    readonly emailDeliveryStatus: 'queued';
   }>;
   /** Returns a session only for a Verification Sign-in (ADR-0054). */
   verify(

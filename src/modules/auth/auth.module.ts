@@ -14,6 +14,10 @@ import {
   type AuthRateLimiterPort,
 } from './application/auth-rate-limiter.port';
 import {
+  EMAIL_PAYLOAD_CIPHER,
+  type EmailPayloadCipher,
+} from './application/email-delivery-request.port';
+import {
   EMAIL_SENDER,
   type EmailSenderPort,
 } from './application/email-sender.port';
@@ -43,6 +47,7 @@ import {
 } from './application/verification-token.port';
 import { Argon2PasswordHasher } from './infrastructure/argon2-password.hasher';
 import { CryptoRefreshToken } from './infrastructure/crypto-refresh-token';
+import { createEmailPayloadCipher } from './infrastructure/email-payload-cipher';
 import {
   JoseUserAccessTokenService,
   USER_ACCESS_TOKEN_CRYPTO,
@@ -128,6 +133,12 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
             process.env.AIHUB_RUNTIME_DATABASE_SCOPE !== 'sandbox',
         );
       },
+      inject: [RUNTIME_SECRET_PROVIDER],
+    },
+    {
+      provide: EMAIL_PAYLOAD_CIPHER,
+      useFactory: (provider: RuntimeSecretProvider): EmailPayloadCipher =>
+        createEmailPayloadCipher(provider.getSnapshot().emailOutbox),
       inject: [RUNTIME_SECRET_PROVIDER],
     },
     {

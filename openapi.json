@@ -7687,7 +7687,12 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "required": ["email", "username", "status"],
+                      "required": [
+                        "email",
+                        "username",
+                        "status",
+                        "email_delivery_status"
+                      ],
                       "properties": {
                         "email": {
                           "type": "string"
@@ -7697,6 +7702,10 @@
                         },
                         "status": {
                           "const": "pending_verification",
+                          "type": "string"
+                        },
+                        "email_delivery_status": {
+                          "const": "queued",
                           "type": "string"
                         }
                       }

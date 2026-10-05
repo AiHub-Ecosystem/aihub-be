@@ -1,11 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
+import type { EmailPayloadCipher } from '@/modules/auth/application/email-delivery-request.port';
 import type { EmailOutboxRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';
-
-export interface EmailPayloadCipher {
-  encrypt(plaintext: string): string;
-  decrypt(envelope: string): string;
-}
 
 const ENVELOPE_VERSION = 'v1';
 

@@ -1,5 +1,7 @@
 import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 
+import type { InsertEmailDeliveryRequestInput } from './email-delivery-request.port';
+
 export interface RegisterLocalAccountInput {
   readonly email: string;
   readonly username: string;
@@ -10,6 +12,8 @@ export interface RegisterLocalAccountInput {
   /** Hash of the requesting browser's Signup Browser Binding, if any. */
   readonly browserBindingHash?: string;
   readonly now: Date;
+  /** Written in the same transaction as the account, or nowhere. */
+  readonly emailDelivery?: InsertEmailDeliveryRequestInput;
 }
 
 export interface LoginIdentity {

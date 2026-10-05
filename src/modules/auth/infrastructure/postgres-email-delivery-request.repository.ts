@@ -1,4 +1,10 @@
 import { AppError } from '@/common/errors/app-error';
+import type {
+  EmailDeliveryKind,
+  InsertEmailDeliveryRequestInput,
+} from '@/modules/auth/application/email-delivery-request.port';
+
+export type { EmailDeliveryKind, InsertEmailDeliveryRequestInput };
 
 /**
  * Structural minimum for any client that can run a single statement: the auth
@@ -10,18 +16,6 @@ export interface EmailDeliveryQueryClient {
     text: string,
     values: readonly unknown[],
   ): Promise<readonly Record<string, unknown>[]>;
-}
-
-export type EmailDeliveryKind =
-  | 'verification_email'
-  | 'password_reset_email'
-  | 'organization_invite_email';
-
-export interface InsertEmailDeliveryRequestInput {
-  id: string;
-  kind: EmailDeliveryKind;
-  payloadCiphertext: string;
-  createdAt: Date;
 }
 
 export interface EmailDeliveryRequestRecord {
