@@ -49,6 +49,13 @@ export type ResponseFor<K extends OperationId> =
     : SpeakingGradeResponse;
 
 export interface OperationDispatcherPort {
+  /**
+   * Concrete implementation: `HttpOperationDispatcher` in
+   * `src/modules/gateway/infrastructure/`. The per-operation adapters it
+   * selects from the composition-root array live in `src/downstream/<service>/`
+   * (`writing/`, `speaking/`), as a source boundary, never inside a feature
+   * module.
+   */
   dispatch<O extends OperationId>(
     operation: O,
     input: RequestFor<O>,

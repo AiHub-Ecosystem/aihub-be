@@ -51,6 +51,15 @@ export type ResponseForCommand<C extends BaseGradingCommand> = ResponseFor<
   C['operation']
 >;
 
+/**
+ * The grading port both feature modules dispatch through. Declared and bound
+ * by the Gateway module: `GradingOrchestrator` (this folder) dispatches via
+ * `HttpOperationDispatcher`, whose per-operation adapters live in
+ * `src/downstream/writing/` and `src/downstream/speaking/`. Feature modules
+ * deliberately own no adapter of their own — the source-boundary rule in
+ * AGENTS.md puts pure adapters in `src/downstream` rather than in a feature
+ * module.
+ */
 export interface GradingOrchestratorPort {
   execute<C extends BaseGradingCommand>(
     command: C,

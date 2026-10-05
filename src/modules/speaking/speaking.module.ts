@@ -37,6 +37,12 @@ const SPEAKING_AUDIO_DATABASE = Symbol('SPEAKING_AUDIO_DATABASE');
 
 type SpeakingAudioDatabase = SpeakingAudioQueryClient;
 
+// Grading for Speaking goes through the same shared
+// `GradingOrchestratorPort`/`GRADING_ORCHESTRATOR` declared and bound by the
+// Gateway module. This module's `infrastructure/` layer is only multipart
+// parsing and Audio asset storage; no Speaking-local grading adapter exists
+// — per-operation adapters live in `src/downstream/speaking/` by source
+// boundary (AGENTS.md, "Source boundaries").
 @Module({
   imports: [GatewayModule, IdentityModule, MeteringModule, SecretsModule],
   controllers: [
