@@ -85,6 +85,8 @@ function assertErrorCode(codes: readonly string[]): readonly string[] {
   ];
 }
 
+// Mirrors the shape pinned in `src/common/http/success-envelope.ts`; the
+// strings assert what the client must observe, not the builder itself.
 function assertEnvelope(operationId: string): readonly string[] {
   return [
     "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",

@@ -325,6 +325,18 @@ module.exports = {
       to: { path: '^src/modules/[^/]+/(infrastructure/|.*/infrastructure/)' },
     },
     {
+      name: 'no-business-module-owns-public-envelope',
+      severity: 'error',
+      comment:
+        'Public response shapes live in src/common; a business module must not define the success or error envelope itself.',
+      from: {
+        // Definition files must live at src/common/**; the interceptor and
+        // filter names do not match this exact-name pattern on purpose.
+        path: '^src/modules/.*/(success-envelope|error-envelope)\\.ts$',
+      },
+      to: { path: '^src/' },
+    },
+    {
       name: 'no-test-helpers-in-production-code',
       severity: 'error',
       comment:

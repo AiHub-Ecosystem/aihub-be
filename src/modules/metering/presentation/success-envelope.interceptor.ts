@@ -9,6 +9,10 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { type Observable, mergeMap } from 'rxjs';
 
 import { isOperationId } from '@/catalog/operation-id';
+import {
+  type SuccessEnvelope,
+  buildSuccessEnvelope,
+} from '@/common/http/success-envelope';
 import { isRequestId } from '@/common/request-context/request-id';
 import { completeRequestMetering } from '@/modules/metering/application/metering-completion';
 import {
@@ -32,21 +36,6 @@ interface DispatchResultLike {
   readonly models?: readonly MeteringModel[];
   readonly aiProcessingMs?: number;
   readonly idempotentReplay?: boolean;
-}
-
-interface SuccessEnvelope<TData> {
-  readonly data: TData;
-  readonly meta: {
-    readonly request_id: string;
-    readonly correlation_id?: string;
-    readonly service: string;
-    readonly operation: string;
-    readonly timing: {
-      readonly downstream_ms: number;
-      readonly gateway_overhead_ms: number;
-      readonly total_ms: number;
-    };
-  };
 }
 
 function isDispatchResult(value: unknown): value is DispatchResultLike {
@@ -115,17 +104,6 @@ export class SuccessEnvelopeInterceptor implements NestInterceptor {
         if (value.idempotentReplay === true) {
           reply.header('Idempotent-Replay', 'true');
         }
-        const meta = {
-          request_id: requestId,
-          ...(correlation === undefined ? {} : { correlation_id: correlation }),
-          service: value.operation.split('.')[0] ?? 'unknown',
-          operation: value.operation,
-          timing: {
-            downstream_ms: downstreamMs,
-            gateway_overhead_ms: Math.max(0, totalMs - downstreamMs),
-            total_ms: totalMs,
-          },
-        };
 
         // A request whose id never validated cannot be identified, so there is
         // nothing to write a record against; the envelope below still carries
@@ -143,7 +121,14 @@ export class SuccessEnvelopeInterceptor implements NestInterceptor {
           );
         }
 
-        return { data: value.data, meta };
+        return buildSuccessEnvelope({
+          data: value.data,
+          operation: value.operation,
+          downstreamMs,
+          totalMs,
+          requestId,
+          ...(correlation === undefined ? {} : { correlationId: correlation }),
+        });
       }),
     );
   }

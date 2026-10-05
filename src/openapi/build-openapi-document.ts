@@ -190,9 +190,10 @@ function errorResponseSchema(codes: readonly ErrorCode[]): TSchema {
 }
 
 /**
- * Mirrors `SuccessEnvelopeInterceptor`'s actual output field for field —
- * `correlation_id` is genuinely optional there (only present when the
- * client sent `X-Correlation-Id`), not merely undocumented.
+ * Mirrors the public success envelope built by
+ * `src/common/http/success-envelope.ts` field for field — `correlation_id`
+ * is genuinely optional there (only present when the client sent
+ * `X-Correlation-Id`), not merely undocumented.
  */
 function successEnvelopeSchema(dataSchema: TSchema): TSchema {
   return Type.Object(
