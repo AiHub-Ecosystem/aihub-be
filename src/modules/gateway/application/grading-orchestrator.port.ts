@@ -1,8 +1,5 @@
-import type {
-  SpeakingGradeInput,
-  SpeakingGradeJsonInput,
-  SpeakingGradeResponse,
-} from '@/contracts/speaking/grading';
+import type { OperationId } from '@/catalog/operation-id';
+import type { SpeakingGradeResponse } from '@/contracts/speaking/grading';
 import type {
   GradeResponse,
   GradeTask1Request,
@@ -38,31 +35,33 @@ export interface GradeTask2Command extends WritingCommand {
   readonly input: GradeTask2Request;
 }
 
-export interface GradeSpeakingCommand extends GradingRequestMetadata {
-  readonly operation: 'speaking.grading';
-  readonly input: SpeakingGradeInput;
-}
+/**
+ * The minimal shape every dispatch command satisfies. `OperationId` is the
+ * union of the operation keys in the catalog, so adding a catalog entry
+ * widens this automatically — no edit here.
+ */
+export type BaseGradingCommand = GradingRequestMetadata & {
+  readonly operation: OperationId;
+  readonly input: unknown;
+};
 
-export interface GradeSpeakingJsonCommand extends GradingRequestMetadata {
-  readonly operation: 'speaking.grading-json';
-  readonly input: SpeakingGradeJsonInput;
-}
-
-export type GradingCommand =
-  | GradeTask1Command
-  | GradeTask2Command
-  | GradeSpeakingCommand
-  | GradeSpeakingJsonCommand;
+/**
+ * Response family per operation, chosen structurally by the command's
+ * operation literal. Commands for a new operation extend `WritingCommand`
+ * or the speaking base shape and inherit the right family — this map is
+ * never edited when an operation is added.
+ */
+export type ResponseFor<C extends BaseGradingCommand> =
+  C['operation'] extends `writing.${string}`
+    ? GradeResponse
+    : C['operation'] extends `speaking.${string}`
+      ? SpeakingGradeResponse
+      : unknown;
 
 export interface GradingOrchestratorPort {
-  execute(command: GradeTask1Command): Promise<DispatchResult<GradeResponse>>;
-  execute(command: GradeTask2Command): Promise<DispatchResult<GradeResponse>>;
-  execute(
-    command: GradeSpeakingCommand,
-  ): Promise<DispatchResult<SpeakingGradeResponse>>;
-  execute(
-    command: GradeSpeakingJsonCommand,
-  ): Promise<DispatchResult<SpeakingGradeResponse>>;
+  execute<C extends BaseGradingCommand>(
+    command: C,
+  ): Promise<DispatchResult<ResponseFor<C>>>;
 }
 
 export const GRADING_ORCHESTRATOR = Symbol('GRADING_ORCHESTRATOR');

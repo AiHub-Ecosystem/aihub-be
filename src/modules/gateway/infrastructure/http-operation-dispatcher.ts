@@ -4,20 +4,11 @@ import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
 import type { ErrorCode } from '@/common/errors/error-code';
 import type { RequestContext } from '@/common/request-context/request-context';
-import type {
-  SpeakingGradeInput,
-  SpeakingGradeJsonInput,
-  SpeakingGradeResponse,
-} from '@/contracts/speaking/grading';
-import type {
-  GradeResponse,
-  GradeTask1Request,
-  GradeTask2Request,
-} from '@/contracts/writing/grading';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { InternalAIServiceResponse } from '@/downstream/downstream.types';
 import type { InternalTokenIssuerPort } from '@/modules/gateway/application/internal-token-issuer.port';
 import type {
+  DispatchOutputFor,
   DispatchResult,
   OperationDispatcherPort,
 } from '@/modules/gateway/application/operation-dispatcher.port';
@@ -148,7 +139,7 @@ function dispatchTimedOut(): AppError {
 export class HttpOperationDispatcher implements OperationDispatcherPort {
   // `unknown` on both sides is the one place a dispatch table for a
   // heterogeneous set of adapters has to erase the per-operation types the
-  // public `OperationDispatcherPort` overloads keep precise. It is populated
+  // public `OperationDispatcherPort` generic keeps precise. It is populated
   // solely from the constructor's own `adapters` array, so a lookup by
   // `operation` always returns the one adapter whose real input/output types
   // match that same literal — safe by construction, not by an unchecked
@@ -170,36 +161,11 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
     );
   }
 
-  // Repeats `OperationDispatcherPort`'s overloads here, immediately followed
-  // by the one broader implementation signature below — the standard
-  // TypeScript pattern for an overloaded method, so every external caller
-  // sees only the four precise signatures and the internal, type-erased
-  // implementation never leaks out as part of the public type.
-  dispatch(
-    operation: 'writing.task1.grade',
-    input: GradeTask1Request,
-    context: RequestContext,
-  ): Promise<DispatchResult<GradeResponse>>;
-  dispatch(
-    operation: 'writing.task2.grade',
-    input: GradeTask2Request,
-    context: RequestContext,
-  ): Promise<DispatchResult<GradeResponse>>;
-  dispatch(
-    operation: 'speaking.grading',
-    input: SpeakingGradeInput,
-    context: RequestContext,
-  ): Promise<DispatchResult<SpeakingGradeResponse>>;
-  dispatch(
-    operation: 'speaking.grading-json',
-    input: SpeakingGradeJsonInput,
-    context: RequestContext,
-  ): Promise<DispatchResult<SpeakingGradeResponse>>;
-  async dispatch(
-    operation: OperationId,
+  async dispatch<O extends OperationId>(
+    operation: O,
     input: unknown,
     context: RequestContext,
-  ): Promise<DispatchResult<unknown>> {
+  ): Promise<DispatchResult<DispatchOutputFor<O>>> {
     const adapter = this.adapters.get(operation);
     if (adapter === undefined) {
       throw unconfiguredOperation(operation);
@@ -281,6 +247,9 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
       }
 
       const telemetry = extractDownstreamTelemetry(response.body);
+      // The one place the dispatch table's type erasure surfaces as a cast:
+      // the adapter registered for this operation literal produced `data`,
+      // so its family matches `DispatchOutputFor<O>` by construction.
       return {
         operation,
         data: adapter.parseResponse(response),
@@ -292,7 +261,7 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
         ...(telemetry?.aiProcessingMs === undefined
           ? {}
           : { aiProcessingMs: telemetry.aiProcessingMs }),
-      };
+      } as DispatchResult<DispatchOutputFor<O>>;
     } catch (error) {
       if (
         sandboxRequest &&

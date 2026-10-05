@@ -11,7 +11,6 @@ import {
   GradeTask2RequestSchema,
 } from '@/contracts/writing/grading';
 import type { DownstreamId } from '@/downstream/downstream.types';
-import type { OperationId } from './operation-id';
 
 // 'organization' is not an identity scope here and is not coming back.
 // Identity scope describes which User Identity form an operation consumes, and
@@ -120,7 +119,11 @@ export const OPERATION_CATALOG = {
     requestSchema: SpeakingGradeJsonRequestSchema,
     responseContract: SpeakingGradeResponseSchema,
   },
-} as const satisfies Record<OperationId, OperationDef>;
+} as const;
+
+// OperationId is `keyof typeof OPERATION_CATALOG` (see operation-id.ts), so
+// a catalog entry is the single place an operation id is declared; a stale
+// id list cannot exist by construction.
 
 /**
  * The Scope vocabulary AIHUB publishes. Key creation validates against this so

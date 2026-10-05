@@ -1,15 +1,7 @@
 import type { OperationId } from '@/catalog/operation-id';
 import type { RequestContext } from '@/common/request-context/request-context';
-import type {
-  SpeakingGradeInput,
-  SpeakingGradeJsonInput,
-  SpeakingGradeResponse,
-} from '@/contracts/speaking/grading';
-import type {
-  GradeResponse,
-  GradeTask1Request,
-  GradeTask2Request,
-} from '@/contracts/writing/grading';
+import type { SpeakingGradeResponse } from '@/contracts/speaking/grading';
+import type { GradeResponse } from '@/contracts/writing/grading';
 import type {
   MeteringModel,
   MeteringUsage,
@@ -26,34 +18,26 @@ export interface DispatchResult<TOutput> {
 }
 
 /**
- * One overload per operation rather than a single generic signature: with
- * only four operations, this gives every call site full type safety (the
- * input and result are pinned to the literal operation string) without
- * needing schema-derived mapped types. The implementation's own signature is
- * necessarily broader than any one overload — that is where the type
- * erasure inherent to a dispatch table actually lives, not at any call site.
+ * Per-operation typing is one generic mapped by the operation literal, not
+ * one overload per operation: the literal selects the output family, and the
+ * input erases to `unknown` — the same erasure the adapter table already
+ * makes. Adding an operation never edits this file's shape; any operation id
+ * following the `writing.`/`speaking.` prefix convention inherits its output
+ * family automatically.
  */
+export type DispatchOutputFor<O extends OperationId> =
+  O extends `writing.${string}`
+    ? GradeResponse
+    : O extends `speaking.${string}`
+      ? SpeakingGradeResponse
+      : unknown;
+
 export interface OperationDispatcherPort {
-  dispatch(
-    operation: 'writing.task1.grade',
-    input: GradeTask1Request,
+  dispatch<O extends OperationId>(
+    operation: O,
+    input: unknown,
     context: RequestContext,
-  ): Promise<DispatchResult<GradeResponse>>;
-  dispatch(
-    operation: 'writing.task2.grade',
-    input: GradeTask2Request,
-    context: RequestContext,
-  ): Promise<DispatchResult<GradeResponse>>;
-  dispatch(
-    operation: 'speaking.grading',
-    input: SpeakingGradeInput,
-    context: RequestContext,
-  ): Promise<DispatchResult<SpeakingGradeResponse>>;
-  dispatch(
-    operation: 'speaking.grading-json',
-    input: SpeakingGradeJsonInput,
-    context: RequestContext,
-  ): Promise<DispatchResult<SpeakingGradeResponse>>;
+  ): Promise<DispatchResult<DispatchOutputFor<O>>>;
 }
 
 export const OPERATION_DISPATCHER = Symbol('OPERATION_DISPATCHER');
