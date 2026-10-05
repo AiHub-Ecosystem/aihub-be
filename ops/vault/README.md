@@ -17,9 +17,10 @@ secret/aihub/{environment}/user-access-jwt
 secret/aihub/{environment}/database
 secret/aihub/{environment}/redis
 secret/aihub/{environment}/sandbox-assertion
+secret/aihub/{environment}/email-outbox
 ```
 
-The first five bundles are part of the V1 runtime-secret document. The
+The first six bundles are part of the V1 runtime-secret document. The
 database, Redis, and sandbox-assertion bundles are rendered into a separate
 connection document because they are process bootstrap configuration. The
 Speaking question catalog uses the SeaweedFS bundle to create short-lived read
@@ -39,8 +40,9 @@ vault policy write aihub-production-runtime ops/vault/policies/aihub-production-
 
 The repository also includes an explicit operator-only provisioning helper. It
 expects a mode-700 directory with `ai-speaking.json`, `ai-writing.json`,
-`seaweedfs.json`, `resend.json`, and `user-access-jwt.json` containing only the flat bundle keys. It passes file paths to
-the Vault CLI, never secret values:
+`seaweedfs.json`, `resend.json`, `user-access-jwt.json`, and
+`email-outbox.json` containing only the flat bundle keys. It passes file paths
+to the Vault CLI, never secret values:
 
 ```powershell
 $env:AIHUB_VAULT_PROVISION_ALLOW = 'true'
