@@ -47,6 +47,9 @@ export class InMemoryVerificationTokenAdapter
       consumedReason: undefined,
       signedInAt: undefined,
     });
+    if (input.emailDelivery !== undefined) {
+      this.state.emailDeliveryRequests.push(input.emailDelivery);
+    }
     return { email: account.email };
   }
 

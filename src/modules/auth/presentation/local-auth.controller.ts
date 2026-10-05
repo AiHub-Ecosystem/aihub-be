@@ -48,6 +48,7 @@ interface RegisterEnvelope {
     readonly email: string;
     readonly username: string;
     readonly status: 'pending_verification';
+    readonly email_delivery_status: 'queued';
   };
   readonly meta: { readonly request_id: string };
 }
@@ -139,7 +140,12 @@ export class LocalAuthController {
       input.browser_binding,
     );
     return {
-      data: result,
+      data: {
+        email: result.email,
+        username: result.username,
+        status: result.status,
+        email_delivery_status: result.emailDeliveryStatus,
+      },
       meta: { request_id: String(request.id) },
     };
   }
