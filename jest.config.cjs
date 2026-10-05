@@ -22,7 +22,7 @@ module.exports = {
   // own module loader does not, so SWC compiles it to CommonJS here. The two
   // alternatives cover pnpm's store path and the linked path (ADR-0047).
   transformIgnorePatterns: [
-    '/node_modules/(?!\\.pnpm/@nestjs\\+|.pnpm/jose|@nestjs/|jose/)',
+    '/node_modules/(?!\\.pnpm/@nestjs\\+|\\.pnpm/@fastify\\+|\\.pnpm/jose|@nestjs/|@fastify/|jose/|.pnpm/cookie|cookie/)',
   ],
   collectCoverageFrom: ['<rootDir>/src/**/*.ts'],
   clearMocks: true,
