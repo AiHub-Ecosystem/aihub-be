@@ -1,7 +1,15 @@
 import type { OperationId } from '@/catalog/operation-id';
 import type { RequestContext } from '@/common/request-context/request-context';
-import type { SpeakingGradeResponse } from '@/contracts/speaking/grading';
-import type { GradeResponse } from '@/contracts/writing/grading';
+import type {
+  SpeakingGradeInput,
+  SpeakingGradeJsonInput,
+  SpeakingGradeResponse,
+} from '@/contracts/speaking/grading';
+import type {
+  GradeResponse,
+  GradeTask1Request,
+  GradeTask2Request,
+} from '@/contracts/writing/grading';
 import type {
   MeteringModel,
   MeteringUsage,
@@ -18,26 +26,33 @@ export interface DispatchResult<TOutput> {
 }
 
 /**
- * Per-operation typing is one generic mapped by the operation literal, not
- * one overload per operation: the literal selects the output family, and the
- * input erases to `unknown` — the same erasure the adapter table already
- * makes. Adding an operation never edits this file's shape; any operation id
- * following the `writing.`/`speaking.` prefix convention inherits its output
- * family automatically.
+ * Request/response types per operation. Both are pinned by the operation
+ * literal; an id that follows the `writing.`/`speaking.` prefix convention
+ * maps to that family's response type, and anything else yields `never` so
+ * an undispatched operation cannot be given a meaningful result type.
  */
-export type DispatchOutputFor<O extends OperationId> =
-  O extends `writing.${string}`
-    ? GradeResponse
-    : O extends `speaking.${string}`
-      ? SpeakingGradeResponse
-      : unknown;
+export type RequestFor<K extends OperationId> = K extends 'writing.task1.grade'
+  ? GradeTask1Request
+  : K extends 'writing.task2.grade'
+    ? GradeTask2Request
+    : K extends 'speaking.grading'
+      ? SpeakingGradeInput
+      : K extends 'speaking.grading-json'
+        ? SpeakingGradeJsonInput
+        : never;
+
+export type ResponseFor<K extends OperationId> = K extends `writing.${string}`
+  ? GradeResponse
+  : K extends `speaking.${string}`
+    ? SpeakingGradeResponse
+    : never;
 
 export interface OperationDispatcherPort {
   dispatch<O extends OperationId>(
     operation: O,
-    input: unknown,
+    input: RequestFor<O>,
     context: RequestContext,
-  ): Promise<DispatchResult<DispatchOutputFor<O>>>;
+  ): Promise<DispatchResult<ResponseFor<O>>>;
 }
 
 export const OPERATION_DISPATCHER = Symbol('OPERATION_DISPATCHER');

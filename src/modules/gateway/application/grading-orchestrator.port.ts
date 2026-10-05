@@ -1,12 +1,14 @@
 import type { OperationId } from '@/catalog/operation-id';
-import type { SpeakingGradeResponse } from '@/contracts/speaking/grading';
 import type {
-  GradeResponse,
   GradeTask1Request,
   GradeTask2Request,
 } from '@/contracts/writing/grading';
 import type { IdempotencyBackgroundLifecycle } from '@/modules/idempotency/application/idempotency-service.port';
-import type { DispatchResult } from './operation-dispatcher.port';
+import {
+  type DispatchResult,
+  type RequestFor,
+  type ResponseFor,
+} from './operation-dispatcher.port';
 
 export interface GradingRequestMetadata {
   readonly requestId: string;
@@ -42,26 +44,17 @@ export interface GradeTask2Command extends WritingCommand {
  */
 export type BaseGradingCommand = GradingRequestMetadata & {
   readonly operation: OperationId;
-  readonly input: unknown;
+  readonly input: RequestFor<OperationId>;
 };
 
-/**
- * Response family per operation, chosen structurally by the command's
- * operation literal. Commands for a new operation extend `WritingCommand`
- * or the speaking base shape and inherit the right family — this map is
- * never edited when an operation is added.
- */
-export type ResponseFor<C extends BaseGradingCommand> =
-  C['operation'] extends `writing.${string}`
-    ? GradeResponse
-    : C['operation'] extends `speaking.${string}`
-      ? SpeakingGradeResponse
-      : unknown;
+export type ResponseForCommand<C extends BaseGradingCommand> = ResponseFor<
+  C['operation']
+>;
 
 export interface GradingOrchestratorPort {
   execute<C extends BaseGradingCommand>(
     command: C,
-  ): Promise<DispatchResult<ResponseFor<C>>>;
+  ): Promise<DispatchResult<ResponseForCommand<C>>>;
 }
 
 export const GRADING_ORCHESTRATOR = Symbol('GRADING_ORCHESTRATOR');

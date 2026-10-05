@@ -15,7 +15,11 @@ import {
   GradingOrchestrator,
 } from './grading-orchestrator';
 import type { GradingRequestMetadata } from './grading-orchestrator.port';
-import type { OperationDispatcherPort } from './operation-dispatcher.port';
+import {
+  type DispatchResult,
+  type RequestFor,
+  type ResponseFor,
+} from './operation-dispatcher.port';
 
 const writingData: GradeResponse = {
   overall_band: 7,
@@ -54,7 +58,7 @@ function fixture(catalog: CatalogLookup) {
   const dispatcher = {
     dispatch: async <O extends OperationId>(
       operation: O,
-      input: unknown,
+      input: RequestFor<O>,
       context: RequestContext,
     ) => {
       calls.push({ operation, input, context });
@@ -62,9 +66,9 @@ function fixture(catalog: CatalogLookup) {
         operation,
         data: operation.startsWith('writing.') ? writingData : speakingData,
         downstreamMs: 23,
-      };
+      } as DispatchResult<ResponseFor<O>>;
     },
-  } as OperationDispatcherPort;
+  };
   const idempotency: IdempotencyServicePort = {
     async execute<T>(
       input: IdempotencyExecutionInput,

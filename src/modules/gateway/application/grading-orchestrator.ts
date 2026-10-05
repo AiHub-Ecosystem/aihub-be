@@ -24,11 +24,13 @@ import type {
   GradeTask1Command,
   GradeTask2Command,
   GradingOrchestratorPort,
-  ResponseFor,
+  ResponseForCommand,
 } from './grading-orchestrator.port';
-import type {
-  DispatchResult,
-  OperationDispatcherPort,
+import {
+  type DispatchResult,
+  type OperationDispatcherPort,
+  type RequestFor,
+  type ResponseFor,
 } from './operation-dispatcher.port';
 
 type WritingCommand = GradeTask1Command | GradeTask2Command;
@@ -98,13 +100,16 @@ function decodeWritingReplay(
   );
 }
 
-function decodeStoredResult(
+function decodeStoredResult<K extends OperationId>(
   value: unknown,
-  operation: OperationId,
+  operation: K,
   responseContract: OperationDef['responseContract'],
-): DispatchResult<unknown> {
+): DispatchResult<ResponseFor<K>> {
   if (operation.startsWith('writing.')) {
-    return decodeWritingReplay(value, operation as WritingCommand['operation']);
+    return decodeWritingReplay(
+      value,
+      operation as WritingCommand['operation'],
+    ) as DispatchResult<ResponseFor<K>>;
   }
 
   if (
@@ -116,6 +121,8 @@ function decodeStoredResult(
     throw new Error(`stored ${operation} grading response is malformed`);
   }
 
+  // `value.data` just passed `Value.Check` against the operation's own
+  // response contract, so the parse cannot produce a shape outside it.
   return withDispatchTelemetry(
     {
       operation,
@@ -123,7 +130,7 @@ function decodeStoredResult(
       downstreamMs: value.downstreamMs as number,
     },
     readDispatchTelemetry(value),
-  );
+  ) as DispatchResult<ResponseFor<K>>;
 }
 
 export class GradingOrchestrator implements GradingOrchestratorPort {
@@ -135,7 +142,7 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
 
   async execute<C extends BaseGradingCommand>(
     command: C,
-  ): Promise<DispatchResult<ResponseFor<C>>> {
+  ): Promise<DispatchResult<ResponseForCommand<C>>> {
     const def = this.catalog[command.operation];
     if (def === undefined) {
       throw new Error(`Unknown operation: ${command.operation}`);
@@ -158,14 +165,19 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
       signal: command.signal,
     });
 
-    const dispatch = (work?: IdempotencyWorkContext) =>
+    const dispatch = (
+      work?: IdempotencyWorkContext,
+    ): Promise<DispatchResult<ResponseForCommand<C>>> =>
       this.dispatcher.dispatch(
         command.operation,
-        command.input,
+        // TS cannot correlate a generic command's `operation` with its own
+        // `input`; the constraint on `BaseGradingCommand` already ties them,
+        // so this narrows the union one generic command carries.
+        command.input as RequestFor<C['operation']>,
         work === undefined
           ? context
           : { ...context, signal: work.signal, deadlineAt: work.deadlineAt },
-      ) as Promise<DispatchResult<ResponseFor<C>>>;
+      ) as Promise<DispatchResult<ResponseForCommand<C>>>;
 
     if (def.idempotency !== 'required') {
       return dispatch();
@@ -192,7 +204,7 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
           value,
           command.operation,
           def.responseContract,
-        ) as DispatchResult<ResponseFor<C>>,
+        ) as DispatchResult<ResponseForCommand<C>>,
     );
 
     return execution.replay

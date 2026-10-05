@@ -8,9 +8,10 @@ import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { InternalAIServiceResponse } from '@/downstream/downstream.types';
 import type { InternalTokenIssuerPort } from '@/modules/gateway/application/internal-token-issuer.port';
 import type {
-  DispatchOutputFor,
   DispatchResult,
   OperationDispatcherPort,
+  RequestFor,
+  ResponseFor,
 } from '@/modules/gateway/application/operation-dispatcher.port';
 import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import { extractDownstreamTelemetry } from '@/modules/metering/application/metering.telemetry';
@@ -163,9 +164,9 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
 
   async dispatch<O extends OperationId>(
     operation: O,
-    input: unknown,
+    input: RequestFor<O>,
     context: RequestContext,
-  ): Promise<DispatchResult<DispatchOutputFor<O>>> {
+  ): Promise<DispatchResult<ResponseFor<O>>> {
     const adapter = this.adapters.get(operation);
     if (adapter === undefined) {
       throw unconfiguredOperation(operation);
@@ -249,7 +250,7 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
       const telemetry = extractDownstreamTelemetry(response.body);
       // The one place the dispatch table's type erasure surfaces as a cast:
       // the adapter registered for this operation literal produced `data`,
-      // so its family matches `DispatchOutputFor<O>` by construction.
+      // so its shape matches `ResponseFor<O>` by construction.
       return {
         operation,
         data: adapter.parseResponse(response),
@@ -261,7 +262,7 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
         ...(telemetry?.aiProcessingMs === undefined
           ? {}
           : { aiProcessingMs: telemetry.aiProcessingMs }),
-      } as DispatchResult<DispatchOutputFor<O>>;
+      } as DispatchResult<ResponseFor<O>>;
     } catch (error) {
       if (
         sandboxRequest &&

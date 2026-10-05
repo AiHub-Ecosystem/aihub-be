@@ -35,7 +35,15 @@ describe('HttpOperationDispatcher fifth-operation extensibility', () => {
 
     const result = await dispatcher.dispatch(
       'writing.echo.grade' as OperationId,
-      { essay: 'x' },
+      // The fifth operation's id is not yet a member of the catalog's
+      // operation union, so the union-wide input type must be satisfied by a
+      // real member's shape; the adapter under test replaces the body anyway.
+      {
+        question: 'Describe the chart.',
+        chart_type: 'Bar Chart',
+        essay: 'A clear essay.',
+        image_url: 'https://example.com/chart.png',
+      },
       createRequestContext({
         requestId: 'req-fifth',
         receivedAt: new Date(),
