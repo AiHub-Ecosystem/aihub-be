@@ -134,3 +134,16 @@ for an operator command that must report whether the purge happened; and the
 adapter's 100 ms timeout is tuned for the gateway, not for an operator
 reaching Redis through a tunnel. Routing the purge through the port would have
 changed what the operator is told, which the Operator surface cannot do.
+
+## Update: explicit TypeScript public facades
+
+The remaining cross-module and CLI imports were moved behind `public/` files
+owned by each module. These facades publish the small set of pure functions,
+operation vocabulary, and operator-facing use cases that other modules and
+commands need. The gateway's quota adapter now consumes a dedicated
+`quota-reconciliation.port.ts` contract. Runtime behavior did not change.
+
+The dependency rule discovers files under `public/` from the source tree and
+requires consumers to import those facades. It still reports direct imports of
+private module paths. The current tree has no `no-cross-module-internal-import`
+or `no-cli-module-internal-import` warnings.

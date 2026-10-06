@@ -35,6 +35,7 @@ If an older architecture draft conflicts with an implementation spec, record the
 
 - AIHUB is one NestJS/Fastify application, not a monorepo.
 - Business modules use `presentation -> application -> domain`; infrastructure implements application ports and points inward.
+- Cross-module TypeScript APIs that are not Nest providers live under the owning module's `public/` facades. Consumers import those facades instead of implementation paths.
 - `domain` has no framework, transport, environment, database, cache, or downstream imports.
 - `src/common` contains only genuinely cross-cutting primitives. `src/catalog` owns operation metadata; `src/contracts` owns boundary schemas; `src/downstream` owns pure mappers and dispatch seams.
 - Keep constants and configuration beside the application use case or layer that owns them; group related values by policy, and extract them only when independently reused. Avoid generic `constants` files and never move business policy into `src/common` or `domain`.

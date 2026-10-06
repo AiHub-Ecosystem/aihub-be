@@ -1,3 +1,4 @@
+import { createPostgresUsageRetentionRepository } from '@/modules/metering/infrastructure/postgres-usage-retention.repository';
 import {
   USAGE_PRUNE_BATCH_SIZE,
   UsagePruneError,
@@ -6,8 +7,7 @@ import {
   type UsageRetentionPort,
   UsageRetentionService,
   type UsageRetentionSummary,
-} from '@/modules/metering/application/usage-retention';
-import { createPostgresUsageRetentionRepository } from '@/modules/metering/infrastructure/postgres-usage-retention.repository';
+} from '@/modules/metering/public/usage-retention';
 
 export interface UsagePruneCliInput {
   readonly databaseUrl: string;

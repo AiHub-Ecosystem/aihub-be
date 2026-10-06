@@ -1,4 +1,5 @@
 import { parseUtcTimestamp } from '@/common/time/parse-utc-timestamp';
+import { createPostgresUsageCompletenessReportRepository } from '@/modules/metering/infrastructure/postgres-usage-completeness-report.repository';
 import {
   type UsageCompletenessReport,
   UsageCompletenessReportService,
@@ -7,12 +8,11 @@ import {
   type UsageReportOperationDefinition,
   type UsageReportRepositoryPort,
   type UsageReportWindow,
-} from '@/modules/metering/application/usage-completeness-report';
+} from '@/modules/metering/public/usage-completeness-report';
 import {
   UsagePruneError,
   calculateUsageRetentionCutoff,
-} from '@/modules/metering/application/usage-retention';
-import { createPostgresUsageCompletenessReportRepository } from '@/modules/metering/infrastructure/postgres-usage-completeness-report.repository';
+} from '@/modules/metering/public/usage-retention';
 
 export interface UsageReportCliInput {
   readonly databaseUrl: string;

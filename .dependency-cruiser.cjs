@@ -25,27 +25,29 @@ function isSharedPrimitive(file) {
  *      extends the shared request type every module already agrees on.
  *   4. A file whose module exports a symbol it declares, which is how NestJS
  *      publishes a guard or interceptor to the modules that compose it.
- *   5. A file that declares a Nest decorator, which composes at import time
+ *   5. An explicit `public/` facade, which declares the module's plain
+ *      TypeScript API for values that are not Nest providers.
+ *   6. A file that declares a Nest decorator, which composes at import time
  *      and so can never travel through the DI container.
  *
  * `from.path` captures the module name as group 1 and `to.path` refers back to
  * it as `$1` inside a negative lookahead, so one rule expresses "any module to
  * a different module" without generating a rule per module pair. The seam
- * patterns in `to.pathNot` exempt the module file, application ports, and
- * shared primitives of whichever module the target turns out to be.
+ * patterns in `to.pathNot` exempt the module file, application ports,
+ * explicit `public/` facades, and shared primitives of whichever module the
+ * target turns out to be.
  *
- * This rule is `warn`, not `error`. It reads each module's `exports:` array so
- * the Nest seam is exempt, but dependency-cruiser matches by path, so the
- * exemption is the whole file rather than the one exported symbol. What
- * remains are imports of pure functions and module-owned values that no module
- * publishes, and fixing those means changing code rather than a rule.
+ * This rule is `warn`, not `error`, because Nest exports are matched by file:
+ * the exemption covers a file declaring an exported symbol, not only that
+ * symbol. Plain TypeScript APIs are published through explicit `public/`
+ * facades instead.
  */
 function crossModuleRule() {
   return {
     name: 'no-cross-module-internal-import',
     severity: 'warn',
     comment:
-      "A business module depends on another through its public seam: the module file, an application port, or a primitive that declares 'module fastify'. Importing another module's internals couples two modules that must be able to change apart. Reported as a warning because Nest module 'exports:' arrays are a real seam this path-based rule cannot see yet (ADR-0066).",
+      "A business module imports another module's internal path. Use the module file, an application port, an explicit public/ facade, a Nest export, decorator, or shared request primitive (ADR-0066).",
     from: {
       // Group 1 is the importing module's name.
       path: '^src/modules/([^/]+)/',
@@ -58,6 +60,7 @@ function crossModuleRule() {
         '^src/modules/[^/]+/(application/|.*/application/)[^/]*[.]port[.]ts$',
         ...sharedPrimitivePaths(),
         ...nestExportPaths(),
+        ...publicModuleApiPaths(),
         ...nestDecoratorPaths(),
       ],
     },
@@ -72,16 +75,15 @@ function crossModuleRule() {
  * reach this tree and this rule does not report it either.
  *
  * What it does report is a command reaching past the seam into a module's
- * application logic or domain. That logic belongs behind a port or in a
- * surface the module publishes, and a command using it as a library is free
- * to drift from the rule the module owns.
+ * application logic or domain. That logic belongs behind a port or in an
+ * explicit public/ facade the module publishes.
  */
 function cliRule() {
   return {
     name: 'no-cli-module-internal-import',
     severity: 'warn',
     comment:
-      "An Operator command reaches a module through its public seam: the module file, an application port, a shared primitive, an exported symbol, or a decorator. Constructing infrastructure is this tree's job as a composition root, but importing a module's application logic or domain is not (ADR-0066).",
+      "An Operator command imports a module's internal path. Use an application port or explicit public/ facade; constructing infrastructure remains the CLI composition root's job (ADR-0066).",
     from: {
       path: '^src/cli/',
       pathNot: '[.]spec[.]ts$',
@@ -94,6 +96,7 @@ function cliRule() {
         '^src/modules/[^/]+/(application/|.*/application/)[^/]*[.]port[.]ts$',
         ...sharedPrimitivePaths(),
         ...nestExportPaths(),
+        ...publicModuleApiPaths(),
         ...nestDecoratorPaths(),
       ],
     },
@@ -118,6 +121,29 @@ function nestDecoratorPaths() {
         /export function \w+\([^)]*\):\s*(Class|Method)Decorator\b/.test(
           readFileSync(join(entry.parentPath, entry.name), 'utf8'),
         ),
+    )
+    .map(
+      (entry) =>
+        `^${relative(process.cwd(), join(entry.parentPath, entry.name))
+          .split(/[\\/]/)
+          .join('/')
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+    );
+}
+
+/**
+ * Plain TypeScript contracts and functions that consumers need are published
+ * through files in `public/`. Unlike a maintained allowlist, the directory is
+ * the module's explicit API surface and callers must import that facade.
+ */
+function publicModuleApiPaths() {
+  return readdirSync(modulesDirectory, { recursive: true, withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        entry.name.endsWith('.ts') &&
+        !entry.name.endsWith('.spec.ts') &&
+        entry.parentPath.split(/[\\/]/).includes('public'),
     )
     .map(
       (entry) =>

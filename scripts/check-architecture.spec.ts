@@ -28,10 +28,9 @@ function matches(pattern: string | string[], path: string): boolean {
  * pins the effect; these cases pin which paths the rule reads as seam.
  */
 describe('cross-module import rule', () => {
-  it('is reported rather than enforced until it can read a Nest exports array', () => {
-    // ADR-0066: the graded-request chain composes guards that their owning
-    // module exports, so forbidding this rule would reject a deliberate
-    // construction until the rule can tell an export from a private file.
+  it('keeps future path-based findings visible without blocking valid seams', () => {
+    // Nest exports are exempt by declaring file, so keep the rule warning-only
+    // while preserving the broad guard/interceptor seam.
     expect(crossModuleRule?.severity).toBe('warn');
   });
 
@@ -149,11 +148,8 @@ describe('cross-module import rule over the real tree', () => {
       }));
   });
 
-  it('reports the 10 cross-module imports ADR-0066 records', () => {
-    // Ten of the 21 the rule first reported are seam: six the graded-request
-    // chain composes from a module's `exports:`, and four decorator files that
-    // compose at import time and can never travel through DI.
-    expect(violations).toHaveLength(10);
+  it('reports no imports of another module internal files', () => {
+    expect(violations).toEqual([]);
   });
 
   it('reports no guard, interceptor, or decorator left', () => {
@@ -213,6 +209,17 @@ describe('cross-module import rule over the real tree', () => {
     ).toBe(false);
   });
 
+  it('exempts only explicit public facades, not the implementation behind them', () => {
+    const pathNot = crossModuleRule?.to.pathNot ?? [];
+
+    expect(
+      matches(pathNot, 'src/modules/metering/public/usage-retention.ts'),
+    ).toBe(true);
+    expect(
+      matches(pathNot, 'src/modules/metering/application/usage-retention.ts'),
+    ).toBe(false);
+  });
+
   it('reports none of them from a spec file', () => {
     // Spec files reach into other modules' `testing/` folders on purpose, so
     // dropping the from-side exclusion raises this to 43.
@@ -237,8 +244,8 @@ describe('cross-module import rule over the real tree', () => {
    * matching fails silently in the direction that hides a real coupling.
    */
   it('reports no command binding infrastructure', () => {
-    // 14 edges today. Constructing the Postgres client and repository is this
-    // tree's job, the same job `*.module.ts` does and that rule also exempts.
+    // Constructing the Postgres client and repository is this tree's job, the
+    // same job `*.module.ts` does and that rule also exempts.
     expect(
       cliViolations.filter((edge) => edge.to.includes('/infrastructure/')),
     ).toEqual([]);
@@ -251,20 +258,8 @@ describe('cross-module import rule over the real tree', () => {
     ).toEqual([]);
   });
 
-  it('reports the 4 commands using module logic as a library', () => {
-    // No module wires these services, so nothing publishes them and a command
-    // is free to drift from the rule the module owns. Publishing them is the
-    // fix, and it changes code rather than the rule.
-    expect(cliViolations).toHaveLength(4);
-    expect(
-      [
-        ...new Set(cliViolations.map((edge) => edge.to.split('/').pop())),
-      ].sort(),
-    ).toEqual([
-      'quota-reconciliation.ts',
-      'usage-completeness-report.ts',
-      'usage-retention.ts',
-    ]);
+  it('reports no command importing unpublished application logic', () => {
+    expect(cliViolations).toEqual([]);
   });
 
   it('reports none of them from a cli spec file', () => {
@@ -273,11 +268,15 @@ describe('cross-module import rule over the real tree', () => {
     ).toEqual([]);
   });
 
-  it('leaves the module-to-module count untouched', () => {
-    // Both rules read the same seam helpers, so changing what counts as
-    // published moves both counts. This pins that adding the second rule did
-    // not widen the first.
-    expect(violations).toHaveLength(10);
+  it('recognizes published module facades for the CLI boundary too', () => {
+    const pathNot = cliRule?.to.pathNot ?? [];
+
+    expect(
+      matches(pathNot, 'src/modules/metering/public/usage-retention.ts'),
+    ).toBe(true);
+    expect(
+      matches(pathNot, 'src/modules/metering/application/usage-retention.ts'),
+    ).toBe(false);
   });
 
   it('reads the cli rule from the config', () => {

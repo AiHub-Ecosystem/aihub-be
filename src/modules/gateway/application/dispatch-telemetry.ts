@@ -3,7 +3,7 @@ import {
   normalizeMeteringModels,
   normalizeMeteringTelemetry,
   normalizeMeteringUsage,
-} from '@/modules/metering/application/metering.telemetry';
+} from '@/modules/metering/public/telemetry';
 import type { DispatchResult } from './operation-dispatcher.port';
 
 function isRecord(value: unknown): value is Record<string, unknown> {

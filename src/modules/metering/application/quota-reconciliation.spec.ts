@@ -1,13 +1,15 @@
 import {
   InvalidQuotaReconciliationMonthError,
-  type QuotaCounterOverwritePort,
-  type QuotaCounterOverwriteRequest,
-  type QuotaOrganizationSnapshot,
   type QuotaReconciliationEvent,
   QuotaReconciliationService,
-  type QuotaReconciliationSnapshotPort,
-  type QuotaReconciliationTarget,
 } from './quota-reconciliation';
+import type {
+  QuotaCounterOverwritePort,
+  QuotaCounterOverwriteRequest,
+  QuotaOrganizationSnapshot,
+  QuotaReconciliationSnapshotPort,
+  QuotaReconciliationTarget,
+} from './quota-reconciliation.port';
 
 class FakeSnapshotPort implements QuotaReconciliationSnapshotPort {
   readonly targets: QuotaReconciliationTarget[] = [];

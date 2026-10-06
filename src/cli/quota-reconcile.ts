@@ -2,15 +2,15 @@ import {
   type RedisQuotaReconciliationClient,
   RedisQuotaReconciliationCounter,
 } from '@/modules/gateway/infrastructure/redis-quota-reconciliation.counter';
+import { createPostgresQuotaReconciliationRepository } from '@/modules/metering/infrastructure/postgres-quota-reconciliation.repository';
 import {
   type QuotaReconciliationEvent,
   QuotaReconciliationService,
   type QuotaReconciliationSummary,
-} from '@/modules/metering/application/quota-reconciliation';
-import { createPostgresQuotaReconciliationRepository } from '@/modules/metering/infrastructure/postgres-quota-reconciliation.repository';
+} from '@/modules/metering/public/quota-reconciliation';
 import Redis from 'ioredis';
 
-export { parseTargetMonth } from '@/modules/metering/application/quota-reconciliation';
+export { parseTargetMonth } from '@/modules/metering/public/quota-reconciliation';
 
 interface QuotaReconciliationCliInput {
   readonly databaseUrl: string;

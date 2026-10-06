@@ -14,7 +14,7 @@ import type {
   ResponseFor,
 } from '@/modules/gateway/application/operation-dispatcher.port';
 import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
-import { extractDownstreamTelemetry } from '@/modules/metering/application/metering.telemetry';
+import { extractDownstreamTelemetry } from '@/modules/metering/public/telemetry';
 import {
   type DownstreamHttpClient,
   isDefinitelyNotDispatched,

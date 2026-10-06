@@ -25,14 +25,14 @@ import {
   type CreateOrganizationInvitationResponse,
   type ListOpenOrganizationInvitationsResponse,
 } from '@/contracts/organization/invitation';
-import { normalizeEmail } from '@/modules/auth/domain/local-auth';
 import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
-import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '@/modules/idempotency/application/idempotency-operation';
+import { normalizeEmail } from '@/modules/auth/public/local-auth';
 import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyServicePort,
 } from '@/modules/idempotency/application/idempotency-service.port';
-import { resolveIdempotencyKey } from '@/modules/idempotency/presentation/idempotency-key';
+import { resolveIdempotencyKey } from '@/modules/idempotency/public/idempotency-key';
+import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '@/modules/idempotency/public/idempotency-operation';
 import {
   ACCEPT_ORGANIZATION_INVITATION,
   type AcceptOrganizationInvitationPort,

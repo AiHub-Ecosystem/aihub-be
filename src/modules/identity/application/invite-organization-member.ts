@@ -3,7 +3,7 @@ import { invalidRequest } from '@/common/errors/invalid-request';
 import type { IdMinter } from '@/common/ids/prefixed-id';
 import type { RequestContext } from '@/common/request-context/request-context';
 import { type AuthRateLimiterPort } from '@/modules/auth/application/auth-rate-limiter.port';
-import { normalizeEmail } from '@/modules/auth/domain/local-auth';
+import { normalizeEmail } from '@/modules/auth/public/local-auth';
 
 import type { OrganizationInvitationPort } from './organization-invitation.port';
 import type { OrganizationInviteTokenPort } from './organization-invite-token.port';

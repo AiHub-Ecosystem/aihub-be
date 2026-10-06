@@ -24,12 +24,12 @@ import {
   type RenameOrganizationResponse,
 } from '@/contracts/organization/organization';
 import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
-import { ORGANIZATION_CREATE_OPERATION } from '@/modules/idempotency/application/idempotency-operation';
 import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyServicePort,
 } from '@/modules/idempotency/application/idempotency-service.port';
-import { resolveIdempotencyKey } from '@/modules/idempotency/presentation/idempotency-key';
+import { resolveIdempotencyKey } from '@/modules/idempotency/public/idempotency-key';
+import { ORGANIZATION_CREATE_OPERATION } from '@/modules/idempotency/public/idempotency-operation';
 import type { CreatedOrganization } from '@/modules/identity/application/create-organization';
 import {
   CREATE_ORGANIZATION,

@@ -23,7 +23,7 @@ import {
 import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
 import { getConcurrencyBackgroundLifecycle } from '@/modules/gateway/presentation/concurrency-permit';
 import { GradedRequest } from '@/modules/gateway/presentation/graded-request.decorator';
-import { resolveIdempotencyKey } from '@/modules/idempotency/presentation/idempotency-key';
+import { resolveIdempotencyKey } from '@/modules/idempotency/public/idempotency-key';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
