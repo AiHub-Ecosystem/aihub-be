@@ -969,6 +969,33 @@ describe('email outbox dispatch poller', () => {
       expect(await failedCountFor('verification_email')).toBe(before + 1);
     });
 
+    it('gives up a request whose three attempts were all reserved and none recorded an outcome', async () => {
+      // A process that died after each reservation, before any provider outcome
+      // was written. Nothing ever set an error code, and the row must still not
+      // be left queued with its ciphertext and no alert.
+      const seeded = await seedRequest();
+      await pool.query(
+        `UPDATE email_delivery_requests
+         SET attempts = 3, last_attempt_at = $2, last_error_code = NULL,
+             lease_owner = NULL, lease_expires_at = NULL
+         WHERE id = $1`,
+        [seeded.id, new Date(NOW.getTime() - 10 * MINUTE)],
+      );
+      const before = await failedCountFor('verification_email');
+      const sender = new RecordingSender();
+
+      await poller(OWNER_B, sender, () => NOW).runOnce();
+
+      expect(sender.sends).toEqual([]);
+      expect(await rowOf(seeded.id)).toMatchObject({
+        status: 'failed',
+        attempts: 3,
+        last_error_code: 'outcome_unknown',
+        payload_ciphertext: null,
+      });
+      expect(await failedCountFor('verification_email')).toBe(before + 1);
+    });
+
     it('reports one terminal failure once when two instances reconcile it at the same time', async () => {
       const seeded = await exhaust(rejectingProvider());
       await pool.query(

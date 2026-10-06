@@ -159,6 +159,10 @@ const MARK_CANCELLED_SQL = `
  * It takes no lease, because there is no claimant to fence: the row is only
  * claimable once its lease lapsed, which is exactly the state that means nobody
  * is still working on it.
+ *
+ * It does not ask for prior error evidence. A process that dies after each of
+ * the three reservations leaves `last_error_code` NULL, and that row is exactly
+ * as stuck as one whose third outcome failed to commit.
  */
 const FAIL_EXHAUSTED_SQL = `
   UPDATE email_delivery_requests
@@ -167,7 +171,6 @@ const FAIL_EXHAUSTED_SQL = `
       completed_at = $1, lease_owner = NULL, lease_expires_at = NULL
   WHERE status = 'queued'
     AND attempts >= 3
-    AND last_error_code IS NOT NULL
     AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
   RETURNING id
 `;
