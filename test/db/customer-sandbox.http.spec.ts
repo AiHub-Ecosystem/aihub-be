@@ -16,6 +16,10 @@ import { migrateSandboxOrganization } from '@/cli/sandbox-control-plane-migratio
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import {
+  type RuntimeConnectionConfiguration,
+  appConfig,
+} from '@/config/runtime-configuration';
+import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
 } from '@/modules/auth/application/user-access-token.port';
@@ -23,6 +27,7 @@ import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
 import { generateApiKey } from '@/modules/identity/domain/api-key';
+import { RUNTIME_CONNECTION_CONFIGURATION } from '@/modules/secrets/application/runtime-connection-configuration.port';
 import {
   createSandboxTestPool,
   createSandboxTestRedis,
@@ -37,6 +42,7 @@ import {
 } from './tenant-isolation/fixtures';
 
 const ORGANIZATION_ID = 'org_sandbox_customer';
+const DEMO_ORGANIZATION_ID = 'org_sandbox_demo_config_test';
 const ASSERTION_ISSUER = 'https://identity.customer.test';
 const GRADE_PATH = '/v1/ielts/writing/task1/grade';
 const TASK2_PATH = '/v1/ielts/writing/task2/grade';
@@ -98,6 +104,18 @@ let sandbox: ReturnType<typeof createSandboxTestPool>;
 let redis: ReturnType<typeof createSandboxTestRedis>;
 let app: NestFastifyApplication;
 let controlPlaneApp: NestFastifyApplication;
+type MutableAppConfiguration = {
+  -readonly [Key in keyof ReturnType<typeof appConfig>]: ReturnType<
+    typeof appConfig
+  >[Key];
+};
+type MutableConnectionConfiguration = {
+  -readonly [Key in keyof RuntimeConnectionConfiguration]: RuntimeConnectionConfiguration[Key];
+};
+let appConfiguration: MutableAppConfiguration;
+let controlPlaneConfiguration: MutableAppConfiguration;
+let appConnectionConfiguration: MutableConnectionConfiguration;
+let controlPlaneConnectionConfiguration: MutableConnectionConfiguration;
 let apiKey: {
   readonly id: string;
   readonly raw: string;
@@ -112,14 +130,6 @@ let adminUserId: string;
 let memberUserId: string;
 
 beforeAll(async () => {
-  process.env.DATABASE_URL = sandboxTestDatabaseUrl();
-  process.env.REDIS_URL = sandboxTestRedisUrl();
-  process.env.AIHUB_PRODUCTION_HOST = 'api.production.test';
-  process.env.AIHUB_STAGING_HOST = 'api.staging.test';
-  process.env.AIHUB_DEVELOPMENT_HOST = 'api.development.test';
-  process.env.AIHUB_SANDBOX_HOST = 'api.sandbox.test';
-  delete process.env.AIHUB_SANDBOX_ORG_IDS;
-
   controlPlane = createTestPool();
   sandbox = createSandboxTestPool();
   redis = createSandboxTestRedis();
@@ -173,9 +183,6 @@ beforeAll(async () => {
   const controlPlaneReaderUrl = new URL(testDatabaseUrl());
   controlPlaneReaderUrl.username = controlPlaneReaderRole;
   controlPlaneReaderUrl.password = controlPlaneReaderPassword;
-  process.env.CONTROL_PLANE_READ_DATABASE_URL =
-    controlPlaneReaderUrl.toString();
-
   const identity = await createTenantIdentity(
     ASSERTION_ISSUER,
     'customer-sandbox-key',
@@ -216,9 +223,11 @@ beforeAll(async () => {
     );
   }
 
-  process.env.DATABASE_URL = testDatabaseUrl();
-  delete process.env.CONTROL_PLANE_DATABASE_URL;
-  delete process.env.CONTROL_PLANE_READ_DATABASE_URL;
+  controlPlaneConfiguration = createAppConfiguration();
+  controlPlaneConnectionConfiguration = createConnectionConfiguration(
+    testDatabaseUrl(),
+    controlPlaneReaderUrl.toString(),
+  );
   const verifier: UserAccessTokenVerifierPort = {
     verify: async (token) => ({
       userId: token.split('.')[0] ?? '',
@@ -235,6 +244,10 @@ beforeAll(async () => {
   const controlPlaneModule = await Test.createTestingModule({
     imports: [AppModule],
   })
+    .overrideProvider(appConfig.KEY)
+    .useValue(controlPlaneConfiguration)
+    .overrideProvider(RUNTIME_CONNECTION_CONFIGURATION)
+    .useValue(controlPlaneConnectionConfiguration)
     .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
     .useValue(verifier)
     .overrideProvider(USER_ACCOUNT_REPOSITORY)
@@ -263,10 +276,11 @@ beforeAll(async () => {
     hash: createHash('sha256').update(createdKey.api_key).digest('hex'),
   };
 
-  process.env.DATABASE_URL = sandboxTestDatabaseUrl();
-  delete process.env.CONTROL_PLANE_DATABASE_URL;
-  process.env.CONTROL_PLANE_READ_DATABASE_URL =
-    controlPlaneReaderUrl.toString();
+  appConfiguration = createAppConfiguration();
+  appConnectionConfiguration = createConnectionConfiguration(
+    sandboxTestDatabaseUrl(),
+    controlPlaneReaderUrl.toString(),
+  );
 
   downstreamCalls = 0;
   const downstreamStub = {
@@ -285,6 +299,10 @@ beforeAll(async () => {
     async close() {},
   } as unknown as DownstreamHttpClient;
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(appConfig.KEY)
+    .useValue(appConfiguration)
+    .overrideProvider(RUNTIME_CONNECTION_CONFIGURATION)
+    .useValue(appConnectionConfiguration)
     .overrideProvider(DownstreamHttpClient)
     .useValue(downstreamStub)
     .compile();
@@ -296,6 +314,32 @@ beforeAll(async () => {
   await app.init();
   await fastify.ready();
 });
+
+function createAppConfiguration(): MutableAppConfiguration {
+  return {
+    ...appConfig(),
+    NODE_ENV: 'test',
+    AIHUB_PRODUCTION_HOST: 'api.production.test',
+    AIHUB_STAGING_HOST: 'api.staging.test',
+    AIHUB_DEVELOPMENT_HOST: 'api.development.test',
+    AIHUB_SANDBOX_HOST: 'api.sandbox.test',
+    AIHUB_SANDBOX_ORG_IDS: undefined,
+  };
+}
+
+function createConnectionConfiguration(
+  databaseUrl: string,
+  controlPlaneReadDatabaseUrl: string,
+): MutableConnectionConfiguration {
+  return {
+    databaseUrl,
+    controlPlaneDatabaseUrl: testDatabaseUrl(),
+    controlPlaneReadDatabaseUrl,
+    redisUrl: sandboxTestRedisUrl(),
+    sandboxAssertionPrivateKey: undefined,
+    sandboxAssertionKeyId: undefined,
+  };
+}
 
 beforeEach(async () => {
   downstreamCalls = 0;
@@ -381,17 +425,17 @@ function grade(
 
 describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
   it('keeps the migrated demo key usable for assertion minting and Speaking', async () => {
-    const demoOrganizationId = `org_sandbox_demo_${ulid().toLowerCase()}`;
+    const demoOrganizationId = DEMO_ORGANIZATION_ID;
     const demoKey = generateApiKey(`ak_sandbox_demo_${ulid().toLowerCase()}`);
     const demoIdentity = await createTenantIdentity(
       'https://demo.identity.test',
       'demo-sandbox-http',
     );
     const demoPrivateKey = await exportPKCS8(demoIdentity.privateKey);
-    const savedEnvironment = {
-      organizations: process.env.AIHUB_SANDBOX_ORG_IDS,
-      privateKey: process.env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY,
-      keyId: process.env.AIHUB_SANDBOX_ASSERTION_KID,
+    const savedConfiguration = {
+      organizations: appConfiguration.AIHUB_SANDBOX_ORG_IDS,
+      privateKey: appConnectionConfiguration.sandboxAssertionPrivateKey,
+      keyId: appConnectionConfiguration.sandboxAssertionKeyId,
     };
 
     await sandbox.query(
@@ -432,9 +476,9 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
         ),
       ).resolves.toMatchObject({ status: 'applied' });
 
-      process.env.AIHUB_SANDBOX_ORG_IDS = demoOrganizationId;
-      process.env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY = demoPrivateKey;
-      process.env.AIHUB_SANDBOX_ASSERTION_KID = demoIdentity.keyId;
+      appConfiguration.AIHUB_SANDBOX_ORG_IDS = demoOrganizationId;
+      appConnectionConfiguration.sandboxAssertionPrivateKey = demoPrivateKey;
+      appConnectionConfiguration.sandboxAssertionKeyId = demoIdentity.keyId;
       const minted = await app
         .getHttpAdapter()
         .getInstance()
@@ -478,22 +522,11 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
       expect(speaking.json().meta.operation).toBe('speaking.grading-json');
       expect(downstreamCalls).toBe(1);
     } finally {
-      if (savedEnvironment.organizations === undefined) {
-        delete process.env.AIHUB_SANDBOX_ORG_IDS;
-      } else {
-        process.env.AIHUB_SANDBOX_ORG_IDS = savedEnvironment.organizations;
-      }
-      if (savedEnvironment.privateKey === undefined) {
-        delete process.env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY;
-      } else {
-        process.env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY =
-          savedEnvironment.privateKey;
-      }
-      if (savedEnvironment.keyId === undefined) {
-        delete process.env.AIHUB_SANDBOX_ASSERTION_KID;
-      } else {
-        process.env.AIHUB_SANDBOX_ASSERTION_KID = savedEnvironment.keyId;
-      }
+      appConfiguration.AIHUB_SANDBOX_ORG_IDS = savedConfiguration.organizations;
+      appConnectionConfiguration.sandboxAssertionPrivateKey =
+        savedConfiguration.privateKey;
+      appConnectionConfiguration.sandboxAssertionKeyId =
+        savedConfiguration.keyId;
       await controlPlane.query(
         'DELETE FROM api_keys WHERE organization_id = $1',
         [demoOrganizationId],
