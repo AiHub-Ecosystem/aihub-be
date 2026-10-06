@@ -1,5 +1,6 @@
 import { Inject, Module, type OnModuleDestroy } from '@nestjs/common';
 
+import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
 import { IdentityModule } from '@/modules/identity/identity.module';
 import { MeteringModule } from '@/modules/metering/metering.module';
@@ -87,7 +88,13 @@ type SpeakingAudioDatabase = SpeakingAudioQueryClient;
         repository: SpeakingAudioUploadRepositoryPort,
         storage: SpeakingAudioAssetStoragePort,
         clock: () => Date,
-      ) => new SpeakingAudioUploadService(repository, storage, clock),
+      ) =>
+        new SpeakingAudioUploadService(
+          repository,
+          storage,
+          prefixedIdGenerator('aud_'),
+          clock,
+        ),
     },
     {
       provide: SpeakingAudioUploadSweep,

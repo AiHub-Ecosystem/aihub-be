@@ -1,5 +1,6 @@
 import { Inject, Module, type OnModuleDestroy } from '@nestjs/common';
 
+import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import { AuthModule } from '@/modules/auth/auth.module';
 import {
   RUNTIME_SECRET_PROVIDER,
@@ -65,7 +66,8 @@ type AvatarDatabase = AvatarQueryClient & { close(): Promise<void> };
       useFactory: (
         avatars: AvatarRepositoryPort,
         storage: AvatarStoragePort,
-      ): AvatarUploadService => new AvatarUploadService(avatars, storage),
+      ): AvatarUploadService =>
+        new AvatarUploadService(avatars, storage, prefixedIdGenerator('ava_')),
     },
   ],
   exports: [AvatarOrphanSweep],

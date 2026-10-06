@@ -1,5 +1,3 @@
-import { ulid } from 'ulid';
-
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import {
@@ -71,6 +69,7 @@ export class AvatarUploadService {
   constructor(
     private readonly avatars: AvatarRepositoryPort,
     private readonly storage: AvatarStoragePort,
+    private readonly newAssetId: (now: Date) => string,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -87,7 +86,7 @@ export class AvatarUploadService {
       throw payloadTooLarge();
     }
 
-    const assetId = `ava_${ulid()}`;
+    const assetId = this.newAssetId(this.now());
     const signed = await this.storage.createUploadUrl({
       objectKey: avatarObjectKey(input.userId, assetId),
       contentType,

@@ -75,6 +75,13 @@ export const EMAIL_DELIVERY_REQUEST_WRITER = Symbol(
   'EMAIL_DELIVERY_REQUEST_WRITER',
 );
 
+/**
+ * The `edr_` namespace, bound once by the module so a use case receives a
+ * mint function instead of importing one. Mints from the caller's `now`, so
+ * the id a request is committed with carries the same instant as its row.
+ */
+export const EMAIL_DELIVERY_ID = Symbol('EMAIL_DELIVERY_ID');
+
 export interface InsertEmailDeliveryRequestInput {
   readonly id: string;
   readonly kind: EmailDeliveryKind;

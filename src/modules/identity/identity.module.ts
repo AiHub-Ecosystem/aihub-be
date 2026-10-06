@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { DrizzleModule, getDrizzleToken } from '@nestjs/drizzle';
 import { drizzle } from 'drizzle-orm/node-postgres';
 
+import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import {
   OPAQUE_TOKEN_BINDINGS,
   opaqueTokenIssuer,
@@ -403,6 +404,7 @@ function drizzleDatabaseOptions(databaseUrl: string) {
           invitations,
           tokenIssuer,
           rateLimiter,
+          prefixedIdGenerator('edr_'),
         ),
       inject: [
         ORGANIZATION_MEMBERSHIP,

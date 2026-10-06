@@ -1,5 +1,3 @@
-import { ulid } from 'ulid';
-
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import type { ResetPasswordRequest } from '@/contracts/auth/local-auth';
@@ -110,6 +108,7 @@ export class LocalAuthService {
     private readonly accessTokenIssuer: UserAccessTokenIssuerPort,
     private readonly refreshTokenIssuer: RefreshTokenIssuerPort,
     private readonly clock: LocalAuthServiceClock,
+    private readonly newEmailDeliveryId: (now: Date) => string,
   ) {}
 
   async register(
@@ -456,7 +455,7 @@ export class LocalAuthService {
     now: Date,
   ): InsertEmailDeliveryRequestInput {
     return {
-      id: `edr_${ulid()}`,
+      id: this.newEmailDeliveryId(now),
       kind,
       payloadCiphertext: this.payloadCipher.encrypt(JSON.stringify(payload)),
       createdAt: now,

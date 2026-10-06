@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import {
   OPAQUE_TOKEN_BINDINGS,
   hashOpaqueToken,
@@ -16,6 +17,7 @@ import {
   type AuthRateLimiterPort,
 } from './application/auth-rate-limiter.port';
 import {
+  EMAIL_DELIVERY_ID,
   EMAIL_DELIVERY_REQUEST_WRITER,
   EMAIL_PAYLOAD_CIPHER,
   type EmailDeliveryRequestWriterPort,
@@ -132,6 +134,10 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
     {
       provide: AUTH_CLOCK,
       useFactory: (): LocalAuthServiceClock => ({ now: () => new Date() }),
+    },
+    {
+      provide: EMAIL_DELIVERY_ID,
+      useFactory: () => prefixedIdGenerator('edr_'),
     },
     {
       provide: EMAIL_SENDER,
@@ -256,6 +262,7 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
         USER_ACCESS_TOKEN_ISSUER,
         REFRESH_TOKEN_ISSUER,
         AUTH_CLOCK,
+        EMAIL_DELIVERY_ID,
       ],
     },
     UserAccessJwtGuard,

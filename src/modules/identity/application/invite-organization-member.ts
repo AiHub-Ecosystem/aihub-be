@@ -3,7 +3,6 @@ import { invalidRequest } from '@/common/errors/invalid-request';
 import type { RequestContext } from '@/common/request-context/request-context';
 import { type AuthRateLimiterPort } from '@/modules/auth/application/auth-rate-limiter.port';
 import { normalizeEmail } from '@/modules/auth/domain/local-auth';
-import { ulid } from 'ulid';
 
 import type { OrganizationInvitationPort } from './organization-invitation.port';
 import type { OrganizationInviteTokenPort } from './organization-invite-token.port';
@@ -81,6 +80,8 @@ export class InviteOrganizationMember {
     private readonly invitations: OrganizationInvitationPort,
     private readonly tokenIssuer: OrganizationInviteTokenPort,
     private readonly rateLimiter: AuthRateLimiterPort,
+    private readonly newEmailDeliveryId: (now: Date) => string,
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
   async authorize(input: InviteOrganizationMemberInput): Promise<void> {
@@ -101,7 +102,7 @@ export class InviteOrganizationMember {
 
     await this.enforceRateLimits(input, email);
 
-    const now = new Date();
+    const now = this.now();
     const issued = this.tokenIssuer.issue(now);
     const result = await this.invitations.createInvitation({
       context: input.context,
@@ -116,7 +117,7 @@ export class InviteOrganizationMember {
       // invitation, so a caller retrying after a delivery failure re-sends
       // nothing: a worker dispatches the row (ADR-0074).
       emailDelivery: {
-        id: `edr_${ulid()}`,
+        id: this.newEmailDeliveryId(now),
         token: issued.raw,
         createdAt: now,
       },

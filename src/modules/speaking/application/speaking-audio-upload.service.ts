@@ -1,5 +1,3 @@
-import { ulid } from 'ulid';
-
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import type { RequestContext } from '@/common/request-context/request-context';
@@ -115,6 +113,7 @@ export class SpeakingAudioUploadService
   constructor(
     private readonly repository: SpeakingAudioUploadRepositoryPort,
     private readonly storage: SpeakingAudioAssetStoragePort,
+    private readonly newAssetId: (now: Date) => string,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -136,7 +135,7 @@ export class SpeakingAudioUploadService
 
     const owner = uploadContextOwner(input.context);
     const createdAt = this.now();
-    const assetId = `aud_${ulid()}`;
+    const assetId = this.newAssetId(createdAt);
     const objectKey = speakingAudioObjectKey(owner.organizationId, assetId);
     const intentExpiresAt = new Date(
       createdAt.getTime() + SPEAKING_AUDIO_UPLOAD_INTENT_TTL_MS,

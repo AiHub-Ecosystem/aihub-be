@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   AuthRateLimitScope,
@@ -296,6 +297,7 @@ describe('organization invitation management idempotency seam', () => {
       invitations,
       tokenIssuer,
       rateLimiter,
+      prefixedIdGenerator('edr_'),
     );
   });
 

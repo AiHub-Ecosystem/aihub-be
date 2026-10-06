@@ -1,3 +1,4 @@
+import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 import {
   type InMemoryAuthState,
@@ -198,6 +199,7 @@ function service() {
     new FakeAccessTokenIssuer(),
     new FakeRefreshTokenIssuer(),
     clock,
+    prefixedIdGenerator('edr_'),
   );
   return {
     local,
