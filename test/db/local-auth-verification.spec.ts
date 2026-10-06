@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import type { IssuedRefreshToken } from '@/modules/auth/application/refresh-token.port';
+import { Argon2PasswordHasher } from '@/modules/auth/infrastructure/argon2-password.hasher';
 import { createPostgresAuthClient } from '@/modules/auth/infrastructure/postgres-auth.client';
 import { PostgresLocalAuthRepository } from '@/modules/auth/infrastructure/postgres-local-auth.repository';
 
@@ -659,5 +660,61 @@ describe('local email verification against PostgreSQL', () => {
         }),
       ).resolves.toEqual({ kind: 'invalid' });
     });
+  });
+});
+
+describe('password hashes from the installed argon2 against PostgreSQL', () => {
+  // The hash constraint once pinned one parameter order and an argon2 upgrade
+  // emitted another, so these use the real hasher rather than a fixed string.
+  const hasher = new Argon2PasswordHasher();
+
+  it('registers an account with a real password hash', async () => {
+    const passwordHash = await hasher.hash('correct horse battery staple');
+
+    await repository.register({
+      email: 'real-hash@example.com',
+      username: 'real_hash_01',
+      passwordHash,
+      tokenId: `evt_${ulid()}`,
+      tokenHash: tokenHash(),
+      tokenExpiresAt: EXPIRES_AT,
+      browserBindingHash: tokenHash(),
+      now: NOW,
+    });
+
+    const { rows } = await pool.query<{ password_hash: string }>(
+      `SELECT password_hash FROM auth_identities WHERE canonical_email = $1`,
+      ['real-hash@example.com'],
+    );
+    expect(rows).toHaveLength(1);
+    await expect(
+      hasher.verify(
+        'correct horse battery staple',
+        rows[0]?.password_hash ?? '',
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it('resets a password to a real password hash', async () => {
+    await seedAccount('active', 'reset-real@example.com');
+    const rawToken = randomBytes(32).toString('base64url');
+    const resetTokenHash = createHash('sha256')
+      .update(rawToken, 'utf8')
+      .digest('hex');
+    await repository.issuePasswordResetToken({
+      email: 'reset-real@example.com',
+      tokenId: `prt_${ulid()}`,
+      tokenHash: resetTokenHash,
+      tokenExpiresAt: EXPIRES_AT,
+      now: NOW,
+    });
+
+    const result = await repository.consumePasswordReset({
+      tokenHash: resetTokenHash,
+      passwordHash: await hasher.hash('a new passphrase'),
+      now: new Date(NOW.getTime() + 1_000),
+    });
+
+    expect(result).toEqual({ kind: 'reset' });
   });
 });
