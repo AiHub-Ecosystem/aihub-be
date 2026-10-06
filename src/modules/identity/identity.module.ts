@@ -11,7 +11,9 @@ import {
   type AuthRateLimiterPort,
 } from '@/modules/auth/application/auth-rate-limiter.port';
 import {
+  EMAIL_DELIVERY_REQUEST_WRITER,
   EMAIL_PAYLOAD_CIPHER,
+  type EmailDeliveryRequestWriterPort,
   type EmailPayloadCipherPort,
 } from '@/modules/auth/application/email-delivery-request.port';
 import { AuthModule } from '@/modules/auth/auth.module';
@@ -371,12 +373,14 @@ function drizzleDatabaseOptions(databaseUrl: string) {
       provide: ORGANIZATION_INVITATION,
       useFactory: (
         payloadCipher: EmailPayloadCipherPort,
+        emailRequests: EmailDeliveryRequestWriterPort,
       ): OrganizationInvitationPort =>
         new PostgresOrganizationInvitationRepository(
           postgresIdentityClient(),
           payloadCipher,
+          emailRequests,
         ),
-      inject: [EMAIL_PAYLOAD_CIPHER],
+      inject: [EMAIL_PAYLOAD_CIPHER, EMAIL_DELIVERY_REQUEST_WRITER],
     },
     {
       provide: ORGANIZATION_INVITE_TOKEN,

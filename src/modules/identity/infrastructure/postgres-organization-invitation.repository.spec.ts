@@ -1,6 +1,9 @@
 import { AppError } from '@/common/errors/app-error';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import type { EmailPayloadCipherPort } from '@/modules/auth/application/email-delivery-request.port';
+import type {
+  EmailDeliveryRequestWriterPort,
+  EmailPayloadCipherPort,
+} from '@/modules/auth/application/email-delivery-request.port';
 import type {
   AcceptOrganizationInvitationInput,
   CreateOrganizationInvitationInput,
@@ -40,11 +43,31 @@ class RecordingCipher implements EmailPayloadCipherPort {
   }
 }
 
+/**
+ * Writes through the transaction it is handed, as the auth module's writer
+ * does, so the recorded statements show the request committing with the
+ * invitation. The table and its insert belong to the auth module.
+ */
+const emailRequests: EmailDeliveryRequestWriterPort = {
+  async insert(transaction, input) {
+    await transaction.query('INSERT INTO email_delivery_requests', [
+      input.id,
+      input.kind,
+      input.payloadCiphertext,
+      input.createdAt,
+    ]);
+  },
+};
+
 function invitationRepository(
   identity: PostgresIdentityTransactionalClient,
   cipher: EmailPayloadCipherPort = new RecordingCipher(),
 ): PostgresOrganizationInvitationRepository {
-  return new PostgresOrganizationInvitationRepository(identity, cipher);
+  return new PostgresOrganizationInvitationRepository(
+    identity,
+    cipher,
+    emailRequests,
+  );
 }
 
 function client(
@@ -299,9 +322,9 @@ describe('PostgresOrganizationInvitationRepository', () => {
     // names the organization it just read.
     const delivery = recorded[5];
     expect(delivery?.text).toContain('INSERT INTO email_delivery_requests');
-    expect(delivery?.text).toContain("'organization_invite_email'");
     expect(delivery?.values).toEqual([
       'edr_01J00000000000000000000000',
+      'organization_invite_email',
       'sealed-payload',
       NOW,
     ]);

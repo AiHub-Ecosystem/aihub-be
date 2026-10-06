@@ -16,7 +16,9 @@ import {
   type AuthRateLimiterPort,
 } from './application/auth-rate-limiter.port';
 import {
+  EMAIL_DELIVERY_REQUEST_WRITER,
   EMAIL_PAYLOAD_CIPHER,
+  type EmailDeliveryRequestWriterPort,
   type EmailPayloadCipherPort,
 } from './application/email-delivery-request.port';
 import {
@@ -50,6 +52,7 @@ import {
 import { Argon2PasswordHasher } from './infrastructure/argon2-password.hasher';
 import { CryptoRefreshToken } from './infrastructure/crypto-refresh-token';
 import {
+  EMAIL_OUTBOX_POLL_INTERVAL_MS,
   EmailOutboxPollerScheduler,
   emailOutboxLeaseOwner,
   reportTerminalEmailDeliveryFailure,
@@ -65,7 +68,10 @@ import {
   createPostgresAuthClient,
 } from './infrastructure/postgres-auth.client';
 import { PostgresEmailCredentialRepository } from './infrastructure/postgres-email-credential.repository';
-import { PostgresEmailDispatchStore } from './infrastructure/postgres-email-delivery-request.repository';
+import {
+  PostgresEmailDeliveryRequestRepository,
+  PostgresEmailDispatchStore,
+} from './infrastructure/postgres-email-delivery-request.repository';
 import { PostgresLocalAuthRepository } from './infrastructure/postgres-local-auth.repository';
 import { RedisAuthRateLimiter } from './infrastructure/redis-auth-rate-limiter';
 import { ResendEmailSender } from './infrastructure/resend-email.sender';
@@ -144,6 +150,14 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
       },
       inject: [RUNTIME_SECRET_PROVIDER],
     },
+    // The outbox table is this module's (ADR-0074). Another module that commits
+    // an Email Delivery Request with its own mutation writes it through this
+    // port, inside that mutation's transaction.
+    {
+      provide: EMAIL_DELIVERY_REQUEST_WRITER,
+      useFactory: (): EmailDeliveryRequestWriterPort =>
+        new PostgresEmailDeliveryRequestRepository(),
+    },
     {
       provide: EMAIL_PAYLOAD_CIPHER,
       useFactory: (provider: RuntimeSecretProvider): EmailPayloadCipherPort =>
@@ -177,9 +191,18 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
     },
     {
       provide: EmailOutboxPollerScheduler,
-      useFactory: (poller: EmailDeliveryPoller): EmailOutboxPollerScheduler =>
-        new EmailOutboxPollerScheduler(poller),
-      inject: [EmailDeliveryPoller],
+      useFactory: (
+        poller: EmailDeliveryPoller,
+        client: PostgresAuthClient,
+      ): EmailOutboxPollerScheduler => {
+        const store = new PostgresEmailDispatchStore(client);
+        return new EmailOutboxPollerScheduler(
+          poller,
+          EMAIL_OUTBOX_POLL_INTERVAL_MS,
+          () => store.backlog({ now: new Date() }),
+        );
+      },
+      inject: [EmailDeliveryPoller, POSTGRES_AUTH_CLIENT],
     },
     {
       provide: AUTH_RATE_LIMITER,
@@ -221,6 +244,7 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
   exports: [
     EMAIL_SENDER,
     EMAIL_PAYLOAD_CIPHER,
+    EMAIL_DELIVERY_REQUEST_WRITER,
     AUTH_RATE_LIMITER,
     USER_ACCOUNT_REPOSITORY,
     VERIFICATION_TOKEN_REPOSITORY,

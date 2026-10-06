@@ -1,5 +1,9 @@
 import { METRICS_ROUTE_PATH, getMetrics } from './metrics';
-import { recordCompletedRequest, recordEmailDeliveryFailed } from './metrics';
+import {
+  recordCompletedRequest,
+  recordEmailDeliveryFailed,
+  setEmailOutboxBacklogSource,
+} from './metrics';
 
 const GRADE = 'writing.task1.grade';
 
@@ -165,5 +169,58 @@ describe('email delivery failure metric', () => {
     recordEmailDeliveryFailed('verification_email');
 
     expect(await getMetrics()).not.toContain('cancelled');
+  });
+});
+
+describe('email outbox backlog metrics', () => {
+  afterEach(() => {
+    setEmailOutboxBacklogSource(undefined);
+  });
+
+  it('exposes no backlog series until an outbox registers its source', async () => {
+    expect(await getMetrics()).not.toContain('aihub_email_outbox_queued{');
+  });
+
+  it('reads the queue at scrape time, with zero for kinds that have nothing waiting', async () => {
+    let reads = 0;
+    setEmailOutboxBacklogSource(async () => {
+      reads += 1;
+      return [{ kind: 'verification_email', queued: 4, oldestAgeSeconds: 930 }];
+    });
+
+    expect(
+      await sample('aihub_email_outbox_queued', { kind: 'verification_email' }),
+    ).toBe('4');
+    expect(
+      await sample('aihub_email_outbox_oldest_queued_age_seconds', {
+        kind: 'verification_email',
+      }),
+    ).toBe('930');
+    expect(
+      await sample('aihub_email_outbox_queued', {
+        kind: 'organization_invite_email',
+      }),
+    ).toBe('0');
+    // Each scrape reads once for both gauges, and a later scrape reads again.
+    expect(reads).toBe(3);
+  });
+
+  it('drops the series when the queue cannot be read, rather than repeating a stale value', async () => {
+    let healthy = true;
+    setEmailOutboxBacklogSource(async () => {
+      if (!healthy) throw new Error('database unavailable');
+      return [
+        { kind: 'password_reset_email', queued: 2, oldestAgeSeconds: 12 },
+      ];
+    });
+    expect(
+      await sample('aihub_email_outbox_queued', {
+        kind: 'password_reset_email',
+      }),
+    ).toBe('2');
+
+    healthy = false;
+
+    expect(await getMetrics()).not.toContain('aihub_email_outbox_queued{');
   });
 });

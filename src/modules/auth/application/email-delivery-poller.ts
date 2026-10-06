@@ -1,3 +1,5 @@
+import { OPAQUE_TOKEN_BINDINGS } from '@/common/security/opaque-token-issuer';
+
 import type {
   AuthEmailDeliveryPayload,
   EmailCredentialActionabilityPort,
@@ -22,12 +24,64 @@ import type { EmailSenderPort } from './email-sender.port';
  */
 export const MAX_DELIVERY_ATTEMPTS = 3;
 
+/**
+ * How long a request this instance could not open waits before any instance
+ * claims it again. Long enough that a batch is never filled by the same
+ * unopenable rows pass after pass, short enough that an instance holding the
+ * key picks it up well inside the credential's lifetime.
+ */
+export const DEFER_RETRY_MS = 5 * 60_000;
+
+/**
+ * The longest any credential an Email Delivery Request carries stays valid. A
+ * queued request older than this can never be sent, whatever its payload says.
+ */
+export const MAX_CREDENTIAL_LIFETIME_MS = Math.max(
+  ...Object.values(OPAQUE_TOKEN_BINDINGS).map((binding) => binding.ttlMs),
+);
+
 export interface EmailDispatchSummary {
   readonly claimed: number;
   readonly providerAccepted: number;
+  /** Includes requests cancelled because they outlived every credential. */
   readonly cancelled: number;
   /** Requests that exhausted their attempts; a retried one is not failed. */
   readonly failed: number;
+  /** Requests handed back because this instance cannot open their payload. */
+  readonly deferred: number;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+const INVITE_ROLES: readonly string[] = ['owner', 'admin', 'member'];
+
+/**
+ * The decrypted payload is data this process wrote, but it crosses a storage
+ * boundary and a deploy can change its shape, so it is checked rather than
+ * cast. A payload that does not match its kind is one no instance will ever be
+ * able to send.
+ */
+function isPayloadFor(
+  kind: EmailDeliveryKind,
+  value: unknown,
+): value is AuthEmailDeliveryPayload {
+  if (typeof value !== 'object' || value === null) return false;
+  const payload = value as Record<string, unknown>;
+  if (
+    !isNonEmptyString(payload.email) ||
+    !isNonEmptyString(payload.token) ||
+    !isNonEmptyString(payload.expiresAt)
+  ) {
+    return false;
+  }
+  if (kind !== 'organization_invite_email') return true;
+  return (
+    isNonEmptyString(payload.organizationName) &&
+    isNonEmptyString(payload.role) &&
+    INVITE_ROLES.includes(payload.role)
+  );
 }
 
 export interface EmailDeliveryPollerOptions {
@@ -133,6 +187,7 @@ export class EmailDeliveryPoller {
   }
 
   async runOnce(): Promise<EmailDispatchSummary> {
+    const stale = await this.cancelStaleRequests();
     const exhausted = await this.failExhaustedRequests();
     const claimed = await this.store.claim({
       owner: this.options.owner,
@@ -144,8 +199,9 @@ export class EmailDeliveryPoller {
     const summary = {
       claimed: claimed.length,
       providerAccepted: 0,
-      cancelled: 0,
+      cancelled: stale,
       failed: exhausted,
+      deferred: 0,
     };
     for (const request of claimed) {
       try {
@@ -153,6 +209,7 @@ export class EmailDeliveryPoller {
         if (outcome === 'provider_accepted') summary.providerAccepted += 1;
         if (outcome === 'cancelled') summary.cancelled += 1;
         if (outcome === 'failed') summary.failed += 1;
+        if (outcome === 'deferred') summary.deferred += 1;
       } catch {
         // The store is unreachable, or a transition lost a race with another
         // instance. The row keeps its lease and its payload, so the next pass
@@ -162,6 +219,26 @@ export class EmailDeliveryPoller {
     }
     await this.reportUnreportedFailures();
     return summary;
+  }
+
+  /**
+   * Cancels requests that outlived every credential an Email Delivery Request
+   * can carry, without opening them. This is what bounds a request that is never
+   * dispatched — one sealed under a key version no instance holds, or one whose
+   * credential check keeps failing — so its payload is still erased.
+   */
+  private async cancelStaleRequests(): Promise<number> {
+    const now = this.now();
+    try {
+      const cancelled = await this.store.cancelStale({
+        at: now,
+        createdAtOrBefore: new Date(now.getTime() - MAX_CREDENTIAL_LIFETIME_MS),
+      });
+      return cancelled.length;
+    } catch {
+      // The next pass retries; a stale row stays unsendable either way.
+      return 0;
+    }
   }
 
   /**
@@ -257,7 +334,7 @@ export class EmailDeliveryPoller {
     try {
       payload = this.readPayload(request);
     } catch {
-      return this.defer(request);
+      return this.defer(request, now);
     }
     if (payload === undefined) {
       // A payload this instance cannot open will never open, so waiting would
@@ -303,32 +380,35 @@ export class EmailDeliveryPoller {
   }
 
   /**
-   * `undefined` is a payload that will never open: absent, or an envelope this
-   * instance cannot make sense of. An unknown key version is not that, and is
-   * rethrown so the row can go back with its ciphertext instead of being
-   * cancelled out from under an instance that holds the key.
+   * `undefined` is a payload that will never open: absent, an envelope this
+   * instance cannot make sense of, or plaintext that is not the shape its kind
+   * needs. An unknown key version is not that, and is rethrown so the row can
+   * go back with its ciphertext instead of being cancelled out from under an
+   * instance that holds the key.
    */
   private readPayload(
     request: EmailDeliveryRequestRecord,
   ): AuthEmailDeliveryPayload | undefined {
     const ciphertext = request.payloadCiphertext;
     if (ciphertext === null) return undefined;
+    let parsed: unknown;
     try {
-      return JSON.parse(
-        this.cipher.decrypt(ciphertext),
-      ) as AuthEmailDeliveryPayload;
+      parsed = JSON.parse(this.cipher.decrypt(ciphertext));
     } catch (error) {
       if (error instanceof EmailPayloadUnknownKeyVersionError) throw error;
       return undefined;
     }
+    return isPayloadFor(request.kind, parsed) ? parsed : undefined;
   }
 
   private async defer(
     request: EmailDeliveryRequestRecord,
+    now: Date,
   ): Promise<'deferred'> {
     await this.store.releaseDeferred({
       id: request.id,
       owner: this.options.owner,
+      retryAt: new Date(now.getTime() + DEFER_RETRY_MS),
     });
     return 'deferred';
   }

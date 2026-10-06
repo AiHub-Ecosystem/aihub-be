@@ -40,6 +40,33 @@ export type EmailDeliveryPayload =
   | AuthEmailDeliveryPayload
   | OrganizationInviteEmailDeliveryPayload;
 
+/**
+ * The one thing writing a request needs from the caller's open transaction:
+ * running a statement. Any module's transaction handle satisfies it, which is
+ * what lets a mutation in another module commit its Email Delivery Request
+ * atomically without that module knowing the table.
+ */
+export interface EmailDeliveryTransaction {
+  query(text: string, values: readonly unknown[]): Promise<unknown>;
+}
+
+/**
+ * The only way an Email Delivery Request is written. The outbox table belongs
+ * to this module (ADR-0074), so another module that commits a request with its
+ * own mutation goes through this port rather than holding a copy of the insert,
+ * which would drift the first time the table changed.
+ */
+export interface EmailDeliveryRequestWriterPort {
+  insert(
+    transaction: EmailDeliveryTransaction,
+    input: InsertEmailDeliveryRequestInput,
+  ): Promise<void>;
+}
+
+export const EMAIL_DELIVERY_REQUEST_WRITER = Symbol(
+  'EMAIL_DELIVERY_REQUEST_WRITER',
+);
+
 export interface InsertEmailDeliveryRequestInput {
   readonly id: string;
   readonly kind: EmailDeliveryKind;
@@ -181,14 +208,27 @@ export interface EmailDispatchStorePort {
   }): Promise<void>;
   /**
    * Hands a claimed request back without recording an outcome, for one this
-   * instance cannot finish yet. No attempt is spent, the payload stays, and the
-   * lease is released, so the next instance to claim it starts where this one
-   * stopped rather than inheriting a terminal state.
+   * instance cannot finish yet. No attempt is spent and the payload stays, so the
+   * next instance to claim it starts where this one stopped rather than
+   * inheriting a terminal state. It is not claimable again before `retryAt`: a
+   * row released for immediate reclaim would come back every pass and, once a
+   * batch's worth of them existed, keep every other request from being claimed.
    */
   releaseDeferred(input: {
     readonly id: string;
     readonly owner: string;
+    readonly retryAt: Date;
   }): Promise<void>;
+  /**
+   * Cancels queued requests created at or before `createdAtOrBefore` whose lease
+   * has lapsed, and erases their payload, without opening it. Every credential an
+   * Email Delivery Request carries has expired by then, so the request can never
+   * be sent; this is what erases a payload no instance can decrypt (ADR-0074).
+   */
+  cancelStale(input: {
+    readonly at: Date;
+    readonly createdAtOrBefore: Date;
+  }): Promise<readonly EmailDeliveryRequestRecord[]>;
   /**
    * Requests that spent their last attempt without a recorded outcome, whose
    * lease has lapsed. They are given up as `failed` rather than dispatched

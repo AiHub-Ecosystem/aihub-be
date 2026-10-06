@@ -3,7 +3,10 @@ import type {
   ClaimEmailDeliveryRequestsInput,
   EmailDeliveryCancelReason,
   EmailDeliveryErrorCode,
+  EmailDeliveryKind,
   EmailDeliveryRequestRecord,
+  EmailDeliveryRequestWriterPort,
+  EmailDeliveryTransaction,
   EmailDispatchStorePort,
   InsertEmailDeliveryRequestInput,
 } from '@/modules/auth/application/email-delivery-request.port';
@@ -174,12 +177,48 @@ const FAIL_EXHAUSTED_SQL = `
  * attempt, no attempt time, no terminal state. That is what leaves a row sealed
  * with a key version only another instance holds deliverable, rather than
  * cancelled with its payload erased.
+ *
+ * The lease time is moved to the retry time rather than cleared. The claim
+ * treats a lease in the future as held, so the row stays out of every batch
+ * until then instead of coming straight back on the next pass.
  */
 const RELEASE_DEFERRED_SQL = `
   UPDATE email_delivery_requests
-  SET lease_owner = NULL, lease_expires_at = NULL
+  SET lease_owner = NULL, lease_expires_at = $3
   WHERE id = $1 AND status = 'queued' AND lease_owner = $2::text
   RETURNING id
+`;
+
+/**
+ * Queued requests older than every credential an Email Delivery Request can
+ * carry. None of them can be sent any more, so they are cancelled as expired
+ * and their payload erased without being opened, which is the only way a
+ * payload no instance can decrypt still leaves the table (ADR-0074). A row
+ * still under a live lease is left to the instance that holds it.
+ */
+const CANCEL_STALE_SQL = `
+  UPDATE email_delivery_requests
+  SET status = 'cancelled', cancel_reason = 'credential_expired',
+      payload_ciphertext = NULL, completed_at = $1,
+      lease_owner = NULL, lease_expires_at = NULL
+  WHERE status = 'queued'
+    AND created_at <= $2
+    AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
+  RETURNING id, kind, status, payload_ciphertext, attempts, last_attempt_at,
+            last_error_code, cancel_reason, created_at, completed_at
+`;
+
+/**
+ * What an operator alerts on when dispatch stops: how many requests wait in
+ * each kind, and how long the oldest has waited. Read from the table rather
+ * than from the poller, so it keeps rising when no instance is dispatching.
+ */
+const BACKLOG_SQL = `
+  SELECT kind, count(*)::int AS queued,
+         EXTRACT(EPOCH FROM ($1::timestamptz - min(created_at)))::float8 AS oldest_age_seconds
+  FROM email_delivery_requests
+  WHERE status = 'queued'
+  GROUP BY kind
 `;
 
 /**
@@ -246,6 +285,33 @@ function storeError(message: string): AppError {
  * reason are the two columns whose vocabulary the check constraint only bounds
  * by shape, so they are validated against the same lists the port declares.
  */
+/** One kind's share of the queue, as the backlog metrics expose it. */
+export interface EmailDeliveryBacklogRow {
+  readonly kind: EmailDeliveryKind;
+  readonly queued: number;
+  readonly oldestAgeSeconds: number;
+}
+
+function toBacklogRow(value: unknown): EmailDeliveryBacklogRow {
+  if (!isRecord(value)) {
+    throw storeError('Email delivery backlog is invalid');
+  }
+  const kind = oneOf(value, 'kind', EMAIL_DELIVERY_KINDS);
+  const queued = integerValue(value, 'queued');
+  const oldestAgeSeconds = value.oldest_age_seconds;
+  if (
+    kind === undefined ||
+    queued === undefined ||
+    typeof oldestAgeSeconds !== 'number' ||
+    !Number.isFinite(oldestAgeSeconds)
+  ) {
+    throw storeError('Email delivery backlog is invalid');
+  }
+  // The query's clock and the database's insert clock can disagree by a little,
+  // and an age is never negative.
+  return { kind, queued, oldestAgeSeconds: Math.max(0, oldestAgeSeconds) };
+}
+
 function toRecord(value: unknown): EmailDeliveryRequestRecord {
   if (!isRecord(value)) {
     throw storeError('Email delivery request is invalid');
@@ -299,9 +365,11 @@ function toRecord(value: unknown): EmailDeliveryRequestRecord {
   };
 }
 
-export class PostgresEmailDeliveryRequestRepository {
+export class PostgresEmailDeliveryRequestRepository
+  implements EmailDeliveryRequestWriterPort
+{
   async insert(
-    client: EmailDeliveryQueryClient,
+    client: EmailDeliveryTransaction,
     input: InsertEmailDeliveryRequestInput,
   ): Promise<void> {
     await client.query(INSERT_SQL, [
@@ -395,9 +463,32 @@ export class PostgresEmailDeliveryRequestRepository {
 
   async releaseDeferred(
     client: EmailDeliveryQueryClient,
-    input: { id: string; owner: string },
+    input: { id: string; owner: string; retryAt: Date },
   ): Promise<EmailDeliveryRequestRecord> {
-    return this.apply(client, RELEASE_DEFERRED_SQL, [input.id, input.owner]);
+    return this.apply(client, RELEASE_DEFERRED_SQL, [
+      input.id,
+      input.owner,
+      input.retryAt,
+    ]);
+  }
+
+  async cancelStale(
+    client: EmailDeliveryQueryClient,
+    input: { at: Date; createdAtOrBefore: Date },
+  ): Promise<readonly EmailDeliveryRequestRecord[]> {
+    const rows = await client.query(CANCEL_STALE_SQL, [
+      input.at,
+      input.createdAtOrBefore,
+    ]);
+    return rows.map(toRecord);
+  }
+
+  async backlog(
+    client: EmailDeliveryQueryClient,
+    input: { now: Date },
+  ): Promise<readonly EmailDeliveryBacklogRow[]> {
+    const rows = await client.query(BACKLOG_SQL, [input.now]);
+    return rows.map(toBacklogRow);
   }
 
   async claim(
@@ -534,8 +625,23 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
   async releaseDeferred(input: {
     readonly id: string;
     readonly owner: string;
+    readonly retryAt: Date;
   }): Promise<void> {
     await this.requests.releaseDeferred(this.client, input);
+  }
+
+  cancelStale(input: {
+    readonly at: Date;
+    readonly createdAtOrBefore: Date;
+  }): Promise<readonly EmailDeliveryRequestRecord[]> {
+    return this.requests.cancelStale(this.client, input);
+  }
+
+  /** Not part of the dispatch port: only the backlog metrics read it. */
+  backlog(input: {
+    readonly now: Date;
+  }): Promise<readonly EmailDeliveryBacklogRow[]> {
+    return this.requests.backlog(this.client, input);
   }
 
   claimUnreportedFailures(input: {

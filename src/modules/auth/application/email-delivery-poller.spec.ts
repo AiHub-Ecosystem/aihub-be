@@ -1,4 +1,8 @@
-import { EmailDeliveryPoller } from './email-delivery-poller';
+import {
+  DEFER_RETRY_MS,
+  EmailDeliveryPoller,
+  MAX_CREDENTIAL_LIFETIME_MS,
+} from './email-delivery-poller';
 import { EmailPayloadUnknownKeyVersionError } from './email-delivery-request.port';
 import type {
   ClaimEmailDeliveryRequestsInput,
@@ -89,8 +93,20 @@ class FakeStore implements EmailDispatchStorePort {
     this.reserved.push(input.id);
   }
 
-  async releaseDeferred(input: { id: string }): Promise<void> {
+  deferredUntil: Date[] = [];
+  stale: EmailDeliveryRequestRecord[] = [];
+  staleCutoffs: Date[] = [];
+
+  async releaseDeferred(input: { id: string; retryAt: Date }): Promise<void> {
     this.deferred.push(input.id);
+    this.deferredUntil.push(input.retryAt);
+  }
+
+  async cancelStale(input: {
+    createdAtOrBefore: Date;
+  }): Promise<readonly EmailDeliveryRequestRecord[]> {
+    this.staleCutoffs.push(input.createdAtOrBefore);
+    return this.stale;
   }
 
   async failExhausted(): Promise<readonly EmailDeliveryRequestRecord[]> {
@@ -287,6 +303,7 @@ describe('EmailDeliveryPoller', () => {
       providerAccepted: 1,
       cancelled: 0,
       failed: 0,
+      deferred: 0,
     });
   });
 
@@ -457,6 +474,7 @@ describe('EmailDeliveryPoller', () => {
       providerAccepted: 0,
       cancelled: 1,
       failed: 0,
+      deferred: 0,
     });
   });
 
@@ -530,6 +548,7 @@ describe('EmailDeliveryPoller', () => {
       providerAccepted: 1,
       cancelled: 0,
       failed: 0,
+      deferred: 0,
     });
   });
 
@@ -560,7 +579,102 @@ describe('EmailDeliveryPoller', () => {
       providerAccepted: 0,
       cancelled: 0,
       failed: 0,
+      deferred: 1,
     });
+  });
+
+  it('keeps a deferred request out of every batch until its retry time', async () => {
+    const store = new FakeStore();
+    const poller = new EmailDeliveryPoller(
+      store,
+      new FakeCredentials(),
+      unknownKeyVersionCipher(),
+      new RecordingSender(),
+      (): Date => NOW,
+      { hash: () => TOKEN_HASH },
+      { owner: 'instance-a' },
+    );
+    store.claimResult = [claimed()];
+
+    await poller.runOnce();
+
+    // Released for immediate reclaim, a batch of unopenable rows would come
+    // back every pass and keep every newer request from being claimed.
+    expect(store.deferredUntil).toEqual([
+      new Date(NOW.getTime() + DEFER_RETRY_MS),
+    ]);
+  });
+
+  it.each([
+    [
+      'a missing token',
+      {
+        email: 'person@example.com',
+        expiresAt: VERIFICATION_PAYLOAD.expiresAt,
+      },
+    ],
+    ['a non-string email', { ...VERIFICATION_PAYLOAD, email: 42 }],
+    ['an empty expiry', { ...VERIFICATION_PAYLOAD, expiresAt: '' }],
+    ['a JSON array', []],
+  ])(
+    'cancels a request whose payload has %s, without sending or checking it',
+    async (_case, payload) => {
+      const { poller, store, credentials, sender } = harness({
+        payload: payload as unknown as EmailDeliveryPayload,
+      });
+      store.claimResult = [claimed()];
+
+      await poller.runOnce();
+
+      // A payload that cannot be sent never will be; reaching the credential
+      // check with it is what used to throw before the attempt was reserved and
+      // leave the row to be claimed again on every pass.
+      expect(store.cancelled).toEqual([
+        { id: ROW_ID, reason: 'not_actionable' },
+      ]);
+      expect(store.reserved).toEqual([]);
+      expect(credentials.checked).toEqual([]);
+      expect(sender.sends).toEqual([]);
+    },
+  );
+
+  it('cancels an invitation whose payload lacks its organization or role', async () => {
+    const { poller, store, sender } = harness({
+      payload: {
+        ...VERIFICATION_PAYLOAD,
+        organizationName: 'Resonance',
+        role: 'superuser',
+      } as unknown as EmailDeliveryPayload,
+    });
+    store.claimResult = [
+      claimed({ id: 'edr_invite', kind: 'organization_invite_email' }),
+    ];
+
+    await poller.runOnce();
+
+    expect(store.cancelled).toEqual([
+      { id: 'edr_invite', reason: 'not_actionable' },
+    ]);
+    expect(sender.sends).toEqual([]);
+  });
+
+  it('cancels requests older than every credential lifetime before claiming', async () => {
+    const { poller, store } = harness();
+    store.stale = [claimed({ id: 'edr_stale' })];
+
+    const summary = await poller.runOnce();
+
+    expect(store.staleCutoffs).toEqual([
+      new Date(NOW.getTime() - MAX_CREDENTIAL_LIFETIME_MS),
+    ]);
+    expect(summary.cancelled).toBe(1);
+  });
+
+  it('treats the longest credential lifetime as one day', () => {
+    // Verification and invitation tokens live 24 hours, password reset one;
+    // the stale cutoff must follow the longest, or it would cancel a request
+    // whose credential is still valid.
+    expect(MAX_CREDENTIAL_LIFETIME_MS).toBe(24 * 60 * 60 * 1000);
   });
 
   it('cancels a request whose payload can no longer be read', async () => {
@@ -608,6 +722,7 @@ describe('EmailDeliveryPoller', () => {
       providerAccepted: 0,
       cancelled: 0,
       failed: 0,
+      deferred: 0,
     });
   });
 
@@ -674,6 +789,11 @@ describe('EmailDeliveryPoller', () => {
     it('reports a request that used its last attempt', async () => {
       const failures: unknown[] = [];
       const { poller, store, sender } = harness({
+        payload: {
+          ...VERIFICATION_PAYLOAD,
+          organizationName: 'Resonance',
+          role: 'member',
+        },
         onTerminalFailure: (failure) => failures.push(failure),
       });
       store.claimResult = [

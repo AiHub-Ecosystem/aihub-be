@@ -428,8 +428,6 @@ describe('cross-module table access', () => {
     expect(sharedTableAccesses()).toEqual([
       // Identity resolves the invitation a request was minted for.
       'auth_identities: auth + identity',
-      // ADR-0074: Identity commits the request, Auth dispatches it.
-      'email_delivery_requests: auth + identity',
       // ADR-0074: Auth asks whether the credential is still actionable.
       'organization_invitations: auth + identity',
       // Metering reads the Organization an entitlement decision is about.

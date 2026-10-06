@@ -107,7 +107,40 @@ handling. It emits no metric and no event.
 That is a load-bearing distinction: an alert rule that fired on cancellation
 would page on routine user behaviour and train operators to ignore the one event
 that matters. `summary.cancelled` in the per-pass log line
-(`email outbox pass claimed=... cancelled=N failed=N`) is the visibility for it.
+(`email outbox pass claimed=... cancelled=N failed=N deferred=N`) is the
+visibility for it.
+
+A queued request older than the longest credential lifetime (24 hours) is also
+cancelled as `credential_expired`, at the start of every pass and without being
+opened. Its credential can no longer work, so it can never be sent; cancelling it
+is what erases a payload that no instance can decrypt.
+
+## Queue backlog: when dispatch stops
+
+The terminal-failure counter only moves when a request gives up. If no instance
+dispatches at all — the poller is not running, every claim errors, or every
+request is waiting on a key version this instance does not hold — nothing gives
+up, and that counter stays flat. Two gauges cover that case:
+
+| Signal                                                     | Meaning                                              |
+| ---------------------------------------------------------- | ---------------------------------------------------- |
+| `aihub_email_outbox_queued{kind="..."}`                    | Email Delivery Requests waiting for dispatch         |
+| `aihub_email_outbox_oldest_queued_age_seconds{kind="..."}` | how long the oldest waiting request has been waiting |
+
+Both are read from the table at scrape time rather than from the poller, so they
+keep rising while dispatch is stopped. If the table cannot be read, the series
+disappear instead of repeating their last value, so an `absent()` rule catches
+that too. `kind` is the only label.
+
+Suggested alert condition: the oldest queued age exceeds 15 minutes for any
+`kind`. A healthy request is sent on its first pass (every 5 seconds) or retried
+at +1 and +5 minutes, so 15 minutes is past the whole retry schedule. A request
+held back because its payload is sealed with a key version this instance lacks
+waits 5 minutes between claims, so a key removed too early shows up here too.
+
+`deferred=N` in the per-pass log line counts requests handed back for that
+reason. A steadily non-zero value means a key version was removed while queued
+requests still needed it; restore the key before those requests age out.
 
 ## What an operator can read
 

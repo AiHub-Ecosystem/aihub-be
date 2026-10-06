@@ -21,6 +21,7 @@ class ControllablePoller {
     providerAccepted: number;
     cancelled: number;
     failed: number;
+    deferred: number;
   }> {
     this.calls += 1;
     if (this.holdOpen) {
@@ -33,6 +34,7 @@ class ControllablePoller {
       providerAccepted: 1,
       cancelled: 0,
       failed: 0,
+      deferred: 0,
     };
   }
 

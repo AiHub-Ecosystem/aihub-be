@@ -17,6 +17,7 @@ import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/
 import { PostgresOrganizationInvitationRepository } from '@/modules/identity/infrastructure/postgres-organization-invitation.repository';
 import { createRuntimeSecretProviderFromProcessEnvironment } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
 
+import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import {
   createTestPool,
   resetIdentityTables,
@@ -272,7 +273,11 @@ beforeAll(() => {
     createRuntimeSecretProviderFromProcessEnvironment().getSnapshot()
       .emailOutbox,
   );
-  repository = new PostgresOrganizationInvitationRepository(client, cipher);
+  repository = new PostgresOrganizationInvitationRepository(
+    client,
+    cipher,
+    new PostgresEmailDeliveryRequestRepository(),
+  );
 });
 
 afterAll(async () => {

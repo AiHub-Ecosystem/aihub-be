@@ -1,4 +1,4 @@
-import { Counter, Histogram, Registry } from '@prometheus-io/client';
+import { Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 
 /**
  * The metric names spec section L.2 fixes. Issue #198 owns five of the
@@ -75,6 +75,84 @@ export type EmailDeliveryKindLabel =
 
 export function recordEmailDeliveryFailed(kind: EmailDeliveryKindLabel): void {
   emailDeliveryFailedTotal.inc({ kind });
+}
+
+const EMAIL_DELIVERY_KIND_LABELS: readonly EmailDeliveryKindLabel[] = [
+  'verification_email',
+  'password_reset_email',
+  'organization_invite_email',
+];
+
+export interface EmailOutboxBacklogSample {
+  readonly kind: EmailDeliveryKindLabel;
+  readonly queued: number;
+  readonly oldestAgeSeconds: number;
+}
+
+type EmailOutboxBacklogSource = () => Promise<
+  readonly EmailOutboxBacklogSample[]
+>;
+
+let emailOutboxBacklogSource: EmailOutboxBacklogSource | undefined;
+let pendingBacklogRead: Promise<void> | undefined;
+
+/**
+ * Reads the queue once per scrape for both gauges. The terminal-failure
+ * counter only moves when a request gives up, so it cannot see dispatch that
+ * has stopped altogether; these are read from the table at scrape time for
+ * exactly that reason. A failed read drops the series rather than repeating the
+ * last value, because a stale "nothing waiting" is the reading that hides an
+ * outage.
+ */
+function readEmailOutboxBacklog(): Promise<void> {
+  const source = emailOutboxBacklogSource;
+  if (source === undefined) return Promise.resolve();
+  pendingBacklogRead ??= (async () => {
+    try {
+      const samples = await source();
+      for (const kind of EMAIL_DELIVERY_KIND_LABELS) {
+        const sample = samples.find((entry) => entry.kind === kind);
+        emailOutboxQueued.set({ kind }, sample?.queued ?? 0);
+        emailOutboxOldestAge.set({ kind }, sample?.oldestAgeSeconds ?? 0);
+      }
+    } catch {
+      emailOutboxQueued.reset();
+      emailOutboxOldestAge.reset();
+    } finally {
+      pendingBacklogRead = undefined;
+    }
+  })();
+  return pendingBacklogRead;
+}
+
+const emailOutboxQueued = new Gauge({
+  name: 'aihub_email_outbox_queued',
+  help: 'Email Delivery Requests waiting for dispatch.',
+  labelNames: ['kind'],
+  registers: [registry],
+  collect: readEmailOutboxBacklog,
+});
+
+const emailOutboxOldestAge = new Gauge({
+  name: 'aihub_email_outbox_oldest_queued_age_seconds',
+  help: 'Age of the oldest Email Delivery Request still waiting for dispatch.',
+  labelNames: ['kind'],
+  registers: [registry],
+  collect: readEmailOutboxBacklog,
+});
+
+/**
+ * Registers where the backlog gauges read from. Only the process that owns an
+ * outbox registers one; until then the gauges expose no series.
+ */
+export function setEmailOutboxBacklogSource(
+  source: EmailOutboxBacklogSource | undefined,
+): void {
+  emailOutboxBacklogSource = source;
+  if (source === undefined) {
+    emailOutboxQueued.reset();
+    emailOutboxOldestAge.reset();
+  }
 }
 
 /**

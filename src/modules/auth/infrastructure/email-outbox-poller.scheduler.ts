@@ -8,7 +8,9 @@ import {
 
 import {
   type EmailDeliveryKindLabel,
+  type EmailOutboxBacklogSample,
   recordEmailDeliveryFailed,
+  setEmailOutboxBacklogSource,
 } from '@/common/observability/metrics';
 import { EmailDeliveryPoller } from '@/modules/auth/application/email-delivery-poller';
 
@@ -33,14 +35,25 @@ export class EmailOutboxPollerScheduler
   private timer: NodeJS.Timeout | undefined;
   private running = false;
 
+  /**
+   * `backlog` feeds the queue-age gauges. It is registered beside the timer
+   * rather than read by the poller, so the gauges keep reporting from the table
+   * even when passes stop running — which is the outage they exist to show.
+   */
   constructor(
     private readonly poller: EmailDeliveryPoller,
     private readonly intervalMs = EMAIL_OUTBOX_POLL_INTERVAL_MS,
+    private readonly backlog?: () => Promise<
+      readonly EmailOutboxBacklogSample[]
+    >,
   ) {}
 
   onModuleInit(): void {
     if (process.env.NODE_ENV === 'test') {
       return;
+    }
+    if (this.backlog !== undefined) {
+      setEmailOutboxBacklogSource(this.backlog);
     }
     this.timer = setInterval(() => {
       void this.pass();
@@ -55,6 +68,9 @@ export class EmailOutboxPollerScheduler
       clearInterval(this.timer);
       this.timer = undefined;
     }
+    if (this.backlog !== undefined) {
+      setEmailOutboxBacklogSource(undefined);
+    }
   }
 
   /**
@@ -67,9 +83,9 @@ export class EmailOutboxPollerScheduler
     this.running = true;
     try {
       const summary = await this.poller.runOnce();
-      if (summary.claimed > 0) {
+      if (summary.claimed > 0 || summary.cancelled > 0 || summary.failed > 0) {
         this.logger.log(
-          `email outbox pass claimed=${summary.claimed} provider_accepted=${summary.providerAccepted} cancelled=${summary.cancelled} failed=${summary.failed}`,
+          `email outbox pass claimed=${summary.claimed} provider_accepted=${summary.providerAccepted} cancelled=${summary.cancelled} failed=${summary.failed} deferred=${summary.deferred}`,
         );
       }
     } catch (error) {

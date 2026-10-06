@@ -36,6 +36,7 @@ import {
 import { PostgresOrganizationInvitationRepository } from '@/modules/identity/infrastructure/postgres-organization-invitation.repository';
 import { createRuntimeSecretProviderFromProcessEnvironment } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
 
+import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import {
   createTestPool,
   resetIdentityTables,
@@ -141,7 +142,11 @@ beforeAll(async () => {
   );
 
   const invitations: OrganizationInvitationPort =
-    new PostgresOrganizationInvitationRepository(identityClient, cipher);
+    new PostgresOrganizationInvitationRepository(
+      identityClient,
+      cipher,
+      new PostgresEmailDeliveryRequestRepository(),
+    );
   const verifier: UserAccessTokenVerifierPort = {
     verify: async (token: string) => {
       if (token !== 'valid.token.value') {

@@ -252,4 +252,126 @@ describe('email delivery request repository', () => {
       }),
     ).rejects.toThrow(/queued state|attempts/i);
   });
+  it('keeps a deferred row out of claims until its retry time, then returns it', async () => {
+    const id = requestId();
+    await repository.insert(authClient, insertInput(id));
+    const owner = await claimAs(id, 'owner-a');
+    const retryAt = new Date(NOW.getTime() + 5 * 60_000);
+
+    await repository.releaseDeferred(authClient, { id, owner, retryAt });
+
+    const early = await repository.claim(authClient, {
+      now: new Date(retryAt.getTime() - 1),
+      limit: 10,
+      leaseMs: 60_000,
+      owner: 'owner-b',
+    });
+    expect(early.map((row) => row.id)).toEqual([]);
+
+    const due = await repository.claim(authClient, {
+      now: retryAt,
+      limit: 10,
+      leaseMs: 60_000,
+      owner: 'owner-b',
+    });
+    expect(due.map((row) => row.id)).toEqual([id]);
+    const { rows } = await pool.query(
+      'SELECT attempts, payload_ciphertext FROM email_delivery_requests WHERE id = $1',
+      [id],
+    );
+    expect(rows[0]).toEqual({ attempts: 0, payload_ciphertext: CIPHERTEXT });
+  });
+
+  it('cancels and erases stale queued rows without touching fresh or leased ones', async () => {
+    const stale = requestId();
+    const leased = requestId();
+    const fresh = requestId();
+    const cutoff = new Date(NOW.getTime() - 24 * 60 * 60_000);
+    const old = new Date(cutoff.getTime() - 1);
+    for (const id of [stale, leased]) {
+      await repository.insert(authClient, {
+        ...insertInput(id),
+        createdAt: old,
+      });
+    }
+    await repository.insert(authClient, insertInput(fresh));
+    await pool.query(
+      "UPDATE email_delivery_requests SET lease_owner = 'owner-a', lease_expires_at = $2 WHERE id = $1",
+      [leased, new Date(NOW.getTime() + 60_000)],
+    );
+
+    const cancelled = await repository.cancelStale(authClient, {
+      at: NOW,
+      createdAtOrBefore: cutoff,
+    });
+
+    expect(cancelled.map((row) => row.id)).toEqual([stale]);
+    const { rows } = await pool.query(
+      'SELECT id, status, cancel_reason, payload_ciphertext FROM email_delivery_requests ORDER BY id',
+    );
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        {
+          id: stale,
+          status: 'cancelled',
+          cancel_reason: 'credential_expired',
+          payload_ciphertext: null,
+        },
+        {
+          id: leased,
+          status: 'queued',
+          cancel_reason: null,
+          payload_ciphertext: CIPHERTEXT,
+        },
+        {
+          id: fresh,
+          status: 'queued',
+          cancel_reason: null,
+          payload_ciphertext: CIPHERTEXT,
+        },
+      ]),
+    );
+  });
+
+  it('reports the queued backlog per kind with the age of the oldest request', async () => {
+    const older = requestId();
+    const newer = requestId();
+    const invite = requestId();
+    const done = requestId();
+    await repository.insert(authClient, {
+      ...insertInput(older),
+      createdAt: new Date(NOW.getTime() - 600_000),
+    });
+    await repository.insert(authClient, {
+      ...insertInput(newer),
+      createdAt: new Date(NOW.getTime() - 60_000),
+    });
+    await repository.insert(authClient, {
+      ...insertInput(invite),
+      kind: 'organization_invite_email',
+      createdAt: new Date(NOW.getTime() - 30_000),
+    });
+    await repository.insert(authClient, {
+      ...insertInput(done),
+      createdAt: new Date(NOW.getTime() - 3_600_000),
+    });
+    // A terminal row is not waiting, however old it is.
+    await repository.cancelStale(authClient, {
+      at: NOW,
+      createdAtOrBefore: new Date(NOW.getTime() - 3_000_000),
+    });
+
+    const backlog = await repository.backlog(authClient, { now: NOW });
+
+    expect([...backlog].sort((a, b) => a.kind.localeCompare(b.kind))).toEqual([
+      { kind: 'organization_invite_email', queued: 1, oldestAgeSeconds: 30 },
+      { kind: 'verification_email', queued: 2, oldestAgeSeconds: 600 },
+    ]);
+  });
+
+  it('reports an empty backlog as no rows', async () => {
+    await expect(repository.backlog(authClient, { now: NOW })).resolves.toEqual(
+      [],
+    );
+  });
 });

@@ -18,6 +18,7 @@ import { PostgresOrganizationInvitationRepository } from '@/modules/identity/inf
 import { PostgresOrganizationMembershipRepository } from '@/modules/identity/infrastructure/postgres-organization-membership.repository';
 import { createRuntimeSecretProviderFromProcessEnvironment } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
 
+import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import {
   createTestPool,
   resetIdentityTables,
@@ -343,6 +344,7 @@ describe('First Owner Attachment against PostgreSQL', () => {
       new PostgresOrganizationInvitationRepository(
         client,
         cipher,
+        new PostgresEmailDeliveryRequestRepository(),
       ).createInvitation({
         context,
         invitationId: `oiv_${ulid()}`,

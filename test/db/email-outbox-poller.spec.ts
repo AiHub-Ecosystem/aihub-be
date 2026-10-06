@@ -4,7 +4,10 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { getMetrics } from '@/common/observability/metrics';
-import { EmailDeliveryPoller } from '@/modules/auth/application/email-delivery-poller';
+import {
+  DEFER_RETRY_MS,
+  EmailDeliveryPoller,
+} from '@/modules/auth/application/email-delivery-poller';
 import type {
   EmailDeliveryKind,
   EmailDeliveryRequestRecord,
@@ -570,25 +573,62 @@ describe('email outbox dispatch poller', () => {
       });
     });
 
-    it('leaves a request sealed with a key version this instance lacks queued, unerased, and claimable', async () => {
+    it('leaves a request sealed with a key version this instance lacks queued, unerased, and claimable after its retry time', async () => {
       const seeded = await seedRequest({ sealedWith: foreignCipher });
       const sender = new RecordingSender();
+      const retryAt = new Date(NOW.getTime() + DEFER_RETRY_MS);
 
-      await poller(OWNER_A, sender).runOnce();
+      const summary = await poller(OWNER_A, sender).runOnce();
 
       // Cancelling would erase a payload the instance that holds the key can
-      // still deliver, so the row keeps its ciphertext and its attempts and
-      // goes straight back into circulation.
+      // still deliver, so the row keeps its ciphertext and its attempts. It is
+      // not handed straight back: a batch of such rows reclaimed every pass
+      // would keep every newer request from being claimed.
       expect(sender.sends).toEqual([]);
+      expect(summary).toMatchObject({ claimed: 1, deferred: 1, cancelled: 0 });
       expect(await rowOf(seeded.id)).toMatchObject({
         status: 'queued',
         attempts: 0,
         cancel_reason: null,
         lease_owner: null,
-        lease_expires_at: null,
+        lease_expires_at: retryAt,
       });
       expect((await rowOf(seeded.id)).payload_ciphertext).not.toBeNull();
-      expect((await claim(OWNER_B)).map((row) => row.id)).toEqual([seeded.id]);
+      expect(await claim(OWNER_B)).toEqual([]);
+      expect(
+        (await claim(OWNER_B, { now: retryAt })).map((row) => row.id),
+      ).toEqual([seeded.id]);
+    });
+
+    it('does not let deferred rows starve newer requests', async () => {
+      const foreign = [];
+      for (let index = 0; index < 3; index += 1) {
+        foreign.push(await seedRequest({ sealedWith: foreignCipher }));
+      }
+      const deliverable = await seedRequest();
+      const sender = new RecordingSender();
+      const smallBatch = new EmailDeliveryPoller(
+        store,
+        new PostgresEmailCredentialRepository(client),
+        cipher,
+        sender,
+        () => NOW,
+        { hash },
+        { owner: OWNER_A, batchSize: 3 },
+      );
+
+      await smallBatch.runOnce();
+      await smallBatch.runOnce();
+
+      // The first pass fills its batch with the three unopenable rows and defers
+      // them; the second must reach the request behind them.
+      expect(sender.sends).toHaveLength(1);
+      expect(await rowOf(deliverable.id)).toMatchObject({
+        status: 'provider_accepted',
+      });
+      for (const row of foreign) {
+        expect(await rowOf(row.id)).toMatchObject({ status: 'queued' });
+      }
     });
 
     it('cancels a request whose credential was superseded', async () => {
@@ -707,6 +747,7 @@ describe('email outbox dispatch poller', () => {
         },
         markCancelled: (input) => store.markCancelled(input),
         releaseDeferred: (input) => store.releaseDeferred(input),
+        cancelStale: (input) => store.cancelStale(input),
         claimUnreportedFailures: (input) =>
           store.claimUnreportedFailures(input),
         markFailureReported: (input) => store.markFailureReported(input),
