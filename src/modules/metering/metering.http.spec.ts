@@ -7,6 +7,7 @@ import { Test } from '@nestjs/testing';
 import { AppModule } from '@/app.module';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { appConfig } from '@/config/runtime-configuration';
 import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
 import type {
   IdempotencyExecution,
@@ -47,12 +48,13 @@ const idempotency = {
 describe('authenticated metering HTTP boundary', () => {
   let app: NestFastifyApplication;
   let finalizer: FakeFinalizer;
-  const originalAllowBypass = process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV;
-  const originalNodeEnv = process.env.NODE_ENV;
+  const runtimeConfiguration = {
+    ...appConfig(),
+    NODE_ENV: 'test',
+    AIHUB_ALLOW_UNAUTHENTICATED_DEV: true,
+  };
 
   beforeAll(async () => {
-    process.env.NODE_ENV = 'test';
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'true';
     finalizer = new FakeFinalizer();
 
     const dispatcher = {
@@ -66,6 +68,8 @@ describe('authenticated metering HTTP boundary', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(appConfig.KEY)
+      .useValue(runtimeConfiguration)
       .overrideProvider(METERING_FINALIZER)
       .useValue(finalizer)
       .overrideProvider(OPERATION_DISPATCHER)
@@ -84,8 +88,6 @@ describe('authenticated metering HTTP boundary', () => {
 
   afterAll(async () => {
     await app.close();
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = originalAllowBypass;
-    process.env.NODE_ENV = originalNodeEnv;
   });
 
   it('writes exactly one billable record before a successful response', async () => {
@@ -132,9 +134,8 @@ describe('authenticated metering HTTP boundary', () => {
 
   it('writes no record for a request that never authenticated', async () => {
     const before = finalizer.inputs.length;
-    // The dev bypass authenticates a keyless local request, so it has to be
-    // off for the case this test is about: a key that never resolves.
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'false';
+    // Disable the injected dev bypass for the case this test is about.
+    runtimeConfiguration.AIHUB_ALLOW_UNAUTHENTICATED_DEV = false;
 
     try {
       const response = await app.inject({
@@ -150,7 +151,7 @@ describe('authenticated metering HTTP boundary', () => {
 
       expect(response.statusCode).toBe(401);
     } finally {
-      process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'true';
+      runtimeConfiguration.AIHUB_ALLOW_UNAUTHENTICATED_DEV = true;
     }
 
     expect(finalizer.inputs).toHaveLength(before);

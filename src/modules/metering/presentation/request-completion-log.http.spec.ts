@@ -22,6 +22,7 @@ import { METRICS_ROUTE_PATH } from '@/common/observability/metrics';
 import { registerMetricsRoute } from '@/common/observability/metrics.route';
 import { createRequestLogging } from '@/common/observability/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { appConfig } from '@/config/runtime-configuration';
 import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
 import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
 import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
@@ -218,23 +219,13 @@ describe('request completion log over the HTTP boundary', () => {
   const exporter = new InMemorySpanExporter();
   const dispatcher = new ScriptedDispatcher();
   const usageRepository = new ScriptedUsageRepository();
-  const originalAllowBypass = process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV;
-  const originalNodeEnv = process.env.NODE_ENV;
-
-  function restoreEnvironment(
-    name: string,
-    original: string | undefined,
-  ): void {
-    if (original === undefined) {
-      delete process.env[name];
-    } else {
-      process.env[name] = original;
-    }
-  }
+  const runtimeConfiguration = {
+    ...appConfig(),
+    NODE_ENV: 'test',
+    AIHUB_ALLOW_UNAUTHENTICATED_DEV: true,
+  };
 
   beforeAll(async () => {
-    process.env.NODE_ENV = 'test';
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'true';
     log = new CapturedLog();
 
     // A real SDK, so the span the request runs inside — and therefore the
@@ -248,6 +239,8 @@ describe('request completion log over the HTTP boundary', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(appConfig.KEY)
+      .useValue(runtimeConfiguration)
       .overrideProvider(USAGE_REPOSITORY)
       .useValue(usageRepository)
       // Keeps the real MeteringService — which owns the failure logger this
@@ -283,8 +276,6 @@ describe('request completion log over the HTTP boundary', () => {
   afterAll(async () => {
     await app.close();
     await sdk.shutdown();
-    restoreEnvironment('AIHUB_ALLOW_UNAUTHENTICATED_DEV', originalAllowBypass);
-    restoreEnvironment('NODE_ENV', originalNodeEnv);
   });
 
   beforeEach(() => {
@@ -468,7 +459,7 @@ describe('request completion log over the HTTP boundary', () => {
   });
 
   it('omits the organization keys entirely for a request that never authenticated', async () => {
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'false';
+    runtimeConfiguration.AIHUB_ALLOW_UNAUTHENTICATED_DEV = false;
 
     try {
       const response = await app.inject({
@@ -479,7 +470,7 @@ describe('request completion log over the HTTP boundary', () => {
 
       expect(response.statusCode).toBe(401);
     } finally {
-      process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'true';
+      runtimeConfiguration.AIHUB_ALLOW_UNAUTHENTICATED_DEV = true;
     }
 
     const event = log.only();

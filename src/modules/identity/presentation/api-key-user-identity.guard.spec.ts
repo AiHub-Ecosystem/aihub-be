@@ -9,6 +9,7 @@ import type {
   UserIdentityInput,
   UserIdentityResolverPort,
 } from '@/modules/identity/application/user-identity-resolver.port';
+import type { RequestEnvironmentConfig } from './request-environment';
 
 import { ApiKeyUserIdentityGuard } from './api-key-user-identity.guard';
 
@@ -56,24 +57,18 @@ function guard(
   return new ApiKeyUserIdentityGuard(
     options.authenticator ?? { authenticate: async () => authenticated },
     options.resolver ?? { resolve: async () => resolved },
+    {
+      NODE_ENV: 'test',
+      AIHUB_ALLOW_UNAUTHENTICATED_DEV: false,
+      AIHUB_PRODUCTION_HOST: 'api.acme-real-domain.com',
+      AIHUB_STAGING_HOST: undefined,
+      AIHUB_DEVELOPMENT_HOST: undefined,
+      AIHUB_SANDBOX_HOST: undefined,
+    } satisfies RequestEnvironmentConfig,
   );
 }
 
 describe('ApiKeyUserIdentityGuard', () => {
-  const originalHost = process.env.AIHUB_PRODUCTION_HOST;
-
-  beforeEach(() => {
-    process.env.AIHUB_PRODUCTION_HOST = 'api.acme-real-domain.com';
-  });
-
-  afterEach(() => {
-    if (originalHost === undefined) {
-      Reflect.deleteProperty(process.env, 'AIHUB_PRODUCTION_HOST');
-    } else {
-      process.env.AIHUB_PRODUCTION_HOST = originalHost;
-    }
-  });
-
   it('attaches the resolved End-User ID to the authenticated request', async () => {
     const value = request();
 

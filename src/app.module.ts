@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 
+import { RuntimeConfigurationModule } from './config/runtime-configuration.module';
 import { HealthController } from './health/health.controller';
 import { AuthModule } from './modules/auth/auth.module';
 import { AvatarModule } from './modules/avatar/avatar.module';
@@ -15,6 +16,7 @@ import { OpenApiModule } from './openapi/openapi.module';
 @Module({
   controllers: [HealthController],
   imports: [
+    RuntimeConfigurationModule,
     AuthModule,
     AvatarModule,
     IdentityModule,

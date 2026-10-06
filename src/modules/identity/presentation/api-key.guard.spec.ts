@@ -6,6 +6,7 @@ import type {
   AuthenticatedApiKey,
 } from '@/modules/identity/application/api-key-authenticator.port';
 import { ApiKeyGuard } from './api-key.guard';
+import type { RequestEnvironmentConfig } from './request-environment';
 
 // writing.task1.grade requires the `writing.grade` Scope.
 const OPERATION_ID = 'writing.task1.grade';
@@ -46,24 +47,17 @@ function reflector(): Reflector {
 }
 
 function guard(authenticator: ApiKeyAuthenticatorPort): ApiKeyGuard {
-  return new ApiKeyGuard(reflector(), authenticator, undefined);
+  return new ApiKeyGuard(reflector(), authenticator, undefined, {
+    NODE_ENV: 'test',
+    AIHUB_ALLOW_UNAUTHENTICATED_DEV: false,
+    AIHUB_PRODUCTION_HOST: 'api.aihub.test',
+    AIHUB_STAGING_HOST: undefined,
+    AIHUB_DEVELOPMENT_HOST: undefined,
+    AIHUB_SANDBOX_HOST: undefined,
+  } satisfies RequestEnvironmentConfig);
 }
 
 describe('ApiKeyGuard scope check', () => {
-  const originalHost = process.env.AIHUB_PRODUCTION_HOST;
-
-  beforeEach(() => {
-    process.env.AIHUB_PRODUCTION_HOST = 'api.aihub.test';
-  });
-
-  afterEach(() => {
-    if (originalHost === undefined) {
-      Reflect.deleteProperty(process.env, 'AIHUB_PRODUCTION_HOST');
-    } else {
-      process.env.AIHUB_PRODUCTION_HOST = originalHost;
-    }
-  });
-
   it('admits a key whose Scopes cover the operation requiredScope', async () => {
     const value = request();
 

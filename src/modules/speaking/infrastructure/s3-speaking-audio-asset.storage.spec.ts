@@ -1,26 +1,8 @@
-import type {
-  RuntimeSecretProvider,
-  RuntimeSecretSnapshot,
-} from '@/modules/secrets/application/runtime-secret-provider.port';
+import { createSeaweedFsS3Client } from '@/modules/secrets/infrastructure/seaweedfs-s3-client.factory';
 import { S3SpeakingAudioAssetStorage } from './s3-speaking-audio-asset.storage';
 
 const KEY =
   'orgs/org_01J00000000000000000000001/speaking/aud_01J00000000000000000000001/original';
-
-function provider(
-  seaweedfs?: RuntimeSecretSnapshot['seaweedfs'],
-): RuntimeSecretProvider {
-  return {
-    getSnapshot: (): RuntimeSecretSnapshot => ({
-      aiSpeaking: { clientId: 'client', secretKey: 'secret' },
-      aiWriting: { token: 'token' },
-      resend: { apiKey: 'resend-api-key' },
-      userAccessJwt: { privateKeyPem: 'private-key', keyId: 'key-id' },
-      emailOutbox: { currentKeyId: 'test', keys: { test: 'k'.repeat(44) } },
-      ...(seaweedfs === undefined ? {} : { seaweedfs }),
-    }),
-  };
-}
 
 function storage(
   send: jest.Mock<Promise<unknown>, [unknown]> = jest
@@ -29,7 +11,12 @@ function storage(
   options: ConstructorParameters<typeof S3SpeakingAudioAssetStorage>[1] = {},
 ) {
   return new S3SpeakingAudioAssetStorage(
-    provider({ accessKeyId: 'AKIDEXAMPLE', secretAccessKey: 'secret-key' }),
+    createSeaweedFsS3Client({
+      credentials: {
+        accessKeyId: 'AKIDEXAMPLE',
+        secretAccessKey: 'secret-key',
+      },
+    }),
     {
       productionBucket: 'aihub-speaking-recordings',
       sandboxBucket: 'aihub-sandbox-speaking-recordings',
@@ -102,7 +89,7 @@ describe('S3SpeakingAudioAssetStorage', () => {
   });
 
   it('fails closed when SeaweedFS credentials are missing', async () => {
-    const adapter = new S3SpeakingAudioAssetStorage(provider(), {
+    const adapter = new S3SpeakingAudioAssetStorage(undefined, {
       productionBucket: 'aihub-speaking-recordings',
       sandboxBucket: 'aihub-sandbox-speaking-recordings',
     });
@@ -129,7 +116,9 @@ describe('S3SpeakingAudioAssetStorage', () => {
       'another-bucket',
     ]) {
       const adapter = new S3SpeakingAudioAssetStorage(
-        provider({ accessKeyId: 'access', secretAccessKey: 'secret' }),
+        createSeaweedFsS3Client({
+          credentials: { accessKeyId: 'access', secretAccessKey: 'secret' },
+        }),
         {
           productionBucket: bucket,
           sandboxBucket: 'aihub-sandbox-speaking-recordings',

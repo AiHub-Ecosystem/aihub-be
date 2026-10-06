@@ -18,7 +18,7 @@ async function main() {
   if (typeof loadRuntimeConnectionEnvironment !== 'function') {
     throw new Error('runtime connection loader is unavailable');
   }
-  loadRuntimeConnectionEnvironment();
+  loadRuntimeConnectionEnvironment({ env: process.env });
 
   const target = process.argv[2] ?? 'dist/main.js';
   // The target sees its own arguments: `runtime-entrypoint.mjs scripts/cli.mjs

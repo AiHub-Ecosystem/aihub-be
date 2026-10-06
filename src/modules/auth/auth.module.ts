@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import {
@@ -6,7 +7,13 @@ import {
   hashOpaqueToken,
   opaqueTokenIssuer,
 } from '@/common/security/opaque-token-issuer';
+import { appConfig } from '@/config/runtime-configuration';
+import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import { EmailDeliveryPoller } from '@/modules/auth/application/email-delivery-poller';
+import {
+  RUNTIME_CONNECTION_CONFIGURATION,
+  type RuntimeConnectionConfigurationPort,
+} from '@/modules/secrets/application/runtime-connection-configuration.port';
 import {
   RUNTIME_SECRET_PROVIDER,
   type RuntimeSecretProvider,
@@ -81,13 +88,16 @@ import { LocalAuthController } from './presentation/local-auth.controller';
 import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
 
 @Module({
-  imports: [SecretsModule],
+  imports: [RuntimeConfigurationModule, SecretsModule],
   controllers: [LocalAuthController],
   providers: [
     {
       provide: POSTGRES_AUTH_CLIENT,
-      useFactory: (): PostgresAuthClient =>
-        createPostgresAuthClient(process.env.DATABASE_URL ?? ''),
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
+      ): PostgresAuthClient =>
+        createPostgresAuthClient(configuration.databaseUrl ?? ''),
     },
     {
       provide: PostgresLocalAuthRepository,
@@ -141,20 +151,25 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
     },
     {
       provide: EMAIL_SENDER,
-      useFactory: (provider: RuntimeSecretProvider): EmailSenderPort => {
+      useFactory: (
+        provider: RuntimeSecretProvider,
+        configuration: ConfigType<typeof appConfig>,
+      ): EmailSenderPort => {
         const snapshot = provider.getSnapshot();
-        const isProduction = process.env.NODE_ENV === 'production';
+        const isProduction =
+          configuration.NODE_ENV === 'production' ||
+          configuration.NODE_ENV === 'staging';
         return new ResendEmailSender(
           snapshot.resend,
-          process.env.RESEND_FROM ?? '',
+          configuration.RESEND_FROM ?? '',
           fetch,
-          process.env.CUSTOMER_WEB_BASE_URL,
+          configuration.CUSTOMER_WEB_BASE_URL,
           isProduction,
           isProduction &&
-            process.env.AIHUB_RUNTIME_DATABASE_SCOPE !== 'sandbox',
+            configuration.AIHUB_RUNTIME_DATABASE_SCOPE !== 'sandbox',
         );
       },
-      inject: [RUNTIME_SECRET_PROVIDER],
+      inject: [RUNTIME_SECRET_PROVIDER, appConfig.KEY],
     },
     // The outbox table is this module's (ADR-0074). Another module that commits
     // an Email Delivery Request with its own mutation writes it through this
@@ -200,27 +215,33 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
       useFactory: (
         poller: EmailDeliveryPoller,
         client: PostgresAuthClient,
+        configuration: ConfigType<typeof appConfig>,
       ): EmailOutboxPollerScheduler => {
         const store = new PostgresEmailDispatchStore(client);
         return new EmailOutboxPollerScheduler(
           poller,
           EMAIL_OUTBOX_POLL_INTERVAL_MS,
           () => store.backlog({ now: new Date() }),
+          configuration.NODE_ENV !== 'test',
         );
       },
-      inject: [EmailDeliveryPoller, POSTGRES_AUTH_CLIENT],
+      inject: [EmailDeliveryPoller, POSTGRES_AUTH_CLIENT, appConfig.KEY],
     },
     {
       provide: AUTH_RATE_LIMITER,
-      useFactory: (): AuthRateLimiterPort =>
-        new RedisAuthRateLimiter(process.env.REDIS_URL ?? ''),
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
+      ): AuthRateLimiterPort =>
+        new RedisAuthRateLimiter(configuration.redisUrl ?? ''),
     },
     {
       provide: USER_ACCESS_TOKEN_CRYPTO,
       useFactory: (
         provider: RuntimeSecretProvider,
+        configuration: ConfigType<typeof appConfig>,
       ): JoseUserAccessTokenService => {
-        const issuer = process.env.AIHUB_USER_ACCESS_ISSUER?.trim();
+        const issuer = configuration.AIHUB_USER_ACCESS_ISSUER?.trim();
         if (issuer === undefined || issuer.length === 0) {
           throw new Error('AIHUB_USER_ACCESS_ISSUER is required');
         }
@@ -234,7 +255,7 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
           clockSkewSeconds: 60,
         });
       },
-      inject: [RUNTIME_SECRET_PROVIDER],
+      inject: [RUNTIME_SECRET_PROVIDER, appConfig.KEY],
     },
     {
       provide: USER_ACCESS_TOKEN_ISSUER,

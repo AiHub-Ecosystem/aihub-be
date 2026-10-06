@@ -167,7 +167,7 @@ services:
       # live Avatars. Unset leaves the Sandbox Avatar routes at 503 (ADR-0068).
       SEAWEEDFS_USER_ASSET_BUCKET: ${SEAWEEDFS_SANDBOX_USER_ASSET_BUCKET:-}
       # Set only after WISPACE confirms the dedicated private Sandbox bucket.
-      SEAWEEDFS_SANDBOX_AUDIO_ASSET_BUCKET: ${SEAWEEDFS_SANDBOX_AUDIO_ASSET_BUCKET:-}
+      SEAWEEDFS_AUDIO_ASSET_BUCKET: ${SEAWEEDFS_SANDBOX_AUDIO_ASSET_BUCKET:-}
     networks: *app-database-networks
     ports:
       - "127.0.0.1:${AIHUB_SANDBOX_APP_PORT:-3022}:3000"

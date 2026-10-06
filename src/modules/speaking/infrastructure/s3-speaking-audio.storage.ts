@@ -3,26 +3,17 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
-import type { RuntimeSecretProvider } from '@/modules/secrets/application/runtime-secret-provider.port';
 import type { SpeakingAudioStoragePort } from '@/modules/speaking/application/speaking-audio-storage.port';
-import { SPEAKING_AUDIO_URL_HOST } from '@/modules/speaking/application/speaking-audio-url.policy';
 
-export const DEFAULT_SEAWEEDFS_ENDPOINT = `https://${SPEAKING_AUDIO_URL_HOST}`;
-export const DEFAULT_SEAWEEDFS_BUCKET = 'aihub-speaking-samples';
-export const DEFAULT_SEAWEEDFS_REGION = 'us-east-1';
 export const SPEAKING_AUDIO_URL_TTL_SECONDS = 15 * 60;
 
 interface StorageConfig {
-  readonly endpoint: string;
   readonly bucket: string;
-  readonly region: string;
   readonly expiresInSeconds: number;
 }
 
 export interface SpeakingAudioStorageOptions {
-  readonly endpoint?: string;
   readonly bucket?: string;
-  readonly region?: string;
   readonly expiresInSeconds?: number;
 }
 
@@ -32,62 +23,6 @@ function storageError(message: string): AppError {
     message,
     retryable: false,
   });
-}
-
-function configuredStorage(
-  secretProvider: RuntimeSecretProvider,
-  options: SpeakingAudioStorageOptions,
-): StorageConfig | undefined {
-  const credentials = secretProvider.getSnapshot().seaweedfs;
-  if (credentials === undefined) {
-    return undefined;
-  }
-
-  const endpoint = (
-    options.endpoint ??
-    process.env.SEAWEEDFS_ENDPOINT_URL ??
-    DEFAULT_SEAWEEDFS_ENDPOINT
-  ).trim();
-  const bucket = (
-    options.bucket ??
-    process.env.SEAWEEDFS_BUCKET ??
-    DEFAULT_SEAWEEDFS_BUCKET
-  ).trim();
-  const region = (
-    options.region ??
-    process.env.SEAWEEDFS_REGION ??
-    DEFAULT_SEAWEEDFS_REGION
-  ).trim();
-
-  if (!bucket || !region) {
-    throw storageError('Speaking sample audio storage is misconfigured');
-  }
-
-  try {
-    const url = new URL(endpoint);
-    if (
-      url.protocol !== 'https:' ||
-      url.hostname !== SPEAKING_AUDIO_URL_HOST ||
-      url.port ||
-      url.username ||
-      url.password ||
-      url.pathname !== '/' ||
-      url.search ||
-      url.hash
-    ) {
-      throw new Error('invalid SeaweedFS endpoint');
-    }
-  } catch {
-    throw storageError('Speaking sample audio storage is misconfigured');
-  }
-
-  return {
-    endpoint,
-    bucket,
-    region,
-    expiresInSeconds:
-      options.expiresInSeconds ?? SPEAKING_AUDIO_URL_TTL_SECONDS,
-  };
 }
 
 function validObjectKey(objectKey: string): boolean {
@@ -106,30 +41,19 @@ export class S3SpeakingAudioStorage implements SpeakingAudioStoragePort {
   private readonly config: StorageConfig | undefined;
 
   constructor(
-    secretProvider: RuntimeSecretProvider,
+    client: S3Client | undefined,
     options: SpeakingAudioStorageOptions = {},
   ) {
-    this.config = configuredStorage(secretProvider, options);
-    if (this.config === undefined) {
-      this.client = undefined;
-      return;
-    }
-
-    const credentials = secretProvider.getSnapshot().seaweedfs;
-    if (credentials === undefined) {
-      this.client = undefined;
-      return;
-    }
-
-    this.client = new S3Client({
-      endpoint: this.config.endpoint,
-      region: this.config.region,
-      forcePathStyle: true,
-      credentials: {
-        accessKeyId: credentials.accessKeyId,
-        secretAccessKey: credentials.secretAccessKey,
-      },
-    });
+    const bucket = options.bucket?.trim();
+    this.client = client;
+    this.config =
+      client === undefined || bucket === undefined || bucket.length === 0
+        ? undefined
+        : {
+            bucket,
+            expiresInSeconds:
+              options.expiresInSeconds ?? SPEAKING_AUDIO_URL_TTL_SECONDS,
+          };
   }
 
   async getReadUrl(objectKey: string): Promise<string> {

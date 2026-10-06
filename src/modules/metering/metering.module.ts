@@ -6,6 +6,11 @@ import {
 } from '@/modules/gateway/application/quota-counter.port';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
 import {
+  RUNTIME_CONNECTION_CONFIGURATION,
+  type RuntimeConnectionConfigurationPort,
+} from '@/modules/secrets/application/runtime-connection-configuration.port';
+import { SecretsModule } from '@/modules/secrets/secrets.module';
+import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
 } from './application/metering-finalizer.port';
@@ -27,13 +32,16 @@ import { HttpExceptionFilter } from './presentation/http-exception.filter';
 import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.interceptor';
 
 @Module({
-  imports: [GatewayModule],
+  imports: [SecretsModule, GatewayModule],
   providers: [
     {
       provide: USAGE_REPOSITORY,
-      useFactory: (): UsageRepositoryPort =>
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
+      ): UsageRepositoryPort =>
         new PostgresUsageRepository(
-          createPostgresMeteringClient(process.env.DATABASE_URL ?? ''),
+          createPostgresMeteringClient(configuration.databaseUrl ?? ''),
         ),
     },
     {

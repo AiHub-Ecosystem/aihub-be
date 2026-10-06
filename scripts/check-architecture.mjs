@@ -60,16 +60,44 @@ for (const file of collectTypeScriptFiles(downstreamDirectory)) {
 }
 
 const srcDirectory = join(root, 'src');
+const configurationDirectory = join(srcDirectory, 'config');
+const cliDirectory = join(srcDirectory, 'cli');
+for (const file of collectTypeScriptFiles(srcDirectory)) {
+  if (
+    file.endsWith('.spec.ts') ||
+    file.startsWith(configurationDirectory) ||
+    file.startsWith(cliDirectory)
+  ) {
+    continue;
+  }
+
+  const source = readFileSync(file, 'utf8');
+  if (/\bprocess\.env\b/.test(source)) {
+    fail(
+      `${relative(root, file)} reads process.env outside the configuration boundary; inject validated configuration instead`,
+    );
+  }
+}
+
 const secretsInfrastructureDirectory = join(
   srcDirectory,
   'modules',
   'secrets',
   'infrastructure',
 );
+const secretsModulePath = join(
+  srcDirectory,
+  'modules',
+  'secrets',
+  'secrets.module.ts',
+);
 for (const file of collectTypeScriptFiles(srcDirectory)) {
   if (
     file.endsWith('.spec.ts') ||
-    file.startsWith(secretsInfrastructureDirectory)
+    file.startsWith(secretsInfrastructureDirectory) ||
+    file.startsWith(configurationDirectory) ||
+    file.startsWith(cliDirectory) ||
+    file === secretsModulePath
   ) {
     continue;
   }

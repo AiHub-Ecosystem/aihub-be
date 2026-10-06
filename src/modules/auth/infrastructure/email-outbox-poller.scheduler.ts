@@ -46,12 +46,11 @@ export class EmailOutboxPollerScheduler
     private readonly backlog?: () => Promise<
       readonly EmailOutboxBacklogSample[]
     >,
+    private readonly enabled = true,
   ) {}
 
   onModuleInit(): void {
-    if (process.env.NODE_ENV === 'test') {
-      return;
-    }
+    if (!this.enabled) return;
     if (this.backlog !== undefined) {
       setEmailOutboxBacklogSource(this.backlog);
     }

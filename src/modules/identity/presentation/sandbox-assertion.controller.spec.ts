@@ -10,6 +10,10 @@ import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
 import { generateRequestId } from '@/common/request-context/request-id';
 import {
+  appConfig,
+  getRuntimeConnectionConfiguration,
+} from '@/config/runtime-configuration';
+import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
   type AuthenticatedApiKey,
@@ -18,6 +22,7 @@ import {
   ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
   type OrganizationIdentityConfig,
 } from '@/modules/identity/application/organization-identity-config-repository.port';
+import { RUNTIME_CONNECTION_CONFIGURATION } from '@/modules/secrets/application/runtime-connection-configuration.port';
 
 const SANDBOX_ORG = 'org_sandbox';
 
@@ -33,22 +38,31 @@ const identityConfig: OrganizationIdentityConfig = {
 
 let authenticatedApiKey: AuthenticatedApiKey;
 let authenticationError: AppError | undefined;
+type TestRuntimeConfiguration = {
+  -readonly [Key in keyof ReturnType<typeof appConfig>]: ReturnType<
+    typeof appConfig
+  >[Key];
+};
 
 describe('Sandbox assertion HTTP flow', () => {
   let app: NestFastifyApplication;
-  const originalEnv = { ...process.env };
+  let runtimeConfiguration: TestRuntimeConfiguration;
 
   beforeAll(async () => {
     const { privateKey } = await generateKeyPair('RS256', {
       extractable: true,
     });
-
-    process.env.NODE_ENV = 'test';
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'false';
-    process.env.AIHUB_SANDBOX_ORG_IDS = SANDBOX_ORG;
-    process.env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY =
-      await exportPKCS8(privateKey);
-    process.env.AIHUB_SANDBOX_ASSERTION_KID = 'sandbox-2026-09';
+    runtimeConfiguration = {
+      ...appConfig(),
+      NODE_ENV: 'test',
+      AIHUB_ALLOW_UNAUTHENTICATED_DEV: false,
+      AIHUB_SANDBOX_ORG_IDS: SANDBOX_ORG,
+    };
+    const runtimeConnection = {
+      ...getRuntimeConnectionConfiguration(),
+      sandboxAssertionPrivateKey: await exportPKCS8(privateKey),
+      sandboxAssertionKeyId: 'sandbox-2026-09',
+    };
 
     const authenticator: ApiKeyAuthenticatorPort = {
       authenticate: async () => {
@@ -61,6 +75,10 @@ describe('Sandbox assertion HTTP flow', () => {
     };
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(appConfig.KEY)
+      .useValue(runtimeConfiguration)
+      .overrideProvider(RUNTIME_CONNECTION_CONFIGURATION)
+      .useValue(runtimeConnection)
       .overrideProvider(API_KEY_AUTHENTICATOR)
       .useValue(authenticator)
       .overrideProvider(ORGANIZATION_IDENTITY_CONFIG_REPOSITORY)
@@ -76,13 +94,12 @@ describe('Sandbox assertion HTTP flow', () => {
 
   afterAll(async () => {
     await app.close();
-    process.env = originalEnv;
   });
 
   beforeEach(() => {
     jest.restoreAllMocks();
     authenticationError = undefined;
-    process.env.AIHUB_SANDBOX_ORG_IDS = SANDBOX_ORG;
+    runtimeConfiguration.AIHUB_SANDBOX_ORG_IDS = SANDBOX_ORG;
     authenticatedApiKey = {
       organizationId: SANDBOX_ORG,
       apiKeyId: 'ak_sandbox',
@@ -196,7 +213,7 @@ describe('Sandbox assertion HTTP flow', () => {
 
   // An unconfigured deployment must look like one that never had the route.
   it('answers 404 when no sandbox is configured', async () => {
-    process.env.AIHUB_SANDBOX_ORG_IDS = '';
+    runtimeConfiguration.AIHUB_SANDBOX_ORG_IDS = '';
 
     const response = await mint({ user_id: 'student_456' });
 

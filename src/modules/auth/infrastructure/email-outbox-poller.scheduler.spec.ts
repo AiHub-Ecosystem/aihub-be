@@ -46,10 +46,13 @@ class ControllablePoller {
 function scheduler(
   poller: ControllablePoller,
   intervalMs = INTERVAL_MS,
+  enabled = true,
 ): EmailOutboxPollerScheduler {
   return new EmailOutboxPollerScheduler(
     poller as unknown as EmailDeliveryPoller,
     intervalMs,
+    undefined,
+    enabled,
   );
 }
 
@@ -58,11 +61,9 @@ function delay(ms: number): Promise<void> {
 }
 
 describe('EmailOutboxPollerScheduler', () => {
-  const originalNodeEnv = process.env.NODE_ENV;
   const subjects: EmailOutboxPollerScheduler[] = [];
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
     for (const subject of subjects.splice(0)) {
       subject.onApplicationShutdown();
     }
@@ -72,8 +73,7 @@ describe('EmailOutboxPollerScheduler', () => {
     poller: ControllablePoller,
     nodeEnv: string,
   ): EmailOutboxPollerScheduler {
-    process.env.NODE_ENV = nodeEnv;
-    const subject = scheduler(poller);
+    const subject = scheduler(poller, INTERVAL_MS, nodeEnv !== 'test');
     subjects.push(subject);
     subject.onModuleInit();
     return subject;

@@ -3,9 +3,29 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseEnv } from 'node:util';
 
+import {
+  loadRuntimeConfiguration,
+  runtimeEnvironmentMetadata,
+} from '@/config/runtime-configuration';
 import { ConfiguredRuntimeSecretProvider } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
 import { loadRuntimeConnectionEnvironment } from '@/modules/secrets/infrastructure/runtime-connection.environment';
 import { writeBootConfig } from './ci-boot-config.cjs';
+
+const PRODUCTION_DEPLOYMENT_ONLY_VARIABLES = new Set([
+  'AIHUB_IMAGE',
+  'AIHUB_SANDBOX_ENABLED',
+  'AIHUB_SANDBOX_APP_PORT',
+  'AIHUB_DATABASE_NETWORK',
+  'AIHUB_APP_PORT',
+  'CUSTOMER_WEB_SANDBOX_BASE_URL',
+  'SEAWEEDFS_SANDBOX_USER_ASSET_BUCKET',
+  'SEAWEEDFS_SANDBOX_AUDIO_ASSET_BUCKET',
+  'VAULT_IMAGE',
+  'VAULT_ADDR',
+  'VAULT_CA_CERT_FILE',
+  'VAULT_ROLE_ID_FILE',
+  'AIHUB_RUNTIME_SECRETS_HOST_DIR',
+]);
 
 function readBootEnv(directory: string): NodeJS.Dict<string> {
   return parseEnv(readFileSync(join(directory, 'boot.env'), 'utf8'));
@@ -20,6 +40,7 @@ function productionAppEnvironmentNames(): string[] {
   const start = lines.findIndex((line) => line.includes('&app-environment'));
   const names: string[] = [];
   for (const line of lines.slice(start + 1)) {
+    if (line.trim().length === 0 || line.trimStart().startsWith('#')) continue;
     const match = /^ {2}([A-Z][A-Z0-9_]*):/.exec(line);
     if (match?.[1] === undefined) {
       break;
@@ -72,6 +93,7 @@ describe('CI boot configuration', () => {
 
     loadRuntimeConnectionEnvironment({ env });
 
+    expect(() => loadRuntimeConfiguration(env)).not.toThrow();
     expect(env.DATABASE_URL).toMatch(/^postgres:\/\//);
     expect(env.REDIS_URL).toMatch(/^redis:\/\//);
     expect(env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY).toContain(
@@ -87,6 +109,29 @@ describe('CI boot configuration', () => {
     expect(Object.keys(readBootEnv(directory)).sort()).toEqual(
       productionAppEnvironmentNames().sort(),
     );
+  });
+
+  it('keeps the local example and production app environment covered by the schema', () => {
+    const localExampleNames = Object.keys(
+      parseEnv(readFileSync('.env.example', 'utf8')),
+    );
+    expect(localExampleNames).toEqual(
+      expect.arrayContaining(Object.keys(runtimeEnvironmentMetadata)),
+    );
+    for (const name of productionAppEnvironmentNames()) {
+      expect(runtimeEnvironmentMetadata).toHaveProperty(name);
+    }
+    const productionExampleNames = Object.keys(
+      parseEnv(readFileSync('.env.production.example', 'utf8')),
+    );
+    for (const name of productionExampleNames) {
+      expect(
+        Object.prototype.hasOwnProperty.call(
+          runtimeEnvironmentMetadata,
+          name,
+        ) || PRODUCTION_DEPLOYMENT_ONLY_VARIABLES.has(name),
+      ).toBe(true);
+    }
   });
 
   it('sets a valid Customer Web URL for production startup', () => {

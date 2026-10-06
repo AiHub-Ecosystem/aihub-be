@@ -1,11 +1,16 @@
+import type { S3Client } from '@aws-sdk/client-s3';
 import { Inject, Module, type OnModuleDestroy } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
+import { appConfig } from '@/config/runtime-configuration';
+import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import {
-  RUNTIME_SECRET_PROVIDER,
-  type RuntimeSecretProvider,
-} from '@/modules/secrets/application/runtime-secret-provider.port';
+  RUNTIME_CONNECTION_CONFIGURATION,
+  type RuntimeConnectionConfigurationPort,
+} from '@/modules/secrets/application/runtime-connection-configuration.port';
+import { SEAWEEDFS_S3_CLIENT } from '@/modules/secrets/application/seaweedfs-s3-client.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
 import { AvatarOrphanSweep } from './application/avatar-orphan-sweep';
 import {
@@ -30,13 +35,16 @@ const AVATAR_DATABASE = Symbol('AVATAR_DATABASE');
 type AvatarDatabase = AvatarQueryClient & { close(): Promise<void> };
 
 @Module({
-  imports: [AuthModule, SecretsModule],
+  imports: [RuntimeConfigurationModule, AuthModule, SecretsModule],
   controllers: [AvatarController],
   providers: [
     {
       provide: AVATAR_DATABASE,
-      useFactory: (): AvatarDatabase =>
-        createAvatarQueryClient(process.env.DATABASE_URL ?? ''),
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
+      ): AvatarDatabase =>
+        createAvatarQueryClient(configuration.databaseUrl ?? ''),
     },
     {
       provide: AVATAR_REPOSITORY,
@@ -46,9 +54,14 @@ type AvatarDatabase = AvatarQueryClient & { close(): Promise<void> };
     },
     {
       provide: AVATAR_STORAGE,
-      inject: [RUNTIME_SECRET_PROVIDER],
-      useFactory: (secrets: RuntimeSecretProvider): AvatarStoragePort =>
-        new S3AvatarStorage(secrets),
+      inject: [SEAWEEDFS_S3_CLIENT, appConfig.KEY],
+      useFactory: (
+        client: S3Client | undefined,
+        configuration: ConfigType<typeof appConfig>,
+      ): AvatarStoragePort =>
+        new S3AvatarStorage(client, {
+          bucket: configuration.SEAWEEDFS_USER_ASSET_BUCKET,
+        }),
     },
     // Published for the operator sweep (`avatar:sweep`), which builds its own
     // instance from CLI-constructed adapters rather than booting Nest.

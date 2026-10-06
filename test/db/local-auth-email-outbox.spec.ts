@@ -7,6 +7,7 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { AppModule } from '@/app.module';
+import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { generateRequestId } from '@/common/request-context/request-id';
 import {
   AUTH_RATE_LIMITER,
@@ -35,7 +36,6 @@ import {
 } from '@/modules/auth/infrastructure/postgres-auth.client';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import { PostgresLocalAuthRepository } from '@/modules/auth/infrastructure/postgres-local-auth.repository';
-import { createRuntimeSecretProviderFromProcessEnvironment } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
 
 import {
   createTestPool,
@@ -131,8 +131,7 @@ beforeAll(async () => {
   outbox = new SwitchableEmailDeliveryRequests();
   const repository = new PostgresLocalAuthRepository(authClient, outbox);
   cipher = createEmailPayloadCipher(
-    createRuntimeSecretProviderFromProcessEnvironment().getSnapshot()
-      .emailOutbox,
+    createCliRuntimeSecretProvider().getSnapshot().emailOutbox,
   );
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })

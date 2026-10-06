@@ -1,3 +1,7 @@
+import type {
+  RuntimeConfiguration,
+  RuntimeConnectionConfiguration,
+} from '@/config/runtime-configuration';
 import type { IdentityConfigAlgorithm } from '@/modules/identity/domain/organization-identity-config';
 
 /**
@@ -30,20 +34,21 @@ function trimmed(value: string | undefined): string {
  * same way — half a key pair cannot sign anything, so there is nothing to
  * usefully enable.
  *
- * Read lazily per call rather than once at import time. Module decorators are
- * evaluated while `AppModule` is imported, which happens before `bootstrap`
- * loads `.env`, so anything resolved at import time would see an empty
- * environment in local development.
+ * Read lazily per call from the injected runtime connection configuration so
+ * importing `AppModule` never reads secret material during module evaluation.
  */
 export function readSandboxSigningMaterial(
-  env: NodeJS.ProcessEnv = process.env,
+  configuration: Pick<
+    RuntimeConnectionConfiguration,
+    'sandboxAssertionPrivateKey' | 'sandboxAssertionKeyId'
+  >,
 ): SandboxSigningMaterial | undefined {
   // A PEM carried in an environment variable usually arrives with its line
   // breaks escaped, and `importPKCS8` rejects the single-line form outright.
   const privateKeyPem = trimmed(
-    env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY,
+    configuration.sandboxAssertionPrivateKey,
   ).replace(/\\n/g, '\n');
-  const keyId = trimmed(env.AIHUB_SANDBOX_ASSERTION_KID);
+  const keyId = trimmed(configuration.sandboxAssertionKeyId);
 
   if (privateKeyPem.length === 0 || keyId.length === 0) {
     return undefined;
@@ -59,9 +64,9 @@ export function readSandboxSigningMaterial(
  * reads it invites the two to be confused for each other.
  */
 export function readSandboxOrganizationIds(
-  env: NodeJS.ProcessEnv = process.env,
+  configuration: Pick<RuntimeConfiguration, 'AIHUB_SANDBOX_ORG_IDS'>,
 ): readonly string[] {
-  return trimmed(env.AIHUB_SANDBOX_ORG_IDS)
+  return trimmed(configuration.AIHUB_SANDBOX_ORG_IDS)
     .split(',')
     .map((value) => value.trim())
     .filter((value) => value.length > 0);

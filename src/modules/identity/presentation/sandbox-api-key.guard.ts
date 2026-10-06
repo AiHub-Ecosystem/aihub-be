@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
+import { appConfig } from '@/config/runtime-configuration';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
@@ -16,6 +17,7 @@ import {
 } from '@/modules/identity/application/sandbox-assertion-policy.port';
 import { authenticateApiKey, forbidden } from './authenticate-api-key';
 import type { AuthenticatedRequest } from './authenticated-request';
+import type { RequestEnvironmentConfig } from './request-environment';
 
 function notFound(): AppError {
   return new AppError({
@@ -53,6 +55,8 @@ export class SandboxApiKeyGuard implements CanActivate {
     private readonly authenticator: ApiKeyAuthenticatorPort,
     @Inject(SANDBOX_ASSERTION_POLICY)
     private readonly policy: SandboxAssertionPolicyPort,
+    @Inject(appConfig.KEY)
+    private readonly configuration: RequestEnvironmentConfig,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -65,7 +69,11 @@ export class SandboxApiKeyGuard implements CanActivate {
       throw notFound();
     }
 
-    const authenticated = await authenticateApiKey(request, this.authenticator);
+    const authenticated = await authenticateApiKey(
+      request,
+      this.authenticator,
+      this.configuration,
+    );
 
     if (!this.policy.allows(authenticated.organizationId)) {
       throw forbidden();

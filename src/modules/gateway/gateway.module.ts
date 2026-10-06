@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 
+import { appConfig } from '@/config/runtime-configuration';
+import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import { speakingGradingJsonAdapter } from '@/downstream/speaking/speaking-grading-json.adapter';
 import { speakingGradingAdapter } from '@/downstream/speaking/speaking-grading.adapter';
 import { task1GradeAdapter } from '@/downstream/writing/task1-grade.adapter';
@@ -7,6 +10,10 @@ import { task2GradeAdapter } from '@/downstream/writing/task2-grade.adapter';
 import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
 import type { IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
 import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
+import {
+  RUNTIME_CONNECTION_CONFIGURATION,
+  type RuntimeConnectionConfigurationPort,
+} from '@/modules/secrets/application/runtime-connection-configuration.port';
 import {
   RUNTIME_SECRET_PROVIDER,
   type RuntimeSecretProvider,
@@ -49,23 +56,27 @@ import { QuotaGuard } from './presentation/quota.guard';
 import { RateLimitGuard } from './presentation/rate-limit.guard';
 
 @Module({
-  imports: [SecretsModule, IdempotencyModule],
+  imports: [RuntimeConfigurationModule, SecretsModule, IdempotencyModule],
   providers: [
     {
       provide: REDIS_GATEWAY_CLIENT,
-      useFactory: (): RedisGatewayClient | undefined =>
-        createRedisGatewayClient(process.env.REDIS_URL ?? ''),
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
+      ): RedisGatewayClient | undefined =>
+        createRedisGatewayClient(configuration.redisUrl ?? ''),
     },
     {
       provide: DownstreamHttpClient,
       useFactory: (
         secretProvider: RuntimeSecretProvider,
+        configuration: ConfigType<typeof appConfig>,
       ): DownstreamHttpClient => {
         const secrets = secretProvider.getSnapshot();
         return new DownstreamHttpClient(
           {
-            'ai-writing': process.env.DOWNSTREAM_AI_WRITING_URL ?? '',
-            'ai-speaking': process.env.DOWNSTREAM_AI_SPEAKING_URL ?? '',
+            'ai-writing': configuration.DOWNSTREAM_AI_WRITING_URL ?? '',
+            'ai-speaking': configuration.DOWNSTREAM_AI_SPEAKING_URL ?? '',
           },
           undefined,
           {
@@ -76,7 +87,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
           },
         );
       },
-      inject: [RUNTIME_SECRET_PROVIDER],
+      inject: [RUNTIME_SECRET_PROVIDER, appConfig.KEY],
     },
     {
       provide: INTERNAL_TOKEN_ISSUER,
@@ -107,8 +118,11 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     },
     {
       provide: SANDBOX_DISPATCH_BUDGET,
-      useFactory: (): SandboxDispatchBudgetPort =>
-        new PostgresSandboxDispatchBudget(process.env.DATABASE_URL ?? ''),
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
+      ): SandboxDispatchBudgetPort =>
+        new PostgresSandboxDispatchBudget(configuration.databaseUrl ?? ''),
     },
     {
       provide: OPERATION_DISPATCHER,

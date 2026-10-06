@@ -10,6 +10,7 @@ import { Reflector } from '@nestjs/core';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
+import { appConfig } from '@/config/runtime-configuration';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
@@ -23,6 +24,7 @@ import { openMeteringEvidence } from '@/modules/metering/application/metering-ev
 import { authenticateApiKey, forbidden } from './authenticate-api-key';
 import type { AuthenticatedRequest } from './authenticated-request';
 import {
+  type RequestEnvironmentConfig,
   isLocalAuthBypassEnabled,
   resolveAihubEnvironment,
 } from './request-environment';
@@ -62,6 +64,9 @@ export class ApiKeyGuard implements CanActivate {
     @Optional()
     @Inject(SANDBOX_ASSERTION_POLICY)
     private readonly sandboxPolicy?: SandboxAssertionPolicyPort,
+    @Optional()
+    @Inject(appConfig.KEY)
+    private readonly configuration?: RequestEnvironmentConfig,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -76,13 +81,14 @@ export class ApiKeyGuard implements CanActivate {
     }
 
     const operation = OPERATION_CATALOG[operationId];
-    const environment = resolveAihubEnvironment(request);
+    const configuration = this.requireConfiguration();
+    const environment = resolveAihubEnvironment(request, configuration);
     const header = request.headers['x-api-key'];
 
     if (
       environment === 'development' &&
       header === undefined &&
-      isLocalAuthBypassEnabled()
+      isLocalAuthBypassEnabled(configuration)
     ) {
       const authenticated = localDevelopmentIdentity(operation, environment);
       request.aihubAuth = authenticated;
@@ -95,7 +101,11 @@ export class ApiKeyGuard implements CanActivate {
       return true;
     }
 
-    const authenticated = await authenticateApiKey(request, this.authenticator);
+    const authenticated = await authenticateApiKey(
+      request,
+      this.authenticator,
+      configuration,
+    );
     const authorized =
       environment === 'sandbox'
         ? {
@@ -122,5 +132,10 @@ export class ApiKeyGuard implements CanActivate {
     }
 
     return true;
+  }
+
+  private requireConfiguration(): RequestEnvironmentConfig {
+    if (this.configuration === undefined) throw configurationError();
+    return this.configuration;
   }
 }

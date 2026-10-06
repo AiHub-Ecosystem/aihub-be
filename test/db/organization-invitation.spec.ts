@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
+import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { EmailPayloadCipherPort } from '@/modules/auth/application/email-delivery-request.port';
 import { createEmailPayloadCipher } from '@/modules/auth/infrastructure/email-payload-cipher';
@@ -15,7 +16,6 @@ import type { OrganizationMembershipRole } from '@/modules/identity/application/
 import type { PostgresIdentityTransactionalClient } from '@/modules/identity/infrastructure/postgres-identity.client';
 import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
 import { PostgresOrganizationInvitationRepository } from '@/modules/identity/infrastructure/postgres-organization-invitation.repository';
-import { createRuntimeSecretProviderFromProcessEnvironment } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
 
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import {
@@ -270,8 +270,7 @@ beforeAll(() => {
   pool = createTestPool();
   client = createPostgresIdentityClient(testDatabaseUrl());
   cipher = createEmailPayloadCipher(
-    createRuntimeSecretProviderFromProcessEnvironment().getSnapshot()
-      .emailOutbox,
+    createCliRuntimeSecretProvider().getSnapshot().emailOutbox,
   );
   repository = new PostgresOrganizationInvitationRepository(
     client,

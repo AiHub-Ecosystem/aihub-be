@@ -1,4 +1,5 @@
 import './config/load-local-environment';
+import './config/bootstrap-runtime-configuration';
 import { requestTracer } from './common/observability/open-telemetry';
 
 import fastifyCookie from '@fastify/cookie';
@@ -12,19 +13,14 @@ import { AppModule } from './app.module';
 import { registerMetricsRoute } from './common/observability/metrics.route';
 import { createRequestLogging } from './common/observability/request-logger';
 import { generateRequestId } from './common/request-context/request-id';
-import {
-  assertAuthBypassFlagIsSafe,
-  assertHostConfigurationIsSafe,
-} from './modules/identity/presentation/request-environment';
+import { getRuntimeConfiguration } from './config/runtime-configuration';
 import { registerSpeakingMultipartParser } from './modules/speaking/infrastructure/fastify-speaking-multipart.parser';
 import { registerRequestHooks } from './register-request-hooks';
 
-const DEFAULT_PORT = 3000;
 const MAX_BODY_BYTES = 1024 * 1024;
 
 export async function bootstrap(): Promise<void> {
-  assertAuthBypassFlagIsSafe();
-  assertHostConfigurationIsSafe();
+  const configuration = getRuntimeConfiguration();
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
@@ -58,7 +54,7 @@ export async function bootstrap(): Promise<void> {
   // (`/v1/ielts/writing/task1/grade`) so it stays the single source of truth and
   // matches the D1 contract verbatim. A prefix here would produce `/v1/v1/...`.
   // `/health` stays unversioned because probes are infrastructure, not API.
-  await app.listen(Number(process.env.PORT ?? DEFAULT_PORT), '0.0.0.0');
+  await app.listen(configuration.PORT, '0.0.0.0');
 }
 
 void bootstrap();

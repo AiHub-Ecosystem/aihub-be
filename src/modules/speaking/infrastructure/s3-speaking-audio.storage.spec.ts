@@ -1,30 +1,16 @@
-import type {
-  RuntimeSecretProvider,
-  RuntimeSecretSnapshot,
-} from '@/modules/secrets/application/runtime-secret-provider.port';
+import { createSeaweedFsS3Client } from '@/modules/secrets/infrastructure/seaweedfs-s3-client.factory';
 import { S3SpeakingAudioStorage } from './s3-speaking-audio.storage';
 
-function provider(
-  seaweedfs?: RuntimeSecretSnapshot['seaweedfs'],
-): RuntimeSecretProvider {
-  return {
-    getSnapshot: (): RuntimeSecretSnapshot => ({
-      aiSpeaking: { clientId: 'client', secretKey: 'secret' },
-      aiWriting: { token: 'token' },
-      resend: { apiKey: 'resend-api-key' },
-      userAccessJwt: {
-        privateKeyPem: 'private-key',
-        keyId: 'key-id',
-      },
-      emailOutbox: { currentKeyId: 'test', keys: { test: 'k'.repeat(44) } },
-      ...(seaweedfs === undefined ? {} : { seaweedfs }),
-    }),
-  };
-}
+const configuredClient = () =>
+  createSeaweedFsS3Client({
+    credentials: { accessKeyId: 'access', secretAccessKey: 'secret' },
+  });
 
 describe('S3SpeakingAudioStorage', () => {
   it('fails closed when SeaweedFS credentials are not configured', async () => {
-    const storage = new S3SpeakingAudioStorage(provider());
+    const storage = new S3SpeakingAudioStorage(undefined, {
+      bucket: 'aihub-speaking-samples',
+    });
 
     await expect(
       storage.getReadUrl('speaking-samples/part-1/sample.webm'),
@@ -32,10 +18,10 @@ describe('S3SpeakingAudioStorage', () => {
   });
 
   it('creates an approved presigned URL for a trusted object key', async () => {
-    const storage = new S3SpeakingAudioStorage(
-      provider({ accessKeyId: 'access', secretAccessKey: 'secret' }),
-      { bucket: 'test-speaking-samples', expiresInSeconds: 60 },
-    );
+    const storage = new S3SpeakingAudioStorage(configuredClient(), {
+      bucket: 'test-speaking-samples',
+      expiresInSeconds: 60,
+    });
 
     const value = await storage.getReadUrl(
       'speaking-samples/part-1/sample.webm',
@@ -49,9 +35,7 @@ describe('S3SpeakingAudioStorage', () => {
   });
 
   it('rejects path traversal in object keys', async () => {
-    const storage = new S3SpeakingAudioStorage(
-      provider({ accessKeyId: 'access', secretAccessKey: 'secret' }),
-    );
+    const storage = new S3SpeakingAudioStorage(configuredClient());
 
     await expect(storage.getReadUrl('../private.mp3')).rejects.toMatchObject({
       code: 'INTERNAL_ERROR',

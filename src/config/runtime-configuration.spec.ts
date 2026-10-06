@@ -1,0 +1,114 @@
+import {
+  RuntimeConfigurationError,
+  appConfig,
+  loadRuntimeConfiguration,
+  runtimeEnvironmentMetadata,
+} from './runtime-configuration';
+
+describe('runtime configuration', () => {
+  it('applies declared defaults and parses scalar values', () => {
+    const config = loadRuntimeConfiguration({
+      NODE_ENV: 'test',
+      AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
+      AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
+      AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+      PORT: '4312',
+      AIHUB_ALLOW_UNAUTHENTICATED_DEV: 'true',
+    });
+
+    expect(config.PORT).toBe(4312);
+    expect(config.AIHUB_ALLOW_UNAUTHENTICATED_DEV).toBe(true);
+    expect(config.LOG_LEVEL).toBe('info');
+    expect(config.SEAWEEDFS_ENDPOINT_URL).toBe('https://s3.wispace.app');
+    expect(config.SEAWEEDFS_REGION).toBe('us-east-1');
+  });
+
+  it('aggregates missing and invalid variable names without their values', () => {
+    let caught: unknown;
+    try {
+      loadRuntimeConfiguration({
+        NODE_ENV: 'production',
+        AIHUB_RUNTIME_SECRET_SOURCE: 'env',
+        AIHUB_USER_ACCESS_ISSUER: 'not a URL',
+        PORT: 'not-a-port',
+        LOG_LEVEL: 'super-verbose',
+        RESEND_API_KEY: 'secret-that-must-not-appear',
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(RuntimeConfigurationError);
+    const error = caught as RuntimeConfigurationError;
+    expect(error.variableNames).toEqual(
+      expect.arrayContaining([
+        'PORT',
+        'LOG_LEVEL',
+        'AIHUB_USER_ACCESS_ISSUER',
+        'AIHUB_PRODUCTION_HOST',
+        'DOWNSTREAM_AI_WRITING_URL',
+        'DOWNSTREAM_AI_SPEAKING_URL',
+        'RESEND_FROM',
+        'CUSTOMER_WEB_BASE_URL',
+        'DOWNSTREAM_AI_WRITING_TOKEN',
+      ]),
+    );
+    expect(error.message).not.toContain('secret-that-must-not-appear');
+  });
+
+  it('aggregates unsafe host bindings by variable name', () => {
+    let caught: unknown;
+    try {
+      loadRuntimeConfiguration({
+        NODE_ENV: 'production',
+        AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
+        AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
+        AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+        DATABASE_URL: 'postgres://user:password@db.test.invalid/aihub',
+        REDIS_URL: 'redis://user:password@redis.test.invalid/0',
+        DOWNSTREAM_AI_WRITING_URL: 'https://writing.test.invalid',
+        DOWNSTREAM_AI_SPEAKING_URL: 'https://speaking.test.invalid',
+        RESEND_FROM: 'no-reply@test.invalid',
+        CUSTOMER_WEB_BASE_URL: 'https://customer.test.invalid',
+        AIHUB_ALLOW_UNAUTHENTICATED_DEV: 'true',
+        AIHUB_PRODUCTION_HOST: 'api.aihub.example.com',
+        AIHUB_STAGING_HOST: 'API.AIHUB.EXAMPLE.COM.',
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(RuntimeConfigurationError);
+    expect((caught as RuntimeConfigurationError).variableNames).toEqual(
+      expect.arrayContaining([
+        'AIHUB_PRODUCTION_HOST',
+        'AIHUB_STAGING_HOST',
+        'AIHUB_ALLOW_UNAUTHENTICATED_DEV',
+      ]),
+    );
+    expect((caught as Error).message).not.toContain('test.invalid');
+  });
+
+  it('records the type, default, required mode, and secret status in one schema', () => {
+    expect(runtimeEnvironmentMetadata.PORT).toMatchObject({
+      type: 'number',
+      defaultValue: 3000,
+    });
+    expect(runtimeEnvironmentMetadata.SEAWEEDFS_ACCESS_KEY_ID?.secret).toBe(
+      true,
+    );
+    expect(
+      runtimeEnvironmentMetadata.DOWNSTREAM_AI_WRITING_URL?.requiredIn,
+    ).toEqual(['staging', 'production']);
+  });
+
+  it('keeps secret values out of the Nest application config provider', () => {
+    const configuration = appConfig();
+
+    expect(configuration).not.toHaveProperty('DATABASE_URL');
+    expect(configuration).not.toHaveProperty('DOWNSTREAM_AI_WRITING_TOKEN');
+    expect(configuration).not.toHaveProperty(
+      'AIHUB_USER_ACCESS_JWT_PRIVATE_KEY',
+    );
+  });
+});

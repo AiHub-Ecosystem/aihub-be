@@ -7,20 +7,22 @@ import { UndiciInstrumentation } from '@opentelemetry/instrumentation-undici';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { AlwaysOnSampler } from '@opentelemetry/sdk-trace-base';
 
+import { getRuntimeConfiguration } from '@/config/runtime-configuration';
 import {
   downstreamUrlAttributes,
   postgresOperationName,
   redisOperationName,
 } from './span-sanitizers';
 
-const exporterEndpoint = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?.trim();
+const configuration = getRuntimeConfiguration();
+const exporterEndpoint = configuration.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
 
 export const tracingEnabled =
   exporterEndpoint !== undefined && exporterEndpoint.length > 0;
 
 if (exporterEndpoint !== undefined && exporterEndpoint.length > 0) {
   const sdk = new NodeSDK({
-    serviceName: process.env.OTEL_SERVICE_NAME?.trim() || 'aihub-be',
+    serviceName: configuration.OTEL_SERVICE_NAME,
     sampler: new AlwaysOnSampler(),
     textMapPropagator: new W3CTraceContextPropagator(),
     traceExporter: new OTLPTraceExporter({ url: exporterEndpoint }),

@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { loadEnvFile } from 'node:process';
+import process, { loadEnvFile } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { ulid } from 'ulid';
@@ -210,7 +210,7 @@ if (existsSync(runtimeConnectionModule)) {
   if (typeof loadRuntimeConnectionEnvironment !== 'function') {
     throw new Error('runtime connection loader is unavailable');
   }
-  loadRuntimeConnectionEnvironment();
+  loadRuntimeConnectionEnvironment({ env: process.env });
 }
 
 function parseOptions(values) {

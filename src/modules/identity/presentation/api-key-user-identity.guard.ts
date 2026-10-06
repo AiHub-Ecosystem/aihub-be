@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
+import { appConfig } from '@/config/runtime-configuration';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
@@ -18,6 +19,7 @@ import {
 
 import { authenticateApiKey } from './authenticate-api-key';
 import type { AuthenticatedRequest } from './authenticated-request';
+import type { RequestEnvironmentConfig } from './request-environment';
 
 /** Authenticates an API-key Public API Route that also resolves an End-User ID. */
 @Injectable()
@@ -27,11 +29,17 @@ export class ApiKeyUserIdentityGuard implements CanActivate {
     private readonly authenticator: ApiKeyAuthenticatorPort,
     @Inject(USER_IDENTITY_RESOLVER)
     private readonly resolver: UserIdentityResolverPort,
+    @Inject(appConfig.KEY)
+    private readonly configuration: RequestEnvironmentConfig,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const authenticated = await authenticateApiKey(request, this.authenticator);
+    const authenticated = await authenticateApiKey(
+      request,
+      this.authenticator,
+      this.configuration,
+    );
     const header = request.headers['x-user-identity'];
 
     if (header === undefined) {

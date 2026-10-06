@@ -1,14 +1,19 @@
+import type { S3Client } from '@aws-sdk/client-s3';
 import { Inject, Module, type OnModuleDestroy } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
+import { appConfig } from '@/config/runtime-configuration';
+import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
 import { IdentityModule } from '@/modules/identity/identity.module';
 import { MeteringModule } from '@/modules/metering/metering.module';
 import { SuccessEnvelopeInterceptor } from '@/modules/metering/presentation/success-envelope.interceptor';
 import {
-  RUNTIME_SECRET_PROVIDER,
-  type RuntimeSecretProvider,
-} from '@/modules/secrets/application/runtime-secret-provider.port';
+  RUNTIME_CONNECTION_CONFIGURATION,
+  type RuntimeConnectionConfigurationPort,
+} from '@/modules/secrets/application/runtime-connection-configuration.port';
+import { SEAWEEDFS_S3_CLIENT } from '@/modules/secrets/application/seaweedfs-s3-client.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
 import { SPEAKING_AUDIO_STORAGE } from './application/speaking-audio-storage.port';
 import {
@@ -45,7 +50,13 @@ type SpeakingAudioDatabase = SpeakingAudioQueryClient;
 // — per-operation adapters live in `src/downstream/speaking/` by source
 // boundary (AGENTS.md, "Source boundaries").
 @Module({
-  imports: [GatewayModule, IdentityModule, MeteringModule, SecretsModule],
+  imports: [
+    RuntimeConfigurationModule,
+    GatewayModule,
+    IdentityModule,
+    MeteringModule,
+    SecretsModule,
+  ],
   controllers: [
     SpeakingGradingController,
     SpeakingQuestionsController,
@@ -54,8 +65,11 @@ type SpeakingAudioDatabase = SpeakingAudioQueryClient;
   providers: [
     {
       provide: SPEAKING_AUDIO_DATABASE,
-      useFactory: (): SpeakingAudioDatabase =>
-        createSpeakingAudioQueryClient(process.env.DATABASE_URL ?? ''),
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
+      ): SpeakingAudioDatabase =>
+        createSpeakingAudioQueryClient(configuration.databaseUrl ?? ''),
     },
     {
       provide: SPEAKING_AUDIO_UPLOAD_REPOSITORY,
@@ -67,11 +81,23 @@ type SpeakingAudioDatabase = SpeakingAudioQueryClient;
     },
     {
       provide: SPEAKING_AUDIO_ASSET_STORAGE,
-      inject: [RUNTIME_SECRET_PROVIDER],
+      inject: [SEAWEEDFS_S3_CLIENT, appConfig.KEY],
       useFactory: (
-        secrets: RuntimeSecretProvider,
-      ): SpeakingAudioAssetStoragePort =>
-        new S3SpeakingAudioAssetStorage(secrets),
+        client: S3Client | undefined,
+        configuration: ConfigType<typeof appConfig>,
+      ): SpeakingAudioAssetStoragePort => {
+        const bucket = configuration.SEAWEEDFS_AUDIO_ASSET_BUCKET;
+        return new S3SpeakingAudioAssetStorage(
+          client,
+          configuration.AIHUB_RUNTIME_DATABASE_SCOPE === 'sandbox'
+            ? bucket === undefined
+              ? {}
+              : { sandboxBucket: bucket }
+            : bucket === undefined
+              ? {}
+              : { productionBucket: bucket },
+        );
+      },
     },
     {
       provide: SPEAKING_AUDIO_UPLOAD_CLOCK,
@@ -108,9 +134,13 @@ type SpeakingAudioDatabase = SpeakingAudioQueryClient;
     {
       provide: SPEAKING_AUDIO_STORAGE,
       useFactory: (
-        secretProvider: RuntimeSecretProvider,
-      ): S3SpeakingAudioStorage => new S3SpeakingAudioStorage(secretProvider),
-      inject: [RUNTIME_SECRET_PROVIDER],
+        client: S3Client | undefined,
+        configuration: ConfigType<typeof appConfig>,
+      ): S3SpeakingAudioStorage =>
+        new S3SpeakingAudioStorage(client, {
+          bucket: configuration.SEAWEEDFS_BUCKET,
+        }),
+      inject: [SEAWEEDFS_S3_CLIENT, appConfig.KEY],
     },
     {
       provide: SPEAKING_MULTIPART_PARSER,

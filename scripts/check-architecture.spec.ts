@@ -315,8 +315,8 @@ function commonFilesReadingEnvironment(): string[] {
 }
 
 /**
- * `.claude/rules/common.md` lets a file under `src/common` read the
- * environment only when it is an explicit boundary adapter, and names them.
+ * `.claude/rules/common.md` keeps environment access out of `src/common`;
+ * runtime configuration owns reads before Nest starts.
  *
  * This list is the one place that decision is enforced: a new common file that
  * reads `process.env` fails here until it is added to this expectation and to
@@ -326,10 +326,7 @@ function commonFilesReadingEnvironment(): string[] {
  */
 describe('common layer environment boundary', () => {
   it('has exactly the boundary adapters that read the environment', () => {
-    expect(commonFilesReadingEnvironment()).toEqual([
-      'observability/open-telemetry.ts',
-      'observability/request-logger.ts',
-    ]);
+    expect(commonFilesReadingEnvironment()).toEqual([]);
   });
 });
 

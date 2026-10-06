@@ -2,6 +2,7 @@ import type { ExecutionContext } from '@nestjs/common';
 
 import type { AuthenticatedApiKey } from '@/modules/identity/application/api-key-authenticator.port';
 import type { UserIdentityResolverPort } from '@/modules/identity/application/user-identity-resolver.port';
+import type { RequestEnvironmentConfig } from './request-environment';
 import { UserIdentityGuard } from './user-identity.guard';
 
 const authenticated: AuthenticatedApiKey = {
@@ -32,25 +33,24 @@ function guard(
       scopes: [],
     }),
   },
+  configuration: RequestEnvironmentConfig = {
+    NODE_ENV: 'production',
+    AIHUB_ALLOW_UNAUTHENTICATED_DEV: false,
+    AIHUB_PRODUCTION_HOST: undefined,
+    AIHUB_STAGING_HOST: undefined,
+    AIHUB_DEVELOPMENT_HOST: undefined,
+    AIHUB_SANDBOX_HOST: undefined,
+  },
 ) {
   return new UserIdentityGuard(
     { getAllAndOverride: () => operation } as never,
     resolver,
+    configuration,
   );
 }
 
 describe('UserIdentityGuard', () => {
-  const originalNodeEnv = process.env.NODE_ENV;
-  const originalBypass = process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV;
-
-  afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = originalBypass;
-  });
-
   it('rejects a missing user identity for user-scoped operations', async () => {
-    process.env.NODE_ENV = 'production';
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'false';
     const request: Record<string, unknown> = {
       headers: {},
       aihubAuth: authenticated,
@@ -65,15 +65,20 @@ describe('UserIdentityGuard', () => {
   });
 
   it('uses the synthetic actor only for the local development bypass', async () => {
-    process.env.NODE_ENV = 'test';
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'true';
     const request: Record<string, unknown> = {
       headers: {},
       aihubAuth: { ...authenticated, organizationId: 'local-development' },
     };
 
     await expect(
-      guard('writing.task1.grade').canActivate(context(request)),
+      guard('writing.task1.grade', undefined, {
+        NODE_ENV: 'test',
+        AIHUB_ALLOW_UNAUTHENTICATED_DEV: true,
+        AIHUB_PRODUCTION_HOST: undefined,
+        AIHUB_STAGING_HOST: undefined,
+        AIHUB_DEVELOPMENT_HOST: undefined,
+        AIHUB_SANDBOX_HOST: undefined,
+      }).canActivate(context(request)),
     ).resolves.toBe(true);
     expect(request.aihubIdentity).toEqual({
       userId: 'local-development',

@@ -4,37 +4,23 @@ import { type FastifyRequest, LogController } from 'fastify';
 import { createRequestLogging } from './request-logger';
 
 describe('createRequestLogging', () => {
-  const originalLevel = process.env.LOG_LEVEL;
-
-  afterEach(() => {
-    if (originalLevel === undefined) {
-      delete process.env.LOG_LEVEL;
-    } else {
-      process.env.LOG_LEVEL = originalLevel;
-    }
-  });
-
-  function level(): unknown {
-    const { logger } = createRequestLogging();
+  function level(value?: string): unknown {
+    const { logger } = createRequestLogging(undefined, value);
     return typeof logger === 'object' ? logger.level : undefined;
   }
 
-  it('defaults to info when LOG_LEVEL is not set', () => {
-    delete process.env.LOG_LEVEL;
-
+  it('defaults to the validated configuration value', () => {
     expect(level()).toBe('info');
   });
 
-  it('takes the level from LOG_LEVEL', () => {
-    process.env.LOG_LEVEL = ' warn ';
-
-    expect(level()).toBe('warn');
+  it('takes the level from explicit configuration', () => {
+    expect(level(' warn ')).toBe('warn');
   });
 
-  it('names LOG_LEVEL when its value is not a level', () => {
-    process.env.LOG_LEVEL = 'verbose';
-
-    expect(() => createRequestLogging()).toThrow(/LOG_LEVEL.*verbose/);
+  it('names LOG_LEVEL when it receives an invalid value without echoing it', () => {
+    expect(() => createRequestLogging(undefined, 'verbose')).toThrow(
+      /LOG_LEVEL must be one of/,
+    );
   });
 });
 

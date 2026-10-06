@@ -1,0 +1,1 @@
+export const SEAWEEDFS_S3_CLIENT = Symbol('SEAWEEDFS_S3_CLIENT');

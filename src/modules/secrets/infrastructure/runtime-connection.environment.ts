@@ -5,7 +5,7 @@ type RuntimeConnectionDocument = Readonly<Record<string, unknown>>;
 type ReadFile = (path: string) => string;
 
 export interface RuntimeConnectionEnvironmentOptions {
-  readonly env?: NodeJS.ProcessEnv;
+  readonly env: NodeJS.ProcessEnv;
   readonly readFile?: ReadFile;
 }
 
@@ -26,9 +26,9 @@ export class RuntimeConnectionConfigurationError extends Error {
  * file is a no-op.
  */
 export function loadRuntimeConnectionEnvironment(
-  options: RuntimeConnectionEnvironmentOptions = {},
+  options: RuntimeConnectionEnvironmentOptions,
 ): void {
-  const env = options.env ?? process.env;
+  const env = options.env;
   const path = env.AIHUB_RUNTIME_CONNECTION_SECRETS_FILE?.trim();
   if (path === undefined || path.length === 0) {
     return;

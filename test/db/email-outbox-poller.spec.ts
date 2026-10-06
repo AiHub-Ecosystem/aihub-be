@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
+import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { getMetrics } from '@/common/observability/metrics';
 import {
   DEFER_RETRY_MS,
@@ -26,7 +27,6 @@ import {
 } from '@/modules/auth/infrastructure/postgres-auth.client';
 import { PostgresEmailCredentialRepository } from '@/modules/auth/infrastructure/postgres-email-credential.repository';
 import { PostgresEmailDispatchStore } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
-import { createRuntimeSecretProviderFromProcessEnvironment } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
 
 import {
   createTestPool,
@@ -44,7 +44,7 @@ const OWNER_B = 'outbox-instance-b';
  * back by a poller holding the same key: the production shape, not a stub.
  */
 const cipher = createEmailPayloadCipher(
-  createRuntimeSecretProviderFromProcessEnvironment().getSnapshot().emailOutbox,
+  createCliRuntimeSecretProvider().getSnapshot().emailOutbox,
 );
 
 /**

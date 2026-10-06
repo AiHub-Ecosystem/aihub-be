@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { DrizzleModule, getDrizzleToken } from '@nestjs/drizzle';
 import { drizzle } from 'drizzle-orm/node-postgres';
 
@@ -7,6 +8,8 @@ import {
   OPAQUE_TOKEN_BINDINGS,
   opaqueTokenIssuer,
 } from '@/common/security/opaque-token-issuer';
+import { appConfig } from '@/config/runtime-configuration';
+import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
@@ -21,6 +24,11 @@ import {
 import { AuthModule } from '@/modules/auth/auth.module';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
 import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
+import {
+  RUNTIME_CONNECTION_CONFIGURATION,
+  type RuntimeConnectionConfigurationPort,
+} from '@/modules/secrets/application/runtime-connection-configuration.port';
+import { SecretsModule } from '@/modules/secrets/secrets.module';
 
 import { CreateOrganizationApiKey } from './api-keys/application/create-organization-api-key';
 import { CREATE_ORGANIZATION_API_KEY } from './api-keys/application/create-organization-api-key.port';
@@ -50,7 +58,6 @@ import {
 } from './application/api-key-authenticator.port';
 import {
   CreateOrganization,
-  selfServeMonthlyRequestQuota,
   selfServeOrganizationTerms,
 } from './application/create-organization';
 import { CREATE_ORGANIZATION } from './application/create-organization.port';
@@ -146,6 +153,7 @@ import {
   RedisAuthFailureCounter,
   RedisIdentityStore,
 } from './infrastructure/redis-identity.store';
+import { readSandboxSigningMaterial } from './infrastructure/sandbox-assertion.config';
 import { ApiKeyUserIdentityGuard } from './presentation/api-key-user-identity.guard';
 import { ApiKeyGuard } from './presentation/api-key.guard';
 import { OrganizationAuditEventController } from './presentation/organization-audit-event.controller';
@@ -157,27 +165,24 @@ import { SandboxApiKeyGuard } from './presentation/sandbox-api-key.guard';
 import { SandboxAssertionController } from './presentation/sandbox-assertion.controller';
 import { UserIdentityGuard } from './presentation/user-identity.guard';
 
-function controlPlaneDatabaseUrl(): string {
-  return (
-    process.env.CONTROL_PLANE_DATABASE_URL ?? process.env.DATABASE_URL ?? ''
-  );
+function controlPlaneDatabaseUrl(
+  configuration: RuntimeConnectionConfigurationPort,
+): string {
+  return configuration.controlPlaneDatabaseUrl ?? '';
 }
 
 // Each repository owns its client (they expose `close()` passthroughs), so
 // this names the construction rather than sharing one pool across them.
-function postgresIdentityClient(): ReturnType<
-  typeof createPostgresIdentityClient
-> {
-  return createPostgresIdentityClient(controlPlaneDatabaseUrl());
+function postgresIdentityClient(
+  configuration: RuntimeConnectionConfigurationPort,
+): ReturnType<typeof createPostgresIdentityClient> {
+  return createPostgresIdentityClient(controlPlaneDatabaseUrl(configuration));
 }
 
-function controlPlaneReadDatabaseUrl(): string {
-  return (
-    process.env.CONTROL_PLANE_READ_DATABASE_URL ??
-    process.env.CONTROL_PLANE_DATABASE_URL ??
-    process.env.DATABASE_URL ??
-    ''
-  );
+function controlPlaneReadDatabaseUrl(
+  configuration: RuntimeConnectionConfigurationPort,
+): string {
+  return configuration.controlPlaneReadDatabaseUrl ?? '';
 }
 
 const IDENTITY_READ_DATABASE = 'identity-read';
@@ -198,16 +203,24 @@ function drizzleDatabaseOptions(databaseUrl: string) {
 @Module({
   // `RateLimitGuard` on the sandbox route consumes the gateway's rate limiter.
   imports: [
+    RuntimeConfigurationModule,
+    SecretsModule,
     AuthModule,
     GatewayModule,
     IdempotencyModule,
     DrizzleModule.forRootAsync({
       name: IDENTITY_READ_DATABASE,
-      useFactory: () => drizzleDatabaseOptions(controlPlaneReadDatabaseUrl()),
+      imports: [SecretsModule],
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (configuration: RuntimeConnectionConfigurationPort) =>
+        drizzleDatabaseOptions(controlPlaneReadDatabaseUrl(configuration)),
     }),
     DrizzleModule.forRootAsync({
       name: IDENTITY_WRITE_DATABASE,
-      useFactory: () => drizzleDatabaseOptions(controlPlaneDatabaseUrl()),
+      imports: [SecretsModule],
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (configuration: RuntimeConnectionConfigurationPort) =>
+        drizzleDatabaseOptions(controlPlaneDatabaseUrl(configuration)),
     }),
   ],
   controllers: [
@@ -243,8 +256,13 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     },
     {
       provide: ORGANIZATION_MEMBERSHIP,
-      useFactory: (): OrganizationMembershipPort =>
-        new PostgresOrganizationMembershipRepository(postgresIdentityClient()),
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
+      ): OrganizationMembershipPort =>
+        new PostgresOrganizationMembershipRepository(
+          postgresIdentityClient(configuration),
+        ),
     },
     {
       provide: ORGANIZATION_MEMBERSHIP_LIST,
@@ -266,26 +284,37 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     },
     {
       provide: ORGANIZATION_CREATION_RECORD,
-      useFactory: (): OrganizationCreationRecordPort =>
-        new PostgresOrganizationCreationRepository(postgresIdentityClient()),
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
+      ): OrganizationCreationRecordPort =>
+        new PostgresOrganizationCreationRepository(
+          postgresIdentityClient(configuration),
+        ),
     },
     {
       provide: CREATE_ORGANIZATION,
-      useFactory: (organizations: OrganizationCreationRecordPort) =>
+      useFactory: (
+        organizations: OrganizationCreationRecordPort,
+        configuration: ConfigType<typeof appConfig>,
+      ) =>
         new CreateOrganization(
           organizations,
           selfServeOrganizationTerms(
-            selfServeMonthlyRequestQuota(
-              process.env.AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA,
-            ),
+            configuration.AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA,
           ),
         ),
-      inject: [ORGANIZATION_CREATION_RECORD],
+      inject: [ORGANIZATION_CREATION_RECORD, appConfig.KEY],
     },
     {
       provide: ORGANIZATION_RENAME_RECORD,
-      useFactory: (): OrganizationRenameRecordPort =>
-        new PostgresOrganizationRenameRepository(postgresIdentityClient()),
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
+      ): OrganizationRenameRecordPort =>
+        new PostgresOrganizationRenameRepository(
+          postgresIdentityClient(configuration),
+        ),
     },
     {
       provide: RENAME_ORGANIZATION,
@@ -295,8 +324,13 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     },
     {
       provide: ORGANIZATION_API_KEY,
-      useFactory: (): OrganizationApiKeyPort =>
-        new PostgresOrganizationApiKeyRepository(postgresIdentityClient()),
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
+      ): OrganizationApiKeyPort =>
+        new PostgresOrganizationApiKeyRepository(
+          postgresIdentityClient(configuration),
+        ),
     },
     {
       provide: CREATE_ORGANIZATION_API_KEY,
@@ -308,8 +342,13 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     },
     {
       provide: ORGANIZATION_AUDIT_EVENT_READ,
-      useFactory: (): OrganizationAuditEventReadPort =>
-        new PostgresOrganizationAuditReadRepository(postgresIdentityClient()),
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
+      ): OrganizationAuditEventReadPort =>
+        new PostgresOrganizationAuditReadRepository(
+          postgresIdentityClient(configuration),
+        ),
     },
     {
       provide: READ_ORGANIZATION_AUDIT_EVENTS,
@@ -374,15 +413,20 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     {
       provide: ORGANIZATION_INVITATION,
       useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
         payloadCipher: EmailPayloadCipherPort,
         emailRequests: EmailDeliveryRequestWriterPort,
       ): OrganizationInvitationPort =>
         new PostgresOrganizationInvitationRepository(
-          postgresIdentityClient(),
+          postgresIdentityClient(configuration),
           payloadCipher,
           emailRequests,
         ),
-      inject: [EMAIL_PAYLOAD_CIPHER, EMAIL_DELIVERY_REQUEST_WRITER],
+      inject: [
+        RUNTIME_CONNECTION_CONFIGURATION,
+        EMAIL_PAYLOAD_CIPHER,
+        EMAIL_DELIVERY_REQUEST_WRITER,
+      ],
     },
     {
       provide: ORGANIZATION_INVITE_TOKEN,
@@ -442,7 +486,9 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     },
     {
       provide: API_KEY_CACHE,
-      useFactory: () => new RedisIdentityStore(process.env.REDIS_URL ?? ''),
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (configuration: RuntimeConnectionConfigurationPort) =>
+        new RedisIdentityStore(configuration.redisUrl ?? ''),
     },
     {
       provide: JWKS_CACHE,
@@ -450,8 +496,9 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     },
     {
       provide: AUTH_FAILURE_COUNTER,
-      useFactory: () =>
-        new RedisAuthFailureCounter(process.env.REDIS_URL ?? ''),
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (configuration: RuntimeConnectionConfigurationPort) =>
+        new RedisAuthFailureCounter(configuration.redisUrl ?? ''),
     },
     {
       provide: API_KEY_AUTHENTICATOR,
@@ -491,14 +538,22 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     },
     {
       provide: SANDBOX_ASSERTION_POLICY,
-      useClass: EnvSandboxAssertionPolicy,
+      inject: [appConfig.KEY, RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: ConfigType<typeof appConfig>,
+        connection: RuntimeConnectionConfigurationPort,
+      ) => new EnvSandboxAssertionPolicy(configuration, connection),
     },
     {
       // The signer resolves its key on first use, not here: this factory runs
       // while the module graph is assembled, and a deployment without a
       // sandbox must still assemble.
       provide: SANDBOX_ASSERTION_SIGNER,
-      useClass: JoseSandboxAssertionSigner,
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (connection: RuntimeConnectionConfigurationPort) =>
+        new JoseSandboxAssertionSigner(() =>
+          readSandboxSigningMaterial(connection),
+        ),
     },
     {
       provide: SANDBOX_ASSERTION_MINTER,

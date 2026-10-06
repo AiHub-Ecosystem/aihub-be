@@ -5,6 +5,7 @@ import type {
   AuthenticatedApiKey,
 } from '@/modules/identity/application/api-key-authenticator.port';
 import type { SandboxAssertionPolicyPort } from '@/modules/identity/application/sandbox-assertion-policy.port';
+import type { RequestEnvironmentConfig } from './request-environment';
 import { SandboxApiKeyGuard } from './sandbox-api-key.guard';
 
 const authenticated: AuthenticatedApiKey = {
@@ -52,24 +53,18 @@ function guard(
   return new SandboxApiKeyGuard(
     options.authenticator ?? { authenticate: async () => authenticated },
     options.policy ?? policy(),
+    {
+      NODE_ENV: 'test',
+      AIHUB_ALLOW_UNAUTHENTICATED_DEV: false,
+      AIHUB_PRODUCTION_HOST: undefined,
+      AIHUB_STAGING_HOST: undefined,
+      AIHUB_DEVELOPMENT_HOST: undefined,
+      AIHUB_SANDBOX_HOST: 'sandbox.aihub.test',
+    } satisfies RequestEnvironmentConfig,
   );
 }
 
 describe('SandboxApiKeyGuard', () => {
-  const originalHost = process.env.AIHUB_SANDBOX_HOST;
-
-  beforeEach(() => {
-    process.env.AIHUB_SANDBOX_HOST = 'sandbox.aihub.test';
-  });
-
-  afterEach(() => {
-    if (originalHost === undefined) {
-      Reflect.deleteProperty(process.env, 'AIHUB_SANDBOX_HOST');
-    } else {
-      process.env.AIHUB_SANDBOX_HOST = originalHost;
-    }
-  });
-
   it('authenticates a sandbox key and exposes it on the request', async () => {
     const value = request();
 

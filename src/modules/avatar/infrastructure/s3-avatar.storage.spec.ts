@@ -3,6 +3,7 @@ import type {
   RuntimeSecretProvider,
   RuntimeSecretSnapshot,
 } from '@/modules/secrets/application/runtime-secret-provider.port';
+import { createSeaweedFsS3Client } from '@/modules/secrets/infrastructure/seaweedfs-s3-client.factory';
 
 import {
   type AvatarStorageOptions,
@@ -35,11 +36,16 @@ function storage(
   options: AvatarStorageOptions = {},
   secrets: RuntimeSecretProvider = provider(),
 ): S3AvatarStorage {
-  return new S3AvatarStorage(secrets, {
-    bucket: 'aihub-user-assets',
-    now: () => NOW,
-    ...options,
-  });
+  return new S3AvatarStorage(
+    createSeaweedFsS3Client({
+      credentials: secrets.getSnapshot().seaweedfs,
+    }),
+    {
+      bucket: 'aihub-user-assets',
+      now: () => NOW,
+      ...options,
+    },
+  );
 }
 
 function clientAnswering(answer: () => Promise<unknown>) {
@@ -133,39 +139,26 @@ describe('S3AvatarStorage', () => {
   });
 
   describe('configuration', () => {
-    const originalBucket = process.env.SEAWEEDFS_USER_ASSET_BUCKET;
-
-    afterEach(() => {
-      if (originalBucket === undefined) {
-        delete process.env.SEAWEEDFS_USER_ASSET_BUCKET;
-      } else {
-        process.env.SEAWEEDFS_USER_ASSET_BUCKET = originalBucket;
-      }
-    });
-
     it.each([
-      [
-        'no credentials',
-        () => new S3AvatarStorage(provider(null), { bucket: 'b' }),
-      ],
+      ['no credentials', () => new S3AvatarStorage(undefined, { bucket: 'b' })],
       [
         'no bucket',
-        () => {
-          delete process.env.SEAWEEDFS_USER_ASSET_BUCKET;
-          return new S3AvatarStorage(provider());
-        },
+        () =>
+          new S3AvatarStorage(
+            createSeaweedFsS3Client({
+              credentials: provider().getSnapshot().seaweedfs,
+            }),
+          ),
       ],
       [
         'a blank bucket',
-        () => new S3AvatarStorage(provider(), { bucket: '  ' }),
-      ],
-      [
-        'an unapproved endpoint',
-        () => storage({ endpoint: 'https://evil.example' }),
-      ],
-      [
-        'an http endpoint',
-        () => storage({ endpoint: 'http://s3.wispace.app' }),
+        () =>
+          new S3AvatarStorage(
+            createSeaweedFsS3Client({
+              credentials: provider().getSnapshot().seaweedfs,
+            }),
+            { bucket: '  ' },
+          ),
       ],
     ])(
       'answers storage unavailable on every call with %s',
@@ -201,16 +194,16 @@ describe('S3AvatarStorage', () => {
       },
     );
 
-    it('reads the bucket from SEAWEEDFS_USER_ASSET_BUCKET', async () => {
-      process.env.SEAWEEDFS_USER_ASSET_BUCKET = 'from-env-bucket';
-
-      const { url } = await new S3AvatarStorage(provider()).createUploadUrl({
+    it('uses the bucket supplied by the application configuration', async () => {
+      const { url } = await storage({
+        bucket: 'from-config-bucket',
+      }).createUploadUrl({
         objectKey: KEY,
         contentType: 'image/png',
         byteSize: 1,
       });
 
-      expect(new URL(url).pathname).toBe(`/from-env-bucket/${KEY}`);
+      expect(new URL(url).pathname).toBe(`/from-config-bucket/${KEY}`);
     });
   });
 

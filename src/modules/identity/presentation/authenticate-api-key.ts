@@ -4,7 +4,10 @@ import type {
   AuthenticatedApiKey,
 } from '@/modules/identity/application/api-key-authenticator.port';
 import type { AuthenticatedRequest } from './authenticated-request';
-import { resolveAihubEnvironment } from './request-environment';
+import {
+  type RequestEnvironmentConfig,
+  resolveAihubEnvironment,
+} from './request-environment';
 
 export function forbidden(): AppError {
   return new AppError({
@@ -27,8 +30,9 @@ export function forbidden(): AppError {
 export async function authenticateApiKey(
   request: AuthenticatedRequest,
   authenticator: ApiKeyAuthenticatorPort,
+  configuration: RequestEnvironmentConfig,
 ): Promise<AuthenticatedApiKey> {
-  const environment = resolveAihubEnvironment(request);
+  const environment = resolveAihubEnvironment(request, configuration);
   const header = request.headers['x-api-key'];
   const authenticated = await authenticator.authenticate({
     value: typeof header === 'string' ? header : '',

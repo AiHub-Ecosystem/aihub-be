@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
+import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { EmailPayloadCipherPort } from '@/modules/auth/application/email-delivery-request.port';
 import { createEmailPayloadCipher } from '@/modules/auth/infrastructure/email-payload-cipher';
@@ -16,7 +17,6 @@ import {
 import { PostgresOrganizationFirstOwnerRepository } from '@/modules/identity/infrastructure/postgres-organization-first-owner.repository';
 import { PostgresOrganizationInvitationRepository } from '@/modules/identity/infrastructure/postgres-organization-invitation.repository';
 import { PostgresOrganizationMembershipRepository } from '@/modules/identity/infrastructure/postgres-organization-membership.repository';
-import { createRuntimeSecretProviderFromProcessEnvironment } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
 
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import {
@@ -37,8 +37,7 @@ beforeAll(() => {
   );
   repository = new PostgresOrganizationFirstOwnerRepository(client);
   cipher = createEmailPayloadCipher(
-    createRuntimeSecretProviderFromProcessEnvironment().getSnapshot()
-      .emailOutbox,
+    createCliRuntimeSecretProvider().getSnapshot().emailOutbox,
   );
 });
 

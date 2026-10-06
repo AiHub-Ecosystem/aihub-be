@@ -5,10 +5,7 @@ import type {
   SandboxAssertionClaims,
   SandboxAssertionSignerPort,
 } from '@/modules/identity/application/sandbox-assertion-signer.port';
-import {
-  type SandboxSigningMaterial,
-  readSandboxSigningMaterial,
-} from './sandbox-assertion.config';
+import { type SandboxSigningMaterial } from './sandbox-assertion.config';
 
 function notConfigured(): AppError {
   return new AppError({
@@ -35,9 +32,7 @@ export class JoseSandboxAssertionSigner implements SandboxAssertionSignerPort {
   private importedKey?: Promise<CryptoKey | KeyObject>;
 
   constructor(
-    private readonly readMaterial: () =>
-      | SandboxSigningMaterial
-      | undefined = readSandboxSigningMaterial,
+    private readonly readMaterial: () => SandboxSigningMaterial | undefined,
   ) {}
 
   get algorithm(): SandboxAssertionSignerPort['algorithm'] {

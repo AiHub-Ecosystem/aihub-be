@@ -90,6 +90,8 @@ const BOOT_ENVIRONMENT = {
   DOWNSTREAM_AI_SPEAKING_URL: 'http://speaking.ci-boot.invalid',
   RESEND_FROM: 'AIHUB <no-reply@ci-boot.invalid>',
   CUSTOMER_WEB_BASE_URL: 'https://customer.ci-boot.invalid',
+  SEAWEEDFS_USER_ASSET_BUCKET: '',
+  SEAWEEDFS_AUDIO_ASSET_BUCKET: '',
 };
 
 function writeBootConfig(directory) {

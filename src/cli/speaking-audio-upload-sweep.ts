@@ -1,4 +1,4 @@
-import { createRuntimeSecretProviderFromProcessEnvironment } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
+import { createSeaweedFsS3Client } from '@/modules/secrets/infrastructure/seaweedfs-s3-client.factory';
 import type {
   SpeakingAudioAssetStoragePort,
   SpeakingAudioUploadRepositoryPort,
@@ -9,6 +9,7 @@ import {
   createSpeakingAudioQueryClient,
 } from '@/modules/speaking/infrastructure/postgres-speaking-audio-upload.repository';
 import { S3SpeakingAudioAssetStorage } from '@/modules/speaking/infrastructure/s3-speaking-audio-asset.storage';
+import { createCliRuntimeSecretProvider } from './runtime-secret-provider';
 
 import { runOperatorCommand } from './operator-command-context';
 
@@ -45,11 +46,25 @@ export async function runSpeakingAudioUploadSweepCommand(
   input: SpeakingAudioUploadSweepCliInput,
 ) {
   const repository = openRepository(input);
-  const storage =
-    input.storage ??
-    new S3SpeakingAudioAssetStorage(
-      createRuntimeSecretProviderFromProcessEnvironment(),
+  let storage = input.storage;
+  if (storage === undefined) {
+    const secretProvider = createCliRuntimeSecretProvider();
+    const bucket = process.env.SEAWEEDFS_AUDIO_ASSET_BUCKET;
+    storage = new S3SpeakingAudioAssetStorage(
+      createSeaweedFsS3Client({
+        endpoint: process.env.SEAWEEDFS_ENDPOINT_URL,
+        region: process.env.SEAWEEDFS_REGION,
+        credentials: secretProvider.getSnapshot().seaweedfs,
+      }),
+      process.env.AIHUB_RUNTIME_DATABASE_SCOPE === 'sandbox'
+        ? bucket === undefined
+          ? {}
+          : { sandboxBucket: bucket }
+        : bucket === undefined
+          ? {}
+          : { productionBucket: bucket },
     );
+  }
   const sweep = new SpeakingAudioUploadSweep(repository, storage);
   const { result } = await runOperatorCommand(
     repository,
@@ -59,3 +74,4 @@ export async function runSpeakingAudioUploadSweepCommand(
   (input.emit ?? console.log)(JSON.stringify(result));
   return result;
 }
+import process from 'node:process';

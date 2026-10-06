@@ -9,7 +9,8 @@ import {
   createAvatarQueryClient,
 } from '@/modules/avatar/infrastructure/postgres-avatar.repository';
 import { S3AvatarStorage } from '@/modules/avatar/infrastructure/s3-avatar.storage';
-import { createRuntimeSecretProviderFromProcessEnvironment } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
+import { createSeaweedFsS3Client } from '@/modules/secrets/infrastructure/seaweedfs-s3-client.factory';
+import { createCliRuntimeSecretProvider } from './runtime-secret-provider';
 
 import { runOperatorCommand } from './operator-command-context';
 
@@ -45,9 +46,20 @@ export async function runAvatarSweepCommand(
 ): Promise<AvatarSweepSummary> {
   const emit = input.emit ?? console.log;
   const repository = openRepository(input);
-  const storage =
-    input.storage ??
-    new S3AvatarStorage(createRuntimeSecretProviderFromProcessEnvironment());
+  let storage = input.storage;
+  if (storage === undefined) {
+    const secretProvider = createCliRuntimeSecretProvider();
+    storage = new S3AvatarStorage(
+      createSeaweedFsS3Client({
+        endpoint: process.env.SEAWEEDFS_ENDPOINT_URL,
+        region: process.env.SEAWEEDFS_REGION,
+        credentials: secretProvider.getSnapshot().seaweedfs,
+      }),
+      process.env.SEAWEEDFS_USER_ASSET_BUCKET === undefined
+        ? {}
+        : { bucket: process.env.SEAWEEDFS_USER_ASSET_BUCKET },
+    );
+  }
   const sweep = new AvatarOrphanSweep(repository, storage);
 
   const { result } = await runOperatorCommand(
@@ -59,3 +71,4 @@ export async function runAvatarSweepCommand(
   emit(JSON.stringify(result));
   return result;
 }
+import process from 'node:process';

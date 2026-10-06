@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import process from 'node:process';
 
 import type {
   AiSpeakingRuntimeSecrets,
@@ -31,13 +30,10 @@ export class RuntimeSecretConfigurationError extends Error {
   }
 }
 
-export function createRuntimeSecretProviderFromProcessEnvironment(): RuntimeSecretProvider {
-  return new ConfiguredRuntimeSecretProvider({
-    nodeEnv: process.env.NODE_ENV,
-    source: process.env.AIHUB_RUNTIME_SECRET_SOURCE,
-    secretsFile: process.env.AIHUB_RUNTIME_SECRETS_FILE,
-    values: process.env,
-  });
+export function createRuntimeSecretProvider(
+  options: RuntimeSecretProviderOptions,
+): RuntimeSecretProvider {
+  return new ConfiguredRuntimeSecretProvider(options);
 }
 
 export class ConfiguredRuntimeSecretProvider implements RuntimeSecretProvider {

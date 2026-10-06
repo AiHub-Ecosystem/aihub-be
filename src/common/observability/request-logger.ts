@@ -1,3 +1,4 @@
+import { getRuntimeConfiguration } from '@/config/runtime-configuration';
 import { type FastifyServerOptions, LogController } from 'fastify';
 
 const DEFAULT_LOG_LEVEL = 'info';
@@ -15,13 +16,11 @@ const LOG_LEVELS = [
  * Fails at boot, with the name of the setting, rather than letting Pino throw
  * an error about a level nobody can trace back to `LOG_LEVEL`.
  */
-function configuredLogLevel(): string {
-  const configured = process.env.LOG_LEVEL?.trim() || DEFAULT_LOG_LEVEL;
-  const level = LOG_LEVELS.find((candidate) => candidate === configured);
+function configuredLogLevel(configured: string | undefined): string {
+  const levelName = configured?.trim() || DEFAULT_LOG_LEVEL;
+  const level = LOG_LEVELS.find((candidate) => candidate === levelName);
   if (level === undefined) {
-    throw new Error(
-      `LOG_LEVEL must be one of ${LOG_LEVELS.join(', ')}; got "${configured}"`,
-    );
+    throw new Error(`LOG_LEVEL must be one of ${LOG_LEVELS.join(', ')}`);
   }
 
   return level;
@@ -55,6 +54,7 @@ export type RequestLogging = Pick<
  */
 export function createRequestLogging(
   stream?: RequestLogStream,
+  logLevel: string | undefined = getRuntimeConfiguration().LOG_LEVEL,
 ): RequestLogging {
   return {
     // Fastify's own "incoming request" and "request completed" lines would
@@ -73,7 +73,7 @@ export function createRequestLogging(
       // Read here rather than passed in from the bootstrap because this file is
       // the explicit boundary adapter that builds the server's logging
       // configuration, the same way `open-telemetry.ts` reads its own.
-      level: configuredLogLevel(),
+      level: configuredLogLevel(logLevel),
       // `null` drops the pid and hostname bindings: lines stay identical
       // across replicas and carry nothing that differs per process.
       base: null,

@@ -20,13 +20,13 @@ import { loadEnvFile } from 'node:process';
 
 import { ulid } from 'ulid';
 
+import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { AppError } from '@/common/errors/app-error';
 import type { RequestContext } from '@/common/request-context/request-context';
 import { task1GradeAdapter } from '@/downstream/writing/task1-grade.adapter';
 import { task2GradeAdapter } from '@/downstream/writing/task2-grade.adapter';
 import type { DownstreamHttpRequestOptions } from '@/modules/gateway/infrastructure/downstream-http.client';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
-import { createRuntimeSecretProviderFromProcessEnvironment } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -428,8 +428,7 @@ async function main(): Promise<void> {
   let writingToken: string;
   try {
     writingToken =
-      createRuntimeSecretProviderFromProcessEnvironment().getSnapshot()
-        .aiWriting.token;
+      createCliRuntimeSecretProvider().getSnapshot().aiWriting.token;
   } catch {
     console.error(
       JSON.stringify({

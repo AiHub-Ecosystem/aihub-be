@@ -9,6 +9,7 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { AppModule } from '@/app.module';
+import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { generateRequestId } from '@/common/request-context/request-id';
 import {
   AUTH_RATE_LIMITER,
@@ -34,7 +35,6 @@ import {
   createPostgresIdentityClient,
 } from '@/modules/identity/infrastructure/postgres-identity.client';
 import { PostgresOrganizationInvitationRepository } from '@/modules/identity/infrastructure/postgres-organization-invitation.repository';
-import { createRuntimeSecretProviderFromProcessEnvironment } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
 
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import {
@@ -137,8 +137,7 @@ beforeAll(async () => {
     createPostgresIdentityClient(testDatabaseUrl()),
   );
   cipher = createEmailPayloadCipher(
-    createRuntimeSecretProviderFromProcessEnvironment().getSnapshot()
-      .emailOutbox,
+    createCliRuntimeSecretProvider().getSnapshot().emailOutbox,
   );
 
   const invitations: OrganizationInvitationPort =

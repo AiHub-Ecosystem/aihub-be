@@ -7,7 +7,6 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 import { AppError } from '@/common/errors/app-error';
-import type { RuntimeSecretProvider } from '@/modules/secrets/application/runtime-secret-provider.port';
 import type { SpeakingAudioAssetStoragePort } from '@/modules/speaking/application/speaking-audio-upload.port';
 import {
   SPEAKING_AUDIO_BUCKETS,
@@ -16,12 +15,7 @@ import {
 } from '@/modules/speaking/domain/speaking-audio-asset';
 import type { SpeakingAudioEnvironment } from '@/modules/speaking/domain/speaking-audio-asset';
 
-const SEAWEEDFS_HOST = 's3.wispace.app';
-const DEFAULT_ENDPOINT = `https://${SEAWEEDFS_HOST}`;
-const DEFAULT_REGION = 'us-east-1';
 export interface SpeakingAudioAssetStorageOptions {
-  readonly endpoint?: string;
-  readonly region?: string;
   readonly productionBucket?: string;
   readonly sandboxBucket?: string;
   readonly now?: () => Date;
@@ -48,24 +42,6 @@ function isNotFound(error: unknown): boolean {
   return name === 'NotFound' || $metadata?.httpStatusCode === 404;
 }
 
-function approvedEndpoint(endpoint: string): boolean {
-  try {
-    const url = new URL(endpoint);
-    return (
-      url.protocol === 'https:' &&
-      url.hostname === SEAWEEDFS_HOST &&
-      !url.port &&
-      !url.username &&
-      !url.password &&
-      url.pathname === '/' &&
-      !url.search &&
-      !url.hash
-    );
-  } catch {
-    return false;
-  }
-}
-
 interface ConfiguredStorage {
   readonly signer: S3Client;
   readonly client: Pick<S3Client, 'send'>;
@@ -80,53 +56,21 @@ export class S3SpeakingAudioAssetStorage
   private readonly now: () => Date;
 
   constructor(
-    secretProvider: RuntimeSecretProvider,
+    sharedClient: S3Client | undefined,
     options: SpeakingAudioAssetStorageOptions = {},
   ) {
     this.now = options.now ?? (() => new Date());
-    const credentials = secretProvider.getSnapshot().seaweedfs;
-    const productionBucket = (
-      options.productionBucket ??
-      process.env.SEAWEEDFS_AUDIO_ASSET_BUCKET ??
-      ''
-    ).trim();
-    const sandboxBucket = (
-      options.sandboxBucket ??
-      process.env.SEAWEEDFS_SANDBOX_AUDIO_ASSET_BUCKET ??
-      ''
-    ).trim();
-    const endpoint = (
-      options.endpoint ??
-      process.env.SEAWEEDFS_ENDPOINT_URL ??
-      DEFAULT_ENDPOINT
-    ).trim();
-    const region = (
-      options.region ??
-      process.env.SEAWEEDFS_REGION ??
-      DEFAULT_REGION
-    ).trim();
+    const productionBucket = (options.productionBucket ?? '').trim();
+    const sandboxBucket = (options.sandboxBucket ?? '').trim();
 
-    if (
-      credentials === undefined ||
-      region.length === 0 ||
-      !approvedEndpoint(endpoint)
-    ) {
+    if (sharedClient === undefined) {
       this.configured = undefined;
       return;
     }
 
-    const signer = new S3Client({
-      endpoint,
-      region,
-      forcePathStyle: true,
-      credentials: {
-        accessKeyId: credentials.accessKeyId,
-        secretAccessKey: credentials.secretAccessKey,
-      },
-    });
     this.configured = {
-      signer,
-      client: options.client ?? signer,
+      signer: sharedClient,
+      client: options.client ?? sharedClient,
       productionBucket:
         productionBucket === SPEAKING_AUDIO_BUCKETS.production
           ? productionBucket

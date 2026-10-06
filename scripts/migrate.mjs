@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
-import { loadEnvFile } from 'node:process';
+import process, { loadEnvFile } from 'node:process';
 
 import { Pool } from 'pg';
 
@@ -20,7 +20,7 @@ if (existsSync(runtimeConnectionModule)) {
   if (typeof loadRuntimeConnectionEnvironment !== 'function') {
     throw new Error('runtime connection loader is unavailable');
   }
-  loadRuntimeConnectionEnvironment();
+  loadRuntimeConnectionEnvironment({ env: process.env });
 }
 
 const databaseUrl = process.env.DATABASE_URL;

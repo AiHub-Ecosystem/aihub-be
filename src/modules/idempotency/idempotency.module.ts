@@ -1,6 +1,11 @@
 import { Module } from '@nestjs/common';
 
 import {
+  RUNTIME_CONNECTION_CONFIGURATION,
+  type RuntimeConnectionConfigurationPort,
+} from '@/modules/secrets/application/runtime-connection-configuration.port';
+import { SecretsModule } from '@/modules/secrets/secrets.module';
+import {
   IDEMPOTENCY_REPOSITORY,
   type IdempotencyRepositoryPort,
 } from './application/idempotency-repository.port';
@@ -10,12 +15,16 @@ import { createPostgresIdempotencyClient } from './infrastructure/postgres-idemp
 import { PostgresIdempotencyRepository } from './infrastructure/postgres-idempotency.repository';
 
 @Module({
+  imports: [SecretsModule],
   providers: [
     {
       provide: IDEMPOTENCY_REPOSITORY,
-      useFactory: (): IdempotencyRepositoryPort =>
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
+      ): IdempotencyRepositoryPort =>
         new PostgresIdempotencyRepository(
-          createPostgresIdempotencyClient(process.env.DATABASE_URL ?? ''),
+          createPostgresIdempotencyClient(configuration.databaseUrl ?? ''),
         ),
     },
     {

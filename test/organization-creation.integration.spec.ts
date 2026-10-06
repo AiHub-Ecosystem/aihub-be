@@ -6,6 +6,10 @@ import { Test } from '@nestjs/testing';
 
 import { AppModule } from '@/app.module';
 import {
+  appConfig,
+  loadRuntimeConfiguration,
+} from '@/config/runtime-configuration';
+import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
 } from '@/modules/auth/application/user-access-token.port';
@@ -305,13 +309,9 @@ describe('Self-serve Organization creation over HTTP', () => {
   });
 });
 
-// The suite above boots the Application once, so it only ever proves the
-// unset branch. These boot it again per case with the variable set, which is
-// what would catch a typo in the composition root: the unit tests on
-// `selfServeMonthlyRequestQuota` pass either way, and this is the only place
-// the configured value is shown reaching a stored Organization.
-describe('Self-serve Organization terms read from the environment', () => {
-  const originalQuota = process.env.AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA;
+// The suite above boots the Application once. These compile it with an
+// explicit DI configuration to prove the configured value reaches storage.
+describe('Self-serve Organization terms from injected configuration', () => {
   let app: NestFastifyApplication | undefined;
   let creation: OrganizationCreationLimitFake;
   let idempotency: IdempotencyRepositoryFake;
@@ -326,20 +326,9 @@ describe('Self-serve Organization terms read from the environment', () => {
       await app.close();
       app = undefined;
     }
-    if (originalQuota === undefined) {
-      delete process.env.AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA;
-    } else {
-      process.env.AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA = originalQuota;
-    }
   });
 
-  /**
-   * The composition root reads the variable while the module graph is built,
-   * so the Application has to boot after the value is already in place. That
-   * ordering is the whole point: booting first and setting the variable after
-   * would prove nothing about the wiring.
-   */
-  async function boot(): Promise<void> {
+  async function boot(monthlyRequestQuota: number): Promise<void> {
     const verifier: UserAccessTokenVerifierPort = {
       verify: async (token: string) => {
         if (token === OWNER_TOKEN) {
@@ -351,6 +340,11 @@ describe('Self-serve Organization terms read from the environment', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(appConfig.KEY)
+      .useValue({
+        ...appConfig(),
+        AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA: monthlyRequestQuota,
+      })
       .overrideProvider(ORGANIZATION_CREATION_RECORD)
       .useValue(creation)
       .overrideProvider(IDEMPOTENCY_REPOSITORY)
@@ -369,8 +363,7 @@ describe('Self-serve Organization terms read from the environment', () => {
   }
 
   it('starts an Organization on the configured quota', async () => {
-    process.env.AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA = '1000000';
-    await boot();
+    await boot(1_000_000);
 
     const response = await app!.inject({
       method: 'POST',
@@ -383,11 +376,15 @@ describe('Self-serve Organization terms read from the environment', () => {
     expect(creation.created[0]?.terms.monthlyRequestQuota).toBe(1_000_000);
   });
 
-  it('refuses to start on a quota that is not a positive integer', async () => {
-    process.env.AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA = 'not-a-number';
-
-    await expect(boot()).rejects.toThrow(
-      /AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA/,
-    );
+  it('rejects a quota that is not a positive integer at config load', () => {
+    expect(() =>
+      loadRuntimeConfiguration({
+        NODE_ENV: 'test',
+        AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
+        AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
+        AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+        AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA: 'not-a-number',
+      }),
+    ).toThrow(/AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA/);
   });
 });
