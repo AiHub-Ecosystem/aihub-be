@@ -49,6 +49,14 @@ The event is raised once, on the attempt that used the last of a request's three
 attempts, not once per attempt. A retried request emits nothing, so the counter
 measures abandoned requests rather than provider trouble.
 
+A process can exit between the write that makes a request terminal and the
+callback that emits its event, which would lose the alert for good: the row is
+terminal, so no later pass claims it. The row therefore records when its
+notification went out (`failure_reported_at`), and every pass reconciles the
+terminal rows that have no such record before it ends. A pass that starts after
+the one that failed a request still emits its event, and a request whose
+notification is already recorded is never reported twice.
+
 Suggested alert condition: any increase of `aihub_email_delivery_failed_total`
 over a window long enough to cover the retry schedule (attempts run at 0, +1
 minute, and +5 minutes, so 15 minutes is a safe minimum). `kind` separates the
@@ -79,7 +87,7 @@ erased, so a failed request can be investigated without any customer data:
 
 ```sql
 SELECT id, kind, status, attempts, last_attempt_at, last_error_code,
-       cancel_reason, created_at, completed_at
+       cancel_reason, created_at, completed_at, failure_reported_at
 FROM email_delivery_requests
 WHERE status = 'failed'
 ORDER BY completed_at DESC;
@@ -89,6 +97,20 @@ On a terminal request `payload_ciphertext` is `NULL` and the lease columns are
 released. `attempts` is the count used, `last_error_code` the bounded cause, and
 `completed_at` when the request was given up on. For a `cancelled` row read
 `cancel_reason` instead; `last_error_code` is not set.
+
+Three rows are states an operator will meet that no pass resolves on its own, and
+none of them is a lost email:
+
+- `failure_reported_at IS NULL` on a `failed` row means an instance still owes
+  its alert. The next pass reconciles it.
+- A `queued` row naming a key version this deployment does not hold was claimed
+  by an instance that could not read it. The instance that does hold the key
+  claims it unchanged, with its attempts untouched. The cause is a keyring that
+  dropped an id still in use by queued rows.
+- A `queued` row with `attempts` at the cap lost the outcome of its last attempt,
+  so no pass can retry it or finish it. It is given up on deliberately rather
+  than called a fourth time, and the payload stays until the row is resolved by
+  hand.
 
 The `id` is safe to quote in a ticket. It is the correlation handle between the
 alert, this row, and the instance that emitted the event.

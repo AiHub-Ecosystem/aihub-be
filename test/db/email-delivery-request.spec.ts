@@ -96,6 +96,7 @@ describe('email delivery request repository', () => {
       });
 
       const attemptedAt = new Date('2026-10-05T12:00:05.000Z');
+      await repository.reserveAttempt(authClient, { id, attemptedAt });
       const outcome = await repository.markProviderAccepted(authClient, {
         id,
         attemptedAt,
@@ -131,9 +132,11 @@ describe('email delivery request repository', () => {
       [id, CIPHERTEXT, NOW],
     );
 
+    const attemptedAt = new Date('2026-10-05T12:01:00.000Z');
+    await repository.reserveAttempt(authClient, { id, attemptedAt });
     await repository.recordFailedAttempt(authClient, {
       id,
-      attemptedAt: new Date('2026-10-05T12:01:00.000Z'),
+      attemptedAt,
       errorCode: 'timeout',
     });
     const rows = await pool.query(
@@ -206,18 +209,16 @@ describe('email delivery request repository', () => {
     );
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      await repository.recordFailedAttempt(authClient, {
+      await repository.reserveAttempt(authClient, {
         id,
         attemptedAt: new Date(Date.UTC(2026, 9, 5, 12, attempt)),
-        errorCode: 'timeout',
       });
     }
 
     await expect(
-      repository.recordFailedAttempt(authClient, {
+      repository.reserveAttempt(authClient, {
         id,
         attemptedAt: new Date(),
-        errorCode: 'timeout',
       }),
     ).rejects.toThrow(/queued state|attempts/i);
   });

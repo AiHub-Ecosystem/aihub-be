@@ -90,6 +90,35 @@ AIHUB_RUNTIME_SECRET_SOURCE=env
 DOWNSTREAM_AI_WRITING_TOKEN=<token supplied by the AI Writing team>
 ```
 
+Then generate the Email outbox payload key. Queued verification, password-reset,
+and invitation emails are sealed with this key before they are written, and the
+outbox is what sends them, so startup fails without it.
+
+PowerShell:
+
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+```
+
+macOS/Linux:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+```
+
+Paste the printed value into both variables, keeping the key id free of `.` and
+keeping it as a key of the object:
+
+```dotenv
+EMAIL_OUTBOX_CURRENT_KEY_ID=local-2026-10
+EMAIL_OUTBOX_KEYS={"local-2026-10":"<the value the command printed>"}
+```
+
+Rotating later means adding the new id to `EMAIL_OUTBOX_KEYS` and pointing
+`EMAIL_OUTBOX_CURRENT_KEY_ID` at it, while keeping the old id until nothing is
+sealed with it. An instance that lacks a key cannot read the rows sealed with
+it, so it leaves them queued for an instance that has one.
+
 To run the Speaking demo, also set the provider-owned Dev configuration. These
 values stay in `.env` or a secret manager; they are never sent by the client:
 
@@ -507,10 +536,18 @@ Confirm that `DATABASE_URL` in `.env` matches the Compose configuration.
 
 The most common cause is missing runtime-secret configuration. For local
 development, set `AIHUB_RUNTIME_SECRET_SOURCE=env` plus
-`DOWNSTREAM_AI_WRITING_TOKEN`, `DOWNSTREAM_AI_SPEAKING_CLIENT_ID`, and
-`DOWNSTREAM_AI_SPEAKING_SECRET_KEY` in `.env`, then restart `pnpm dev`. For a
+`DOWNSTREAM_AI_WRITING_TOKEN`, `DOWNSTREAM_AI_SPEAKING_CLIENT_ID`,
+`DOWNSTREAM_AI_SPEAKING_SECRET_KEY`, `EMAIL_OUTBOX_CURRENT_KEY_ID`, and
+`EMAIL_OUTBOX_KEYS` in `.env`, then restart `pnpm dev`. For a
 Vault Agent deployment, check the rendered file path and required bundle keys;
 the process fails closed when the file is absent or malformed.
+
+### `required runtime secret is missing: email-outbox key bundle`
+
+Both outbox variables are blank in a fresh copy of `.env.example`; generate a
+key as in step 1 and set `EMAIL_OUTBOX_CURRENT_KEY_ID` to a key of the
+`EMAIL_OUTBOX_KEYS` object. A key id containing `.` is refused at startup,
+because `.` is the envelope delimiter.
 
 ### `AI_SERVICE_ERROR` or `AI_SERVICE_TIMEOUT` on Speaking
 

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
@@ -8,6 +8,8 @@ import { EmailDeliveryPoller } from '@/modules/auth/application/email-delivery-p
 import type {
   EmailDeliveryKind,
   EmailDeliveryRequestRecord,
+  EmailDispatchStorePort,
+  EmailPayloadCipherPort,
 } from '@/modules/auth/application/email-delivery-request.port';
 import type {
   EmailDispatchOptions,
@@ -41,6 +43,15 @@ const OWNER_B = 'outbox-instance-b';
 const cipher = createEmailPayloadCipher(
   createRuntimeSecretProviderFromProcessEnvironment().getSnapshot().emailOutbox,
 );
+
+/**
+ * A keyring this instance does not hold, standing in for the instance that sealed
+ * a row after a rotation the reader has not restarted through.
+ */
+const foreignCipher = createEmailPayloadCipher({
+  currentKeyId: 'unseen-2026-11',
+  keys: { 'unseen-2026-11': randomBytes(32).toString('base64') },
+});
 
 const MINUTE = 60_000;
 
@@ -81,6 +92,8 @@ interface SeedOptions {
   readonly expiresAt?: Date;
   readonly organizationName?: string;
   readonly role?: 'owner' | 'admin' | 'member';
+  /** Seals the payload with another keyring, as a rotation leaves rows sealed. */
+  readonly sealedWith?: EmailPayloadCipherPort;
 }
 
 /**
@@ -170,7 +183,12 @@ async function seedRequest(options: SeedOptions = {}): Promise<SeededRequest> {
     `INSERT INTO email_delivery_requests (
        id, kind, status, payload_ciphertext, attempts, last_attempt_at, created_at
      ) VALUES ($1, $2, 'queued', $3, 0, NULL, $4)`,
-    [id, kind, cipher.encrypt(JSON.stringify(payload)), NOW],
+    [
+      id,
+      kind,
+      (options.sealedWith ?? cipher).encrypt(JSON.stringify(payload)),
+      NOW,
+    ],
   );
   return { id, tokenHash, email, token };
 }
@@ -295,12 +313,14 @@ interface Row {
   readonly completed_at: Date | null;
   readonly lease_owner: string | null;
   readonly lease_expires_at: Date | null;
+  readonly failure_reported_at: Date | null;
 }
 
 async function rowOf(id: string): Promise<Row> {
   const result = await pool.query<Row>(
     `SELECT status, attempts, payload_ciphertext, cancel_reason, last_error_code,
-            last_attempt_at, completed_at, lease_owner, lease_expires_at
+            last_attempt_at, completed_at, lease_owner, lease_expires_at,
+            failure_reported_at
      FROM email_delivery_requests WHERE id = $1`,
     [id],
   );
@@ -510,6 +530,27 @@ describe('email outbox dispatch poller', () => {
       });
     });
 
+    it('leaves a request sealed with a key version this instance lacks queued, unerased, and claimable', async () => {
+      const seeded = await seedRequest({ sealedWith: foreignCipher });
+      const sender = new RecordingSender();
+
+      await poller(OWNER_A, sender).runOnce();
+
+      // Cancelling would erase a payload the instance that holds the key can
+      // still deliver, so the row keeps its ciphertext and its attempts and
+      // goes straight back into circulation.
+      expect(sender.sends).toEqual([]);
+      expect(await rowOf(seeded.id)).toMatchObject({
+        status: 'queued',
+        attempts: 0,
+        cancel_reason: null,
+        lease_owner: null,
+        lease_expires_at: null,
+      });
+      expect((await rowOf(seeded.id)).payload_ciphertext).not.toBeNull();
+      expect((await claim(OWNER_B)).map((row) => row.id)).toEqual([seeded.id]);
+    });
+
     it('cancels a request whose credential was superseded', async () => {
       const seeded = await seedRequest();
       await pool.query(
@@ -603,6 +644,53 @@ describe('email outbox dispatch poller', () => {
         payload_ciphertext: null,
         lease_owner: null,
       });
+    });
+
+    it('gives the provider at most three attempts even when every transition fails', async () => {
+      const seeded = await seedRequest();
+      const sender = new RecordingSender();
+      sender.failure = new Error('Resend email delivery failed');
+      // Every outcome transition fails, which is the case the attempt cap has to
+      // survive: the row keeps its lease, its payload, and its attempts, so only
+      // the reservation taken before the call can bound the provider.
+      const unreachable: EmailDispatchStorePort = {
+        claim: (input) => store.claim(input),
+        reserveAttempt: (input) => store.reserveAttempt(input),
+        markProviderAccepted: async () => {
+          throw new Error('store is unavailable');
+        },
+        markFailed: async () => {
+          throw new Error('store is unavailable');
+        },
+        recordFailedAttempt: async () => {
+          throw new Error('store is unavailable');
+        },
+        markCancelled: (input) => store.markCancelled(input),
+        releaseDeferred: (input) => store.releaseDeferred(input),
+        unreportedFailures: (input) => store.unreportedFailures(input),
+        markFailureReported: (input) => store.markFailureReported(input),
+      };
+      let clock = NOW;
+      const failing = new EmailDeliveryPoller(
+        unreachable,
+        new PostgresEmailCredentialRepository(client),
+        cipher,
+        sender,
+        () => clock,
+        { hash },
+        {
+          owner: OWNER_A,
+          onTerminalFailure: reportTerminalEmailDeliveryFailure,
+        },
+      );
+
+      for (const minutes of [0, 1, 6, 20, 40]) {
+        clock = new Date(NOW.getTime() + minutes * MINUTE);
+        await failing.runOnce();
+      }
+
+      expect(sender.sends).toHaveLength(3);
+      expect((await rowOf(seeded.id)).attempts).toBe(3);
     });
 
     it('presents the same idempotency key on every attempt of one request', async () => {
@@ -729,6 +817,40 @@ describe('email outbox dispatch poller', () => {
       expect(row.lease_owner).toBeNull();
       expect(row.lease_expires_at).toBeNull();
       expect(row.completed_at).toEqual(
+        new Date(NOW.getTime() + 6 * MINUTE + 2_000),
+      );
+    });
+
+    it('reports a terminal failure whose notification was lost, on a later pass', async () => {
+      const seeded = await exhaust(rejectingProvider());
+      // Exactly what a process exit between the markFailed commit and the
+      // callback leaves behind: a terminal row with no record of a signal.
+      await pool.query(
+        'UPDATE email_delivery_requests SET failure_reported_at = NULL WHERE id = $1',
+        [seeded.id],
+      );
+      const before = await failedCountFor('verification_email');
+
+      const emitted = await captureStderr(async () => {
+        await poller(OWNER_B, new RecordingSender()).runOnce();
+      });
+
+      expect(emitted).toContain('exhausted its attempts');
+      expect(await failedCountFor('verification_email')).toBe(before + 1);
+      expect((await rowOf(seeded.id)).failure_reported_at).not.toBeNull();
+
+      // Once, not once per pass: the durable record ends the reconciliation.
+      const again = await captureStderr(async () => {
+        await poller(OWNER_B, new RecordingSender()).runOnce();
+      });
+      expect(again).not.toContain('exhausted its attempts');
+      expect(await failedCountFor('verification_email')).toBe(before + 1);
+    });
+
+    it('records the notification on the request it gave up on', async () => {
+      const seeded = await exhaust(rejectingProvider());
+
+      expect((await rowOf(seeded.id)).failure_reported_at).toEqual(
         new Date(NOW.getTime() + 6 * MINUTE + 2_000),
       );
     });

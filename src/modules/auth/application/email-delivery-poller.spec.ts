@@ -1,4 +1,5 @@
 import { EmailDeliveryPoller } from './email-delivery-poller';
+import { EmailPayloadUnknownKeyVersionError } from './email-delivery-request.port';
 import type {
   ClaimEmailDeliveryRequestsInput,
   EmailCredentialActionabilityPort,
@@ -32,6 +33,11 @@ class FakeStore implements EmailDispatchStorePort {
   cancelled: { id: string; reason: string }[] = [];
   failed: { id: string; errorCode: string }[] = [];
   attempts: { id: string; errorCode: string }[] = [];
+  reserved: string[] = [];
+  deferred: string[] = [];
+  unreported: EmailDeliveryRequestRecord[] = [];
+  reconcileLimits: number[] = [];
+  reported: string[] = [];
 
   async claim(
     input: ClaimEmailDeliveryRequestsInput,
@@ -60,6 +66,25 @@ class FakeStore implements EmailDispatchStorePort {
     errorCode: string;
   }): Promise<void> {
     this.attempts.push({ id: input.id, errorCode: input.errorCode });
+  }
+
+  async reserveAttempt(input: { id: string }): Promise<void> {
+    this.reserved.push(input.id);
+  }
+
+  async releaseDeferred(input: { id: string }): Promise<void> {
+    this.deferred.push(input.id);
+  }
+
+  async unreportedFailures(input: { limit: number }): Promise<
+    readonly EmailDeliveryRequestRecord[]
+  > {
+    this.reconcileLimits.push(input.limit);
+    return this.unreported.slice(0, input.limit);
+  }
+
+  async markFailureReported(input: { id: string }): Promise<void> {
+    this.reported.push(input.id);
   }
 }
 
@@ -148,6 +173,19 @@ function unreadableCipher(): EmailPayloadCipherPort {
     encrypt: (): string => 'sealed',
     decrypt: () => {
       throw new Error('email outbox envelope is malformed');
+    },
+  };
+}
+
+/**
+ * An instance whose startup keyring predates the key version this row was sealed
+ * with, which is what a gradual rotation leaves behind on the old instances.
+ */
+function unknownKeyVersionCipher(): EmailPayloadCipherPort {
+  return {
+    encrypt: (): string => 'sealed',
+    decrypt: () => {
+      throw new EmailPayloadUnknownKeyVersionError();
     },
   };
 }
@@ -271,6 +309,34 @@ describe('EmailDeliveryPoller', () => {
       ROW_ID,
       ROW_ID,
     ]);
+  });
+
+  it('reserves the attempt before calling the provider, not after it answers', async () => {
+    // A transition that fails after the provider already ran is swallowed, so
+    // the only record that a provider call happened is the one taken before it.
+    const { poller, store, sender } = harness();
+    store.markProviderAccepted = async () => {
+      throw new Error('store is unavailable');
+    };
+    store.claimResult = [claimed({ attempts: 1 })];
+
+    await poller.runOnce();
+
+    expect(store.reserved).toEqual([ROW_ID]);
+    expect(sender.sends).toHaveLength(1);
+    // The attempt the provider spent is already counted; the failed transition
+    // adds nothing on top of it.
+    expect(store.accepted).toEqual([]);
+  });
+
+  it('spends no attempt on a request it cancels before calling the provider', async () => {
+    const { poller, store } = harness({ credential: 'closed' });
+    store.claimResult = [claimed()];
+
+    await poller.runOnce();
+
+    expect(store.reserved).toEqual([]);
+    expect(store.cancelled).toEqual([{ id: ROW_ID, reason: 'not_actionable' }]);
   });
 
   it('records a retriable failure while attempts remain under the cap', async () => {
@@ -433,6 +499,36 @@ describe('EmailDeliveryPoller', () => {
     });
   });
 
+  it('leaves a request another instance can still open queued and unerased', async () => {
+    const store = new FakeStore();
+    const sender = new RecordingSender();
+    const poller = new EmailDeliveryPoller(
+      store,
+      new FakeCredentials(),
+      unknownKeyVersionCipher(),
+      sender,
+      (): Date => NOW,
+      { hash: () => TOKEN_HASH },
+      { owner: 'instance-a' },
+    );
+    store.claimResult = [claimed()];
+
+    const summary = await poller.runOnce();
+
+    // Cancelling here would erase a payload the instance that owns the key can
+    // still deliver; the row goes back with its ciphertext and its attempts.
+    expect(store.cancelled).toEqual([]);
+    expect(store.deferred).toEqual([ROW_ID]);
+    expect(store.attempts).toEqual([]);
+    expect(sender.sends).toEqual([]);
+    expect(summary).toEqual({
+      claimed: 1,
+      providerAccepted: 0,
+      cancelled: 0,
+      failed: 0,
+    });
+  });
+
   it('cancels a request whose payload can no longer be read', async () => {
     const store = new FakeStore();
     const sender = new RecordingSender();
@@ -577,6 +673,69 @@ describe('EmailDeliveryPoller', () => {
       await poller.runOnce();
 
       expect(failures).toEqual([]);
+    });
+
+    it('reports a terminal failure whose notification a restart never got to send', async () => {
+      // What a process exit between the markFailed commit and the notification
+      // leaves behind: a terminal row, its payload already erased, and no record
+      // that anything was ever reported.
+      const failures: unknown[] = [];
+      const { poller, store } = harness({
+        onTerminalFailure: (failure) => failures.push(failure),
+      });
+      store.unreported = [
+        claimed({
+          status: 'failed',
+          attempts: 3,
+          payloadCiphertext: null,
+          lastErrorCode: 'timeout',
+          completedAt: NOW,
+        }),
+      ];
+
+      await poller.runOnce();
+
+      expect(failures).toEqual([
+        { id: ROW_ID, kind: 'verification_email', errorCode: 'timeout' },
+      ]);
+      expect(store.reported).toEqual([ROW_ID]);
+    });
+
+    it('stops reporting a terminal failure once the notification is recorded', async () => {
+      // The store no longer returns a reported row, so a second pass over the
+      // same durable state is silent: one event per terminal failure, not one
+      // per pass.
+      const failures: unknown[] = [];
+      const { poller, store } = harness({
+        onTerminalFailure: (failure) => failures.push(failure),
+      });
+      store.unreported = [
+        claimed({
+          id: 'edr_gone',
+          status: 'failed',
+          lastErrorCode: 'provider_rejected',
+        }),
+      ];
+      await poller.runOnce();
+      store.unreported = [];
+      await poller.runOnce();
+
+      expect(failures).toHaveLength(1);
+      expect(store.reported).toEqual(['edr_gone']);
+    });
+
+    it('records the notification of a request it just gave up on', async () => {
+      const failures: unknown[] = [];
+      const { poller, store, sender } = harness({
+        onTerminalFailure: (failure) => failures.push(failure),
+      });
+      store.claimResult = [claimed({ attempts: 2 })];
+      sender.failure = new Error('Resend email delivery failed');
+
+      await poller.runOnce();
+
+      expect(failures).toHaveLength(1);
+      expect(store.reported).toEqual([ROW_ID]);
     });
 
     it('reports nothing for a request it cancelled instead', async () => {

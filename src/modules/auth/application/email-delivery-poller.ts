@@ -9,6 +9,7 @@ import type {
   EmailDispatchStorePort,
   OrganizationInviteEmailDeliveryPayload,
 } from './email-delivery-request.port';
+import { EmailPayloadUnknownKeyVersionError } from './email-delivery-request.port';
 import type { EmailPayloadCipherPort } from './email-delivery-request.port';
 import { EMAIL_ATTEMPT_TIMEOUT_MS } from './email-sender.port';
 import type { EmailSenderPort } from './email-sender.port';
@@ -158,14 +159,66 @@ export class EmailDeliveryPoller {
         // stranding the rest of the batch.
       }
     }
+    await this.reportUnreportedFailures();
     return summary;
+  }
+
+  /**
+   * Emits the alert for every terminal request that has no record of one, which
+   * after a restart includes the ones whose own pass died before its callback.
+   * A terminal row is not claimable, so without this its alert would be lost for
+   * good — and reporting from durable state is what keeps the event at one per
+   * terminal failure rather than one per pass.
+   */
+  private async reportUnreportedFailures(): Promise<void> {
+    let pending: readonly EmailDeliveryRequestRecord[];
+    try {
+      pending = await this.store.unreportedFailures({ limit: this.batchSize });
+    } catch {
+      return;
+    }
+    for (const failure of pending) {
+      // A failed row carries a bounded cause; the query only returns ones that
+      // do, and a row that somehow did not is left alone rather than reported
+      // under a code nobody recorded.
+      if (failure.lastErrorCode === null) continue;
+      try {
+        this.report({
+          id: failure.id,
+          kind: failure.kind,
+          errorCode: failure.lastErrorCode,
+        });
+        await this.store.markFailureReported({
+          id: failure.id,
+          reportedAt: this.now(),
+        });
+      } catch {
+        // Reported but not recorded, or not reported at all: the row stays in
+        // the pending set, so the next pass tries again.
+      }
+    }
+  }
+
+  private report(failure: {
+    readonly id: string;
+    readonly kind: EmailDeliveryKind;
+    readonly errorCode: EmailDeliveryErrorCode;
+  }): void {
+    this.options.onTerminalFailure?.(failure);
   }
 
   private async dispatch(
     request: EmailDeliveryRequestRecord,
-  ): Promise<'provider_accepted' | 'cancelled' | 'failed' | 'retried'> {
+  ): Promise<
+    'provider_accepted' | 'cancelled' | 'failed' | 'retried' | 'deferred'
+  > {
     const now = this.now();
-    const payload = this.readPayload(request);
+    let payload: AuthEmailDeliveryPayload | undefined;
+    try {
+      payload = this.readPayload(request);
+    } catch {
+      return this.defer(request);
+    }
     if (payload === undefined) {
       // A payload this instance cannot open will never open, so waiting would
       // claim the row forever without ever making it deliverable.
@@ -186,6 +239,11 @@ export class EmailDeliveryPoller {
       return this.cancel(request, cancelReasonOf(state), now);
     }
 
+    // The attempt is spent before the provider is called, not recorded after it
+    // answers: a transition that fails must not hand the same request another
+    // pass at the provider.
+    await this.store.reserveAttempt({ id: request.id, attemptedAt: now });
+
     try {
       await this.deliver(request, payload);
     } catch (error) {
@@ -196,6 +254,12 @@ export class EmailDeliveryPoller {
     return 'provider_accepted';
   }
 
+  /**
+   * `undefined` is a payload that will never open: absent, or an envelope this
+   * instance cannot make sense of. An unknown key version is not that, and is
+   * rethrown so the row can go back with its ciphertext instead of being
+   * cancelled out from under an instance that holds the key.
+   */
   private readPayload(
     request: EmailDeliveryRequestRecord,
   ): AuthEmailDeliveryPayload | undefined {
@@ -205,9 +269,17 @@ export class EmailDeliveryPoller {
       return JSON.parse(
         this.cipher.decrypt(ciphertext),
       ) as AuthEmailDeliveryPayload;
-    } catch {
+    } catch (error) {
+      if (error instanceof EmailPayloadUnknownKeyVersionError) throw error;
       return undefined;
     }
+  }
+
+  private async defer(
+    request: EmailDeliveryRequestRecord,
+  ): Promise<'deferred'> {
+    await this.store.releaseDeferred({ id: request.id });
+    return 'deferred';
   }
 
   private async deliver(
@@ -259,11 +331,8 @@ export class EmailDeliveryPoller {
         failedAt: now,
         errorCode,
       });
-      this.options.onTerminalFailure?.({
-        id: request.id,
-        kind: request.kind,
-        errorCode,
-      });
+      this.report({ id: request.id, kind: request.kind, errorCode });
+      await this.store.markFailureReported({ id: request.id, reportedAt: now });
       return 'failed';
     }
     await this.store.recordFailedAttempt({

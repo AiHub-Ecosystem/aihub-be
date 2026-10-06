@@ -1,9 +1,18 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 import type { EmailPayloadCipherPort } from '@/modules/auth/application/email-delivery-request.port';
+import { EmailPayloadUnknownKeyVersionError } from '@/modules/auth/application/email-delivery-request.port';
 import type { EmailOutboxRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';
 
 const ENVELOPE_VERSION = 'v1';
+
+/**
+ * The envelope is dot-joined and read back as exactly five segments, so a key id
+ * carrying the delimiter would make the cipher reject its own output. Refused at
+ * startup rather than at first encrypt, because by then a queued row could
+ * already hold an envelope nothing can open.
+ */
+const ENVELOPE_DELIMITER = '.';
 
 export function createEmailPayloadCipher(
   secrets: EmailOutboxRuntimeSecrets,
@@ -36,7 +45,7 @@ export function createEmailPayloadCipher(
       }
       const key = keys.get(parts[1] as string);
       if (key === undefined) {
-        throw new Error('email outbox key version is unknown');
+        throw new EmailPayloadUnknownKeyVersionError();
       }
       const iv = Buffer.from(parts[2] as string, 'base64url');
       const tag = Buffer.from(parts[3] as string, 'base64url');
@@ -60,11 +69,20 @@ function validateKeyring(
   }
   const ring = new Map<string, Buffer>();
   for (const [keyId, value] of entries) {
+    if (keyId.length === 0 || keyId.includes(ENVELOPE_DELIMITER)) {
+      throw new Error('email outbox key id is invalid');
+    }
     const key = Buffer.from(value, 'base64');
     if (key.length !== 32) {
       throw new Error('email outbox key material is invalid');
     }
     ring.set(keyId, key);
+  }
+  if (
+    secrets.currentKeyId.length === 0 ||
+    secrets.currentKeyId.includes(ENVELOPE_DELIMITER)
+  ) {
+    throw new Error('email outbox key id is invalid');
   }
   if (!ring.has(secrets.currentKeyId)) {
     throw new Error('email outbox current key id is not provisioned');

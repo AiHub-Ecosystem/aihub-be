@@ -74,6 +74,38 @@ describe('createEmailPayloadCipher', () => {
     );
   });
 
+  it('rejects a key id that would split the envelope at startup', () => {
+    // A delimiter in the key id produces a sixth segment, which decrypt refuses
+    // as malformed — so the application's own envelope would never open again.
+    expect(() =>
+      createEmailPayloadCipher({
+        currentKeyId: '2026.10',
+        keys: { '2026.10': Buffer.alloc(32, 1).toString('base64') },
+      }),
+    ).toThrow('email outbox key id is invalid');
+  });
+
+  it('rejects an empty key id at startup', () => {
+    expect(() =>
+      createEmailPayloadCipher({
+        currentKeyId: '',
+        keys: { '': Buffer.alloc(32, 1).toString('base64') },
+      }),
+    ).toThrow('email outbox key id is invalid');
+  });
+
+  it('rejects a retained key id that carries the envelope delimiter', () => {
+    expect(() =>
+      createEmailPayloadCipher({
+        currentKeyId: '2026-10',
+        keys: {
+          '2026-10': Buffer.alloc(32, 1).toString('base64'),
+          '2026.09': Buffer.alloc(32, 2).toString('base64'),
+        },
+      }),
+    ).toThrow('email outbox key id is invalid');
+  });
+
   it('rejects missing or malformed key material at construction', () => {
     expect(() =>
       createEmailPayloadCipher({ currentKeyId: '2026-10', keys: {} }),

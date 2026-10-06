@@ -90,19 +90,30 @@ const CLAIM_SQL = `
 `;
 
 /**
- * Each marker is one attempt, except cancellation, which happens before
- * dispatch. A marker only applies while the row is still queued, so a
- * terminal state can never be overwritten or revived, and every marker
- * releases the lease it still holds.
+ * One attempt, taken before the provider is called. `attempts < 3` is the
+ * predicate that makes the cap hard rather than advisory: once the third
+ * reservation has committed no further claim can match this row, whatever the
+ * transition after the call went on to do.
  *
- * A failed attempt releases the lease too, because the row stays queued and
- * its retry delay becomes the only thing that decides when it is claimable
- * again. Holding a lease until the lease expired would add the lease length to
- * every retry delay.
+ * The lease is deliberately left held. This poller still owns the row while the
+ * provider is in flight; a process that dies here releases it by lapsing.
+ */
+const RESERVE_ATTEMPT_SQL = `
+  UPDATE email_delivery_requests
+  SET attempts = attempts + 1, last_attempt_at = $2
+  WHERE id = $1 AND status = 'queued' AND attempts < 3
+  RETURNING id
+`;
+
+/**
+ * A failed attempt releases the lease, because the row stays queued and its
+ * retry delay becomes the only thing that decides when it is claimable again.
+ * Holding a lease until the lease expired would add the lease length to every
+ * retry delay. The attempt itself was already counted by the reservation.
  */
 const RECORD_FAILED_ATTEMPT_SQL = `
   UPDATE email_delivery_requests
-  SET attempts = attempts + 1, last_attempt_at = $2, last_error_code = $3,
+  SET last_attempt_at = $2, last_error_code = $3,
       lease_owner = NULL, lease_expires_at = NULL
   WHERE id = $1 AND status = 'queued'
   RETURNING id
@@ -110,8 +121,8 @@ const RECORD_FAILED_ATTEMPT_SQL = `
 
 const MARK_PROVIDER_ACCEPTED_SQL = `
   UPDATE email_delivery_requests
-  SET status = 'provider_accepted', attempts = attempts + 1,
-      last_attempt_at = $2, payload_ciphertext = NULL, completed_at = $2,
+  SET status = 'provider_accepted', last_attempt_at = $2,
+      payload_ciphertext = NULL, completed_at = $2,
       lease_owner = NULL, lease_expires_at = NULL
   WHERE id = $1 AND status = 'queued'
   RETURNING id
@@ -119,7 +130,7 @@ const MARK_PROVIDER_ACCEPTED_SQL = `
 
 const MARK_FAILED_SQL = `
   UPDATE email_delivery_requests
-  SET status = 'failed', attempts = attempts + 1, last_attempt_at = $2,
+  SET status = 'failed', last_attempt_at = $2,
       last_error_code = $3, payload_ciphertext = NULL, completed_at = $2,
       lease_owner = NULL, lease_expires_at = NULL
   WHERE id = $1 AND status = 'queued'
@@ -132,6 +143,43 @@ const MARK_CANCELLED_SQL = `
       payload_ciphertext = NULL, completed_at = $3,
       lease_owner = NULL, lease_expires_at = NULL
   WHERE id = $1 AND status = 'queued'
+  RETURNING id
+`;
+
+/**
+ * Releases a claim this instance cannot finish and records nothing else: no
+ * attempt, no attempt time, no terminal state. That is what leaves a row sealed
+ * with a key version only another instance holds deliverable, rather than
+ * cancelled with its payload erased.
+ */
+const RELEASE_DEFERRED_SQL = `
+  UPDATE email_delivery_requests
+  SET lease_owner = NULL, lease_expires_at = NULL
+  WHERE id = $1 AND status = 'queued'
+  RETURNING id
+`;
+
+/**
+ * Terminal requests whose alert never went out. A request only reaches `failed`
+ * by spending its third attempt, so this is a bounded and normally empty set;
+ * it becomes non-empty exactly when a process exited between that commit and the
+ * callback, which is the gap the runbook's alert depends on not existing.
+ */
+const UNREPORTED_FAILURES_SQL = `
+  SELECT id, kind, status, payload_ciphertext, attempts, last_attempt_at,
+         last_error_code, cancel_reason, created_at, completed_at
+  FROM email_delivery_requests
+  WHERE status = 'failed'
+    AND failure_reported_at IS NULL
+    AND last_error_code IS NOT NULL
+  ORDER BY completed_at, id
+  LIMIT $1
+`;
+
+const MARK_FAILURE_REPORTED_SQL = `
+  UPDATE email_delivery_requests
+  SET failure_reported_at = $2
+  WHERE id = $1 AND status = 'failed'
   RETURNING id
 `;
 
@@ -226,6 +274,16 @@ export class PostgresEmailDeliveryRequestRepository {
     ]);
   }
 
+  async reserveAttempt(
+    client: EmailDeliveryQueryClient,
+    input: { id: string; attemptedAt: Date },
+  ): Promise<EmailDeliveryRequestRecord> {
+    return this.apply(client, RESERVE_ATTEMPT_SQL, [
+      input.id,
+      input.attemptedAt,
+    ]);
+  }
+
   async markProviderAccepted(
     client: EmailDeliveryQueryClient,
     input: { id: string; attemptedAt: Date },
@@ -258,6 +316,13 @@ export class PostgresEmailDeliveryRequestRepository {
     ]);
   }
 
+  async releaseDeferred(
+    client: EmailDeliveryQueryClient,
+    input: { id: string },
+  ): Promise<EmailDeliveryRequestRecord> {
+    return this.apply(client, RELEASE_DEFERRED_SQL, [input.id]);
+  }
+
   async claim(
     client: EmailDeliveryQueryClient,
     input: ClaimEmailDeliveryRequestsInput,
@@ -269,6 +334,24 @@ export class PostgresEmailDeliveryRequestRepository {
       String(input.leaseMs),
     ]);
     return rows.map(toRecord);
+  }
+
+  async unreportedFailures(
+    client: EmailDeliveryQueryClient,
+    input: { limit: number },
+  ): Promise<readonly EmailDeliveryRequestRecord[]> {
+    const rows = await client.query(UNREPORTED_FAILURES_SQL, [input.limit]);
+    return rows.map(toRecord);
+  }
+
+  async markFailureReported(
+    client: EmailDeliveryQueryClient,
+    input: { id: string; reportedAt: Date },
+  ): Promise<EmailDeliveryRequestRecord> {
+    return this.apply(client, MARK_FAILURE_REPORTED_SQL, [
+      input.id,
+      input.reportedAt,
+    ]);
   }
 
   private async apply(
@@ -340,5 +423,29 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
     readonly errorCode: EmailDeliveryErrorCode;
   }): Promise<void> {
     await this.requests.recordFailedAttempt(this.client, input);
+  }
+
+  async reserveAttempt(input: {
+    readonly id: string;
+    readonly attemptedAt: Date;
+  }): Promise<void> {
+    await this.requests.reserveAttempt(this.client, input);
+  }
+
+  async releaseDeferred(input: { readonly id: string }): Promise<void> {
+    await this.requests.releaseDeferred(this.client, input);
+  }
+
+  unreportedFailures(input: {
+    readonly limit: number;
+  }): Promise<readonly EmailDeliveryRequestRecord[]> {
+    return this.requests.unreportedFailures(this.client, input);
+  }
+
+  async markFailureReported(input: {
+    readonly id: string;
+    readonly reportedAt: Date;
+  }): Promise<void> {
+    await this.requests.markFailureReported(this.client, input);
   }
 }

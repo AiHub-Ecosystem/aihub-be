@@ -57,6 +57,19 @@ export interface EmailPayloadCipherPort {
   decrypt(envelope: string): string;
 }
 
+/**
+ * The envelope names a key version this instance holds no key for, which is what
+ * an instance that started before a rotation sees when it claims a row another
+ * instance sealed afterwards. It is not a broken payload: the row stays queued
+ * and unerased, because the instance that does hold the key can still open it.
+ */
+export class EmailPayloadUnknownKeyVersionError extends Error {
+  constructor() {
+    super('email outbox key version is unknown');
+    this.name = 'EmailPayloadUnknownKeyVersionError';
+  }
+}
+
 export const EMAIL_PAYLOAD_CIPHER = Symbol('EMAIL_PAYLOAD_CIPHER');
 
 export const EMAIL_DELIVERY_REQUEST_STATUSES = [
@@ -122,6 +135,16 @@ export interface EmailDispatchStorePort {
   claim(
     input: ClaimEmailDeliveryRequestsInput,
   ): Promise<readonly EmailDeliveryRequestRecord[]>;
+  /**
+   * Counts the attempt before the provider is called, durably, and refuses a row
+   * that has used its three. Counting it here rather than in the transition that
+   * follows the call is what makes the cap a cap: a transition that fails leaves
+   * the attempt spent, so no pass can reach the provider a fourth time.
+   */
+  reserveAttempt(input: {
+    readonly id: string;
+    readonly attemptedAt: Date;
+  }): Promise<void>;
   markProviderAccepted(input: {
     readonly id: string;
     readonly attemptedAt: Date;
@@ -140,6 +163,26 @@ export interface EmailDispatchStorePort {
     readonly id: string;
     readonly attemptedAt: Date;
     readonly errorCode: EmailDeliveryErrorCode;
+  }): Promise<void>;
+  /**
+   * Hands a claimed request back without recording an outcome, for one this
+   * instance cannot finish yet. No attempt is spent, the payload stays, and the
+   * lease is released, so the next instance to claim it starts where this one
+   * stopped rather than inheriting a terminal state.
+   */
+  releaseDeferred(input: { readonly id: string }): Promise<void>;
+  /**
+   * Terminal requests whose notification was never recorded, oldest first, so a
+   * pass that starts after the one that failed them still emits their alert. The
+   * row is no longer claimable by then, which is exactly why the durable record
+   * has to be readable on its own.
+   */
+  unreportedFailures(input: {
+    readonly limit: number;
+  }): Promise<readonly EmailDeliveryRequestRecord[]>;
+  markFailureReported(input: {
+    readonly id: string;
+    readonly reportedAt: Date;
   }): Promise<void>;
 }
 
