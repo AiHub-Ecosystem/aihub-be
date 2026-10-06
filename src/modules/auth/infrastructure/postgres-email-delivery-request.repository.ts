@@ -165,20 +165,23 @@ const RELEASE_DEFERRED_SQL = `
  * it becomes non-empty exactly when a process exited between that commit and the
  * callback, which is the gap the runbook's alert depends on not existing.
  *
- * Claiming the notification is what this statement does, so it is one atomic
- * step: the rows it returns are the rows this instance alone will report. A
- * plain read followed by a later update would let two instances see the same
- * pending row and both count one terminal failure twice.
+ * Claiming is one atomic step, so two instances reconciling at once do not both
+ * report the same failure. The claim writes a lease rather than the reported
+ * stamp, because the row has to stay claimable if this instance dies before it
+ * emits: a stamp written here would lose that alert for good, while a lease only
+ * delays it until the lease lapses.
  */
 const CLAIM_UNREPORTED_FAILURES_SQL = `
   UPDATE email_delivery_requests
-  SET failure_reported_at = $2
+  SET failure_notify_lease_expires_at = $3
   WHERE id IN (
     SELECT id
     FROM email_delivery_requests
     WHERE status = 'failed'
       AND failure_reported_at IS NULL
       AND last_error_code IS NOT NULL
+      AND (failure_notify_lease_expires_at IS NULL
+           OR failure_notify_lease_expires_at <= $2)
     ORDER BY completed_at, id
     LIMIT $1
     FOR UPDATE SKIP LOCKED
@@ -187,10 +190,26 @@ const CLAIM_UNREPORTED_FAILURES_SQL = `
             last_error_code, cancel_reason, created_at, completed_at
 `;
 
+/**
+ * Written only after the signal was emitted, and it takes the lease with it, so
+ * a reported row is never claimed again. It requires the row to still be
+ * `failed`, which a terminal state can never leave.
+ */
 const MARK_FAILURE_REPORTED_SQL = `
   UPDATE email_delivery_requests
-  SET failure_reported_at = $2
+  SET failure_reported_at = $2, failure_notify_lease_expires_at = NULL
   WHERE id = $1 AND status = 'failed'
+  RETURNING id
+`;
+
+/**
+ * Gives up a claim without emitting, so a callback that threw does not lock the
+ * row out until the lease lapses.
+ */
+const RELEASE_FAILURE_NOTIFICATION_SQL = `
+  UPDATE email_delivery_requests
+  SET failure_notify_lease_expires_at = NULL
+  WHERE id = $1 AND status = 'failed' AND failure_reported_at IS NULL
   RETURNING id
 `;
 
@@ -349,11 +368,12 @@ export class PostgresEmailDeliveryRequestRepository {
 
   async claimUnreportedFailures(
     client: EmailDeliveryQueryClient,
-    input: { limit: number; reportedAt: Date },
+    input: { limit: number; now: Date; leaseMs: number },
   ): Promise<readonly EmailDeliveryRequestRecord[]> {
     const rows = await client.query(CLAIM_UNREPORTED_FAILURES_SQL, [
       input.limit,
-      input.reportedAt,
+      input.now,
+      new Date(input.now.getTime() + input.leaseMs),
     ]);
     return rows.map(toRecord);
   }
@@ -366,6 +386,13 @@ export class PostgresEmailDeliveryRequestRepository {
       input.id,
       input.reportedAt,
     ]);
+  }
+
+  async releaseFailureNotification(
+    client: EmailDeliveryQueryClient,
+    input: { id: string },
+  ): Promise<EmailDeliveryRequestRecord> {
+    return this.apply(client, RELEASE_FAILURE_NOTIFICATION_SQL, [input.id]);
   }
 
   private async apply(
@@ -452,7 +479,8 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
 
   claimUnreportedFailures(input: {
     readonly limit: number;
-    readonly reportedAt: Date;
+    readonly now: Date;
+    readonly leaseMs: number;
   }): Promise<readonly EmailDeliveryRequestRecord[]> {
     return this.requests.claimUnreportedFailures(this.client, input);
   }
@@ -462,5 +490,11 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
     readonly reportedAt: Date;
   }): Promise<void> {
     await this.requests.markFailureReported(this.client, input);
+  }
+
+  async releaseFailureNotification(input: {
+    readonly id: string;
+  }): Promise<void> {
+    await this.requests.releaseFailureNotification(this.client, input);
   }
 }

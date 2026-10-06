@@ -57,6 +57,14 @@ terminal rows that have no such record before it ends. A pass that starts after
 the one that failed a request still emits its event, and a request whose
 notification is already recorded is never reported twice.
 
+Reconciling takes a lease (`failure_notify_lease_expires_at`) rather than
+recording the report immediately, because both halves matter. Two instances
+reconciling at once must produce one event between them, so the claim excludes
+the other instance; and an instance that dies, or a callback that throws, must
+not consume the alert, so the row stays claimable until the signal was actually
+emitted. A live lease with no `failure_reported_at` is therefore an alert this
+instance is still owed, and it becomes claimable again when the lease lapses.
+
 Suggested alert condition: any increase of `aihub_email_delivery_failed_total`
 over a window long enough to cover the retry schedule (attempts run at 0, +1
 minute, and +5 minutes, so 15 minutes is a safe minimum). `kind` separates the
@@ -87,7 +95,8 @@ erased, so a failed request can be investigated without any customer data:
 
 ```sql
 SELECT id, kind, status, attempts, last_attempt_at, last_error_code,
-       cancel_reason, created_at, completed_at, failure_reported_at
+       cancel_reason, created_at, completed_at, failure_reported_at,
+       failure_notify_lease_expires_at
 FROM email_delivery_requests
 WHERE status = 'failed'
 ORDER BY completed_at DESC;

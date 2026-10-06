@@ -670,6 +670,8 @@ describe('email outbox dispatch poller', () => {
         claimUnreportedFailures: (input) =>
           store.claimUnreportedFailures(input),
         markFailureReported: (input) => store.markFailureReported(input),
+        releaseFailureNotification: (input) =>
+          store.releaseFailureNotification(input),
       };
       let clock = NOW;
       const failing = new EmailDeliveryPoller(
@@ -871,6 +873,34 @@ describe('email outbox dispatch poller', () => {
         poller(OWNER_B, new RecordingSender()).runOnce(),
       ]);
 
+      expect(await failedCountFor('verification_email')).toBe(before + 1);
+      expect((await rowOf(seeded.id)).failure_reported_at).not.toBeNull();
+    });
+
+    it('reclaims a notification whose instance died holding the lease', async () => {
+      const seeded = await exhaust(rejectingProvider());
+      await pool.query(
+        'UPDATE email_delivery_requests SET failure_reported_at = NULL WHERE id = $1',
+        [seeded.id],
+      );
+      const before = await failedCountFor('verification_email');
+
+      // What an exit between claiming and emitting leaves behind: the lease is
+      // still held, but the reported stamp was never written.
+      await pool.query(
+        `UPDATE email_delivery_requests
+         SET failure_notify_lease_expires_at = $2
+         WHERE id = $1`,
+        [seeded.id, new Date(NOW.getTime() + MINUTE)],
+      );
+
+      // While the lease is live, nobody reports it.
+      await poller(OWNER_B, new RecordingSender()).runOnce();
+      expect(await failedCountFor('verification_email')).toBe(before);
+
+      // Once it lapses the alert is owed again: delayed, never lost.
+      const later = new Date(NOW.getTime() + MINUTE + 1_000);
+      await poller(OWNER_B, new RecordingSender(), () => later).runOnce();
       expect(await failedCountFor('verification_email')).toBe(before + 1);
       expect((await rowOf(seeded.id)).failure_reported_at).not.toBeNull();
     });

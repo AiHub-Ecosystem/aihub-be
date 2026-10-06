@@ -170,15 +170,17 @@ export class EmailDeliveryPoller {
    * good — and reporting from durable state is what keeps the event at one per
    * terminal failure rather than one per pass.
    *
-   * The store claims the rows before returning them, so a failure two instances
-   * reconcile at once is reported once between them.
+   * The store claims the rows before returning them under a lease, so a failure
+   * two instances reconcile at once is reported once between them, and one this
+   * instance dies reporting stays claimable again when the lease lapses.
    */
   private async reportUnreportedFailures(): Promise<void> {
     let pending: readonly EmailDeliveryRequestRecord[];
     try {
       pending = await this.store.claimUnreportedFailures({
         limit: this.batchSize,
-        reportedAt: this.now(),
+        now: this.now(),
+        leaseMs: this.leaseMs,
       });
     } catch {
       return;
@@ -194,11 +196,25 @@ export class EmailDeliveryPoller {
           kind: failure.kind,
           errorCode: failure.lastErrorCode,
         });
+        await this.store.markFailureReported({
+          id: failure.id,
+          reportedAt: this.now(),
+        });
       } catch {
-        // Claimed but not reported: the next pass will not see it again, because
-        // the claim already recorded it. A callback that throws is an
-        // observability defect, not a delivery one.
+        // Emitting is what has to be retried, not recorded: hand the claim back so
+        // this row is reportable now rather than after the lease lapses. A
+        // callback that throws is an observability defect, not a delivery one, so
+        // it must not stop the rest of the batch.
+        await this.releaseNotification(failure.id);
       }
+    }
+  }
+
+  private async releaseNotification(id: string): Promise<void> {
+    try {
+      await this.store.releaseFailureNotification({ id });
+    } catch {
+      // The lease still lapses on its own, so this is a delay, not a loss.
     }
   }
 

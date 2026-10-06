@@ -177,17 +177,26 @@ export interface EmailDispatchStorePort {
    * row is no longer claimable by then, which is exactly why the durable record
    * has to be readable on its own.
    *
-   * Claiming them is part of the call: the returned rows are already recorded as
-   * reported, so two instances reconciling the same failure produce one event
-   * between them, not two.
+   * Claiming them is part of the call, and it takes a lease rather than marking
+   * them reported: two instances reconciling at once produce one event between
+   * them, while an instance that dies before emitting leaves the row claimable
+   * again when the lease lapses. `markFailureReported` is what ends the sequence.
    */
   claimUnreportedFailures(input: {
     readonly limit: number;
-    readonly reportedAt: Date;
+    readonly now: Date;
+    readonly leaseMs: number;
   }): Promise<readonly EmailDeliveryRequestRecord[]>;
   markFailureReported(input: {
     readonly id: string;
     readonly reportedAt: Date;
+  }): Promise<void>;
+  /**
+   * Hands a claim back without emitting, for a callback that threw. Without it
+   * the row would stay invisible until the lease lapsed.
+   */
+  releaseFailureNotification(input: {
+    readonly id: string;
   }): Promise<void>;
 }
 

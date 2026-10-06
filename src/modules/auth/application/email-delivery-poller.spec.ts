@@ -38,6 +38,8 @@ class FakeStore implements EmailDispatchStorePort {
   unreported: EmailDeliveryRequestRecord[] = [];
   reconcileLimits: number[] = [];
   reported: string[] = [];
+  claimed: string[] = [];
+  released: string[] = [];
 
   async claim(
     input: ClaimEmailDeliveryRequestsInput,
@@ -81,14 +83,20 @@ class FakeStore implements EmailDispatchStorePort {
   }): Promise<readonly EmailDeliveryRequestRecord[]> {
     this.reconcileLimits.push(input.limit);
     const claimed = this.unreported.slice(0, input.limit);
-    // The claim is what records the notification, so a claimed row counts as
-    // reported whether or not the callback that follows it succeeds.
-    this.reported.push(...claimed.map((row) => row.id));
+    // The claim leases the row rather than reporting it, so a claimed row is
+    // only reported once the callback returned and the stamp was written.
+    this.claimed.push(...claimed.map((row) => row.id));
     return claimed;
   }
 
   async markFailureReported(input: { id: string }): Promise<void> {
     this.reported.push(input.id);
+  }
+
+  async releaseFailureNotification(input: { id: string }): Promise<void> {
+    // Handing the claim back leaves the row in the unreported set, which is what
+    // clearing the lease does in the store: the next pass can report it again.
+    this.released.push(input.id);
   }
 }
 
@@ -696,6 +704,44 @@ describe('EmailDeliveryPoller', () => {
           completedAt: NOW,
         }),
       ];
+
+      await poller.runOnce();
+
+      expect(failures).toEqual([
+        { id: ROW_ID, kind: 'verification_email', errorCode: 'timeout' },
+      ]);
+      expect(store.reported).toEqual([ROW_ID]);
+    });
+
+    it('hands the notification back when the callback throws, so the next pass reports it', async () => {
+      // A claim that recorded the report before emitting would lose this alert
+      // for good: no later pass sees a row already marked reported. Handing the
+      // claim back is what keeps the promise recoverable.
+      const failures: unknown[] = [];
+      let failNext = true;
+      const { poller, store } = harness({
+        onTerminalFailure: (failure) => {
+          if (failNext) {
+            failNext = false;
+            throw new Error('the alert transport is unavailable');
+          }
+          failures.push(failure);
+        },
+      });
+      store.unreported = [
+        claimed({
+          status: 'failed',
+          attempts: 3,
+          payloadCiphertext: null,
+          lastErrorCode: 'timeout',
+          completedAt: NOW,
+        }),
+      ];
+
+      await poller.runOnce();
+
+      expect(store.released).toEqual([ROW_ID]);
+      expect(store.reported).toEqual([]);
 
       await poller.runOnce();
 
