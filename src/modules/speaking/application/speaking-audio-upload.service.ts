@@ -1,5 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
+import type { IdMinter } from '@/common/ids/prefixed-id';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   SpeakingAudioAsset,
@@ -113,7 +114,7 @@ export class SpeakingAudioUploadService
   constructor(
     private readonly repository: SpeakingAudioUploadRepositoryPort,
     private readonly storage: SpeakingAudioAssetStoragePort,
-    private readonly newAssetId: (now: Date) => string,
+    private readonly newAssetId: IdMinter,
     private readonly now: () => Date = () => new Date(),
   ) {}
 

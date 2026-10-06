@@ -1,5 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
+import type { IdMinter } from '@/common/ids/prefixed-id';
 import type { RequestContext } from '@/common/request-context/request-context';
 import { type AuthRateLimiterPort } from '@/modules/auth/application/auth-rate-limiter.port';
 import { normalizeEmail } from '@/modules/auth/domain/local-auth';
@@ -80,8 +81,7 @@ export class InviteOrganizationMember {
     private readonly invitations: OrganizationInvitationPort,
     private readonly tokenIssuer: OrganizationInviteTokenPort,
     private readonly rateLimiter: AuthRateLimiterPort,
-    private readonly newEmailDeliveryId: (now: Date) => string,
-    private readonly now: () => Date = () => new Date(),
+    private readonly newEmailDeliveryId: IdMinter,
   ) {}
 
   async authorize(input: InviteOrganizationMemberInput): Promise<void> {
@@ -102,7 +102,7 @@ export class InviteOrganizationMember {
 
     await this.enforceRateLimits(input, email);
 
-    const now = this.now();
+    const now = new Date();
     const issued = this.tokenIssuer.issue(now);
     const result = await this.invitations.createInvitation({
       context: input.context,

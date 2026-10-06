@@ -271,6 +271,7 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
     EMAIL_SENDER,
     EMAIL_PAYLOAD_CIPHER,
     EMAIL_DELIVERY_REQUEST_WRITER,
+    EMAIL_DELIVERY_ID,
     AUTH_RATE_LIMITER,
     USER_ACCOUNT_REPOSITORY,
     VERIFICATION_TOKEN_REPOSITORY,

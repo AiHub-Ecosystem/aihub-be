@@ -1,5 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
+import type { IdMinter } from '@/common/ids/prefixed-id';
 import {
   AVATAR_COMPLETION_WINDOW_MS,
   AVATAR_MAX_BYTES,
@@ -69,7 +70,7 @@ export class AvatarUploadService {
   constructor(
     private readonly avatars: AvatarRepositoryPort,
     private readonly storage: AvatarStoragePort,
-    private readonly newAssetId: (now: Date) => string,
+    private readonly newAssetId: IdMinter,
     private readonly now: () => Date = () => new Date(),
   ) {}
 

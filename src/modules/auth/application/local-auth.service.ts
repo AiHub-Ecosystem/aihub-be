@@ -1,5 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
+import type { IdMinter } from '@/common/ids/prefixed-id';
 import type { ResetPasswordRequest } from '@/contracts/auth/local-auth';
 import {
   type NormalizedRegistration,
@@ -108,7 +109,7 @@ export class LocalAuthService {
     private readonly accessTokenIssuer: UserAccessTokenIssuerPort,
     private readonly refreshTokenIssuer: RefreshTokenIssuerPort,
     private readonly clock: LocalAuthServiceClock,
-    private readonly newEmailDeliveryId: (now: Date) => string,
+    private readonly newEmailDeliveryId: IdMinter,
   ) {}
 
   async register(

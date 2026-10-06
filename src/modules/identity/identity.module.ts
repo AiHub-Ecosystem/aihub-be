@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { DrizzleModule, getDrizzleToken } from '@nestjs/drizzle';
 import { drizzle } from 'drizzle-orm/node-postgres';
 
-import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
+import type { IdMinter } from '@/common/ids/prefixed-id';
 import {
   OPAQUE_TOKEN_BINDINGS,
   opaqueTokenIssuer,
@@ -12,6 +12,7 @@ import {
   type AuthRateLimiterPort,
 } from '@/modules/auth/application/auth-rate-limiter.port';
 import {
+  EMAIL_DELIVERY_ID,
   EMAIL_DELIVERY_REQUEST_WRITER,
   EMAIL_PAYLOAD_CIPHER,
   type EmailDeliveryRequestWriterPort,
@@ -398,19 +399,21 @@ function drizzleDatabaseOptions(databaseUrl: string) {
         invitations: OrganizationInvitationPort,
         tokenIssuer: OrganizationInviteTokenPort,
         rateLimiter: AuthRateLimiterPort,
+        newEmailDeliveryId: IdMinter,
       ) =>
         new InviteOrganizationMember(
           membership,
           invitations,
           tokenIssuer,
           rateLimiter,
-          prefixedIdGenerator('edr_'),
+          newEmailDeliveryId,
         ),
       inject: [
         ORGANIZATION_MEMBERSHIP,
         ORGANIZATION_INVITATION,
         ORGANIZATION_INVITE_TOKEN,
         AUTH_RATE_LIMITER,
+        EMAIL_DELIVERY_ID,
       ],
     },
     {
