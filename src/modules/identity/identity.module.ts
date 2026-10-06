@@ -153,6 +153,7 @@ import { PostgresOrganizationIdentityConfigRepository } from './infrastructure/p
 import { PostgresOrganizationInvitationRepository } from './infrastructure/postgres-organization-invitation.repository';
 import { PostgresOrganizationMembershipRepository } from './infrastructure/postgres-organization-membership.repository';
 import { PostgresOrganizationRenameRepository } from './infrastructure/postgres-organization-rename.repository';
+import { checkPostgresIdentityDatabase } from './infrastructure/postgres-readiness';
 import {
   RedisAuthFailureCounter,
   RedisIdentityStore,
@@ -204,34 +205,6 @@ function drizzleDatabaseOptions(databaseUrl: string) {
   };
 }
 
-async function checkIdentityDatabase(
-  database: IdentityDatabase,
-  databaseUrl: string | undefined,
-  timeoutMs: number,
-): Promise<void> {
-  if (databaseUrl === undefined || databaseUrl.trim().length === 0) {
-    throw new Error('PostgreSQL is not configured');
-  }
-
-  const client = (
-    database as IdentityDatabase & {
-      readonly $client?:
-        | {
-            query(input: {
-              text: string;
-              query_timeout: number;
-            }): Promise<unknown>;
-          }
-        | string;
-    }
-  ).$client;
-  if (client === undefined || typeof client === 'string') {
-    throw new Error('PostgreSQL client is unavailable');
-  }
-
-  await client.query({ text: 'SELECT 1', query_timeout: timeoutMs });
-}
-
 @Module({
   // `RateLimitGuard` on the sandbox route consumes the gateway's rate limiter.
   imports: [
@@ -278,13 +251,13 @@ async function checkIdentityDatabase(
         readDb: IdentityDatabase,
       ): IdentityPostgresReadiness => ({
         checkControlPlaneWrite: (timeoutMs) =>
-          checkIdentityDatabase(
+          checkPostgresIdentityDatabase(
             writeDb,
             configuration.controlPlaneDatabaseUrl,
             timeoutMs,
           ),
         checkControlPlaneRead: (timeoutMs) =>
-          checkIdentityDatabase(
+          checkPostgresIdentityDatabase(
             readDb,
             configuration.controlPlaneReadDatabaseUrl,
             timeoutMs,
