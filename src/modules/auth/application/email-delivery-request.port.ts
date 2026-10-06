@@ -176,9 +176,14 @@ export interface EmailDispatchStorePort {
    * pass that starts after the one that failed them still emits their alert. The
    * row is no longer claimable by then, which is exactly why the durable record
    * has to be readable on its own.
+   *
+   * Claiming them is part of the call: the returned rows are already recorded as
+   * reported, so two instances reconciling the same failure produce one event
+   * between them, not two.
    */
-  unreportedFailures(input: {
+  claimUnreportedFailures(input: {
     readonly limit: number;
+    readonly reportedAt: Date;
   }): Promise<readonly EmailDeliveryRequestRecord[]>;
   markFailureReported(input: {
     readonly id: string;

@@ -667,7 +667,8 @@ describe('email outbox dispatch poller', () => {
         },
         markCancelled: (input) => store.markCancelled(input),
         releaseDeferred: (input) => store.releaseDeferred(input),
-        unreportedFailures: (input) => store.unreportedFailures(input),
+        claimUnreportedFailures: (input) =>
+          store.claimUnreportedFailures(input),
         markFailureReported: (input) => store.markFailureReported(input),
       };
       let clock = NOW;
@@ -853,6 +854,25 @@ describe('email outbox dispatch poller', () => {
       expect((await rowOf(seeded.id)).failure_reported_at).toEqual(
         new Date(NOW.getTime() + 6 * MINUTE + 2_000),
       );
+    });
+
+    it('reports one terminal failure once when two instances reconcile it at the same time', async () => {
+      const seeded = await exhaust(rejectingProvider());
+      await pool.query(
+        'UPDATE email_delivery_requests SET failure_reported_at = NULL WHERE id = $1',
+        [seeded.id],
+      );
+      const before = await failedCountFor('verification_email');
+
+      // Both instances find the same unreported terminal row. Claiming it is one
+      // atomic statement, so between them they emit one event, not two.
+      await Promise.all([
+        poller(OWNER_A, new RecordingSender()).runOnce(),
+        poller(OWNER_B, new RecordingSender()).runOnce(),
+      ]);
+
+      expect(await failedCountFor('verification_email')).toBe(before + 1);
+      expect((await rowOf(seeded.id)).failure_reported_at).not.toBeNull();
     });
 
     it('counts the terminal failure under its email kind', async () => {

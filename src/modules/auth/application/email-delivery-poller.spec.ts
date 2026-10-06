@@ -76,11 +76,15 @@ class FakeStore implements EmailDispatchStorePort {
     this.deferred.push(input.id);
   }
 
-  async unreportedFailures(input: { limit: number }): Promise<
-    readonly EmailDeliveryRequestRecord[]
-  > {
+  async claimUnreportedFailures(input: {
+    limit: number;
+  }): Promise<readonly EmailDeliveryRequestRecord[]> {
     this.reconcileLimits.push(input.limit);
-    return this.unreported.slice(0, input.limit);
+    const claimed = this.unreported.slice(0, input.limit);
+    // The claim is what records the notification, so a claimed row counts as
+    // reported whether or not the callback that follows it succeeds.
+    this.reported.push(...claimed.map((row) => row.id));
+    return claimed;
   }
 
   async markFailureReported(input: { id: string }): Promise<void> {

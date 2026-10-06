@@ -164,16 +164,27 @@ const RELEASE_DEFERRED_SQL = `
  * by spending its third attempt, so this is a bounded and normally empty set;
  * it becomes non-empty exactly when a process exited between that commit and the
  * callback, which is the gap the runbook's alert depends on not existing.
+ *
+ * Claiming the notification is what this statement does, so it is one atomic
+ * step: the rows it returns are the rows this instance alone will report. A
+ * plain read followed by a later update would let two instances see the same
+ * pending row and both count one terminal failure twice.
  */
-const UNREPORTED_FAILURES_SQL = `
-  SELECT id, kind, status, payload_ciphertext, attempts, last_attempt_at,
-         last_error_code, cancel_reason, created_at, completed_at
-  FROM email_delivery_requests
-  WHERE status = 'failed'
-    AND failure_reported_at IS NULL
-    AND last_error_code IS NOT NULL
-  ORDER BY completed_at, id
-  LIMIT $1
+const CLAIM_UNREPORTED_FAILURES_SQL = `
+  UPDATE email_delivery_requests
+  SET failure_reported_at = $2
+  WHERE id IN (
+    SELECT id
+    FROM email_delivery_requests
+    WHERE status = 'failed'
+      AND failure_reported_at IS NULL
+      AND last_error_code IS NOT NULL
+    ORDER BY completed_at, id
+    LIMIT $1
+    FOR UPDATE SKIP LOCKED
+  )
+  RETURNING id, kind, status, payload_ciphertext, attempts, last_attempt_at,
+            last_error_code, cancel_reason, created_at, completed_at
 `;
 
 const MARK_FAILURE_REPORTED_SQL = `
@@ -336,11 +347,14 @@ export class PostgresEmailDeliveryRequestRepository {
     return rows.map(toRecord);
   }
 
-  async unreportedFailures(
+  async claimUnreportedFailures(
     client: EmailDeliveryQueryClient,
-    input: { limit: number },
+    input: { limit: number; reportedAt: Date },
   ): Promise<readonly EmailDeliveryRequestRecord[]> {
-    const rows = await client.query(UNREPORTED_FAILURES_SQL, [input.limit]);
+    const rows = await client.query(CLAIM_UNREPORTED_FAILURES_SQL, [
+      input.limit,
+      input.reportedAt,
+    ]);
     return rows.map(toRecord);
   }
 
@@ -436,10 +450,11 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
     await this.requests.releaseDeferred(this.client, input);
   }
 
-  unreportedFailures(input: {
+  claimUnreportedFailures(input: {
     readonly limit: number;
+    readonly reportedAt: Date;
   }): Promise<readonly EmailDeliveryRequestRecord[]> {
-    return this.requests.unreportedFailures(this.client, input);
+    return this.requests.claimUnreportedFailures(this.client, input);
   }
 
   async markFailureReported(input: {

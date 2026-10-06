@@ -169,16 +169,22 @@ export class EmailDeliveryPoller {
    * A terminal row is not claimable, so without this its alert would be lost for
    * good — and reporting from durable state is what keeps the event at one per
    * terminal failure rather than one per pass.
+   *
+   * The store claims the rows before returning them, so a failure two instances
+   * reconcile at once is reported once between them.
    */
   private async reportUnreportedFailures(): Promise<void> {
     let pending: readonly EmailDeliveryRequestRecord[];
     try {
-      pending = await this.store.unreportedFailures({ limit: this.batchSize });
+      pending = await this.store.claimUnreportedFailures({
+        limit: this.batchSize,
+        reportedAt: this.now(),
+      });
     } catch {
       return;
     }
     for (const failure of pending) {
-      // A failed row carries a bounded cause; the query only returns ones that
+      // A failed row carries a bounded cause; the claim only returns ones that
       // do, and a row that somehow did not is left alone rather than reported
       // under a code nobody recorded.
       if (failure.lastErrorCode === null) continue;
@@ -188,13 +194,10 @@ export class EmailDeliveryPoller {
           kind: failure.kind,
           errorCode: failure.lastErrorCode,
         });
-        await this.store.markFailureReported({
-          id: failure.id,
-          reportedAt: this.now(),
-        });
       } catch {
-        // Reported but not recorded, or not reported at all: the row stays in
-        // the pending set, so the next pass tries again.
+        // Claimed but not reported: the next pass will not see it again, because
+        // the claim already recorded it. A callback that throws is an
+        // observability defect, not a delivery one.
       }
     }
   }
