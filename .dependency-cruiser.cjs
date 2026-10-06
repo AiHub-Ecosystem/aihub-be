@@ -302,6 +302,14 @@ module.exports = {
       to: { path: '^src/.*/(infrastructure|presentation)/' },
     },
     {
+      name: 'application-no-nestjs',
+      severity: 'error',
+      comment:
+        'Application code is plain TypeScript built by a module composition root. A use case carries its ports as constructor parameters, so @nestjs/* here means the wiring is hidden in decorators instead of readable in the module.',
+      from: { path: '^src/.*/application/' },
+      to: { path: 'node_modules/@nestjs' },
+    },
+    {
       name: 'presentation-no-infrastructure',
       severity: 'error',
       comment:
