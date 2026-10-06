@@ -49,6 +49,20 @@ The event is raised once, on the attempt that used the last of a request's three
 attempts, not once per attempt. A retried request emits nothing, so the counter
 measures abandoned requests rather than provider trouble.
 
+A request that used its last attempt is only given up through this same
+notification path. Emitting it directly from the transition would race the
+reconciler on the other instance, which can claim the row the moment that
+transition commits, and two instances would report one failure.
+
+An attempt is reserved before the provider is called, so a process that dies in
+between leaves a row that is `queued`, already at the cap, and excluded from
+every later claim — it would keep its ciphertext and stay silent. Each pass
+gives such a row up as `failed` with `last_error_code = 'outcome_unknown'`
+before it claims anything, so no fourth provider call is made and the alert
+still goes out. That code means the outcome of the last attempt was never
+recorded, which is different from `timeout` or `provider_rejected`: neither the
+provider's answer nor its failure was ever observed.
+
 A process can exit between the write that makes a request terminal and the
 callback that emits its event, which would lose the alert for good: the row is
 terminal, so no later pass claims it. The row therefore records when its

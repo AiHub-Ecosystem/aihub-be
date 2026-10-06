@@ -712,6 +712,7 @@ describe('email outbox dispatch poller', () => {
         markFailureReported: (input) => store.markFailureReported(input),
         releaseFailureNotification: (input) =>
           store.releaseFailureNotification(input),
+        failExhausted: (input) => store.failExhausted(input),
       };
       let clock = NOW;
       const failing = new EmailDeliveryPoller(
@@ -897,6 +898,34 @@ describe('email outbox dispatch poller', () => {
       expect((await rowOf(seeded.id)).failure_reported_at).toEqual(
         new Date(NOW.getTime() + 6 * MINUTE + 2_000),
       );
+    });
+
+    it('gives up a request whose last attempt never recorded an outcome', async () => {
+      // A process that died between reserving the third attempt and writing the
+      // result. The claim predicate excludes it because the cap is reached, so
+      // without a recovery path it would keep its ciphertext and stay silent.
+      const seeded = await seedRequest();
+      await pool.query(
+        `UPDATE email_delivery_requests
+         SET attempts = 3, last_attempt_at = $2, last_error_code = 'provider_rejected',
+             lease_owner = NULL, lease_expires_at = NULL
+         WHERE id = $1`,
+        [seeded.id, new Date(NOW.getTime() - 10 * MINUTE)],
+      );
+      const before = await failedCountFor('verification_email');
+      const sender = new RecordingSender();
+
+      await poller(OWNER_B, sender, () => NOW).runOnce();
+
+      // No fourth provider call: the cap is the cap.
+      expect(sender.sends).toEqual([]);
+      expect(await rowOf(seeded.id)).toMatchObject({
+        status: 'failed',
+        attempts: 3,
+        last_error_code: 'outcome_unknown',
+        payload_ciphertext: null,
+      });
+      expect(await failedCountFor('verification_email')).toBe(before + 1);
     });
 
     it('reports one terminal failure once when two instances reconcile it at the same time', async () => {

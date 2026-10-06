@@ -4,6 +4,7 @@ import type {
   ClaimEmailDeliveryRequestsInput,
   EmailCredentialActionabilityPort,
   EmailCredentialState,
+  EmailDeliveryErrorCode,
   EmailDeliveryKind,
   EmailDeliveryPayload,
   EmailDeliveryRequestRecord,
@@ -36,6 +37,7 @@ class FakeStore implements EmailDispatchStorePort {
   reserved: string[] = [];
   deferred: string[] = [];
   unreported: EmailDeliveryRequestRecord[] = [];
+  exhausted: EmailDeliveryRequestRecord[] = [];
   reconcileLimits: number[] = [];
   reported: string[] = [];
   claimed: string[] = [];
@@ -59,8 +61,21 @@ class FakeStore implements EmailDispatchStorePort {
     this.cancelled.push({ id: input.id, reason: input.reason });
   }
 
-  async markFailed(input: { id: string; errorCode: string }): Promise<void> {
+  async markFailed(input: {
+    id: string;
+    errorCode: EmailDeliveryErrorCode;
+  }): Promise<void> {
     this.failed.push({ id: input.id, errorCode: input.errorCode });
+    // The real store makes the row terminal and unreported in the same commit,
+    // which is what puts it in the reconciler's set for the rest of this pass.
+    const row = this.claimResult.find((claimed) => claimed.id === input.id);
+    if (row !== undefined) {
+      this.unreported.push({
+        ...row,
+        status: 'failed',
+        lastErrorCode: input.errorCode,
+      });
+    }
   }
 
   async recordFailedAttempt(input: {
@@ -76,6 +91,13 @@ class FakeStore implements EmailDispatchStorePort {
 
   async releaseDeferred(input: { id: string }): Promise<void> {
     this.deferred.push(input.id);
+  }
+
+  async failExhausted(): Promise<readonly EmailDeliveryRequestRecord[]> {
+    // Giving up is a commit like any other, so the row lands in the reconciler's
+    // set the same way a row failed during dispatch does.
+    this.unreported.push(...this.exhausted);
+    return this.exhausted;
   }
 
   async claimUnreportedFailures(input: {
@@ -685,6 +707,28 @@ describe('EmailDeliveryPoller', () => {
       await poller.runOnce();
 
       expect(failures).toEqual([]);
+    });
+
+    it('gives up a request that used its last attempt without a recorded outcome', async () => {
+      // A process that died between reserving the third attempt and writing the
+      // outcome. The claim predicate excludes it because the cap is reached, so
+      // nothing else would ever move it.
+      const exhausted = claimed({
+        status: 'queued',
+        attempts: 3,
+        lastErrorCode: 'provider_rejected',
+      });
+      const failures: unknown[] = [];
+      const { poller, store, sender } = harness({
+        onTerminalFailure: (failure) => failures.push(failure),
+      });
+      store.exhausted = [exhausted];
+
+      await poller.runOnce();
+
+      expect(sender.sends).toEqual([]);
+      expect(store.exhausted).toEqual([exhausted]);
+      expect(failures).toHaveLength(1);
     });
 
     it('reports a terminal failure whose notification a restart never got to send', async () => {

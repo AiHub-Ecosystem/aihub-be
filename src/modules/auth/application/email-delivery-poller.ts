@@ -133,6 +133,7 @@ export class EmailDeliveryPoller {
   }
 
   async runOnce(): Promise<EmailDispatchSummary> {
+    const exhausted = await this.failExhaustedRequests();
     const claimed = await this.store.claim({
       owner: this.options.owner,
       limit: this.batchSize,
@@ -144,7 +145,7 @@ export class EmailDeliveryPoller {
       claimed: claimed.length,
       providerAccepted: 0,
       cancelled: 0,
-      failed: 0,
+      failed: exhausted,
     };
     for (const request of claimed) {
       try {
@@ -161,6 +162,26 @@ export class EmailDeliveryPoller {
     }
     await this.reportUnreportedFailures();
     return summary;
+  }
+
+  /**
+   * Gives up requests that spent their last attempt without a recorded outcome.
+   *
+   * The attempt is reserved before the provider is called, so a process that
+   * dies in between leaves a row that is `queued`, already at the cap, and
+   * excluded from every further claim. It would keep its ciphertext and never
+   * report anything. This gives it up before the claim rather than calling the
+   * provider a fourth time.
+   */
+  private async failExhaustedRequests(): Promise<number> {
+    try {
+      const failed = await this.store.failExhausted({ at: this.now() });
+      return failed.length;
+    } catch {
+      // The next pass retries. Nothing is lost either way: an unreported
+      // terminal row stays claimable until its alert is emitted.
+      return 0;
+    }
   }
 
   /**
@@ -362,8 +383,11 @@ export class EmailDeliveryPoller {
         errorCode,
         owner: this.options.owner,
       });
-      this.report({ id: request.id, kind: request.kind, errorCode });
-      await this.store.markFailureReported({ id: request.id, reportedAt: now });
+      // The alert is not emitted here. The moment this commits, the row is
+      // eligible for another instance's reconciliation, so emitting from this
+      // path would let both instances report the same failure. Reconciliation at
+      // the end of this pass claims the row under the notification lease and
+      // emits it, so it is still this pass that reports it.
       return 'failed';
     }
     await this.store.recordFailedAttempt({

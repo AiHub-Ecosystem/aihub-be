@@ -86,6 +86,7 @@ export type EmailDeliveryRequestStatus =
 export const EMAIL_DELIVERY_ERROR_CODES = [
   'timeout',
   'provider_rejected',
+  'outcome_unknown',
 ] as const;
 
 export type EmailDeliveryErrorCode =
@@ -188,6 +189,15 @@ export interface EmailDispatchStorePort {
     readonly id: string;
     readonly owner: string;
   }): Promise<void>;
+  /**
+   * Requests that spent their last attempt without a recorded outcome, whose
+   * lease has lapsed. They are given up as `failed` rather than dispatched
+   * again: the attempt cap is the cap, and a row nothing else will move must not
+   * keep its payload or stay silent.
+   */
+  failExhausted(input: {
+    readonly at: Date;
+  }): Promise<readonly EmailDeliveryRequestRecord[]>;
   /**
    * Terminal requests whose notification was never recorded, oldest first, so a
    * pass that starts after the one that failed them still emits their alert. The

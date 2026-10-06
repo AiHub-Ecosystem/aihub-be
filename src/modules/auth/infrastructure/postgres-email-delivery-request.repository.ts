@@ -147,6 +147,29 @@ const MARK_CANCELLED_SQL = `
 `;
 
 /**
+ * A request that spent its last attempt but whose outcome was never written:
+ * the process exited, or the transition after the provider call could not
+ * commit. The claim predicate excludes it because `attempts` reached the cap,
+ * so nothing else would ever move it, and it would keep its ciphertext and
+ * never report. This gives up such a row without a fourth provider call.
+ *
+ * It takes no lease, because there is no claimant to fence: the row is only
+ * claimable once its lease lapsed, which is exactly the state that means nobody
+ * is still working on it.
+ */
+const FAIL_EXHAUSTED_SQL = `
+  UPDATE email_delivery_requests
+  SET status = 'failed', last_attempt_at = COALESCE(last_attempt_at, $1),
+      last_error_code = 'outcome_unknown', payload_ciphertext = NULL,
+      completed_at = $1, lease_owner = NULL, lease_expires_at = NULL
+  WHERE status = 'queued'
+    AND attempts >= 3
+    AND last_error_code IS NOT NULL
+    AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
+  RETURNING id
+`;
+
+/**
  * Releases a claim this instance cannot finish and records nothing else: no
  * attempt, no attempt time, no terminal state. That is what leaves a row sealed
  * with a key version only another instance holds deliverable, rather than
@@ -345,6 +368,14 @@ export class PostgresEmailDeliveryRequestRepository {
     ]);
   }
 
+  async failExhausted(
+    client: EmailDeliveryQueryClient,
+    input: { at: Date },
+  ): Promise<readonly EmailDeliveryRequestRecord[]> {
+    const rows = await client.query(FAIL_EXHAUSTED_SQL, [input.at]);
+    return rows.map(toRecord);
+  }
+
   async markCancelled(
     client: EmailDeliveryQueryClient,
     input: {
@@ -466,6 +497,12 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
     readonly owner: string;
   }): Promise<void> {
     await this.requests.markFailed(this.client, input);
+  }
+
+  async failExhausted(input: {
+    readonly at: Date;
+  }): Promise<readonly EmailDeliveryRequestRecord[]> {
+    return this.requests.failExhausted(this.client, input);
   }
 
   async markCancelled(input: {
