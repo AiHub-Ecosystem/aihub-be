@@ -28,3 +28,4 @@ demo-jwks.json
 # pnpm store created by containerized verify runs (keep out of the repo)
 .pnpm-store/
 .worktrees/
+bash.exe.stackdump
