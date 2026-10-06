@@ -1,4 +1,3 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ulid } from 'ulid';
 
 import { AppError } from '@/common/errors/app-error';
@@ -13,12 +12,8 @@ import {
   validatePassword,
 } from '@/modules/auth/domain/local-auth';
 import { AuthIdentityConflictError } from './auth-identity-conflict.error';
+import { type AuthRateLimiterPort } from './auth-rate-limiter.port';
 import {
-  AUTH_RATE_LIMITER,
-  type AuthRateLimiterPort,
-} from './auth-rate-limiter.port';
-import {
-  EMAIL_PAYLOAD_CIPHER,
   type EmailDeliveryKind,
   type EmailDeliveryPayload,
   type EmailPayloadCipherPort,
@@ -28,44 +23,21 @@ import {
   type IssuedSession,
   RefreshRotationCommittedError,
 } from './local-auth-service.port';
-import {
-  PASSWORD_HASHER,
-  type PasswordHasherPort,
-} from './password-hasher.port';
-import {
-  PASSWORD_RESET_TOKEN_REPOSITORY,
-  type PasswordResetTokenRepositoryPort,
-} from './password-reset-token-repository.port';
-import {
-  PASSWORD_RESET_TOKEN,
-  type PasswordResetTokenPort,
-} from './password-reset-token.port';
-import {
-  REFRESH_SESSION_REPOSITORY,
-  type RefreshSessionRepositoryPort,
-} from './refresh-session-repository.port';
+import { type PasswordHasherPort } from './password-hasher.port';
+import { type PasswordResetTokenRepositoryPort } from './password-reset-token-repository.port';
+import { type PasswordResetTokenPort } from './password-reset-token.port';
+import { type RefreshSessionRepositoryPort } from './refresh-session-repository.port';
 import {
   type IssuedRefreshToken,
-  REFRESH_TOKEN_ISSUER,
   type RefreshTokenIssuerPort,
 } from './refresh-token.port';
 import {
   type IssuedUserAccessToken,
-  USER_ACCESS_TOKEN_ISSUER,
   type UserAccessTokenIssuerPort,
 } from './user-access-token.port';
-import {
-  USER_ACCOUNT_REPOSITORY,
-  type UserAccountRepositoryPort,
-} from './user-account.port';
-import {
-  VERIFICATION_TOKEN_REPOSITORY,
-  type VerificationTokenRepositoryPort,
-} from './verification-token-repository.port';
-import {
-  VERIFICATION_TOKEN,
-  type VerificationTokenPort,
-} from './verification-token.port';
+import { type UserAccountRepositoryPort } from './user-account.port';
+import { type VerificationTokenRepositoryPort } from './verification-token-repository.port';
+import { type VerificationTokenPort } from './verification-token.port';
 
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 const LOGIN_IP_LIMIT = 20;
@@ -119,39 +91,26 @@ function invalidPasswordResetToken(): AppError {
   });
 }
 
-@Injectable()
+/**
+ * Built by the auth module's composition root, which passes every port
+ * explicitly, so this class carries no framework decorators and the clock is
+ * never silently the wall clock because a binding went missing.
+ */
 export class LocalAuthService {
-  private readonly clock: LocalAuthServiceClock;
-
   constructor(
-    @Inject(USER_ACCOUNT_REPOSITORY)
     private readonly userAccounts: UserAccountRepositoryPort,
-    @Inject(VERIFICATION_TOKEN_REPOSITORY)
     private readonly verificationTokens: VerificationTokenRepositoryPort,
-    @Inject(PASSWORD_RESET_TOKEN_REPOSITORY)
     private readonly passwordResetTokens: PasswordResetTokenRepositoryPort,
-    @Inject(REFRESH_SESSION_REPOSITORY)
     private readonly refreshSessions: RefreshSessionRepositoryPort,
-    @Inject(PASSWORD_HASHER)
     private readonly passwordHasher: PasswordHasherPort,
-    @Inject(VERIFICATION_TOKEN)
     private readonly tokenIssuer: VerificationTokenPort,
-    @Inject(PASSWORD_RESET_TOKEN)
     private readonly passwordResetTokenIssuer: PasswordResetTokenPort,
-    @Inject(EMAIL_PAYLOAD_CIPHER)
     private readonly payloadCipher: EmailPayloadCipherPort,
-    @Inject(AUTH_RATE_LIMITER)
     private readonly rateLimiter: AuthRateLimiterPort,
-    @Inject(USER_ACCESS_TOKEN_ISSUER)
     private readonly accessTokenIssuer: UserAccessTokenIssuerPort,
-    @Inject(REFRESH_TOKEN_ISSUER)
     private readonly refreshTokenIssuer: RefreshTokenIssuerPort,
-    @Optional()
-    @Inject(AUTH_CLOCK)
-    clock?: LocalAuthServiceClock,
-  ) {
-    this.clock = clock ?? { now: () => new Date() };
-  }
+    private readonly clock: LocalAuthServiceClock,
+  ) {}
 
   async register(
     input: RegistrationInput,

@@ -238,7 +238,26 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
       provide: USER_ACCESS_TOKEN_VERIFIER,
       useExisting: USER_ACCESS_TOKEN_CRYPTO,
     },
-    { provide: LOCAL_AUTH_SERVICE, useClass: LocalAuthService },
+    {
+      provide: LOCAL_AUTH_SERVICE,
+      useFactory: (
+        ...ports: ConstructorParameters<typeof LocalAuthService>
+      ): LocalAuthService => new LocalAuthService(...ports),
+      inject: [
+        USER_ACCOUNT_REPOSITORY,
+        VERIFICATION_TOKEN_REPOSITORY,
+        PASSWORD_RESET_TOKEN_REPOSITORY,
+        REFRESH_SESSION_REPOSITORY,
+        PASSWORD_HASHER,
+        VERIFICATION_TOKEN,
+        PASSWORD_RESET_TOKEN,
+        EMAIL_PAYLOAD_CIPHER,
+        AUTH_RATE_LIMITER,
+        USER_ACCESS_TOKEN_ISSUER,
+        REFRESH_TOKEN_ISSUER,
+        AUTH_CLOCK,
+      ],
+    },
     UserAccessJwtGuard,
   ],
   exports: [
