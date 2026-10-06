@@ -613,6 +613,12 @@ location / {
     proxy_set_header X-Forwarded-Proto $scheme;
 }
 
+# Keep dependency readiness private. Host-local monitoring uses `docker exec`
+# against the container's loopback address and does not pass through nginx.
+location = /ready {
+    return 404;
+}
+
 listen 443 ssl; # managed by Certbot
 ssl_certificate /etc/letsencrypt/live/api.aihubproduction.com/fullchain.pem;
 ssl_certificate_key /etc/letsencrypt/live/api.aihubproduction.com/privkey.pem;
@@ -658,6 +664,10 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /ready {
+        return 404;
     }
 
     listen 443 ssl;
@@ -717,10 +727,11 @@ until its backup and disposal have been approved separately.
 ### Checking deployed state
 
 `ops/status.sh` reports, for the production and Sandbox containers, the commit
-each runs, its state and health, a `/health` probe from inside the container, its
-restart count, and the number of error-like log lines since it started. It
-changes nothing. Nothing is installed on the host; the script travels over
-stdin, and the host user needs the same `sudo -n docker` access the deploy uses:
+each runs, its state and health, `/health` and `/ready` probes from inside the
+container, its restart count, and the number of error-like log lines since it
+started. It changes nothing. Nothing is installed on the host; the script
+travels over stdin, and the host user needs the same `sudo -n docker` access the
+deploy uses:
 
 ```sh
 ssh <user>@<host> 'bash -s -- <expected-commit-sha>' < ops/status.sh
@@ -729,7 +740,7 @@ ssh <user>@<host> 'bash -s -- <expected-commit-sha>' < ops/status.sh
 Pass the commit you expect (for example `git rev-parse origin/main`) and a
 container on any other commit is reported `FAIL`, so "is the latest code live?"
 has a yes-or-no answer. The exit status is 1 when any container is missing, not
-running, not healthy, failing its probe, or on another commit. A non-zero
+running, not healthy, failing either probe, or on another commit. A non-zero
 `errors=` count is not a failure by itself: read those lines, because they
 include real errors such as a downstream contract violation.
 

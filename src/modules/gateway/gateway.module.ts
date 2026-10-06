@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
+import {
+  GATEWAY_REDIS_READINESS,
+  type GatewayRedisReadiness,
+} from './public/redis-readiness';
 
 import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
@@ -65,6 +69,19 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
         configuration: RuntimeConnectionConfigurationPort,
       ): RedisGatewayClient | undefined =>
         createRedisGatewayClient(configuration.redisUrl ?? ''),
+    },
+    {
+      provide: GATEWAY_REDIS_READINESS,
+      inject: [REDIS_GATEWAY_CLIENT],
+      useFactory: (
+        client: RedisGatewayClient | undefined,
+      ): GatewayRedisReadiness => ({
+        async check() {
+          if (client === undefined || (await client.ping()) !== 'PONG') {
+            throw new Error('Redis is unavailable');
+          }
+        },
+      }),
     },
     {
       provide: DownstreamHttpClient,
@@ -162,6 +179,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     ConcurrencyPermitInterceptor,
   ],
   exports: [
+    GATEWAY_REDIS_READINESS,
     OPERATION_DISPATCHER,
     GRADING_ORCHESTRATOR,
     DownstreamHttpClient,

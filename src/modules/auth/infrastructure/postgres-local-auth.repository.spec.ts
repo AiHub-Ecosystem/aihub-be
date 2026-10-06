@@ -5,6 +5,8 @@ import type {
 import { PostgresLocalAuthRepository } from './postgres-local-auth.repository';
 
 class FakeClient implements PostgresAuthClient {
+  async checkConnection(): Promise<void> {}
+
   readonly queries: Array<{ text: string; values: readonly unknown[] }> = [];
   responses: readonly Record<string, unknown>[][] = [];
   queryResponses: Record<string, unknown>[][] = [];

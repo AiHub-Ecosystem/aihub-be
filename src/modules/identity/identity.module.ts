@@ -29,6 +29,10 @@ import {
   type RuntimeConnectionConfigurationPort,
 } from '@/modules/secrets/application/runtime-connection-configuration.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
+import {
+  IDENTITY_POSTGRES_READINESS,
+  type IdentityPostgresReadiness,
+} from './public/postgres-readiness';
 
 import { CreateOrganizationApiKey } from './api-keys/application/create-organization-api-key';
 import { CREATE_ORGANIZATION_API_KEY } from './api-keys/application/create-organization-api-key.port';
@@ -200,6 +204,34 @@ function drizzleDatabaseOptions(databaseUrl: string) {
   };
 }
 
+async function checkIdentityDatabase(
+  database: IdentityDatabase,
+  databaseUrl: string | undefined,
+  timeoutMs: number,
+): Promise<void> {
+  if (databaseUrl === undefined || databaseUrl.trim().length === 0) {
+    throw new Error('PostgreSQL is not configured');
+  }
+
+  const client = (
+    database as IdentityDatabase & {
+      readonly $client?:
+        | {
+            query(input: {
+              text: string;
+              query_timeout: number;
+            }): Promise<unknown>;
+          }
+        | string;
+    }
+  ).$client;
+  if (client === undefined || typeof client === 'string') {
+    throw new Error('PostgreSQL client is unavailable');
+  }
+
+  await client.query({ text: 'SELECT 1', query_timeout: timeoutMs });
+}
+
 @Module({
   // `RateLimitGuard` on the sandbox route consumes the gateway's rate limiter.
   imports: [
@@ -233,6 +265,32 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     OrganizationIdentityConfigController,
   ],
   providers: [
+    {
+      provide: IDENTITY_POSTGRES_READINESS,
+      inject: [
+        RUNTIME_CONNECTION_CONFIGURATION,
+        getDrizzleToken(IDENTITY_WRITE_DATABASE),
+        getDrizzleToken(IDENTITY_READ_DATABASE),
+      ],
+      useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
+        writeDb: IdentityDatabase,
+        readDb: IdentityDatabase,
+      ): IdentityPostgresReadiness => ({
+        checkControlPlaneWrite: (timeoutMs) =>
+          checkIdentityDatabase(
+            writeDb,
+            configuration.controlPlaneDatabaseUrl,
+            timeoutMs,
+          ),
+        checkControlPlaneRead: (timeoutMs) =>
+          checkIdentityDatabase(
+            readDb,
+            configuration.controlPlaneReadDatabaseUrl,
+            timeoutMs,
+          ),
+      }),
+    },
     {
       provide: API_KEY_REPOSITORY,
       useFactory: (db: IdentityDatabase) =>
@@ -572,6 +630,7 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     UserIdentityGuard,
   ],
   exports: [
+    IDENTITY_POSTGRES_READINESS,
     API_KEY_AUTHENTICATOR,
     ApiKeyGuard,
     ApiKeyUserIdentityGuard,

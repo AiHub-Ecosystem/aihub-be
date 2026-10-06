@@ -86,6 +86,10 @@ import { RedisAuthRateLimiter } from './infrastructure/redis-auth-rate-limiter';
 import { ResendEmailSender } from './infrastructure/resend-email.sender';
 import { LocalAuthController } from './presentation/local-auth.controller';
 import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
+import {
+  AUTH_POSTGRES_READINESS,
+  type AuthPostgresReadiness,
+} from './public/postgres-readiness';
 
 @Module({
   imports: [RuntimeConfigurationModule, SecretsModule],
@@ -98,6 +102,13 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
         configuration: RuntimeConnectionConfigurationPort,
       ): PostgresAuthClient =>
         createPostgresAuthClient(configuration.databaseUrl ?? ''),
+    },
+    {
+      provide: AUTH_POSTGRES_READINESS,
+      inject: [POSTGRES_AUTH_CLIENT],
+      useFactory: (client: PostgresAuthClient): AuthPostgresReadiness => ({
+        check: (timeoutMs) => client.checkConnection(timeoutMs),
+      }),
     },
     {
       provide: PostgresLocalAuthRepository,
@@ -289,6 +300,7 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
     UserAccessJwtGuard,
   ],
   exports: [
+    AUTH_POSTGRES_READINESS,
     EMAIL_SENDER,
     EMAIL_PAYLOAD_CIPHER,
     EMAIL_DELIVERY_REQUEST_WRITER,

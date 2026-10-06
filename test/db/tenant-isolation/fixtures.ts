@@ -120,6 +120,7 @@ export function createTenantIsolationRedis(): Redis {
 export function createTenantIsolationRedisClients(): TenantIsolationRedisClients {
   const raw = createTenantIsolationRedis();
   const gateway: RedisGatewayClient = {
+    ping: () => raw.ping(),
     get: (key) => raw.get(key),
     set: (key, value, mode, seconds) => raw.set(key, value, mode, seconds),
     incr: (key) => raw.incr(key),

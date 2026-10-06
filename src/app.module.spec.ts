@@ -11,6 +11,7 @@ import { PUBLIC_ROUTES } from './catalog/public-routes';
 import { AppError } from './common/errors/app-error';
 import { registerBodySizeGuard } from './common/http/body-size.hook';
 import { generateRequestId } from './common/request-context/request-id';
+import { RUNTIME_CONNECTION_CONFIGURATION } from './modules/secrets/application/runtime-connection-configuration.port';
 import { buildOpenApiDocument } from './openapi/build-openapi-document';
 
 @Controller('boom')
@@ -84,10 +85,19 @@ describe('AppModule wiring', () => {
   const registeredRoutes: RegisteredRoute[] = [];
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
+    const moduleBuilder = Test.createTestingModule({
       imports: [AppModule],
       controllers: [BoomController],
-    }).compile();
+    });
+    moduleBuilder.overrideProvider(RUNTIME_CONNECTION_CONFIGURATION).useValue({
+      databaseUrl: undefined,
+      controlPlaneDatabaseUrl: undefined,
+      controlPlaneReadDatabaseUrl: undefined,
+      redisUrl: undefined,
+      sandboxAssertionPrivateKey: undefined,
+      sandboxAssertionKeyId: undefined,
+    });
+    const moduleRef = await moduleBuilder.compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({ genReqId: () => generateRequestId() }),
@@ -117,6 +127,21 @@ describe('AppModule wiring', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: 'ok' });
+  });
+
+  it('serves readiness separately and marks unconfigured dependencies down', async () => {
+    const response = await app.inject({ method: 'GET', url: '/ready' });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      status: 'error',
+      dependencies: {
+        'runtime-postgres': 'down',
+        'control-plane-write-postgres': 'down',
+        'control-plane-read-postgres': 'down',
+        redis: 'down',
+      },
+    });
   });
 
   it('serves the docs page and raw spec unauthenticated through the real app wiring', async () => {

@@ -60,4 +60,16 @@ describe('committed aihub.postman_collection.json', () => {
     expect(generated).toContain('responds with HTTP 429');
     expect(generated).toContain('RATE_LIMITED');
   });
+
+  it('keeps infrastructure health endpoints out of the generated collection', async () => {
+    const generated = JSON.stringify(
+      await buildPostmanCollection(
+        committedOpenApiDocument(),
+        packageVersion(),
+      ),
+    );
+
+    expect(generated).not.toContain('/health');
+    expect(generated).not.toContain('/ready');
+  });
 });

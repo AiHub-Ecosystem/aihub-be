@@ -1,6 +1,7 @@
 import Redis from 'ioredis';
 
 export interface RedisGatewayClient {
+  ping(): Promise<string>;
   get(key: string): Promise<string | null>;
   set(
     key: string,
@@ -23,6 +24,10 @@ export const REDIS_GATEWAY_CLIENT = Symbol('REDIS_GATEWAY_CLIENT');
 
 class IoredisGatewayClient implements RedisGatewayClient {
   constructor(private readonly client: Redis) {}
+
+  ping(): Promise<string> {
+    return this.client.ping();
+  }
 
   get(key: string): Promise<string | null> {
     return this.client.get(key);

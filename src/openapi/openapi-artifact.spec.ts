@@ -102,6 +102,15 @@ describe('committed openapi.json', () => {
     expect(success).not.toContain('public_keys_jwks');
   });
 
+  it('keeps infrastructure health endpoints out of the public API document', () => {
+    const document = committedDocument() as {
+      paths: Record<string, unknown>;
+    };
+
+    expect(document.paths).not.toHaveProperty('/health');
+    expect(document.paths).not.toHaveProperty('/ready');
+  });
+
   // OpenAPI 3.1 validity itself is checked by `scripts/validate-openapi.mjs`
   // (wired into `pnpm verify`), not here: the validator package is ESM-only
   // and Jest's CommonJS transform pipeline cannot load it, even via a

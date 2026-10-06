@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, type QueryConfig } from 'pg';
 
 export interface PostgresAuthQueryClient {
   query(
@@ -8,6 +8,7 @@ export interface PostgresAuthQueryClient {
 }
 
 export interface PostgresAuthClient extends PostgresAuthQueryClient {
+  checkConnection(timeoutMs: number): Promise<void>;
   transaction<T>(
     callback: (client: PostgresAuthQueryClient) => Promise<T>,
   ): Promise<T>;
@@ -27,6 +28,9 @@ export function createPostgresAuthClient(
       transaction: async () => {
         throw new Error('DATABASE_URL is missing');
       },
+      checkConnection: async () => {
+        throw new Error('DATABASE_URL is missing');
+      },
       close: async () => undefined,
     };
   }
@@ -39,6 +43,13 @@ export function createPostgresAuthClient(
   });
 
   return {
+    async checkConnection(timeoutMs) {
+      // pg reads query_timeout per query at runtime; @types/pg only declares it on PoolConfig.
+      await pool.query({
+        text: 'SELECT 1',
+        query_timeout: timeoutMs,
+      } as QueryConfig);
+    },
     async query(text, values) {
       const result = await pool.query<Record<string, unknown>>(text, [
         ...values,
