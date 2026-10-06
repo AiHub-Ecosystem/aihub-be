@@ -392,6 +392,46 @@ describe('email outbox dispatch poller', () => {
       expect(afterExpiry.map((row) => row.id)).toEqual([seeded.id]);
     });
 
+    it('refuses a transition from the claimant whose lease was taken over', async () => {
+      // A batch that outlives its lease lets a second instance reclaim the row.
+      // The first one is then still holding a request record it no longer owns,
+      // and must not be able to spend its attempt or clear the new owner's lease.
+      const seeded = await seedRequest();
+      await claim(OWNER_A, { leaseMs: 30_000 });
+      await claim(OWNER_B, { now: new Date(NOW.getTime() + 30_001) });
+
+      await expect(
+        store.reserveAttempt({
+          id: seeded.id,
+          attemptedAt: NOW,
+          owner: OWNER_A,
+        }),
+      ).rejects.toThrow('not in a queued state');
+
+      const row = await rowOf(seeded.id);
+      expect(row.attempts).toBe(0);
+      expect(row.lease_owner).toBe(OWNER_B);
+    });
+
+    it('lets the current owner spend the attempt and finish a taken-over row', async () => {
+      const seeded = await seedRequest();
+      await claim(OWNER_A, { leaseMs: 30_000 });
+      await claim(OWNER_B, { now: new Date(NOW.getTime() + 30_001) });
+
+      await store.reserveAttempt({
+        id: seeded.id,
+        attemptedAt: NOW,
+        owner: OWNER_B,
+      });
+      await store.markProviderAccepted({
+        id: seeded.id,
+        attemptedAt: NOW,
+        owner: OWNER_B,
+      });
+
+      expect((await rowOf(seeded.id)).status).toBe('provider_accepted');
+    });
+
     it('claims no more than the batch it asked for', async () => {
       for (let index = 0; index < 4; index += 1) await seedRequest();
 
@@ -768,6 +808,7 @@ describe('email outbox dispatch poller', () => {
           id: seeded.id,
           failedAt: NOW,
           errorCode: 'timeout',
+          owner: OWNER_A,
         }),
       ).rejects.toThrow('not in a queued state');
 

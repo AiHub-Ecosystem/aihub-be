@@ -47,6 +47,23 @@ beforeEach(async () => {
 });
 
 describe('email delivery request repository', () => {
+  /**
+   * Every transition is fenced by the claim that produced it, so a test has to
+   * hold the lease the way the poller does before it can move the row.
+   */
+  async function claimAs(id: string, owner: string): Promise<string> {
+    const claimed = await repository.claim(authClient, {
+      now: NOW,
+      limit: 1,
+      leaseMs: 60_000,
+      owner,
+    });
+    if (claimed[0]?.id !== id) {
+      throw new Error(`expected to claim ${id}, got ${claimed[0]?.id}`);
+    }
+    return owner;
+  }
+
   it('writes inside the caller transaction and rolls back with it', async () => {
     const client = createPostgresAuthClient(testDatabaseUrl());
     try {
@@ -96,10 +113,12 @@ describe('email delivery request repository', () => {
       });
 
       const attemptedAt = new Date('2026-10-05T12:00:05.000Z');
-      await repository.reserveAttempt(authClient, { id, attemptedAt });
+      const owner = await claimAs(id, 'owner-a');
+      await repository.reserveAttempt(authClient, { id, attemptedAt, owner });
       const outcome = await repository.markProviderAccepted(authClient, {
         id,
         attemptedAt,
+        owner,
       });
 
       expect(outcome).toMatchObject({
@@ -133,11 +152,13 @@ describe('email delivery request repository', () => {
     );
 
     const attemptedAt = new Date('2026-10-05T12:01:00.000Z');
-    await repository.reserveAttempt(authClient, { id, attemptedAt });
+    const owner = await claimAs(id, 'owner-a');
+    await repository.reserveAttempt(authClient, { id, attemptedAt, owner });
     await repository.recordFailedAttempt(authClient, {
       id,
       attemptedAt,
       errorCode: 'timeout',
+      owner,
     });
     const rows = await pool.query(
       'SELECT status, attempts, last_error_code, payload_ciphertext FROM email_delivery_requests WHERE id = $1',
@@ -161,15 +182,19 @@ describe('email delivery request repository', () => {
       );
     }
 
+    const failedOwner = await claimAs(failedId, 'owner-a');
     await repository.markFailed(authClient, {
       id: failedId,
       failedAt: new Date('2026-10-05T12:05:00.000Z'),
       errorCode: 'provider_rejected',
+      owner: failedOwner,
     });
+    const cancelledOwner = await claimAs(cancelledId, 'owner-b');
     await repository.markCancelled(authClient, {
       id: cancelledId,
       cancelledAt: new Date('2026-10-05T12:05:00.000Z'),
       reason: 'credential_revoked',
+      owner: cancelledOwner,
     });
 
     const rows = await pool.query(
@@ -188,6 +213,7 @@ describe('email delivery request repository', () => {
         id: failedId,
         cancelledAt: new Date(),
         reason: 'not_actionable',
+        owner: failedOwner,
       }),
     ).rejects.toThrow(/queued state|attempts/i);
 
@@ -208,10 +234,12 @@ describe('email delivery request repository', () => {
       [id, CIPHERTEXT, NOW],
     );
 
+    const owner = await claimAs(id, 'owner-a');
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await repository.reserveAttempt(authClient, {
         id,
         attemptedAt: new Date(Date.UTC(2026, 9, 5, 12, attempt)),
+        owner,
       });
     }
 
@@ -219,6 +247,7 @@ describe('email delivery request repository', () => {
       repository.reserveAttempt(authClient, {
         id,
         attemptedAt: new Date(),
+        owner,
       }),
     ).rejects.toThrow(/queued state|attempts/i);
   });

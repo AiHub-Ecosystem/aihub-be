@@ -101,7 +101,7 @@ const CLAIM_SQL = `
 const RESERVE_ATTEMPT_SQL = `
   UPDATE email_delivery_requests
   SET attempts = attempts + 1, last_attempt_at = $2
-  WHERE id = $1 AND status = 'queued' AND attempts < 3
+  WHERE id = $1 AND status = 'queued' AND lease_owner = $3::text AND attempts < 3
   RETURNING id
 `;
 
@@ -113,9 +113,9 @@ const RESERVE_ATTEMPT_SQL = `
  */
 const RECORD_FAILED_ATTEMPT_SQL = `
   UPDATE email_delivery_requests
-  SET last_attempt_at = $2, last_error_code = $3,
+  SET last_attempt_at = $2, last_error_code = $4,
       lease_owner = NULL, lease_expires_at = NULL
-  WHERE id = $1 AND status = 'queued'
+  WHERE id = $1 AND status = 'queued' AND lease_owner = $3::text
   RETURNING id
 `;
 
@@ -124,7 +124,7 @@ const MARK_PROVIDER_ACCEPTED_SQL = `
   SET status = 'provider_accepted', last_attempt_at = $2,
       payload_ciphertext = NULL, completed_at = $2,
       lease_owner = NULL, lease_expires_at = NULL
-  WHERE id = $1 AND status = 'queued'
+  WHERE id = $1 AND status = 'queued' AND lease_owner = $3::text
   RETURNING id
 `;
 
@@ -133,7 +133,7 @@ const MARK_FAILED_SQL = `
   SET status = 'failed', last_attempt_at = $2,
       last_error_code = $3, payload_ciphertext = NULL, completed_at = $2,
       lease_owner = NULL, lease_expires_at = NULL
-  WHERE id = $1 AND status = 'queued'
+  WHERE id = $1 AND status = 'queued' AND lease_owner = $4::text
   RETURNING id
 `;
 
@@ -142,7 +142,7 @@ const MARK_CANCELLED_SQL = `
   SET status = 'cancelled', cancel_reason = $2,
       payload_ciphertext = NULL, completed_at = $3,
       lease_owner = NULL, lease_expires_at = NULL
-  WHERE id = $1 AND status = 'queued'
+  WHERE id = $1 AND status = 'queued' AND lease_owner = $4::text
   RETURNING id
 `;
 
@@ -155,7 +155,7 @@ const MARK_CANCELLED_SQL = `
 const RELEASE_DEFERRED_SQL = `
   UPDATE email_delivery_requests
   SET lease_owner = NULL, lease_expires_at = NULL
-  WHERE id = $1 AND status = 'queued'
+  WHERE id = $1 AND status = 'queued' AND lease_owner = $2::text
   RETURNING id
 `;
 
@@ -295,62 +295,78 @@ export class PostgresEmailDeliveryRequestRepository {
       id: string;
       attemptedAt: Date;
       errorCode: EmailDeliveryErrorCode;
+      owner: string;
     },
   ): Promise<EmailDeliveryRequestRecord> {
     return this.apply(client, RECORD_FAILED_ATTEMPT_SQL, [
       input.id,
       input.attemptedAt,
+      input.owner,
       input.errorCode,
     ]);
   }
 
   async reserveAttempt(
     client: EmailDeliveryQueryClient,
-    input: { id: string; attemptedAt: Date },
+    input: { id: string; attemptedAt: Date; owner: string },
   ): Promise<EmailDeliveryRequestRecord> {
     return this.apply(client, RESERVE_ATTEMPT_SQL, [
       input.id,
       input.attemptedAt,
+      input.owner,
     ]);
   }
 
   async markProviderAccepted(
     client: EmailDeliveryQueryClient,
-    input: { id: string; attemptedAt: Date },
+    input: { id: string; attemptedAt: Date; owner: string },
   ): Promise<EmailDeliveryRequestRecord> {
     return this.apply(client, MARK_PROVIDER_ACCEPTED_SQL, [
       input.id,
       input.attemptedAt,
+      input.owner,
     ]);
   }
 
   async markFailed(
     client: EmailDeliveryQueryClient,
-    input: { id: string; failedAt: Date; errorCode: EmailDeliveryErrorCode },
+    input: {
+      id: string;
+      failedAt: Date;
+      errorCode: EmailDeliveryErrorCode;
+      owner: string;
+    },
   ): Promise<EmailDeliveryRequestRecord> {
     return this.apply(client, MARK_FAILED_SQL, [
       input.id,
       input.failedAt,
       input.errorCode,
+      input.owner,
     ]);
   }
 
   async markCancelled(
     client: EmailDeliveryQueryClient,
-    input: { id: string; cancelledAt: Date; reason: EmailDeliveryCancelReason },
+    input: {
+      id: string;
+      cancelledAt: Date;
+      reason: EmailDeliveryCancelReason;
+      owner: string;
+    },
   ): Promise<EmailDeliveryRequestRecord> {
     return this.apply(client, MARK_CANCELLED_SQL, [
       input.id,
       input.reason,
       input.cancelledAt,
+      input.owner,
     ]);
   }
 
   async releaseDeferred(
     client: EmailDeliveryQueryClient,
-    input: { id: string },
+    input: { id: string; owner: string },
   ): Promise<EmailDeliveryRequestRecord> {
-    return this.apply(client, RELEASE_DEFERRED_SQL, [input.id]);
+    return this.apply(client, RELEASE_DEFERRED_SQL, [input.id, input.owner]);
   }
 
   async claim(
@@ -438,6 +454,7 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
   async markProviderAccepted(input: {
     readonly id: string;
     readonly attemptedAt: Date;
+    readonly owner: string;
   }): Promise<void> {
     await this.requests.markProviderAccepted(this.client, input);
   }
@@ -446,6 +463,7 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
     readonly id: string;
     readonly failedAt: Date;
     readonly errorCode: EmailDeliveryErrorCode;
+    readonly owner: string;
   }): Promise<void> {
     await this.requests.markFailed(this.client, input);
   }
@@ -454,6 +472,7 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
     readonly id: string;
     readonly cancelledAt: Date;
     readonly reason: EmailDeliveryCancelReason;
+    readonly owner: string;
   }): Promise<void> {
     await this.requests.markCancelled(this.client, input);
   }
@@ -462,6 +481,7 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
     readonly id: string;
     readonly attemptedAt: Date;
     readonly errorCode: EmailDeliveryErrorCode;
+    readonly owner: string;
   }): Promise<void> {
     await this.requests.recordFailedAttempt(this.client, input);
   }
@@ -469,11 +489,15 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
   async reserveAttempt(input: {
     readonly id: string;
     readonly attemptedAt: Date;
+    readonly owner: string;
   }): Promise<void> {
     await this.requests.reserveAttempt(this.client, input);
   }
 
-  async releaseDeferred(input: { readonly id: string }): Promise<void> {
+  async releaseDeferred(input: {
+    readonly id: string;
+    readonly owner: string;
+  }): Promise<void> {
     await this.requests.releaseDeferred(this.client, input);
   }
 

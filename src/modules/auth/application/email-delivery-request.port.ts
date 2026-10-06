@@ -141,28 +141,42 @@ export interface EmailDispatchStorePort {
    * follows the call is what makes the cap a cap: a transition that fails leaves
    * the attempt spent, so no pass can reach the provider a fourth time.
    */
+  /**
+   * Every transition below carries the claimer's identity. A batch can outlive its
+   * lease under a database stall or a paused process, and a claim that lapsed and
+   * was taken by another instance must not be writable by the first one: it would
+   * spend an attempt the new owner is spending, or clear the new owner's lease.
+   * Requiring `owner` to still hold the row is what makes the lease a fence and
+   * not a hint, so an update that matched nothing is a lost race rather than a
+   * second writer.
+   */
   reserveAttempt(input: {
     readonly id: string;
     readonly attemptedAt: Date;
+    readonly owner: string;
   }): Promise<void>;
   markProviderAccepted(input: {
     readonly id: string;
     readonly attemptedAt: Date;
+    readonly owner: string;
   }): Promise<void>;
   markFailed(input: {
     readonly id: string;
     readonly failedAt: Date;
     readonly errorCode: EmailDeliveryErrorCode;
+    readonly owner: string;
   }): Promise<void>;
   markCancelled(input: {
     readonly id: string;
     readonly cancelledAt: Date;
     readonly reason: EmailDeliveryCancelReason;
+    readonly owner: string;
   }): Promise<void>;
   recordFailedAttempt(input: {
     readonly id: string;
     readonly attemptedAt: Date;
     readonly errorCode: EmailDeliveryErrorCode;
+    readonly owner: string;
   }): Promise<void>;
   /**
    * Hands a claimed request back without recording an outcome, for one this
@@ -170,7 +184,10 @@ export interface EmailDispatchStorePort {
    * lease is released, so the next instance to claim it starts where this one
    * stopped rather than inheriting a terminal state.
    */
-  releaseDeferred(input: { readonly id: string }): Promise<void>;
+  releaseDeferred(input: {
+    readonly id: string;
+    readonly owner: string;
+  }): Promise<void>;
   /**
    * Terminal requests whose notification was never recorded, oldest first, so a
    * pass that starts after the one that failed them still emits their alert. The

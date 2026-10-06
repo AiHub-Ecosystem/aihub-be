@@ -261,7 +261,11 @@ export class EmailDeliveryPoller {
     // The attempt is spent before the provider is called, not recorded after it
     // answers: a transition that fails must not hand the same request another
     // pass at the provider.
-    await this.store.reserveAttempt({ id: request.id, attemptedAt: now });
+    await this.store.reserveAttempt({
+      id: request.id,
+      attemptedAt: now,
+      owner: this.options.owner,
+    });
 
     try {
       await this.deliver(request, payload);
@@ -269,7 +273,11 @@ export class EmailDeliveryPoller {
       return this.recordFailure(request, errorCodeOf(error), now);
     }
 
-    await this.store.markProviderAccepted({ id: request.id, attemptedAt: now });
+    await this.store.markProviderAccepted({
+      id: request.id,
+      attemptedAt: now,
+      owner: this.options.owner,
+    });
     return 'provider_accepted';
   }
 
@@ -297,7 +305,10 @@ export class EmailDeliveryPoller {
   private async defer(
     request: EmailDeliveryRequestRecord,
   ): Promise<'deferred'> {
-    await this.store.releaseDeferred({ id: request.id });
+    await this.store.releaseDeferred({
+      id: request.id,
+      owner: this.options.owner,
+    });
     return 'deferred';
   }
 
@@ -349,6 +360,7 @@ export class EmailDeliveryPoller {
         id: request.id,
         failedAt: now,
         errorCode,
+        owner: this.options.owner,
       });
       this.report({ id: request.id, kind: request.kind, errorCode });
       await this.store.markFailureReported({ id: request.id, reportedAt: now });
@@ -358,6 +370,7 @@ export class EmailDeliveryPoller {
       id: request.id,
       attemptedAt: now,
       errorCode,
+      owner: this.options.owner,
     });
     return 'retried';
   }
@@ -371,6 +384,7 @@ export class EmailDeliveryPoller {
       id: request.id,
       cancelledAt: now,
       reason,
+      owner: this.options.owner,
     });
     return 'cancelled';
   }

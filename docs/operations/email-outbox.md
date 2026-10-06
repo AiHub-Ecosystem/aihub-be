@@ -65,6 +65,13 @@ not consume the alert, so the row stays claimable until the signal was actually
 emitted. A live lease with no `failure_reported_at` is therefore an alert this
 instance is still owed, and it becomes claimable again when the lease lapses.
 
+The dispatch lease fences the writer as well as excluding the other instance.
+A batch that outruns its lease — a database stall, a paused process — can be
+reclaimed, and the instance that lost the row may still be holding it in memory.
+Every transition after a claim therefore requires that `lease_owner` still be
+this instance, so the stale one's update matches nothing instead of spending an
+attempt the new owner is spending or clearing the new owner's lease.
+
 Suggested alert condition: any increase of `aihub_email_delivery_failed_total`
 over a window long enough to cover the retry schedule (attempts run at 0, +1
 minute, and +5 minutes, so 15 minutes is a safe minimum). `kind` separates the
