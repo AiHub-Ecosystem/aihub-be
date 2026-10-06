@@ -42,6 +42,10 @@ function runtimeSecrets() {
       key_id: FAKE,
     },
     seaweedfs: { access_key_id: FAKE, secret_access_key: FAKE },
+    'email-outbox': {
+      current_key_id: FAKE,
+      keys: { [FAKE]: Buffer.alloc(32, 1).toString('base64') },
+    },
   };
 }
 

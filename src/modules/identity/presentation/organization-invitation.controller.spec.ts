@@ -113,10 +113,8 @@ describe('Organization invitation HTTP flow', () => {
     };
     invitations = {
       createInvitation: jest.fn(
-        async (_input: CreateOrganizationInvitationInput) => ({
-          kind: 'created' as const,
-          organizationName: 'Acme',
-        }),
+        async (_input: CreateOrganizationInvitationInput) =>
+          ({ kind: 'created' }) as const,
       ),
       listOpenInvitations: jest.fn(
         async (
@@ -206,11 +204,9 @@ describe('Organization invitation HTTP flow', () => {
     verifiedTokens = [];
     invitations.createInvitation.mockResolvedValue({
       kind: 'created',
-      organizationName: 'Acme',
     });
     invitations.listOpenInvitations.mockResolvedValue([]);
     invitations.revokeInvitation.mockResolvedValue({ kind: 'closed' });
-    emailSender.sendOrganizationInviteEmail.mockResolvedValue(undefined);
     idempotency.execute.mockImplementation(
       async <T>(
         input: IdempotencyExecutionInput,
@@ -276,6 +272,7 @@ describe('Organization invitation HTTP flow', () => {
         expires_at: expect.stringMatching(
           /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
         ),
+        email_delivery_status: 'queued',
       },
       meta: { request_id: REQUEST_ID },
     });
@@ -330,6 +327,7 @@ describe('Organization invitation HTTP flow', () => {
       email: 'invitee@example.com',
       role: 'member' as const,
       expiresAt: new Date('2026-09-22T12:00:00.000Z'),
+      emailDeliveryStatus: 'queued' as const,
     };
     idempotency.execute.mockResolvedValueOnce({
       result: replayed,
@@ -351,11 +349,83 @@ describe('Organization invitation HTTP flow', () => {
         role: 'member',
         status: 'pending',
         expires_at: '2026-09-22T12:00:00.000Z',
+        email_delivery_status: 'queued',
       },
       meta: { request_id: REQUEST_ID },
     });
     expect(invitations.createInvitation).not.toHaveBeenCalled();
     expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+  });
+
+  it('replays a record completed before the outbox, which stored no delivery status', async () => {
+    // ADR-0038 keeps a completed record replayable for 24 hours, and a record
+    // written before this deploy carries no delivery status at all.
+    idempotency.execute.mockImplementationOnce(
+      async (
+        input: IdempotencyExecutionInput,
+        _work: IdempotencyWork<unknown>,
+        decodeReplay: IdempotencyReplayDecoder<unknown>,
+      ) => ({
+        result: decodeReplay({
+          invitationId: INVITATION_ID,
+          organizationId: ORGANIZATION_ID,
+          email: 'invitee@example.com',
+          role: 'member',
+          expiresAt: '2026-09-22T12:00:00.000Z',
+        }),
+        replay: true,
+      }),
+    );
+
+    const response = await invite(undefined, {
+      authorization: 'Bearer valid.token.value',
+      'idempotency-key': 'invite-1',
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.headers['idempotent-replay']).toBe('true');
+    expect(response.json()).toEqual({
+      data: {
+        invitation_id: INVITATION_ID,
+        organization_id: ORGANIZATION_ID,
+        email: 'invitee@example.com',
+        role: 'member',
+        status: 'pending',
+        expires_at: '2026-09-22T12:00:00.000Z',
+        email_delivery_status: 'queued',
+      },
+      meta: { request_id: REQUEST_ID },
+    });
+    expect(invitations.createInvitation).not.toHaveBeenCalled();
+    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+  });
+
+  it('still refuses a stored record that carries a status it cannot report', async () => {
+    idempotency.execute.mockImplementationOnce(
+      async (
+        input: IdempotencyExecutionInput,
+        _work: IdempotencyWork<unknown>,
+        decodeReplay: IdempotencyReplayDecoder<unknown>,
+      ) => ({
+        result: decodeReplay({
+          invitationId: INVITATION_ID,
+          organizationId: ORGANIZATION_ID,
+          email: 'invitee@example.com',
+          role: 'member',
+          expiresAt: '2026-09-22T12:00:00.000Z',
+          emailDeliveryStatus: 'delivered',
+        }),
+        replay: true,
+      }),
+    );
+
+    const response = await invite(undefined, {
+      authorization: 'Bearer valid.token.value',
+      'idempotency-key': 'invite-1',
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(invitations.createInvitation).not.toHaveBeenCalled();
   });
 
   it('rechecks current authorization before replay', async () => {
@@ -370,7 +440,7 @@ describe('Organization invitation HTTP flow', () => {
     expect(idempotency.execute).not.toHaveBeenCalled();
   });
 
-  it('persists only the token hash and hands the raw token to the email sender', async () => {
+  it('persists only the token hash and hands the raw token to the outbox request', async () => {
     await invite();
 
     const persisted = createInvitationCall();
@@ -379,15 +449,22 @@ describe('Organization invitation HTTP flow', () => {
     expect(persisted.invitedBy).toBe(USER_ID);
     expect(persisted.role).toBe('member');
 
-    const emailCall =
-      emailSender.sendOrganizationInviteEmail.mock.calls[0]?.[0];
-    expect(emailCall).toBeDefined();
-    expect(emailCall?.email).toBe('invitee@example.com');
-    expect(emailCall?.organizationName).toBe('Acme');
-    expect(emailCall?.role).toBe('member');
-    expect(emailCall?.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(emailCall?.token).not.toBe(persisted.tokenHash);
-    expect(emailCall?.expiresAt).toEqual(persisted.expiresAt);
+    // The committed credential is the one a worker will email: the same raw
+    // token, never a re-mint, and never persisted in the clear.
+    expect(persisted.emailDelivery.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(persisted.emailDelivery.token).not.toBe(persisted.tokenHash);
+    expect(persisted.emailDelivery.id).toMatch(/^edr_[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(persisted.emailDelivery.createdAt).toBe(persisted.now);
+    // The provider is not called in the request path.
+    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+  });
+
+  it('reports the request as queued on a fresh invitation', async () => {
+    const response = await invite();
+
+    expect(response.json()).toMatchObject({
+      data: { email_delivery_status: 'queued' },
+    });
   });
 
   it('expires the invite token 24 hours after issuance', async () => {
@@ -750,49 +827,30 @@ describe('Organization invitation HTTP flow', () => {
     expect(invitations.createInvitation).not.toHaveBeenCalled();
   });
 
-  it('surfaces a retryable error when invite email delivery fails', async () => {
-    emailSender.sendOrganizationInviteEmail.mockRejectedValue(
-      new Error('resend down'),
+  it('surfaces a commit failure without leaking the credential', async () => {
+    invitations.createInvitation.mockRejectedValue(
+      new Error('outbox store unavailable'),
     );
 
     const response = await invite();
 
-    expect(response.statusCode).toBe(503);
-    expect(response.json().error.code).toBe('AUTH_EMAIL_DELIVERY_UNAVAILABLE');
-    expect(response.json().error.retryable).toBe(true);
-    // The invitation stays durable; a retry supersedes its token.
-    expect(invitations.createInvitation).toHaveBeenCalledTimes(1);
+    expect(response.statusCode).toBe(500);
+    expect(response.json().error.code).toBe('INTERNAL_ERROR');
+    expect(response.payload).not.toContain('outbox store unavailable');
+    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
   });
 
-  it('does not leak the raw token through a delivery failure response', async () => {
-    emailSender.sendOrganizationInviteEmail.mockRejectedValue(
-      new Error('resend down'),
-    );
-
-    const response = await invite();
-    const rawToken =
-      emailSender.sendOrganizationInviteEmail.mock.calls[0]?.[0].token;
-
-    expect(rawToken).toBeDefined();
-    expect(response.body).not.toContain(rawToken);
-  });
-
-  it('supersedes the undelivered token when the caller retries after a delivery failure', async () => {
-    emailSender.sendOrganizationInviteEmail.mockRejectedValueOnce(
-      new Error('resend down'),
-    );
-
-    const failed = await invite();
+  it('supersedes the open token when the caller retries', async () => {
+    const first = await invite();
     const second = await invite();
 
-    expect(failed.statusCode).toBe(503);
+    expect(first.statusCode).toBe(201);
     expect(second.statusCode).toBe(201);
-    expect(invitations.createInvitation).toHaveBeenCalledTimes(2);
 
-    const first = invitations.createInvitation.mock.calls[0]?.[0];
+    const firstCall = invitations.createInvitation.mock.calls[0]?.[0];
     const retry = invitations.createInvitation.mock.calls[1]?.[0];
-    expect(retry?.tokenHash).not.toBe(first?.tokenHash);
-    expect(retry?.email).toBe(first?.email);
+    expect(retry?.tokenHash).not.toBe(firstCall?.tokenHash);
+    expect(retry?.email).toBe(firstCall?.email);
   });
 
   it('normalizes a differently-cased resend onto the same durable email', async () => {
@@ -826,8 +884,7 @@ describe('Organization invitation HTTP flow', () => {
       stderr.mockRestore();
     }
 
-    const rawToken =
-      emailSender.sendOrganizationInviteEmail.mock.calls[0]?.[0].token;
+    const rawToken = createInvitationCall().emailDelivery.token;
     expect(rawToken).toBeDefined();
     expect(written.join('')).not.toContain(rawToken);
   });

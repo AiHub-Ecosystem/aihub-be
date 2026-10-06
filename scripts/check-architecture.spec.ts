@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 
 import architectureConfig from '../.dependency-cruiser.cjs';
 
@@ -329,6 +329,111 @@ describe('common layer environment boundary', () => {
     expect(commonFilesReadingEnvironment()).toEqual([
       'observability/open-telemetry.ts',
       'observability/request-logger.ts',
+    ]);
+  });
+});
+
+/**
+ * ADR-0074 gave two modules a reason to name a table the other owns: Identity
+ * writes the Email Delivery Request its invitation commits, and Auth reads the
+ * invitation to decide whether a claimed request is still actionable. Neither
+ * access is an import, so the dependency-cruiser seam cannot see it, and
+ * `.claude/rules/testing.md` asks for a guard wherever a new boundary appears.
+ *
+ * A table listed here is one two modules name. A module that starts naming a
+ * table a second module already names fails this until the reason is written
+ * down, which is what turns "two modules happen to read the same table" into a
+ * decision somebody made. Table names come from the migrations, so an English
+ * word in a comment or a CTE name cannot pose as one.
+ */
+describe('cross-module table access', () => {
+  function migrations(): string {
+    return join(__dirname, '..', 'database', 'migrations');
+  }
+
+  function createdTables(): Set<string> {
+    const tables = new Set<string>();
+
+    for (const file of readdirSync(migrations()).filter((entry) =>
+      entry.endsWith('.sql'),
+    )) {
+      for (const match of readFileSync(
+        join(migrations(), file),
+        'utf8',
+      ).matchAll(/CREATE TABLE(?: IF NOT EXISTS)?\s+([a-z_][a-z0-9_]*)/gi)) {
+        const table = match[1];
+        if (table !== undefined) {
+          tables.add(table.toLowerCase());
+        }
+      }
+    }
+
+    return tables;
+  }
+
+  function moduleInfrastructureFiles(directory: string): string[] {
+    return readdirSync(directory, { recursive: true, withFileTypes: true })
+      .filter(
+        (entry) =>
+          entry.isFile() &&
+          entry.name.endsWith('.ts') &&
+          !entry.name.endsWith('.spec.ts'),
+      )
+      .map((entry) => join(entry.parentPath, entry.name))
+      .filter((file) => file.includes(`${sep}infrastructure${sep}`));
+  }
+
+  function sharedTableAccesses(): string[] {
+    const tables = createdTables();
+    const modulesByTable = new Map<string, Set<string>>();
+
+    for (const file of moduleInfrastructureFiles(
+      join(__dirname, '..', 'src', 'modules'),
+    )) {
+      const module = relative(join(__dirname, '..', 'src', 'modules'), file)
+        .split(/[\\/]/)
+        .join('/')
+        .split('/')[0];
+      if (module === undefined) {
+        continue;
+      }
+
+      for (const [, statement] of readFileSync(file, 'utf8').matchAll(
+        /`([^`]*)`/g,
+      )) {
+        if (statement === undefined) {
+          continue;
+        }
+        for (const match of statement.matchAll(
+          /\b(?:FROM|INTO|UPDATE|JOIN)\s+([a-z_][a-z0-9_]*)/gi,
+        )) {
+          const table = match[1]?.toLowerCase();
+          if (table === undefined || !tables.has(table)) {
+            continue;
+          }
+          const modules = modulesByTable.get(table) ?? new Set<string>();
+          modules.add(module);
+          modulesByTable.set(table, modules);
+        }
+      }
+    }
+
+    return [...modulesByTable]
+      .filter(([, modules]) => modules.size > 1)
+      .map(([table, modules]) => `${table}: ${[...modules].sort().join(' + ')}`)
+      .sort();
+  }
+
+  it('names exactly the tables more than one module reads or writes', () => {
+    expect(sharedTableAccesses()).toEqual([
+      // Identity resolves the invitation a request was minted for.
+      'auth_identities: auth + identity',
+      // ADR-0074: Auth asks whether the credential is still actionable.
+      'organization_invitations: auth + identity',
+      // Metering reads the Organization an entitlement decision is about.
+      'organizations: identity + metering',
+      // Both modules resolve the User Account a token belongs to.
+      'user_accounts: auth + identity',
     ]);
   });
 });

@@ -9,10 +9,25 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 - **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
-- **Close**: `gh issue close <number> --comment "..."`
+- **Close**: `gh issue close <number> --comment "..."`. See [Closing an issue](#closing-an-issue) for what the comment has to show.
 - **Link a sub-issue** (see Sub-issues below): create the child issue first, then `gh api graphql`
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
+
+## Closing an issue
+
+An issue whose change runs in production closes on evidence that it runs there, not on a green test run or a merge into a feature branch. A fix that is merged only into an unmerged branch has not reached production: `main` deploys, nothing else does.
+
+The closing comment names:
+
+- the commit on `main` that carries the change;
+- what was observed on the host after CD finished, for example `ops/status.sh` reporting that commit as healthy, a `schema_migrations` row for a migration, or a probe of the changed behaviour.
+
+Until then, leave the issue open and say in a comment where the fix is and what still has to happen. If an issue was closed too early, reopen it with the evidence.
+
+Changes that never run in production (docs, tests, CI, tooling) close when they are merged into `main`.
+
+Why: #261 was closed after its fix passed the database lane, while the fix sat on an unmerged feature branch. Production kept rejecting every registration until the migration was shipped to `main` separately.
 
 ## Sub-issues
 

@@ -1,6 +1,10 @@
 import { AppError } from '@/common/errors/app-error';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type {
+  EmailDeliveryRequestWriterPort,
+  EmailPayloadCipherPort,
+} from '@/modules/auth/application/email-delivery-request.port';
+import type {
   AcceptOrganizationInvitationInput,
   CreateOrganizationInvitationInput,
   ListOpenOrganizationInvitationsInput,
@@ -25,8 +29,49 @@ interface RecordedQuery {
   readonly values: readonly unknown[];
 }
 
+/** The AEAD has its own tests; this records what the repository asked to seal. */
+class RecordingCipher implements EmailPayloadCipherPort {
+  readonly sealed: string[] = [];
+
+  encrypt(plaintext: string): string {
+    this.sealed.push(plaintext);
+    return 'sealed-payload';
+  }
+
+  decrypt(): string {
+    throw new Error('the repository never reads a payload back');
+  }
+}
+
+/**
+ * Writes through the transaction it is handed, as the auth module's writer
+ * does, so the recorded statements show the request committing with the
+ * invitation. The table and its insert belong to the auth module.
+ */
+const emailRequests: EmailDeliveryRequestWriterPort = {
+  async insert(transaction, input) {
+    await transaction.query('INSERT INTO email_delivery_requests', [
+      input.id,
+      input.kind,
+      input.payloadCiphertext,
+      input.createdAt,
+    ]);
+  },
+};
+
+function invitationRepository(
+  identity: PostgresIdentityTransactionalClient,
+  cipher: EmailPayloadCipherPort = new RecordingCipher(),
+): PostgresOrganizationInvitationRepository {
+  return new PostgresOrganizationInvitationRepository(
+    identity,
+    cipher,
+    emailRequests,
+  );
+}
+
 function client(
-  rowsFor: (text: string) => readonly unknown[],
+  rowsFor: (text: string) => readonly Record<string, unknown>[],
   recorded: RecordedQuery[] = [],
   options: { readonly failTransaction?: boolean } = {},
 ): PostgresIdentityTransactionalClient {
@@ -51,7 +96,7 @@ function rows(options: {
   readonly activeMembership: boolean;
   readonly supersededOpenInvitation?: boolean;
 }) {
-  return (text: string): readonly unknown[] => {
+  return (text: string): readonly Record<string, unknown>[] => {
     if (text.includes('FROM organizations')) {
       return [{ id: ORGANIZATION_ID, name: 'Acme' }];
     }
@@ -86,6 +131,11 @@ function input(
     invitedBy: USER_ID,
     tokenHash: TOKEN_HASH,
     expiresAt: EXPIRES_AT,
+    emailDelivery: {
+      id: 'edr_01J00000000000000000000000',
+      token: 'raw-invite-token',
+      createdAt: NOW,
+    },
     now: NOW,
     ...overrides,
   };
@@ -134,7 +184,7 @@ function revokeInput(
 describe('PostgresOrganizationInvitationRepository', () => {
   it('lists open invitations as redacted metadata in deterministic order', async () => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(
         () => [
           {
@@ -173,7 +223,7 @@ describe('PostgresOrganizationInvitationRepository', () => {
   });
 
   it('fails the whole listing when the issuer projection is invalid', async () => {
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(() => [
         {
           id: INVITATION_ID,
@@ -194,7 +244,7 @@ describe('PostgresOrganizationInvitationRepository', () => {
   });
 
   it('fails closed when the durable listing is unavailable', async () => {
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(() => {
         throw new Error('connection reset');
       }),
@@ -217,9 +267,7 @@ describe('PostgresOrganizationInvitationRepository', () => {
     ['an invalid current time', { now: new Date(Number.NaN) }],
   ])('rejects %s before touching the store', async (_label, overrides) => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
-      client(() => [], recorded),
-    );
+    const repository = invitationRepository(client(() => [], recorded));
 
     await expect(
       repository.listOpenInvitations(listInput(overrides)),
@@ -229,19 +277,22 @@ describe('PostgresOrganizationInvitationRepository', () => {
 
   it('supersedes the previous open invitation and inserts the replacement in one transaction', async () => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
+    const cipher = new RecordingCipher();
+    const repository = invitationRepository(
       client(rows({ activeMembership: false }), recorded),
+      cipher,
     );
 
     const result = await repository.createInvitation(input());
 
-    expect(result).toEqual({ kind: 'created', organizationName: 'Acme' });
+    expect(result).toEqual({ kind: 'created' });
 
     const statements = recorded.map(({ text }) => text.trim().split(/\s+/)[0]);
     expect(statements).toEqual([
       'SELECT',
       'SELECT',
       'UPDATE',
+      'INSERT',
       'INSERT',
       'INSERT',
     ]);
@@ -266,11 +317,29 @@ describe('PostgresOrganizationInvitationRepository', () => {
       EXPIRES_AT,
       NOW,
     ]);
+
+    // The request the worker will send is committed by the same transaction, and
+    // names the organization it just read.
+    const delivery = recorded[5];
+    expect(delivery?.text).toContain('INSERT INTO email_delivery_requests');
+    expect(delivery?.values).toEqual([
+      'edr_01J00000000000000000000000',
+      'organization_invite_email',
+      'sealed-payload',
+      NOW,
+    ]);
+    expect(JSON.parse(cipher.sealed[0] ?? '')).toEqual({
+      email: 'invitee@example.com',
+      organizationName: 'Acme',
+      role: 'member',
+      token: 'raw-invite-token',
+      expiresAt: EXPIRES_AT.toISOString(),
+    });
   });
 
   it('locks the organization before it decides anything', async () => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(rows({ activeMembership: false }), recorded),
     );
 
@@ -281,7 +350,7 @@ describe('PostgresOrganizationInvitationRepository', () => {
 
   it('reports a conflict for an email that already holds an active membership', async () => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(rows({ activeMembership: true }), recorded),
     );
 
@@ -297,7 +366,7 @@ describe('PostgresOrganizationInvitationRepository', () => {
 
   it('only treats an active membership as a conflict', async () => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(rows({ activeMembership: false }), recorded),
     );
 
@@ -313,7 +382,7 @@ describe('PostgresOrganizationInvitationRepository', () => {
 
   it('matches the invited email against the durable canonical email', async () => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(rows({ activeMembership: false }), recorded),
     );
 
@@ -340,7 +409,7 @@ describe('PostgresOrganizationInvitationRepository', () => {
     ['an empty email', { email: '   ' }],
   ])('rejects %s', async (_label, overrides) => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(rows({ activeMembership: false }), recorded),
     );
 
@@ -351,7 +420,7 @@ describe('PostgresOrganizationInvitationRepository', () => {
   });
 
   it('fails closed without exposing the driver failure', async () => {
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(rows({ activeMembership: false }), [], { failTransaction: true }),
     );
 
@@ -362,9 +431,7 @@ describe('PostgresOrganizationInvitationRepository', () => {
   });
 
   it('rejects an organization row it cannot map', async () => {
-    const repository = new PostgresOrganizationInvitationRepository(
-      client(() => []),
-    );
+    const repository = invitationRepository(client(() => []));
 
     await expect(repository.createInvitation(input())).rejects.toMatchObject({
       code: 'INTERNAL_ERROR',
@@ -390,7 +457,7 @@ describe('PostgresOrganizationInvitationRepository acceptance', () => {
       grantedRole = 'member',
     } = options;
 
-    return (text: string): readonly unknown[] => {
+    return (text: string): readonly Record<string, unknown>[] => {
       if (text.includes('FROM organization_invitations')) {
         return noInvitation
           ? []
@@ -442,9 +509,7 @@ describe('PostgresOrganizationInvitationRepository acceptance', () => {
 
   it('locks the invitation, grants the membership, and consumes the token in one transaction', async () => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
-      client(acceptRows(), recorded),
-    );
+    const repository = invitationRepository(client(acceptRows(), recorded));
 
     const result = await repository.acceptInvitation(acceptInput());
 
@@ -469,9 +534,7 @@ describe('PostgresOrganizationInvitationRepository acceptance', () => {
 
   it('takes the invitation role only for a disabled membership', async () => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
-      client(acceptRows(), recorded),
-    );
+    const repository = invitationRepository(client(acceptRows(), recorded));
 
     await repository.acceptInvitation(acceptInput());
 
@@ -483,7 +546,7 @@ describe('PostgresOrganizationInvitationRepository acceptance', () => {
   });
 
   it('returns the role the membership actually ended up with', async () => {
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(acceptRows({ grantedRole: 'owner' })),
     );
 
@@ -498,9 +561,7 @@ describe('PostgresOrganizationInvitationRepository acceptance', () => {
 
   it('resolves the organization status and caller email in the same transaction', async () => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
-      client(acceptRows(), recorded),
-    );
+    const repository = invitationRepository(client(acceptRows(), recorded));
 
     await repository.acceptInvitation(acceptInput());
 
@@ -519,7 +580,7 @@ describe('PostgresOrganizationInvitationRepository acceptance', () => {
     ['an account with no password identity', { noCallerIdentity: true }],
   ])('rejects %s without consuming anything', async (_label, overrides) => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(acceptRows(overrides), recorded),
     );
 
@@ -532,7 +593,7 @@ describe('PostgresOrganizationInvitationRepository acceptance', () => {
 
   it('rejects a suspended organization without consuming anything', async () => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(acceptRows({ organizationStatus: 'suspended' }), recorded),
     );
 
@@ -548,9 +609,7 @@ describe('PostgresOrganizationInvitationRepository acceptance', () => {
     ['a token hash that is not sha-256 hex', { tokenHash: 'not-a-hash' }],
   ])('rejects %s before touching the store', async (_label, overrides) => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
-      client(acceptRows(), recorded),
-    );
+    const repository = invitationRepository(client(acceptRows(), recorded));
 
     await expect(
       repository.acceptInvitation(acceptInput(overrides)),
@@ -560,9 +619,7 @@ describe('PostgresOrganizationInvitationRepository acceptance', () => {
 
   it('rejects a request context that names an organization', async () => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
-      client(acceptRows(), recorded),
-    );
+    const repository = invitationRepository(client(acceptRows(), recorded));
 
     // The organization comes from the invitation; a caller-named one has no
     // meaning here and must not be silently ignored.
@@ -584,7 +641,7 @@ describe('PostgresOrganizationInvitationRepository acceptance', () => {
   });
 
   it('fails closed without exposing the driver failure', async () => {
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(acceptRows(), [], { failTransaction: true }),
     );
 
@@ -598,7 +655,7 @@ describe('PostgresOrganizationInvitationRepository acceptance', () => {
 
   it('records an acceptance with the role the membership actually took', async () => {
     const recorded: RecordedQuery[] = [];
-    await new PostgresOrganizationInvitationRepository(
+    await invitationRepository(
       client(acceptRows({ grantedRole: 'admin' }), recorded),
     ).acceptInvitation(acceptInput());
 
@@ -612,7 +669,7 @@ describe('PostgresOrganizationInvitationRepository acceptance', () => {
 
   it('records nothing for a token it refuses', async () => {
     const recorded: RecordedQuery[] = [];
-    await new PostgresOrganizationInvitationRepository(
+    await invitationRepository(
       client(acceptRows({ noInvitation: true }), recorded),
     ).acceptInvitation(acceptInput());
 
@@ -644,7 +701,7 @@ describe('PostgresOrganizationInvitationRepository revocation', () => {
       updateRows = true,
     } = options;
 
-    return (text: string): readonly unknown[] => {
+    return (text: string): readonly Record<string, unknown>[] => {
       if (text.includes('FROM organizations')) {
         return [{ id: ORGANIZATION_ID, status: organizationStatus }];
       }
@@ -686,9 +743,7 @@ describe('PostgresOrganizationInvitationRepository revocation', () => {
 
   it('locks the organization before the invitation and closes an open row', async () => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
-      client(revokeRows(), recorded),
-    );
+    const repository = invitationRepository(client(revokeRows(), recorded));
 
     await expect(repository.revokeInvitation(revokeInput())).resolves.toEqual({
       kind: 'closed',
@@ -728,7 +783,7 @@ describe('PostgresOrganizationInvitationRepository revocation', () => {
     ['an invitation from another organization', { invitation: null }],
   ])('returns not_found for %s without writing', async (_label, options) => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(revokeRows(options), recorded),
     );
 
@@ -746,7 +801,7 @@ describe('PostgresOrganizationInvitationRepository revocation', () => {
     'returns a closed no-op for %s without auditing',
     async (_label, options) => {
       const recorded: RecordedQuery[] = [];
-      const repository = new PostgresOrganizationInvitationRepository(
+      const repository = invitationRepository(
         client(
           revokeRows({ invitation: { role: 'member', ...options } }),
           recorded,
@@ -765,7 +820,7 @@ describe('PostgresOrganizationInvitationRepository revocation', () => {
 
   it('denies an admin targeting an owner invitation and records the real target', async () => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(
         revokeRows({
           invitation: {
@@ -801,9 +856,7 @@ describe('PostgresOrganizationInvitationRepository revocation', () => {
 
   it('denies a member targeting a real invitation and records the real target', async () => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
-      client(revokeRows(), recorded),
-    );
+    const repository = invitationRepository(client(revokeRows(), recorded));
 
     await expect(
       repository.revokeInvitation(revokeInput({ actorRole: 'member' })),
@@ -820,7 +873,7 @@ describe('PostgresOrganizationInvitationRepository revocation', () => {
 
   it('stops at a suspended organization before reading the invitation', async () => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(revokeRows({ organizationStatus: 'suspended' }), recorded),
     );
 
@@ -844,9 +897,7 @@ describe('PostgresOrganizationInvitationRepository revocation', () => {
     ['an invalid current time', { now: new Date(Number.NaN) }],
   ])('rejects %s before touching the store', async (_label, overrides) => {
     const recorded: RecordedQuery[] = [];
-    const repository = new PostgresOrganizationInvitationRepository(
-      client(revokeRows(), recorded),
-    );
+    const repository = invitationRepository(client(revokeRows(), recorded));
 
     await expect(
       repository.revokeInvitation(revokeInput(overrides)),
@@ -855,7 +906,7 @@ describe('PostgresOrganizationInvitationRepository revocation', () => {
   });
 
   it('fails closed without exposing a transaction failure', async () => {
-    const repository = new PostgresOrganizationInvitationRepository(
+    const repository = invitationRepository(
       client(revokeRows(), [], { failTransaction: true }),
     );
 
@@ -877,7 +928,7 @@ describe('PostgresOrganizationInvitationRepository audit trail', () => {
 
   it('records a first invitation as sent, labelled by the invited email', async () => {
     const recorded: RecordedQuery[] = [];
-    await new PostgresOrganizationInvitationRepository(
+    await invitationRepository(
       client(rows({ activeMembership: false }), recorded),
     ).createInvitation(input());
 
@@ -898,7 +949,7 @@ describe('PostgresOrganizationInvitationRepository audit trail', () => {
 
   it('records a resend separately from the invitation it superseded', async () => {
     const recorded: RecordedQuery[] = [];
-    await new PostgresOrganizationInvitationRepository(
+    await invitationRepository(
       client(
         rows({ activeMembership: false, supersededOpenInvitation: true }),
         recorded,

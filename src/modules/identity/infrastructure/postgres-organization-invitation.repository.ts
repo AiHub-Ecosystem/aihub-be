@@ -1,5 +1,9 @@
 import { AppError } from '@/common/errors/app-error';
 import type {
+  EmailDeliveryRequestWriterPort,
+  EmailPayloadCipherPort,
+} from '@/modules/auth/application/email-delivery-request.port';
+import type {
   AcceptOrganizationInvitationInput,
   AcceptOrganizationInvitationResult,
   CreateOrganizationInvitationInput,
@@ -228,7 +232,11 @@ function mapOpenInvitation(
 export class PostgresOrganizationInvitationRepository
   implements OrganizationInvitationPort
 {
-  constructor(private readonly client: PostgresIdentityTransactionalClient) {}
+  constructor(
+    private readonly client: PostgresIdentityTransactionalClient,
+    private readonly payloadCipher: EmailPayloadCipherPort,
+    private readonly emailRequests: EmailDeliveryRequestWriterPort,
+  ) {}
 
   async createInvitation(
     input: CreateOrganizationInvitationInput,
@@ -296,7 +304,17 @@ export class PostgresOrganizationInvitationRepository
           },
         );
 
-        return { kind: 'created', organizationName: name };
+        // Sealed here because the Organization name is only readable in this
+        // transaction, and queued here so the invitation and the request that
+        // emails its credential commit or roll back together (ADR-0074).
+        await this.emailRequests.insert(transaction, {
+          id: input.emailDelivery.id,
+          kind: 'organization_invite_email',
+          payloadCiphertext: this.sealInvitePayload(input, name),
+          createdAt: input.emailDelivery.createdAt,
+        });
+
+        return { kind: 'created' };
       });
     } catch (error) {
       if (error instanceof AppError) {
@@ -304,6 +322,26 @@ export class PostgresOrganizationInvitationRepository
       }
       throw identityStoreError('Identity store is unavailable');
     }
+  }
+
+  /**
+   * What the worker needs to send the message, and nothing more: the
+   * credential travels only as authenticated ciphertext under a key version it
+   * resolves itself from the envelope.
+   */
+  private sealInvitePayload(
+    input: CreateOrganizationInvitationInput,
+    name: string,
+  ): string {
+    return this.payloadCipher.encrypt(
+      JSON.stringify({
+        email: input.email,
+        organizationName: name,
+        role: input.role,
+        token: input.emailDelivery.token,
+        expiresAt: input.expiresAt.toISOString(),
+      }),
+    );
   }
 
   async listOpenInvitations(

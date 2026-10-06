@@ -1,3 +1,5 @@
+import type { InsertEmailDeliveryRequestInput } from './email-delivery-request.port';
+
 export interface PasswordResetTarget {
   readonly email: string;
 }
@@ -28,6 +30,8 @@ export interface IssuePasswordResetTokenInput {
   readonly tokenHash: string;
   readonly tokenExpiresAt: Date;
   readonly now: Date;
+  /** Written in the same transaction as the issue, or nowhere. */
+  readonly emailDelivery?: InsertEmailDeliveryRequestInput;
 }
 
 /**

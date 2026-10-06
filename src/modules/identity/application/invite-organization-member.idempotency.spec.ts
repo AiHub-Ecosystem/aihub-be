@@ -1,12 +1,9 @@
+import { AppError } from '@/common/errors/app-error';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   AuthRateLimitScope,
   AuthRateLimiterPort,
 } from '@/modules/auth/application/auth-rate-limiter.port';
-import type {
-  EmailSenderPort,
-  OrganizationInviteEmailInput,
-} from '@/modules/auth/application/email-sender.port';
 import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '@/modules/idempotency/application/idempotency-operation';
 import type {
   CompleteIdempotencyInput,
@@ -173,7 +170,8 @@ function decodeInvitation(value: unknown): InvitedOrganizationMember {
     typeof invitationId !== 'string' ||
     typeof organizationId !== 'string' ||
     typeof email !== 'string' ||
-    (role !== 'owner' && role !== 'admin' && role !== 'member')
+    (role !== 'owner' && role !== 'admin' && role !== 'member') ||
+    value.emailDeliveryStatus !== 'queued'
   ) {
     throw new Error('invalid stored invitation');
   }
@@ -195,6 +193,7 @@ function decodeInvitation(value: unknown): InvitedOrganizationMember {
     email,
     role,
     expiresAt: parsedExpiresAt,
+    emailDeliveryStatus: 'queued',
   };
 }
 
@@ -226,6 +225,14 @@ class RateLimiterFake implements AuthRateLimiterPort {
   }
 }
 
+function storeUnavailable(): AppError {
+  return new AppError({
+    code: 'INTERNAL_ERROR',
+    message: 'Identity store is unavailable',
+    retryable: false,
+  });
+}
+
 describe('organization invitation management idempotency seam', () => {
   let repository: ManagementRepository;
   let service: IdempotencyService;
@@ -235,9 +242,6 @@ describe('organization invitation management idempotency seam', () => {
   >;
   let invitations: jest.Mocked<OrganizationInvitationPort>;
   let tokenIssuer: jest.Mocked<OrganizationInviteTokenPort>;
-  let emailSender: jest.Mocked<
-    Pick<EmailSenderPort, 'sendOrganizationInviteEmail'>
-  >;
   let rateLimiter: RateLimiterFake;
   let issuedTokenCount: number;
 
@@ -268,10 +272,8 @@ describe('organization invitation management idempotency seam', () => {
     };
     invitations = {
       createInvitation: jest.fn(
-        async (_input: CreateOrganizationInvitationInput) => ({
-          kind: 'created' as const,
-          organizationName: 'Acme',
-        }),
+        async (_input: CreateOrganizationInvitationInput) =>
+          ({ kind: 'created' }) as const,
       ),
       listOpenInvitations: jest.fn(),
       acceptInvitation: jest.fn(),
@@ -289,16 +291,10 @@ describe('organization invitation management idempotency seam', () => {
       }),
       hash: jest.fn((raw: string) => raw),
     };
-    emailSender = {
-      sendOrganizationInviteEmail: jest.fn(
-        async (_input: OrganizationInviteEmailInput) => undefined,
-      ),
-    };
     inviteMember = new InviteOrganizationMember(
       membership,
       invitations,
       tokenIssuer,
-      emailSender,
       rateLimiter,
     );
   });
@@ -367,7 +363,6 @@ describe('organization invitation management idempotency seam', () => {
     expect(replay).toEqual({ result: first.result, replay: true });
     expect(issuedTokenCount).toBe(1);
     expect(invitations.createInvitation).toHaveBeenCalledTimes(1);
-    expect(emailSender.sendOrganizationInviteEmail).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -389,7 +384,6 @@ describe('organization invitation management idempotency seam', () => {
 
       expect(issuedTokenCount).toBe(0);
       expect(invitations.createInvitation).not.toHaveBeenCalled();
-      expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
     },
   );
 
@@ -416,7 +410,7 @@ describe('organization invitation management idempotency seam', () => {
         userId: 'usr_fourth',
       }),
     ).rejects.toMatchObject({ code: 'RATE_LIMITED', httpStatus: 429 });
-    expect(emailSender.sendOrganizationInviteEmail).toHaveBeenCalledTimes(3);
+    expect(invitations.createInvitation).toHaveBeenCalledTimes(3);
   });
 
   it('rejects a different role with the same scoped key', async () => {
@@ -429,7 +423,7 @@ describe('organization invitation management idempotency seam', () => {
       httpStatus: 409,
     });
     expect(issuedTokenCount).toBe(1);
-    expect(emailSender.sendOrganizationInviteEmail).toHaveBeenCalledTimes(1);
+    expect(invitations.createInvitation).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the same key independent across callers and Organizations', async () => {
@@ -441,7 +435,7 @@ describe('organization invitation management idempotency seam', () => {
     });
 
     expect(issuedTokenCount).toBe(3);
-    expect(emailSender.sendOrganizationInviteEmail).toHaveBeenCalledTimes(3);
+    expect(invitations.createInvitation).toHaveBeenCalledTimes(3);
   });
 
   it('lets a missing key retain the existing non-idempotent behavior', async () => {
@@ -449,7 +443,7 @@ describe('organization invitation management idempotency seam', () => {
     await execute({});
 
     expect(issuedTokenCount).toBe(2);
-    expect(emailSender.sendOrganizationInviteEmail).toHaveBeenCalledTimes(2);
+    expect(invitations.createInvitation).toHaveBeenCalledTimes(2);
   });
 
   it('allows one concurrent claimant and conflicts the other safely', async () => {
@@ -470,7 +464,7 @@ describe('organization invitation management idempotency seam', () => {
       reason: { code: 'IDEMPOTENCY_CONFLICT', httpStatus: 409 },
     });
     expect(issuedTokenCount).toBe(1);
-    expect(emailSender.sendOrganizationInviteEmail).toHaveBeenCalledTimes(1);
+    expect(invitations.createInvitation).toHaveBeenCalledTimes(1);
   });
 
   it('fails closed when reservation storage is unavailable', async () => {
@@ -481,7 +475,6 @@ describe('organization invitation management idempotency seam', () => {
     );
     expect(issuedTokenCount).toBe(0);
     expect(invitations.createInvitation).not.toHaveBeenCalled();
-    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
   });
 
   it('keeps completion uncertainty pending so a retry cannot duplicate the invitation', async () => {
@@ -500,45 +493,40 @@ describe('organization invitation management idempotency seam', () => {
     ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT', httpStatus: 409 });
     expect(issuedTokenCount).toBe(1);
     expect(invitations.createInvitation).toHaveBeenCalledTimes(1);
-    expect(emailSender.sendOrganizationInviteEmail).toHaveBeenCalledTimes(1);
   });
 
-  it('surfaces retryable email failure and allows a later same-key recovery', async () => {
-    emailSender.sendOrganizationInviteEmail.mockRejectedValueOnce(
-      new Error('email unavailable'),
-    );
+  it('fails the whole create when the commit fails and lets the same key retry', async () => {
+    invitations.createInvitation.mockRejectedValueOnce(storeUnavailable());
 
     await expect(execute({ idempotencyKey: 'invite-1' })).rejects.toMatchObject(
       {
-        code: 'AUTH_EMAIL_DELIVERY_UNAVAILABLE',
-        httpStatus: 503,
+        code: 'INTERNAL_ERROR',
+        httpStatus: 500,
       },
     );
     await expect(
       execute({
         idempotencyKey: 'invite-1',
-        requestId: 'req_01J00000000000000000003',
+        requestId: 'req_01J00000000000000000000003',
       }),
     ).resolves.toMatchObject({ replay: false });
     expect(issuedTokenCount).toBe(2);
-    expect(emailSender.sendOrganizationInviteEmail).toHaveBeenCalledTimes(2);
+    expect(invitations.createInvitation).toHaveBeenCalledTimes(2);
   });
 
-  it('consumes the email allowance when delivery fails', async () => {
-    emailSender.sendOrganizationInviteEmail.mockRejectedValue(
-      new Error('email unavailable'),
-    );
+  it('consumes the email allowance when the commit fails', async () => {
+    invitations.createInvitation.mockRejectedValue(storeUnavailable());
 
     for (const idempotencyKey of ['invite-1', 'invite-2', 'invite-3']) {
       await expect(execute({ idempotencyKey })).rejects.toMatchObject({
-        code: 'AUTH_EMAIL_DELIVERY_UNAVAILABLE',
-        httpStatus: 503,
+        code: 'INTERNAL_ERROR',
+        httpStatus: 500,
       });
     }
 
     await expect(execute({ idempotencyKey: 'invite-4' })).rejects.toMatchObject(
       { code: 'RATE_LIMITED', httpStatus: 429 },
     );
-    expect(emailSender.sendOrganizationInviteEmail).toHaveBeenCalledTimes(3);
+    expect(invitations.createInvitation).toHaveBeenCalledTimes(3);
   });
 });

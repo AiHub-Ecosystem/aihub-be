@@ -4,6 +4,8 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
+import type { EmailPayloadCipherPort } from '@/modules/auth/application/email-delivery-request.port';
+import { createEmailPayloadCipher } from '@/modules/auth/infrastructure/email-payload-cipher';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-organization-api-key.repository';
 import type { AttachFirstOwnerInput } from '@/modules/identity/application/organization-first-owner.port';
@@ -14,7 +16,9 @@ import {
 import { PostgresOrganizationFirstOwnerRepository } from '@/modules/identity/infrastructure/postgres-organization-first-owner.repository';
 import { PostgresOrganizationInvitationRepository } from '@/modules/identity/infrastructure/postgres-organization-invitation.repository';
 import { PostgresOrganizationMembershipRepository } from '@/modules/identity/infrastructure/postgres-organization-membership.repository';
+import { createRuntimeSecretProviderFromProcessEnvironment } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
 
+import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import {
   createTestPool,
   resetIdentityTables,
@@ -24,6 +28,7 @@ import {
 let pool: Pool;
 let client: PostgresIdentityTransactionalClient & { close(): Promise<void> };
 let repository: PostgresOrganizationFirstOwnerRepository;
+let cipher: EmailPayloadCipherPort;
 
 beforeAll(() => {
   pool = createTestPool();
@@ -31,6 +36,10 @@ beforeAll(() => {
     (pool.options as { connectionString?: string }).connectionString ?? '',
   );
   repository = new PostgresOrganizationFirstOwnerRepository(client);
+  cipher = createEmailPayloadCipher(
+    createRuntimeSecretProviderFromProcessEnvironment().getSnapshot()
+      .emailOutbox,
+  );
 });
 
 afterAll(async () => {
@@ -332,7 +341,11 @@ describe('First Owner Attachment against PostgreSQL', () => {
 
     const now = new Date();
     await expect(
-      new PostgresOrganizationInvitationRepository(client).createInvitation({
+      new PostgresOrganizationInvitationRepository(
+        client,
+        cipher,
+        new PostgresEmailDeliveryRequestRepository(),
+      ).createInvitation({
         context,
         invitationId: `oiv_${ulid()}`,
         organizationId,
@@ -341,6 +354,11 @@ describe('First Owner Attachment against PostgreSQL', () => {
         invitedBy: ownerId,
         tokenHash: createHash('sha256').update('token').digest('hex'),
         expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+        emailDelivery: {
+          id: `edr_${ulid()}`,
+          token: 'raw-invite-token',
+          createdAt: now,
+        },
         now,
       }),
     ).resolves.toMatchObject({ kind: 'created' });

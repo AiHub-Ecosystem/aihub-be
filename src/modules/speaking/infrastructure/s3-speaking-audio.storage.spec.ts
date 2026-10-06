@@ -16,6 +16,7 @@ function provider(
         privateKeyPem: 'private-key',
         keyId: 'key-id',
       },
+      emailOutbox: { currentKeyId: 'test', keys: { test: 'k'.repeat(44) } },
       ...(seaweedfs === undefined ? {} : { seaweedfs }),
     }),
   };

@@ -1,4 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
+import { ulid } from 'ulid';
 
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
@@ -16,7 +17,13 @@ import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from './auth-rate-limiter.port';
-import { EMAIL_SENDER, type EmailSenderPort } from './email-sender.port';
+import {
+  EMAIL_PAYLOAD_CIPHER,
+  type EmailDeliveryKind,
+  type EmailDeliveryPayload,
+  type EmailPayloadCipherPort,
+  type InsertEmailDeliveryRequestInput,
+} from './email-delivery-request.port';
 import {
   type IssuedSession,
   RefreshRotationCommittedError,
@@ -80,12 +87,14 @@ const RESET_TOKEN_WINDOW_MS = 15 * 60 * 1000;
 const DUMMY_PASSWORD_HASH =
   '$argon2id$v=19$m=65536,t=3,p=1$SoHl8YUBzXgiAZ4xlgNZyg$qwZIFOa2OcIOgiHLRYImWLsza4k9/T4ZZvvhiWrD41k';
 const PASSWORD_RECOVERY_MESSAGE =
-  'If the account exists, reset instructions have been sent.';
+  'If the account exists and is eligible, AIHUB has accepted a request to send password reset instructions.';
 
 export interface RegisteredLocalAccount {
   readonly email: string;
   readonly username: string;
   readonly status: 'pending_verification';
+  /** Acceptance-time only: the request is queued, not yet with the provider. */
+  readonly emailDeliveryStatus: 'queued';
 }
 
 export interface LocalAuthServiceClock {
@@ -129,8 +138,8 @@ export class LocalAuthService {
     private readonly tokenIssuer: VerificationTokenPort,
     @Inject(PASSWORD_RESET_TOKEN)
     private readonly passwordResetTokenIssuer: PasswordResetTokenPort,
-    @Inject(EMAIL_SENDER)
-    private readonly emailSender: EmailSenderPort,
+    @Inject(EMAIL_PAYLOAD_CIPHER)
+    private readonly payloadCipher: EmailPayloadCipherPort,
     @Inject(AUTH_RATE_LIMITER)
     private readonly rateLimiter: AuthRateLimiterPort,
     @Inject(USER_ACCESS_TOKEN_ISSUER)
@@ -184,6 +193,16 @@ export class LocalAuthService {
         tokenHash: issued.hash,
         tokenExpiresAt: issued.expiresAt,
         ...this.bindingHash(browserBinding),
+        // Committed with the account or not at all (ADR-0074).
+        emailDelivery: this.emailDeliveryRequest(
+          'verification_email',
+          {
+            email: normalized.email,
+            token: issued.raw,
+            expiresAt: issued.expiresAt.toISOString(),
+          },
+          now,
+        ),
         now,
       });
     } catch (error) {
@@ -197,25 +216,11 @@ export class LocalAuthService {
       throw error;
     }
 
-    try {
-      await this.emailSender.sendVerificationEmail({
-        email: normalized.email,
-        token: issued.raw,
-        expiresAt: issued.expiresAt,
-      });
-    } catch (error) {
-      throw new AppError({
-        code: 'AUTH_EMAIL_DELIVERY_UNAVAILABLE',
-        message: 'Email delivery is temporarily unavailable',
-        retryable: true,
-        cause: error,
-      });
-    }
-
     return {
       email: normalized.email,
       username: normalized.username,
       status: 'pending_verification',
+      emailDeliveryStatus: 'queued',
     };
   }
 
@@ -282,30 +287,27 @@ export class LocalAuthService {
 
     const now = this.clock.now();
     const issued = this.tokenIssuer.issue(now);
-    const target = await this.verificationTokens.rotateVerificationToken({
+    // The address is already canonical here, so the request can be sealed before
+    // the repository knows whether a target exists. A repository that finds no
+    // target writes neither the rotation nor the request, and the route stays
+    // generic either way: it must not reveal that a request was queued.
+    await this.verificationTokens.rotateVerificationToken({
       email: normalizedEmail,
       tokenId: issued.id,
       tokenHash: issued.hash,
       tokenExpiresAt: issued.expiresAt,
       ...this.bindingHash(browserBinding),
+      emailDelivery: this.emailDeliveryRequest(
+        'verification_email',
+        {
+          email: normalizedEmail,
+          token: issued.raw,
+          expiresAt: issued.expiresAt.toISOString(),
+        },
+        now,
+      ),
       now,
     });
-    if (target === undefined) {
-      return;
-    }
-
-    // Keep the route generic: a provider failure must not reveal that the
-    // address belongs to an account. Registration exposes a delivery failure
-    // because it already creates a new account and has no enumeration value.
-    try {
-      await this.emailSender.sendVerificationEmail({
-        email: target.email,
-        token: issued.raw,
-        expiresAt: issued.expiresAt,
-      });
-    } catch {
-      // The next generic resend can recover delivery without exposing state.
-    }
   }
 
   async forgotPassword(
@@ -336,26 +338,25 @@ export class LocalAuthService {
 
     const now = this.clock.now();
     const issued = this.passwordResetTokenIssuer.issue(now);
-    const target = await this.passwordResetTokens.issuePasswordResetToken({
+    // Sealed before the repository resolves the target, because the request is
+    // written inside that transaction. An ineligible address yields neither the
+    // token nor the request, and the reply is identical either way.
+    await this.passwordResetTokens.issuePasswordResetToken({
       email: normalizedEmail,
       tokenId: issued.id,
       tokenHash: issued.hash,
       tokenExpiresAt: issued.expiresAt,
+      emailDelivery: this.emailDeliveryRequest(
+        'password_reset_email',
+        {
+          email: normalizedEmail,
+          token: issued.raw,
+          expiresAt: issued.expiresAt.toISOString(),
+        },
+        now,
+      ),
       now,
     });
-
-    if (target !== undefined) {
-      try {
-        await this.emailSender.sendPasswordResetEmail({
-          email: target.email,
-          token: issued.raw,
-          expiresAt: issued.expiresAt,
-        });
-      } catch {
-        // Keep the public recovery result generic. A later request supersedes
-        // this token, while a late provider delivery can still succeed.
-      }
-    }
 
     return { message: PASSWORD_RECOVERY_MESSAGE };
   }
@@ -483,6 +484,24 @@ export class LocalAuthService {
     return browserBinding === undefined
       ? {}
       : { browserBindingHash: this.tokenIssuer.hash(browserBinding) };
+  }
+
+  /**
+   * The durable handoff (ADR-0074). The recipient and token reach the row only
+   * as authenticated ciphertext, under a key version the worker can still
+   * resolve when it claims the row.
+   */
+  private emailDeliveryRequest(
+    kind: EmailDeliveryKind,
+    payload: EmailDeliveryPayload,
+    now: Date,
+  ): InsertEmailDeliveryRequestInput {
+    return {
+      id: `edr_${ulid()}`,
+      kind,
+      payloadCiphertext: this.payloadCipher.encrypt(JSON.stringify(payload)),
+      createdAt: now,
+    };
   }
 
   async refresh(

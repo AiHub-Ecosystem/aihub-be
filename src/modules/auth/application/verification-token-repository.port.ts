@@ -1,3 +1,4 @@
+import type { InsertEmailDeliveryRequestInput } from './email-delivery-request.port';
 import type { IssuedRefreshToken } from './refresh-token.port';
 
 export interface ResendVerificationTarget {
@@ -21,6 +22,8 @@ export interface RotateVerificationTokenInput {
   readonly tokenExpiresAt: Date;
   readonly browserBindingHash?: string;
   readonly now: Date;
+  /** Written in the same transaction as the rotation, or nowhere. */
+  readonly emailDelivery?: InsertEmailDeliveryRequestInput;
 }
 
 export interface ConsumeVerificationTokenInput {

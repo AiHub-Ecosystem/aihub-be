@@ -17,9 +17,10 @@ secret/aihub/{environment}/user-access-jwt
 secret/aihub/{environment}/database
 secret/aihub/{environment}/redis
 secret/aihub/{environment}/sandbox-assertion
+secret/aihub/{environment}/email-outbox
 ```
 
-The first five bundles are part of the V1 runtime-secret document. The
+The first six bundles are part of the V1 runtime-secret document. The
 database, Redis, and sandbox-assertion bundles are rendered into a separate
 connection document because they are process bootstrap configuration. The
 Speaking question catalog uses the SeaweedFS bundle to create short-lived read
@@ -39,8 +40,9 @@ vault policy write aihub-production-runtime ops/vault/policies/aihub-production-
 
 The repository also includes an explicit operator-only provisioning helper. It
 expects a mode-700 directory with `ai-speaking.json`, `ai-writing.json`,
-`seaweedfs.json`, `resend.json`, and `user-access-jwt.json` containing only the flat bundle keys. It passes file paths to
-the Vault CLI, never secret values:
+`seaweedfs.json`, `resend.json`, `user-access-jwt.json`, and
+`email-outbox.json` containing only the flat bundle keys. It passes file paths
+to the Vault CLI, never secret values:
 
 ```powershell
 $env:AIHUB_VAULT_PROVISION_ALLOW = 'true'
@@ -49,6 +51,23 @@ $env:AIHUB_VAULT_CREDENTIALS_DIR = 'C:\secure\aihub-vault\staging'
 $env:AIHUB_VAULT_AGENT_CIDR = '172.16.2.1/32'
 pnpm vault:provision
 ```
+
+Every value in a bundle file is a string. In `email-outbox.json` that includes
+`keys`, which is a JSON object **encoded as a string**, mapping each key id to 32
+random bytes in base64. The template inserts that string into the rendered
+document as-is, so it must be valid JSON:
+
+```json
+{
+  "current_key_id": "k2026-10",
+  "keys": "{\"k2026-10\": \"<base64 of 32 random bytes>\"}"
+}
+```
+
+Generate a key with
+`node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`.
+To rotate, add the new id to `keys`, point `current_key_id` at it, and keep the
+old id until no queued request still needs it (see the email outbox runbook).
 
 `AIHUB_VAULT_AGENT_CIDR` is the address **Vault records as the login source**.
 That is not the Agent container's IP. The Agent and Vault sit on separate Docker

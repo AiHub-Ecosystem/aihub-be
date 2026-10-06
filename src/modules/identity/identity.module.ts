@@ -11,9 +11,11 @@ import {
   type AuthRateLimiterPort,
 } from '@/modules/auth/application/auth-rate-limiter.port';
 import {
-  EMAIL_SENDER,
-  type EmailSenderPort,
-} from '@/modules/auth/application/email-sender.port';
+  EMAIL_DELIVERY_REQUEST_WRITER,
+  EMAIL_PAYLOAD_CIPHER,
+  type EmailDeliveryRequestWriterPort,
+  type EmailPayloadCipherPort,
+} from '@/modules/auth/application/email-delivery-request.port';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
 import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
@@ -369,8 +371,16 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     },
     {
       provide: ORGANIZATION_INVITATION,
-      useFactory: (): OrganizationInvitationPort =>
-        new PostgresOrganizationInvitationRepository(postgresIdentityClient()),
+      useFactory: (
+        payloadCipher: EmailPayloadCipherPort,
+        emailRequests: EmailDeliveryRequestWriterPort,
+      ): OrganizationInvitationPort =>
+        new PostgresOrganizationInvitationRepository(
+          postgresIdentityClient(),
+          payloadCipher,
+          emailRequests,
+        ),
+      inject: [EMAIL_PAYLOAD_CIPHER, EMAIL_DELIVERY_REQUEST_WRITER],
     },
     {
       provide: ORGANIZATION_INVITE_TOKEN,
@@ -386,21 +396,18 @@ function drizzleDatabaseOptions(databaseUrl: string) {
         membership: OrganizationMembershipPort,
         invitations: OrganizationInvitationPort,
         tokenIssuer: OrganizationInviteTokenPort,
-        emailSender: EmailSenderPort,
         rateLimiter: AuthRateLimiterPort,
       ) =>
         new InviteOrganizationMember(
           membership,
           invitations,
           tokenIssuer,
-          emailSender,
           rateLimiter,
         ),
       inject: [
         ORGANIZATION_MEMBERSHIP,
         ORGANIZATION_INVITATION,
         ORGANIZATION_INVITE_TOKEN,
-        EMAIL_SENDER,
         AUTH_RATE_LIMITER,
       ],
     },

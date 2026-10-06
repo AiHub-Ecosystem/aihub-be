@@ -12,9 +12,10 @@ import {
   type AuthRateLimiterPort,
 } from '@/modules/auth/application/auth-rate-limiter.port';
 import {
-  EMAIL_SENDER,
-  type EmailSenderPort,
-} from '@/modules/auth/application/email-sender.port';
+  EMAIL_PAYLOAD_CIPHER,
+  type EmailDeliveryPayload,
+  type EmailPayloadCipherPort,
+} from '@/modules/auth/application/email-delivery-request.port';
 import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
@@ -55,34 +56,23 @@ import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memo
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const EMAIL = 'person@example.com';
+const RECOVERY_MESSAGE =
+  'If the account exists and is eligible, AIHUB has accepted a request to send password reset instructions.';
 
-class SenderFake implements EmailSenderPort {
-  fail = false;
-  passwordResetEmails: Array<{
-    readonly email: string;
-    readonly token: string;
-    readonly expiresAt: Date;
-  }> = [];
-
-  async sendOrganizationInviteEmail(): Promise<void> {
-    throw new Error('local auth does not send organization invitations');
+/**
+ * Reversible so a test can read the durable handoff. The request path never
+ * calls a provider, so this stands in for the whole Resend boundary.
+ */
+class PayloadCipherFake implements EmailPayloadCipherPort {
+  encrypt(plaintext: string): string {
+    const sealed = Buffer.from(plaintext, 'utf8').toString('base64url');
+    return `sealed:${sealed}`;
   }
 
-  async sendVerificationEmail(): Promise<void> {
-    if (this.fail) {
-      throw new Error('provider failed');
-    }
-  }
-
-  async sendPasswordResetEmail(input: {
-    readonly email: string;
-    readonly token: string;
-    readonly expiresAt: Date;
-  }): Promise<void> {
-    if (this.fail) {
-      throw new Error('provider failed');
-    }
-    this.passwordResetEmails.push(input);
+  decrypt(envelope: string): string {
+    return Buffer.from(envelope.slice('sealed:'.length), 'base64url').toString(
+      'utf8',
+    );
   }
 }
 
@@ -209,7 +199,7 @@ describe('local auth HTTP boundary', () => {
   let verificationTokens: InMemoryVerificationTokenAdapter;
   let passwordResetTokens: InMemoryPasswordResetTokenAdapter;
   let refreshSessions: InMemoryRefreshSessionAdapter;
-  let sender: SenderFake;
+  let cipher: PayloadCipherFake;
   let hasher: HasherFake;
   let limiter: LimiterFake;
   let tokenIssuer: TokenFake;
@@ -223,7 +213,7 @@ describe('local auth HTTP boundary', () => {
     verificationTokens = new InMemoryVerificationTokenAdapter(state);
     passwordResetTokens = new InMemoryPasswordResetTokenAdapter(state);
     refreshSessions = new InMemoryRefreshSessionAdapter(state);
-    sender = new SenderFake();
+    cipher = new PayloadCipherFake();
     hasher = new HasherFake();
     limiter = new LimiterFake();
     tokenIssuer = new TokenFake();
@@ -241,8 +231,8 @@ describe('local auth HTTP boundary', () => {
       .useValue(passwordResetTokens)
       .overrideProvider(REFRESH_SESSION_REPOSITORY)
       .useValue(refreshSessions)
-      .overrideProvider(EMAIL_SENDER)
-      .useValue(sender)
+      .overrideProvider(EMAIL_PAYLOAD_CIPHER)
+      .useValue(cipher)
       .overrideProvider(PASSWORD_HASHER)
       .useValue(hasher)
       .overrideProvider(VERIFICATION_TOKEN)
@@ -272,8 +262,6 @@ describe('local auth HTTP boundary', () => {
 
   beforeEach(() => {
     state.reset();
-    sender.fail = false;
-    sender.passwordResetEmails = [];
     hasher.result = true;
     hasher.verifyByHash = false;
     limiter.allowed = true;
@@ -333,6 +321,18 @@ describe('local auth HTTP boundary', () => {
     return String(setCookie).split(';', 1)[0] ?? '';
   }
 
+  /** What the worker would read back out of the ciphertext once it claims a row. */
+  function sealed(
+    request: { readonly payloadCiphertext: string } | undefined,
+  ): EmailDeliveryPayload {
+    if (request === undefined) {
+      throw new Error('no email delivery request was written');
+    }
+    return JSON.parse(
+      cipher.decrypt(request.payloadCiphertext),
+    ) as EmailDeliveryPayload;
+  }
+
   it('registers and acknowledges first and repeated verification through HTTP', async () => {
     const register = await app.inject({
       method: 'POST',
@@ -351,6 +351,7 @@ describe('local auth HTTP boundary', () => {
         email: 'person@example.com',
         username: 'person_01',
         status: 'pending_verification',
+        email_delivery_status: 'queued',
       },
       meta: { request_id: expect.stringMatching(/^req_/) },
     });
@@ -613,7 +614,7 @@ describe('local auth HTTP boundary', () => {
     expect(state.accounts.size).toBe(1);
   });
 
-  it('keeps malformed input generic and provider failures non-sensitive', async () => {
+  it('keeps malformed input generic', async () => {
     const malformed = await app.inject({
       method: 'POST',
       url: '/v1/auth/register',
@@ -623,23 +624,7 @@ describe('local auth HTTP boundary', () => {
     expect(malformed.statusCode).toBe(400);
     expect(malformed.json().error).toMatchObject({ code: 'INVALID_REQUEST' });
     expect(state.accounts.size).toBe(0);
-
-    sender.fail = true;
-    const failed = await app.inject({
-      method: 'POST',
-      url: '/v1/auth/register',
-      headers: { 'content-type': 'application/json' },
-      payload: {
-        email: 'second@example.com',
-        username: 'second_01',
-        password: 'correct horse battery',
-      },
-    });
-    expect(failed.statusCode).toBe(503);
-    expect(failed.json().error).toEqual(
-      expect.objectContaining({ code: 'AUTH_EMAIL_DELIVERY_UNAVAILABLE' }),
-    );
-    expect(failed.payload).not.toContain('provider failed');
+    expect(state.emailDeliveryRequests).toHaveLength(0);
   });
 
   it('returns the generic invalid-token error over HTTP', async () => {
@@ -670,27 +655,33 @@ describe('local auth HTTP boundary', () => {
     expect(state.verificationTokens.size).toBe(0);
   });
 
-  it('returns a generic password-recovery envelope even when delivery fails', async () => {
-    seedActiveAccount();
-    sender.fail = true;
-    const response = await app.inject({
-      method: 'POST',
-      url: '/v1/auth/forgot-password',
-      headers: { 'content-type': 'application/json' },
-      payload: { email: EMAIL },
-    });
+  it.each([
+    ['unknown', false],
+    ['known', true],
+  ])(
+    'returns the same recovery envelope for a %s account',
+    async (_label, eligible) => {
+      if (eligible) {
+        seedActiveAccount();
+      }
 
-    expect(response.statusCode).toBe(202);
-    expect(response.json()).toEqual({
-      data: {
-        message: 'If the account exists, reset instructions have been sent.',
-      },
-      meta: { request_id: expect.stringMatching(/^req_/) },
-    });
-    expect(response.payload).not.toContain('reset-token');
-  });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/forgot-password',
+        headers: { 'content-type': 'application/json' },
+        payload: { email: ' Person@Example.com ' },
+      });
 
-  it('delivers reset instructions without exposing the token in the response', async () => {
+      expect(response.statusCode).toBe(202);
+      expect(response.json()).toEqual({
+        data: { message: RECOVERY_MESSAGE },
+        meta: { request_id: expect.stringMatching(/^req_/) },
+      });
+      expect(response.payload).not.toContain('reset-token');
+    },
+  );
+
+  it('queues reset instructions instead of sending them in the request path', async () => {
     seedActiveAccount();
 
     const response = await app.inject({
@@ -701,14 +692,10 @@ describe('local auth HTTP boundary', () => {
     });
 
     expect(response.statusCode).toBe(202);
-    expect(response.json().data).toEqual({
-      message: 'If the account exists, reset instructions have been sent.',
-    });
-    expect(sender.passwordResetEmails).toHaveLength(1);
-    expect(sender.passwordResetEmails[0]).toEqual({
+    expect(state.emailDeliveryRequests).toHaveLength(1);
+    expect(sealed(state.emailDeliveryRequests[0])).toMatchObject({
       email: EMAIL,
       token: 'reset-token-1',
-      expiresAt: expect.any(Date),
     });
     expect(response.payload).not.toContain('reset-token');
   });

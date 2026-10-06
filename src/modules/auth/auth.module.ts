@@ -2,8 +2,10 @@ import { Module } from '@nestjs/common';
 
 import {
   OPAQUE_TOKEN_BINDINGS,
+  hashOpaqueToken,
   opaqueTokenIssuer,
 } from '@/common/security/opaque-token-issuer';
+import { EmailDeliveryPoller } from '@/modules/auth/application/email-delivery-poller';
 import {
   RUNTIME_SECRET_PROVIDER,
   type RuntimeSecretProvider,
@@ -13,6 +15,12 @@ import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from './application/auth-rate-limiter.port';
+import {
+  EMAIL_DELIVERY_REQUEST_WRITER,
+  EMAIL_PAYLOAD_CIPHER,
+  type EmailDeliveryRequestWriterPort,
+  type EmailPayloadCipherPort,
+} from './application/email-delivery-request.port';
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
@@ -44,6 +52,13 @@ import {
 import { Argon2PasswordHasher } from './infrastructure/argon2-password.hasher';
 import { CryptoRefreshToken } from './infrastructure/crypto-refresh-token';
 import {
+  EMAIL_OUTBOX_POLL_INTERVAL_MS,
+  EmailOutboxPollerScheduler,
+  emailOutboxLeaseOwner,
+  reportTerminalEmailDeliveryFailure,
+} from './infrastructure/email-outbox-poller.scheduler';
+import { createEmailPayloadCipher } from './infrastructure/email-payload-cipher';
+import {
   JoseUserAccessTokenService,
   USER_ACCESS_TOKEN_CRYPTO,
 } from './infrastructure/jose-user-access-token.service';
@@ -52,6 +67,11 @@ import {
   type PostgresAuthClient,
   createPostgresAuthClient,
 } from './infrastructure/postgres-auth.client';
+import { PostgresEmailCredentialRepository } from './infrastructure/postgres-email-credential.repository';
+import {
+  PostgresEmailDeliveryRequestRepository,
+  PostgresEmailDispatchStore,
+} from './infrastructure/postgres-email-delivery-request.repository';
 import { PostgresLocalAuthRepository } from './infrastructure/postgres-local-auth.repository';
 import { RedisAuthRateLimiter } from './infrastructure/redis-auth-rate-limiter';
 import { ResendEmailSender } from './infrastructure/resend-email.sender';
@@ -130,6 +150,60 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
       },
       inject: [RUNTIME_SECRET_PROVIDER],
     },
+    // The outbox table is this module's (ADR-0074). Another module that commits
+    // an Email Delivery Request with its own mutation writes it through this
+    // port, inside that mutation's transaction.
+    {
+      provide: EMAIL_DELIVERY_REQUEST_WRITER,
+      useFactory: (): EmailDeliveryRequestWriterPort =>
+        new PostgresEmailDeliveryRequestRepository(),
+    },
+    {
+      provide: EMAIL_PAYLOAD_CIPHER,
+      useFactory: (provider: RuntimeSecretProvider): EmailPayloadCipherPort =>
+        createEmailPayloadCipher(provider.getSnapshot().emailOutbox),
+      inject: [RUNTIME_SECRET_PROVIDER],
+    },
+    // The dispatch poller runs in every instance against its own database, so
+    // it takes the same pool and key the writers used (ADR-0074). The token
+    // hashing is the opaque issuer's, which is the one function all three
+    // credential tables were written with.
+    {
+      provide: EmailDeliveryPoller,
+      useFactory: (
+        client: PostgresAuthClient,
+        cipher: EmailPayloadCipherPort,
+        sender: EmailSenderPort,
+      ): EmailDeliveryPoller =>
+        new EmailDeliveryPoller(
+          new PostgresEmailDispatchStore(client),
+          new PostgresEmailCredentialRepository(client),
+          cipher,
+          sender,
+          (): Date => new Date(),
+          { hash: hashOpaqueToken },
+          {
+            owner: emailOutboxLeaseOwner(),
+            onTerminalFailure: reportTerminalEmailDeliveryFailure,
+          },
+        ),
+      inject: [POSTGRES_AUTH_CLIENT, EMAIL_PAYLOAD_CIPHER, EMAIL_SENDER],
+    },
+    {
+      provide: EmailOutboxPollerScheduler,
+      useFactory: (
+        poller: EmailDeliveryPoller,
+        client: PostgresAuthClient,
+      ): EmailOutboxPollerScheduler => {
+        const store = new PostgresEmailDispatchStore(client);
+        return new EmailOutboxPollerScheduler(
+          poller,
+          EMAIL_OUTBOX_POLL_INTERVAL_MS,
+          () => store.backlog({ now: new Date() }),
+        );
+      },
+      inject: [EmailDeliveryPoller, POSTGRES_AUTH_CLIENT],
+    },
     {
       provide: AUTH_RATE_LIMITER,
       useFactory: (): AuthRateLimiterPort =>
@@ -169,6 +243,8 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
   ],
   exports: [
     EMAIL_SENDER,
+    EMAIL_PAYLOAD_CIPHER,
+    EMAIL_DELIVERY_REQUEST_WRITER,
     AUTH_RATE_LIMITER,
     USER_ACCOUNT_REPOSITORY,
     VERIFICATION_TOKEN_REPOSITORY,

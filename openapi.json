@@ -548,7 +548,7 @@
         }
       },
       "Error503": {
-        "description": "IDENTITY_PROVIDER_UNAVAILABLE | IDENTITY_JWKS_SOURCE_UNAVAILABLE | IDENTITY_CONFIG_CACHE_UNAVAILABLE | AUTH_EMAIL_DELIVERY_UNAVAILABLE | AVATAR_STORAGE_UNAVAILABLE | SPEAKING_AUDIO_STORAGE_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
+        "description": "IDENTITY_PROVIDER_UNAVAILABLE | IDENTITY_JWKS_SOURCE_UNAVAILABLE | IDENTITY_CONFIG_CACHE_UNAVAILABLE | AVATAR_STORAGE_UNAVAILABLE | SPEAKING_AUDIO_STORAGE_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
         "content": {
           "application/json": {
             "schema": {
@@ -573,10 +573,6 @@
                         },
                         {
                           "const": "IDENTITY_CONFIG_CACHE_UNAVAILABLE",
-                          "type": "string"
-                        },
-                        {
-                          "const": "AUTH_EMAIL_DELIVERY_UNAVAILABLE",
                           "type": "string"
                         },
                         {
@@ -4968,7 +4964,8 @@
                         "email",
                         "role",
                         "status",
-                        "expires_at"
+                        "expires_at",
+                        "email_delivery_status"
                       ],
                       "properties": {
                         "invitation_id": {
@@ -5007,6 +5004,10 @@
                         "expires_at": {
                           "format": "date-time",
                           "type": "string"
+                        },
+                        "email_delivery_status": {
+                          "const": "queued",
+                          "type": "string"
                         }
                       }
                     },
@@ -5043,9 +5044,6 @@
           },
           "500": {
             "$ref": "#/components/responses/Error500"
-          },
-          "503": {
-            "$ref": "#/components/responses/Error503"
           }
         }
       },
@@ -7687,7 +7685,12 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "required": ["email", "username", "status"],
+                      "required": [
+                        "email",
+                        "username",
+                        "status",
+                        "email_delivery_status"
+                      ],
                       "properties": {
                         "email": {
                           "type": "string"
@@ -7697,6 +7700,10 @@
                         },
                         "status": {
                           "const": "pending_verification",
+                          "type": "string"
+                        },
+                        "email_delivery_status": {
+                          "const": "queued",
                           "type": "string"
                         }
                       }
@@ -7726,9 +7733,6 @@
           },
           "500": {
             "$ref": "#/components/responses/Error500"
-          },
-          "503": {
-            "$ref": "#/components/responses/Error503"
           }
         }
       }
