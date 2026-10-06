@@ -9,7 +9,7 @@ import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from '@/modules/auth/application/auth-rate-limiter.port';
-import { type EmailPayloadCipher } from '@/modules/auth/application/email-delivery-request.port';
+import { type EmailPayloadCipherPort } from '@/modules/auth/application/email-delivery-request.port';
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
@@ -87,7 +87,7 @@ class RateLimiterFake implements AuthRateLimiterPort {
 }
 
 /** The AEAD has its own tests; this suite is about what is committed with what. */
-class StubCipher implements EmailPayloadCipher {
+class StubCipher implements EmailPayloadCipherPort {
   encrypt(plaintext: string): string {
     return `sealed.${plaintext}`;
   }

@@ -14,7 +14,7 @@ import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from '@/modules/auth/application/auth-rate-limiter.port';
-import type { EmailPayloadCipher } from '@/modules/auth/application/email-delivery-request.port';
+import type { EmailPayloadCipherPort } from '@/modules/auth/application/email-delivery-request.port';
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
@@ -123,7 +123,7 @@ let app: NestFastifyApplication;
 let identityClient: SwitchableIdentityClient;
 let sender: RecordingSender;
 let rateLimiter: CountingRateLimiter;
-let cipher: EmailPayloadCipher;
+let cipher: EmailPayloadCipherPort;
 const ownerId = `usr_${ulid()}`;
 
 beforeAll(async () => {

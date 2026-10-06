@@ -1,12 +1,13 @@
 import { EmailDeliveryPoller } from './email-delivery-poller';
 import type {
+  ClaimEmailDeliveryRequestsInput,
   EmailCredentialActionabilityPort,
   EmailCredentialState,
   EmailDeliveryKind,
   EmailDeliveryPayload,
   EmailDeliveryRequestRecord,
   EmailDispatchStorePort,
-  EmailPayloadCipher,
+  EmailPayloadCipherPort,
 } from './email-delivery-request.port';
 import type {
   EmailDispatchOptions,
@@ -25,13 +26,17 @@ const VERIFICATION_PAYLOAD = {
 };
 
 class FakeStore implements EmailDispatchStorePort {
+  claims: ClaimEmailDeliveryRequestsInput[] = [];
   claimResult: EmailDeliveryRequestRecord[] = [];
   accepted: string[] = [];
   cancelled: { id: string; reason: string }[] = [];
   failed: { id: string; errorCode: string }[] = [];
   attempts: { id: string; errorCode: string }[] = [];
 
-  async claim(): Promise<readonly EmailDeliveryRequestRecord[]> {
+  async claim(
+    input: ClaimEmailDeliveryRequestsInput,
+  ): Promise<readonly EmailDeliveryRequestRecord[]> {
+    this.claims.push(input);
     return this.claimResult;
   }
 
@@ -131,14 +136,14 @@ function claimed(
   };
 }
 
-function sealed(payload: EmailDeliveryPayload): EmailPayloadCipher {
+function sealed(payload: EmailDeliveryPayload): EmailPayloadCipherPort {
   return {
     encrypt: (): string => 'sealed',
     decrypt: (): string => JSON.stringify(payload),
   };
 }
 
-function unreadableCipher(): EmailPayloadCipher {
+function unreadableCipher(): EmailPayloadCipherPort {
   return {
     encrypt: (): string => 'sealed',
     decrypt: () => {
@@ -485,10 +490,50 @@ describe('EmailDeliveryPoller', () => {
     expect(summary.claimed).toBe(0);
   });
 
-  it('holds a lease long enough that one batch cannot be re-claimed mid-flight', () => {
-    expect(EmailDeliveryPoller.LEASE_MS).toBeGreaterThan(
-      EmailDeliveryPoller.BATCH_SIZE * EmailDeliveryPoller.ATTEMPT_TIMEOUT_MS,
+  /**
+   * The lease is what stops a second instance re-claiming a row this one is
+   * still sending, so it has to cover the whole batch and not one request. The
+   * cost of a request is its provider attempt plus the credential check and the
+   * terminal write around it, and the margin is past that because the claim
+   * predicate treats a lapsed lease as immediately reclaimable.
+   */
+  function worstCaseBatchMs(batchSize: number): number {
+    return (
+      batchSize *
+      (EmailDeliveryPoller.ATTEMPT_TIMEOUT_MS +
+        EmailDeliveryPoller.REQUEST_OVERHEAD_MS)
     );
+  }
+
+  it('claims a lease that outlives the whole default batch', async () => {
+    const { poller, store } = harness();
+
+    await poller.runOnce();
+
+    const claim = store.claims[0];
+    expect(claim?.limit).toBe(EmailDeliveryPoller.BATCH_SIZE);
+    expect(claim?.leaseMs).toBeGreaterThan(
+      worstCaseBatchMs(EmailDeliveryPoller.BATCH_SIZE),
+    );
+  });
+
+  it('claims a lease that grows with a batch larger than the default', async () => {
+    const store = new FakeStore();
+    const poller = new EmailDeliveryPoller(
+      store,
+      new FakeCredentials(),
+      sealed(VERIFICATION_PAYLOAD),
+      new RecordingSender(),
+      (): Date => NOW,
+      { hash: () => TOKEN_HASH },
+      { owner: 'instance-a', batchSize: 25 },
+    );
+
+    await poller.runOnce();
+
+    const claim = store.claims[0];
+    expect(claim?.limit).toBe(25);
+    expect(claim?.leaseMs).toBeGreaterThan(worstCaseBatchMs(25));
   });
 
   it('bounds one provider attempt at five seconds', () => {

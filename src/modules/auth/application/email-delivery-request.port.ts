@@ -1,9 +1,18 @@
 import type { OrganizationInviteEmailInput } from './email-sender.port';
 
-export type EmailDeliveryKind =
-  | 'verification_email'
-  | 'password_reset_email'
-  | 'organization_invite_email';
+/**
+ * Each vocabulary is declared as the runtime list the table's own checks
+ * mirror, and the union is derived from it. A repository validating a row
+ * reads the same list, so a column outside the vocabulary is refused rather
+ * than widened into the record.
+ */
+export const EMAIL_DELIVERY_KINDS = [
+  'verification_email',
+  'password_reset_email',
+  'organization_invite_email',
+] as const;
+
+export type EmailDeliveryKind = (typeof EMAIL_DELIVERY_KINDS)[number];
 
 /**
  * What a worker needs once it claims a request: the inputs the matching
@@ -41,28 +50,43 @@ export interface InsertEmailDeliveryRequestInput {
 /**
  * The only way an Email Delivery Request's payload can be sealed and read back.
  * A worker that claims a row resolves the key version from the envelope itself.
+ * Named for the record it owns, the way every other durable record port is.
  */
-export interface EmailPayloadCipher {
+export interface EmailPayloadCipherPort {
   encrypt(plaintext: string): string;
   decrypt(envelope: string): string;
 }
 
 export const EMAIL_PAYLOAD_CIPHER = Symbol('EMAIL_PAYLOAD_CIPHER');
 
+export const EMAIL_DELIVERY_REQUEST_STATUSES = [
+  'queued',
+  'provider_accepted',
+  'failed',
+  'cancelled',
+] as const;
+
 export type EmailDeliveryRequestStatus =
-  | 'queued'
-  | 'provider_accepted'
-  | 'failed'
-  | 'cancelled';
+  (typeof EMAIL_DELIVERY_REQUEST_STATUSES)[number];
 
 /** The bounded codes the table's own checks admit; nothing else is stored. */
-export type EmailDeliveryErrorCode = 'timeout' | 'provider_rejected';
+export const EMAIL_DELIVERY_ERROR_CODES = [
+  'timeout',
+  'provider_rejected',
+] as const;
+
+export type EmailDeliveryErrorCode =
+  (typeof EMAIL_DELIVERY_ERROR_CODES)[number];
+
+export const EMAIL_DELIVERY_CANCEL_REASONS = [
+  'credential_expired',
+  'credential_superseded',
+  'credential_revoked',
+  'not_actionable',
+] as const;
 
 export type EmailDeliveryCancelReason =
-  | 'credential_expired'
-  | 'credential_superseded'
-  | 'credential_revoked'
-  | 'not_actionable';
+  (typeof EMAIL_DELIVERY_CANCEL_REASONS)[number];
 
 export interface EmailDeliveryRequestRecord {
   readonly id: string;
@@ -71,8 +95,8 @@ export interface EmailDeliveryRequestRecord {
   readonly payloadCiphertext: string | null;
   readonly attempts: number;
   readonly lastAttemptAt: Date | null;
-  readonly lastErrorCode: string | null;
-  readonly cancelReason: string | null;
+  readonly lastErrorCode: EmailDeliveryErrorCode | null;
+  readonly cancelReason: EmailDeliveryCancelReason | null;
   readonly createdAt: Date;
   readonly completedAt: Date | null;
 }

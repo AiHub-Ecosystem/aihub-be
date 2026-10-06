@@ -1,6 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import type { EmailPayloadCipher } from '@/modules/auth/application/email-delivery-request.port';
+import type { EmailPayloadCipherPort } from '@/modules/auth/application/email-delivery-request.port';
 import type {
   AcceptOrganizationInvitationInput,
   CreateOrganizationInvitationInput,
@@ -27,7 +27,7 @@ interface RecordedQuery {
 }
 
 /** The AEAD has its own tests; this records what the repository asked to seal. */
-class RecordingCipher implements EmailPayloadCipher {
+class RecordingCipher implements EmailPayloadCipherPort {
   readonly sealed: string[] = [];
 
   encrypt(plaintext: string): string {
@@ -42,7 +42,7 @@ class RecordingCipher implements EmailPayloadCipher {
 
 function invitationRepository(
   identity: PostgresIdentityTransactionalClient,
-  cipher: EmailPayloadCipher = new RecordingCipher(),
+  cipher: EmailPayloadCipherPort = new RecordingCipher(),
 ): PostgresOrganizationInvitationRepository {
   return new PostgresOrganizationInvitationRepository(identity, cipher);
 }

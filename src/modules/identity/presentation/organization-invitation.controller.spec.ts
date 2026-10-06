@@ -357,6 +357,77 @@ describe('Organization invitation HTTP flow', () => {
     expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
   });
 
+  it('replays a record completed before the outbox, which stored no delivery status', async () => {
+    // ADR-0038 keeps a completed record replayable for 24 hours, and a record
+    // written before this deploy carries no delivery status at all.
+    idempotency.execute.mockImplementationOnce(
+      async (
+        input: IdempotencyExecutionInput,
+        _work: IdempotencyWork<unknown>,
+        decodeReplay: IdempotencyReplayDecoder<unknown>,
+      ) => ({
+        result: decodeReplay({
+          invitationId: INVITATION_ID,
+          organizationId: ORGANIZATION_ID,
+          email: 'invitee@example.com',
+          role: 'member',
+          expiresAt: '2026-09-22T12:00:00.000Z',
+        }),
+        replay: true,
+      }),
+    );
+
+    const response = await invite(undefined, {
+      authorization: 'Bearer valid.token.value',
+      'idempotency-key': 'invite-1',
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.headers['idempotent-replay']).toBe('true');
+    expect(response.json()).toEqual({
+      data: {
+        invitation_id: INVITATION_ID,
+        organization_id: ORGANIZATION_ID,
+        email: 'invitee@example.com',
+        role: 'member',
+        status: 'pending',
+        expires_at: '2026-09-22T12:00:00.000Z',
+        email_delivery_status: 'queued',
+      },
+      meta: { request_id: REQUEST_ID },
+    });
+    expect(invitations.createInvitation).not.toHaveBeenCalled();
+    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+  });
+
+  it('still refuses a stored record that carries a status it cannot report', async () => {
+    idempotency.execute.mockImplementationOnce(
+      async (
+        input: IdempotencyExecutionInput,
+        _work: IdempotencyWork<unknown>,
+        decodeReplay: IdempotencyReplayDecoder<unknown>,
+      ) => ({
+        result: decodeReplay({
+          invitationId: INVITATION_ID,
+          organizationId: ORGANIZATION_ID,
+          email: 'invitee@example.com',
+          role: 'member',
+          expiresAt: '2026-09-22T12:00:00.000Z',
+          emailDeliveryStatus: 'delivered',
+        }),
+        replay: true,
+      }),
+    );
+
+    const response = await invite(undefined, {
+      authorization: 'Bearer valid.token.value',
+      'idempotency-key': 'invite-1',
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(invitations.createInvitation).not.toHaveBeenCalled();
+  });
+
   it('rechecks current authorization before replay', async () => {
     callerStatus = 'disabled';
 

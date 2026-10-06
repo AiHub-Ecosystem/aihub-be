@@ -1,13 +1,13 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
-import type { EmailPayloadCipher } from '@/modules/auth/application/email-delivery-request.port';
+import type { EmailPayloadCipherPort } from '@/modules/auth/application/email-delivery-request.port';
 import type { EmailOutboxRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';
 
 const ENVELOPE_VERSION = 'v1';
 
 export function createEmailPayloadCipher(
   secrets: EmailOutboxRuntimeSecrets,
-): EmailPayloadCipher {
+): EmailPayloadCipherPort {
   const keys = validateKeyring(secrets);
   return {
     encrypt(plaintext) {

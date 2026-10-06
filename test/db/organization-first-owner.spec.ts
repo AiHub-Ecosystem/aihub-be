@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import type { EmailPayloadCipher } from '@/modules/auth/application/email-delivery-request.port';
+import type { EmailPayloadCipherPort } from '@/modules/auth/application/email-delivery-request.port';
 import { createEmailPayloadCipher } from '@/modules/auth/infrastructure/email-payload-cipher';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-organization-api-key.repository';
@@ -27,7 +27,7 @@ import {
 let pool: Pool;
 let client: PostgresIdentityTransactionalClient & { close(): Promise<void> };
 let repository: PostgresOrganizationFirstOwnerRepository;
-let cipher: EmailPayloadCipher;
+let cipher: EmailPayloadCipherPort;
 
 beforeAll(() => {
   pool = createTestPool();

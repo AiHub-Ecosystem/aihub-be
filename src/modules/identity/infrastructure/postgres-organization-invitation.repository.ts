@@ -1,5 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
-import type { EmailPayloadCipher } from '@/modules/auth/application/email-delivery-request.port';
+import type { EmailPayloadCipherPort } from '@/modules/auth/application/email-delivery-request.port';
 import type {
   AcceptOrganizationInvitationInput,
   AcceptOrganizationInvitationResult,
@@ -240,7 +240,7 @@ export class PostgresOrganizationInvitationRepository
 {
   constructor(
     private readonly client: PostgresIdentityTransactionalClient,
-    private readonly payloadCipher: EmailPayloadCipher,
+    private readonly payloadCipher: EmailPayloadCipherPort,
   ) {}
 
   async createInvitation(

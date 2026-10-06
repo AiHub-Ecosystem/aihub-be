@@ -57,6 +57,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * ADR-0038 keeps a completed record replayable for its whole 24-hour
+ * retention, so a record written before the outbox existed is still read here.
+ * It carries no delivery status: that invitation was emailed synchronously and
+ * will not be, so nothing is outstanding for a caller to wait on. The response
+ * contract names one value for the field, and reporting it keeps the replay a
+ * `201` rather than the `500` a strict reader would raise inside the retention
+ * window. A stored value that is present but is not the one the response can
+ * carry is still refused.
+ */
 function decodeInvitationReplay(value: unknown): InvitedOrganizationMember {
   if (!isRecord(value)) {
     throw new Error('stored invitation replay is invalid');
@@ -67,13 +77,14 @@ function decodeInvitationReplay(value: unknown): InvitedOrganizationMember {
   const email = value.email;
   const role = value.role;
   const expiresAt = value.expiresAt;
+  const emailDeliveryStatus = value.emailDeliveryStatus;
   if (
     typeof invitationId !== 'string' ||
     typeof organizationId !== 'string' ||
     typeof email !== 'string' ||
     (role !== 'owner' && role !== 'admin' && role !== 'member') ||
     typeof expiresAt !== 'string' ||
-    value.emailDeliveryStatus !== 'queued'
+    (emailDeliveryStatus !== undefined && emailDeliveryStatus !== 'queued')
   ) {
     throw new Error('stored invitation replay is invalid');
   }

@@ -9,7 +9,7 @@ import { InMemoryRefreshSessionAdapter } from '@/modules/auth/testing/in-memory-
 import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
 import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
 import type { AuthRateLimiterPort } from './auth-rate-limiter.port';
-import type { EmailPayloadCipher } from './email-delivery-request.port';
+import type { EmailPayloadCipherPort } from './email-delivery-request.port';
 import { LocalAuthService } from './local-auth.service';
 import type { PasswordHasherPort } from './password-hasher.port';
 import type {
@@ -104,7 +104,7 @@ class FakePasswordResetTokenIssuer implements PasswordResetTokenPort {
  * Reversible so a test can read what the worker would later read back out of
  * the ciphertext. The real cipher is exercised by its own spec.
  */
-class FakeCipher implements EmailPayloadCipher {
+class FakeCipher implements EmailPayloadCipherPort {
   sealed: string[] = [];
 
   encrypt(plaintext: string): string {

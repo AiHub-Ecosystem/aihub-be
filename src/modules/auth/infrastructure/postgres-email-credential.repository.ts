@@ -4,6 +4,12 @@ import type {
   EmailDeliveryKind,
 } from '@/modules/auth/application/email-delivery-request.port';
 
+import {
+  authStoreError,
+  dateValue,
+  isRecord,
+  nullableDateValue,
+} from './auth-row';
 import type { EmailDeliveryQueryClient } from './postgres-email-delivery-request.repository';
 
 /**
@@ -31,7 +37,9 @@ export class PostgresEmailCredentialRepository
 
   /**
    * Only the hash is read back, so a dispatch decision cannot leak a raw token,
-   * and nothing here logs: the answer is a bounded state, not a reason.
+   * and nothing here logs: the answer is a bounded state, not a reason. A row
+   * whose columns are not the shape the table declares is refused rather than
+   * read, so a malformed projection cannot decide a dispatch as `actionable`.
    */
   async check(input: {
     readonly kind: EmailDeliveryKind;
@@ -45,12 +53,18 @@ export class PostgresEmailCredentialRepository
     if (row === undefined) {
       return 'missing';
     }
-    const expiresAt = row.expires_at as Date;
+
+    const expiresAt = isRecord(row) ? dateValue(row, 'expires_at') : undefined;
+    const consumedAt = isRecord(row)
+      ? nullableDateValue(row, 'consumed_at')
+      : undefined;
+    if (expiresAt === undefined || consumedAt === undefined) {
+      throw authStoreError('Email credential data is invalid');
+    }
+
     if (expiresAt.getTime() <= input.now.getTime()) {
       return 'expired';
     }
-    return row.consumed_at === null || row.consumed_at === undefined
-      ? 'actionable'
-      : 'closed';
+    return consumedAt === null ? 'actionable' : 'closed';
   }
 }

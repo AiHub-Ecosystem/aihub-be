@@ -14,7 +14,7 @@ import {
 import {
   EMAIL_PAYLOAD_CIPHER,
   type EmailDeliveryPayload,
-  type EmailPayloadCipher,
+  type EmailPayloadCipherPort,
 } from '@/modules/auth/application/email-delivery-request.port';
 import {
   PASSWORD_HASHER,
@@ -63,7 +63,7 @@ const RECOVERY_MESSAGE =
  * Reversible so a test can read the durable handoff. The request path never
  * calls a provider, so this stands in for the whole Resend boundary.
  */
-class PayloadCipherFake implements EmailPayloadCipher {
+class PayloadCipherFake implements EmailPayloadCipherPort {
   encrypt(plaintext: string): string {
     const sealed = Buffer.from(plaintext, 'utf8').toString('base64url');
     return `sealed:${sealed}`;

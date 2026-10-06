@@ -12,7 +12,7 @@ import {
 } from '@/modules/auth/application/auth-rate-limiter.port';
 import {
   EMAIL_PAYLOAD_CIPHER,
-  type EmailPayloadCipher,
+  type EmailPayloadCipherPort,
 } from '@/modules/auth/application/email-delivery-request.port';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
@@ -370,7 +370,7 @@ function drizzleDatabaseOptions(databaseUrl: string) {
     {
       provide: ORGANIZATION_INVITATION,
       useFactory: (
-        payloadCipher: EmailPayloadCipher,
+        payloadCipher: EmailPayloadCipherPort,
       ): OrganizationInvitationPort =>
         new PostgresOrganizationInvitationRepository(
           postgresIdentityClient(),

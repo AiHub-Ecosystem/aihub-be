@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import type { EmailPayloadCipher } from '@/modules/auth/application/email-delivery-request.port';
+import type { EmailPayloadCipherPort } from '@/modules/auth/application/email-delivery-request.port';
 import { createEmailPayloadCipher } from '@/modules/auth/infrastructure/email-payload-cipher';
 import type {
   AcceptOrganizationInvitationResult,
@@ -37,7 +37,7 @@ type MembershipStatus = 'active' | 'disabled';
 let pool: Pool;
 let client: PostgresIdentityTransactionalClient & { close(): Promise<void> };
 let repository: PostgresOrganizationInvitationRepository;
-let cipher: EmailPayloadCipher;
+let cipher: EmailPayloadCipherPort;
 
 function userId(): string {
   return `usr_${ulid()}`;

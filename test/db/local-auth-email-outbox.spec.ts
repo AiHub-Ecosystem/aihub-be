@@ -14,7 +14,7 @@ import {
 } from '@/modules/auth/application/auth-rate-limiter.port';
 import {
   EMAIL_PAYLOAD_CIPHER,
-  type EmailPayloadCipher,
+  type EmailPayloadCipherPort,
 } from '@/modules/auth/application/email-delivery-request.port';
 import {
   EMAIL_SENDER,
@@ -119,7 +119,7 @@ let app: NestFastifyApplication;
 let authClient: PostgresAuthClient;
 let outbox: SwitchableEmailDeliveryRequests;
 let sender: RecordingSender;
-let cipher: EmailPayloadCipher;
+let cipher: EmailPayloadCipherPort;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = testDatabaseUrl();

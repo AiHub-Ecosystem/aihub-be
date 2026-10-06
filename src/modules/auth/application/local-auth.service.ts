@@ -21,7 +21,7 @@ import {
   EMAIL_PAYLOAD_CIPHER,
   type EmailDeliveryKind,
   type EmailDeliveryPayload,
-  type EmailPayloadCipher,
+  type EmailPayloadCipherPort,
   type InsertEmailDeliveryRequestInput,
 } from './email-delivery-request.port';
 import {
@@ -139,7 +139,7 @@ export class LocalAuthService {
     @Inject(PASSWORD_RESET_TOKEN)
     private readonly passwordResetTokenIssuer: PasswordResetTokenPort,
     @Inject(EMAIL_PAYLOAD_CIPHER)
-    private readonly payloadCipher: EmailPayloadCipher,
+    private readonly payloadCipher: EmailPayloadCipherPort,
     @Inject(AUTH_RATE_LIMITER)
     private readonly rateLimiter: AuthRateLimiterPort,
     @Inject(USER_ACCESS_TOKEN_ISSUER)

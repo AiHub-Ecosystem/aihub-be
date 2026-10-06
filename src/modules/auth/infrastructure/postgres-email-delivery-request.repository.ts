@@ -3,12 +3,27 @@ import type {
   ClaimEmailDeliveryRequestsInput,
   EmailDeliveryCancelReason,
   EmailDeliveryErrorCode,
-  EmailDeliveryKind,
   EmailDeliveryRequestRecord,
-  EmailDeliveryRequestStatus,
   EmailDispatchStorePort,
   InsertEmailDeliveryRequestInput,
 } from '@/modules/auth/application/email-delivery-request.port';
+import {
+  EMAIL_DELIVERY_CANCEL_REASONS,
+  EMAIL_DELIVERY_ERROR_CODES,
+  EMAIL_DELIVERY_KINDS,
+  EMAIL_DELIVERY_REQUEST_STATUSES,
+} from '@/modules/auth/application/email-delivery-request.port';
+
+import {
+  dateValue,
+  integerValue,
+  isRecord,
+  nullableDateValue,
+  nullableOneOf,
+  nullableStringValue,
+  oneOf,
+  stringValue,
+} from './auth-row';
 
 /**
  * Structural minimum for any client that can run a single statement: the auth
@@ -77,12 +92,18 @@ const CLAIM_SQL = `
 /**
  * Each marker is one attempt, except cancellation, which happens before
  * dispatch. A marker only applies while the row is still queued, so a
- * terminal state can never be overwritten or revived, and every terminal
- * marker releases the lease it still holds.
+ * terminal state can never be overwritten or revived, and every marker
+ * releases the lease it still holds.
+ *
+ * A failed attempt releases the lease too, because the row stays queued and
+ * its retry delay becomes the only thing that decides when it is claimable
+ * again. Holding a lease until the lease expired would add the lease length to
+ * every retry delay.
  */
 const RECORD_FAILED_ATTEMPT_SQL = `
   UPDATE email_delivery_requests
-  SET attempts = attempts + 1, last_attempt_at = $2, last_error_code = $3
+  SET attempts = attempts + 1, last_attempt_at = $2, last_error_code = $3,
+      lease_owner = NULL, lease_expires_at = NULL
   WHERE id = $1 AND status = 'queued'
   RETURNING id
 `;
@@ -118,6 +139,65 @@ function storeError(message: string): AppError {
   return new AppError({ code: 'INTERNAL_ERROR', message, retryable: false });
 }
 
+/**
+ * Every column crosses a reader, so a row the table could not have produced is
+ * refused rather than asserted into a record. The error code and cancellation
+ * reason are the two columns whose vocabulary the check constraint only bounds
+ * by shape, so they are validated against the same lists the port declares.
+ */
+function toRecord(value: unknown): EmailDeliveryRequestRecord {
+  if (!isRecord(value)) {
+    throw storeError('Email delivery request is invalid');
+  }
+
+  const id = stringValue(value, 'id');
+  const kind = oneOf(value, 'kind', EMAIL_DELIVERY_KINDS);
+  const status = oneOf(value, 'status', EMAIL_DELIVERY_REQUEST_STATUSES);
+  const payloadCiphertext = nullableStringValue(value, 'payload_ciphertext');
+  const attempts = integerValue(value, 'attempts');
+  const lastAttemptAt = nullableDateValue(value, 'last_attempt_at');
+  const lastErrorCode = nullableOneOf(
+    value,
+    'last_error_code',
+    EMAIL_DELIVERY_ERROR_CODES,
+  );
+  const cancelReason = nullableOneOf(
+    value,
+    'cancel_reason',
+    EMAIL_DELIVERY_CANCEL_REASONS,
+  );
+  const createdAt = dateValue(value, 'created_at');
+  const completedAt = nullableDateValue(value, 'completed_at');
+
+  if (
+    id === undefined ||
+    kind === undefined ||
+    status === undefined ||
+    payloadCiphertext === undefined ||
+    attempts === undefined ||
+    lastAttemptAt === undefined ||
+    createdAt === undefined ||
+    completedAt === undefined ||
+    lastErrorCode === undefined ||
+    cancelReason === undefined
+  ) {
+    throw storeError('Email delivery request is invalid');
+  }
+
+  return {
+    id,
+    kind,
+    status,
+    payloadCiphertext,
+    attempts,
+    lastAttemptAt,
+    lastErrorCode,
+    cancelReason,
+    createdAt,
+    completedAt,
+  };
+}
+
 export class PostgresEmailDeliveryRequestRepository {
   async insert(
     client: EmailDeliveryQueryClient,
@@ -133,7 +213,11 @@ export class PostgresEmailDeliveryRequestRepository {
 
   async recordFailedAttempt(
     client: EmailDeliveryQueryClient,
-    input: { id: string; attemptedAt: Date; errorCode: string },
+    input: {
+      id: string;
+      attemptedAt: Date;
+      errorCode: EmailDeliveryErrorCode;
+    },
   ): Promise<EmailDeliveryRequestRecord> {
     return this.apply(client, RECORD_FAILED_ATTEMPT_SQL, [
       input.id,
@@ -154,7 +238,7 @@ export class PostgresEmailDeliveryRequestRepository {
 
   async markFailed(
     client: EmailDeliveryQueryClient,
-    input: { id: string; failedAt: Date; errorCode: string },
+    input: { id: string; failedAt: Date; errorCode: EmailDeliveryErrorCode },
   ): Promise<EmailDeliveryRequestRecord> {
     return this.apply(client, MARK_FAILED_SQL, [
       input.id,
@@ -165,7 +249,7 @@ export class PostgresEmailDeliveryRequestRepository {
 
   async markCancelled(
     client: EmailDeliveryQueryClient,
-    input: { id: string; cancelledAt: Date; reason: string },
+    input: { id: string; cancelledAt: Date; reason: EmailDeliveryCancelReason },
   ): Promise<EmailDeliveryRequestRecord> {
     return this.apply(client, MARK_CANCELLED_SQL, [
       input.id,
@@ -184,7 +268,7 @@ export class PostgresEmailDeliveryRequestRepository {
       input.owner,
       String(input.leaseMs),
     ]);
-    return rows.map((row) => this.toRecord(row));
+    return rows.map(toRecord);
   }
 
   private async apply(
@@ -205,22 +289,7 @@ export class PostgresEmailDeliveryRequestRepository {
     if (row === undefined) {
       throw storeError('Email delivery request is unavailable');
     }
-    return this.toRecord(row);
-  }
-
-  private toRecord(row: Record<string, unknown>): EmailDeliveryRequestRecord {
-    return {
-      id: row.id as string,
-      kind: row.kind as EmailDeliveryKind,
-      status: row.status as EmailDeliveryRequestStatus,
-      payloadCiphertext: row.payload_ciphertext as string | null,
-      attempts: Number(row.attempts),
-      lastAttemptAt: (row.last_attempt_at as Date | null) ?? null,
-      lastErrorCode: row.last_error_code as string | null,
-      cancelReason: row.cancel_reason as string | null,
-      createdAt: row.created_at as Date,
-      completedAt: (row.completed_at as Date | null) ?? null,
-    };
+    return toRecord(row);
   }
 }
 

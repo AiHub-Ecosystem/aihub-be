@@ -17,7 +17,7 @@ import {
 } from './application/auth-rate-limiter.port';
 import {
   EMAIL_PAYLOAD_CIPHER,
-  type EmailPayloadCipher,
+  type EmailPayloadCipherPort,
 } from './application/email-delivery-request.port';
 import {
   EMAIL_SENDER,
@@ -146,7 +146,7 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
     },
     {
       provide: EMAIL_PAYLOAD_CIPHER,
-      useFactory: (provider: RuntimeSecretProvider): EmailPayloadCipher =>
+      useFactory: (provider: RuntimeSecretProvider): EmailPayloadCipherPort =>
         createEmailPayloadCipher(provider.getSnapshot().emailOutbox),
       inject: [RUNTIME_SECRET_PROVIDER],
     },
@@ -158,7 +158,7 @@ import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
       provide: EmailDeliveryPoller,
       useFactory: (
         client: PostgresAuthClient,
-        cipher: EmailPayloadCipher,
+        cipher: EmailPayloadCipherPort,
         sender: EmailSenderPort,
       ): EmailDeliveryPoller =>
         new EmailDeliveryPoller(

@@ -475,6 +475,24 @@ describe('email outbox dispatch poller', () => {
 
       expect(await claim(OWNER_A)).toEqual([]);
     });
+
+    it('waits out the retry delay rather than the lease after a failed attempt', async () => {
+      const seeded = await seedRequest();
+      const sender = new RecordingSender();
+      sender.failure = new Error('Resend email delivery failed');
+      let clock = NOW;
+      const failing = poller(OWNER_A, sender, () => clock);
+
+      await failing.runOnce();
+      expect((await rowOf(seeded.id)).lease_owner).toBeNull();
+
+      // Well inside the lease the poller took, but past the one-minute delay:
+      // the retry delay alone decides when the row is claimable again.
+      clock = new Date(NOW.getTime() + MINUTE + 1_000);
+      await failing.runOnce();
+
+      expect(sender.sends).toHaveLength(2);
+    });
   });
 
   describe('dispatch', () => {

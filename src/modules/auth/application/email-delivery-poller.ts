@@ -9,7 +9,7 @@ import type {
   EmailDispatchStorePort,
   OrganizationInviteEmailDeliveryPayload,
 } from './email-delivery-request.port';
-import type { EmailPayloadCipher } from './email-delivery-request.port';
+import type { EmailPayloadCipherPort } from './email-delivery-request.port';
 import { EMAIL_ATTEMPT_TIMEOUT_MS } from './email-sender.port';
 import type { EmailSenderPort } from './email-sender.port';
 
@@ -86,12 +86,33 @@ export class EmailDeliveryPoller {
   static readonly BATCH_SIZE = 10;
   static readonly ATTEMPT_TIMEOUT_MS = EMAIL_ATTEMPT_TIMEOUT_MS;
   /**
+   * What one request costs besides its provider attempt: the credential check
+   * that decides dispatch, the terminal write that records the outcome, and the
+   * scheduling between them. The lease budget is spent per request, so it is
+   * declared next to the attempt it adds to.
+   *
+   * This is an estimate, not a bound: nothing measures how long the two queries
+   * around an attempt take, so a store slow enough to spend more than this
+   * shortens the guarantee. Raise it when that shows up.
+   */
+  static readonly REQUEST_OVERHEAD_MS = 5_000;
+  /**
    * A lease has to outlive the whole batch, not one request: a poller holds a
    * full batch of rows while it works through them, and a lease that expired
    * mid-batch would let a second instance re-claim a row this one is still
-   * sending.
+   * sending. It therefore carries margin past that worst case, because the
+   * claim predicate treats a lapsed lease as immediately reclaimable.
    */
-  static readonly LEASE_MS = 60_000;
+  static readonly LEASE_MARGIN_MS = 5_000;
+
+  static leaseMsFor(batchSize: number): number {
+    return (
+      batchSize *
+        (EmailDeliveryPoller.ATTEMPT_TIMEOUT_MS +
+          EmailDeliveryPoller.REQUEST_OVERHEAD_MS) +
+      EmailDeliveryPoller.LEASE_MARGIN_MS
+    );
+  }
 
   private readonly batchSize: number;
   private readonly leaseMs: number;
@@ -99,14 +120,15 @@ export class EmailDeliveryPoller {
   constructor(
     private readonly store: EmailDispatchStorePort,
     private readonly credentials: EmailCredentialActionabilityPort,
-    private readonly cipher: EmailPayloadCipher,
+    private readonly cipher: EmailPayloadCipherPort,
     private readonly sender: EmailSenderPort,
     private readonly now: () => Date,
     private readonly tokens: { hash(raw: string): string },
     private readonly options: EmailDeliveryPollerOptions,
   ) {
     this.batchSize = options.batchSize ?? EmailDeliveryPoller.BATCH_SIZE;
-    this.leaseMs = options.leaseMs ?? EmailDeliveryPoller.LEASE_MS;
+    this.leaseMs =
+      options.leaseMs ?? EmailDeliveryPoller.leaseMsFor(this.batchSize);
   }
 
   async runOnce(): Promise<EmailDispatchSummary> {
