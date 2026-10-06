@@ -38,23 +38,35 @@ import { type UserAccountRepositoryPort } from './user-account.port';
 import { type VerificationTokenRepositoryPort } from './verification-token-repository.port';
 import { type VerificationTokenPort } from './verification-token.port';
 
-const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
-const LOGIN_IP_LIMIT = 20;
-const LOGIN_IP_WINDOW_MS = 5 * 60 * 1000;
-const LOGIN_EMAIL_LIMIT = 5;
-const LOGIN_EMAIL_WINDOW_MS = 15 * 60 * 1000;
-const REFRESH_IP_LIMIT = 20;
-const REFRESH_IP_WINDOW_MS = 5 * 60 * 1000;
-const REFRESH_TOKEN_LIMIT = 5;
-const REFRESH_TOKEN_WINDOW_MS = 15 * 60 * 1000;
-const FORGOT_IP_LIMIT = 3;
-const FORGOT_IP_WINDOW_MS = 15 * 60 * 1000;
-const FORGOT_EMAIL_LIMIT = 3;
-const FORGOT_EMAIL_WINDOW_MS = 24 * 60 * 60 * 1000;
-const RESET_IP_LIMIT = 10;
-const RESET_IP_WINDOW_MS = 5 * 60 * 1000;
-const RESET_TOKEN_LIMIT = 5;
-const RESET_TOKEN_WINDOW_MS = 15 * 60 * 1000;
+const LOCAL_AUTH_RATE_LIMITS = {
+  register: {
+    ip: { scope: 'register_ip', limit: 5, windowMs: 15 * 60 * 1000 },
+    email: { scope: 'register_email', limit: 3, windowMs: 24 * 60 * 60 * 1000 },
+  },
+  verify: {
+    ip: { scope: 'verify_ip', limit: 10, windowMs: 5 * 60 * 1000 },
+  },
+  resend: {
+    ip: { scope: 'resend_ip', limit: 3, windowMs: 15 * 60 * 1000 },
+    email: { scope: 'resend_email', limit: 3, windowMs: 24 * 60 * 60 * 1000 },
+  },
+  login: {
+    ip: { scope: 'login_ip', limit: 20, windowMs: 5 * 60 * 1000 },
+    email: { scope: 'login_email', limit: 5, windowMs: 15 * 60 * 1000 },
+  },
+  refresh: {
+    ip: { scope: 'refresh_ip', limit: 20, windowMs: 5 * 60 * 1000 },
+    token: { scope: 'refresh_token', limit: 5, windowMs: 15 * 60 * 1000 },
+  },
+  forgotPassword: {
+    ip: { scope: 'forgot_ip', limit: 3, windowMs: 15 * 60 * 1000 },
+    email: { scope: 'forgot_email', limit: 3, windowMs: 24 * 60 * 60 * 1000 },
+  },
+  resetPassword: {
+    ip: { scope: 'reset_ip', limit: 10, windowMs: 5 * 60 * 1000 },
+    token: { scope: 'reset_token', limit: 5, windowMs: 15 * 60 * 1000 },
+  },
+} as const;
 const DUMMY_PASSWORD_HASH =
   '$argon2id$v=19$m=65536,t=3,p=1$SoHl8YUBzXgiAZ4xlgNZyg$qwZIFOa2OcIOgiHLRYImWLsza4k9/T4ZZvvhiWrD41k';
 const PASSWORD_RECOVERY_MESSAGE =
@@ -125,18 +137,8 @@ export class LocalAuthService {
     }
 
     await this.enforceRateLimits([
-      {
-        scope: 'register_ip',
-        key: ip,
-        limit: 5,
-        windowMs: 15 * 60 * 1000,
-      },
-      {
-        scope: 'register_email',
-        key: normalized.email,
-        limit: 3,
-        windowMs: VERIFICATION_TTL_MS,
-      },
+      { ...LOCAL_AUTH_RATE_LIMITS.register.ip, key: ip },
+      { ...LOCAL_AUTH_RATE_LIMITS.register.email, key: normalized.email },
     ]);
 
     const now = this.clock.now();
@@ -189,7 +191,7 @@ export class LocalAuthService {
     browserBinding?: string,
   ): Promise<IssuedSession | undefined> {
     await this.enforceRateLimits([
-      { scope: 'verify_ip', key: ip, limit: 10, windowMs: 5 * 60 * 1000 },
+      { ...LOCAL_AUTH_RATE_LIMITS.verify.ip, key: ip },
     ]);
 
     const now = this.clock.now();
@@ -230,18 +232,8 @@ export class LocalAuthService {
     }
 
     await this.enforceRateLimits([
-      {
-        scope: 'resend_ip',
-        key: ip,
-        limit: 3,
-        windowMs: 15 * 60 * 1000,
-      },
-      {
-        scope: 'resend_email',
-        key: normalizedEmail,
-        limit: 3,
-        windowMs: VERIFICATION_TTL_MS,
-      },
+      { ...LOCAL_AUTH_RATE_LIMITS.resend.ip, key: ip },
+      { ...LOCAL_AUTH_RATE_LIMITS.resend.email, key: normalizedEmail },
     ]);
 
     const now = this.clock.now();
@@ -282,16 +274,12 @@ export class LocalAuthService {
 
     await this.enforceRateLimits([
       {
-        scope: 'forgot_ip',
+        ...LOCAL_AUTH_RATE_LIMITS.forgotPassword.ip,
         key: ip,
-        limit: FORGOT_IP_LIMIT,
-        windowMs: FORGOT_IP_WINDOW_MS,
       },
       {
-        scope: 'forgot_email',
+        ...LOCAL_AUTH_RATE_LIMITS.forgotPassword.email,
         key: normalizedEmail,
-        limit: FORGOT_EMAIL_LIMIT,
-        windowMs: FORGOT_EMAIL_WINDOW_MS,
       },
     ]);
 
@@ -378,16 +366,12 @@ export class LocalAuthService {
     ) {
       await this.enforceRateLimits([
         {
-          scope: 'login_ip',
+          ...LOCAL_AUTH_RATE_LIMITS.login.ip,
           key: ip,
-          limit: LOGIN_IP_LIMIT,
-          windowMs: LOGIN_IP_WINDOW_MS,
         },
         {
-          scope: 'login_email',
+          ...LOCAL_AUTH_RATE_LIMITS.login.email,
           key: normalized.email,
-          limit: LOGIN_EMAIL_LIMIT,
-          windowMs: LOGIN_EMAIL_WINDOW_MS,
         },
       ]);
       throw new AppError({
@@ -546,19 +530,15 @@ export class LocalAuthService {
   ): Promise<void> {
     await this.enforceRateLimits([
       {
-        scope: 'refresh_ip',
+        ...LOCAL_AUTH_RATE_LIMITS.refresh.ip,
         key: ip,
-        limit: REFRESH_IP_LIMIT,
-        windowMs: REFRESH_IP_WINDOW_MS,
       },
       ...(tokenHash === undefined
         ? []
         : [
             {
-              scope: 'refresh_token' as const,
+              ...LOCAL_AUTH_RATE_LIMITS.refresh.token,
               key: tokenHash,
-              limit: REFRESH_TOKEN_LIMIT,
-              windowMs: REFRESH_TOKEN_WINDOW_MS,
             },
           ]),
     ]);
@@ -570,16 +550,12 @@ export class LocalAuthService {
   ): Promise<void> {
     await this.enforceRateLimits([
       {
-        scope: 'reset_ip',
+        ...LOCAL_AUTH_RATE_LIMITS.resetPassword.ip,
         key: ip,
-        limit: RESET_IP_LIMIT,
-        windowMs: RESET_IP_WINDOW_MS,
       },
       {
-        scope: 'reset_token',
+        ...LOCAL_AUTH_RATE_LIMITS.resetPassword.token,
         key: tokenHash,
-        limit: RESET_TOKEN_LIMIT,
-        windowMs: RESET_TOKEN_WINDOW_MS,
       },
     ]);
   }

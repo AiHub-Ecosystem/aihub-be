@@ -37,6 +37,7 @@ If an older architecture draft conflicts with an implementation spec, record the
 - Business modules use `presentation -> application -> domain`; infrastructure implements application ports and points inward.
 - `domain` has no framework, transport, environment, database, cache, or downstream imports.
 - `src/common` contains only genuinely cross-cutting primitives. `src/catalog` owns operation metadata; `src/contracts` owns boundary schemas; `src/downstream` owns pure mappers and dispatch seams.
+- Keep constants and configuration beside the application use case or layer that owns them; group related values by policy, and extract them only when independently reused. Avoid generic `constants` files and never move business policy into `src/common` or `domain`.
 - Organization identity is explicit in `RequestContext` and application inputs. Do not recover tenant identity from a repository-global variable.
 - Controllers validate and orchestrate; they do not call Postgres, Redis, or downstream HTTP clients directly.
 
