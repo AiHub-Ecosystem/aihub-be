@@ -35,6 +35,41 @@ describe('HealthController', () => {
     await app.close();
   });
 
+  it.each(['172.16.7.1', '203.0.113.9', '::ffff:10.0.0.4'])(
+    'answers 404 and runs no probe for a connection from %s',
+    async (remoteAddress) => {
+      let probed = false;
+      probes[0]!.check = async () => {
+        probed = true;
+      };
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/ready',
+        remoteAddress,
+      });
+
+      // Reached through the reverse proxy the peer is never loopback, so this
+      // endpoint stays private even if the edge rule that hides it is missing.
+      expect(response.statusCode).toBe(404);
+      expect(response.body).not.toContain('runtime-postgres');
+      expect(probed).toBe(false);
+    },
+  );
+
+  it.each(['127.0.0.1', '::1', '::ffff:127.0.0.1'])(
+    'answers a connection from loopback address %s',
+    async (remoteAddress) => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/ready',
+        remoteAddress,
+      });
+
+      expect(response.statusCode).toBe(200);
+    },
+  );
+
   it('reports each reachable dependency without extra Terminus metadata', async () => {
     const response = await app.inject({ method: 'GET', url: '/ready' });
 
