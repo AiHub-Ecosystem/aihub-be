@@ -26,10 +26,7 @@ import type {
   IssuedOrganizationInviteToken,
   OrganizationInviteTokenPort,
 } from './organization-invite-token.port';
-import type {
-  OrganizationMembershipPort,
-  OrganizationMembershipRecord,
-} from './organization-membership.port';
+import type { OrganizationMembershipPort } from './organization-membership.port';
 
 const ORGANIZATION_ID = 'org_acme';
 const OTHER_ORGANIZATION_ID = 'org_other';
@@ -238,11 +235,16 @@ describe('organization invitation management idempotency seam', () => {
   let repository: ManagementRepository;
   let service: IdempotencyService;
   let inviteMember: InviteOrganizationMember;
-  let membership: jest.Mocked<
-    Pick<OrganizationMembershipPort, 'resolveMembership'>
-  >;
-  let invitations: jest.Mocked<OrganizationInvitationPort>;
-  let tokenIssuer: jest.Mocked<OrganizationInviteTokenPort>;
+  let membership: Pick<OrganizationMembershipPort, 'resolveMembership'>;
+  /**
+   * Only `createInvitation` is observed; the other three throw so a use case
+   * that reaches one fails loudly instead of resolving `undefined` and
+   * passing a test that never exercised it.
+   */
+  let invitations: OrganizationInvitationPort;
+  let invitationCreateInputs: CreateOrganizationInvitationInput[];
+  let invitationCreateErrors: Error[];
+  let tokenIssuer: OrganizationInviteTokenPort;
   let rateLimiter: RateLimiterFake;
   let issuedTokenCount: number;
 
@@ -251,37 +253,39 @@ describe('organization invitation management idempotency seam', () => {
     service = new IdempotencyService(repository);
     rateLimiter = new RateLimiterFake();
     issuedTokenCount = 0;
+    invitationCreateInputs = [];
+    invitationCreateErrors = [];
     membership = {
-      resolveMembership: jest.fn(
-        async ({
+      resolveMembership: async ({ organizationId, userId }) => ({
+        kind: 'active',
+        membership: {
           organizationId,
           userId,
-        }): Promise<{
-          readonly kind: 'active';
-          readonly membership: OrganizationMembershipRecord;
-        }> => ({
-          kind: 'active',
-          membership: {
-            organizationId,
-            userId,
-            organizationStatus: 'active',
-            role: 'owner',
-            status: 'active',
-          },
-        }),
-      ),
+          organizationStatus: 'active',
+          role: 'owner',
+          status: 'active',
+        },
+      }),
     };
     invitations = {
-      createInvitation: jest.fn(
-        async (_input: CreateOrganizationInvitationInput) =>
-          ({ kind: 'created' }) as const,
-      ),
-      listOpenInvitations: jest.fn(),
-      acceptInvitation: jest.fn(),
-      revokeInvitation: jest.fn(),
+      createInvitation: async (input) => {
+        invitationCreateInputs.push(input);
+        const error = invitationCreateErrors.shift();
+        if (error) throw error;
+        return { kind: 'created' } as const;
+      },
+      listOpenInvitations: () => {
+        throw new Error('this test does not list invitations');
+      },
+      acceptInvitation: () => {
+        throw new Error('this test does not accept invitations');
+      },
+      revokeInvitation: () => {
+        throw new Error('this test does not revoke invitations');
+      },
     };
     tokenIssuer = {
-      issue: jest.fn((now: Date): IssuedOrganizationInviteToken => {
+      issue: (now: Date): IssuedOrganizationInviteToken => {
         issuedTokenCount += 1;
         return {
           id: `oiv_${issuedTokenCount}`,
@@ -289,8 +293,8 @@ describe('organization invitation management idempotency seam', () => {
           hash: `hash-${issuedTokenCount}`,
           expiresAt: new Date(now.getTime() + 86_400_000),
         };
-      }),
-      hash: jest.fn((raw: string) => raw),
+      },
+      hash: (raw: string) => raw,
     };
     inviteMember = new InviteOrganizationMember(
       membership,
@@ -364,7 +368,7 @@ describe('organization invitation management idempotency seam', () => {
     expect(first.replay).toBe(false);
     expect(replay).toEqual({ result: first.result, replay: true });
     expect(issuedTokenCount).toBe(1);
-    expect(invitations.createInvitation).toHaveBeenCalledTimes(1);
+    expect(invitationCreateInputs).toHaveLength(1);
   });
 
   it.each([
@@ -385,7 +389,7 @@ describe('organization invitation management idempotency seam', () => {
       });
 
       expect(issuedTokenCount).toBe(0);
-      expect(invitations.createInvitation).not.toHaveBeenCalled();
+      expect(invitationCreateInputs).toHaveLength(0);
     },
   );
 
@@ -412,7 +416,7 @@ describe('organization invitation management idempotency seam', () => {
         userId: 'usr_fourth',
       }),
     ).rejects.toMatchObject({ code: 'RATE_LIMITED', httpStatus: 429 });
-    expect(invitations.createInvitation).toHaveBeenCalledTimes(3);
+    expect(invitationCreateInputs).toHaveLength(3);
   });
 
   it('rejects a different role with the same scoped key', async () => {
@@ -425,7 +429,7 @@ describe('organization invitation management idempotency seam', () => {
       httpStatus: 409,
     });
     expect(issuedTokenCount).toBe(1);
-    expect(invitations.createInvitation).toHaveBeenCalledTimes(1);
+    expect(invitationCreateInputs).toHaveLength(1);
   });
 
   it('keeps the same key independent across callers and Organizations', async () => {
@@ -437,7 +441,7 @@ describe('organization invitation management idempotency seam', () => {
     });
 
     expect(issuedTokenCount).toBe(3);
-    expect(invitations.createInvitation).toHaveBeenCalledTimes(3);
+    expect(invitationCreateInputs).toHaveLength(3);
   });
 
   it('lets a missing key retain the existing non-idempotent behavior', async () => {
@@ -445,7 +449,7 @@ describe('organization invitation management idempotency seam', () => {
     await execute({});
 
     expect(issuedTokenCount).toBe(2);
-    expect(invitations.createInvitation).toHaveBeenCalledTimes(2);
+    expect(invitationCreateInputs).toHaveLength(2);
   });
 
   it('allows one concurrent claimant and conflicts the other safely', async () => {
@@ -466,7 +470,7 @@ describe('organization invitation management idempotency seam', () => {
       reason: { code: 'IDEMPOTENCY_CONFLICT', httpStatus: 409 },
     });
     expect(issuedTokenCount).toBe(1);
-    expect(invitations.createInvitation).toHaveBeenCalledTimes(1);
+    expect(invitationCreateInputs).toHaveLength(1);
   });
 
   it('fails closed when reservation storage is unavailable', async () => {
@@ -476,7 +480,7 @@ describe('organization invitation management idempotency seam', () => {
       { code: 'INTERNAL_ERROR', httpStatus: 500 },
     );
     expect(issuedTokenCount).toBe(0);
-    expect(invitations.createInvitation).not.toHaveBeenCalled();
+    expect(invitationCreateInputs).toHaveLength(0);
   });
 
   it('keeps completion uncertainty pending so a retry cannot duplicate the invitation', async () => {
@@ -494,11 +498,11 @@ describe('organization invitation management idempotency seam', () => {
       }),
     ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT', httpStatus: 409 });
     expect(issuedTokenCount).toBe(1);
-    expect(invitations.createInvitation).toHaveBeenCalledTimes(1);
+    expect(invitationCreateInputs).toHaveLength(1);
   });
 
   it('fails the whole create when the commit fails and lets the same key retry', async () => {
-    invitations.createInvitation.mockRejectedValueOnce(storeUnavailable());
+    invitationCreateErrors.push(storeUnavailable());
 
     await expect(execute({ idempotencyKey: 'invite-1' })).rejects.toMatchObject(
       {
@@ -513,11 +517,15 @@ describe('organization invitation management idempotency seam', () => {
       }),
     ).resolves.toMatchObject({ replay: false });
     expect(issuedTokenCount).toBe(2);
-    expect(invitations.createInvitation).toHaveBeenCalledTimes(2);
+    expect(invitationCreateInputs).toHaveLength(2);
   });
 
   it('consumes the email allowance when the commit fails', async () => {
-    invitations.createInvitation.mockRejectedValue(storeUnavailable());
+    invitationCreateErrors.push(
+      storeUnavailable(),
+      storeUnavailable(),
+      storeUnavailable(),
+    );
 
     for (const idempotencyKey of ['invite-1', 'invite-2', 'invite-3']) {
       await expect(execute({ idempotencyKey })).rejects.toMatchObject({
@@ -529,6 +537,6 @@ describe('organization invitation management idempotency seam', () => {
     await expect(execute({ idempotencyKey: 'invite-4' })).rejects.toMatchObject(
       { code: 'RATE_LIMITED', httpStatus: 429 },
     );
-    expect(invitations.createInvitation).toHaveBeenCalledTimes(3);
+    expect(invitationCreateInputs).toHaveLength(3);
   });
 });
