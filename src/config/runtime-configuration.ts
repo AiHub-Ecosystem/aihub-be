@@ -25,6 +25,19 @@ export const DEFAULT_SEAWEEDFS_ENDPOINT = 'https://s3.wispace.app';
 export const DEFAULT_SEAWEEDFS_REGION = 'us-east-1';
 export const DEFAULT_SEAWEEDFS_SAMPLE_BUCKET = 'aihub-speaking-samples';
 
+export const PUBLIC_API_SERVERS = [
+  {
+    environment: 'production',
+    hostname: 'api.aihubproduction.com',
+    description: 'Production API',
+  },
+  {
+    environment: 'sandbox',
+    hostname: 'sandbox.aihubproduction.com',
+    description: 'Sandbox API for testing',
+  },
+] as const;
+
 const fields = {
   NODE_ENV: { kind: 'enum', values: MODES, defaultValue: 'production' },
   PORT: { kind: 'number', defaultValue: 3000, minValue: 0, maxValue: 65535 },

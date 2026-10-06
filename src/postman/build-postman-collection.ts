@@ -835,6 +835,16 @@ export async function buildPostmanCollection(
   openApiDocument: unknown,
   version: string,
 ): Promise<unknown> {
+  const servers = (
+    openApiDocument as {
+      readonly servers?: readonly { readonly url?: unknown }[];
+    } | null
+  )?.servers;
+  const baseUrl = servers?.[0]?.url;
+  if (typeof baseUrl !== 'string' || baseUrl.length === 0) {
+    throw new Error('OpenAPI document must declare at least one server');
+  }
+
   const base = stripKey(
     await convertOpenApiToPostman(openApiDocument),
     'response',
@@ -854,8 +864,9 @@ export async function buildPostmanCollection(
     variable: [
       {
         key: 'baseUrl',
-        value: 'https://api.aihubproduction.example.com',
-        description: 'AIHUB base URL for the environment under test.',
+        value: baseUrl,
+        description:
+          'Production API base URL; select Sandbox in OpenAPI to test.',
       },
       { key: 'apiKey', value: 'REPLACE_WITH_A_VALID_ORGANIZATION_API_KEY' },
       {

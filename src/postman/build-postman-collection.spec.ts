@@ -92,13 +92,18 @@ describe('buildPostmanCollection', () => {
 
   it('declares baseUrl and apiKey as collection variables', async () => {
     const collection = await build();
-    const names = (collection.variable as readonly { key: string }[]).map(
-      (v) => v.key,
-    );
+    const variables = collection.variable as readonly {
+      key: string;
+      value: string;
+    }[];
+    const names = variables.map((v) => v.key);
 
     expect(names).toContain('baseUrl');
     expect(names).toContain('apiKey');
     expect(names).toContain('refreshToken');
+    expect(
+      variables.find((variable) => variable.key === 'baseUrl')?.value,
+    ).toBe('https://api.aihubproduction.com');
   });
 
   it('represents refresh and logout credentials as a Postman cookie, not a header', async () => {

@@ -27,6 +27,17 @@ function configuration(
 }
 
 describe('resolveAihubEnvironment', () => {
+  it('resolves the published Production and Sandbox hostnames', () => {
+    const config = configuration();
+
+    expect(
+      resolveAihubEnvironment(request('api.aihubproduction.com'), config),
+    ).toBe('production');
+    expect(
+      resolveAihubEnvironment(request('sandbox.aihubproduction.com'), config),
+    ).toBe('sandbox');
+  });
+
   it('derives all four environments from configured hostnames', () => {
     const config = configuration({
       AIHUB_PRODUCTION_HOST: 'api.acme-real-domain.com',

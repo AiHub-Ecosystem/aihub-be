@@ -3836,8 +3836,8 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "https://api.aihubproduction.example.com",
-      "description": "AIHUB base URL for the environment under test."
+      "value": "https://api.aihubproduction.com",
+      "description": "Production API base URL; select Sandbox in OpenAPI to test."
     },
     {
       "key": "apiKey",

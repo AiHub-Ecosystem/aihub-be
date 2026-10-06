@@ -14,6 +14,7 @@ import {
   type HttpStatus,
   httpStatusForErrorCode,
 } from '@/common/errors/error-registry';
+import { PUBLIC_API_SERVERS } from '@/config/runtime-configuration';
 import {
   ForgotPasswordResponseSchema,
   LoginResponseSchema,
@@ -1721,6 +1722,10 @@ export function buildOpenApiDocument(version: string): unknown {
       title: 'AIHUB API',
       version,
     },
+    servers: PUBLIC_API_SERVERS.map(({ hostname, description }) => ({
+      url: `https://${hostname}`,
+      description,
+    })),
     security: [{ ApiKeyAuth: [] }],
     components: {
       securitySchemes: {

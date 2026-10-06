@@ -37,6 +37,10 @@ interface OpenApiPathItem {
 interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
+  readonly servers: readonly {
+    readonly url: string;
+    readonly description: string;
+  }[];
   readonly security: readonly Record<string, readonly string[]>[];
   readonly components: {
     readonly securitySchemes: Record<string, unknown>;
@@ -131,6 +135,20 @@ function build(): OpenApiDocument {
 describe('buildOpenApiDocument', () => {
   it('declares OpenAPI 3.1', () => {
     expect(build().openapi).toBe('3.1.0');
+  });
+
+  it('publishes the Production and Sandbox servers', () => {
+    expect(build().servers).toEqual([
+      {
+        url: 'https://api.aihubproduction.com',
+        description: 'Production API',
+      },
+      {
+        url: 'https://sandbox.aihubproduction.com',
+        description: 'Sandbox API for testing',
+      },
+    ]);
+    expect(build().servers).not.toHaveLength(0);
   });
 
   it('has exactly one path entry per catalogued operation, so adding an operation without regenerating fails', () => {

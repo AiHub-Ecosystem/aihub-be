@@ -1,7 +1,10 @@
 import type { FastifyRequest } from 'fastify';
 
 import { AppError } from '@/common/errors/app-error';
-import type { RuntimeConfiguration } from '@/config/runtime-configuration';
+import {
+  PUBLIC_API_SERVERS,
+  type RuntimeConfiguration,
+} from '@/config/runtime-configuration';
 
 export type AihubEnvironment =
   | 'development'
@@ -41,6 +44,9 @@ function configuredHosts(
   config: RequestEnvironmentConfig,
 ): ReadonlyMap<string, AihubEnvironment> {
   const hosts = new Map<string, AihubEnvironment>();
+  for (const server of PUBLIC_API_SERVERS) {
+    hosts.set(server.hostname, server.environment);
+  }
   for (const environment of ENVIRONMENTS) {
     const variable = HOST_VARIABLES[environment];
     const value = config[variable];

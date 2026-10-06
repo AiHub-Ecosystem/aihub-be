@@ -4,6 +4,16 @@
     "title": "AIHUB API",
     "version": "0.1.0"
   },
+  "servers": [
+    {
+      "url": "https://api.aihubproduction.com",
+      "description": "Production API"
+    },
+    {
+      "url": "https://sandbox.aihubproduction.com",
+      "description": "Sandbox API for testing"
+    }
+  ],
   "security": [
     {
       "ApiKeyAuth": []
