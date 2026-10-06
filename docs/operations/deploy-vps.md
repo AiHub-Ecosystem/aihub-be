@@ -613,8 +613,12 @@ location / {
     proxy_set_header X-Forwarded-Proto $scheme;
 }
 
-# Keep dependency readiness private. Host-local monitoring uses `docker exec`
+# Keep dependency readiness and metrics private. Host-local monitoring uses `docker exec`
 # against the container's loopback address and does not pass through nginx.
+location = /metrics {
+    return 404;
+}
+
 location = /ready {
     return 404;
 }
@@ -664,6 +668,10 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /metrics {
+        return 404;
     }
 
     location = /ready {
