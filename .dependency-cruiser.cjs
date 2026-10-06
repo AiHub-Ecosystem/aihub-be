@@ -37,15 +37,14 @@ function isSharedPrimitive(file) {
  * explicit `public/` facades, and shared primitives of whichever module the
  * target turns out to be.
  *
- * This rule is `warn`, not `error`, because Nest exports are matched by file:
- * the exemption covers a file declaring an exported symbol, not only that
- * symbol. Plain TypeScript APIs are published through explicit `public/`
- * facades instead.
+ * This rule is an error. Nest exports are matched by file, so the exemption
+ * covers a file declaring an exported symbol, not only that symbol. Plain
+ * TypeScript APIs are published through explicit `public/` facades instead.
  */
 function crossModuleRule() {
   return {
     name: 'no-cross-module-internal-import',
-    severity: 'warn',
+    severity: 'error',
     comment:
       "A business module imports another module's internal path. Use the module file, an application port, an explicit public/ facade, a Nest export, decorator, or shared request primitive (ADR-0066).",
     from: {
@@ -81,7 +80,7 @@ function crossModuleRule() {
 function cliRule() {
   return {
     name: 'no-cli-module-internal-import',
-    severity: 'warn',
+    severity: 'error',
     comment:
       "An Operator command imports a module's internal path. Use an application port or explicit public/ facade; constructing infrastructure remains the CLI composition root's job (ADR-0066).",
     from: {

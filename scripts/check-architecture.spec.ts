@@ -27,11 +27,10 @@ function matches(pattern: string | string[], path: string): boolean {
  * matching reports the whole tree. The real-tree test at the bottom is what
  * pins the effect; these cases pin which paths the rule reads as seam.
  */
-describe('cross-module import rule', () => {
-  it('keeps future path-based findings visible without blocking valid seams', () => {
-    // Nest exports are exempt by declaring file, so keep the rule warning-only
-    // while preserving the broad guard/interceptor seam.
-    expect(crossModuleRule?.severity).toBe('warn');
+describe('cross-module import rules', () => {
+  it('fails on imports outside the published seams', () => {
+    expect(crossModuleRule?.severity).toBe('error');
+    expect(cliRule?.severity).toBe('error');
   });
 
   it('covers every module pair with one rule, skipping the importing module', () => {
@@ -282,7 +281,7 @@ describe('cross-module import rule over the real tree', () => {
   it('reads the cli rule from the config', () => {
     // The real-tree assertions above would pass if the rule were silently
     // dropped from the config, so its presence is checked directly.
-    expect(cliRule?.severity).toBe('warn');
+    expect(cliRule?.severity).toBe('error');
     expect(matches(cliRule?.from.path ?? '', 'src/cli/usage-prune.ts')).toBe(
       true,
     );

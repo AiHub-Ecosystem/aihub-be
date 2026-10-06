@@ -147,3 +147,12 @@ The dependency rule discovers files under `public/` from the source tree and
 requires consumers to import those facades. It still reports direct imports of
 private module paths. The current tree has no `no-cross-module-internal-import`
 or `no-cli-module-internal-import` warnings.
+
+## Update: internal imports are forbidden after cleanup (#310, 2026-10-06)
+
+The cross-module and CLI cleanup removed the remaining private-path imports.
+Both `no-cross-module-internal-import` and `no-cli-module-internal-import` are
+now errors, so a future import outside a module's published seam fails
+`pnpm arch-check`. The current tree has zero findings for both rules. The
+warning counts above describe earlier snapshots and remain as historical
+measurements.
