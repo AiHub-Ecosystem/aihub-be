@@ -52,6 +52,23 @@ $env:AIHUB_VAULT_AGENT_CIDR = '172.16.2.1/32'
 pnpm vault:provision
 ```
 
+Every value in a bundle file is a string. In `email-outbox.json` that includes
+`keys`, which is a JSON object **encoded as a string**, mapping each key id to 32
+random bytes in base64. The template inserts that string into the rendered
+document as-is, so it must be valid JSON:
+
+```json
+{
+  "current_key_id": "k2026-10",
+  "keys": "{\"k2026-10\": \"<base64 of 32 random bytes>\"}"
+}
+```
+
+Generate a key with
+`node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`.
+To rotate, add the new id to `keys`, point `current_key_id` at it, and keep the
+old id until no queued request still needs it (see the email outbox runbook).
+
 `AIHUB_VAULT_AGENT_CIDR` is the address **Vault records as the login source**.
 That is not the Agent container's IP. The Agent and Vault sit on separate Docker
 networks, so Docker NATs every cross-network connection to the Vault-side
