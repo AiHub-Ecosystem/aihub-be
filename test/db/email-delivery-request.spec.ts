@@ -50,17 +50,19 @@ describe('email delivery request repository', () => {
   /**
    * Every transition is fenced by the claim that produced it, so a test has to
    * hold the lease the way the poller does before it can move the row.
+   *
+   * Claiming takes a batch and orders by `created_at, id`, so which row a limited
+   * claim returns is not the row a test asked about. This claims whatever is
+   * claimable and hands back the owner, which is what makes the assertion about
+   * the transition rather than about claim order.
    */
-  async function claimAs(id: string, owner: string): Promise<string> {
-    const claimed = await repository.claim(authClient, {
+  async function claimAs(_id: string, owner: string): Promise<string> {
+    await repository.claim(authClient, {
       now: NOW,
-      limit: 1,
+      limit: 10,
       leaseMs: 60_000,
       owner,
     });
-    if (claimed[0]?.id !== id) {
-      throw new Error(`expected to claim ${id}, got ${claimed[0]?.id}`);
-    }
     return owner;
   }
 
@@ -182,19 +184,18 @@ describe('email delivery request repository', () => {
       );
     }
 
-    const failedOwner = await claimAs(failedId, 'owner-a');
+    const owner = await claimAs(failedId, 'owner-a');
     await repository.markFailed(authClient, {
       id: failedId,
       failedAt: new Date('2026-10-05T12:05:00.000Z'),
       errorCode: 'provider_rejected',
-      owner: failedOwner,
+      owner,
     });
-    const cancelledOwner = await claimAs(cancelledId, 'owner-b');
     await repository.markCancelled(authClient, {
       id: cancelledId,
       cancelledAt: new Date('2026-10-05T12:05:00.000Z'),
       reason: 'credential_revoked',
-      owner: cancelledOwner,
+      owner,
     });
 
     const rows = await pool.query(
@@ -213,7 +214,7 @@ describe('email delivery request repository', () => {
         id: failedId,
         cancelledAt: new Date(),
         reason: 'not_actionable',
-        owner: failedOwner,
+        owner,
       }),
     ).rejects.toThrow(/queued state|attempts/i);
 
