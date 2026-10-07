@@ -28,3 +28,7 @@ Both peaks are more than 220 MiB below the 614 MiB gate, so keep the current pro
 OWASP lists `m=19456 KiB, t=2, p=1` as a minimum recommended Argon2id profile. [Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
 
 If the lower profile still exceeds the RSS threshold, record that result and revisit the wider container budget under #268; do not keep lowering password-hash cost in this issue. The confirmation run repeated the current profile after the decision; no profile migration or login rehash is needed while the RSS gate passes.
+
+## Verification (2026-10-07)
+
+`pnpm verify` passed on the pinned Node 22.23.2 Linux environment: 197 test suites passed, with 1,896 tests passing and one skipped.
