@@ -11,8 +11,6 @@
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "migrate": "node scripts/migrate.mjs",
-    "migrate:sandbox-control-plane": "node scripts/sandbox-control-plane-migration.cjs",
-    "migrate:cw": "node scripts/customer-web-migration.cjs",
     "cli": "node scripts/cli.mjs",
     "dev:assertion": "node scripts/dev-sign-assertion.mjs",
     "demo:bootstrap": "node scripts/demo-bootstrap.mjs",

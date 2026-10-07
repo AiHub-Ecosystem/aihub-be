@@ -12,7 +12,6 @@ import { exportPKCS8 } from 'jose';
 import { ulid } from 'ulid';
 
 import { AppModule } from '@/app.module';
-import { migrateSandboxOrganization } from '@/cli/sandbox-control-plane-migration';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import {
@@ -438,22 +437,25 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
       keyId: appConnectionConfiguration.sandboxAssertionKeyId,
     };
 
-    await sandbox.query(
+    // The demo Organization, its key, and its identity configuration live in
+    // the production control plane (ADR-0056), so the fixture seeds them
+    // directly there rather than reproducing a cutover.
+    await controlPlane.query(
       `INSERT INTO organizations
          (id, name, entitlements, rate_limit_rpm, max_concurrent,
           monthly_request_quota, hard_stop_on_quota)
        VALUES ($1, 'Demo Sandbox', ARRAY['speaking'], 60, 3, 10, true)`,
       [demoOrganizationId],
     );
-    await sandbox.query(
+    await controlPlane.query(
       `INSERT INTO api_keys
          (id, organization_id, key_hash, key_prefix, name, scopes,
           allowed_environments, status)
        VALUES ($1, $2, decode($3, 'hex'), $4, 'BFF demo key',
-         ARRAY['speaking.grade'], ARRAY['development'], 'active')`,
+         ARRAY['speaking.grade'], ARRAY['sandbox'], 'active')`,
       [demoKey.id, demoOrganizationId, demoKey.hash, demoKey.prefix],
     );
-    await sandbox.query(
+    await controlPlane.query(
       `INSERT INTO organization_identity_configs
          (organization_id, issuer, jwks_url, public_keys_jwks,
           allowed_algorithms, max_assertion_ttl_seconds, status)
@@ -467,15 +469,6 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
     );
 
     try {
-      await expect(
-        migrateSandboxOrganization(
-          sandbox,
-          controlPlane,
-          demoOrganizationId,
-          true,
-        ),
-      ).resolves.toMatchObject({ status: 'applied' });
-
       appConfiguration.AIHUB_SANDBOX_ORG_IDS = demoOrganizationId;
       appConnectionConfiguration.sandboxAssertionPrivateKey = demoPrivateKey;
       appConnectionConfiguration.sandboxAssertionKeyId = demoIdentity.keyId;
@@ -536,16 +529,6 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
         [demoOrganizationId],
       );
       await controlPlane.query('DELETE FROM organizations WHERE id = $1', [
-        demoOrganizationId,
-      ]);
-      await sandbox.query('DELETE FROM api_keys WHERE organization_id = $1', [
-        demoOrganizationId,
-      ]);
-      await sandbox.query(
-        'DELETE FROM organization_identity_configs WHERE organization_id = $1',
-        [demoOrganizationId],
-      );
-      await sandbox.query('DELETE FROM organizations WHERE id = $1', [
         demoOrganizationId,
       ]);
     }

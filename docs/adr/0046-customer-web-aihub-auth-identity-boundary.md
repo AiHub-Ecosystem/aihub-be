@@ -20,7 +20,7 @@ Per live-grading request the BFF authorizes against current membership state by 
 
 ## Migration of existing Clerk data
 
-An operator script inside aihub-be pulls users, memberships, and pending invitations from the Clerk Backend API. The evidence bundle — mapping table, quarantine list, run log — lives outside git; the repository carries only the runbook plus aggregate counts and a SHA-256 digest of the mapping file, because the mapping contains email addresses.
+An operator script inside aihub-be pulls users, memberships, and pending invitations from the Clerk Backend API. The evidence bundle — mapping table, quarantine list, run log — lives outside git; the repository carries only the runbook plus aggregate counts and a SHA-256 digest of the mapping file, because the mapping contains email addresses. The cutover has run and the script was removed in #337; the procedure is retained as a record in [Customer Web identity cutover runbook](../history/customer-web-identity-cutover.md), and git history retains the tool.
 
 Matching keys on the normalized email: one exact active match reuses that account (duplicates are impossible by construction), no match pre-provisions a new account, and every ambiguous case — missing email, multiple candidates, a suspended or disabled target, or an unexpected existing membership row — enters quarantine for operator disposition (`link` / `create` / `skip`) that must be resolved before the flip. Migrated accounts are seeded `active` with an unusable random password; the first credential arrives through the password-reset path, whose delivered token re-proves email ownership. This deliberately departs from ADR-0022's pending-verification registration contract because this is operator-seeded migration, not registration.
 

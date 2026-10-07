@@ -1,5 +1,11 @@
 # Customer Web identity cutover runbook (issue #94, ADR-0046)
 
+> **Historical record.** This cutover ran in production and #94 is closed. The
+> `pnpm migrate:cw` runner and its executor were removed in #337, so the commands
+> below no longer exist; git history retains the tool. Keep this document for the
+> reasoning and the shape of the export, dispositions, and evidence files — not
+> as something to re-run.
+
 Cutover moves the Customer Web sandbox from Clerk to AIHUB auth in one flip.
 Rollback is a redeploy of the previous Customer Web image tag — not a
 feature flag, not a data rollback. AIHUB-side accounts and memberships created
