@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly STAGING_DIR=/var/lib/aihub-nginx-staging
+readonly API_SOURCE="$STAGING_DIR/aihub-api.conf"
+readonly SANDBOX_SOURCE="$STAGING_DIR/sandbox.conf"
+readonly API_DEST=/etc/nginx/conf.d/aihub-api.conf
+readonly SANDBOX_DEST=/etc/nginx/conf.d/sandbox.conf
+
+if [[ $# -ne 0 ]]; then
+  printf 'This helper accepts no arguments.\n' >&2
+  exit 2
+fi
+
+if [[ ! -d "$STAGING_DIR" || -L "$STAGING_DIR" ]]; then
+  printf 'Missing or invalid nginx staging directory.\n' >&2
+  exit 1
+fi
+if [[ ! -f "$API_SOURCE" || -L "$API_SOURCE" || ! -s "$API_SOURCE" ]]; then
+  printf 'Missing or invalid staged API nginx config.\n' >&2
+  exit 1
+fi
+if [[ -L "$SANDBOX_SOURCE" ]]; then
+  printf 'Staged Sandbox nginx config must not be a symlink.\n' >&2
+  exit 1
+fi
+
+api_existed=0
+sandbox_existed=0
+if [[ -L "$API_DEST" ]]; then
+  printf 'Refusing symlink destination: %s\n' "$API_DEST" >&2
+  exit 1
+fi
+if [[ -L "$SANDBOX_DEST" ]]; then
+  printf 'Refusing symlink destination: %s\n' "$SANDBOX_DEST" >&2
+  exit 1
+fi
+backup_dir="$(mktemp -d /run/aihub-nginx.XXXXXX)"
+if [[ -e "$API_DEST" ]]; then
+  cp -a "$API_DEST" "$backup_dir/api.conf"
+  api_existed=1
+fi
+if [[ -e "$SANDBOX_DEST" ]]; then
+  cp -a "$SANDBOX_DEST" "$backup_dir/sandbox.conf"
+  sandbox_existed=1
+fi
+
+rollback() {
+  local status="$1"
+  trap - ERR INT TERM
+  set +e
+
+  if [[ "$api_existed" -eq 1 ]]; then
+    cp -a "$backup_dir/api.conf" "$API_DEST"
+  else
+    rm -f "$API_DEST"
+  fi
+  if [[ "$sandbox_existed" -eq 1 ]]; then
+    cp -a "$backup_dir/sandbox.conf" "$SANDBOX_DEST"
+  else
+    rm -f "$SANDBOX_DEST"
+  fi
+
+  if nginx -t; then
+    systemctl reload nginx
+  else
+    printf 'Rollback restored files but nginx -t still fails; nginx was not reloaded.\n' >&2
+  fi
+  rm -rf "$backup_dir"
+  exit "$status"
+}
+trap 'rollback $?' ERR
+trap 'rollback 1' INT TERM
+
+install -o root -g root -m 0644 "$API_SOURCE" "$API_DEST"
+if [[ -f "$SANDBOX_SOURCE" ]]; then
+  [[ -s "$SANDBOX_SOURCE" ]] || { printf 'Staged Sandbox nginx config is empty.\n' >&2; false; }
+  install -o root -g root -m 0644 "$SANDBOX_SOURCE" "$SANDBOX_DEST"
+else
+  rm -f "$SANDBOX_DEST"
+fi
+
+nginx -t
+systemctl reload nginx
+trap - ERR INT TERM
+rm -rf "$backup_dir"

@@ -441,56 +441,81 @@ bind port 80 against nginx.
 them unrelated to AIHUB, and `docker ps` lists around twenty containers from
 several projects. Taking port 80 or 443 from nginx takes those sites down with
 it. Do not stop nginx, do not add a container that binds those ports, and do not
-"free up" a port that appears to be in use.
+"free up" a port that appears to be in use. AIHUB owns only
+[`ops/nginx/aihub-api.conf`](../../ops/nginx/aihub-api.conf) and
+[`ops/nginx/sandbox.conf`](../../ops/nginx/sandbox.conf); the other hostnames
+and their Certbot blocks stay operator-managed.
 
-The live production site lives in `/etc/nginx/conf.d/aihub.conf`:
+### Managed nginx configuration
 
-```nginx
-server_name api.aihubproduction.com;
-server_tokens off;
-add_header Strict-Transport-Security "max-age=15552000" always;
+The operator-managed `/etc/nginx/conf.d/aihub.conf` contains the API hostname
+alongside the apex frontend, Certbot redirects, and legacy alias. Before CD can
+own the AIHUB blocks, perform this one-time migration during a supervised
+change window:
 
-# Keep the edge above the application's own limits so AIHUB's JSON error
-# envelope, not nginx's bare HTML 413/504, reaches the client. The Speaking
-# multipart route accepts a 26 MiB wire body and runs on a 60-second budget.
-client_max_body_size 27m;
-proxy_read_timeout 75s;
-proxy_send_timeout 75s;
+1. Back up `/etc/nginx` and capture current behavior of both AIHUB hosts and at
+   least one unrelated site.
+2. Copy only the TLS and port-80 `api.aihubproduction.com` server blocks into
+   `/etc/nginx/conf.d/aihub-api.conf`. Preserve the frontend/apex blocks,
+   Certbot redirects, and `aihub-api.aihubproduction.com` alias in `aihub.conf`.
+3. Run `sudo nginx -t`, reload once, then verify `/health` on both AIHUB hosts,
+   `/metrics` and `/ready` return 404, and the unrelated site still works.
+   Probe the public grading route without an API key; it must return the app's
+   JSON `401` without dispatching to the provider or consuming quota:
 
-location / {
-    proxy_pass http://127.0.0.1:3021;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
+   ```sh
+   response_file="$(mktemp)"
+   status="$(curl -sS -o "$response_file" -w '%{http_code}' -X POST \
+     https://api.aihubproduction.com/v1/ielts/speaking/grading)"
+   test "$status" = 401
+   jq -e 'has("error")' "$response_file" >/dev/null
+   rm -f "$response_file"
+   ```
 
-# Keep dependency readiness and metrics private. Host-local monitoring uses `docker exec`
-# against the container's loopback address and does not pass through nginx.
-location = /metrics {
-    return 404;
-}
+   Do not expect this `401` to be gzip-compressed: stock nginx's gzip filter
+   only accepts status 200, 403, and 404. CI verifies compressed `200` verdict
+   responses and `Vary: Accept-Encoding` using the captured fixture.
 
-location = /ready {
-    return 404;
-}
+4. Prepare the staging directory and install the reviewed helper as root before
+   enabling its CD invocation.
 
-listen 443 ssl; # managed by Certbot
-ssl_certificate /etc/letsencrypt/live/api.aihubproduction.com/fullchain.pem;
-ssl_certificate_key /etc/letsencrypt/live/api.aihubproduction.com/privkey.pem;
+```sh
+sudo install -d -o <deploy-user> -g <deploy-user> -m 0750 \
+  /var/lib/aihub-nginx-staging
+sudo install -o root -g root -m 0755 ops/nginx/aihub-nginx-apply \
+  /usr/local/sbin/aihub-nginx-apply
 ```
 
-`proxy_set_header Host $host` is load-bearing. The application resolves the
-request environment from that header, so a block that rewrites or drops it would
-make every request on that hostname fail with `ENVIRONMENT_NOT_ALLOWED`.
+Add exactly this sudoers command for the deploy user using `visudo`:
 
-`client_max_body_size` and the proxy timeouts must stay above the application's
-own per-operation limits (`maxBodyBytes` and `timeoutMs` in
-`src/catalog/operation-catalog.ts`); the sandbox server block needs the same
-lines. Without them, nginx rejects a large Speaking upload with its default 1 MB
-body limit and a bare HTML 413 before the application ever sees the request, so
-the client loses the JSON `PAYLOAD_TOO_LARGE` envelope.
+```sudoers
+<deploy-user> ALL=(root) NOPASSWD: /usr/local/sbin/aihub-nginx-apply
+```
+
+CD stages the API config and, when `AIHUB_SANDBOX_ENABLED=true`, the Sandbox
+config in `/var/lib/aihub-nginx-staging`. The no-argument root-owned helper only
+changes those two destinations, runs `nginx -t` before reload, and restores
+previous files if install, validation, or reload fails. With Sandbox disabled,
+it removes only `/etc/nginx/conf.d/sandbox.conf`. Operators review and install
+helper updates; CD cannot replace its code.
+
+Do not enable this CD step until migration and bootstrap are complete. The API
+and Sandbox configs keep the 27 MiB request ceiling, 75-second proxy timeouts,
+forwarding headers, HSTS, hidden nginx version, and edge 404s for `/metrics`
+and `/ready`. `Host` forwarding is load-bearing because the app resolves its
+runtime environment from that header.
+
+Speaking gzip is scoped to JSON responses from the two grading routes. The
+multipart audio request passes unchanged, and request buffering is disabled
+only for raw multipart grading. CI checks the actual nginx locations with the
+captured verdict fixture and no provider call. The app sets
+`Cache-Control: no-store` on both grading routes for privacy.
+
+The workflow step is gated by the repository Actions variable
+`AIHUB_MANAGED_NGINX`. Leave it unset during initial rollout; set it to the
+string `true` only after the supervised migration, staging directory, helper,
+and sudoers entry have been verified. This lets normal app deployments proceed
+while the operator-owned cutover is pending.
 
 ### Publishing another hostname
 
@@ -504,49 +529,9 @@ Set the `server_name` directive to use the Nginx installer.
 ```
 
 So write the block first, then let certbot fill in the TLS lines — or write
-them yourself against the certificate paths certbot reports. The sandbox tier
-was published this way, and `/etc/nginx/conf.d/sandbox.conf` is the result:
-
-```nginx
-server {
-    server_name sandbox.aihubproduction.com;
-    server_tokens off;
-    add_header Strict-Transport-Security "max-age=15552000" always;
-    client_max_body_size 27m;
-
-    location / {
-        proxy_pass http://127.0.0.1:3022;
-        proxy_read_timeout 75s;
-        proxy_send_timeout 75s;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location = /metrics {
-        return 404;
-    }
-
-    location = /ready {
-        return 404;
-    }
-
-    listen 443 ssl;
-    ssl_certificate /etc/letsencrypt/live/sandbox.aihubproduction.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/sandbox.aihubproduction.com/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-}
-
-server {
-    listen 80;
-    server_name sandbox.aihubproduction.com;
-    server_tokens off;
-    return 301 https://$host$request_uri;
-}
-```
+them against the certificate paths certbot reports. The Sandbox block is
+versioned in `ops/nginx/sandbox.conf` and installed by the managed helper after
+the migration and bootstrap above.
 
 The sequence:
 
@@ -573,18 +558,11 @@ half of that guarantee the application cannot enforce itself.
 
 ### Disabling the sandbox tier
 
-Remove the sandbox nginx server block first, validate, and reload nginx so the
-hostname stops accepting traffic:
-
-```sh
-sudo nano /etc/nginx/conf.d/sandbox.conf
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-Then set `AIHUB_SANDBOX_ENABLED=false` and remove `AIHUB_SANDBOX_HOST` and
-`AIHUB_SANDBOX_ORG_IDS` together. The next `main` deployment removes the stale
-`app-sandbox` container. It does not drop `aihub_sandbox`; retain that database
-until its backup and disposal have been approved separately.
+Set `AIHUB_SANDBOX_ENABLED=false` and remove `AIHUB_SANDBOX_HOST` and
+`AIHUB_SANDBOX_ORG_IDS` together. The next `main` deployment removes the
+managed nginx Sandbox file and stale `app-sandbox` container. It does not drop
+`aihub_sandbox`; retain that database until its backup and disposal have been
+approved separately.
 
 ## Verify and operate
 

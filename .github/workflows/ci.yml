@@ -77,6 +77,12 @@ jobs:
       - name: Validate OpenAPI
         run: pnpm validate:openapi
 
+      - name: Install nginx for the edge compression check
+        run: sudo apt-get update && sudo apt-get install --yes nginx
+
+      - name: Verify scoped Speaking JSON gzip
+        run: bash ops/nginx/check-gzip.sh
+
   test:
     name: Unit tests
     runs-on: ubuntu-latest

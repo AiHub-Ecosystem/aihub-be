@@ -34,8 +34,8 @@ referrer to the CDN.
   responses.
 - HSTS and `server_tokens off` are applied to the live API and Sandbox nginx
   blocks after validation and reload. CD can now validate and reload nginx
-  without a password, but cannot sync the configuration because it has no
-  permission to write nginx config files.
+  without a password, but cannot sync the configuration yet. Issue #112 records
+  the accepted fixed-helper boundary for that work (ADR-0079).
 - Verify headers and docs markup with Fastify injection tests, then manually
   smoke-test that `/docs` renders in a browser. Do not add browser automation
   infrastructure just for this page.
@@ -48,5 +48,5 @@ referrer to the CDN.
   not match the pinned asset and the browser omits the referring URL.
 - CSP may allow inline styles for Scalar, while scripts remain pinned and
   integrity-checked.
-- CD cannot keep the manual nginx change in sync until it can safely write the
-  nginx configuration.
+- CD cannot keep the manual nginx change in sync until the operator installs
+  the root-owned helper described in ADR-0079.

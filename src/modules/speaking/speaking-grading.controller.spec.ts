@@ -14,6 +14,7 @@ import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { AppError } from '@/common/errors/app-error';
 import { registerBodySizeGuard } from '@/common/http/body-size.hook';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import {
   GRADING_ORCHESTRATOR,
@@ -28,6 +29,7 @@ import {
   SPEAKING_AUDIO_MAX_BYTES,
   registerSpeakingMultipartParser,
 } from './infrastructure/fastify-speaking-multipart.parser';
+import { registerSpeakingGradingHeaders } from './presentation/speaking-grading-headers.hook';
 
 const FIXTURES = join(__dirname, '../../../test/fixtures/ai-speaking');
 
@@ -206,6 +208,8 @@ describe('Speaking grading HTTP flow', () => {
     registerSpeakingMultipartParser(app.getHttpAdapter().getInstance());
     registerBodySizeGuard(app.getHttpAdapter().getInstance());
     registerRequestLifecycle(app.getHttpAdapter().getInstance());
+    registerSecurityHeaders(app.getHttpAdapter().getInstance());
+    registerSpeakingGradingHeaders(app.getHttpAdapter().getInstance());
     app
       .getHttpAdapter()
       .getInstance()
@@ -251,6 +255,7 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
     const body = response.json();
     expect(body.meta.operation).toBe('speaking.grading');
     expect(body.data.scorability.is_scorable).toBe(false);
@@ -321,6 +326,7 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
     expect(response.json().meta.operation).toBe('speaking.grading-json');
     expect(response.json().data).not.toHaveProperty('performance_timing');
     expect(response.json().data).not.toHaveProperty('user_id');
@@ -510,6 +516,7 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
+    expect(response.headers['cache-control']).toBe('no-store');
     expect(response.json().error.code).toBe('INVALID_REQUEST');
     expect(outboundJson).toBeUndefined();
   });
@@ -565,6 +572,7 @@ describe('Speaking grading HTTP flow', () => {
         });
 
         expect(response.statusCode).toBe(publicStatus);
+        expect(response.headers['cache-control']).toBe('no-store');
         expect(response.json().error.code).toBe(errorCode);
         expect(response.json().error.retryable).toBe(retryable);
         expect(response.payload).not.toContain(
@@ -678,6 +686,7 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
+    expect(response.headers['cache-control']).toBe('no-store');
     expect(response.json().error.code).toBe('INVALID_REQUEST');
   });
 

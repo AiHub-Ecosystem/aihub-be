@@ -133,6 +133,46 @@ jobs:
           ssh "${ssh_opts[@]}" "$target" \
             "test -s '$VPS_APP_DIR/docker-compose.production.yml' && test -s '$VPS_APP_DIR/ops/vault/agent/aihub-runtime.hcl' && test -s '$VPS_APP_DIR/ops/vault/templates/runtime-secrets.json.ctmpl' && test -s '$VPS_APP_DIR/ops/vault/templates/connection-secrets.json.ctmpl'"
 
+      - name: Apply managed AIHUB nginx config
+        if: ${{ vars.AIHUB_MANAGED_NGINX == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          scp_opts=(-i "$HOME/.ssh/aihub-deploy" -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          sandbox_enabled="$(ssh "${ssh_opts[@]}" "$target" \
+            "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -eu
+          sed -n 's/^AIHUB_SANDBOX_ENABLED=//p' "$APP_DIR/.env.production"
+          REMOTE
+          )"
+          if [ -z "$sandbox_enabled" ]; then
+            sandbox_enabled=false
+          fi
+          if [ "$sandbox_enabled" != true ] && [ "$sandbox_enabled" != false ]; then
+            printf 'AIHUB_SANDBOX_ENABLED must be true or false\n' >&2
+            exit 1
+          fi
+
+          ssh "${ssh_opts[@]}" "$target" \
+            "test -d /var/lib/aihub-nginx-staging && test -w /var/lib/aihub-nginx-staging"
+          scp "${scp_opts[@]}" ops/nginx/aihub-api.conf \
+            "$target:/var/lib/aihub-nginx-staging/aihub-api.conf"
+          if [ "$sandbox_enabled" = true ]; then
+            scp "${scp_opts[@]}" ops/nginx/sandbox.conf \
+              "$target:/var/lib/aihub-nginx-staging/sandbox.conf"
+          else
+            ssh "${ssh_opts[@]}" "$target" \
+              "rm -f /var/lib/aihub-nginx-staging/sandbox.conf"
+          fi
+
+          ssh "${ssh_opts[@]}" "$target" \
+            "test -s /var/lib/aihub-nginx-staging/aihub-api.conf && if [ '$sandbox_enabled' = true ]; then test -s /var/lib/aihub-nginx-staging/sandbox.conf; else test ! -e /var/lib/aihub-nginx-staging/sandbox.conf; fi"
+          ssh "${ssh_opts[@]}" "$target" \
+            "sudo -n /usr/local/sbin/aihub-nginx-apply"
+
       - name: Log in to GHCR on VPS
         shell: bash
         env:
