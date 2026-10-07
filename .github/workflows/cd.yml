@@ -348,6 +348,12 @@ jobs:
 
           REMOTE
 
+      - name: Verify production health URL
+        shell: bash
+        env:
+          AIHUB_PRODUCTION_HOST: ${{ vars.AIHUB_PRODUCTION_HOST }}
+        run: node scripts/probe-production-health.cjs
+
       - name: Log out of GHCR on VPS
         if: always()
         continue-on-error: true

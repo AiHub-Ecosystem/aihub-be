@@ -705,8 +705,13 @@ The Production handoff matrix is split by safety boundary:
   success mappings are covered by the Speaking HTTP seam tests; do not corrupt
   live provider credentials or deliberately overload Production to manufacture
   those failures.
-- Health is checked by the Compose container healthcheck and the CD workflow;
-  rollback uses the immutable `AIHUB_IMAGE` tag described below.
+- Compose checks each container's local health. After those gates pass, CD
+  probes `https://AIHUB_PRODUCTION_HOST/health` from the GitHub runner and
+  requires a 2xx response without following redirects. It retries failures for
+  at most two minutes (10 seconds per request, 5 seconds between attempts),
+  logs status or request errors without response bodies, and fails the job
+  without rolling back. Rollback uses the immutable `AIHUB_IMAGE` tag described
+  below.
 
 ## Rollback
 
@@ -724,7 +729,11 @@ Compose files and `.env.production` in the app directory. The deploy user must
 be allowed to run Docker non-interactively, either directly or via
 passwordless `sudo -n docker`.
 
-Create a protected GitHub Environment named `production` and add these secrets:
+Create a protected GitHub Environment named `production` and add this variable
+and these secrets:
+
+- `AIHUB_PRODUCTION_HOST` (the public production DNS hostname from
+  `.env.production`; used by CD to probe the public health route)
 
 - `VPS_HOST`
 - `VPS_USER`
