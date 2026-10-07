@@ -14,6 +14,22 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## Issue body shape
+
+No issue template file exists; the shape below is the convention, and an agent or maintainer writes it by hand. `## Parent` and `## Blocked by` are omitted when they do not apply.
+
+1. `## Parent`
+2. `## What to build`
+3. `## Acceptance criteria`
+4. `## Blocked by`
+
+An acceptance criterion names a surface by the path an operator or the build actually touches, because "gone from the CLI dispatcher" was not checkable in #337: `scripts/cli.mjs` never dispatched those two commands. The CLI has two distinct surfaces, and each criterion should say which one it means.
+
+- **`scripts/cli.mjs`** — the `pnpm cli` dispatcher. It maps a command word to a `src/cli/*.ts` runner through `cliRunnerDescriptor` and `loadCliRunner`. Every `pnpm cli <command>` subcommand has a case here.
+- **`scripts/<tool>.cjs`** — a standalone entry script for a tool that is not a `pnpm cli` subcommand, loaded from `dist/cli/*.js` or the `.ts` source. Such a tool needs both its `.cjs` wrapper and a `package.json` script, and appears in neither `scripts/cli.mjs` nor `knip.json` entry evidence unless something else reaches it.
+
+Say which one: "gone from `scripts/cli.mjs`" or "its `scripts/<tool>.cjs` entry script is removed". When a criterion cannot be verified by reading one file, name the file.
+
 ## Closing an issue
 
 An issue whose change runs in production closes on evidence that it runs there, not on a green test run or a merge into a feature branch. A fix that is merged only into an unmerged branch has not reached production: `main` deploys, nothing else does.

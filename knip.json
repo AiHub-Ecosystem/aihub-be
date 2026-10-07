@@ -28,9 +28,11 @@
     // Nest bootstrap: package `start` points at dist/main.js; the nest plugin
     // does not always map that back to the TypeScript entry on its own.
     "src/main.ts",
-    // Operator CLI surfaces, loaded dynamically by their `.cjs` wrappers
-    // (tsx in dev, dist in prod), which knip cannot follow statically. Entry
-    // status also treats their exports as public surface.
+    // Operator CLI surfaces. scripts/cli.mjs resolves each one through
+    // cliRunnerDescriptor and loadCliRunner, which picks `dist/cli/*.js` in
+    // production and the `.ts` source under tsx, so knip cannot follow those
+    // imports statically. Entry status also treats their exports as public
+    // surface.
     "src/cli/quota-reconcile.ts",
     "src/cli/usage-report.ts",
     "src/cli/usage-prune.ts",
