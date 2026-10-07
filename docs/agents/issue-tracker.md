@@ -14,16 +14,11 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
-## Issue body shape
+## Naming a surface in an acceptance criterion
 
-No issue template file exists; the shape below is the convention, and an agent or maintainer writes it by hand. `## Parent` and `## Blocked by` are omitted when they do not apply.
+The issue body shape is not repeated here: `/to-issues` carries the template, and it is the single source for it. What this repo owns is what its surfaces _are_, because a criterion that names one loosely cannot be verified by reading a file.
 
-1. `## Parent`
-2. `## What to build`
-3. `## Acceptance criteria`
-4. `## Blocked by`
-
-An acceptance criterion names a surface by the path an operator or the build actually touches, because "gone from the CLI dispatcher" was not checkable in #337: `scripts/cli.mjs` never dispatched those two commands. The CLI has two distinct surfaces, and each criterion should say which one it means.
+An acceptance criterion names a surface by the path an operator or the build actually touches. "Gone from the CLI dispatcher" was not checkable in #337: `scripts/cli.mjs` never dispatched those two commands. The CLI has two distinct surfaces, and a criterion should say which one it means.
 
 - **`scripts/cli.mjs`** — the `pnpm cli` dispatcher. It maps a command word to a `src/cli/*.ts` runner through `cliRunnerDescriptor` and `loadCliRunner`. Every `pnpm cli <command>` subcommand has a case here.
 - **`scripts/<tool>.cjs`** — a standalone entry script for a tool that is not a `pnpm cli` subcommand, loaded from `dist/cli/*.js` or the `.ts` source. Such a tool needs both its `.cjs` wrapper and a `package.json` script, and appears in neither `scripts/cli.mjs` nor `knip.json` entry evidence unless something else reaches it.
