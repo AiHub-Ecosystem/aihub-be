@@ -9,6 +9,7 @@ import type {
   RuntimeSecretSnapshot,
   SeaweedFsRuntimeSecrets,
   UserAccessJwtRuntimeSecrets,
+  WebSessionRuntimeSecrets,
 } from '@/modules/secrets/application/runtime-secret-provider.port';
 
 type RuntimeSecretSource = 'env' | 'agent-file';
@@ -127,6 +128,7 @@ function loadFromEnvironment(
     userAccessJwt,
     seaweedfs,
     emailOutbox,
+    loadOptionalWebSession(options.values),
   );
 }
 
@@ -162,6 +164,7 @@ function loadFromAgentFile(
       'user-access-jwt',
       'seaweedfs',
       'email-outbox',
+      'web-session',
     ],
     'runtime secret document',
   );
@@ -250,6 +253,25 @@ function loadFromAgentFile(
     'email-outbox runtime secret bundle',
   );
   const emailOutbox = loadEmailOutboxRecord(emailOutboxRecord);
+  // Required, not optional: a production or staging instance that renders no
+  // Web Session bundle must refuse to boot rather than serve the Web Session
+  // routes as open ones.
+  const webSessionRecord = asRecord(
+    root['web-session'],
+    'Web Session runtime secret bundle',
+  );
+  assertAllowedKeys(
+    webSessionRecord,
+    ['client_secret'],
+    'Web Session runtime secret bundle',
+  );
+  const webSession: WebSessionRuntimeSecrets = {
+    clientSecret: requiredRecordString(
+      webSessionRecord,
+      'client_secret',
+      'Customer Web BFF client secret',
+    ),
+  };
   return freezeSnapshot(
     aiSpeaking,
     aiWriting,
@@ -257,6 +279,7 @@ function loadFromAgentFile(
     userAccessJwt,
     seaweedfs,
     emailOutbox,
+    webSession,
   );
 }
 
@@ -316,6 +339,20 @@ function loadEmailOutboxRecord(
     throw configurationError('email-outbox current key id is not provisioned');
   }
   return { currentKeyId, keys };
+}
+
+/**
+ * The one runtime secret a local environment may leave out. Every other
+ * credential is required in both sources, because AIHUB cannot serve a request
+ * without one; the Customer Web BFF client secret gates routes a deployment
+ * that has no Customer Web may never call, so its absence is a state the
+ * routes report rather than a boot failure.
+ */
+function loadOptionalWebSession(
+  values: SecretValues,
+): WebSessionRuntimeSecrets | undefined {
+  const clientSecret = values.AIHUB_WEB_SESSION_CLIENT_SECRET;
+  return hasValue(clientSecret) ? { clientSecret } : undefined;
 }
 
 function loadOptionalSeaweedFs(
@@ -390,6 +427,7 @@ function freezeSnapshot(
   userAccessJwt: UserAccessJwtRuntimeSecrets,
   seaweedfs: SeaweedFsRuntimeSecrets | undefined,
   emailOutbox: EmailOutboxRuntimeSecrets,
+  webSession: WebSessionRuntimeSecrets | undefined,
 ): RuntimeSecretSnapshot {
   const snapshot = {
     aiSpeaking: Object.freeze(aiSpeaking),
@@ -401,6 +439,9 @@ function freezeSnapshot(
       currentKeyId: emailOutbox.currentKeyId,
       keys: Object.freeze({ ...emailOutbox.keys }),
     }),
+    ...(webSession === undefined
+      ? {}
+      : { webSession: Object.freeze(webSession) }),
   };
   return Object.freeze(snapshot);
 }

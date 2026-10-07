@@ -34,3 +34,7 @@ path "secret/data/aihub/production/sandbox-assertion" {
 path "secret/data/aihub/production/email-outbox" {
   capabilities = ["read"]
 }
+
+path "secret/data/aihub/production/web-session" {
+  capabilities = ["read"]
+}

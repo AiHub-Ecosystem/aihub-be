@@ -149,6 +149,15 @@ const fields = {
     secret: true,
     requiredWhenSecretSource: true,
   },
+  // Static secret the Customer Web BFF proves itself with on every Web Session
+  // route. The runtime value comes from the Vault `web-session` bundle; this
+  // variable is the deploy-time gate, so a staging or production image booted
+  // without it refuses to start rather than serving an open route.
+  AIHUB_WEB_SESSION_CLIENT_SECRET: {
+    kind: 'string',
+    secret: true,
+    requiredIn: PROD_MODES,
+  },
   EMAIL_OUTBOX_CURRENT_KEY_ID: {
     kind: 'string',
     secret: true,

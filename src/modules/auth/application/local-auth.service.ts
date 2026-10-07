@@ -6,7 +6,6 @@ import {
   type NormalizedRegistration,
   type RegistrationInput,
   normalizeEmail,
-  normalizeLogin,
   normalizeRegistration,
   validatePassword,
 } from '@/modules/auth/domain/local-auth';
@@ -22,6 +21,10 @@ import {
   type IssuedSession,
   RefreshRotationCommittedError,
 } from './local-auth-service.port';
+import {
+  type CredentialCheckPorts,
+  authenticateCredentials,
+} from './local-credentials';
 import { type PasswordHasherPort } from './password-hasher.port';
 import { type PasswordResetTokenRepositoryPort } from './password-reset-token-repository.port';
 import { type PasswordResetTokenPort } from './password-reset-token.port';
@@ -50,10 +53,6 @@ const LOCAL_AUTH_RATE_LIMITS = {
     ip: { scope: 'resend_ip', limit: 3, windowMs: 15 * 60 * 1000 },
     email: { scope: 'resend_email', limit: 3, windowMs: 24 * 60 * 60 * 1000 },
   },
-  login: {
-    ip: { scope: 'login_ip', limit: 20, windowMs: 5 * 60 * 1000 },
-    email: { scope: 'login_email', limit: 5, windowMs: 15 * 60 * 1000 },
-  },
   refresh: {
     ip: { scope: 'refresh_ip', limit: 20, windowMs: 5 * 60 * 1000 },
     token: { scope: 'refresh_token', limit: 5, windowMs: 15 * 60 * 1000 },
@@ -67,8 +66,6 @@ const LOCAL_AUTH_RATE_LIMITS = {
     token: { scope: 'reset_token', limit: 5, windowMs: 15 * 60 * 1000 },
   },
 } as const;
-const DUMMY_PASSWORD_HASH =
-  '$argon2id$v=19$m=65536,t=3,p=1$SoHl8YUBzXgiAZ4xlgNZyg$qwZIFOa2OcIOgiHLRYImWLsza4k9/T4ZZvvhiWrD41k';
 const PASSWORD_RECOVERY_MESSAGE =
   'If the account exists and is eligible, AIHUB has accepted a request to send password reset instructions.';
 
@@ -343,45 +340,16 @@ export class LocalAuthService {
     input: { readonly email: string; readonly password: string },
     ip: string,
   ): Promise<IssuedSession> {
-    let normalized: { readonly email: string; readonly password: string };
-    try {
-      normalized = normalizeLogin(input);
-    } catch (error) {
-      throw invalidRequest(error);
-    }
+    const userId = await authenticateCredentials(this.credentials, input, ip);
+    return this.startLoginSession(userId, this.clock.now());
+  }
 
-    const identity = await this.userAccounts.findLoginIdentityByEmail(
-      normalized.email,
-    );
-    const passwordHash = identity?.passwordHash ?? DUMMY_PASSWORD_HASH;
-    const passwordMatches = await this.passwordHasher.verify(
-      normalized.password,
-      passwordHash,
-    );
-
-    if (
-      identity === undefined ||
-      !passwordMatches ||
-      identity.status !== 'active'
-    ) {
-      await this.enforceRateLimits([
-        {
-          ...LOCAL_AUTH_RATE_LIMITS.login.ip,
-          key: ip,
-        },
-        {
-          ...LOCAL_AUTH_RATE_LIMITS.login.email,
-          key: normalized.email,
-        },
-      ]);
-      throw new AppError({
-        code: 'AUTH_CREDENTIALS_INVALID',
-        message: 'Email or password is invalid',
-        retryable: false,
-      });
-    }
-
-    return this.startLoginSession(identity.userId, this.clock.now());
+  private get credentials(): CredentialCheckPorts {
+    return {
+      userAccounts: this.userAccounts,
+      passwordHasher: this.passwordHasher,
+      rateLimiter: this.rateLimiter,
+    };
   }
 
   /**

@@ -35,9 +35,18 @@ export const DEFER_RETRY_MS = 5 * 60_000;
 /**
  * The longest any credential an Email Delivery Request carries stays valid. A
  * queued request older than this can never be sent, whatever its payload says.
+ *
+ * The Web Session binding is deliberately not in this list: no email carries a
+ * Web Session, and including its 30 days would let the outbox hold a request
+ * whose credential expired a month ago. A new credential an email does carry
+ * belongs here.
  */
 export const MAX_CREDENTIAL_LIFETIME_MS = Math.max(
-  ...Object.values(OPAQUE_TOKEN_BINDINGS).map((binding) => binding.ttlMs),
+  ...[
+    OPAQUE_TOKEN_BINDINGS.passwordReset,
+    OPAQUE_TOKEN_BINDINGS.verification,
+    OPAQUE_TOKEN_BINDINGS.organizationInvite,
+  ].map((binding) => binding.ttlMs),
 );
 
 export interface EmailDispatchSummary {

@@ -27,11 +27,20 @@ export interface InMemoryPasswordResetToken {
   consumedAt: Date | undefined;
 }
 
+export interface InMemoryWebSession {
+  readonly sessionId: string;
+  readonly userId: string;
+  readonly tokenHash: string;
+  readonly createdAt: Date;
+  readonly expiresAt: Date;
+  lastRenewedAt: Date;
+  revokedAt: Date | undefined;
+}
+
 /**
- * The durable auth state one test owns. The four in-memory adapters read and
- * write the same instance, so a cross-aggregate effect such as a password
- * reset revoking Refresh Sessions is observable without leaking into the
- * next test.
+ * The durable auth state one test owns. The in-memory adapters read and write
+ * the same instance, so a cross-aggregate effect such as a password reset
+ * revoking Refresh Sessions is observable without leaking into the next test.
  */
 export interface InMemoryAuthState {
   /** User id -> account. */
@@ -42,6 +51,8 @@ export interface InMemoryAuthState {
   readonly passwordResetTokens: Map<string, InMemoryPasswordResetToken>;
   /** Token hash -> refresh session token. */
   readonly refreshTokens: Map<string, RefreshTokenRecord>;
+  /** Token hash -> web session. */
+  readonly webSessions: Map<string, InMemoryWebSession>;
   /** Email Delivery Requests recorded by the adapters, in call order. */
   readonly emailDeliveryRequests: InsertEmailDeliveryRequestInput[];
   /** Empties the durable state so the next test starts from nothing. */
@@ -54,12 +65,14 @@ export function createInMemoryAuthState(): InMemoryAuthState {
     verificationTokens: new Map(),
     passwordResetTokens: new Map(),
     refreshTokens: new Map(),
+    webSessions: new Map(),
     emailDeliveryRequests: [],
     reset() {
       this.accounts.clear();
       this.verificationTokens.clear();
       this.passwordResetTokens.clear();
       this.refreshTokens.clear();
+      this.webSessions.clear();
       this.emailDeliveryRequests.length = 0;
     },
   };

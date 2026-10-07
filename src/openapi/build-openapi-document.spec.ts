@@ -339,6 +339,7 @@ describe('buildOpenApiDocument', () => {
       bearer: 'BearerAuth',
       'api-key': 'ApiKeyAuth',
       'refresh-cookie': 'RefreshCookie',
+      'bff-client-secret': 'BffClientSecret',
       none: '',
     };
 
@@ -799,6 +800,33 @@ describe('buildOpenApiDocument', () => {
       'password',
     );
     expect(JSON.stringify(register?.responses['201'])).not.toContain('token');
+  });
+
+  it('labels the Web Session route as server-to-server for the Customer Web BFF', () => {
+    const doc = build();
+    const operation = doc.paths['/v1/auth/web-sessions']?.post;
+    const scheme = doc.components.securitySchemes?.BffClientSecret as
+      | Record<string, unknown>
+      | undefined;
+
+    expect(operation?.operationId).toBe('auth.web_sessions.create');
+    expect(operation?.security).toEqual([{ BffClientSecret: [] }]);
+    expect(operation?.responses['201']).toBeDefined();
+    expect(JSON.stringify(operation?.responses['201'])).toContain('no-store');
+    // One generic 401: a wrong client secret and a wrong password answer alike.
+    expect(JSON.stringify(operation?.responses['401'])).toContain(
+      'AUTH_CREDENTIALS_INVALID',
+    );
+    expect(JSON.stringify(operation?.responses['401'])).toContain(
+      'UNAUTHORIZED',
+    );
+    expect(scheme).toMatchObject({
+      type: 'apiKey',
+      in: 'header',
+      name: 'X-AIHUB-Client-Secret',
+    });
+    expect(scheme?.description).toContain('Server-to-server only');
+    expect(scheme?.description).toContain('Customer Web BFF');
   });
 
   it('mints without an assertion, because issuing one is what it does', () => {

@@ -21,6 +21,7 @@ import {
   PASSWORD_POLICY_DESCRIPTION,
   RegisterResponseSchema,
 } from '@/contracts/auth/local-auth';
+import { CreateWebSessionResponseSchema } from '@/contracts/auth/web-session';
 import {
   DEFAULT_ORGANIZATION_AUDIT_PAGE_SIZE,
   MAX_ORGANIZATION_AUDIT_PAGE_SIZE,
@@ -33,7 +34,10 @@ import {
   PASSWORD_MAX_CODE_POINTS,
   PASSWORD_MIN_CODE_POINTS,
 } from '@/modules/auth/domain/local-auth';
-import { REFRESH_COOKIE_NAME } from '@/modules/auth/presentation/refresh-cookie';
+import {
+  REFRESH_COOKIE_NAME,
+  WEB_SESSION_CLIENT_SECRET_HEADER,
+} from '@/modules/auth/presentation/refresh-cookie';
 import { toOpenApiPath } from './openapi-path';
 
 /**
@@ -70,6 +74,8 @@ function routeSecurityOf(routeId: PublicRouteId): Record<string, unknown> {
       return { security: [{ ApiKeyAuth: [] }] };
     case 'refresh-cookie':
       return { security: [{ RefreshCookie: [] }] };
+    case 'bff-client-secret':
+      return { security: [{ BffClientSecret: [] }] };
     case 'none':
       return { security: [] };
   }
@@ -352,6 +358,22 @@ function refreshInvalidResponse(): Record<string, unknown> {
   };
 }
 
+/** Both codes the Web Session route can answer 401 with, and nothing finer. */
+function webSessionRefusedResponse(): Record<string, unknown> {
+  return {
+    description:
+      'Client secret missing or wrong, or the email and password are not an active account',
+    content: {
+      'application/json': {
+        schema: errorResponseSchema([
+          'UNAUTHORIZED',
+          'AUTH_CREDENTIALS_INVALID',
+        ]),
+      },
+    },
+  };
+}
+
 function publishedLocalAuthRequestSchema(schema: TSchema): TSchema {
   // The three routes that publish a password re-state the policy so a generated
   // client enforces it, which means restating the object rather than merging a
@@ -556,6 +578,58 @@ function localAuthPathItems(): Record<string, Record<string, unknown>> {
       logoutResponses,
       false,
     ),
+  };
+}
+
+/**
+ * The Customer Web BFF route group. A browser never calls these: the caller is
+ * a server holding the BFF client secret, and the Web Session token comes back
+ * in the body rather than in a cookie AIHUB could not set for another host.
+ */
+function webSessionPathItems(): Record<string, Record<string, unknown>> {
+  const createResponses = {
+    '201': {
+      description:
+        'Web Session created. The opaque token travels in this body, never in a cookie: the Customer Web BFF stores it in its own HttpOnly cookie.',
+      headers: {
+        'Cache-Control': {
+          schema: { type: 'string', enum: ['no-store'] },
+        },
+      },
+      content: {
+        'application/json': { schema: CreateWebSessionResponseSchema },
+      },
+    },
+    ...routeErrorResponsesOf('auth.web_sessions.create'),
+    // One generic 401 covers a missing or wrong client secret and a wrong,
+    // unknown, pending-verification, or disabled credential alike: the route
+    // cannot tell them apart, so the document must not look as though it can.
+    '401': webSessionRefusedResponse(),
+  };
+
+  return {
+    [routePathOf('auth.web_sessions.create')]: {
+      post: {
+        operationId: 'auth.web_sessions.create',
+        summary: 'Create a Web Session from an email and password',
+        description:
+          'Server-to-server only, Customer Web BFF. AIHUB stores only the token hash, never sets a cookie for this route, and applies the same credential checks and login rate limits as POST /v1/auth/login.',
+        ...routeIdentityScopeOf('auth.web_sessions.create'),
+        ...routeSecurityOf('auth.web_sessions.create'),
+        parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: publishedLocalAuthRequestSchema(
+                routeSchemaOf('auth.web_sessions.create', 'request'),
+              ),
+            },
+          },
+        },
+        responses: createResponses,
+      },
+    },
   };
 }
 
@@ -1704,6 +1778,7 @@ export function buildOpenApiDocument(version: string): unknown {
   paths[routePathOf('organizations.auditEvents.list')] =
     organizationAuditEventPathItem();
   Object.assign(paths, localAuthPathItems());
+  Object.assign(paths, webSessionPathItems());
   addHeadOperations(paths);
 
   const errorResponses: Record<string, unknown> = {};
@@ -1748,6 +1823,13 @@ export function buildOpenApiDocument(version: string): unknown {
           name: REFRESH_COOKIE_NAME,
           description:
             'Host-only Secure HttpOnly cookie containing the opaque refresh credential.',
+        },
+        BffClientSecret: {
+          type: 'apiKey',
+          in: 'header',
+          name: WEB_SESSION_CLIENT_SECRET_HEADER,
+          description:
+            'Server-to-server only, Customer Web BFF. Static client secret proving the caller is the AIHUB-owned Customer Web backend. Not a browser credential and not an Organization key: a browser never sends it, and these routes are not for a browser to call.',
         },
       },
       parameters: {

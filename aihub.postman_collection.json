@@ -2789,6 +2789,70 @@
       }
     },
     {
+      "id": "93730afb-f7aa-43e9-8ea3-27cbb5a1b22b",
+      "name": "Create a Web Session from an email and password",
+      "request": {
+        "name": "Create a Web Session from an email and password",
+        "description": {
+          "content": "Server-to-server only, Customer Web BFF. AIHUB stores only the token hash, never sets a cookie for this route, and applies the same credential checks and login rate limits as POST /v1/auth/login.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "auth", "web-sessions"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "apikey",
+          "apikey": [
+            {
+              "key": "key",
+              "value": "X-AIHUB-Client-Secret"
+            },
+            {
+              "key": "value",
+              "value": "{{apiKey}}"
+            },
+            {
+              "key": "in",
+              "value": "header"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"<string>\",\n  \"password\": \"<string>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
       "name": "D1 handover test cases (docs/history/aihub-deliverable-1-historical-contract.md §G)",
       "item": [
         {

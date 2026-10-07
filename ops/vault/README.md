@@ -18,6 +18,7 @@ secret/aihub/{environment}/database
 secret/aihub/{environment}/redis
 secret/aihub/{environment}/sandbox-assertion
 secret/aihub/{environment}/email-outbox
+secret/aihub/{environment}/web-session
 ```
 
 The first six bundles are part of the V1 runtime-secret document. The
@@ -25,7 +26,10 @@ database, Redis, and sandbox-assertion bundles are rendered into a separate
 connection document because they are process bootstrap configuration. The
 Speaking question catalog uses the SeaweedFS bundle to create short-lived read
 URLs for the public sample-audio endpoint, and the Resend bundle supplies the
-verification-email provider credential.
+verification-email provider credential. The `web-session` bundle holds the one
+static secret the Customer Web BFF proves itself with on the Web Session routes;
+it is required in production and staging, so stage it and restart vault-agent
+before merging a change that needs it.
 
 ## Policy bootstrap
 

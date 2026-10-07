@@ -102,6 +102,46 @@ describe('runtime configuration', () => {
     ).toEqual(['staging', 'production']);
   });
 
+  /**
+   * The BFF client secret refuses to be missing in a production-like instance,
+   * so a deployment that never staged it fails at deploy time rather than at the
+   * first login, and a local one may leave it blank and see the Web Session
+   * routes answer 503 instead.
+   */
+  it('makes the Customer Web BFF client secret required in production only', () => {
+    const secret = runtimeEnvironmentMetadata.AIHUB_WEB_SESSION_CLIENT_SECRET;
+
+    expect(secret).toMatchObject({
+      type: 'string',
+      secret: true,
+      requiredIn: ['staging', 'production'],
+      requiredWhenSecretSource: false,
+    });
+
+    const reportedIn = (mode: string): readonly string[] => {
+      try {
+        loadRuntimeConfiguration({
+          NODE_ENV: mode,
+          AIHUB_RUNTIME_SECRET_SOURCE: 'env',
+        });
+        return [];
+      } catch (error) {
+        return (error as RuntimeConfigurationError).variableNames;
+      }
+    };
+
+    // Only this variable's own absence is asserted: an instance missing other
+    // required settings fails for its own reasons.
+    expect(reportedIn('production')).toContain(
+      'AIHUB_WEB_SESSION_CLIENT_SECRET',
+    );
+    expect(reportedIn('staging')).toContain('AIHUB_WEB_SESSION_CLIENT_SECRET');
+    expect(reportedIn('development')).not.toContain(
+      'AIHUB_WEB_SESSION_CLIENT_SECRET',
+    );
+    expect(reportedIn('test')).not.toContain('AIHUB_WEB_SESSION_CLIENT_SECRET');
+  });
+
   it('keeps secret values out of the Nest application config provider', () => {
     const configuration = appConfig();
 
@@ -110,5 +150,6 @@ describe('runtime configuration', () => {
     expect(configuration).not.toHaveProperty(
       'AIHUB_USER_ACCESS_JWT_PRIVATE_KEY',
     );
+    expect(configuration).not.toHaveProperty('AIHUB_WEB_SESSION_CLIENT_SECRET');
   });
 });

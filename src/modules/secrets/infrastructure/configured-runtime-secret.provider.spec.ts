@@ -26,6 +26,7 @@ const emailOutboxSnapshot = {
   currentKeyId: emailOutboxCurrentKeyId,
   keys: { [emailOutboxCurrentKeyId]: emailOutboxKey },
 };
+const bffClientSecret = 'customer-web-bff-client-secret';
 
 function options(
   overrides: Partial<RuntimeSecretProviderOptions> = {},
@@ -79,6 +80,7 @@ describe('ConfiguredRuntimeSecretProvider', () => {
         key_id: userAccessKeyId,
       },
       'email-outbox': emailOutboxAgent,
+      'web-session': { client_secret: bffClientSecret },
       seaweedfs: {
         access_key_id: 'storage-access',
         secret_access_key: 'storage-secret',
@@ -106,6 +108,7 @@ describe('ConfiguredRuntimeSecretProvider', () => {
         keyId: userAccessKeyId,
       },
       emailOutbox: emailOutboxSnapshot,
+      webSession: { clientSecret: bffClientSecret },
       seaweedfs: {
         accessKeyId: 'storage-access',
         secretAccessKey: 'storage-secret',
@@ -301,6 +304,59 @@ describe('ConfiguredRuntimeSecretProvider', () => {
           }),
         ),
     ).toThrow('runtime secret file cannot be read');
+  });
+
+  it('carries the BFF client secret from the local variable when one is set', () => {
+    const provider = new ConfiguredRuntimeSecretProvider(
+      options({
+        values: {
+          ...options().values,
+          AIHUB_WEB_SESSION_CLIENT_SECRET: 'local',
+        },
+      }),
+    );
+
+    expect(provider.getSnapshot().webSession).toEqual({
+      clientSecret: 'local',
+    });
+  });
+
+  /**
+   * The one bundle a local environment may leave out, because the Web Session
+   * routes answer 503 for it rather than failing the boot of a machine that has
+   * no Customer Web BFF. A production instance reads the Agent file, where it
+   * is required, so it cannot reach that state.
+   */
+  it('omits the BFF client secret locally rather than inventing one', () => {
+    const provider = new ConfiguredRuntimeSecretProvider(options());
+
+    expect(provider.getSnapshot().webSession).toBeUndefined();
+  });
+
+  it('refuses to boot an Agent-rendered document with no BFF client secret', () => {
+    expect(
+      () =>
+        new ConfiguredRuntimeSecretProvider(
+          options({
+            source: 'agent-file',
+            secretsFile: 'runtime-secrets.json',
+            readFile: () =>
+              JSON.stringify({
+                'ai-speaking': {
+                  client_id: speakingClient,
+                  secret_key: speakingSecret,
+                },
+                'ai-writing': { token: writingToken },
+                resend: { api_key: resendApiKey },
+                'user-access-jwt': {
+                  private_key_pem: userAccessPrivateKey,
+                  key_id: userAccessKeyId,
+                },
+                'email-outbox': emailOutboxAgent,
+              }),
+          }),
+        ),
+    ).toThrow('Web Session runtime secret bundle has an invalid shape');
   });
 
   it('rejects a partial optional SeaweedFS bundle', () => {

@@ -15,7 +15,12 @@ if (!FormatRegistry.Has(PASSWORD_POLICY_FORMAT)) {
 
 const PASSWORD_RUNTIME_MAX_CODE_UNITS = PASSWORD_MAX_CODE_POINTS * 2;
 
-const PasswordSchema = Type.String({
+/**
+ * The one password shape every credential-bearing route accepts. Exported so a
+ * new route composes it rather than restating the policy, which would let the
+ * documented bounds and the validated bounds drift apart.
+ */
+export const PasswordSchema = Type.String({
   minLength: 1,
   maxLength: PASSWORD_RUNTIME_MAX_CODE_UNITS,
   format: PASSWORD_POLICY_FORMAT,
