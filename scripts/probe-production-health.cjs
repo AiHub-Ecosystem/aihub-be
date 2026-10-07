@@ -11,7 +11,15 @@ async function probeProductionHealth(hostname) {
     console.error('AIHUB_PRODUCTION_HOST is required');
     return false;
   }
-  if (!/^[A-Za-z0-9.-]+$/.test(hostname)) {
+  const labels = hostname.split('.');
+  if (
+    hostname.length > 253 ||
+    labels.some(
+      (label) =>
+        label.length > 63 ||
+        !/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label),
+    )
+  ) {
     console.error('AIHUB_PRODUCTION_HOST must be a DNS hostname');
     return false;
   }
