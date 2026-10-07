@@ -18,6 +18,7 @@ on:
       - ".claude/**"
       - ".gitattributes"
       - ".gitignore"
+      - "**.md"
 
   workflow_dispatch:
 
