@@ -282,22 +282,15 @@ jobs:
   # and fails before CD can ship a release that cannot start. It proves the
   # image builds and starts, nothing more: docs/operations/ci-boot-check.md.
   #
-  # It also publishes that image, so the artifact CD ships is the artifact this
-  # lane started rather than a second build of the same Dockerfile. CD pulls by
-  # commit sha and checks the digest against the one this lane records
-  # (ADR-0064).
+  # The image artifact CD ships must be the artifact this lane started, not a
+  # second build of the same Dockerfile. The push-only job publishes it after
+  # this lane passes (ADR-0064).
   image:
     name: Image boot
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # The environment is here for its registry credential, not for protection:
-    # it declares no reviewers and no branch policy, so entering it gates
-    # nothing. See the push step for why GITHUB_TOKEN cannot do this job.
-    environment:
-      name: production
     permissions:
       contents: read
-      packages: write
 
     steps:
       - name: Check out repository
@@ -337,31 +330,57 @@ jobs:
       - name: Boot the image and wait for its health check
         run: bash scripts/image-boot-check.sh aihub:image-boot
 
-      # Release images exist on the registry from here on. A pull request runs
-      # the same build and boot check but pushes nothing, because no sha it
-      # could tag is ever deployed.
-      #
-      # GITHUB_TOKEN is not the credential here. The package belongs to the
-      # organization, and the workflow token can only write to it once
-      # "Allow GitHub Actions to create and update packages" is enabled in the
-      # package settings, which it is not; a first push failed with
-      # `denied: permission_denied: write_package`. The registry token CD
-      # already uses is named for reading, but it is the credential that can
-      # write here: it carries write:packages and needs no such setting. Rename
-      # it when it is next rotated.
-      - name: Log in to GHCR
+      # Only the push-only job needs this archive. Pull requests build and boot
+      # without entering production or receiving its secrets.
+      - name: Save booted image for publishing
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: docker save --output image-to-publish.tar aihub:image-boot
+
+      - name: Upload booted image for publishing
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: image-to-publish
+          path: image-to-publish.tar
+          compression-level: 0
+
+  # This is the only CI job that enters production. The branch allowlist is
+  # configured on the environment, and this job only exists for main pushes.
+  publish-image:
+    name: Publish image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Download booted image
+        uses: actions/download-artifact@v8
+        with:
+          name: image-to-publish
+
+      - name: Load booted image
+        run: docker load --input image-to-publish.tar
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # GITHUB_TOKEN cannot write this organization package until its package
+      # setting is enabled, so keep the existing write-capable token here.
+      - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ secrets.GHCR_USERNAME }}
           password: ${{ secrets.GHCR_PULL_TOKEN }}
 
-      # The digest `docker push` reports is the manifest digest of what the
-      # registry now holds, which is not the image ID `docker inspect` reports
-      # for the local copy. Asked of the registry rather than scraped out of
-      # `docker push` output, which interleaves a digest per layer, and read the
-      # same way CD reads it.
+      # The registry manifest digest is not the local image ID. Read it the
+      # same way CD does instead of scraping docker push's per-layer output.
       - name: Push the image that booted
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
@@ -380,14 +399,15 @@ jobs:
             "$image" "$digest" >> "$GITHUB_STEP_SUMMARY"
 
       # `workflow_run` payloads carry no job outputs, so this artifact is how
-      # the digest reaches CD. It exists only when the push did: CD runs only
-      # when every lane passed, and a failed push fails this lane.
+      # the digest reaches CD. It exists only when publishing succeeds.
       - name: Record the published digest
-        if: hashFiles('image-digest.txt') != ''
         uses: actions/upload-artifact@v7
         with:
           name: image-digest
           path: image-digest.txt
+
+  # The artifact CD deploys has to be published as well as booted before CI is
+  # green. The publisher is intentionally skipped for PRs and manual runs.
 
   ci:
     name: CI
@@ -400,6 +420,7 @@ jobs:
       - database
       - tenant-isolation
       - image
+      - publish-image
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -413,6 +434,9 @@ jobs:
           DATABASE_RESULT: ${{ needs.database.result }}
           TENANT_ISOLATION_RESULT: ${{ needs.tenant-isolation.result }}
           IMAGE_RESULT: ${{ needs.image.result }}
+          PUBLISH_IMAGE_RESULT: ${{ needs.publish-image.result }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
         run: |
           test "$STATIC_RESULT" = success
           test "$TEST_RESULT" = success
@@ -421,3 +445,8 @@ jobs:
           test "$DATABASE_RESULT" = success
           test "$TENANT_ISOLATION_RESULT" = success
           test "$IMAGE_RESULT" = success
+          if [ "$EVENT_NAME" = push ] && [ "$REF" = refs/heads/main ]; then
+            test "$PUBLISH_IMAGE_RESULT" = success
+          else
+            test "$PUBLISH_IMAGE_RESULT" = skipped
+          fi

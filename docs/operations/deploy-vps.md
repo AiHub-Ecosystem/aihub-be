@@ -899,9 +899,15 @@ Create a protected GitHub Environment named `production` and add these secrets:
 - `VPS_SSH_PRIVATE_KEY`
 - `VPS_SSH_KNOWN_HOSTS` (the trusted host-key line for the VPS)
 - `GHCR_USERNAME`
-- `GHCR_PULL_TOKEN` (a read-only token with `read:packages`; the runner's own
-  GHCR login in the resolve job uses the pushing actor's name with this same
-  token, so the account must be able to authenticate as the actor)
+- `GHCR_PULL_TOKEN` (a token with `read:packages` and `write:packages`; the
+  main-only image publisher uses it to push, and CD uses it to pull)
+
+Restrict the `production` environment's deployment branches to `main`. The CI
+image boot job runs for pull requests without entering this environment; only
+the separate publisher job enters it to push the booted image. CD's
+`workflow_run` jobs also enter `production`; their workflow runs on the default
+branch (`main`), while the trigger and resolve-job condition verify that the
+completed CI run itself came from a push to `main`.
 
 The workflow uses the commit SHA as the only release tag; nothing publishes
 `latest`, so a rollback remains the immutable-image procedure above pointing at

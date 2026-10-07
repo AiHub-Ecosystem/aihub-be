@@ -8,10 +8,13 @@ taking production down after `up -d`.
 
 It answers one question: **does this artifact start.**
 
-When the boot passes, the same image is pushed to GHCR under the commit sha, and
-CD deploys that image rather than building one again
+When the boot passes on a push to `main`, CI saves that image as an artifact.
+A separate, main-only publishing job loads and pushes the artifact to GHCR under
+the commit sha; CD deploys that image rather than building one again
 ([ADR-0064](../adr/0064-ci-publishes-the-image-it-booted.md)). The image that
-reaches production is therefore the image this job started.
+reaches production is therefore the image this job started. Pull requests run
+the build and boot without entering the `production` environment or referencing
+its secrets.
 
 ## Run it locally
 
@@ -78,16 +81,20 @@ after the boot passes. Pull requests run the identical build and boot check and
 push nothing.
 
 The push authenticates with the `production` environment's `GHCR_USERNAME` and
-`GHCR_PULL_TOKEN`, the same credentials CD uses. The job enters that
-environment for the secret alone; it declares no reviewers and no branch
-policy. `GITHUB_TOKEN` is deliberately not used: the package belongs to the
-organization, and the workflow token may write to it only once "Allow GitHub
-Actions to create and update packages" is enabled in the package settings.
-That setting is off, so `GITHUB_TOKEN` fails with
-`denied: permission_denied: write_package`. Turning it on is the better
-long-term answer, because the workflow token rotates itself. Despite its name,
-`GHCR_PULL_TOKEN` is the token that writes here; it is named for reading
-because CD only ever read with it.
+`GHCR_PULL_TOKEN`, the same credentials CD uses. Only the push-only job enters
+that environment; its deployment branch policy allows `main`. `GITHUB_TOKEN`
+is deliberately not used: the package belongs to the organization, and the
+workflow token may write to it only once "Allow GitHub Actions to create and
+update packages" is enabled in the package settings. That setting is off, so
+`GITHUB_TOKEN` fails with `denied: permission_denied: write_package`. Despite
+its name, `GHCR_PULL_TOKEN` is write-capable and is the credential used to push
+here; it is also used by CD to pull the image.
+
+The boot job saves the loaded Docker image as `image-to-publish.tar` and uploads
+it only on a push to `main`. The isolated publisher downloads and loads that
+archive before authenticating, so no second build can drift from the image that
+passed the boot check. Pull requests still boot a local image and publish
+nothing.
 
 The push is a separate `docker push` step rather than
 `docker/build-push-action` with `push: true`. Buildx cannot both load an image
