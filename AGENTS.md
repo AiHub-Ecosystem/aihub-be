@@ -60,6 +60,10 @@ If an older architecture draft conflicts with an implementation spec, record the
 
 To check what is live on the production host (commit, health, errors since start), run `ops/status.sh` as `docs/operations/deploy-vps.md` describes under "Checking deployed state".
 
+For nginx changes, read the "Managed nginx configuration" section in `docs/operations/deploy-vps.md` and inspect all of `sudo -l` before assessing access. Passwordless Docker or dockerd access is root-equivalent; verify the allowed commands before saying a root operator is required.
+
+Treat implementation and release as separate authorizations. VPS credentials do not authorize pushing, enabling deployment gates, or triggering production deployment; do those only when the user explicitly requests them.
+
 ### Required verification
 
 Use the narrowest check while iterating, then run the full loop before handoff:
