@@ -177,7 +177,7 @@ describe('UsageCompletenessReportService', () => {
     ).rejects.toBeInstanceOf(UsageReportSnapshotError);
   });
 
-  it('keeps the current disabled declaration set healthy with zero eligible operations', async () => {
+  it('keeps enabled AI Speaking operations healthy with zero eligible requests', async () => {
     const repository = new FakeUsageReportRepository([]);
     const result = await new UsageCompletenessReportService(
       repository,
@@ -192,14 +192,34 @@ describe('UsageCompletenessReportService', () => {
         from: new Date('2026-09-20T12:00:00.000Z'),
         to: new Date('2026-09-20T13:00:00.000Z'),
       },
-      operations: [],
+      operations: [
+        {
+          operation: 'speaking.grading',
+          downstream: 'ai-speaking',
+          successfulCount: 0,
+          missingUsageCount: 0,
+          incompletePercent: 0,
+          status: 'healthy',
+        },
+        {
+          operation: 'speaking.grading-json',
+          downstream: 'ai-speaking',
+          successfulCount: 0,
+          missingUsageCount: 0,
+          incompletePercent: 0,
+          status: 'healthy',
+        },
+      ],
       summary: {
-        eligibleOperations: 0,
+        eligibleOperations: 2,
         eligibleRequests: 0,
         alertOperations: 0,
         status: 'healthy',
       },
     });
-    expect(repository.queries[0]?.operations).toEqual([]);
+    expect(repository.queries[0]?.operations).toEqual([
+      'speaking.grading',
+      'speaking.grading-json',
+    ]);
   });
 });

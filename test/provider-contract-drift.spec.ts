@@ -56,10 +56,14 @@ describe('AI Speaking: provider contract against the schema AIHUB checks', () =>
     'application/json',
     'schema',
   ]);
+  const providerEnvelope = resolveRef(responseSchema, doc);
+  const envelopeProperties = providerEnvelope.properties as Json;
+  const providerUsage = resolveRef(envelopeProperties.usage, doc);
+  const providerMetrics = resolveRef(envelopeProperties.metrics, doc);
   // The provider wraps the result as `{ status, data }`; AIHUB's schema is the
   // `data` object, which the adapter unwraps first.
   const providerData = {
-    node: (resolveRef(responseSchema, doc).properties as Json).data,
+    node: envelopeProperties.data,
     doc,
   };
   const ours = {
@@ -70,6 +74,27 @@ describe('AI Speaking: provider contract against the schema AIHUB checks', () =>
   const found = schemaDrift(providerData, ours);
   const key = (entry: { kind: string; path: string }) =>
     `${entry.kind} ${entry.path}`;
+
+  it('publishes root-level usage counts and AI processing time', () => {
+    expect(providerEnvelope.required).toEqual(
+      expect.arrayContaining(['usage', 'metrics']),
+    );
+
+    const usageProperties = providerUsage.properties as Json;
+    expect(providerUsage.required).toEqual(
+      expect.arrayContaining(['input_tokens', 'output_tokens', 'total_tokens']),
+    );
+    for (const field of ['input_tokens', 'output_tokens', 'total_tokens']) {
+      expect(usageProperties[field]).toMatchObject({
+        anyOf: expect.arrayContaining([{ type: 'integer' }, { type: 'null' }]),
+      });
+    }
+
+    expect(providerMetrics.required).toContain('ai_processing_ms');
+    expect((providerMetrics.properties as Json).ai_processing_ms).toMatchObject(
+      { type: 'integer' },
+    );
+  });
 
   it('has no difference that is not on the allowed list', () => {
     const known = new Set(allowed.map(key));
