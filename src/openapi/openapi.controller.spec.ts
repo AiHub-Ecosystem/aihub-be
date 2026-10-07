@@ -7,6 +7,7 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 
+import { registerRequestHooks } from '@/register-request-hooks';
 import { buildOpenApiDocument } from './build-openapi-document';
 import { OpenApiModule } from './openapi.module';
 
@@ -28,6 +29,7 @@ describe('OpenApiController', () => {
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter(),
     );
+    registerRequestHooks(app.getHttpAdapter().getInstance(), undefined);
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });
@@ -40,6 +42,9 @@ describe('OpenApiController', () => {
     const response = await app.inject({ method: 'GET', url: '/openapi.json' });
 
     expect(response.statusCode).toBe(200);
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['referrer-policy']).toBe('no-referrer');
+    expect(response.headers['content-security-policy']).toBeUndefined();
     // Built from the same package.json this test process runs against, so
     // the version is whatever it is right now rather than a fixed literal.
     // Round-tripped through JSON on the expected side too: TypeBox schemas
@@ -56,7 +61,22 @@ describe('OpenApiController', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('text/html');
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['referrer-policy']).toBe('no-referrer');
+    expect(response.headers['content-security-policy']).toBe(
+      "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; script-src 'sha384-JezfTaoGe2t8F2YRYUQosjM0S21blpE8j3yOUgTEiTKCyLWx9K4lfwjKPd8Dp7WY'; style-src 'unsafe-inline'; connect-src 'self'; font-src https://fonts.scalar.com",
+    );
     expect(response.payload).toContain('data-url="/openapi.json"');
-    expect(response.payload).toContain('@scalar/api-reference');
+    expect(response.payload).toContain(
+      '<script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.72.1" integrity="sha384-JezfTaoGe2t8F2YRYUQosjM0S21blpE8j3yOUgTEiTKCyLWx9K4lfwjKPd8Dp7WY" crossorigin="anonymous"></script>',
+    );
+  });
+
+  it('sets baseline security headers on errors too', async () => {
+    const response = await app.inject({ method: 'GET', url: '/missing' });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['referrer-policy']).toBe('no-referrer');
   });
 });

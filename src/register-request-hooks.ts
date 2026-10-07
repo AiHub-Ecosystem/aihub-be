@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { registerBodySizeGuard } from './common/http/body-size.hook';
 import { registerRequestLifecycle } from './common/http/request-lifecycle.hook';
 import { registerRequestTracing } from './common/http/request-tracing.hook';
+import { registerSecurityHeaders } from './common/http/security-headers.hook';
 import { registerRequestCompletionLog } from './modules/metering/presentation/request-completion-log.hook';
 
 /**
@@ -26,6 +27,7 @@ export function registerRequestHooks(
 
   registerBodySizeGuard(instance);
   registerRequestLifecycle(instance);
+  registerSecurityHeaders(instance);
 
   // Registered last: tracing owns the span this line names, and the lifecycle
   // hook must already have let the `onResponse` chain through to reach it.

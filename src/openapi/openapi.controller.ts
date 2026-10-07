@@ -23,10 +23,13 @@ const DOCS_PAGE = `<!doctype html>
 </head>
 <body>
   <script id="api-reference" data-url="/openapi.json"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.72.1" integrity="sha384-JezfTaoGe2t8F2YRYUQosjM0S21blpE8j3yOUgTEiTKCyLWx9K4lfwjKPd8Dp7WY" crossorigin="anonymous"></script>
 </body>
 </html>
 `;
+
+const DOCS_CONTENT_SECURITY_POLICY =
+  "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; script-src 'sha384-JezfTaoGe2t8F2YRYUQosjM0S21blpE8j3yOUgTEiTKCyLWx9K4lfwjKPd8Dp7WY'; style-src 'unsafe-inline'; connect-src 'self'; font-src https://fonts.scalar.com";
 
 /**
  * No `@UseGuards` here, deliberately: this is public reference material, not
@@ -49,6 +52,7 @@ export class OpenApiController {
 
   @Get('docs')
   @Header('Content-Type', 'text/html; charset=utf-8')
+  @Header('Content-Security-Policy', DOCS_CONTENT_SECURITY_POLICY)
   getDocsPage(): string {
     return DOCS_PAGE;
   }
