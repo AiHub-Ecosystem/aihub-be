@@ -330,6 +330,18 @@ jobs:
       - name: Boot the image and wait for its health check
         run: bash scripts/image-boot-check.sh aihub:image-boot
 
+      # Temporary issue #314 probe; remove after this pull request run.
+      - name: Verify production secret is unavailable to pull requests
+        if: github.event_name == 'pull_request'
+        env:
+          GHCR_PULL_TOKEN_PROBE: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: |
+          if [ -n "$GHCR_PULL_TOKEN_PROBE" ]; then
+            printf 'GHCR_PULL_TOKEN=UNEXPECTEDLY_PRESENT\n'
+            exit 1
+          fi
+          printf 'GHCR_PULL_TOKEN=EMPTY\n'
+
       # Only the push-only job needs this archive. Pull requests build and boot
       # without entering production or receiving its secrets.
       - name: Save booted image for publishing
