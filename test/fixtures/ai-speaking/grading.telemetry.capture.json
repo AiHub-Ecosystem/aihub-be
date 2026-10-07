@@ -1,0 +1,10 @@
+{
+  "usage": {
+    "input_tokens": 1133,
+    "output_tokens": 994,
+    "total_tokens": 2127
+  },
+  "metrics": {
+    "ai_processing_ms": 8329
+  }
+}

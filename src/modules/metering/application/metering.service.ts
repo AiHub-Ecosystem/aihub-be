@@ -15,7 +15,7 @@ import type { UsageRecord, UsageRepositoryPort } from './usage-repository.port';
 
 export const DOWNSTREAM_USAGE_REPORTING = {
   'ai-writing': false,
-  'ai-speaking': false,
+  'ai-speaking': true,
 } as const satisfies Record<DownstreamId, boolean>;
 
 const NOOP_LOGGER: MeteringFailureLoggerPort = {

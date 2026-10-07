@@ -1,15 +1,19 @@
 # AI Speaking grading service contract v1
 
-Status: Approved; redacted live capture and normalized contract approved by
-the AI Speaking service owner and WISPACE on 2026-09-14.
+Status: Core grading contract approved; redacted live capture and normalized
+contract approved by the AI Speaking service owner and WISPACE on 2026-09-14.
+Provider telemetry fields appeared in its live OpenAPI document and a direct
+production smoke with synthetic audio returned token usage and processing time
+on 2026-10-07. AIHUB production metering verification remains pending.
 
 Owner: AI Speaking service. Consumer: the AIHUB gateway.
 
 Sources: the AI Speaking `API_Grading.md` v1.0.0 / OpenAPI 3.1 contract, the D2
-implementation contract, and the redacted live capture in
-`test/fixtures/ai-speaking/grading.response.json`. The approved capture is the
-evidence boundary for live compatibility; raw audio, credentials, and AI
-Speaking service response bodies remain excluded.
+implementation contract, the redacted live capture in
+`test/fixtures/ai-speaking/grading.response.json`, and the telemetry-only
+production capture in `test/fixtures/ai-speaking/grading.telemetry.capture.json`.
+The approved capture is the evidence boundary for live compatibility; raw
+audio, credentials, and AI Speaking service response bodies remain excluded.
 
 ## 1. Scope and endpoint ownership
 
@@ -97,6 +101,23 @@ public contract.
 
 The AI Speaking service success body is a JSON object with `status: "success"` and a
 `data` object. The following groups are the contract consumed by AIHUB:
+
+The provider's live OpenAPI document, checked on 2026-10-07, also declares the
+root-level `usage` and `metrics` fields. `usage.input_tokens`,
+`usage.output_tokens`, and `usage.total_tokens` are required keys but each is
+`integer | null`; the provider says `null` means it could not obtain usage from
+an LLM call, and `0` means no LLM call was made. `metrics.ai_processing_ms` is a
+required integer. The published example contains non-null token values and a
+processing time. AIHUB records only non-negative integer token counts and the
+non-negative processing time; it never turns `null` into zero. All three token
+counts must be valid for `metering_status = 'complete'`. The provider also
+publishes `usage.cost`, which AIHUB ignores and which is outside issue #57's
+contract.
+
+The updated OpenAPI snapshot records the published schema and example. The
+telemetry-only production capture confirms non-null runtime values for these
+fields; the AIHUB production usage record is still needed to verify persistence
+and close issue #57.
 
 | Group                  | Required fields                                                                                                                                                       |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

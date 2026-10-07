@@ -77,8 +77,9 @@ the final line. It contains no `generated_at` field so rerunning the same
 window against unchanged evidence produces the same lines.
 
 ```json
-{"event":"usage_report_operation","window_from":"2026-09-20T12:00:00.000Z","window_to":"2026-09-20T13:00:00.000Z","operation":"writing.task1.grade","downstream":"ai-writing","successful_count":100,"missing_usage_count":2,"incomplete_percent":2,"status":"alert"}
-{"event":"usage_report_summary","window_from":"2026-09-20T12:00:00.000Z","window_to":"2026-09-20T13:00:00.000Z","eligible_operations":1,"eligible_requests":100,"alert_operations":1,"status":"alert"}
+{"event":"usage_report_operation","window_from":"2026-09-20T12:00:00.000Z","window_to":"2026-09-20T13:00:00.000Z","operation":"speaking.grading","downstream":"ai-speaking","successful_count":100,"missing_usage_count":2,"incomplete_percent":2,"status":"alert"}
+{"event":"usage_report_operation","window_from":"2026-09-20T12:00:00.000Z","window_to":"2026-09-20T13:00:00.000Z","operation":"speaking.grading-json","downstream":"ai-speaking","successful_count":0,"missing_usage_count":0,"incomplete_percent":0,"status":"healthy"}
+{"event":"usage_report_summary","window_from":"2026-09-20T12:00:00.000Z","window_to":"2026-09-20T13:00:00.000Z","eligible_operations":2,"eligible_requests":100,"alert_operations":1,"status":"alert"}
 ```
 
 `incomplete_percent` is a number rounded to two decimal places for display;
@@ -126,12 +127,14 @@ or the infrastructure dependency as appropriate, then rerun the same window.
 
 ## Declaration activation
 
-Current Writing and Speaking declarations are disabled because their provider
-contracts do not yet require usage telemetry. Their traffic is intentionally
-excluded and a zero eligible denominator is healthy. When #57 contract and
-production evidence enable one service, start reporting windows at or after
-that activation. A report window crossing the activation boundary is not
-comparable; no historical record is backfilled or rewritten.
+The AI Speaking declaration is enabled by this change; after deployment, the
+report includes both Speaking operations, including zero-count rows when they
+have no traffic. The AI Writing declaration remains disabled pending
+production verification, so Writing traffic is excluded. Start Speaking
+reporting windows at or after deployment activation. When Writing is enabled
+later, start its windows at or after that activation. A report window crossing
+an activation boundary is not comparable; no historical record is backfilled
+or rewritten.
 
 ## Verification
 

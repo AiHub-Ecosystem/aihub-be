@@ -783,20 +783,37 @@
             },
             "user_id": "Std0809-001"
           },
-          "status": "success"
+          "metrics": {
+            "ai_processing_ms": 2150
+          },
+          "status": "success",
+          "usage": {
+            "cost": 0.002829,
+            "input_tokens": 1830,
+            "output_tokens": 912,
+            "total_tokens": 2742
+          }
         },
         "properties": {
           "data": {
             "$ref": "#/components/schemas/PartnerAssessData"
           },
+          "metrics": {
+            "$ref": "#/components/schemas/ProcessingMetrics"
+          },
           "status": {
             "default": "success",
             "title": "Status",
             "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/UsageInfo"
           }
         },
         "required": [
-          "data"
+          "data",
+          "usage",
+          "metrics"
         ],
         "title": "PartnerAssessResponse",
         "type": "object"
@@ -931,6 +948,20 @@
           "char_index"
         ],
         "title": "PhonemeDetail",
+        "type": "object"
+      },
+      "ProcessingMetrics": {
+        "properties": {
+          "ai_processing_ms": {
+            "description": "Thời gian xử lý AI (SpeechAce + STT + LLM + tính band), mili giây; không gồm thời gian xếp hàng khi hệ thống đông",
+            "title": "Ai Processing Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ai_processing_ms"
+        ],
+        "title": "ProcessingMetrics",
         "type": "object"
       },
       "PronunciationDetailResponse": {
@@ -1863,6 +1894,67 @@
           "storage_key"
         ],
         "title": "UploadSlotOut",
+        "type": "object"
+      },
+      "UsageInfo": {
+        "description": "Token và chi phí (USD) của lượt gọi LLM, theo số OpenRouter báo về.\n\nKhông gồm SpeechAce (tính theo gói) và STT (tính theo giây audio).\n`null` khi đã gọi LLM mà không nhận được phản hồi để biết số thật;\n`0` khi không gọi LLM (ví dụ bài nói quá ngắn).",
+        "properties": {
+          "cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Chi phí lượt gọi LLM, đơn vị USD",
+            "title": "Cost"
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Số token đầu vào (prompt) gửi cho LLM",
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Số token LLM sinh ra, gồm cả token suy luận",
+            "title": "Output Tokens"
+          },
+          "total_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tổng token = input + output",
+            "title": "Total Tokens"
+          }
+        },
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "total_tokens",
+          "cost"
+        ],
+        "title": "UsageInfo",
         "type": "object"
       },
       "ValidationError": {

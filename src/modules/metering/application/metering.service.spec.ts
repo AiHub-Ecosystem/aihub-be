@@ -72,7 +72,7 @@ describe('MeteringService', () => {
   it('declares the current usage policy for every catalogued downstream', () => {
     expect(DOWNSTREAM_USAGE_REPORTING).toEqual({
       'ai-writing': false,
-      'ai-speaking': false,
+      'ai-speaking': true,
     });
   });
 
@@ -95,15 +95,13 @@ describe('MeteringService', () => {
     ]);
   });
 
-  it('keeps incomplete usage unremarkable for every current downstream', async () => {
+  it('keeps incomplete usage unremarkable for non-reporting AI Writing', async () => {
     const repository = new FakeUsageRepository();
     const service = new MeteringService(repository);
 
     for (const operation of [
       'writing.task1.grade',
       'writing.task2.grade',
-      'speaking.grading',
-      'speaking.grading-json',
     ] as const) {
       await service.finalize({
         ...input,
@@ -115,8 +113,31 @@ describe('MeteringService', () => {
     expect(repository.records.map((record) => record.meteringStatus)).toEqual([
       'not_applicable',
       'not_applicable',
-      'not_applicable',
-      'not_applicable',
+    ]);
+  });
+
+  it('flags incomplete usage for reporting AI Speaking operations', async () => {
+    const repository = new FakeUsageRepository();
+    const service = new MeteringService(repository);
+
+    for (const operation of [
+      'speaking.grading',
+      'speaking.grading-json',
+    ] as const) {
+      await service.finalize({
+        ...input,
+        operation,
+        usage: { inputTokens: 12 },
+      });
+    }
+
+    expect(repository.records.map((record) => record.meteringStatus)).toEqual([
+      'missing_usage',
+      'missing_usage',
+    ]);
+    expect(repository.records.map((record) => record.usage)).toEqual([
+      { inputTokens: 12 },
+      { inputTokens: 12 },
     ]);
   });
 

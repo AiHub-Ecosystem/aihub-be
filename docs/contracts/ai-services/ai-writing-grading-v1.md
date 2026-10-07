@@ -1,11 +1,17 @@
 # AI Writing grading provider contract v1
 
-Status: Verified against live AI Writing responses captured on 2026-09-07.
+Status: Business response shape verified against live captures on 2026-09-07.
+Token usage and processing time were observed in direct dev responses for Task
+1 on 2026-10-05 and Task 2 on 2026-10-07; production metering verification
+remains pending.
 
 Owner: AI Writing service. Consumer: the AIHUB gateway.
 
 Fixtures: `test/fixtures/ai-writing/grade-task1.response.json` and
-`test/fixtures/ai-writing/grade-task2.response.json`.
+`test/fixtures/ai-writing/grade-task2.response.json`. Redacted telemetry
+captures are in `test/fixtures/ai-writing/grade-task1.telemetry.capture.json`
+(2026-10-05) and `test/fixtures/ai-writing/grade-task2.telemetry.capture.json`
+(2026-10-07); they contain no essay or raw provider response.
 
 ## 1. Scope and endpoint ownership
 
@@ -110,6 +116,13 @@ Both provider grading operations return the same response shape:
   }
 }
 ```
+
+Both operations also return root-level `usage` and `metrics` siblings. Direct
+dev captures on 2026-10-05 (Task 1) and 2026-10-07 (Task 2) observed all three
+token fields and `metrics.ai_processing_ms` as non-negative integers. A complete
+metering record requires all three token counts together. `usage.cost` was also
+observed but is not part of this contract until its meaning and persistence
+policy are agreed.
 
 The first evaluation key is `1_task_achievement` for Task 1 and
 `1_task_response` for Task 2. The remaining three keys are stable:

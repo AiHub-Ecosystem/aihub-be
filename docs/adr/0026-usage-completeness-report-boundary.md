@@ -53,8 +53,9 @@ rounded to two decimal places; alert comparison uses integer arithmetic:
 `missing_count * 100 > successful_count`.
 
 ```json
-{"event":"usage_report_operation","window_from":"2026-09-20T12:00:00.000Z","window_to":"2026-09-20T13:00:00.000Z","operation":"writing.task1.grade","downstream":"ai-writing","successful_count":100,"missing_usage_count":0,"incomplete_percent":0,"status":"healthy"}
-{"event":"usage_report_summary","window_from":"2026-09-20T12:00:00.000Z","window_to":"2026-09-20T13:00:00.000Z","eligible_operations":1,"eligible_requests":100,"alert_operations":0,"status":"healthy"}
+{"event":"usage_report_operation","window_from":"2026-09-20T12:00:00.000Z","window_to":"2026-09-20T13:00:00.000Z","operation":"speaking.grading","downstream":"ai-speaking","successful_count":100,"missing_usage_count":0,"incomplete_percent":0,"status":"healthy"}
+{"event":"usage_report_operation","window_from":"2026-09-20T12:00:00.000Z","window_to":"2026-09-20T13:00:00.000Z","operation":"speaking.grading-json","downstream":"ai-speaking","successful_count":0,"missing_usage_count":0,"incomplete_percent":0,"status":"healthy"}
+{"event":"usage_report_summary","window_from":"2026-09-20T12:00:00.000Z","window_to":"2026-09-20T13:00:00.000Z","eligible_operations":2,"eligible_requests":100,"alert_operations":0,"status":"healthy"}
 ```
 
 An operation is `alert` only when its rate is strictly above 1%; exactly 1%
@@ -75,9 +76,10 @@ not comparable and is documented as such in the runbook.
 
 - The existing cron/monitor path can alert on the summary status, non-zero
   exit, and missed runs without a new scheduler or alert backend.
-- Current Writing and Speaking declarations are disabled, so the initial
-  report is healthy with zero eligible operations until #57 contract evidence
-  enables a service.
+- After this change is deployed, AI Speaking is enabled and contributes two
+  eligible operations; AI Writing remains disabled pending production
+  verification. With no Speaking traffic, the report emits two zero-count
+  healthy rows rather than a zero eligible-operation set.
 - The report is intentionally global per deployment database; organization
   breakdown and historical declaration timelines are outside #54.
 - A future Prometheus/Grafana implementation may consume the same policy and
