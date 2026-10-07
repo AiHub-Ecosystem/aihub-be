@@ -43,7 +43,7 @@ async function probeProductionHealth(hostname) {
         signal: controller.signal,
       });
       if (response.body) {
-        await response.body.cancel().catch(() => undefined);
+        void response.body.cancel().catch(() => undefined);
       }
 
       if (performance.now() >= deadline) {

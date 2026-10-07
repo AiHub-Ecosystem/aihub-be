@@ -67,6 +67,19 @@ describe('production health probe', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('does not wait for a stalled response body cancellation', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        new ReadableStream({
+          cancel: () => new Promise<void>(() => undefined),
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await expect(probeProductionHealth('api.example.com')).resolves.toBe(true);
+  });
+
   it('stops after the two-minute wall-clock deadline', async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 503 }));
 
