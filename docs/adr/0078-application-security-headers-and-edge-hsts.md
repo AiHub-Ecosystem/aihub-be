@@ -32,19 +32,21 @@ referrer to the CDN.
   `server_tokens off` also remains edge-owned. The edge configuration should
   not add `X-Content-Type-Options`, avoiding a duplicate on proxied application
   responses.
-- The nginx change is deferred until the deploy user can run `nginx -t` and
-  reload nginx through the approved sudo rule.
+- HSTS and `server_tokens off` are applied to the live API and Sandbox nginx
+  blocks after validation and reload. CD can now validate and reload nginx
+  without a password, but cannot sync the configuration because it has no
+  permission to write nginx config files.
 - Verify headers and docs markup with Fastify injection tests, then manually
   smoke-test that `/docs` renders in a browser. Do not add browser automation
   infrastructure just for this page.
 
 ## Consequences
 
-- Application responses get `nosniff` and `no-referrer`; nginx-generated edge
-  responses get HSTS once #112 can safely apply it.
+- Application responses get `nosniff` and `no-referrer`; the API and Sandbox
+  edge blocks add HSTS and suppress the nginx version.
 - The CDN still receives a request for Scalar, but SRI rejects bytes that do
   not match the pinned asset and the browser omits the referring URL.
 - CSP may allow inline styles for Scalar, while scripts remain pinned and
   integrity-checked.
-- HSTS will not be present at the edge until the deploy user's validation and
-  reload permissions are ready.
+- CD cannot keep the manual nginx change in sync until it can safely write the
+  nginx configuration.

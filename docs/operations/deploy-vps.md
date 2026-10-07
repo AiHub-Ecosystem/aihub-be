@@ -447,6 +447,8 @@ The live production site lives in `/etc/nginx/conf.d/aihub.conf`:
 
 ```nginx
 server_name api.aihubproduction.com;
+server_tokens off;
+add_header Strict-Transport-Security "max-age=15552000" always;
 
 # Keep the edge above the application's own limits so AIHUB's JSON error
 # envelope, not nginx's bare HTML 413/504, reaches the client. The Speaking
@@ -508,6 +510,8 @@ was published this way, and `/etc/nginx/conf.d/sandbox.conf` is the result:
 ```nginx
 server {
     server_name sandbox.aihubproduction.com;
+    server_tokens off;
+    add_header Strict-Transport-Security "max-age=15552000" always;
     client_max_body_size 27m;
 
     location / {
@@ -539,6 +543,7 @@ server {
 server {
     listen 80;
     server_name sandbox.aihubproduction.com;
+    server_tokens off;
     return 301 https://$host$request_uri;
 }
 ```
