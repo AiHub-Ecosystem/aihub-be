@@ -18,6 +18,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Operator actor:** the active AIHUB User Account named by the `--actor` option for an Operator command; it is the recorded actor for Organization Audit Events.
 - **Auth Identity:** a login identity attached to an AIHUB User Account, such as the Phase 1 local email/password identity or a future Google identity; it is not itself an Organization, API key, or username.
 - **Password policy:** the local Auth Identity password rule that accepts 12 through 128 Unicode code points, counted without normalization.
+- **Password hashing profile:** the Argon2id algorithm and work parameters (`m`, `t`, `p`) used to create local password hashes; it is separate from the Password policy, which governs accepted password length.
 - **Auth identity conflict:** the domain result of a registration attempt whose normalized email or username is already in use; it is distinct from malformed input.
 - **Username:** the normalized, unique account identifier owned by an AIHUB User Account; it is separate from the Auth Identity used to authenticate.
 - **User Access JWT:** a short-lived RS256 token issued by AIHUB after local credential authentication for user-facing APIs or the Customer Web BFF; it is distinct from `X-API-Key`, User Identities, and internal downstream JWTs, carries the User Account ID as `sub`, and does not carry organization or mutable credential data.
