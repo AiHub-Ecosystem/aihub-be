@@ -85,7 +85,10 @@ class FakeKeyProvider implements JwksKeyProviderPort {
     return Promise.resolve(input.forceRefresh ? this.refreshed : this.initial);
   }
 
-  validateRemote(): Promise<void> {
+  validateRemote(_input: {
+    readonly organizationId: string;
+    readonly url: string;
+  }): Promise<void> {
     return Promise.resolve();
   }
 }
