@@ -1,7 +1,10 @@
 import { ulid } from 'ulid';
 
 import { AuthIdentityConflictError } from '@/modules/auth/application/auth-identity-conflict.error';
-import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/application/email-delivery-request.port';
+import type {
+  EmailDeliveryTransaction,
+  InsertEmailDeliveryRequestInput,
+} from '@/modules/auth/application/email-delivery-request.port';
 import type {
   IssuePasswordResetTokenInput,
   PasswordResetResult,
@@ -667,7 +670,10 @@ export class PostgresLocalAuthRepository
     emailDelivery: InsertEmailDeliveryRequestInput | undefined,
   ): Promise<void> {
     if (emailDelivery !== undefined) {
-      await this.emailDeliveryRequests.insert(transaction, emailDelivery);
+      await this.emailDeliveryRequests.insert(
+        transaction as unknown as EmailDeliveryTransaction,
+        emailDelivery,
+      );
     }
   }
 

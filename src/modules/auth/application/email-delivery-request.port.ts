@@ -40,22 +40,11 @@ export type EmailDeliveryPayload =
   | AuthEmailDeliveryPayload
   | OrganizationInviteEmailDeliveryPayload;
 
-/**
- * The one thing writing a request needs from the caller's open transaction:
- * running a statement. Any module's transaction handle satisfies it, which is
- * what lets a mutation in another module commit its Email Delivery Request
- * atomically without that module knowing the table.
- *
- * `query(text, values)` is SQL-shaped on purpose: the port was chosen so a
- * second store can hand this module its own open transaction, and a
- * transaction is only portable if it can run a statement on it. An opaque
- * infrastructure-created handle would be the cleaner boundary — the writer
- * could take a callback instead of a SQL string — but it only pays for itself
- * if a second store actually needs to write a request. One implementation
- * today, so the SQL shape stays until someone writes the second caller.
- */
+declare const emailDeliveryTransactionBrand: unique symbol;
+
+/** Opaque capability for the caller-owned PostgreSQL transaction. */
 export interface EmailDeliveryTransaction {
-  query(text: string, values: readonly unknown[]): Promise<unknown>;
+  readonly [emailDeliveryTransactionBrand]: never;
 }
 
 /**

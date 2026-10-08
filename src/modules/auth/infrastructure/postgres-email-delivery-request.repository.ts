@@ -28,11 +28,7 @@ import {
   stringValue,
 } from './auth-row';
 
-/**
- * Structural minimum for any client that can run a single statement: the auth
- * pool client, the identity client, and either one's transaction handle all
- * satisfy it, so a repository call can ride the caller's open transaction.
- */
+/** PostgreSQL query shape used inside the Email Delivery adapters. */
 export interface EmailDeliveryQueryClient {
   query(
     text: string,
@@ -372,9 +368,10 @@ export class PostgresEmailDeliveryRequestRepository
   implements EmailDeliveryRequestWriterPort
 {
   async insert(
-    client: EmailDeliveryTransaction,
+    transaction: EmailDeliveryTransaction,
     input: InsertEmailDeliveryRequestInput,
   ): Promise<void> {
+    const client = transaction as unknown as EmailDeliveryQueryClient;
     await client.query(INSERT_SQL, [
       input.id,
       input.kind,

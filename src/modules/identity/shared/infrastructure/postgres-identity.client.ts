@@ -19,6 +19,13 @@ export interface PostgresIdentityTransactionalClient
   ): Promise<T>;
 }
 
+class PostgresIdentityTransactionExpiredError extends Error {
+  constructor() {
+    super('Identity transaction is no longer active');
+    this.name = 'PostgresIdentityTransactionExpiredError';
+  }
+}
+
 /**
  * Shared by raw Identity clients and Nest's Drizzle integration so both keep
  * the same PostgreSQL pool limits and timeouts.
@@ -73,14 +80,50 @@ export function createPostgresIdentityClient(
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const result = await callback({
-          query: async (text: string, values: readonly unknown[]) => {
-            const response = await client.query<Record<string, unknown>>(text, [
-              ...values,
-            ]);
-            return response.rows;
+
+        let active = true;
+        const queries: Promise<readonly unknown[]>[] = [];
+        const transactionClient: PostgresIdentityQueryClient = {
+          query: (text, values) => {
+            if (!active) {
+              return Promise.reject(
+                new PostgresIdentityTransactionExpiredError(),
+              );
+            }
+            const query = (async () => {
+              const response = await client.query<Record<string, unknown>>(
+                text,
+                [...values],
+              );
+              return response.rows;
+            })();
+            queries.push(query);
+            void query.catch(() => undefined);
+            return query;
           },
-        });
+        };
+
+        let result!: T;
+        let callbackError: { readonly value: unknown } | undefined;
+        try {
+          result = await callback(transactionClient);
+        } catch (error) {
+          callbackError = { value: error };
+        }
+        active = false;
+
+        const queryResults = await Promise.allSettled(queries);
+        if (callbackError !== undefined) {
+          throw callbackError.value;
+        }
+        const failedQuery = queryResults.find(
+          (query): query is PromiseRejectedResult =>
+            query.status === 'rejected',
+        );
+        if (failedQuery !== undefined) {
+          throw failedQuery.reason;
+        }
+
         await client.query('COMMIT');
         return result;
       } catch (error) {

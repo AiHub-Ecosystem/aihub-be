@@ -1,6 +1,6 @@
 # ADR-0074: Transactional outbox for account and invitation email
 
-- Status: Accepted
+- Status: Accepted; transaction-handle boundary amended by [ADR-0083](0083-email-delivery-transaction-handle-lifetime.md)
 - Date: 2026-10-05
 - Related issue: [#230](https://github.com/AiHub-Ecosystem/aihub-be/issues/230)
 - Amends: [ADR-0025](0025-password-recovery-boundary.md) (email delivery only), [ADR-0038](0038-bearer-management-idempotency-scope.md) (invitation email delivery only)

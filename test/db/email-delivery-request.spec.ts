@@ -2,6 +2,7 @@ import { ulid } from 'ulid';
 
 import type { Pool } from 'pg';
 
+import type { EmailDeliveryTransaction } from '@/modules/auth/application/email-delivery-request.port';
 import { createPostgresAuthClient } from '@/modules/auth/infrastructure/postgres-auth.client';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 
@@ -29,6 +30,10 @@ function insertInput(id: string) {
     payloadCiphertext: CIPHERTEXT,
     createdAt: NOW,
   };
+}
+
+function emailDeliveryTransaction(client: object): EmailDeliveryTransaction {
+  return client as unknown as EmailDeliveryTransaction;
 }
 
 beforeAll(() => {
@@ -71,7 +76,10 @@ describe('email delivery request repository', () => {
     try {
       await expect(
         client.transaction(async (tx) => {
-          await repository.insert(tx, insertInput(requestId()));
+          await repository.insert(
+            emailDeliveryTransaction(tx),
+            insertInput(requestId()),
+          );
           throw new Error('force rollback');
         }),
       ).rejects.toThrow('force rollback');
@@ -88,7 +96,7 @@ describe('email delivery request repository', () => {
     try {
       const id = requestId();
       await client.transaction(async (tx) => {
-        await repository.insert(tx, insertInput(id));
+        await repository.insert(emailDeliveryTransaction(tx), insertInput(id));
       });
 
       const rows = await pool.query(
@@ -111,7 +119,7 @@ describe('email delivery request repository', () => {
     try {
       const id = requestId();
       await client.transaction(async (tx) => {
-        await repository.insert(tx, insertInput(id));
+        await repository.insert(emailDeliveryTransaction(tx), insertInput(id));
       });
 
       const attemptedAt = new Date('2026-10-05T12:00:05.000Z');
@@ -254,7 +262,10 @@ describe('email delivery request repository', () => {
   });
   it('keeps a deferred row out of claims until its retry time, then returns it', async () => {
     const id = requestId();
-    await repository.insert(authClient, insertInput(id));
+    await repository.insert(
+      emailDeliveryTransaction(authClient),
+      insertInput(id),
+    );
     const owner = await claimAs(id, 'owner-a');
     const retryAt = new Date(NOW.getTime() + 5 * 60_000);
 
@@ -289,12 +300,15 @@ describe('email delivery request repository', () => {
     const cutoff = new Date(NOW.getTime() - 24 * 60 * 60_000);
     const old = new Date(cutoff.getTime() - 1);
     for (const id of [stale, leased]) {
-      await repository.insert(authClient, {
+      await repository.insert(emailDeliveryTransaction(authClient), {
         ...insertInput(id),
         createdAt: old,
       });
     }
-    await repository.insert(authClient, insertInput(fresh));
+    await repository.insert(
+      emailDeliveryTransaction(authClient),
+      insertInput(fresh),
+    );
     await pool.query(
       "UPDATE email_delivery_requests SET lease_owner = 'owner-a', lease_expires_at = $2 WHERE id = $1",
       [leased, new Date(NOW.getTime() + 60_000)],
@@ -338,20 +352,20 @@ describe('email delivery request repository', () => {
     const newer = requestId();
     const invite = requestId();
     const done = requestId();
-    await repository.insert(authClient, {
+    await repository.insert(emailDeliveryTransaction(authClient), {
       ...insertInput(older),
       createdAt: new Date(NOW.getTime() - 600_000),
     });
-    await repository.insert(authClient, {
+    await repository.insert(emailDeliveryTransaction(authClient), {
       ...insertInput(newer),
       createdAt: new Date(NOW.getTime() - 60_000),
     });
-    await repository.insert(authClient, {
+    await repository.insert(emailDeliveryTransaction(authClient), {
       ...insertInput(invite),
       kind: 'organization_invite_email',
       createdAt: new Date(NOW.getTime() - 30_000),
     });
-    await repository.insert(authClient, {
+    await repository.insert(emailDeliveryTransaction(authClient), {
       ...insertInput(done),
       createdAt: new Date(NOW.getTime() - 3_600_000),
     });

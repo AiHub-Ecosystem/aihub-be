@@ -1,6 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import type {
   EmailDeliveryRequestWriterPort,
+  EmailDeliveryTransaction,
   EmailPayloadCipherPort,
 } from '@/modules/auth/application/email-delivery-request.port';
 import type { OrganizationAuditDraft } from '@/modules/identity/domain/organization-audit-event';
@@ -307,12 +308,15 @@ export class PostgresOrganizationInvitationRepository
         // Sealed here because the Organization name is only readable in this
         // transaction, and queued here so the invitation and the request that
         // emails its credential commit or roll back together (ADR-0074).
-        await this.emailRequests.insert(transaction, {
-          id: input.emailDelivery.id,
-          kind: 'organization_invite_email',
-          payloadCiphertext: this.sealInvitePayload(input, name),
-          createdAt: input.emailDelivery.createdAt,
-        });
+        await this.emailRequests.insert(
+          transaction as unknown as EmailDeliveryTransaction,
+          {
+            id: input.emailDelivery.id,
+            kind: 'organization_invite_email',
+            payloadCiphertext: this.sealInvitePayload(input, name),
+            createdAt: input.emailDelivery.createdAt,
+          },
+        );
 
         return { kind: 'created' };
       });

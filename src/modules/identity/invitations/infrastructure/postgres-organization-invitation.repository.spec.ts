@@ -43,14 +43,11 @@ class RecordingCipher implements EmailPayloadCipherPort {
   }
 }
 
-/**
- * Writes through the transaction it is handed, as the auth module's writer
- * does, so the recorded statements show the request committing with the
- * invitation. The table and its insert belong to the auth module.
- */
+/** Simulates the PostgreSQL writer so recorded statements retain insert order. */
 const emailRequests: EmailDeliveryRequestWriterPort = {
   async insert(transaction, input) {
-    await transaction.query('INSERT INTO email_delivery_requests', [
+    const client = transaction as unknown as PostgresIdentityQueryClient;
+    await client.query('INSERT INTO email_delivery_requests', [
       input.id,
       input.kind,
       input.payloadCiphertext,
