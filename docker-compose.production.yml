@@ -35,7 +35,6 @@ x-app-environment: &app-environment
   AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: /run/secrets/aihub/connection-secrets.json
   # Deploy-time gate for the Web Session routes. The runtime value AIHUB
   # compares against comes from the Vault `web-session` bundle.
-  AIHUB_WEB_SESSION_CLIENT_SECRET: ${AIHUB_WEB_SESSION_CLIENT_SECRET:?AIHUB_WEB_SESSION_CLIENT_SECRET is required}
   AIHUB_RUNTIME_DATABASE_SCOPE: production
   AIHUB_USER_ACCESS_ISSUER: ${AIHUB_USER_ACCESS_ISSUER:?AIHUB_USER_ACCESS_ISSUER is required}
   AIHUB_PRODUCTION_HOST: ${AIHUB_PRODUCTION_HOST:?AIHUB_PRODUCTION_HOST is required}

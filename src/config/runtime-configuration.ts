@@ -10,6 +10,7 @@ interface RuntimeField {
   readonly defaultValue?: string | number | boolean;
   readonly values?: readonly string[];
   readonly requiredIn?: readonly RuntimeMode[];
+  /** Require env-mode values, limited to requiredIn when modes are specified. */
   readonly requiredWhenSecretSource?: boolean;
   readonly secret?: boolean;
   readonly allowEmpty?: boolean;
@@ -149,13 +150,11 @@ const fields = {
     secret: true,
     requiredWhenSecretSource: true,
   },
-  // Static secret the Customer Web BFF proves itself with on every Web Session
-  // route. The runtime value comes from the Vault `web-session` bundle; this
-  // variable is the deploy-time gate, so a staging or production image booted
-  // without it refuses to start rather than serving an open route.
+  // Local env-mode value only; agent-file mode validates the Vault bundle.
   AIHUB_WEB_SESSION_CLIENT_SECRET: {
     kind: 'string',
     secret: true,
+    requiredWhenSecretSource: true,
     requiredIn: PROD_MODES,
   },
   EMAIL_OUTBOX_CURRENT_KEY_ID: {
@@ -325,8 +324,11 @@ export function loadRuntimeConfiguration(
 
     if (
       value === undefined &&
-      (field.requiredIn?.includes(modeValue as RuntimeMode) ||
-        (field.requiredWhenSecretSource && secretSource === 'env'))
+      (field.requiredWhenSecretSource
+        ? secretSource === 'env' &&
+          (field.requiredIn === undefined ||
+            field.requiredIn.includes(modeValue as RuntimeMode))
+        : field.requiredIn?.includes(modeValue as RuntimeMode))
     ) {
       problems.push(name);
     }

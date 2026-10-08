@@ -79,7 +79,6 @@ const BOOT_ENVIRONMENT = {
   AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
   AIHUB_RUNTIME_SECRETS_FILE: `${SECRETS_MOUNT}/runtime-secrets.json`,
   AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: `${SECRETS_MOUNT}/connection-secrets.json`,
-  AIHUB_WEB_SESSION_CLIENT_SECRET: FAKE,
   AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
   AIHUB_USER_ACCESS_ISSUER: 'https://api.ci-boot.invalid',
   AIHUB_PRODUCTION_HOST: 'api.ci-boot.invalid',
