@@ -321,7 +321,7 @@ production logical database, while Postgres remains the durable boundary.
 ## Provision production Vault data
 
 Use the repository helper with the production operator workflow. It writes the
-eight production KV paths and never prints secret values:
+ten production KV paths and never prints secret values:
 
 ```sh
 AIHUB_VAULT_PROVISION_ALLOW=true \
@@ -332,8 +332,11 @@ AIHUB_VAULT_AGENT_CIDR=172.16.2.1/32 \
 ```
 
 The directory contains `ai-speaking.json`, `ai-writing.json`, `resend.json`,
-`user-access-jwt.json`, `seaweedfs.json`, `database.json`, `redis.json`, and
-`sandbox-assertion.json`. Keep it mode `0700` and remove it after provisioning.
+`user-access-jwt.json`, `seaweedfs.json`, `database.json`, `redis.json`,
+`sandbox-assertion.json`, `email-outbox.json`, and `web-session.json`. Keep it
+mode `0700` and remove it after provisioning. The required flat bundle shapes,
+including the `client_secret` string in `web-session.json`, are documented in
+[Vault bootstrap](../../ops/vault/README.md#policy-bootstrap).
 
 `AIHUB_VAULT_AGENT_CIDR` is the address Vault records as the login source, not
 the Agent container's IP. The Agent and Vault run on separate Docker networks,
