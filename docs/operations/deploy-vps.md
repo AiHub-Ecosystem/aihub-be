@@ -649,6 +649,66 @@ that a later deploy has already removed from `docker logs`, open the file named
 for the commit that was running when it happened. Saving is best effort and
 never blocks a release.
 
+### Diagnosing unmatched API 404s
+
+A `request_completed` event with `route: "unmatched"` and `http_status: 404`
+means Fastify did not match the request to an application route. AIHUB returned
+its normal client-facing `NOT_FOUND` response (`outcome: "client_error"`). This
+is a route miss, not a failure in a matched handler or a downstream service. A
+matched route that returns 404 has its route template in `route` and needs to
+be diagnosed against that route. An Nginx-generated 404 does not reach the app
+and therefore has no AIHUB `request_completed` event.
+
+The completion event intentionally has no raw path, query, or body. Its Pino
+`time` field is a Unix timestamp in milliseconds; use its `method` and
+`http_status` to narrow the Nginx access-log entries. The `request_id` is an
+AIHUB identifier that Nginx does not share, so it cannot join the two logs.
+Production and Sandbox app events come from separate `app` and `app-sandbox`
+containers; use the container that emitted the event because an unmatched
+request may not have an `environment` field. If that container has already
+been replaced, use its retained file under `deploy-logs/` as described above.
+
+The current VPS uses UTC. Nginx's default `combined` access-log format records
+time to the nearest second and may include a query in its request field. Copy
+the event's numeric `time`, `method`, and `http_status` into these variables;
+the conversion drops the milliseconds to match Nginx's timestamp precision:
+
+```sh
+event_time_ms=... # numeric `time` from the event
+method=...        # `method` from the event
+status=...        # `http_status` from the event
+second="$(date -u -d "@$((event_time_ms / 1000))" '+%d/%b/%Y:%H:%M:%S')"
+```
+
+Run the following read-only search as an operator who can read the access log.
+It prints every entry in that second with the same method and status, strips
+the query before displaying the path, and does not print the client address or
+the raw request line:
+
+```sh
+awk -F '"' -v second="$second" -v method="$method" -v expected_status="$status" '
+  index($1, "[" second " ") {
+    split($2, request, " ")
+    path = request[2]
+    sub(/\?.*/, "", path)
+    logged_status = $3
+    sub(/^[[:space:]]*/, "", logged_status)
+    sub(/[[:space:]].*/, "", logged_status)
+    if (request[1] == method && logged_status == expected_status)
+      print request[1], path, logged_status
+  }
+' /var/log/nginx/access.log
+```
+
+The current host config sets the global access log to
+`/var/log/nginx/access.log` and does not define a custom log format, so the
+default is `combined` unless the API server block overrides it. If the log
+format or path has changed, inspect the effective Nginx config with
+`sudo nginx -T` and adjust the search accordingly. The access-log file is
+restricted; use an account with permission to read it. If several entries
+remain, report them as candidates: the event's timestamp, method, and status
+cannot identify one request when multiple requests match in the same second.
+
 ### Optional request tracing
 
 Set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` in `.env.production` to an OTLP/HTTP
