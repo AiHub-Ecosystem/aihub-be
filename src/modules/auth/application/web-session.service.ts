@@ -281,22 +281,25 @@ export class WebSessionService implements WebSessionServicePort {
       throw storeUnavailable(error);
     }
 
-    const accessToken = await this.accessTokenIssuer.issue(userId);
-    // The renewal is a side effect of the exchange, not a step in it: the JWT
-    // is already minted, so a throttled write, a write another instance won, or
-    // a store that cannot record it must not cost the caller the credential it
-    // just earned. A missed renewal costs at most an hour of session life, and
-    // the next exchange renews it.
+    // Fail closed: the renewal is a durable write this exchange depends on, so
+    // it runs before the JWT is signed. A store that cannot record the renewal
+    // is a temporary fault the BFF must be able to tell from a bad session, and
+    // it answers `503` with no credential rather than handing out a JWT whose
+    // exchange was never durably recorded. A throttled write, a write another
+    // instance won, or a session revoked in between is still a normal outcome:
+    // the conditional update matches no row and the exchange proceeds.
     await this.renewSession(tokenHash, now);
-    return accessToken;
+
+    return this.accessTokenIssuer.issue(userId);
   }
 
   /**
    * Forward-only sliding expiry, throttled to one write per hour. The repository
    * matches no row when the last renewal is too recent, when the session was
    * revoked or expired in between, or when another request won the update first;
-   * none of those is an exchange failure. A store that throws is not one either:
-   * the exchange is what the caller asked for, and it has already answered.
+   * none of those is an exchange failure, and none of them fails this method. A
+   * store that throws is a failure, and becomes `503` rather than a silently
+   * unrenewed session the caller was told nothing about.
    */
   private async renewSession(tokenHash: string, now: Date): Promise<void> {
     try {
@@ -308,8 +311,8 @@ export class WebSessionService implements WebSessionServicePort {
         renewedAt: now,
         renewedAtBefore: new Date(now.getTime() - HOUR_MS),
       });
-    } catch {
-      // Deliberately swallowed: see the method comment.
+    } catch (error) {
+      throw storeUnavailable(error);
     }
   }
 

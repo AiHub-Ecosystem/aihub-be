@@ -850,22 +850,21 @@ describe('web session HTTP boundary', () => {
       expect(storedSession().expiresAt.getTime()).toBe(farFuture.getTime());
     });
 
-    it('keeps the JWT when only the renewal write fails', async () => {
+    it('answers 503 with no credential when the renewal write fails', async () => {
       const token = await webSessionToken();
       const createdExpiry = storedSession().expiresAt.getTime();
       webSessions.failRenewWebSession = true;
 
       const response = await exchange(token);
 
-      expect(response.statusCode).toBe(200);
-      expect(
-        (
-          await verifier.verify(
-            (response.json() as { data: { access_token: string } }).data
-              .access_token,
-          )
-        ).userId,
-      ).toBe(USER_ID);
+      // Fail closed. A renewal AIHUB could not record is a temporary fault the
+      // BFF must be able to tell from a bad session, so it keeps its cookie
+      // instead of receiving a JWT for an exchange that never committed.
+      expect(response.statusCode).toBe(503);
+      expect(response.json().error).toEqual(
+        expect.objectContaining({ code: 'AUTH_WEB_SESSION_UNAVAILABLE' }),
+      );
+      expect(response.payload).not.toContain('access_token');
       expect(storedSession().expiresAt.getTime()).toBe(createdExpiry);
     });
 
