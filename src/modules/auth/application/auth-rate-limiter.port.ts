@@ -6,6 +6,7 @@ export type AuthRateLimitScope =
   | 'forgot_ip'
   | 'forgot_email'
   | 'verify_ip'
+  | 'web_session_verification_token'
   | 'login_ip'
   | 'login_email'
   | 'reset_ip'

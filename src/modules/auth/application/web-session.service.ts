@@ -1,7 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import type { IdMinter } from '@/common/ids/prefixed-id';
-import { constantTimeEquals } from '@/common/security/constant-time-equals';
-import { OPAQUE_TOKEN_BINDINGS } from '@/common/security/opaque-token-issuer';
+import { enforceAuthRateLimit } from './auth-rate-limit';
 import { type AuthRateLimiterPort } from './auth-rate-limiter.port';
 import { type LocalAuthServiceClock } from './local-auth.service';
 import { authenticateCredentials } from './local-credentials';
@@ -13,12 +12,17 @@ import {
 import { type UserAccountRepositoryPort } from './user-account.port';
 import {
   browserBindingHash,
-  enforceVerificationRateLimit,
+  enforceWebSessionVerificationRateLimit,
 } from './verification-sign-in';
 import { type VerificationTokenRepositoryPort } from './verification-token-repository.port';
 import { type VerificationTokenPort } from './verification-token.port';
-import { type WebSessionClientSecretPort } from './web-session-client-secret.port';
+import { webSessionUnavailable } from './web-session-errors';
+import { WEB_SESSION_POLICY } from './web-session-policy';
 import { type WebSessionRepositoryPort } from './web-session-repository.port';
+import {
+  type CreatedWebSession,
+  type WebSessionServicePort,
+} from './web-session-service.port';
 import { type WebSessionTokenIssuerPort } from './web-session-token.port';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -48,75 +52,6 @@ const EXCHANGE_RATE_LIMITS = {
   }
 >;
 
-export interface CreatedWebSession {
-  readonly token: string;
-  readonly expiresAt: Date;
-}
-
-export interface WebSessionServicePort {
-  createWebSession(
-    input: { readonly email: string; readonly password: string },
-    ip: string,
-    presentedClientSecret: string | undefined,
-  ): Promise<CreatedWebSession>;
-  /**
-   * Verification Sign-in. Answers the Web Session when the Signup Browser
-   * Binding matched and this token's one claim was won, and `undefined` when
-   * the email was verified but no session was granted — which is the same
-   * bodyless `204` the browser-facing verify route answers.
-   */
-  createWebSessionFromVerification(
-    input: {
-      readonly token: string;
-      readonly browserBinding: string | undefined;
-    },
-    ip: string,
-    presentedClientSecret: string | undefined,
-  ): Promise<CreatedWebSession | undefined>;
-  /**
-   * Trade a Web Session for a User Access JWT. `token` is `undefined` when the
-   * request carried the credential somewhere this route refuses to read it
-   * from, which is one generic failure like any other unusable session.
-   */
-  exchangeWebSession(
-    input: { readonly token: string | undefined },
-    ip: string,
-    presentedClientSecret: string | undefined,
-  ): Promise<IssuedUserAccessToken>;
-  /**
-   * End the one Web Session the caller presented. `token` is `undefined` when
-   * the request carried the credential somewhere this route refuses to read it
-   * from.
-   *
-   * Nothing here is a session failure, so nothing here is reported: a valid,
-   * revoked, unknown, expired, and malformed token all answer one bodyless
-   * `204`. Only a store that could not record the revocation answers `503`,
-   * because "could not end it" and "already ended" are different answers for a
-   * BFF clearing a cookie.
-   */
-  revokeWebSession(
-    input: { readonly token: string | undefined },
-    presentedClientSecret: string | undefined,
-  ): Promise<void>;
-}
-
-export const WEB_SESSION_SERVICE = Symbol('WEB_SESSION_SERVICE');
-
-/**
- * AIHUB cannot serve a Web Session right now: either the store that owns the
- * row is unreachable, or this deployment provisioned no client secret. Both are
- * `AUTH_WEB_SESSION_UNAVAILABLE`, and neither carries a credential back, so the
- * BFF keeps the cookie it already had and asks the user to try again.
- */
-function storeUnavailable(cause: unknown): AppError {
-  return new AppError({
-    code: 'AUTH_WEB_SESSION_UNAVAILABLE',
-    message: 'Web Sessions are temporarily unavailable',
-    retryable: true,
-    cause,
-  });
-}
-
 function invalidVerificationToken(): AppError {
   return new AppError({
     code: 'AUTH_VERIFICATION_TOKEN_INVALID',
@@ -142,8 +77,8 @@ function invalidWebSession(): AppError {
 /**
  * The Web Session slice of the auth module, kept beside local login rather
  * than inside it so each Web Session route owns a method here and a route in
- * one controller: this file creates from a password and from a verification
- * token, and the next two tickets add exchange and logout.
+ * one controller: creation from a password or verification token, exchange,
+ * and logout all share the same durable session boundary.
  *
  * A Web Session is not a Refresh Session: its token does not rotate, belongs to
  * no token family, and its row is `web_sessions`, not `refresh_tokens`.
@@ -153,7 +88,6 @@ export class WebSessionService implements WebSessionServicePort {
     private readonly webSessions: WebSessionRepositoryPort,
     private readonly tokenIssuer: WebSessionTokenIssuerPort,
     private readonly newSessionId: IdMinter,
-    private readonly clientSecret: WebSessionClientSecretPort,
     private readonly userAccounts: UserAccountRepositoryPort,
     private readonly passwordHasher: PasswordHasherPort,
     private readonly rateLimiter: AuthRateLimiterPort,
@@ -166,12 +100,7 @@ export class WebSessionService implements WebSessionServicePort {
   async createWebSession(
     input: { readonly email: string; readonly password: string },
     ip: string,
-    presentedClientSecret: string | undefined,
   ): Promise<CreatedWebSession> {
-    // The caller proves who it is before AIHUB looks at a credential or a
-    // session, so a request without the secret never reaches the store.
-    this.assertClientSecret(presentedClientSecret);
-
     // The same check, dummy hash, and login limits login applies, so this route
     // adds no way around them.
     const userId = await authenticateCredentials(
@@ -196,19 +125,16 @@ export class WebSessionService implements WebSessionServicePort {
    * makes "one token, at most one session, whatever its kind" true rather than
    * two paths hoping to agree.
    */
-  async createWebSessionFromVerification(
-    input: {
-      readonly token: string;
-      readonly browserBinding: string | undefined;
-    },
-    ip: string,
-    presentedClientSecret: string | undefined,
-  ): Promise<CreatedWebSession | undefined> {
-    this.assertClientSecret(presentedClientSecret);
-
-    // The limit verify-email already applies, so this route adds no dimension
-    // and no bypass.
-    await enforceVerificationRateLimit(this.rateLimiter, ip);
+  async createWebSessionFromVerification(input: {
+    readonly token: string;
+    readonly browserBinding: string | undefined;
+  }): Promise<CreatedWebSession | undefined> {
+    // BFF requests share a proxy address. Bound repeat attempts by the token
+    // hash instead, using the same verification attempt budget.
+    await enforceWebSessionVerificationRateLimit(
+      this.rateLimiter,
+      this.verificationTokens.hash(input.token),
+    );
 
     const now = this.clock.now();
     // Pre-issued, because the Web Session is stored in the same durable step as
@@ -230,7 +156,7 @@ export class WebSessionService implements WebSessionServicePort {
       });
     } catch (error) {
       // Fail closed: no token reaches the BFF unless the row was committed.
-      throw storeUnavailable(error);
+      throw webSessionUnavailable(error);
     }
 
     if (outcome.kind === 'invalid') {
@@ -253,10 +179,7 @@ export class WebSessionService implements WebSessionServicePort {
   async exchangeWebSession(
     input: { readonly token: string | undefined },
     ip: string,
-    presentedClientSecret: string | undefined,
   ): Promise<IssuedUserAccessToken> {
-    this.assertClientSecret(presentedClientSecret);
-
     if (input.token === undefined || input.token.length === 0) {
       await this.enforceExchangeFailureLimits(ip);
       throw invalidWebSession();
@@ -293,19 +216,30 @@ export class WebSessionService implements WebSessionServicePort {
       // The store owns the rows, so an outage here is a temporary fault the
       // caller must be able to tell from a bad session: `503`, and no
       // credential, so the BFF keeps its cookie.
-      throw storeUnavailable(error);
+      throw webSessionUnavailable(error);
     }
 
-    // Fail closed: the renewal is a durable write this exchange depends on, so
-    // it runs before the JWT is signed. A store that cannot record the renewal
-    // is a temporary fault the BFF must be able to tell from a bad session, and
-    // it answers `503` with no credential rather than handing out a JWT whose
-    // exchange was never durably recorded. A throttled write, a write another
-    // instance won, or a session revoked in between is still a normal outcome:
-    // the conditional update matches no row and the exchange proceeds.
-    await this.renewSession(tokenHash, now);
-
-    return this.accessTokenIssuer.issue(userId);
+    // Sign before the final durable check, but publish nothing until it passes.
+    // If revocation commits during signing or renewal, the fresh read refuses
+    // this exchange. If it commits after the read, the JWT was already signed
+    // before revocation, which is the documented 15-minute allowance.
+    const issued = await this.accessTokenIssuer.issue(userId);
+    const checkedAt = this.clock.now();
+    await this.renewSession(tokenHash, checkedAt);
+    let stillExchangeable;
+    try {
+      stillExchangeable = await this.webSessions.findExchangeableWebSession({
+        tokenHash,
+        now: checkedAt,
+      });
+    } catch (error) {
+      throw webSessionUnavailable(error);
+    }
+    if (stillExchangeable === undefined) {
+      await this.enforceExchangeFailureLimits(ip, tokenHash);
+      throw invalidWebSession();
+    }
+    return issued;
   }
 
   /**
@@ -324,12 +258,9 @@ export class WebSessionService implements WebSessionServicePort {
    * unknown, already-revoked, or expired session, which is the same `204` as a
    * successful one.
    */
-  async revokeWebSession(
-    input: { readonly token: string | undefined },
-    presentedClientSecret: string | undefined,
-  ): Promise<void> {
-    this.assertClientSecret(presentedClientSecret);
-
+  async revokeWebSession(input: {
+    readonly token: string | undefined;
+  }): Promise<void> {
     if (input.token === undefined || input.token.length === 0) {
       return;
     }
@@ -344,7 +275,7 @@ export class WebSessionService implements WebSessionServicePort {
       // end it" from "already ended" would clear a cookie whose session is
       // still live, so an unreachable store is a retryable `503` and not the
       // quiet `204` every unusable session gets.
-      throw storeUnavailable(error);
+      throw webSessionUnavailable(error);
     }
   }
 
@@ -352,7 +283,7 @@ export class WebSessionService implements WebSessionServicePort {
    * Forward-only sliding expiry, throttled to one write per hour. The repository
    * matches no row when the last renewal is too recent, when the session was
    * revoked or expired in between, or when another request won the update first;
-   * none of those is an exchange failure, and none of them fails this method. A
+   * the final session read distinguishes throttling from revocation. A
    * store that throws is a failure, and becomes `503` rather than a silently
    * unrenewed session the caller was told nothing about.
    */
@@ -360,14 +291,12 @@ export class WebSessionService implements WebSessionServicePort {
     try {
       await this.webSessions.renewWebSession({
         tokenHash,
-        expiresAt: new Date(
-          now.getTime() + OPAQUE_TOKEN_BINDINGS.webSession.ttlMs,
-        ),
+        expiresAt: new Date(now.getTime() + WEB_SESSION_POLICY.ttlMs),
         renewedAt: now,
         renewedAtBefore: new Date(now.getTime() - HOUR_MS),
       });
     } catch (error) {
-      throw storeUnavailable(error);
+      throw webSessionUnavailable(error);
     }
   }
 
@@ -389,33 +318,10 @@ export class WebSessionService implements WebSessionServicePort {
         now,
       });
     } catch (error) {
-      throw storeUnavailable(error);
+      throw webSessionUnavailable(error);
     }
 
     return { token: token.raw, expiresAt: token.expiresAt };
-  }
-
-  /**
-   * A missing or wrong secret is one generic `401` that says nothing about
-   * which it was, and the comparison is constant time so it says nothing about
-   * how much of the value matched. A deployment that provisioned no secret
-   * answers `503`: refusing is the only safe answer, never treating every
-   * caller as approved.
-   */
-  private assertClientSecret(presented: string | undefined): void {
-    const expected = this.clientSecret.resolve();
-    if (expected === undefined) {
-      throw storeUnavailable(
-        new Error('no Customer Web BFF client secret is provisioned'),
-      );
-    }
-    if (presented === undefined || !constantTimeEquals(presented, expected)) {
-      throw new AppError({
-        code: 'UNAUTHORIZED',
-        message: 'Client secret is missing or invalid',
-        retryable: false,
-      });
-    }
   }
 
   /**
@@ -434,17 +340,7 @@ export class WebSessionService implements WebSessionServicePort {
         ? []
         : [{ ...EXCHANGE_RATE_LIMITS.token, key: tokenHash }]),
     ]) {
-      const result = await this.rateLimiter.consume(limit);
-      if (!result.allowed) {
-        throw new AppError({
-          code: 'RATE_LIMITED',
-          message: 'Too many requests',
-          retryable: true,
-          ...(result.retryAfterMs === undefined
-            ? {}
-            : { retryAfterMs: result.retryAfterMs }),
-        });
-      }
+      await enforceAuthRateLimit(this.rateLimiter, limit);
     }
   }
 }

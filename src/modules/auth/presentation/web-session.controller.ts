@@ -7,12 +7,12 @@ import {
   Post,
   Req,
   Res,
+  UseGuards,
 } from '@nestjs/common';
-import { Value } from '@sinclair/typebox/value';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { invalidRequest } from '@/common/errors/invalid-request';
+import type { LoginResponse } from '@/contracts/auth/local-auth';
 import {
   type CreateWebSessionFromVerificationRequest,
   CreateWebSessionFromVerificationRequestSchema,
@@ -27,11 +27,11 @@ import {
 import {
   WEB_SESSION_SERVICE,
   type WebSessionServicePort,
-} from '@/modules/auth/application/web-session.service';
-import {
-  clientSecretFrom,
-  hasAlternateWebSessionSource,
-} from '@/modules/auth/presentation/refresh-cookie';
+} from '@/modules/auth/application/web-session-service.port';
+import { accessTokenEnvelope } from './access-token-envelope';
+import { parseAuthBody, requestIp } from './auth-request';
+import { WebSessionClientGuard } from './web-session-client.guard';
+import { hasAlternateWebSessionSource } from './web-session-transport';
 
 /** The one envelope both creation routes answer, so a BFF reads them alike. */
 function createdWebSession(
@@ -47,16 +47,6 @@ function createdWebSession(
   };
 }
 
-/** The JWT envelope `POST /v1/auth/login` already publishes. */
-interface AccessTokenEnvelope {
-  readonly data: {
-    readonly access_token: string;
-    readonly token_type: 'Bearer';
-    readonly expires_in: number;
-  };
-  readonly meta: { readonly request_id: string };
-}
-
 /**
  * The Customer Web BFF route group: server-to-server only, never a browser.
  *
@@ -67,6 +57,7 @@ interface AccessTokenEnvelope {
  * behalf, where no `Set-Cookie` for another host would reach.
  */
 @Controller()
+@UseGuards(WebSessionClientGuard)
 export class WebSessionController {
   constructor(
     @Inject(WEB_SESSION_SERVICE)
@@ -80,18 +71,14 @@ export class WebSessionController {
     @Req() request: FastifyRequest,
     @Body() body: unknown,
   ): Promise<CreateWebSessionResponse> {
-    if (!Value.Check(CreateWebSessionRequestSchema, body)) {
-      throw invalidRequest();
-    }
-    const input = Value.Parse(
+    const input: CreateWebSessionRequest = parseAuthBody(
       CreateWebSessionRequestSchema,
       body,
-    ) as CreateWebSessionRequest;
+    );
 
     const created = await this.service.createWebSession(
       input,
-      request.ip || 'unknown',
-      clientSecretFrom(request),
+      requestIp(request),
     );
 
     return createdWebSession(request, created);
@@ -108,19 +95,15 @@ export class WebSessionController {
     @Body() body: unknown,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<CreateWebSessionResponse | undefined> {
-    if (!Value.Check(CreateWebSessionFromVerificationRequestSchema, body)) {
-      throw invalidRequest();
-    }
-    const input = Value.Parse(
+    const input: CreateWebSessionFromVerificationRequest = parseAuthBody(
       CreateWebSessionFromVerificationRequestSchema,
       body,
-    ) as CreateWebSessionFromVerificationRequest;
-
-    const created = await this.service.createWebSessionFromVerification(
-      { token: input.token, browserBinding: input.browser_binding },
-      request.ip || 'unknown',
-      clientSecretFrom(request),
     );
+
+    const created = await this.service.createWebSessionFromVerification({
+      token: input.token,
+      browserBinding: input.browser_binding,
+    });
 
     // A binding that does not match still verified the email. The BFF signs the
     // user in here or not at all, and learns which from the status alone.
@@ -139,14 +122,11 @@ export class WebSessionController {
   async exchangeWebSession(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
-  ): Promise<AccessTokenEnvelope> {
-    if (!Value.Check(ExchangeWebSessionRequestSchema, body)) {
-      throw invalidRequest();
-    }
-    const input = Value.Parse(
+  ): Promise<LoginResponse> {
+    const input: ExchangeWebSessionRequest = parseAuthBody(
       ExchangeWebSessionRequestSchema,
       body,
-    ) as ExchangeWebSessionRequest;
+    );
 
     const exchanged = await this.service.exchangeWebSession(
       // The credential belongs in this body and nowhere else, so a token
@@ -158,20 +138,16 @@ export class WebSessionController {
           ? undefined
           : input.web_session_token,
       },
-      request.ip || 'unknown',
-      clientSecretFrom(request),
+      requestIp(request),
     );
 
     // The envelope login answers, field for field: an integrator already parses
     // one, and a BFF caching this JWT in process needs no new shape.
-    return {
-      data: {
-        access_token: exchanged.token,
-        token_type: 'Bearer',
-        expires_in: exchanged.expiresIn,
-      },
-      meta: { request_id: String(request.id) },
-    };
+    return accessTokenEnvelope(
+      exchanged.token,
+      exchanged.expiresIn,
+      String(request.id),
+    );
   }
 
   /**
@@ -191,13 +167,10 @@ export class WebSessionController {
     @Req() request: FastifyRequest,
     @Body() body: unknown,
   ): Promise<void> {
-    if (!Value.Check(LogoutWebSessionRequestSchema, body)) {
-      throw invalidRequest();
-    }
-    const input = Value.Parse(
+    const input: LogoutWebSessionRequest = parseAuthBody(
       LogoutWebSessionRequestSchema,
       body,
-    ) as LogoutWebSessionRequest;
+    );
 
     await this.service.revokeWebSession(
       // The credential belongs in this body and nowhere else, exactly as on the
@@ -209,7 +182,6 @@ export class WebSessionController {
           ? undefined
           : input.web_session_token,
       },
-      clientSecretFrom(request),
     );
   }
 }

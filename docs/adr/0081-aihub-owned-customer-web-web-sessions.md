@@ -11,6 +11,8 @@ The Customer Web login session becomes a first-class AIHUB concept, the **Web Se
 
 #345 said "ADR-0046 documents". This repo amends an accepted ADR instead of rewriting it, so the decision lives here and ADR-0046 carries an annotation pointing forward. Its original text stays readable as the decision that was superseded.
 
+#347 originally reused the browser verification IP dimension for the BFF. The deployed proxy supplies a shared peer IP, so that would cap all Customer Web confirmations at ten per five minutes. BFF verification instead applies the same attempt budget to each verification token hash in a separate `web_session_verification_token` dimension; browser verification keeps `verify_ip` unchanged.
+
 ## What a Web Session is
 
 A Web Session is not a Refresh Session. It has no Refresh Token Family, its token does not rotate, and it lives in its own table rather than `refresh_tokens`.
@@ -24,9 +26,9 @@ A Web Session is not a Refresh Session. It has no Refresh Token Family, its toke
 
 ## The server-to-server boundary
 
-The four Web Session routes are for the Customer Web BFF only, authenticated by one static client secret in a dedicated header, compared in constant time and checked before any credential or session lookup. The Web Session token travels in the request body only; offered in a cookie, an `Authorization` header, or a query parameter it is refused. A stolen Web Session token alone is therefore not usable against AIHUB.
+The four Web Session routes are for the Customer Web BFF only, authenticated by one static client secret in a dedicated header, compared in constant time and checked by a presentation guard before body validation or any credential or session lookup. The Web Session token travels in the request body only; offered in a cookie, an `Authorization` header, or a query parameter it is refused. A stolen Web Session token alone is therefore not usable against AIHUB.
 
-The BFF exchanges a session for a short-lived User Access JWT on demand, which it may cache in process until shortly before it expires. AIHUB stores no JWT and keeps no revocation list, so a JWT signed before a logout can stay valid for up to 15 minutes — the same window the Bearer boundary already has. An invalid, expired, revoked, unknown or malformed session answers one generic `401`; an infrastructure failure answers `503` with no credential, so the BFF can keep its cookie and tell a temporary fault from a bad session.
+The BFF exchanges a session for a short-lived User Access JWT on demand, which it may cache in process until shortly before it expires. AIHUB signs the JWT before the final durable session check and returns it only after renewal and a fresh validity read succeed. Revocation committed during signing or renewal refuses the exchange, including when renewal was throttled. Store failures return `503` without a credential. AIHUB stores no JWT and keeps no revocation list, so a JWT signed before a logout can stay valid for up to 15 minutes — the same window the Bearer boundary already has. An invalid, expired, revoked, unknown or malformed session answers one generic `401`; an infrastructure failure answers `503` with no credential, so the BFF can keep its cookie and tell a temporary fault from a bad session.
 
 ## Consequences
 
@@ -36,6 +38,8 @@ The BFF exchanges a session for a short-lived User Access JWT on demand, which i
 - Existing Bearer-token and API-key clients see no change. The Web Session routes are additive and may deploy before the frontend cutover.
 - Release depends on Vault: the secret's Vault template must be staged and `vault-agent` restarted before the merge to `main`, because CD deploys `main` and never restarts the agent. A production or staging image without the secret refuses to boot.
 - Existing frontend Redis sessions are not migrated. At cutover users sign in again once and the flow fails closed, following ADR-0046's "Session state is never migrated".
+
+Production and staging validate the required `web-session.client_secret` in the rendered Vault bundle at startup. They need no copy in the host environment or Docker metadata. The schema variable remains an optional development/test env-mode input; without it, the presentation guard returns `503`.
 
 ## Google login handoff
 

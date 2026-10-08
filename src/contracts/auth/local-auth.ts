@@ -118,6 +118,8 @@ export const LoginResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export type LoginResponse = Static<typeof LoginResponseSchema>;
+
 export const EmptyAuthRequestSchema = Type.Object(
   {},
   { additionalProperties: false },

@@ -63,15 +63,14 @@ import {
   type WebSessionClientSecretPort,
 } from './application/web-session-client-secret.port';
 import { WEB_SESSION_ID } from './application/web-session-id.port';
+import { WEB_SESSION_POLICY } from './application/web-session-policy';
 import { WEB_SESSION_REPOSITORY } from './application/web-session-repository.port';
+import { WEB_SESSION_SERVICE } from './application/web-session-service.port';
 import {
   WEB_SESSION_TOKEN_ISSUER,
   type WebSessionTokenIssuerPort,
 } from './application/web-session-token.port';
-import {
-  WEB_SESSION_SERVICE,
-  WebSessionService,
-} from './application/web-session.service';
+import { WebSessionService } from './application/web-session.service';
 import { Argon2PasswordHasher } from './infrastructure/argon2-password.hasher';
 import { CryptoRefreshToken } from './infrastructure/crypto-refresh-token';
 import {
@@ -101,6 +100,7 @@ import { RedisAuthRateLimiter } from './infrastructure/redis-auth-rate-limiter';
 import { ResendEmailSender } from './infrastructure/resend-email.sender';
 import { LocalAuthController } from './presentation/local-auth.controller';
 import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
+import { WebSessionClientGuard } from './presentation/web-session-client.guard';
 import { WebSessionController } from './presentation/web-session.controller';
 import {
   AUTH_POSTGRES_READINESS,
@@ -166,20 +166,14 @@ import {
     {
       provide: WEB_SESSION_TOKEN_ISSUER,
       useFactory: (): WebSessionTokenIssuerPort =>
-        opaqueTokenIssuer(
-          OPAQUE_TOKEN_BINDINGS.webSession.prefix,
-          OPAQUE_TOKEN_BINDINGS.webSession.ttlMs,
-        ),
+        opaqueTokenIssuer(WEB_SESSION_POLICY.prefix, WEB_SESSION_POLICY.ttlMs),
     },
     {
       provide: WEB_SESSION_ID,
-      useFactory: () =>
-        prefixedIdGenerator(OPAQUE_TOKEN_BINDINGS.webSession.prefix),
+      useFactory: () => prefixedIdGenerator(WEB_SESSION_POLICY.prefix),
     },
     {
-      // The runtime secret source serves the live value; the schema variable is
-      // the deploy-time gate. Absent, the route group answers 503 rather than
-      // serve an open one.
+      // The runtime provider owns the live value; absent local configuration fails closed.
       provide: WEB_SESSION_CLIENT_SECRET,
       inject: [RUNTIME_SECRET_PROVIDER],
       useFactory: (
@@ -197,7 +191,6 @@ import {
         WEB_SESSION_REPOSITORY,
         WEB_SESSION_TOKEN_ISSUER,
         WEB_SESSION_ID,
-        WEB_SESSION_CLIENT_SECRET,
         USER_ACCOUNT_REPOSITORY,
         PASSWORD_HASHER,
         AUTH_RATE_LIMITER,
@@ -371,6 +364,7 @@ import {
       ],
     },
     UserAccessJwtGuard,
+    WebSessionClientGuard,
   ],
   exports: [
     AUTH_POSTGRES_READINESS,

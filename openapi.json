@@ -8543,7 +8543,7 @@
       "post": {
         "operationId": "auth.web_sessions.verification",
         "summary": "Create a Web Session from a verification token",
-        "description": "Server-to-server only, Customer Web BFF. The verification token and the Signup Browser Binding received at signup: a binding that does not match verifies the email and answers 204 with no session, and one token creates at most one session whichever route reaches it first. Applies the same verification rate limits as POST /v1/auth/verify-email.",
+        "description": "Server-to-server only, Customer Web BFF. The verification token and the Signup Browser Binding received at signup: a binding that does not match verifies the email and answers 204 with no session, and one token creates at most one session whichever route reaches it first. Applies the verification attempt budget per token hash, so Customer Web BFF users behind a shared proxy address do not consume one shared IP counter.",
         "x-identity-scope": "none",
         "security": [
           {
@@ -8635,10 +8635,7 @@
             "description": "Email verified; no Web Session created."
           },
           "400": {
-            "$ref": "#/components/responses/Error400"
-          },
-          "401": {
-            "description": "Client secret missing or wrong, or the email and password are not an active account",
+            "description": "Malformed request or invalid verification token",
             "content": {
               "application/json": {
                 "schema": {
@@ -8659,14 +8656,62 @@
                         "code": {
                           "anyOf": [
                             {
-                              "const": "UNAUTHORIZED",
+                              "const": "INVALID_REQUEST",
                               "type": "string"
                             },
                             {
-                              "const": "AUTH_CREDENTIALS_INVALID",
+                              "const": "AUTH_VERIFICATION_TOKEN_INVALID",
                               "type": "string"
                             }
                           ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "retry_after_ms": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "properties": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Client secret missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["error"],
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "const": "UNAUTHORIZED",
+                          "type": "string"
                         },
                         "message": {
                           "type": "string"

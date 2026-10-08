@@ -35,7 +35,10 @@ import type {
   PostgresAuthQueryClient,
 } from './postgres-auth.client';
 import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
-import { REVOKE_USER_WEB_SESSIONS_SQL } from './postgres-web-session.repository';
+import {
+  INSERT_WEB_SESSION_SQL,
+  REVOKE_USER_WEB_SESSIONS_SQL,
+} from './postgres-web-session.repository';
 
 const INVALID: VerificationOutcome = { kind: 'invalid' };
 const VERIFIED: VerificationOutcome = { kind: 'verified' };
@@ -705,22 +708,13 @@ export class PostgresLocalAuthRepository
       readonly issuedAt: Date;
     },
   ): Promise<void> {
-    await transaction.query(
-      `
-        INSERT INTO web_sessions (
-          id, user_account_id, token_hash,
-          created_at, expires_at, last_renewed_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $4)
-      `,
-      [
-        session.sessionId,
-        userId,
-        session.token.hash,
-        session.issuedAt,
-        session.token.expiresAt,
-      ],
-    );
+    await transaction.query(INSERT_WEB_SESSION_SQL, [
+      session.sessionId,
+      userId,
+      session.token.hash,
+      session.issuedAt,
+      session.token.expiresAt,
+    ]);
   }
 
   private refreshTokenRecord(

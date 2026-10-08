@@ -3,11 +3,18 @@ import type {
   ExchangeableWebSession,
   FindExchangeableWebSessionInput,
   RenewWebSessionInput,
-  RevokeUserWebSessionsInput,
   RevokeWebSessionInput,
   WebSessionRepositoryPort,
 } from '@/modules/auth/application/web-session-repository.port';
 import type { PostgresAuthQueryClient } from './postgres-auth.client';
+
+export const INSERT_WEB_SESSION_SQL = `
+        INSERT INTO web_sessions (
+          id, user_account_id, token_hash,
+          created_at, expires_at, last_renewed_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $4)
+      `;
 
 /**
  * Revokes every open Web Session of one account, with the same guard the
@@ -34,22 +41,13 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
   constructor(private readonly client: PostgresAuthQueryClient) {}
 
   async createWebSession(input: CreateWebSessionInput): Promise<void> {
-    await this.client.query(
-      `
-        INSERT INTO web_sessions (
-          id, user_account_id, token_hash,
-          created_at, expires_at, last_renewed_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $4)
-      `,
-      [
-        input.sessionId,
-        input.userId,
-        input.token.hash,
-        input.now,
-        input.token.expiresAt,
-      ],
-    );
+    await this.client.query(INSERT_WEB_SESSION_SQL, [
+      input.sessionId,
+      input.userId,
+      input.token.hash,
+      input.now,
+      input.token.expiresAt,
+    ]);
   }
 
   async findExchangeableWebSession(
@@ -128,17 +126,5 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
       [input.tokenHash, input.revokedAt],
     );
     return rows.length > 0;
-  }
-
-  async revokeWebSessionsByUser(
-    input: RevokeUserWebSessionsInput,
-  ): Promise<number> {
-    const rows = await this.client.query(
-      `${REVOKE_USER_WEB_SESSIONS_SQL}
-        RETURNING id
-      `,
-      [input.userId, input.revokedAt],
-    );
-    return rows.length;
   }
 }

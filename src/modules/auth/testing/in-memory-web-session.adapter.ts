@@ -3,7 +3,6 @@ import type {
   ExchangeableWebSession,
   FindExchangeableWebSessionInput,
   RenewWebSessionInput,
-  RevokeUserWebSessionsInput,
   RevokeWebSessionInput,
   WebSessionRepositoryPort,
 } from '@/modules/auth/application/web-session-repository.port';
@@ -31,7 +30,6 @@ export class InMemoryWebSessionAdapter implements WebSessionRepositoryPort {
   failFindWebSession = false;
   failRenewWebSession = false;
   failRevokeWebSession = false;
-  failRevokeUserWebSessions = false;
 
   constructor(private readonly state: InMemoryAuthState) {}
 
@@ -99,21 +97,5 @@ export class InMemoryWebSessionAdapter implements WebSessionRepositoryPort {
     }
     row.revokedAt = input.revokedAt;
     return true;
-  }
-
-  async revokeWebSessionsByUser(
-    input: RevokeUserWebSessionsInput,
-  ): Promise<number> {
-    if (this.failRevokeUserWebSessions) {
-      throw new Error('durable store unavailable');
-    }
-    let revoked = 0;
-    for (const row of this.state.webSessions.values()) {
-      if (row.userId === input.userId && row.revokedAt === undefined) {
-        row.revokedAt = input.revokedAt;
-        revoked += 1;
-      }
-    }
-    return revoked;
   }
 }

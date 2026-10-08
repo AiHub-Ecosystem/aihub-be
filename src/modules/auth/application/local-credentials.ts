@@ -1,6 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import { normalizeLogin } from '@/modules/auth/domain/local-auth';
+import { enforceAuthRateLimit } from './auth-rate-limit';
 import { type AuthRateLimiterPort } from './auth-rate-limiter.port';
 import { type PasswordHasherPort } from './password-hasher.port';
 import { type UserAccountRepositoryPort } from './user-account.port';
@@ -37,16 +38,6 @@ export interface CredentialCheckPorts {
   readonly rateLimiter: AuthRateLimiterPort;
 }
 
-/**
- * The one credential check every route accepting an email and a password runs,
- * and the reason there is only one. A failure consumes the login limits before
- * it answers, which is what keeps a guessing caller inside them; a second
- * implementation would be the one that adds a bypass.
- *
- * Returns the authenticated user id. Throws `AUTH_CREDENTIALS_INVALID` for a
- * wrong password, an unknown email, a pending-verification account, and a
- * disabled account alike: the caller learns nothing about which it was.
- */
 async function enforceLoginLimits(
   rateLimiter: AuthRateLimiterPort,
   ip: string,
@@ -57,20 +48,20 @@ async function enforceLoginLimits(
     { ...LOGIN_RATE_LIMITS.email, key: email },
   ];
   for (const limit of limits) {
-    const result = await rateLimiter.consume(limit);
-    if (!result.allowed) {
-      throw new AppError({
-        code: 'RATE_LIMITED',
-        message: 'Too many requests',
-        retryable: true,
-        ...(result.retryAfterMs === undefined
-          ? {}
-          : { retryAfterMs: result.retryAfterMs }),
-      });
-    }
+    await enforceAuthRateLimit(rateLimiter, limit);
   }
 }
 
+/**
+ * The one credential check every route accepting an email and a password runs,
+ * and the reason there is only one. A failure consumes the login limits before
+ * it answers, which is what keeps a guessing caller inside them; a second
+ * implementation would be the one that adds a bypass.
+ *
+ * Returns the authenticated user id. Throws `AUTH_CREDENTIALS_INVALID` for a
+ * wrong password, an unknown email, a pending-verification account, and a
+ * disabled account alike: the caller learns nothing about which it was.
+ */
 export async function authenticateCredentials(
   ports: CredentialCheckPorts,
   input: { readonly email: string; readonly password: string },

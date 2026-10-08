@@ -802,6 +802,18 @@ describe('buildOpenApiDocument', () => {
     expect(JSON.stringify(register?.responses['201'])).not.toContain('token');
   });
 
+  it('publishes only verification-specific Web Session failures', () => {
+    const responses =
+      build().paths['/v1/auth/web-sessions/verification']?.post?.responses;
+    const unauthorized = JSON.stringify(responses?.['401']);
+    expect(unauthorized).toContain('UNAUTHORIZED');
+    expect(unauthorized).not.toContain('AUTH_CREDENTIALS_INVALID');
+    expect(unauthorized).not.toContain('password');
+    expect(JSON.stringify(responses?.['400'])).toContain(
+      'AUTH_VERIFICATION_TOKEN_INVALID',
+    );
+  });
+
   it('labels the Web Session route as server-to-server for the Customer Web BFF', () => {
     const doc = build();
     const operation = doc.paths['/v1/auth/web-sessions']?.post;

@@ -27,7 +27,9 @@ import {
   type PasswordResetTokenPort,
 } from '@/modules/auth/application/password-reset-token.port';
 import {
+  USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
+  type UserAccessTokenIssuerPort,
   type UserAccessTokenVerifierPort,
 } from '@/modules/auth/application/user-access-token.port';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
@@ -207,7 +209,6 @@ describe('web session HTTP boundary', () => {
     webSessions.failFindWebSession = false;
     webSessions.failRenewWebSession = false;
     webSessions.failRevokeWebSession = false;
-    webSessions.failRevokeUserWebSessions = false;
     verificationTokens.failSessionWrite = false;
     hasher.result = true;
     limiter.allowed = true;
@@ -697,7 +698,7 @@ describe('web session HTTP boundary', () => {
       expect(state.webSessions.size).toBe(0);
     });
 
-    it('consumes the existing verification rate limit and adds no new dimension', async () => {
+    it('bounds BFF verification attempts by the token hash', async () => {
       limiter.allowed = false;
 
       const response = await signIn();
@@ -706,7 +707,9 @@ describe('web session HTTP boundary', () => {
       expect(response.json().error).toEqual(
         expect.objectContaining({ code: 'RATE_LIMITED' }),
       );
-      expect(limiter.calls.map((call) => call.scope)).toEqual(['verify_ip']);
+      expect(limiter.calls.map((call) => call.scope)).toEqual([
+        'web_session_verification_token',
+      ]);
       expect(state.webSessions.size).toBe(0);
     });
 
@@ -1432,6 +1435,86 @@ describe('web session HTTP boundary', () => {
       }
     });
   });
+
+  describe('revocation racing an exchange', () => {
+    beforeEach(seedActiveAccount);
+
+    it.each(['logout', 'password reset'] as const)(
+      'returns no JWT when %s commits while signing is in flight',
+      async (action) => {
+        const token = await webSessionToken();
+        const resetToken =
+          action === 'password reset'
+            ? await openResetToken(EMAIL, USER_ID)
+            : undefined;
+        const issuer = app.get<UserAccessTokenIssuerPort>(
+          USER_ACCESS_TOKEN_ISSUER,
+        );
+        const issue = issuer.issue.bind(issuer);
+        const paused = jest
+          .spyOn(issuer, 'issue')
+          .mockImplementationOnce(async (userId) => {
+            const revoked =
+              resetToken === undefined
+                ? await app.inject({
+                    method: 'POST',
+                    url: LOGOUT_URL,
+                    headers: { 'x-aihub-client-secret': CLIENT_SECRET },
+                    payload: { web_session_token: token },
+                  })
+                : await resetPassword(resetToken);
+            expect(revoked.statusCode).toBe(204);
+            return issue(userId);
+          });
+        try {
+          const response = await exchange(token);
+          expect(response.statusCode).toBe(401);
+          expect(response.json().error.code).toBe('AUTH_WEB_SESSION_INVALID');
+          expect(response.payload).not.toContain('access_token');
+          expect(response.headers['cache-control']).toBe('no-store');
+        } finally {
+          paused.mockRestore();
+        }
+      },
+    );
+  });
+
+  it('fails closed when the final validity read is unavailable after signing', async () => {
+    seedActiveAccount();
+    const token = await webSessionToken();
+    const issuer = app.get<UserAccessTokenIssuerPort>(USER_ACCESS_TOKEN_ISSUER);
+    const issue = issuer.issue.bind(issuer);
+    const unavailable = jest
+      .spyOn(issuer, 'issue')
+      .mockImplementationOnce(async (userId) => {
+        const signed = await issue(userId);
+        webSessions.failFindWebSession = true;
+        return signed;
+      });
+    try {
+      const response = await exchange(token);
+      expect(response.statusCode).toBe(503);
+      expect(response.json().error.code).toBe('AUTH_WEB_SESSION_UNAVAILABLE');
+      expect(response.payload).not.toContain('access_token');
+    } finally {
+      unavailable.mockRestore();
+    }
+  });
+
+  it.each([URL, VERIFICATION_URL, EXCHANGE_URL, LOGOUT_URL])(
+    'authenticates the BFF before validating the body on %s',
+    async (url) => {
+      const response = await app.inject({
+        method: 'POST',
+        url,
+        headers: { 'content-type': 'application/json' },
+        payload: { unexpected: 'field' },
+      });
+      expect(response.statusCode).toBe(401);
+      expect(response.json().error.code).toBe('UNAUTHORIZED');
+      expect(response.headers['cache-control']).toBe('no-store');
+    },
+  );
 
   describe('password reset', () => {
     beforeEach(() => {

@@ -34,10 +34,8 @@ import {
   PASSWORD_MAX_CODE_POINTS,
   PASSWORD_MIN_CODE_POINTS,
 } from '@/modules/auth/domain/local-auth';
-import {
-  REFRESH_COOKIE_NAME,
-  WEB_SESSION_CLIENT_SECRET_HEADER,
-} from '@/modules/auth/presentation/refresh-cookie';
+import { REFRESH_COOKIE_NAME } from '@/modules/auth/presentation/refresh-cookie';
+import { WEB_SESSION_CLIENT_SECRET_HEADER } from '@/modules/auth/presentation/web-session-transport';
 import { toOpenApiPath } from './openapi-path';
 
 /**
@@ -654,7 +652,7 @@ function webSessionPathItems(): Record<string, Record<string, unknown>> {
         operationId: 'auth.web_sessions.verification',
         summary: 'Create a Web Session from a verification token',
         description:
-          'Server-to-server only, Customer Web BFF. The verification token and the Signup Browser Binding received at signup: a binding that does not match verifies the email and answers 204 with no session, and one token creates at most one session whichever route reaches it first. Applies the same verification rate limits as POST /v1/auth/verify-email.',
+          'Server-to-server only, Customer Web BFF. The verification token and the Signup Browser Binding received at signup: a binding that does not match verifies the email and answers 204 with no session, and one token creates at most one session whichever route reaches it first. Applies the verification attempt budget per token hash, so Customer Web BFF users behind a shared proxy address do not consume one shared IP counter.',
         ...routeIdentityScopeOf('auth.web_sessions.verification'),
         ...routeSecurityOf('auth.web_sessions.verification'),
         parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
@@ -673,7 +671,27 @@ function webSessionPathItems(): Record<string, Record<string, unknown>> {
           },
         },
         responses: {
-          ...createResponses,
+          '201': createResponses['201'],
+          ...routeErrorResponsesOf('auth.web_sessions.verification'),
+          '400': {
+            description: 'Malformed request or invalid verification token',
+            content: {
+              'application/json': {
+                schema: errorResponseSchema([
+                  'INVALID_REQUEST',
+                  'AUTH_VERIFICATION_TOKEN_INVALID',
+                ]),
+              },
+            },
+          },
+          '401': {
+            description: 'Client secret missing or wrong',
+            content: {
+              'application/json': {
+                schema: errorResponseSchema(['UNAUTHORIZED']),
+              },
+            },
+          },
           // 204 is not an error: the email is verified and no session was
           // granted, which is the same answer POST /v1/auth/verify-email gives.
           '204': { description: 'Email verified; no Web Session created.' },

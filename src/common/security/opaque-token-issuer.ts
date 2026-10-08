@@ -13,21 +13,10 @@ const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/**
- * The four bindings that share this issuer shape. The `prefix` and `ttlMs`
- * here are the durable values written to Postgres, so they are named once
- * beside the issuer rather than spelled as bare literals at each call site,
- * where a TTL typo would compile silently and ship.
- *
- * `webSession` is the Customer Web login session AIHUB owns: 30 days of
- * inactivity, sliding forward on every successful exchange. Unlike the other
- * three it does not rotate and belongs to no token family.
- */
 export const OPAQUE_TOKEN_BINDINGS = {
   passwordReset: { prefix: 'prt_', ttlMs: HOUR },
   verification: { prefix: 'evt_', ttlMs: DAY },
   organizationInvite: { prefix: 'oiv_', ttlMs: DAY },
-  webSession: { prefix: 'wbs_', ttlMs: 30 * DAY },
 } as const;
 
 /**
