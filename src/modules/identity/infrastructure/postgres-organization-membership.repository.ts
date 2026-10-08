@@ -11,6 +11,7 @@ import { forbidden } from '@/modules/identity/application/organization-membershi
 import {
   ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL,
   ORGANIZATION_MEMBERSHIP_TARGET_REFUSAL,
+  type OrganizationMembershipMutationAction,
   authorizeOrganizationMembershipMutation,
   hasOrganizationMembershipRouteAuthority,
 } from '@/modules/identity/application/organization-membership.mutation-policy';
@@ -47,6 +48,7 @@ import {
 } from './organization-audit-event.store';
 import type {
   PostgresIdentityClient,
+  PostgresIdentityQueryClient,
   PostgresIdentityTransactionalClient,
 } from './postgres-identity.client';
 
@@ -341,52 +343,220 @@ function mutationResult(
   };
 }
 
-/**
- * The audit draft for one membership act. The target's role and username are
- * read from the locked row, so the record keeps the authority the target
- * actually held at that moment rather than the one a later read would find.
- */
-function membershipAuditDraft(
-  action: 'change_role' | 'disable' | 'transfer',
+function roleChangedAuditDraft(
   target: MutationMembershipRow,
-  callerUsername: string,
-  toRole: OrganizationMembershipRole | undefined,
+  toRole: OrganizationMembershipRole,
   denial?: OrganizationAuditDenial,
 ): OrganizationAuditDraft {
   const refused = denial === undefined ? {} : { denial };
+  return {
+    action: 'membership.role_changed',
+    targetUserAccountId: target.userId,
+    username: target.username,
+    fromRole: target.role,
+    toRole,
+    ...refused,
+  };
+}
 
-  if (action === 'change_role') {
-    if (toRole === undefined) {
-      throw identityStoreError('Identity data is invalid');
-    }
-    return {
-      action: 'membership.role_changed',
-      targetUserAccountId: target.userId,
-      username: target.username,
-      fromRole: target.role,
-      toRole,
-      ...refused,
-    };
-  }
+function membershipDisabledAuditDraft(
+  target: MutationMembershipRow,
+  denial?: OrganizationAuditDenial,
+): OrganizationAuditDraft {
+  const refused = denial === undefined ? {} : { denial };
+  return {
+    action: 'membership.disabled',
+    targetUserAccountId: target.userId,
+    username: target.username,
+    role: target.role,
+    ...refused,
+  };
+}
 
-  if (action === 'disable') {
-    return {
-      action: 'membership.disabled',
-      targetUserAccountId: target.userId,
-      username: target.username,
-      role: target.role,
-      ...refused,
-    };
-  }
-
+function ownerTransferredAuditDraft(
+  target: MutationMembershipRow,
+  previousOwnerUsername: string,
+  denial?: OrganizationAuditDenial,
+): OrganizationAuditDraft {
+  const refused = denial === undefined ? {} : { denial };
   return {
     action: 'membership.owner_transferred',
     targetUserAccountId: target.userId,
     username: target.username,
     fromRole: target.role,
-    previousOwnerUsername: callerUsername,
+    previousOwnerUsername,
     ...refused,
   };
+}
+
+type MembershipMutationDecision =
+  | ReturnType<typeof authorizeOrganizationMembershipMutation>
+  | undefined;
+
+function validateMutationInput(
+  input: OrganizationMembershipMutationInput,
+): void {
+  if (
+    input.context.userId !== input.userId ||
+    input.context.organizationId !== input.organizationId ||
+    input.userId.trim().length === 0 ||
+    input.organizationId.trim().length === 0 ||
+    input.username.trim().length === 0
+  ) {
+    throw identityStoreError(
+      'Identity organization membership input is invalid',
+    );
+  }
+}
+
+async function lockMutationContext(
+  transaction: PostgresIdentityQueryClient,
+  input: OrganizationMembershipMutationInput,
+  routeDenial: string,
+): Promise<{
+  readonly caller: MutationMembershipRow;
+  readonly target: MutationMembershipRow | undefined;
+}> {
+  const organizationRows = await transaction.query(
+    LOCK_ORGANIZATION_FOR_MUTATION_SQL,
+    [input.organizationId],
+  );
+  const organization = organizationRows[0];
+  if (!isRecord(organization)) {
+    throw forbidden(routeDenial);
+  }
+
+  const organizationId = stringValue(organization, 'id');
+  const organizationStatus = organizationStatusValue(organization, 'status');
+  if (
+    organizationId !== input.organizationId ||
+    organizationStatus === undefined
+  ) {
+    throw identityStoreError('Identity data is invalid');
+  }
+  if (organizationStatus === 'suspended') {
+    throw forbidden(routeDenial);
+  }
+
+  const membershipRows = await transaction.query(
+    LOCK_MEMBERSHIPS_FOR_MUTATION_SQL,
+    [input.organizationId, input.userId, input.username],
+  );
+  const memberships = membershipRows.map((value) => {
+    const membership = mapMutationMembershipRow(value);
+    if (membership === undefined) {
+      throw identityStoreError('Identity data is invalid');
+    }
+    return membership;
+  });
+  const caller = memberships.find(
+    (membership) => membership.userId === input.userId,
+  );
+  if (
+    caller === undefined ||
+    caller.organizationId !== input.organizationId ||
+    caller.userId !== input.userId ||
+    caller.status !== 'active'
+  ) {
+    throw forbidden(routeDenial);
+  }
+
+  return {
+    caller,
+    target: memberships.find(
+      (membership) => membership.username === input.username,
+    ),
+  };
+}
+
+function mutationDecision(
+  action: OrganizationMembershipMutationAction,
+  caller: MutationMembershipRow,
+  target: MutationMembershipRow | undefined,
+): MembershipMutationDecision {
+  if (target === undefined) {
+    return undefined;
+  }
+  return authorizeOrganizationMembershipMutation({
+    action,
+    callerUserId: caller.userId,
+    callerRole: caller.role,
+    targetUserId: target.userId,
+    targetRole: target.role,
+    targetStatus: target.status,
+  });
+}
+
+function requireAuthorizedMutationTarget(
+  action: OrganizationMembershipMutationAction,
+  caller: MutationMembershipRow,
+  target: MutationMembershipRow | undefined,
+  decision: MembershipMutationDecision,
+): MutationMembershipRow {
+  // The caller captures a real target refusal before this route denial wins.
+  if (
+    !hasOrganizationMembershipRouteAuthority({
+      action,
+      callerRole: caller.role,
+      targetIsCaller: target?.userId === caller.userId,
+    })
+  ) {
+    throw forbidden(ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL[action]);
+  }
+  if (target === undefined || decision === undefined) {
+    throw notFound();
+  }
+  if (decision.kind === 'forbidden') {
+    throw forbidden(ORGANIZATION_MEMBERSHIP_TARGET_REFUSAL[action]);
+  }
+  if (decision.kind === 'target_unavailable') {
+    throw notFound();
+  }
+  return target;
+}
+
+async function isLastActiveOwner(
+  transaction: PostgresIdentityQueryClient,
+  organizationId: string,
+): Promise<boolean> {
+  const ownerRows = await transaction.query(COUNT_ACTIVE_OWNERS_SQL, [
+    organizationId,
+  ]);
+  const count = ownerCount(ownerRows[0]);
+  if (count === undefined) {
+    throw identityStoreError('Identity data is invalid');
+  }
+  return count <= 1;
+}
+
+function mapUpdatedMembership(value: unknown): {
+  readonly role: OrganizationMembershipRole;
+  readonly status: OrganizationMembershipStatus;
+} {
+  const role = isRecord(value) ? membershipRoleValue(value, 'role') : undefined;
+  const status = isRecord(value)
+    ? membershipStatusValue(value, 'membership_status')
+    : undefined;
+  if (role === undefined || status === undefined) {
+    throw identityStoreError('Identity data is invalid');
+  }
+  return { role, status };
+}
+
+async function rethrowMutationFailure(
+  client: PostgresIdentityClient,
+  stamp: ReturnType<typeof auditStamp>,
+  refused: OrganizationAuditDraft | undefined,
+  error: unknown,
+): Promise<never> {
+  // Denial audit follows rollback; a write failure cannot replace the refusal.
+  if (refused !== undefined) {
+    await recordOrganizationAuditDenial(client, stamp, refused);
+  }
+  if (error instanceof AppError) {
+    throw error;
+  }
+  throw identityStoreError('Identity store is unavailable');
 }
 
 function mapRosterRow(value: unknown): RosterRow | undefined {
@@ -663,247 +833,160 @@ export class PostgresOrganizationMembershipRepository
   async changeRole(
     input: ChangeOrganizationMemberRoleInput,
   ): Promise<OrganizationMembershipMutationResult> {
-    return this.mutate(input, 'change_role', input.role);
+    validateMutationInput(input);
+    const stamp = auditStamp(input, input.userId, input.context.receivedAt);
+    let refused: OrganizationAuditDraft | undefined;
+
+    try {
+      return await this.client.transaction(async (transaction) => {
+        const { caller, target } = await lockMutationContext(
+          transaction,
+          input,
+          ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL.change_role,
+        );
+        const decision = mutationDecision('change_role', caller, target);
+        if (target !== undefined && decision?.kind === 'forbidden') {
+          refused = roleChangedAuditDraft(
+            target,
+            input.role,
+            'insufficient_authority',
+          );
+        }
+        const authorizedTarget = requireAuthorizedMutationTarget(
+          'change_role',
+          caller,
+          target,
+          decision,
+        );
+        if (authorizedTarget.role === input.role) {
+          return mutationResult(authorizedTarget);
+        }
+        if (
+          authorizedTarget.role === 'owner' &&
+          (await isLastActiveOwner(transaction, input.organizationId))
+        ) {
+          refused = roleChangedAuditDraft(
+            authorizedTarget,
+            input.role,
+            'owner_required',
+          );
+          throw ownerRequired();
+        }
+
+        const rows = await transaction.query(CHANGE_ROLE_SQL, [
+          input.organizationId,
+          authorizedTarget.userId,
+          input.role,
+        ]);
+        const updated = mapUpdatedMembership(rows[0]);
+        await recordOrganizationAuditEvent(
+          transaction,
+          stamp,
+          roleChangedAuditDraft(authorizedTarget, updated.role),
+        );
+        return mutationResult(authorizedTarget, updated.role, updated.status);
+      });
+    } catch (error) {
+      return rethrowMutationFailure(this.client, stamp, refused, error);
+    }
   }
 
   async disable(
     input: OrganizationMembershipMutationInput,
   ): Promise<OrganizationMembershipMutationResult> {
-    return this.mutate(input, 'disable');
+    validateMutationInput(input);
+    const stamp = auditStamp(input, input.userId, input.context.receivedAt);
+    let refused: OrganizationAuditDraft | undefined;
+
+    try {
+      return await this.client.transaction(async (transaction) => {
+        const { caller, target } = await lockMutationContext(
+          transaction,
+          input,
+          ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL.disable,
+        );
+        const decision = mutationDecision('disable', caller, target);
+        if (target !== undefined && decision?.kind === 'forbidden') {
+          refused = membershipDisabledAuditDraft(
+            target,
+            'insufficient_authority',
+          );
+        }
+        const authorizedTarget = requireAuthorizedMutationTarget(
+          'disable',
+          caller,
+          target,
+          decision,
+        );
+        if (authorizedTarget.status === 'disabled') {
+          return mutationResult(authorizedTarget);
+        }
+        if (
+          authorizedTarget.role === 'owner' &&
+          (await isLastActiveOwner(transaction, input.organizationId))
+        ) {
+          refused = membershipDisabledAuditDraft(
+            authorizedTarget,
+            'owner_required',
+          );
+          throw ownerRequired();
+        }
+
+        const rows = await transaction.query(DISABLE_MEMBERSHIP_SQL, [
+          input.organizationId,
+          authorizedTarget.userId,
+        ]);
+        const updated = mapUpdatedMembership(rows[0]);
+        if (updated.status !== 'disabled') {
+          throw identityStoreError('Identity data is invalid');
+        }
+        await recordOrganizationAuditEvent(
+          transaction,
+          stamp,
+          membershipDisabledAuditDraft(authorizedTarget),
+        );
+        return mutationResult(authorizedTarget, updated.role, updated.status);
+      });
+    } catch (error) {
+      return rethrowMutationFailure(this.client, stamp, refused, error);
+    }
   }
 
   async transfer(
     input: OrganizationMembershipMutationInput,
   ): Promise<OrganizationMembershipMutationResult> {
-    return this.mutate(input, 'transfer');
-  }
-
-  private async mutate(
-    input: OrganizationMembershipMutationInput,
-    action: 'change_role' | 'disable' | 'transfer',
-    requestedRole?: 'admin' | 'member',
-  ): Promise<OrganizationMembershipMutationResult> {
-    if (
-      input.context.userId !== input.userId ||
-      input.context.organizationId !== input.organizationId ||
-      input.userId.trim().length === 0 ||
-      input.organizationId.trim().length === 0 ||
-      input.username.trim().length === 0 ||
-      (action === 'change_role' && requestedRole === undefined)
-    ) {
-      throw identityStoreError(
-        'Identity organization membership input is invalid',
-      );
-    }
-
-    // The request's own instant, so every event a mutation writes shares one
-    // moment and none of them is settled by the database's clock.
+    validateMutationInput(input);
     const stamp = auditStamp(input, input.userId, input.context.receivedAt);
-    // A refusal is decided inside the transaction that then rolls back, so its
-    // record cannot be written there. It is carried out and written after.
     let refused: OrganizationAuditDraft | undefined;
-
-    // Every refusal of a caller outside the route's authority, including
-    // one only these locks reveal, carries the route's Safe Authorization
-    // Denial.
-    const denial = ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL[action];
 
     try {
       return await this.client.transaction(async (transaction) => {
-        const organizationRows = await transaction.query(
-          LOCK_ORGANIZATION_FOR_MUTATION_SQL,
-          [input.organizationId],
+        const { caller, target } = await lockMutationContext(
+          transaction,
+          input,
+          ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL.transfer,
         );
-        const organization = organizationRows[0];
-        if (!isRecord(organization)) {
-          throw forbidden(denial);
-        }
-
-        const organizationId = stringValue(organization, 'id');
-        const organizationStatus = organizationStatusValue(
-          organization,
-          'status',
-        );
-        if (
-          organizationId !== input.organizationId ||
-          organizationStatus === undefined
-        ) {
-          throw identityStoreError('Identity data is invalid');
-        }
-        if (organizationStatus === 'suspended') {
-          throw forbidden(denial);
-        }
-
-        const membershipRows = await transaction.query(
-          LOCK_MEMBERSHIPS_FOR_MUTATION_SQL,
-          [input.organizationId, input.userId, input.username],
-        );
-        const lockedMemberships = membershipRows.map((value) => {
-          const membership = mapMutationMembershipRow(value);
-          if (membership === undefined) {
-            throw identityStoreError('Identity data is invalid');
-          }
-          return membership;
-        });
-        const caller = lockedMemberships.find(
-          (membership) => membership.userId === input.userId,
-        );
-        if (
-          caller === undefined ||
-          caller.organizationId !== input.organizationId ||
-          caller.userId !== input.userId ||
-          caller.status !== 'active'
-        ) {
-          throw forbidden(denial);
-        }
-
-        const target = lockedMemberships.find(
-          (membership) => membership.username === input.username,
-        );
-        const decision =
-          target &&
-          authorizeOrganizationMembershipMutation({
-            action,
-            callerUserId: caller.userId,
-            callerRole: caller.role,
-            targetUserId: target.userId,
-            targetRole: target.role,
-            targetStatus: target.status,
-          });
-        if (target && decision?.kind === 'forbidden') {
-          // Recorded exactly when the target-level policy refuses, as before
-          // route authority existed: the caller belongs to this Organization
-          // and the target is real, which is the refusal a compliance reader
-          // looks for.
-          refused = membershipAuditDraft(
-            action,
+        const decision = mutationDecision('transfer', caller, target);
+        if (target !== undefined && decision?.kind === 'forbidden') {
+          refused = ownerTransferredAuditDraft(
             target,
             caller.username,
-            requestedRole,
             'insufficient_authority',
           );
         }
-
-        // Answered before the target's existence can show: a caller without
-        // authority on the route gets the same answer for a real username and
-        // an unknown one (ADR-0048). `targetIsCaller` is true only when the
-        // target was found and is the caller, so a name that resolves to
-        // nobody is never the caller's own membership. The application tier
-        // cannot answer this: it holds the caller's User Account ID and the
-        // target's username, never the target's User Account ID.
-        if (
-          !hasOrganizationMembershipRouteAuthority({
-            action,
-            callerRole: caller.role,
-            targetIsCaller: target?.userId === caller.userId,
-          })
-        ) {
-          throw forbidden(denial);
-        }
-
-        if (!target || !decision) {
-          throw notFound();
-        }
-        if (decision.kind === 'forbidden') {
-          throw forbidden(ORGANIZATION_MEMBERSHIP_TARGET_REFUSAL[action]);
-        }
-        if (decision.kind === 'target_unavailable') {
-          throw notFound();
-        }
-
-        // Both repeats that change nothing return early, before the owner
-        // count and before any record is written. A retry of an applied state
-        // is a delivery, not an act, and these boundaries invite retries.
-        if (action === 'disable' && target.status === 'disabled') {
-          return mutationResult(target);
-        }
-
-        if (action === 'change_role' && target.role === requestedRole) {
-          return mutationResult(target);
-        }
-
-        if (
-          (action === 'disable' && target.role === 'owner') ||
-          (action === 'change_role' && target.role === 'owner')
-        ) {
-          const ownerRows = await transaction.query(COUNT_ACTIVE_OWNERS_SQL, [
-            input.organizationId,
-          ]);
-          const count = ownerCount(ownerRows[0]);
-          if (count === undefined) {
-            throw identityStoreError('Identity data is invalid');
-          }
-          if (count <= 1) {
-            refused = membershipAuditDraft(
-              action,
-              target,
-              caller.username,
-              requestedRole,
-              'owner_required',
-            );
-            throw ownerRequired();
-          }
-        }
-
-        if (action === 'change_role') {
-          const rows = await transaction.query(CHANGE_ROLE_SQL, [
-            input.organizationId,
-            target.userId,
-            requestedRole,
-          ]);
-          const updated = rows[0];
-          const role = isRecord(updated)
-            ? membershipRoleValue(updated, 'role')
-            : undefined;
-          const status = isRecord(updated)
-            ? membershipStatusValue(updated, 'membership_status')
-            : undefined;
-          if (role === undefined || status === undefined) {
-            throw identityStoreError('Identity data is invalid');
-          }
-          await recordOrganizationAuditEvent(
-            transaction,
-            stamp,
-            membershipAuditDraft(action, target, caller.username, role),
-          );
-          return mutationResult(target, role, status);
-        }
-
-        if (action === 'disable') {
-          const rows = await transaction.query(DISABLE_MEMBERSHIP_SQL, [
-            input.organizationId,
-            target.userId,
-          ]);
-          const updated = rows[0];
-          const role = isRecord(updated)
-            ? membershipRoleValue(updated, 'role')
-            : undefined;
-          const status = isRecord(updated)
-            ? membershipStatusValue(updated, 'membership_status')
-            : undefined;
-          if (role === undefined || status !== 'disabled') {
-            throw identityStoreError('Identity data is invalid');
-          }
-          await recordOrganizationAuditEvent(
-            transaction,
-            stamp,
-            membershipAuditDraft(action, target, caller.username, undefined),
-          );
-          return mutationResult(target, role, status);
-        }
+        const authorizedTarget = requireAuthorizedMutationTarget(
+          'transfer',
+          caller,
+          target,
+          decision,
+        );
 
         const promotedRows = await transaction.query(
           PROMOTE_TRANSFER_TARGET_SQL,
-          [input.organizationId, target.userId],
+          [input.organizationId, authorizedTarget.userId],
         );
-        const promoted = promotedRows[0];
-        const promotedRole = isRecord(promoted)
-          ? membershipRoleValue(promoted, 'role')
-          : undefined;
-        const promotedStatus = isRecord(promoted)
-          ? membershipStatusValue(promoted, 'membership_status')
-          : undefined;
-        if (promotedRole !== 'owner' || promotedStatus !== 'active') {
+        const promoted = mapUpdatedMembership(promotedRows[0]);
+        if (promoted.role !== 'owner' || promoted.status !== 'active') {
           throw identityStoreError('Identity data is invalid');
         }
 
@@ -919,25 +1002,16 @@ export class PostgresOrganizationMembershipRepository
           throw identityStoreError('Identity data is invalid');
         }
 
-        // One event, not two role changes: ADR-0029 made transfer an atomic
-        // command, and splitting it here would invent a self-demotion nobody
-        // performed.
+        // Transfer is atomic and produces one event for both role changes.
         await recordOrganizationAuditEvent(
           transaction,
           stamp,
-          membershipAuditDraft(action, target, caller.username, undefined),
+          ownerTransferredAuditDraft(authorizedTarget, caller.username),
         );
-
-        return mutationResult(target, promotedRole, promotedStatus);
+        return mutationResult(authorizedTarget, promoted.role, promoted.status);
       });
     } catch (error) {
-      if (refused !== undefined) {
-        await recordOrganizationAuditDenial(this.client, stamp, refused);
-      }
-      if (error instanceof AppError) {
-        throw error;
-      }
-      throw identityStoreError('Identity store is unavailable');
+      return rethrowMutationFailure(this.client, stamp, refused, error);
     }
   }
 
