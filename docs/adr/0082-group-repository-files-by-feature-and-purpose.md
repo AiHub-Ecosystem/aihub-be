@@ -13,7 +13,7 @@ Issue #341 addresses folders where files for many Identity features, script purp
 - Group CLI specs under `test/cli/` and integration specs under `test/integration/`. Keep shared setup and cross-cutting specs at the `test/` root.
 - Keep each Identity feature-layer folder at 20 direct entries or fewer, and each of the `scripts/` and `test/` roots at 15 direct entries or fewer. Add a purpose or feature subfolder before exceeding those limits.
 
-Feature-first Identity grouping was chosen over feature subfolders inside each existing layer. Layer-first would have been a smaller move and would keep each layer's files together, but feature-first places one feature's application, infrastructure, and presentation files together, which directly serves the issue's navigation goal. The explicit layer names retain the dependency direction in the paths and in the architecture check.
+Feature-first Identity grouping was chosen over feature subfolders inside each existing layer. The issue prefers the smaller layer-first move unless the architecture check cannot express its rules; a temporary layer-first fixture confirmed that `pnpm arch-check` catches application-to-infrastructure, presentation-to-infrastructure, and infrastructure-to-presentation imports. During grooming, the repository owner explicitly approved feature-first because it places one feature's application, infrastructure, and presentation files together for navigation. This is an approved choice despite the checker supporting layer-first, not a limitation of the checker. The permanent architecture test verifies the same three rules in the feature-first layout.
 
 ## Consequences
 
@@ -27,4 +27,4 @@ The grouping choice was approved during issue grooming before implementation, bu
 
 ## Verification
 
-On 2026-10-08, `pnpm verify:summary` passed with 201 suites and 2,017 tests, `pnpm test:db` passed with 25 suites and 370 tests, and `pnpm arch-check` reported no dependency violations. The moved-file Docker image built and its boot health check passed.
+On 2026-10-08, `pnpm verify:summary` passed with 201 suites and 2,020 tests, `pnpm test:db` passed with 25 suites and 370 tests, and `pnpm arch-check` reported no dependency violations. `pnpm arch-check` also rejected deliberately invalid imports under both layer-first and feature-first Identity paths. A fresh agent followed the scaffold guidance in a disposable worktree and placed a small Identity application helper and focused spec under `identity/scratch-labels/application/`; its focused spec, type-check, and architecture check passed. The moved-file Docker image built and its boot health check passed.
