@@ -2853,6 +2853,70 @@
       }
     },
     {
+      "id": "40857b6b-af38-4ffa-a3c8-4793cd5f3c7d",
+      "name": "Create a Web Session from a verification token",
+      "request": {
+        "name": "Create a Web Session from a verification token",
+        "description": {
+          "content": "Server-to-server only, Customer Web BFF. The verification token and the Signup Browser Binding received at signup: a binding that does not match verifies the email and answers 204 with no session, and one token creates at most one session whichever route reaches it first. Applies the same verification rate limits as POST /v1/auth/verify-email.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "auth", "web-sessions", "verification"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "apikey",
+          "apikey": [
+            {
+              "key": "key",
+              "value": "X-AIHUB-Client-Secret"
+            },
+            {
+              "key": "value",
+              "value": "{{apiKey}}"
+            },
+            {
+              "key": "in",
+              "value": "header"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"<string>\",\n  \"browser_binding\": \"<string>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
       "name": "D1 handover test cases (docs/history/aihub-deliverable-1-historical-contract.md §G)",
       "item": [
         {

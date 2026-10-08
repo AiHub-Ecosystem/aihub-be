@@ -38,6 +38,10 @@ import {
   type UserAccessTokenIssuerPort,
 } from './user-access-token.port';
 import { type UserAccountRepositoryPort } from './user-account.port';
+import {
+  browserBindingHash,
+  enforceVerificationRateLimit,
+} from './verification-sign-in';
 import { type VerificationTokenRepositoryPort } from './verification-token-repository.port';
 import { type VerificationTokenPort } from './verification-token.port';
 
@@ -45,9 +49,6 @@ const LOCAL_AUTH_RATE_LIMITS = {
   register: {
     ip: { scope: 'register_ip', limit: 5, windowMs: 15 * 60 * 1000 },
     email: { scope: 'register_email', limit: 3, windowMs: 24 * 60 * 60 * 1000 },
-  },
-  verify: {
-    ip: { scope: 'verify_ip', limit: 10, windowMs: 5 * 60 * 1000 },
   },
   resend: {
     ip: { scope: 'resend_ip', limit: 3, windowMs: 15 * 60 * 1000 },
@@ -150,7 +151,7 @@ export class LocalAuthService {
         tokenId: issued.id,
         tokenHash: issued.hash,
         tokenExpiresAt: issued.expiresAt,
-        ...this.bindingHash(browserBinding),
+        ...browserBindingHash(this.tokenIssuer, browserBinding),
         // Committed with the account or not at all (ADR-0074).
         emailDelivery: this.emailDeliveryRequest(
           'verification_email',
@@ -187,9 +188,7 @@ export class LocalAuthService {
     ip: string,
     browserBinding?: string,
   ): Promise<IssuedSession | undefined> {
-    await this.enforceRateLimits([
-      { ...LOCAL_AUTH_RATE_LIMITS.verify.ip, key: ip },
-    ]);
+    await enforceVerificationRateLimit(this.rateLimiter, ip);
 
     const now = this.clock.now();
     // Pre-issued so Verification Sign-in commits the one-time claim and its
@@ -198,8 +197,8 @@ export class LocalAuthService {
     const refreshToken = this.refreshTokenIssuer.issue(now);
     const outcome = await this.verificationTokens.consumeVerificationToken({
       tokenHash: this.tokenIssuer.hash(token),
-      ...this.bindingHash(browserBinding),
-      signInSession: { token: refreshToken, issuedAt: now },
+      ...browserBindingHash(this.tokenIssuer, browserBinding),
+      signInSession: { kind: 'refresh', token: refreshToken, issuedAt: now },
       now,
     });
     if (outcome.kind === 'invalid') {
@@ -244,7 +243,7 @@ export class LocalAuthService {
       tokenId: issued.id,
       tokenHash: issued.hash,
       tokenExpiresAt: issued.expiresAt,
-      ...this.bindingHash(browserBinding),
+      ...browserBindingHash(this.tokenIssuer, browserBinding),
       emailDelivery: this.emailDeliveryRequest(
         'verification_email',
         {
@@ -386,15 +385,6 @@ export class LocalAuthService {
       expiresIn: accessToken.expiresIn,
       refreshToken: refreshToken.raw,
     };
-  }
-
-  /** The Signup Browser Binding is stored and compared only as a hash. */
-  private bindingHash(browserBinding: string | undefined): {
-    readonly browserBindingHash?: string;
-  } {
-    return browserBinding === undefined
-      ? {}
-      : { browserBindingHash: this.tokenIssuer.hash(browserBinding) };
   }
 
   /**

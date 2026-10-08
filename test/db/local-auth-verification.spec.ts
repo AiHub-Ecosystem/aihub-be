@@ -101,7 +101,7 @@ function signInSession(tokenHash: string) {
     hash: tokenHash,
     expiresAt: EXPIRES_AT,
   };
-  return { token, issuedAt: NOW };
+  return { kind: 'refresh', token, issuedAt: NOW } as const;
 }
 
 async function beginLockHolderTransaction() {

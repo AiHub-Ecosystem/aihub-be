@@ -28,6 +28,7 @@ import type {
   VerificationOutcome,
   VerificationTokenRepositoryPort,
 } from '@/modules/auth/application/verification-token-repository.port';
+import type { IssuedWebSessionToken } from '@/modules/auth/application/web-session-token.port';
 import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 import type {
   PostgresAuthClient,
@@ -347,14 +348,24 @@ export class PostgresLocalAuthRepository
         if (claimed.length === 0) {
           return VERIFIED;
         }
-        // The claim, its Refresh Session, and the verification above commit
+        // The claim, the session it won, and the verification above commit
         // together, so a failed insert rolls all of them back and the request
-        // stays retryable while the token is unexpired.
-        await this.insertRefreshSession(transaction, {
-          userId: accountId,
-          token: input.signInSession.token,
-          issuedAt: input.signInSession.issuedAt,
-        });
+        // stays retryable while the token is unexpired. The session kind is the
+        // caller's to pick; the claim is the only one of its kind, so a token
+        // spends its single session whichever route arrives first.
+        if (input.signInSession.kind === 'refresh') {
+          await this.insertRefreshSession(transaction, {
+            userId: accountId,
+            token: input.signInSession.token,
+            issuedAt: input.signInSession.issuedAt,
+          });
+        } else {
+          await this.insertWebSession(transaction, accountId, {
+            sessionId: input.signInSession.sessionId,
+            token: input.signInSession.token,
+            issuedAt: input.signInSession.issuedAt,
+          });
+        }
         return { kind: 'signed_in', userId: accountId };
       };
 
@@ -667,6 +678,38 @@ export class PostgresLocalAuthRepository
         input.token.hash,
         input.issuedAt,
         input.token.expiresAt,
+      ],
+    );
+  }
+
+  /**
+   * The Web Session a Verification Sign-in won, written in this claim's
+   * transaction. `PostgresWebSessionRepository` owns the same row for login
+   * creation, which has no transaction of its own to join.
+   */
+  private async insertWebSession(
+    transaction: PostgresAuthQueryClient,
+    userId: string,
+    session: {
+      readonly sessionId: string;
+      readonly token: IssuedWebSessionToken;
+      readonly issuedAt: Date;
+    },
+  ): Promise<void> {
+    await transaction.query(
+      `
+        INSERT INTO web_sessions (
+          id, user_account_id, token_hash,
+          created_at, expires_at, last_renewed_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $4)
+      `,
+      [
+        session.sessionId,
+        userId,
+        session.token.hash,
+        session.issuedAt,
+        session.token.expiresAt,
       ],
     );
   }

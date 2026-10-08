@@ -202,6 +202,8 @@ import {
         PASSWORD_HASHER,
         AUTH_RATE_LIMITER,
         AUTH_CLOCK,
+        VERIFICATION_TOKEN_REPOSITORY,
+        VERIFICATION_TOKEN,
       ],
     },
     { provide: PASSWORD_HASHER, useClass: Argon2PasswordHasher },

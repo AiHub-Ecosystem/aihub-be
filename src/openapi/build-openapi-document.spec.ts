@@ -829,6 +829,24 @@ describe('buildOpenApiDocument', () => {
     expect(scheme?.description).toContain('Customer Web BFF');
   });
 
+  it('documents Verification Sign-in as the same server-to-server group', () => {
+    const operation = build().paths['/v1/auth/web-sessions/verification']?.post;
+
+    expect(operation?.operationId).toBe('auth.web_sessions.verification');
+    expect(operation?.security).toEqual([{ BffClientSecret: [] }]);
+    expect(operation?.description).toContain('Server-to-server only');
+    expect(operation?.description).toContain('Customer Web BFF');
+    // 204 is the verify-only answer, not an error.
+    expect(operation?.responses['204']).toBeDefined();
+    expect(operation?.responses['201']).toBeDefined();
+    expect(JSON.stringify(operation?.responses['201'])).toContain('no-store');
+    const request = JSON.stringify(operation?.requestBody);
+    expect(request).toContain('browser_binding');
+    // The email itself is a credential: the published request must not carry
+    // one, and the published response must not leak the raw token elsewhere.
+    expect(request).not.toContain('password');
+  });
+
   it('mints without an assertion, because issuing one is what it does', () => {
     const mint = build().paths[SANDBOX_MINT_PATH]?.post;
     const parameterRefs = (mint?.parameters ?? []).map(

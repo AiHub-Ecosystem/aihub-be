@@ -1,6 +1,9 @@
 import { type Static, Type } from '@sinclair/typebox';
 
-import { PasswordSchema } from '@/contracts/auth/local-auth';
+import {
+  BrowserBindingSchema,
+  PasswordSchema,
+} from '@/contracts/auth/local-auth';
 
 /**
  * The Customer Web BFF signs a user in server-to-server: an email, a password,
@@ -18,6 +21,32 @@ export const CreateWebSessionRequestSchema = Type.Object(
 
 export type CreateWebSessionRequest = Static<
   typeof CreateWebSessionRequestSchema
+>;
+
+/**
+ * The same credential handed to a Customer Web BFF instead of a browser: the
+ * verification token the email carried, and the Signup Browser Binding the BFF
+ * received at signup. There is no password here, so this is not the request
+ * above with a field missing.
+ *
+ * A binding that does not match is not an error. It verifies the email and
+ * creates no session, which the route answers as a bodyless `204`.
+ */
+export const CreateWebSessionFromVerificationRequestSchema = Type.Object(
+  {
+    token: Type.String({
+      minLength: 1,
+      maxLength: 512,
+      description:
+        'The verification token AIHUB emailed. One token creates at most one session, whatever its kind.',
+    }),
+    browser_binding: Type.Optional(BrowserBindingSchema),
+  },
+  { additionalProperties: false },
+);
+
+export type CreateWebSessionFromVerificationRequest = Static<
+  typeof CreateWebSessionFromVerificationRequestSchema
 >;
 
 /**

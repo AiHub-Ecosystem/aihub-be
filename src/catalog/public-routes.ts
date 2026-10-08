@@ -14,6 +14,7 @@ import {
   VerifyEmailRequestSchema,
 } from '@/contracts/auth/local-auth';
 import {
+  CreateWebSessionFromVerificationRequestSchema,
   CreateWebSessionRequestSchema,
   CreateWebSessionResponseSchema,
 } from '@/contracts/auth/web-session';
@@ -485,6 +486,18 @@ export const PUBLIC_ROUTES = {
     publishedIdentityScope: 'none',
     idempotency: 'none',
     requestSchema: CreateWebSessionRequestSchema,
+    responseSchema: CreateWebSessionResponseSchema,
+    errorStatuses: [400, 401, 429, 500, 503],
+  },
+  'auth.web_sessions.verification': {
+    method: 'POST',
+    path: '/v1/auth/web-sessions/verification',
+    callerAuth: 'bff-client-secret',
+    organizationResolution: 'none',
+    successStatus: 201,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: CreateWebSessionFromVerificationRequestSchema,
     responseSchema: CreateWebSessionResponseSchema,
     errorStatuses: [400, 401, 429, 500, 503],
   },

@@ -126,7 +126,11 @@ describe('PostgresLocalAuthRepository', () => {
     await expect(
       new PostgresLocalAuthRepository(client).consumeVerificationToken({
         tokenHash: input.tokenHash,
-        signInSession: { token: refreshToken, issuedAt: input.now },
+        signInSession: {
+          kind: 'refresh',
+          token: refreshToken,
+          issuedAt: input.now,
+        },
         now: input.now,
       }),
     ).resolves.toEqual({ kind: 'verified' });
@@ -157,7 +161,11 @@ describe('PostgresLocalAuthRepository', () => {
       new PostgresLocalAuthRepository(client).consumeVerificationToken({
         tokenHash: input.tokenHash,
         browserBindingHash: 'binding-hash',
-        signInSession: { token: refreshToken, issuedAt: input.now },
+        signInSession: {
+          kind: 'refresh',
+          token: refreshToken,
+          issuedAt: input.now,
+        },
         now: input.now,
       }),
     ).resolves.toEqual({

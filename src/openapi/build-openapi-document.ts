@@ -630,6 +630,37 @@ function webSessionPathItems(): Record<string, Record<string, unknown>> {
         responses: createResponses,
       },
     },
+    [routePathOf('auth.web_sessions.verification')]: {
+      post: {
+        operationId: 'auth.web_sessions.verification',
+        summary: 'Create a Web Session from a verification token',
+        description:
+          'Server-to-server only, Customer Web BFF. The verification token and the Signup Browser Binding received at signup: a binding that does not match verifies the email and answers 204 with no session, and one token creates at most one session whichever route reaches it first. Applies the same verification rate limits as POST /v1/auth/verify-email.',
+        ...routeIdentityScopeOf('auth.web_sessions.verification'),
+        ...routeSecurityOf('auth.web_sessions.verification'),
+        parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              // No `publishedLocalAuthRequestSchema`: this request carries no
+              // password, so there is no policy to re-state for a generated
+              // client.
+              schema: routeSchemaOf(
+                'auth.web_sessions.verification',
+                'request',
+              ),
+            },
+          },
+        },
+        responses: {
+          ...createResponses,
+          // 204 is not an error: the email is verified and no session was
+          // granted, which is the same answer POST /v1/auth/verify-email gives.
+          '204': { description: 'Email verified; no Web Session created.' },
+        },
+      },
+    },
   };
 }
 
