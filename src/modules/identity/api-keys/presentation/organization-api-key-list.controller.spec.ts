@@ -27,7 +27,7 @@ import {
   type OrganizationMembershipPort,
   type OrganizationMembershipRole,
   type OrganizationMembershipStatus,
-} from '@/modules/identity/application/organization-membership.port';
+} from '@/modules/identity/membership/application/organization-membership.port';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';

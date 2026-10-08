@@ -2,7 +2,7 @@ import type {
   GrantOrganizationEntitlementInput,
   GrantOrganizationEntitlementResult,
   OrganizationEntitlementPort,
-} from '@/modules/identity/application/organization-entitlement.port';
+} from '@/modules/identity/organizations/application/organization-entitlement.port';
 import { runGrantOrganizationEntitlementCommand } from './organization-entitlement';
 
 class FakeRepository implements OrganizationEntitlementPort {

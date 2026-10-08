@@ -13,3 +13,5 @@
 **Required checks:** focused identity/context tests, `pnpm type-check`, and `pnpm arch-check`.
 
 **Conventions:** accept validated values at application ports; keep raw headers in presentation/auth adapters; enforce TTL, algorithm allowlists, organization binding, and secret redaction.
+
+**Layout:** group Identity code under `src/modules/identity/<feature>/{application,infrastructure,presentation}/`; keep cross-cutting code under `shared/<layer>/` and each feature-layer folder at 20 direct entries or fewer.

@@ -1,16 +1,16 @@
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import type {
   CreateOperatorApiKeyInput,
   RevokeOperatorApiKeyInput,
-} from '@/modules/identity/application/operator-api-key.port';
+} from '@/modules/identity/api-keys/application/operator-api-key.port';
+import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
+import { PostgresOperatorApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-operator-api-key.repository';
 import {
   type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,
-} from '@/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOperatorApiKeyRepository } from '@/modules/identity/infrastructure/postgres-operator-api-key.repository';
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 import { createTestPool, resetIdentityTables } from './database';
 

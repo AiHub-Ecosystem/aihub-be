@@ -1,19 +1,19 @@
 import { Response } from 'undici';
 
+import { ApiKeyAuthenticator } from '@/modules/identity/api-keys/application/api-key-authenticator';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
-import { ApiKeyAuthenticator } from '@/modules/identity/application/api-key-authenticator';
-import { UserAssertionVerifier } from '@/modules/identity/application/user-assertion-verifier';
-import { UserIdentityResolver } from '@/modules/identity/application/user-identity-resolver';
+import { PostgresApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
 import { hashApiKey } from '@/modules/identity/domain/api-key';
-import { JoseUserAssertionCrypto } from '@/modules/identity/infrastructure/jose-user-assertion-crypto';
-import { JwksKeyProvider } from '@/modules/identity/infrastructure/jwks-key-provider';
-import { PostgresApiKeyRepository } from '@/modules/identity/infrastructure/postgres-api-key.repository';
-import { createIdentityDrizzleClient } from '@/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/infrastructure/postgres-organization-identity-config.repository';
+import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/organization-identity-configuration/infrastructure/postgres-organization-identity-config.repository';
+import { createIdentityDrizzleClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import {
   RedisAuthFailureCounter,
   RedisIdentityStore,
-} from '@/modules/identity/infrastructure/redis-identity.store';
+} from '@/modules/identity/shared/infrastructure/redis-identity.store';
+import { UserAssertionVerifier } from '@/modules/identity/user-assertions/application/user-assertion-verifier';
+import { UserIdentityResolver } from '@/modules/identity/user-assertions/application/user-identity-resolver';
+import { JoseUserAssertionCrypto } from '@/modules/identity/user-assertions/infrastructure/jose-user-assertion-crypto';
+import { JwksKeyProvider } from '@/modules/identity/user-assertions/infrastructure/jwks-key-provider';
 
 import { createTestPool, testDatabaseUrl } from '../database';
 

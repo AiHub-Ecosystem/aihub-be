@@ -23,11 +23,11 @@ import {
   type SpeakingAudioUploadUrlResponse,
 } from '@/contracts/speaking/audio-upload';
 import { RateLimitGuard } from '@/modules/gateway/presentation/rate-limit.guard';
-import { ApiKeyUserIdentityGuard } from '@/modules/identity/presentation/api-key-user-identity.guard';
+import { ApiKeyUserIdentityGuard } from '@/modules/identity/api-keys/presentation/api-key-user-identity.guard';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
-} from '@/modules/identity/presentation/authenticated-request';
+} from '@/modules/identity/shared/presentation/authenticated-request';
 import {
   SPEAKING_AUDIO_UPLOAD_SERVICE,
   type SpeakingAudioUploadGrant,

@@ -11,11 +11,11 @@ import type {
   AcceptOrganizationInvitationResult,
   CreateOrganizationInvitationResult,
   RevokeOrganizationInvitationResult,
-} from '@/modules/identity/application/organization-invitation.port';
-import type { OrganizationMembershipRole } from '@/modules/identity/application/organization-membership.port';
-import type { PostgresIdentityTransactionalClient } from '@/modules/identity/infrastructure/postgres-identity.client';
-import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationInvitationRepository } from '@/modules/identity/infrastructure/postgres-organization-invitation.repository';
+} from '@/modules/identity/invitations/application/organization-invitation.port';
+import { PostgresOrganizationInvitationRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository';
+import type { OrganizationMembershipRole } from '@/modules/identity/membership/application/organization-membership.port';
+import type { PostgresIdentityTransactionalClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import {

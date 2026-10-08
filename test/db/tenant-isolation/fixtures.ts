@@ -10,9 +10,9 @@ import { ulid } from 'ulid';
 
 import type { RedisGatewayClient } from '@/modules/gateway/infrastructure/redis-gateway.client';
 import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '@/modules/idempotency/application/idempotency-operation';
-import type { PublicJsonWebKeySet } from '@/modules/identity/application/organization-identity-config-repository.port';
 import type { GeneratedApiKey } from '@/modules/identity/domain/api-key';
-import type { RedisIdentityClient } from '@/modules/identity/infrastructure/redis-identity.store';
+import type { PublicJsonWebKeySet } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
+import type { RedisIdentityClient } from '@/modules/identity/shared/infrastructure/redis-identity.store';
 
 export const TEST_NOW = new Date('2026-09-15T12:00:00.000Z');
 export const ORGANIZATION_A = 'org_tenant_a';

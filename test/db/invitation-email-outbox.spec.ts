@@ -28,13 +28,13 @@ import { createEmailPayloadCipher } from '@/modules/auth/infrastructure/email-pa
 import {
   ORGANIZATION_INVITATION,
   type OrganizationInvitationPort,
-} from '@/modules/identity/application/organization-invitation.port';
+} from '@/modules/identity/invitations/application/organization-invitation.port';
+import { PostgresOrganizationInvitationRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository';
 import {
   type PostgresIdentityQueryClient,
   type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,
-} from '@/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationInvitationRepository } from '@/modules/identity/infrastructure/postgres-organization-invitation.repository';
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import {

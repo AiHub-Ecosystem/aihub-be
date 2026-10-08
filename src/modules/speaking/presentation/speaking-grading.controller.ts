@@ -23,8 +23,8 @@ import { GradedRequest } from '@/modules/gateway/presentation/graded-request.dec
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
-} from '@/modules/identity/presentation/authenticated-request';
-import { RequireOperation } from '@/modules/identity/presentation/require-operation.decorator';
+} from '@/modules/identity/shared/presentation/authenticated-request';
+import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
 import { isApprovedSpeakingAudioUrl } from '@/modules/speaking/application/speaking-audio-url.policy';
 import {
   SPEAKING_MULTIPART_PARSER,

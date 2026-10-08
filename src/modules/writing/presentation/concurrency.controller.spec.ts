@@ -35,7 +35,7 @@ import {
   type ApiKeyAuthenticatorPort,
   type ApiKeyCredential,
   type AuthenticatedApiKey,
-} from '@/modules/identity/application/api-key-authenticator.port';
+} from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 
 const VALID_API_KEY = `aihub_sk_${'C'.repeat(43)}`;
 

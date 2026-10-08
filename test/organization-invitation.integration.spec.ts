@@ -25,13 +25,13 @@ import { userAccountStatus } from '@/modules/auth/testing/user-account-status.st
 import {
   ORGANIZATION_INVITATION,
   type OrganizationInvitationPort,
-} from '@/modules/identity/application/organization-invitation.port';
+} from '@/modules/identity/invitations/application/organization-invitation.port';
+import { PostgresOrganizationInvitationRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository';
 import {
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
-} from '@/modules/identity/application/organization-membership.port';
-import type { PostgresIdentityTransactionalClient } from '@/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationInvitationRepository } from '@/modules/identity/infrastructure/postgres-organization-invitation.repository';
+} from '@/modules/identity/membership/application/organization-membership.port';
+import type { PostgresIdentityTransactionalClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';

@@ -9,14 +9,14 @@ import type { EmailPayloadCipherPort } from '@/modules/auth/application/email-de
 import { createEmailPayloadCipher } from '@/modules/auth/infrastructure/email-payload-cipher';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-organization-api-key.repository';
-import type { AttachFirstOwnerInput } from '@/modules/identity/application/organization-first-owner.port';
+import { PostgresOrganizationInvitationRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository';
+import { PostgresOrganizationMembershipRepository } from '@/modules/identity/membership/infrastructure/postgres-organization-membership.repository';
+import type { AttachFirstOwnerInput } from '@/modules/identity/organizations/application/organization-first-owner.port';
+import { PostgresOrganizationFirstOwnerRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-first-owner.repository';
 import {
   type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,
-} from '@/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationFirstOwnerRepository } from '@/modules/identity/infrastructure/postgres-organization-first-owner.repository';
-import { PostgresOrganizationInvitationRepository } from '@/modules/identity/infrastructure/postgres-organization-invitation.repository';
-import { PostgresOrganizationMembershipRepository } from '@/modules/identity/infrastructure/postgres-organization-membership.repository';
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import {

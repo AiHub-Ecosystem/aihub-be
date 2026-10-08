@@ -14,8 +14,8 @@ import type {
 import {
   auditStamp,
   recordOrganizationAuditEvent,
-} from '@/modules/identity/infrastructure/organization-audit-event.store';
-import type { PostgresIdentityTransactionalClient } from '@/modules/identity/infrastructure/postgres-identity.client';
+} from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
+import type { PostgresIdentityTransactionalClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 /**
  * Locking the Organization row is what makes the active-key limit hold: two

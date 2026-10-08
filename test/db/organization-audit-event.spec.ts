@@ -6,9 +6,9 @@ import type {
   ListOrganizationAuditEventsInput,
   OrganizationAuditEventFilter,
   OrganizationAuditEventPosition,
-} from '@/modules/identity/application/organization-audit-event-read.port';
-import { organizationAuditEventId } from '@/modules/identity/infrastructure/organization-audit-event.store';
-import { PostgresOrganizationAuditReadRepository } from '@/modules/identity/infrastructure/postgres-organization-audit-read.repository';
+} from '@/modules/identity/audit/application/organization-audit-event-read.port';
+import { organizationAuditEventId } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
+import { PostgresOrganizationAuditReadRepository } from '@/modules/identity/audit/infrastructure/postgres-organization-audit-read.repository';
 
 import { createTestPool, resetIdentityTables } from './database';
 

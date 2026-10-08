@@ -3,9 +3,9 @@ import { ulid } from 'ulid';
 
 import { AppError } from '@/common/errors/app-error';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import type { SaveOrganizationIdentityConfigInput } from '@/modules/identity/application/organization-identity-config-repository.port';
-import { createIdentityDrizzleClient } from '@/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/infrastructure/postgres-organization-identity-config.repository';
+import type { SaveOrganizationIdentityConfigInput } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
+import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/organization-identity-configuration/infrastructure/postgres-organization-identity-config.repository';
+import { createIdentityDrizzleClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 import { createTestPool, resetIdentityTables } from './database';
 

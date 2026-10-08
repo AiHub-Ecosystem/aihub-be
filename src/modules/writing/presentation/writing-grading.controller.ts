@@ -27,8 +27,8 @@ import { resolveIdempotencyKey } from '@/modules/idempotency/public/idempotency-
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
-} from '@/modules/identity/presentation/authenticated-request';
-import { RequireOperation } from '@/modules/identity/presentation/require-operation.decorator';
+} from '@/modules/identity/shared/presentation/authenticated-request';
+import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
 
 const TASK1_OPERATION = 'writing.task1.grade' as const;
 const TASK2_OPERATION = 'writing.task2.grade' as const;

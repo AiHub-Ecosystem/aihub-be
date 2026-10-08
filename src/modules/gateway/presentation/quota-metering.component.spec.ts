@@ -6,7 +6,7 @@ import type {
   QuotaCounterPort,
   QuotaCounterRequest,
 } from '@/modules/gateway/application/quota-counter.port';
-import type { AuthenticatedApiKey } from '@/modules/identity/application/api-key-authenticator.port';
+import type { AuthenticatedApiKey } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { openMeteringEvidence } from '@/modules/metering/application/metering-evidence';
 import { MeteringService } from '@/modules/metering/application/metering.service';
 import type {

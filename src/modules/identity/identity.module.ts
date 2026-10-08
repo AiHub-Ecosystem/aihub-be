@@ -34,6 +34,16 @@ import {
   type IdentityPostgresReadiness,
 } from './public/postgres-readiness';
 
+import { ApiKeyAuthenticator } from './api-keys/application/api-key-authenticator';
+import {
+  API_KEY_AUTHENTICATOR,
+  API_KEY_CACHE,
+  API_KEY_REPOSITORY,
+  AUTH_FAILURE_COUNTER,
+  type ApiKeyCachePort,
+  type ApiKeyRepositoryPort,
+  type AuthFailureCounterPort,
+} from './api-keys/application/api-key-authenticator.port';
 import { CreateOrganizationApiKey } from './api-keys/application/create-organization-api-key';
 import { CREATE_ORGANIZATION_API_KEY } from './api-keys/application/create-organization-api-key.port';
 import { ListOrganizationApiKeys } from './api-keys/application/list-organization-api-keys';
@@ -46,129 +56,122 @@ import { RevokeOrganizationApiKey } from './api-keys/application/revoke-organiza
 import { REVOKE_ORGANIZATION_API_KEY } from './api-keys/application/revoke-organization-api-key.port';
 import { RotateOrganizationApiKey } from './api-keys/application/rotate-organization-api-key';
 import { ROTATE_ORGANIZATION_API_KEY } from './api-keys/application/rotate-organization-api-key.port';
+import { PostgresApiKeyRepository } from './api-keys/infrastructure/postgres-api-key.repository';
 import { PostgresOrganizationApiKeyRepository } from './api-keys/infrastructure/postgres-organization-api-key.repository';
+import { ApiKeyUserIdentityGuard } from './api-keys/presentation/api-key-user-identity.guard';
+import { ApiKeyGuard } from './api-keys/presentation/api-key.guard';
 import { OrganizationApiKeyController } from './api-keys/presentation/organization-api-key.controller';
-import { AcceptOrganizationInvitation } from './application/accept-organization-invitation';
-import { ACCEPT_ORGANIZATION_INVITATION } from './application/accept-organization-invitation.port';
-import { ApiKeyAuthenticator } from './application/api-key-authenticator';
-import {
-  API_KEY_AUTHENTICATOR,
-  API_KEY_CACHE,
-  API_KEY_REPOSITORY,
-  AUTH_FAILURE_COUNTER,
-  type ApiKeyCachePort,
-  type ApiKeyRepositoryPort,
-  type AuthFailureCounterPort,
-} from './application/api-key-authenticator.port';
-import {
-  CreateOrganization,
-  selfServeOrganizationTerms,
-} from './application/create-organization';
-import { CREATE_ORGANIZATION } from './application/create-organization.port';
-import { InviteOrganizationMember } from './application/invite-organization-member';
-import { INVITE_ORGANIZATION_MEMBER } from './application/invite-organization-member.port';
-import { JWKS_CACHE, type JwksCachePort } from './application/jwks-cache.port';
-import {
-  JWKS_KEY_PROVIDER,
-  type JwksKeyProviderPort,
-} from './application/jwks-key-provider.port';
-import { ListOpenOrganizationInvitations } from './application/list-open-organization-invitations';
-import { LIST_OPEN_ORGANIZATION_INVITATIONS } from './application/list-open-organization-invitations.port';
-import { ListOrganizationMemberships } from './application/list-organization-memberships';
-import { ManageOrganizationMembership } from './application/manage-organization-membership';
-import { MintSandboxAssertion } from './application/mint-sandbox-assertion';
+import { SandboxApiKeyGuard } from './api-keys/presentation/sandbox-api-key.guard';
 import {
   ORGANIZATION_AUDIT_EVENT_READ,
   type OrganizationAuditEventReadPort,
-} from './application/organization-audit-event-read.port';
-import {
-  ORGANIZATION_CREATION_RECORD,
-  type OrganizationCreationRecordPort,
-} from './application/organization-creation-record.port';
-import {
-  ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
-  type OrganizationIdentityConfigRepositoryPort,
-} from './application/organization-identity-config-repository.port';
+} from './audit/application/organization-audit-event-read.port';
+import { ReadOrganizationAuditEvents } from './audit/application/read-organization-audit-events';
+import { READ_ORGANIZATION_AUDIT_EVENTS } from './audit/application/read-organization-audit-events.port';
+import { PostgresOrganizationAuditReadRepository } from './audit/infrastructure/postgres-organization-audit-read.repository';
+import { OrganizationAuditEventController } from './audit/presentation/organization-audit-event.controller';
+import { AcceptOrganizationInvitation } from './invitations/application/accept-organization-invitation';
+import { ACCEPT_ORGANIZATION_INVITATION } from './invitations/application/accept-organization-invitation.port';
+import { InviteOrganizationMember } from './invitations/application/invite-organization-member';
+import { INVITE_ORGANIZATION_MEMBER } from './invitations/application/invite-organization-member.port';
+import { ListOpenOrganizationInvitations } from './invitations/application/list-open-organization-invitations';
+import { LIST_OPEN_ORGANIZATION_INVITATIONS } from './invitations/application/list-open-organization-invitations.port';
 import {
   ORGANIZATION_INVITATION,
   type OrganizationInvitationPort,
-} from './application/organization-invitation.port';
+} from './invitations/application/organization-invitation.port';
 import {
   ORGANIZATION_INVITE_TOKEN,
   type OrganizationInviteTokenPort,
-} from './application/organization-invite-token.port';
+} from './invitations/application/organization-invite-token.port';
+import { RevokeOrganizationInvitation } from './invitations/application/revoke-organization-invitation';
+import { REVOKE_ORGANIZATION_INVITATION } from './invitations/application/revoke-organization-invitation.port';
+import { PostgresOrganizationInvitationRepository } from './invitations/infrastructure/postgres-organization-invitation.repository';
+import { OrganizationInvitationController } from './invitations/presentation/organization-invitation.controller';
+import { ListOrganizationMemberships } from './membership/application/list-organization-memberships';
+import { ManageOrganizationMembership } from './membership/application/manage-organization-membership';
 import {
   ORGANIZATION_MEMBERSHIP_LIST,
   type OrganizationMembershipListPort,
-} from './application/organization-membership-list.port';
+} from './membership/application/organization-membership-list.port';
 import {
   ORGANIZATION_MEMBERSHIP_MUTATION,
   type OrganizationMembershipMutationPort,
-} from './application/organization-membership-mutation.port';
+} from './membership/application/organization-membership-mutation.port';
 import {
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
-} from './application/organization-membership.port';
+} from './membership/application/organization-membership.port';
+import { PostgresOrganizationMembershipRepository } from './membership/infrastructure/postgres-organization-membership.repository';
+import { OrganizationMembershipController } from './membership/presentation/organization-membership.controller';
+import {
+  ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
+  type OrganizationIdentityConfigRepositoryPort,
+} from './organization-identity-configuration/application/organization-identity-config-repository.port';
+import { ReadOrganizationIdentityConfig } from './organization-identity-configuration/application/read-organization-identity-config';
+import { READ_ORGANIZATION_IDENTITY_CONFIG } from './organization-identity-configuration/application/read-organization-identity-config.port';
+import { SetOrganizationIdentityConfig } from './organization-identity-configuration/application/set-organization-identity-config';
+import { SET_ORGANIZATION_IDENTITY_CONFIG } from './organization-identity-configuration/application/set-organization-identity-config.port';
+import { PostgresOrganizationIdentityConfigRepository } from './organization-identity-configuration/infrastructure/postgres-organization-identity-config.repository';
+import { OrganizationIdentityConfigController } from './organization-identity-configuration/presentation/organization-identity-config.controller';
+import {
+  CreateOrganization,
+  selfServeOrganizationTerms,
+} from './organizations/application/create-organization';
+import { CREATE_ORGANIZATION } from './organizations/application/create-organization.port';
+import {
+  ORGANIZATION_CREATION_RECORD,
+  type OrganizationCreationRecordPort,
+} from './organizations/application/organization-creation-record.port';
 import {
   ORGANIZATION_RENAME_RECORD,
   type OrganizationRenameRecordPort,
-} from './application/organization-rename-record.port';
-import { ReadOrganizationAuditEvents } from './application/read-organization-audit-events';
-import { READ_ORGANIZATION_AUDIT_EVENTS } from './application/read-organization-audit-events.port';
-import { ReadOrganizationIdentityConfig } from './application/read-organization-identity-config';
-import { READ_ORGANIZATION_IDENTITY_CONFIG } from './application/read-organization-identity-config.port';
-import { RenameOrganization } from './application/rename-organization';
-import { RENAME_ORGANIZATION } from './application/rename-organization.port';
-import { RevokeOrganizationInvitation } from './application/revoke-organization-invitation';
-import { REVOKE_ORGANIZATION_INVITATION } from './application/revoke-organization-invitation.port';
-import { SANDBOX_ASSERTION_MINTER } from './application/sandbox-assertion-minter.port';
-import { SANDBOX_ASSERTION_POLICY } from './application/sandbox-assertion-policy.port';
-import {
-  SANDBOX_ASSERTION_SIGNER,
-  type SandboxAssertionSignerPort,
-} from './application/sandbox-assertion-signer.port';
-import { SetOrganizationIdentityConfig } from './application/set-organization-identity-config';
-import { SET_ORGANIZATION_IDENTITY_CONFIG } from './application/set-organization-identity-config.port';
-import {
-  USER_ASSERTION_CRYPTO,
-  type UserAssertionCryptoPort,
-} from './application/user-assertion-crypto.port';
-import { UserAssertionVerifier } from './application/user-assertion-verifier';
-import { UserIdentityResolver } from './application/user-identity-resolver';
-import { USER_IDENTITY_RESOLVER } from './application/user-identity-resolver.port';
-import { identityDrizzleSchema } from './infrastructure/drizzle-identity-schema';
-import { EnvSandboxAssertionPolicy } from './infrastructure/env-sandbox-assertion-policy';
-import { JoseSandboxAssertionSigner } from './infrastructure/jose-sandbox-assertion-signer';
-import { JoseUserAssertionCrypto } from './infrastructure/jose-user-assertion-crypto';
-import { JwksKeyProvider } from './infrastructure/jwks-key-provider';
-import { PostgresApiKeyRepository } from './infrastructure/postgres-api-key.repository';
+} from './organizations/application/organization-rename-record.port';
+import { RenameOrganization } from './organizations/application/rename-organization';
+import { RENAME_ORGANIZATION } from './organizations/application/rename-organization.port';
+import { PostgresOrganizationCreationRepository } from './organizations/infrastructure/postgres-organization-creation.repository';
+import { PostgresOrganizationRenameRepository } from './organizations/infrastructure/postgres-organization-rename.repository';
+import { OrganizationController } from './organizations/presentation/organization.controller';
+import { identityDrizzleSchema } from './shared/infrastructure/drizzle-identity-schema';
 import {
   type IdentityDatabase,
   createPostgresIdentityClient,
   identityDrizzleConnectionOptions,
-} from './infrastructure/postgres-identity.client';
-import { PostgresOrganizationAuditReadRepository } from './infrastructure/postgres-organization-audit-read.repository';
-import { PostgresOrganizationCreationRepository } from './infrastructure/postgres-organization-creation.repository';
-import { PostgresOrganizationIdentityConfigRepository } from './infrastructure/postgres-organization-identity-config.repository';
-import { PostgresOrganizationInvitationRepository } from './infrastructure/postgres-organization-invitation.repository';
-import { PostgresOrganizationMembershipRepository } from './infrastructure/postgres-organization-membership.repository';
-import { PostgresOrganizationRenameRepository } from './infrastructure/postgres-organization-rename.repository';
-import { checkPostgresIdentityDatabase } from './infrastructure/postgres-readiness';
+} from './shared/infrastructure/postgres-identity.client';
+import { checkPostgresIdentityDatabase } from './shared/infrastructure/postgres-readiness';
 import {
   RedisAuthFailureCounter,
   RedisIdentityStore,
-} from './infrastructure/redis-identity.store';
-import { readSandboxSigningMaterial } from './infrastructure/sandbox-assertion.config';
-import { ApiKeyUserIdentityGuard } from './presentation/api-key-user-identity.guard';
-import { ApiKeyGuard } from './presentation/api-key.guard';
-import { OrganizationAuditEventController } from './presentation/organization-audit-event.controller';
-import { OrganizationIdentityConfigController } from './presentation/organization-identity-config.controller';
-import { OrganizationInvitationController } from './presentation/organization-invitation.controller';
-import { OrganizationMembershipController } from './presentation/organization-membership.controller';
-import { OrganizationController } from './presentation/organization.controller';
-import { SandboxApiKeyGuard } from './presentation/sandbox-api-key.guard';
-import { SandboxAssertionController } from './presentation/sandbox-assertion.controller';
-import { UserIdentityGuard } from './presentation/user-identity.guard';
+} from './shared/infrastructure/redis-identity.store';
+import { UserIdentityGuard } from './shared/presentation/user-identity.guard';
+import {
+  JWKS_CACHE,
+  type JwksCachePort,
+} from './user-assertions/application/jwks-cache.port';
+import {
+  JWKS_KEY_PROVIDER,
+  type JwksKeyProviderPort,
+} from './user-assertions/application/jwks-key-provider.port';
+import { MintSandboxAssertion } from './user-assertions/application/mint-sandbox-assertion';
+import { SANDBOX_ASSERTION_MINTER } from './user-assertions/application/sandbox-assertion-minter.port';
+import { SANDBOX_ASSERTION_POLICY } from './user-assertions/application/sandbox-assertion-policy.port';
+import {
+  SANDBOX_ASSERTION_SIGNER,
+  type SandboxAssertionSignerPort,
+} from './user-assertions/application/sandbox-assertion-signer.port';
+import {
+  USER_ASSERTION_CRYPTO,
+  type UserAssertionCryptoPort,
+} from './user-assertions/application/user-assertion-crypto.port';
+import { UserAssertionVerifier } from './user-assertions/application/user-assertion-verifier';
+import { UserIdentityResolver } from './user-assertions/application/user-identity-resolver';
+import { USER_IDENTITY_RESOLVER } from './user-assertions/application/user-identity-resolver.port';
+import { EnvSandboxAssertionPolicy } from './user-assertions/infrastructure/env-sandbox-assertion-policy';
+import { JoseSandboxAssertionSigner } from './user-assertions/infrastructure/jose-sandbox-assertion-signer';
+import { JoseUserAssertionCrypto } from './user-assertions/infrastructure/jose-user-assertion-crypto';
+import { JwksKeyProvider } from './user-assertions/infrastructure/jwks-key-provider';
+import { readSandboxSigningMaterial } from './user-assertions/infrastructure/sandbox-assertion.config';
+import { SandboxAssertionController } from './user-assertions/presentation/sandbox-assertion.controller';
 
 function controlPlaneDatabaseUrl(
   configuration: RuntimeConnectionConfigurationPort,

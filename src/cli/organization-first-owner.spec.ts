@@ -2,7 +2,7 @@ import type {
   AttachFirstOwnerInput,
   AttachFirstOwnerResult,
   OrganizationFirstOwnerPort,
-} from '@/modules/identity/application/organization-first-owner.port';
+} from '@/modules/identity/organizations/application/organization-first-owner.port';
 
 import { runAttachFirstOwnerCommand } from './organization-first-owner';
 

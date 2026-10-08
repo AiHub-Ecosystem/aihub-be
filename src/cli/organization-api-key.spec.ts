@@ -4,7 +4,7 @@ import type {
   OperatorApiKeyPort,
   RevokeOperatorApiKeyInput,
   RevokeOperatorApiKeyResult,
-} from '@/modules/identity/application/operator-api-key.port';
+} from '@/modules/identity/api-keys/application/operator-api-key.port';
 
 import {
   type CreateOperatorApiKeyCliInput,

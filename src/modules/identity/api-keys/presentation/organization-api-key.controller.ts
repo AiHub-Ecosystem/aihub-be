@@ -41,7 +41,7 @@ import {
   type RotateOrganizationApiKeyPort,
 } from '@/modules/identity/api-keys/application/rotate-organization-api-key.port';
 
-import { bearerRequestContext } from '@/modules/identity/presentation/bearer-request-context';
+import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
 
 @Controller()
 @UseGuards(UserAccessJwtGuard)

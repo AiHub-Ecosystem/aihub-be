@@ -2,9 +2,9 @@ import type {
   CreateOperatorApiKeyResult,
   OperatorApiKeyPort,
   RevokeOperatorApiKeyResult,
-} from '@/modules/identity/application/operator-api-key.port';
-import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOperatorApiKeyRepository } from '@/modules/identity/infrastructure/postgres-operator-api-key.repository';
+} from '@/modules/identity/api-keys/application/operator-api-key.port';
+import { PostgresOperatorApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-operator-api-key.repository';
+import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { runOperatorCommand } from './operator-command-context';
 import { purgeApiKeyCache } from './organization-status';
 

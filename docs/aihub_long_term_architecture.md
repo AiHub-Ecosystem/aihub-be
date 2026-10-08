@@ -166,7 +166,7 @@ Key operational rule: **Never store Organization API Keys in frontend or mobile 
 
 **Deployment hostname is the source of truth for the environment.** API keys bind to `allowed_environments` but cannot dictate the environment of an incoming request.
 
-→ Implemented, with caveats that the `Host` header is client-provided and requires reverse-proxy validation: [`05-auth-identity.md` §G.11](superpowers/specs/2026-09-07-aihub/05-auth-identity.md). Code: `src/modules/identity/presentation/request-environment.ts`.
+→ Implemented, with caveats that the `Host` header is client-provided and requires reverse-proxy validation: [`05-auth-identity.md` §G.11](superpowers/specs/2026-09-07-aihub/05-auth-identity.md). Code: `src/modules/identity/shared/presentation/request-environment.ts`.
 
 ---
 
@@ -174,7 +174,7 @@ Key operational rule: **Never store Organization API Keys in frontend or mobile 
 
 Trust model: **Signed End-user Assertion**. Signed by customer backends, verified by AIHUB via the organization's JWKS. AIHUB does not store customer user databases.
 
-→ **Implemented.** Verification sequence, algorithm confusion defense, cross-tenant isolation via `UNIQUE(issuer)`, TTL ceilings, SSRF protection on JWKS fetches, and caching strategies: [`05-auth-identity.md` §G.4–G.6](superpowers/specs/2026-09-07-aihub/05-auth-identity.md). Code: `src/modules/identity/application/user-assertion-verifier.ts`.
+→ **Implemented.** Verification sequence, algorithm confusion defense, cross-tenant isolation via `UNIQUE(issuer)`, TTL ceilings, SSRF protection on JWKS fetches, and caching strategies: [`05-auth-identity.md` §G.4–G.6](superpowers/specs/2026-09-07-aihub/05-auth-identity.md). Code: `src/modules/identity/user-assertions/application/user-assertion-verifier.ts`.
 
 → Customer signing instructions with Node/Python/Java samples: [`integration-guide.md`](integration-guide.md) §3.
 
@@ -196,7 +196,7 @@ Evaluated at the intersection of two distinct layers:
 Organization Entitlement  ∩  API Key Scope  →  Effective Scope
 ```
 
-→ Implemented, fail-closed: `src/modules/identity/application/authorization.ts`. Rationale and examples: [`05-auth-identity.md` §G.10](superpowers/specs/2026-09-07-aihub/05-auth-identity.md).
+→ Implemented, fail-closed: `src/modules/identity/api-keys/application/api-key-authenticator.ts`. Rationale and examples: [`05-auth-identity.md` §G.10](superpowers/specs/2026-09-07-aihub/05-auth-identity.md).
 
 ---
 

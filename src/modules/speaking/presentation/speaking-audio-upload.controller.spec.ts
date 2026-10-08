@@ -10,10 +10,10 @@ import { AppError } from '@/common/errors/app-error';
 import { SpeakingAudioUploadUrlResponseSchema } from '@/contracts/speaking/audio-upload';
 import { SpeakingAudioAssetResponseSchema } from '@/contracts/speaking/audio-upload';
 import { RATE_LIMITER } from '@/modules/gateway/application/rate-limiter.port';
-import type { ApiKeyAuthenticatorPort } from '@/modules/identity/application/api-key-authenticator.port';
-import { API_KEY_AUTHENTICATOR } from '@/modules/identity/application/api-key-authenticator.port';
-import type { UserIdentityResolverPort } from '@/modules/identity/application/user-identity-resolver.port';
-import { USER_IDENTITY_RESOLVER } from '@/modules/identity/application/user-identity-resolver.port';
+import type { ApiKeyAuthenticatorPort } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import { API_KEY_AUTHENTICATOR } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import type { UserIdentityResolverPort } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
+import { USER_IDENTITY_RESOLVER } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import {
   SPEAKING_AUDIO_ASSET_STORAGE,
   SPEAKING_AUDIO_UPLOAD_CLOCK,

@@ -2,15 +2,15 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
-import type { SetOrganizationStatusInput } from '@/modules/identity/application/organization-status.port';
-import { PostgresApiKeyRepository } from '@/modules/identity/infrastructure/postgres-api-key.repository';
+import { PostgresApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
+import type { SetOrganizationStatusInput } from '@/modules/identity/organizations/application/organization-status.port';
+import { PostgresOrganizationStatusRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-status.repository';
 import {
   type IdentityDrizzleClient,
   type PostgresIdentityTransactionalClient,
   createIdentityDrizzleClient,
   createPostgresIdentityClient,
-} from '@/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationStatusRepository } from '@/modules/identity/infrastructure/postgres-organization-status.repository';
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 import { createTestPool, resetIdentityTables } from './database';
 

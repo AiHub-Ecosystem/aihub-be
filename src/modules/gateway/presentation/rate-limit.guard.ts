@@ -13,7 +13,7 @@ import {
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
-} from '@/modules/identity/presentation/authenticated-request';
+} from '@/modules/identity/shared/presentation/authenticated-request';
 
 function rateLimited(retryAfterMs: number | undefined): AppError {
   return new AppError({

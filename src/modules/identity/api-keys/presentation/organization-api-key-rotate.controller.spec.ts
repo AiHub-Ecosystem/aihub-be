@@ -16,22 +16,22 @@ import {
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
+  API_KEY_CACHE,
+  type ApiKeyCachePort,
+} from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import {
   type ListOrganizationApiKeysInput,
   ORGANIZATION_API_KEY,
   type OrganizationApiKeyPort,
   type RotateOrganizationApiKeyRecordInput,
 } from '@/modules/identity/api-keys/application/organization-api-key.port';
 import {
-  API_KEY_CACHE,
-  type ApiKeyCachePort,
-} from '@/modules/identity/application/api-key-authenticator.port';
-import {
   type ListRosterInput,
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
   type OrganizationMembershipRole,
   type OrganizationMembershipStatus,
-} from '@/modules/identity/application/organization-membership.port';
+} from '@/modules/identity/membership/application/organization-membership.port';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';

@@ -2,13 +2,13 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import type { RenameOrganizationRecordInput } from '@/modules/identity/application/organization-rename-record.port';
+import { PostgresOrganizationMembershipRepository } from '@/modules/identity/membership/infrastructure/postgres-organization-membership.repository';
+import type { RenameOrganizationRecordInput } from '@/modules/identity/organizations/application/organization-rename-record.port';
+import { PostgresOrganizationRenameRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-rename.repository';
 import {
   type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,
-} from '@/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationMembershipRepository } from '@/modules/identity/infrastructure/postgres-organization-membership.repository';
-import { PostgresOrganizationRenameRepository } from '@/modules/identity/infrastructure/postgres-organization-rename.repository';
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 import {
   createTestPool,

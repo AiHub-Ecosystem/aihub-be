@@ -14,7 +14,7 @@ import {
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
-} from '@/modules/identity/presentation/authenticated-request';
+} from '@/modules/identity/shared/presentation/authenticated-request';
 import { addMeteringEvidence } from '@/modules/metering/application/metering-evidence';
 
 function nextMonthRetryAfterMs(now: Date): number {

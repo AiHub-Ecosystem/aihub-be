@@ -46,7 +46,7 @@ describe('cross-module import rules', () => {
     expect(
       matches(
         crossModuleRule?.to.pathNot ?? [],
-        'src/modules/identity/presentation/audit-cursor.ts',
+        'src/modules/identity/audit/presentation/audit-cursor.ts',
       ),
     ).toBe(false);
   });
@@ -79,12 +79,15 @@ describe('cross-module import rules', () => {
     expect(
       matches(
         pathNot,
-        'src/modules/identity/presentation/authenticated-request.ts',
+        'src/modules/identity/shared/presentation/authenticated-request.ts',
       ),
     ).toBe(true);
-    // The same presentation folder holds files that do not declare it.
+    // Another Identity presentation file remains private.
     expect(
-      matches(pathNot, 'src/modules/identity/presentation/audit-cursor.ts'),
+      matches(
+        pathNot,
+        'src/modules/identity/audit/presentation/audit-cursor.ts',
+      ),
     ).toBe(false);
   });
 
@@ -169,14 +172,17 @@ describe('cross-module import rule over the real tree', () => {
     // ApiKeyGuard is published by IdentityModule.exports, so the file holding
     // it is seam even though it sits under presentation/.
     expect(
-      matches(pathNot, 'src/modules/identity/presentation/api-key.guard.ts'),
+      matches(
+        pathNot,
+        'src/modules/identity/api-keys/presentation/api-key.guard.ts',
+      ),
     ).toBe(true);
     // A file in the same folder that its module does not export stays private,
     // which is what keeps the exemption from widening to the whole directory.
     expect(
       matches(
         pathNot,
-        'src/modules/identity/presentation/sandbox-api-key.guard.ts',
+        'src/modules/identity/api-keys/presentation/sandbox-api-key.guard.ts',
       ),
     ).toBe(false);
   });
@@ -189,7 +195,7 @@ describe('cross-module import rule over the real tree', () => {
     expect(
       matches(
         pathNot,
-        'src/modules/identity/presentation/require-operation.decorator.ts',
+        'src/modules/identity/shared/presentation/require-operation.decorator.ts',
       ),
     ).toBe(true);
     expect(

@@ -4,9 +4,9 @@ import type { RequestContext } from '@/common/request-context/request-context';
 import {
   ORGANIZATION_API_KEY_ADMISSION,
   admitOrganizationApiKey,
-} from '@/modules/identity/application/organization-admission';
-import { forbidden } from '@/modules/identity/application/organization-membership.authorization';
-import type { OrganizationMembershipPort } from '@/modules/identity/application/organization-membership.port';
+} from '@/modules/identity/membership/application/organization-admission';
+import { forbidden } from '@/modules/identity/membership/application/organization-membership.authorization';
+import type { OrganizationMembershipPort } from '@/modules/identity/membership/application/organization-membership.port';
 import { generateOrganizationApiKey } from './organization-api-key-generator';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
 

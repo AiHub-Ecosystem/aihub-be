@@ -17,7 +17,7 @@ import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { IDEMPOTENCY_REPOSITORY } from '@/modules/idempotency/application/idempotency-repository.port';
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
-import { REQUIRED_OPERATION_METADATA } from '@/modules/identity/presentation/require-operation.decorator';
+import { REQUIRED_OPERATION_METADATA } from '@/modules/identity/shared/presentation/require-operation.decorator';
 import { SpeakingGradingController } from '@/modules/speaking/presentation/speaking-grading.controller';
 import { WritingGradingController } from '@/modules/writing/presentation/writing-grading.controller';
 import { DownstreamHttpClient } from './infrastructure/downstream-http.client';

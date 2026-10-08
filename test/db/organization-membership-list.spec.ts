@@ -14,9 +14,9 @@ import {
 } from '@/modules/auth/application/user-access-token.port';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
-import { ORGANIZATION_MEMBERSHIP } from '@/modules/identity/application/organization-membership.port';
-import { createPostgresIdentityClient } from '@/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationMembershipRepository } from '@/modules/identity/infrastructure/postgres-organization-membership.repository';
+import { ORGANIZATION_MEMBERSHIP } from '@/modules/identity/membership/application/organization-membership.port';
+import { PostgresOrganizationMembershipRepository } from '@/modules/identity/membership/infrastructure/postgres-organization-membership.repository';
+import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 import {
   createTestPool,

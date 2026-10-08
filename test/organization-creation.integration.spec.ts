@@ -28,7 +28,7 @@ import {
   type CreateOrganizationRecordResult,
   ORGANIZATION_CREATION_RECORD,
   type OrganizationCreationRecordPort,
-} from '@/modules/identity/application/organization-creation-record.port';
+} from '@/modules/identity/organizations/application/organization-creation-record.port';
 
 const OWNER_TOKEN = 'owner.token.value';
 const OTHER_TOKEN = 'other.token.value';

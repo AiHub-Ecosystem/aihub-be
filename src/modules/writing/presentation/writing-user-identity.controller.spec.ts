@@ -28,12 +28,12 @@ import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempoten
 import type {
   ApiKeyAuthenticatorPort,
   AuthenticatedApiKey,
-} from '@/modules/identity/application/api-key-authenticator.port';
-import { API_KEY_AUTHENTICATOR } from '@/modules/identity/application/api-key-authenticator.port';
-import type { JwksKeyProviderPort } from '@/modules/identity/application/jwks-key-provider.port';
-import { JWKS_KEY_PROVIDER } from '@/modules/identity/application/jwks-key-provider.port';
-import type { OrganizationIdentityConfig } from '@/modules/identity/application/organization-identity-config-repository.port';
-import { ORGANIZATION_IDENTITY_CONFIG_REPOSITORY } from '@/modules/identity/application/organization-identity-config-repository.port';
+} from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import { API_KEY_AUTHENTICATOR } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import type { OrganizationIdentityConfig } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
+import { ORGANIZATION_IDENTITY_CONFIG_REPOSITORY } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
+import type { JwksKeyProviderPort } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
+import { JWKS_KEY_PROVIDER } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
 
 const authenticatedApiKey: AuthenticatedApiKey = {
   organizationId: 'org_acme',

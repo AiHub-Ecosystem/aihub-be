@@ -235,8 +235,8 @@ Run `pnpm test -- operation-catalog.spec.ts contracts.spec.ts`, `pnpm type-check
 **Files to create**
 
 - `src/modules/identity/identity.module.ts`
-- `src/modules/identity/application/api-key-authenticator.port.ts`
-- `src/modules/identity/application/user-assertion-verifier.port.ts`
+- `src/modules/identity/api-keys/application/api-key-authenticator.port.ts`
+- `src/modules/identity/user-assertions/application/user-assertion-verifier.ts`
 - `src/modules/identity/domain/identity-scope.ts`
 - `src/modules/gateway/gateway.module.ts`
 - `src/modules/gateway/application/operation-dispatcher.port.ts`

@@ -3,8 +3,8 @@ import { apiKeyStatus } from '@/modules/identity/domain/api-key';
 
 import type { OrganizationApiKeyView } from './organization-api-key-view';
 
-import { admitOrganizationApiKey } from '@/modules/identity/application/organization-admission';
-import type { OrganizationMembershipPort } from '@/modules/identity/application/organization-membership.port';
+import { admitOrganizationApiKey } from '@/modules/identity/membership/application/organization-admission';
+import type { OrganizationMembershipPort } from '@/modules/identity/membership/application/organization-membership.port';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
 
 export interface ListOrganizationApiKeysCommand {

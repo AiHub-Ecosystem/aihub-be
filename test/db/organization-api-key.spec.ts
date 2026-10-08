@@ -2,20 +2,20 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
+import { ApiKeyAuthenticator } from '@/modules/identity/api-keys/application/api-key-authenticator';
+import type { ApiKeyCachePort } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import type { CreateOrganizationApiKeyRecordResult } from '@/modules/identity/api-keys/application/organization-api-key.port';
+import { PostgresApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
 import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-organization-api-key.repository';
-import { ApiKeyAuthenticator } from '@/modules/identity/application/api-key-authenticator';
-import type { ApiKeyCachePort } from '@/modules/identity/application/api-key-authenticator.port';
-import { PostgresApiKeyRepository } from '@/modules/identity/infrastructure/postgres-api-key.repository';
 import type {
   IdentityDrizzleClient,
   PostgresIdentityTransactionalClient,
-} from '@/modules/identity/infrastructure/postgres-identity.client';
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import {
   createIdentityDrizzleClient,
   createPostgresIdentityClient,
-} from '@/modules/identity/infrastructure/postgres-identity.client';
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 import {
   createTestPool,

@@ -16,7 +16,7 @@ import {
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
-} from '@/modules/identity/presentation/authenticated-request';
+} from '@/modules/identity/shared/presentation/authenticated-request';
 import { createConcurrencyPermit } from './concurrency-permit';
 
 function concurrencyLimited(retryAfterMs: number): AppError {

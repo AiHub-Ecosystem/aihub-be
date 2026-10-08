@@ -35,7 +35,8 @@ If an older architecture draft conflicts with an implementation spec, record the
 
 - AIHUB is one NestJS/Fastify application, not a monorepo.
 - Business modules use `presentation -> application -> domain`; infrastructure implements application ports and points inward.
-- Cross-module TypeScript APIs that are not Nest providers live under the owning module's `public/` facades. Consumers import those facades instead of implementation paths.
+- Identity code is grouped by feature at `src/modules/identity/<feature>/<layer>/`: use cases, ports, policies, and their specs go in `application/`; controllers, guards, decorators, and route specs in `presentation/`; repositories, adapters, and adapter specs in `infrastructure/`. Keep cross-cutting Identity code under `identity/shared/<layer>/` and each feature-layer folder at 20 direct entries or fewer; split a crowded feature before it exceeds that ceiling.
+- Cross-module TypeScript APIs live under the owning module's `public/` facades unless they use an established seam: application ports, shared Fastify request primitives, Nest decorators, module composition roots, or Nest-exported providers. Consumers use the matching seam instead of other implementation paths.
 - `domain` has no framework, transport, environment, database, cache, or downstream imports.
 - `src/common` contains only genuinely cross-cutting primitives. `src/catalog` owns operation metadata; `src/contracts` owns boundary schemas; `src/downstream` owns pure mappers and dispatch seams.
 - Keep constants and configuration beside the application use case or layer that owns them; group related values by policy, and extract them only when independently reused. Avoid generic `constants` files and never move business policy into `src/common` or `domain`.

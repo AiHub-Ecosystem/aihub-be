@@ -16,7 +16,7 @@ import {
   type OrganizationRenameRecordPort,
   type RenameOrganizationRecordInput,
   type RenameOrganizationRecordResult,
-} from '@/modules/identity/application/organization-rename-record.port';
+} from '@/modules/identity/organizations/application/organization-rename-record.port';
 
 const OWNER_TOKEN = 'owner.token.value';
 const ADMIN_TOKEN = 'admin.token.value';

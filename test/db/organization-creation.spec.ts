@@ -4,16 +4,16 @@ import { ulid } from 'ulid';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-organization-api-key.repository';
+import { PostgresOrganizationMembershipRepository } from '@/modules/identity/membership/infrastructure/postgres-organization-membership.repository';
 import type {
   CreateOrganizationRecordInput,
   CreateOrganizationRecordResult,
-} from '@/modules/identity/application/organization-creation-record.port';
+} from '@/modules/identity/organizations/application/organization-creation-record.port';
+import { PostgresOrganizationCreationRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-creation.repository';
 import {
   type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,
-} from '@/modules/identity/infrastructure/postgres-identity.client';
-import { PostgresOrganizationCreationRepository } from '@/modules/identity/infrastructure/postgres-organization-creation.repository';
-import { PostgresOrganizationMembershipRepository } from '@/modules/identity/infrastructure/postgres-organization-membership.repository';
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 import {
   createTestPool,
