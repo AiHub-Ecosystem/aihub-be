@@ -11,11 +11,11 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { Value } from '@sinclair/typebox/value';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { invalidRequest } from '@/common/errors/invalid-request';
+import { parseRequestBody } from '@/common/http/parse-request-body';
 import {
   type AcceptOrganizationInvitationRequest,
   AcceptOrganizationInvitationRequestSchema,
@@ -130,10 +130,10 @@ export class OrganizationInvitationController {
   ): Promise<AcceptOrganizationInvitationResponse> {
     const { context, requestId, userId } = bearerRequestContext(request);
 
-    if (!Value.Check(AcceptOrganizationInvitationRequestSchema, body)) {
-      throw invalidRequest();
-    }
-    const accepted: AcceptOrganizationInvitationRequest = body;
+    const accepted: AcceptOrganizationInvitationRequest = parseRequestBody(
+      AcceptOrganizationInvitationRequestSchema,
+      body,
+    );
 
     const membership = await this.acceptInvitation.accept({
       context,
@@ -164,10 +164,10 @@ export class OrganizationInvitationController {
       organizationId,
     );
 
-    if (!Value.Check(CreateOrganizationInvitationRequestSchema, body)) {
-      throw invalidRequest();
-    }
-    const invitation: CreateOrganizationInvitationRequest = body;
+    const invitation: CreateOrganizationInvitationRequest = parseRequestBody(
+      CreateOrganizationInvitationRequestSchema,
+      body,
+    );
     let email: string;
     try {
       email = normalizeEmail(invitation.email);

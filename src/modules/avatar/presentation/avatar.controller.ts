@@ -11,12 +11,11 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { Value } from '@sinclair/typebox/value';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { AppError } from '@/common/errors/app-error';
-import { invalidRequest } from '@/common/errors/invalid-request';
+import { parseRequestBody } from '@/common/http/parse-request-body';
 import {
   type AvatarResponse,
   type AvatarUploadResponse,
@@ -73,14 +72,15 @@ export class AvatarController {
     @Body() body: unknown,
   ): Promise<AvatarUploadResponse> {
     const { userId, requestId } = authenticatedUser(request);
-    if (!Value.Check(CreateAvatarUploadRequestSchema, body)) {
-      throw invalidRequest();
-    }
+    const uploadRequest = parseRequestBody(
+      CreateAvatarUploadRequestSchema,
+      body,
+    );
 
     const upload = await this.uploads.requestUpload({
       userId,
-      contentType: body.content_type,
-      byteSize: body.byte_size,
+      contentType: uploadRequest.content_type,
+      byteSize: uploadRequest.byte_size,
     });
 
     return {

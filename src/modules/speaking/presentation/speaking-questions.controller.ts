@@ -22,6 +22,7 @@ function parsePart(value: unknown): SpeakingPart | undefined {
 
   const query = { part: value };
   if (!Value.Check(SpeakingQuestionsQuerySchema, query)) {
+    // arch-check: validates a query, not a body
     throw invalidRequest();
   }
 

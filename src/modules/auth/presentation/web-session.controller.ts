@@ -12,6 +12,7 @@ import {
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { parseRequestBody } from '@/common/http/parse-request-body';
 import type { LoginResponse } from '@/contracts/auth/local-auth';
 import {
   type CreateWebSessionFromVerificationRequest,
@@ -29,7 +30,7 @@ import {
   type WebSessionServicePort,
 } from '@/modules/auth/application/web-session-service.port';
 import { accessTokenEnvelope } from './access-token-envelope';
-import { parseAuthBody, requestIp } from './auth-request';
+import { requestIp } from './auth-request';
 import { WebSessionClientGuard } from './web-session-client.guard';
 import { hasAlternateWebSessionSource } from './web-session-transport';
 
@@ -71,7 +72,7 @@ export class WebSessionController {
     @Req() request: FastifyRequest,
     @Body() body: unknown,
   ): Promise<CreateWebSessionResponse> {
-    const input: CreateWebSessionRequest = parseAuthBody(
+    const input: CreateWebSessionRequest = parseRequestBody(
       CreateWebSessionRequestSchema,
       body,
     );
@@ -95,7 +96,7 @@ export class WebSessionController {
     @Body() body: unknown,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<CreateWebSessionResponse | undefined> {
-    const input: CreateWebSessionFromVerificationRequest = parseAuthBody(
+    const input: CreateWebSessionFromVerificationRequest = parseRequestBody(
       CreateWebSessionFromVerificationRequestSchema,
       body,
     );
@@ -123,7 +124,7 @@ export class WebSessionController {
     @Req() request: FastifyRequest,
     @Body() body: unknown,
   ): Promise<LoginResponse> {
-    const input: ExchangeWebSessionRequest = parseAuthBody(
+    const input: ExchangeWebSessionRequest = parseRequestBody(
       ExchangeWebSessionRequestSchema,
       body,
     );
@@ -167,7 +168,7 @@ export class WebSessionController {
     @Req() request: FastifyRequest,
     @Body() body: unknown,
   ): Promise<void> {
-    const input: LogoutWebSessionRequest = parseAuthBody(
+    const input: LogoutWebSessionRequest = parseRequestBody(
       LogoutWebSessionRequestSchema,
       body,
     );

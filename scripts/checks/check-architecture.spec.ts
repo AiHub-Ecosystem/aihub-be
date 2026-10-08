@@ -513,3 +513,122 @@ describe('cross-module table access', () => {
     ]);
   });
 });
+
+/**
+ * `parseRequestBody` exists so that a `default` in a TypeBox contract means the
+ * same thing on every route. Two ways of reaching TypeBox directly break that:
+ * `Value.Check` alone drops the defaults, and `Value.Parse` alone converts
+ * before it asserts, so a body of the wrong type decodes instead of failing.
+ *
+ * Pinning the list of files allowed to do it keeps the rule honest in both
+ * directions - a route that starts bypassing the helper fails, and a file that
+ * stops bypassing it has to be removed from the list rather than sitting there
+ * as a rule that no longer describes anything. The rule allows a call per line,
+ * so the same list also has to catch a body check added beside an allowed one,
+ * which is why the unmarked-call expectation is asserted separately.
+ */
+describe('request bodies reach their contract through parseRequestBody', () => {
+  const PRESENTATION_ALLOWLIST = [
+    'modules/auth/presentation/access-token-envelope.ts',
+    'modules/identity/membership/presentation/organization-membership.controller.ts',
+    'modules/identity/organization-identity-configuration/presentation/organization-identity-config.controller.ts',
+    'modules/speaking/presentation/speaking-questions.controller.ts',
+  ];
+
+  const srcRoot = join(__dirname, '..', '..', 'src');
+
+  function presentationFiles(): string[] {
+    return readdirSync(srcRoot, { recursive: true, withFileTypes: true })
+      .filter(
+        (entry) =>
+          entry.isFile() &&
+          entry.name.endsWith('.ts') &&
+          !entry.name.endsWith('.spec.ts'),
+      )
+      .map((entry) => join(entry.parentPath, entry.name))
+      .filter((file) => file.includes(`${sep}presentation${sep}`));
+  }
+
+  function callsTypeBox(line: string): boolean {
+    return /\bValue\.(?:Check|Parse)\s*\(/.test(line);
+  }
+
+  // The formatter moves a trailing comment onto its own line, so a marker on
+  // the line below a call counts; this mirrors `check-architecture.mjs`.
+  function isMarked(lines: string[], index: number): boolean {
+    return `${lines[index] ?? ''}\n${lines[index + 1] ?? ''}`.includes(
+      'arch-check:',
+    );
+  }
+
+  function presentationFilesCallingTypeBox(): string[] {
+    return presentationFiles()
+      .filter((file) => {
+        const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+        return lines.some(
+          (line, index) => callsTypeBox(line) && isMarked(lines, index),
+        );
+      })
+      .map((file) => relative(srcRoot, file).split(/[\\/]/).join('/'))
+      .sort();
+  }
+
+  function unmarkedTypeBoxCalls(): string[] {
+    return presentationFiles()
+      .flatMap((file) => {
+        const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+        return lines.flatMap((line, index) =>
+          callsTypeBox(line) && !isMarked(lines, index)
+            ? [
+                `${relative(srcRoot, file).split(/[\\/]/).join('/')}:${index + 1}`,
+              ]
+            : [],
+        );
+      })
+      .sort();
+  }
+
+  it('allows TypeBox only where the reason is written down', () => {
+    expect(presentationFilesCallingTypeBox()).toEqual(PRESENTATION_ALLOWLIST);
+  });
+
+  it('has no presentation file validating a body without the reason', () => {
+    expect(unmarkedTypeBoxCalls()).toEqual([]);
+  });
+
+  it('fails a controller that validates a body itself', () => {
+    const fixtureRoot = mkdtempSync(
+      join(srcRoot, 'modules', 'identity', '.tmp-body-validation-'),
+    );
+    const offending = join(fixtureRoot, 'presentation', 'probe.controller.ts');
+
+    try {
+      mkdirSync(join(fixtureRoot, 'presentation'), { recursive: true });
+      writeFileSync(
+        offending,
+        `import { Value } from '@sinclair/typebox/value';\nexport function probe(body: unknown): boolean {\n  return Value.Check({}, body);\n}\n`,
+      );
+      writeFileSync(
+        join(fixtureRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+      );
+
+      const result = spawnSync(
+        process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+        ['arch-check'],
+        {
+          cwd: process.cwd(),
+          encoding: 'utf8',
+          shell: process.platform === 'win32',
+        },
+      );
+
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(
+        'route a request body through parseRequestBody',
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+});

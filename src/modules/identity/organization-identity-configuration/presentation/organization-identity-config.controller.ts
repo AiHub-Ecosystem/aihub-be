@@ -14,7 +14,7 @@ import type { FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { AppError } from '@/common/errors/app-error';
-import { invalidRequest } from '@/common/errors/invalid-request';
+import { parseRequestBody } from '@/common/http/parse-request-body';
 import {
   PublicJsonWebKeySetSchema,
   type ReadOrganizationIdentityConfigResponse,
@@ -115,10 +115,10 @@ export class OrganizationIdentityConfigController {
         retryable: false,
       });
     }
-    if (!Value.Check(SetOrganizationIdentityConfigRequestSchema, body)) {
-      throw invalidRequest();
-    }
-    const requested: SetOrganizationIdentityConfigRequest = body;
+    const requested: SetOrganizationIdentityConfigRequest = parseRequestBody(
+      SetOrganizationIdentityConfigRequestSchema,
+      body,
+    );
     const config = await this.setIdentityConfig.set({
       context,
       userId,
@@ -154,6 +154,10 @@ function hasInvalidInlineJwks(value: unknown): boolean {
     (value.jwks_url === undefined || value.jwks_url === null) &&
     value.public_keys_jwks !== undefined &&
     value.public_keys_jwks !== null &&
-    !Value.Check(PublicJsonWebKeySetSchema, value.public_keys_jwks)
+    !Value.Check(
+      // arch-check: one nested field, checked to answer IDENTITY_JWKS_INVALID rather than INVALID_REQUEST
+      PublicJsonWebKeySetSchema,
+      value.public_keys_jwks,
+    )
   );
 }

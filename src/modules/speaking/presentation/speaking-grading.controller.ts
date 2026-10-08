@@ -1,9 +1,9 @@
 import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
+import { parseRequestBody } from '@/common/http/parse-request-body';
 import {
   type RequestLifecycleState,
   getRequestLifecycle,
@@ -30,42 +30,32 @@ import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,
 } from '@/modules/speaking/application/speaking-multipart-parser.port';
-import { Value } from '@sinclair/typebox/value';
 import { createFastifySpeakingMultipartSource } from './fastify-speaking-multipart.source';
 
 const OPERATION = 'speaking.grading' as const;
 const JSON_OPERATION = 'speaking.grading-json' as const;
 
 function parseJsonBody(body: unknown): SpeakingGradeJsonInput {
-  if (!Value.Check(SpeakingGradeJsonRequestSchema, body)) {
+  const parsed = parseRequestBody(SpeakingGradeJsonRequestSchema, body);
+  if (!isApprovedSpeakingAudioUrl(parsed.audio_url)) {
     throw invalidRequest();
   }
 
-  try {
-    const parsed = Value.Parse(SpeakingGradeJsonRequestSchema, body);
-    if (!isApprovedSpeakingAudioUrl(parsed.audio_url)) {
-      throw invalidRequest();
-    }
-
-    return {
-      audioUrl: parsed.audio_url,
-      part: parsed.part,
-      questionId: parsed.question_id,
-      ...(parsed.prompt_text === undefined
-        ? {}
-        : { promptText: parsed.prompt_text }),
-      testType: parsed.test_type ?? 'Practice',
-      ...(parsed.test_code === undefined ? {} : { testCode: parsed.test_code }),
-      ...(parsed.transcript === undefined
-        ? {}
-        : { transcript: parsed.transcript }),
-    };
-  } catch (error) {
-    if (error instanceof AppError) {
-      throw error;
-    }
-    throw invalidRequest();
-  }
+  return {
+    audioUrl: parsed.audio_url,
+    part: parsed.part,
+    questionId: parsed.question_id,
+    ...(parsed.prompt_text === undefined
+      ? {}
+      : { promptText: parsed.prompt_text }),
+    // The schema declares `default: 'Practice'`, which the parse above
+    // applies; the fallback only satisfies `exactOptionalPropertyTypes`.
+    testType: parsed.test_type ?? 'Practice',
+    ...(parsed.test_code === undefined ? {} : { testCode: parsed.test_code }),
+    ...(parsed.transcript === undefined
+      ? {}
+      : { transcript: parsed.transcript }),
+  };
 }
 
 function userId(request: AuthenticatedRequest): string {

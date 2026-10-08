@@ -8,10 +8,9 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { Value } from '@sinclair/typebox/value';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { invalidRequest } from '@/common/errors/invalid-request';
+import { parseRequestBody } from '@/common/http/parse-request-body';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import { isRequestId } from '@/common/request-context/request-id';
 import {
@@ -42,18 +41,6 @@ interface MintEnvelope {
   readonly meta: { readonly request_id: string };
 }
 
-function parseBody(body: unknown): MintSandboxAssertionRequest {
-  if (!Value.Check(MintSandboxAssertionRequestSchema, body)) {
-    throw invalidRequest();
-  }
-
-  try {
-    return Value.Parse(MintSandboxAssertionRequestSchema, body);
-  } catch (error) {
-    throw invalidRequest(error);
-  }
-}
-
 /**
  * Issues a short-lived user assertion for a sandbox organization, so that
  * testing the gateway does not require holding an organization's signing key.
@@ -80,7 +67,10 @@ export class SandboxAssertionController {
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
   ): Promise<MintEnvelope> {
-    const parsed = parseBody(body);
+    const parsed: MintSandboxAssertionRequest = parseRequestBody(
+      MintSandboxAssertionRequestSchema,
+      body,
+    );
     const authenticated = getAuthenticatedApiKey(request);
     const requestId = isRequestId(request.id) ? request.id : String(request.id);
     const context = createRequestContext({

@@ -15,6 +15,7 @@ export function accessTokenEnvelope(
     meta: { request_id: requestId },
   };
   if (!Value.Check(LoginResponseSchema, response)) {
+    // arch-check: validates a response to answer INTERNAL_ERROR
     throw new AppError({
       code: 'INTERNAL_ERROR',
       message: 'Access token response is invalid',

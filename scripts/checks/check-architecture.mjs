@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import process from 'node:process';
 
 const root = process.cwd();
@@ -106,6 +106,42 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
   if (/\bvault\b|AIHUB_RUNTIME_SECRETS_FILE/i.test(source)) {
     fail(
       `${relative(root, file)} contains Vault-specific infrastructure; keep it behind the runtime-secret provider`,
+    );
+  }
+}
+
+// Every request body reaches its operation's TypeBox contract through
+// `parseRequestBody`, so a `default` in a schema means the same thing on every
+// route. A controller that calls TypeBox itself skips that helper: `Value.Check`
+// alone drops the defaults, and `Value.Parse` alone converts before it asserts,
+// so a body of the wrong type would decode instead of being rejected.
+//
+// A call that is not body validation - a query, one nested field that answers
+// its own error code, a response envelope - stays, but only when it says why.
+// The marker is per call rather than per file on purpose: a file allowed one
+// such call would otherwise also be allowed to start validating a body beside
+// it, which is the gap this rule exists to close. The next line counts because
+// the formatter moves a trailing comment down onto its own line.
+const BODY_VALIDATION_MARKER = 'arch-check:';
+
+for (const file of collectTypeScriptFiles(srcDirectory)) {
+  if (file.endsWith('.spec.ts') || !file.includes(`${sep}presentation${sep}`)) {
+    continue;
+  }
+
+  const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+  for (const [index, line] of lines.entries()) {
+    if (!/\bValue\.(?:Check|Parse)\s*\(/.test(line)) {
+      continue;
+    }
+
+    const markedOn = `${line}\n${lines[index + 1] ?? ''}`;
+    if (markedOn.includes(BODY_VALIDATION_MARKER)) {
+      continue;
+    }
+
+    fail(
+      `${relative(root, file)}:${index + 1} calls TypeBox directly; route a request body through parseRequestBody, or, if this call is not body validation, mark it with "${BODY_VALIDATION_MARKER} <reason>"`,
     );
   }
 }

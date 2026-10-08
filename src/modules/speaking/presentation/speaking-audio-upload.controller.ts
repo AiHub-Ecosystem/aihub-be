@@ -10,11 +10,11 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { Value } from '@sinclair/typebox/value';
 import type { FastifyReply } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { invalidRequest } from '@/common/errors/invalid-request';
+import { parseRequestBody } from '@/common/http/parse-request-body';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import {
   type CreateSpeakingAudioUploadRequest,
@@ -105,18 +105,10 @@ export class SpeakingAudioUploadController {
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
   ): Promise<SpeakingAudioUploadUrlResponse> {
-    if (!Value.Check(CreateSpeakingAudioUploadRequestSchema, body)) {
-      throw invalidRequest();
-    }
-    let parsed: CreateSpeakingAudioUploadRequest;
-    try {
-      parsed = Value.Parse(
-        CreateSpeakingAudioUploadRequestSchema,
-        body,
-      ) as CreateSpeakingAudioUploadRequest;
-    } catch {
-      throw invalidRequest();
-    }
+    const parsed: CreateSpeakingAudioUploadRequest = parseRequestBody(
+      CreateSpeakingAudioUploadRequestSchema,
+      body,
+    );
 
     const upload = await this.uploads.requestUpload({
       context: requestContext(request),

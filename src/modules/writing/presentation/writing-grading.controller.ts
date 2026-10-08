@@ -1,9 +1,8 @@
 import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
-import { Value } from '@sinclair/typebox/value';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import { invalidRequest } from '@/common/errors/invalid-request';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
+import { parseRequestBody } from '@/common/http/parse-request-body';
 import {
   type RequestLifecycleState,
   getRequestLifecycle,
@@ -12,8 +11,6 @@ import {
   type GradeResponse,
   GradeTask1RequestSchema,
   GradeTask2RequestSchema,
-  type GradeTask1Request as Task1Request,
-  type GradeTask2Request as Task2Request,
 } from '@/contracts/writing/grading';
 import {
   GRADING_ORCHESTRATOR,
@@ -36,30 +33,6 @@ const TASK2_OPERATION = 'writing.task2.grade' as const;
 // Body size is enforced earlier, before parsing, by the `onRequest` hook
 // registered in main.ts (see `registerBodySizeGuard`) — a body that reaches
 // here has already passed that check.
-function parseTask1Body(body: unknown): Task1Request {
-  if (!Value.Check(GradeTask1RequestSchema, body)) {
-    throw invalidRequest();
-  }
-
-  try {
-    return Value.Parse(GradeTask1RequestSchema, body);
-  } catch (error) {
-    throw invalidRequest(error);
-  }
-}
-
-function parseTask2Body(body: unknown): Task2Request {
-  if (!Value.Check(GradeTask2RequestSchema, body)) {
-    throw invalidRequest();
-  }
-
-  try {
-    return Value.Parse(GradeTask2RequestSchema, body);
-  } catch (error) {
-    throw invalidRequest(error);
-  }
-}
-
 function requireUserId(request: AuthenticatedRequest): string {
   const userId = request.aihubIdentity?.userId;
   if (userId === undefined || userId.trim().length === 0) {
@@ -122,7 +95,7 @@ export class WritingGradingController {
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
   ): Promise<DispatchResult<GradeResponse>> {
-    const input = parseTask1Body(body);
+    const input = parseRequestBody(GradeTask1RequestSchema, body);
     const idempotencyKey = resolveIdempotencyKey(
       TASK1_OPERATION,
       request.headers['idempotency-key'],
@@ -150,7 +123,7 @@ export class WritingGradingController {
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
   ): Promise<DispatchResult<GradeResponse>> {
-    const input = parseTask2Body(body);
+    const input = parseRequestBody(GradeTask2RequestSchema, body);
     const idempotencyKey = resolveIdempotencyKey(
       TASK2_OPERATION,
       request.headers['idempotency-key'],

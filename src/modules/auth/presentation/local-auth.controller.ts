@@ -12,6 +12,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { AppError } from '@/common/errors/app-error';
+import { parseRequestBody } from '@/common/http/parse-request-body';
 import {
   EmptyAuthRequestSchema,
   ForgotPasswordRequestSchema,
@@ -31,7 +32,7 @@ import {
   RefreshRotationCommittedError,
 } from '@/modules/auth/application/local-auth-service.port';
 import { accessTokenEnvelope } from './access-token-envelope';
-import { parseAuthBody, requestIp } from './auth-request';
+import { requestIp } from './auth-request';
 import {
   REFRESH_COOKIE_CLEAR_OPTIONS,
   REFRESH_COOKIE_NAME,
@@ -56,7 +57,7 @@ interface ForgotPasswordEnvelope {
 }
 
 function parseEmptyBody(body: unknown): void {
-  parseAuthBody(EmptyAuthRequestSchema, body === undefined ? {} : body);
+  parseRequestBody(EmptyAuthRequestSchema, body);
 }
 
 /** Sets the refresh cookie and returns the envelope every session-issuing route shares. */
@@ -100,7 +101,7 @@ export class LocalAuthController {
     @Req() request: FastifyRequest,
     @Body() body: unknown,
   ): Promise<RegisterEnvelope> {
-    const input = parseAuthBody(RegisterRequestSchema, body);
+    const input = parseRequestBody(RegisterRequestSchema, body);
     const result = await this.service.register(
       input,
       requestIp(request),
@@ -125,7 +126,7 @@ export class LocalAuthController {
     @Body() body: unknown,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<LoginResponse> {
-    const input = parseAuthBody(LoginRequestSchema, body);
+    const input = parseRequestBody(LoginRequestSchema, body);
     const result = await this.service.login(input, requestIp(request));
     return sessionEnvelope(request, reply, result);
   }
@@ -183,7 +184,7 @@ export class LocalAuthController {
     @Body() body: unknown,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<LoginResponse | undefined> {
-    const input: VerifyEmailRequest = parseAuthBody(
+    const input: VerifyEmailRequest = parseRequestBody(
       VerifyEmailRequestSchema,
       body,
     );
@@ -208,7 +209,7 @@ export class LocalAuthController {
     @Req() request: FastifyRequest,
     @Body() body: unknown,
   ): Promise<void> {
-    const input: ResendVerificationRequest = parseAuthBody(
+    const input: ResendVerificationRequest = parseRequestBody(
       ResendVerificationRequestSchema,
       body,
     );
@@ -225,7 +226,7 @@ export class LocalAuthController {
     @Req() request: FastifyRequest,
     @Body() body: unknown,
   ): Promise<ForgotPasswordEnvelope> {
-    const input = parseAuthBody(ForgotPasswordRequestSchema, body);
+    const input = parseRequestBody(ForgotPasswordRequestSchema, body);
     const result = await this.service.forgotPassword(input, requestIp(request));
     return {
       data: result,
@@ -241,7 +242,7 @@ export class LocalAuthController {
     @Body() body: unknown,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
-    const input = parseAuthBody(ResetPasswordRequestSchema, body);
+    const input = parseRequestBody(ResetPasswordRequestSchema, body);
     await this.service.resetPassword(input, requestIp(request));
     clearRefreshCookie(reply);
   }

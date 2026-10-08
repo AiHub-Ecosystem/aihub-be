@@ -10,11 +10,10 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { Value } from '@sinclair/typebox/value';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { invalidRequest } from '@/common/errors/invalid-request';
+import { parseRequestBody } from '@/common/http/parse-request-body';
 import {
   type CreateOrganizationRequest,
   CreateOrganizationRequestSchema,
@@ -83,10 +82,10 @@ export class OrganizationController {
   ): Promise<CreateOrganizationResponse> {
     const { context, requestId, userId } = bearerRequestContext(request);
 
-    if (!Value.Check(CreateOrganizationRequestSchema, body)) {
-      throw invalidRequest();
-    }
-    const requested: CreateOrganizationRequest = body;
+    const requested: CreateOrganizationRequest = parseRequestBody(
+      CreateOrganizationRequestSchema,
+      body,
+    );
     const name = requested.name.trim();
 
     const idempotencyKey = resolveIdempotencyKey(
@@ -155,10 +154,10 @@ export class OrganizationController {
       organizationId,
     );
 
-    if (!Value.Check(RenameOrganizationRequestSchema, body)) {
-      throw invalidRequest();
-    }
-    const requested: RenameOrganizationRequest = body;
+    const requested: RenameOrganizationRequest = parseRequestBody(
+      RenameOrganizationRequestSchema,
+      body,
+    );
     const renamed = await this.renameOrganization.rename({
       context,
       userId,

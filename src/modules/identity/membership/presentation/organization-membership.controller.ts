@@ -16,6 +16,7 @@ import type { FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { invalidRequest } from '@/common/errors/invalid-request';
+import { parseRequestBody } from '@/common/http/parse-request-body';
 import {
   EmptyOrganizationMembershipMutationRequestSchema,
   type OrganizationMembershipListQuery,
@@ -62,6 +63,7 @@ export class OrganizationMembershipController {
     );
     const rawQuery: unknown = request.query;
     if (!Value.Check(OrganizationMembershipListQuerySchema, rawQuery)) {
+      // arch-check: validates a query, not a body
       throw invalidRequest();
     }
 
@@ -125,10 +127,10 @@ export class OrganizationMembershipController {
       organizationId,
     );
 
-    if (!Value.Check(OrganizationMembershipMutationRequestSchema, body)) {
-      throw invalidRequest();
-    }
-    const mutation: OrganizationMembershipMutationRequest = body;
+    const mutation: OrganizationMembershipMutationRequest = parseRequestBody(
+      OrganizationMembershipMutationRequestSchema,
+      body,
+    );
     const result = await this.mutation.changeRole({
       context,
       userId,
@@ -152,7 +154,7 @@ export class OrganizationMembershipController {
       request,
       organizationId,
     );
-    assertEmptyBody(body);
+    parseRequestBody(EmptyOrganizationMembershipMutationRequestSchema, body);
 
     const result = await this.mutation.disable({
       context,
@@ -176,7 +178,7 @@ export class OrganizationMembershipController {
       request,
       organizationId,
     );
-    assertEmptyBody(body);
+    parseRequestBody(EmptyOrganizationMembershipMutationRequestSchema, body);
 
     const result = await this.mutation.transfer({
       context,
@@ -186,17 +188,6 @@ export class OrganizationMembershipController {
     });
 
     return mutationResponse(result, requestId);
-  }
-}
-
-function assertEmptyBody(body: unknown): void {
-  if (
-    !Value.Check(
-      EmptyOrganizationMembershipMutationRequestSchema,
-      body === undefined ? {} : body,
-    )
-  ) {
-    throw invalidRequest();
   }
 }
 

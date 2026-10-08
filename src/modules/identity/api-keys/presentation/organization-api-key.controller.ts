@@ -11,11 +11,10 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { Value } from '@sinclair/typebox/value';
 import type { FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { invalidRequest } from '@/common/errors/invalid-request';
+import { parseRequestBody } from '@/common/http/parse-request-body';
 import {
   type CreateOrganizationApiKeyRequest,
   CreateOrganizationApiKeyRequestSchema,
@@ -182,10 +181,10 @@ export class OrganizationApiKeyController {
       organizationId,
     );
 
-    if (!Value.Check(CreateOrganizationApiKeyRequestSchema, body)) {
-      throw invalidRequest();
-    }
-    const requested: CreateOrganizationApiKeyRequest = body;
+    const requested: CreateOrganizationApiKeyRequest = parseRequestBody(
+      CreateOrganizationApiKeyRequestSchema,
+      body,
+    );
 
     const created = await this.apiKeys.create({
       context,
