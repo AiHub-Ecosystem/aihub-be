@@ -4,15 +4,17 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 ## Conventions
 
-- **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
+- **Create an issue**: `gh issue create --title "..." --body-file <path>`
 - **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
 - **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
-- **Comment on an issue**: `gh issue comment <number> --body "..."`
+- **Comment on an issue**: `gh issue comment <number> --body-file <path>`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
-- **Close**: `gh issue close <number> --comment "..."`. See [Closing an issue](#closing-an-issue) for what the comment has to show.
+- **Close**: `gh issue close <number>`. See [Closing an issue](#closing-an-issue) for what the comment has to show.
 - **Link a sub-issue** (see Sub-issues below): create the child issue first, then `gh api graphql`
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
+
+Bodies go in a file, never in `--body`, and the shell reason why is in the global `AGENTS.md`. To correct a post, patch it rather than adding a second comment: `gh api --method PATCH repos/<owner>/<repo>/issues/comments/<id> -F body=@<path>`, then read it back with `gh api repos/<owner>/<repo>/issues/comments/<id> --jq .body`.
 
 ## Naming a surface in an acceptance criterion
 
@@ -27,6 +29,8 @@ Say which one: "gone from `scripts/cli/cli.mjs`" or "its `scripts/cli/<tool>.cjs
 
 ## Closing an issue
 
+Ask first: **does this change run in production?** A controller, an adapter, a migration, or a deployment manifest does; a test, a check script, and a doc do not. The two kinds close on different evidence, and closing on the wrong one either ships an unreleased claim or blocks a finished doc.
+
 An issue whose change runs in production closes on evidence that it runs there, not on a green test run or a merge into a feature branch. A fix that is merged only into an unmerged branch has not reached production: `main` deploys, nothing else does.
 
 The closing comment names:
@@ -35,6 +39,8 @@ The closing comment names:
 - what was observed on the host after CD finished, for example `ops/status.sh` reporting that commit as healthy, a `schema_migrations` row for a migration, or a probe of the changed behaviour.
 
 Until then, leave the issue open and say in a comment where the fix is and what still has to happen. If an issue was closed too early, reopen it with the evidence.
+
+A commit that is not on `origin/main` has not deployed, whatever the local checks say. `git log origin/main..HEAD --oneline` settles it before the closing comment is written.
 
 Changes that never run in production (docs, tests, CI, tooling) close when they are merged into `main`.
 
@@ -83,4 +89,4 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 - **Blocking**: GitHub's **native issue dependencies**, the canonical, UI-visible representation. Add an edge with `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where `<blocker-db-id>` is the blocker's numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, _not_ the `#number` or `node_id`). GitHub reports `issue_dependencies_summary.blocked_by` (open blockers only, the live gate). Where dependencies aren't available, fall back to a `Blocked by: #<n>, #<n>` line at the top of the child body. A ticket is unblocked when every blocker is closed.
 - **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
 - **Claim**: `gh issue edit <n> --add-assignee @me`, the session's first write.
-- **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
+- **Resolve**: answer in a file, `gh issue comment <n> --body-file <path>`, then `gh issue close <n>` per [Closing an issue](#closing-an-issue), then append a context pointer (gist + link) to the map's Decisions-so-far.
