@@ -41,7 +41,6 @@ x-app-environment: &app-environment
   AIHUB_STAGING_HOST: ${AIHUB_STAGING_HOST:-}
   AIHUB_DEVELOPMENT_HOST: ${AIHUB_DEVELOPMENT_HOST:-}
   AIHUB_SANDBOX_HOST: ${AIHUB_SANDBOX_HOST:-}
-  AIHUB_SANDBOX_ORG_IDS: ${AIHUB_SANDBOX_ORG_IDS:-}
   AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA: ${AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA:-}
   DOWNSTREAM_AI_WRITING_URL: ${DOWNSTREAM_AI_WRITING_URL:?DOWNSTREAM_AI_WRITING_URL is required}
   DOWNSTREAM_AI_SPEAKING_URL: ${DOWNSTREAM_AI_SPEAKING_URL:?DOWNSTREAM_AI_SPEAKING_URL is required}
@@ -163,6 +162,9 @@ services:
     environment:
       <<: *app-environment
       AIHUB_RUNTIME_DATABASE_SCOPE: sandbox
+      # Sandbox only: set on the production app, it enables the assertion mint
+      # route there, and Production accepts what it mints (#442).
+      AIHUB_SANDBOX_ORG_IDS: ${AIHUB_SANDBOX_ORG_IDS:-}
       CUSTOMER_WEB_BASE_URL: ${CUSTOMER_WEB_SANDBOX_BASE_URL:-}
       # Its own Avatar bucket: the records live in the Sandbox database, so a
       # shared bucket would make each deployment's sweep delete the other's

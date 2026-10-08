@@ -157,6 +157,21 @@ describe('CI boot configuration', () => {
     );
   });
 
+  // Set on the production app, it enables the Sandbox assertion mint route
+  // there, and Production accepts what it mints (#442).
+  it('gives the sandbox organization allowlist to the sandbox app only', () => {
+    const compose = readFileSync('docker-compose.production.yml', 'utf8');
+    const sandboxIndex = compose.indexOf('  app-sandbox:');
+    const sandboxEnd = compose.indexOf('\nnetworks:', sandboxIndex);
+
+    expect(productionAppEnvironmentNames()).not.toContain(
+      'AIHUB_SANDBOX_ORG_IDS',
+    );
+    expect(compose.slice(sandboxIndex, sandboxEnd)).toMatch(
+      /AIHUB_SANDBOX_ORG_IDS:\s*\$\{AIHUB_SANDBOX_ORG_IDS:-\}/,
+    );
+  });
+
   it('mints fresh keys on every run, so none is ever committed', () => {
     const keys = (): string[] => [
       readFileSync(join(directory, 'runtime-secrets.json'), 'utf8'),

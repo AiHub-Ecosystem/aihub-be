@@ -85,7 +85,6 @@ const BOOT_ENVIRONMENT = {
   AIHUB_STAGING_HOST: 'staging.ci-boot.invalid',
   AIHUB_DEVELOPMENT_HOST: 'development.ci-boot.invalid',
   AIHUB_SANDBOX_HOST: 'sandbox.ci-boot.invalid',
-  AIHUB_SANDBOX_ORG_IDS: 'org_ci_boot',
   AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA: '100',
   DOWNSTREAM_AI_WRITING_URL: 'http://writing.ci-boot.invalid',
   DOWNSTREAM_AI_SPEAKING_URL: 'http://speaking.ci-boot.invalid',
