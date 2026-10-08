@@ -109,3 +109,28 @@ export const ExchangeWebSessionRequestSchema = Type.Object(
 export type ExchangeWebSessionRequest = Static<
   typeof ExchangeWebSessionRequestSchema
 >;
+
+/**
+ * The credential a Customer Web BFF logs out, in the same one body the exchange
+ * reads it from and nowhere else.
+ *
+ * The value is a bounded string rather than a pattern, and that is the whole
+ * difference from the exchange: logout answers `204` for a session it cannot
+ * use, so a value that is not a Web Session is not a malformed request. It is
+ * the same quiet `204` an already-revoked or expired token gets.
+ */
+export const LogoutWebSessionRequestSchema = Type.Object(
+  {
+    web_session_token: Type.String({
+      minLength: 1,
+      maxLength: 512,
+      description:
+        'The opaque token AIHUB returned when the Web Session was created. Revoked, unknown, expired, and malformed tokens all answer 204 alike, and only the presented session is revoked.',
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export type LogoutWebSessionRequest = Static<
+  typeof LogoutWebSessionRequestSchema
+>;

@@ -4,16 +4,28 @@ import type {
 } from './postgres-auth.client';
 import { PostgresLocalAuthRepository } from './postgres-local-auth.repository';
 
+/**
+ * Records every statement with the transaction that issued it: `0` for a
+ * statement on the client itself, then one number per `transaction(...)`. That
+ * is what makes "one durable step" checkable here — a mutation claimed to ride
+ * one transaction is only in it while its statement carries the same number.
+ */
 class FakeClient implements PostgresAuthClient {
   async checkConnection(): Promise<void> {}
 
-  readonly queries: Array<{ text: string; values: readonly unknown[] }> = [];
+  readonly queries: Array<{
+    text: string;
+    values: readonly unknown[];
+    transaction: number;
+  }> = [];
   responses: readonly Record<string, unknown>[][] = [];
   queryResponses: Record<string, unknown>[][] = [];
   failure: unknown;
+  /** How many transactions this client was asked to open. */
+  opened = 0;
 
   async query(text: string, values: readonly unknown[]) {
-    this.queries.push({ text, values });
+    this.queries.push({ text, values, transaction: 0 });
     return this.queryResponses.shift() ?? [];
   }
 
@@ -24,9 +36,10 @@ class FakeClient implements PostgresAuthClient {
       throw this.failure;
     }
     let index = 0;
+    const transaction = ++this.opened;
     return callback({
       query: async (text, values) => {
-        this.queries.push({ text, values });
+        this.queries.push({ text, values, transaction });
         return this.responses[index++] ?? [];
       },
     });
@@ -212,7 +225,7 @@ describe('PostgresLocalAuthRepository', () => {
     expect(JSON.stringify(client.queries)).not.toContain('token_value');
   });
 
-  it('atomically changes the password, consumes reset tokens, and revokes every refresh session', async () => {
+  it('atomically changes the password, consumes reset tokens, and revokes every refresh session and web session', async () => {
     const client = new FakeClient();
     client.responses = [
       [
@@ -226,6 +239,7 @@ describe('PostgresLocalAuthRepository', () => {
       ],
       [{ id: 'auth_01J00000000000000000000000' }],
       [{ id: 'prt_01J00000000000000000000000' }],
+      [],
       [],
       [],
     ];
@@ -245,8 +259,41 @@ describe('PostgresLocalAuthRepository', () => {
     expect(sql).toContain('UPDATE auth_identities');
     expect(sql).toContain('SET consumed_at');
     expect(sql).toContain('UPDATE refresh_tokens');
+    expect(sql).toContain('UPDATE web_sessions');
     expect(sql).toContain('revoked_at = $2');
+    expect(sql).toContain('WHERE user_account_id = $1 AND revoked_at IS NULL');
+    // Both revocations ride the ONE transaction that changed the password, so a
+    // failure anywhere rolls all of it back: no half-revoked account is
+    // observable between them.
+    expect(client.opened).toBe(1);
+    expect(client.queries.every((query) => query.transaction === 1)).toBe(true);
+    expect(
+      client.queries
+        .filter((query) =>
+          /UPDATE (refresh_tokens|web_sessions)/.test(query.text),
+        )
+        .map((query) => query.values),
+    ).toEqual([
+      ['usr_01J00000000000000000000000', input.now],
+      ['usr_01J00000000000000000000000', input.now],
+    ]);
     expect(JSON.stringify(client.queries)).not.toContain('reset-token');
+  });
+
+  it('revokes no web session at all when the reset token is not consumable', async () => {
+    const client = new FakeClient();
+    client.responses = [[]];
+
+    await expect(
+      new PostgresLocalAuthRepository(client).consumePasswordReset({
+        tokenHash: input.tokenHash,
+        passwordHash: input.passwordHash,
+        now: input.now,
+      }),
+    ).resolves.toEqual({ kind: 'invalid', reason: 'missing' });
+
+    expect(client.queries).toHaveLength(1);
+    expect(JSON.stringify(client.queries)).not.toContain('web_sessions');
   });
 
   it('returns one invalid result for missing, expired, consumed, and inactive reset state', async () => {

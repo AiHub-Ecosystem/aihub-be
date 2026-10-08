@@ -21,6 +21,8 @@ import {
   type CreateWebSessionResponse,
   type ExchangeWebSessionRequest,
   ExchangeWebSessionRequestSchema,
+  type LogoutWebSessionRequest,
+  LogoutWebSessionRequestSchema,
 } from '@/contracts/auth/web-session';
 import {
   WEB_SESSION_SERVICE,
@@ -170,5 +172,44 @@ export class WebSessionController {
       },
       meta: { request_id: String(request.id) },
     };
+  }
+
+  /**
+   * End the one Web Session the caller presented.
+   *
+   * This route is idempotent on purpose, so it answers one bodyless `204` for a
+   * valid session, an already-revoked one, an unknown one, an expired one, and a
+   * malformed one alike: a BFF that logs out from a stale tab, or twice, must
+   * never see a confusing error, and a caller must not be able to probe which
+   * sessions exist. There is no "log out all devices" route — a password reset
+   * is what ends every session of an account.
+   */
+  @Post(PUBLIC_ROUTES['auth.web_sessions.logout'].path)
+  @HttpCode(PUBLIC_ROUTES['auth.web_sessions.logout'].successStatus)
+  @Header('Cache-Control', 'no-store')
+  async logoutWebSession(
+    @Req() request: FastifyRequest,
+    @Body() body: unknown,
+  ): Promise<void> {
+    if (!Value.Check(LogoutWebSessionRequestSchema, body)) {
+      throw invalidRequest();
+    }
+    const input = Value.Parse(
+      LogoutWebSessionRequestSchema,
+      body,
+    ) as LogoutWebSessionRequest;
+
+    await this.service.revokeWebSession(
+      // The credential belongs in this body and nowhere else, exactly as on the
+      // exchange: a token offered in a cookie, an authorization header, or a
+      // query parameter is read from nowhere, which revokes nothing and answers
+      // the same `204` as a token AIHUB has never seen.
+      {
+        token: hasAlternateWebSessionSource(request)
+          ? undefined
+          : input.web_session_token,
+      },
+      clientSecretFrom(request),
+    );
   }
 }

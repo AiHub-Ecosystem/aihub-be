@@ -21,6 +21,11 @@ import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
 } from '@/modules/auth/application/password-hasher.port';
+import { PASSWORD_RESET_TOKEN_REPOSITORY } from '@/modules/auth/application/password-reset-token-repository.port';
+import {
+  PASSWORD_RESET_TOKEN,
+  type PasswordResetTokenPort,
+} from '@/modules/auth/application/password-reset-token.port';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
@@ -39,6 +44,7 @@ import {
   createInMemoryAuthState,
   seedAccount,
 } from '@/modules/auth/testing/in-memory-auth.state';
+import { InMemoryPasswordResetTokenAdapter } from '@/modules/auth/testing/in-memory-password-reset-token.adapter';
 import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
 import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
 import { InMemoryWebSessionAdapter } from '@/modules/auth/testing/in-memory-web-session.adapter';
@@ -47,7 +53,9 @@ import { registerRequestCompletionLog } from '@/modules/metering/presentation/re
 const URL = '/v1/auth/web-sessions';
 const VERIFICATION_URL = '/v1/auth/web-sessions/verification';
 const EXCHANGE_URL = '/v1/auth/web-sessions/exchange';
+const LOGOUT_URL = '/v1/auth/web-sessions/logout';
 const VERIFY_EMAIL_URL = '/v1/auth/verify-email';
+const RESET_PASSWORD_URL = '/v1/auth/reset-password';
 const CLIENT_SECRET = 'bff-client-secret-value-that-must-not-leak';
 const USER_ID = 'usr_01J00000000000000000000000';
 const EMAIL = 'person@example.com';
@@ -89,6 +97,9 @@ class LimiterFake implements AuthRateLimiterPort {
   }
 }
 
+const OTHER_USER_ID = 'usr_01J00000000000000000000001';
+const OTHER_EMAIL = 'someone-else@example.com';
+
 /** Hashes reversibly, so a test can seed the hash of a binding it knows. */
 class VerificationTokenFake implements VerificationTokenPort {
   issue(now: Date): ReturnType<VerificationTokenPort['issue']> {
@@ -129,6 +140,8 @@ describe('web session HTTP boundary', () => {
   let clock: FakeClock;
   let provisioned: { secret: string | undefined };
   let verifier: UserAccessTokenVerifierPort;
+  let passwordResetTokens: InMemoryPasswordResetTokenAdapter;
+  let passwordResetTokenIssuer: PasswordResetTokenPort;
   const log = new CapturedLog();
 
   beforeAll(async () => {
@@ -139,6 +152,7 @@ describe('web session HTTP boundary', () => {
     limiter = new LimiterFake();
     clock = new FakeClock();
     provisioned = { secret: CLIENT_SECRET };
+    passwordResetTokens = new InMemoryPasswordResetTokenAdapter(state);
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -146,6 +160,8 @@ describe('web session HTTP boundary', () => {
       .useValue(new InMemoryUserAccountAdapter(state))
       .overrideProvider(VERIFICATION_TOKEN_REPOSITORY)
       .useValue(verificationTokens)
+      .overrideProvider(PASSWORD_RESET_TOKEN_REPOSITORY)
+      .useValue(passwordResetTokens)
       .overrideProvider(VERIFICATION_TOKEN)
       .useValue(new VerificationTokenFake())
       .overrideProvider(WEB_SESSION_REPOSITORY)
@@ -175,6 +191,10 @@ describe('web session HTTP boundary', () => {
     // JWT login issues", because it rejects any other claim set, audience,
     // issuer, or lifetime.
     verifier = app.get<UserAccessTokenVerifierPort>(USER_ACCESS_TOKEN_VERIFIER);
+    // Likewise the real reset-token issuer, so a seeded reset token is hashed
+    // the way the route hashes the one it is handed.
+    passwordResetTokenIssuer =
+      app.get<PasswordResetTokenPort>(PASSWORD_RESET_TOKEN);
   });
 
   afterAll(async () => {
@@ -186,6 +206,8 @@ describe('web session HTTP boundary', () => {
     webSessions.failCreateWebSession = false;
     webSessions.failFindWebSession = false;
     webSessions.failRenewWebSession = false;
+    webSessions.failRevokeWebSession = false;
+    webSessions.failRevokeUserWebSessions = false;
     verificationTokens.failSessionWrite = false;
     hasher.result = true;
     limiter.allowed = true;
@@ -200,6 +222,15 @@ describe('web session HTTP boundary', () => {
     seedAccount(state, {
       userId: USER_ID,
       email: EMAIL,
+      passwordHash: '$argon2id$fake',
+    });
+  }
+
+  /** A second, unrelated account holder, so "every session" has an outside. */
+  function seedOtherActiveAccount(): void {
+    seedAccount(state, {
+      userId: OTHER_USER_ID,
+      email: OTHER_EMAIL,
       passwordHash: '$argon2id$fake',
     });
   }
@@ -224,6 +255,73 @@ describe('web session HTTP boundary', () => {
       throw new Error('no web session is stored');
     }
     return stored;
+  }
+
+  /** A credential placed somewhere a Web Session route refuses to read it from. */
+  interface AlternateCredential {
+    readonly url: string;
+    readonly headers: Record<string, string>;
+  }
+
+  /**
+   * An exchange request whose client secret defaults to the provisioned one.
+   * Shared by every describe here: whether a session is still alive is observed
+   * by exchanging it, never by reading the row.
+   */
+  function exchange(
+    token: unknown,
+    options: {
+      readonly secret?: string | null;
+      readonly headers?: Record<string, string>;
+    } = {},
+  ): Promise<LightMyRequestResponse> {
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      ...options.headers,
+    };
+    if (options.secret !== null) {
+      headers['x-aihub-client-secret'] = options.secret ?? CLIENT_SECRET;
+    }
+    return app.inject({
+      method: 'POST',
+      url: EXCHANGE_URL,
+      headers,
+      payload: { web_session_token: token },
+    });
+  }
+
+  /**
+   * A reset token the account holder received by email, opened through the
+   * same durable write forgot-password uses.
+   */
+  async function openResetToken(
+    email: string,
+    userId: string,
+  ): Promise<string> {
+    const issued = passwordResetTokenIssuer.issue(clock.now());
+    await passwordResetTokens.issuePasswordResetToken({
+      email,
+      tokenId: issued.id,
+      tokenHash: issued.hash,
+      tokenExpiresAt: issued.expiresAt,
+      now: clock.now(),
+    });
+    if (!state.passwordResetTokens.has(issued.hash)) {
+      throw new Error(`no reset token was stored for ${userId}`);
+    }
+    return issued.raw;
+  }
+
+  function resetPassword(
+    token: unknown,
+    password = 'a new password that works',
+  ): Promise<LightMyRequestResponse> {
+    return app.inject({
+      method: 'POST',
+      url: RESET_PASSWORD_URL,
+      headers: { 'content-type': 'application/json' },
+      payload: { token, password },
+    });
   }
 
   /** A create request whose client secret defaults to the provisioned one. */
@@ -696,34 +794,6 @@ describe('web session HTTP boundary', () => {
       seedActiveAccount();
     });
 
-    /** A credential placed somewhere the route refuses to read it from. */
-    interface AlternateCredential {
-      readonly url: string;
-      readonly headers: Record<string, string>;
-    }
-
-    function exchange(
-      token: unknown,
-      options: {
-        readonly secret?: string | null;
-        readonly headers?: Record<string, string>;
-      } = {},
-    ): Promise<LightMyRequestResponse> {
-      const headers: Record<string, string> = {
-        'content-type': 'application/json',
-        ...options.headers,
-      };
-      if (options.secret !== null) {
-        headers['x-aihub-client-secret'] = options.secret ?? CLIENT_SECRET;
-      }
-      return app.inject({
-        method: 'POST',
-        url: EXCHANGE_URL,
-        headers,
-        payload: { web_session_token: token },
-      });
-    }
-
     it('answers the login envelope with a User Access JWT the real issuer verifies', async () => {
       const token = await webSessionToken();
 
@@ -1120,6 +1190,316 @@ describe('web session HTTP boundary', () => {
         (exchanged.json() as { data: { access_token: string } }).data
           .access_token,
       );
+    });
+  });
+
+  describe('logout', () => {
+    beforeEach(() => {
+      seedActiveAccount();
+    });
+
+    function logout(
+      token: unknown,
+      options: {
+        readonly secret?: string | null;
+        readonly headers?: Record<string, string>;
+        readonly url?: string;
+      } = {},
+    ): Promise<LightMyRequestResponse> {
+      const headers: Record<string, string> = {
+        'content-type': 'application/json',
+        ...options.headers,
+      };
+      if (options.secret !== null) {
+        headers['x-aihub-client-secret'] = options.secret ?? CLIENT_SECRET;
+      }
+      return app.inject({
+        method: 'POST',
+        url: options.url ?? LOGOUT_URL,
+        headers,
+        payload: { web_session_token: token },
+      });
+    }
+
+    it('answers a bodyless 204 and ends only the presented session', async () => {
+      const thisDevice = await webSessionToken();
+      const otherDevice = await webSessionToken();
+      expect(state.webSessions.size).toBe(2);
+      const beforeLogout = new Set(state.webSessions.keys());
+
+      const response = await logout(thisDevice);
+
+      expect(response.statusCode).toBe(204);
+      expect(response.payload).toBe('');
+      expect(response.headers['set-cookie']).toBeUndefined();
+      // Exactly one durable row moved, and it is the presented session's. The
+      // other device is checked by exchanging it, not by reading its row.
+      const revoked = [...state.webSessions.values()].filter(
+        (session) => session.revokedAt !== undefined,
+      );
+      expect(revoked).toHaveLength(1);
+      expect(beforeLogout.has(revoked[0]?.tokenHash ?? '')).toBe(true);
+
+      expect((await exchange(thisDevice)).statusCode).toBe(401);
+      expect((await exchange(otherDevice)).statusCode).toBe(200);
+    });
+
+    it('answers 204 again when the same session is logged out twice', async () => {
+      const token = await webSessionToken();
+
+      const first = await logout(token);
+      const second = await logout(token);
+
+      expect(first.statusCode).toBe(204);
+      expect(second.statusCode).toBe(204);
+      expect(second.payload).toBe('');
+      expect((await exchange(token)).statusCode).toBe(401);
+    });
+
+    it.each([
+      [
+        'a session that is already revoked',
+        async (): Promise<string> => {
+          const token = await webSessionToken();
+          await logout(token);
+          return token;
+        },
+      ],
+      [
+        'an unknown token',
+        async (): Promise<string> => Promise.resolve('u'.repeat(43)),
+      ],
+      [
+        'an expired session',
+        async (): Promise<string> => {
+          const token = await webSessionToken();
+          clock.value = new Date(storedSession().expiresAt.getTime());
+          return token;
+        },
+      ],
+      [
+        'a malformed token',
+        async (): Promise<string> =>
+          Promise.resolve('%%% not a web session token %%%'),
+      ],
+    ])('answers the same bodyless 204 for %s', async (_case, arrange) => {
+      const token = await arrange();
+
+      const response = await logout(token);
+
+      // Idempotent and quiet: nothing here distinguishes one from another, so a
+      // stale tab can never learn whether its cookie was still worth anything.
+      expect(response.statusCode).toBe(204);
+      expect(response.payload).toBe('');
+      expect(response.payload).not.toContain(token);
+    });
+
+    it.each([
+      [
+        'a Web Session cookie',
+        (token: string): AlternateCredential => ({
+          url: LOGOUT_URL,
+          headers: { cookie: `__Host-aihub_web_session=${token}` },
+        }),
+      ],
+      [
+        'a refresh cookie',
+        (token: string): AlternateCredential => ({
+          url: LOGOUT_URL,
+          headers: { cookie: `__Host-aihub_refresh=${token}` },
+        }),
+      ],
+      [
+        'an authorization header',
+        (token: string): AlternateCredential => ({
+          url: LOGOUT_URL,
+          headers: { authorization: `Bearer ${token}` },
+        }),
+      ],
+      [
+        'a query parameter',
+        (token: string): AlternateCredential => ({
+          url: `${LOGOUT_URL}?web_session_token=${token}`,
+          headers: {},
+        }),
+      ],
+    ])(
+      'answers 204 and revokes nothing for a token offered in %s',
+      async (_case, offer) => {
+        const token = await webSessionToken();
+        const { url, headers } = offer(token);
+
+        const response = await logout(token, { url, headers });
+
+        // The body still carried a valid token, so only the alternate source
+        // can explain why nothing was revoked.
+        expect(response.statusCode).toBe(204);
+        expect(response.payload).toBe('');
+        expect((await exchange(token)).statusCode).toBe(200);
+      },
+    );
+
+    it.each([
+      ['a missing client secret', null],
+      ['a wrong client secret', 'not-the-secret'],
+      ['an empty client secret', ''],
+    ])(
+      'refuses %s with one generic 401 before any lookup',
+      async (_case, secret) => {
+        const token = await webSessionToken();
+        // A store that would throw if it were reached: the answer stays `401`,
+        // so the refusal came first and no row was touched.
+        webSessions.failRevokeWebSession = true;
+
+        const response = await logout(token, { secret });
+
+        expect(response.statusCode).toBe(401);
+        expect(response.json().error.code).toBe('UNAUTHORIZED');
+        expect(limiter.calls).toEqual([]);
+        // A refused caller logs nobody out.
+        expect((await exchange(token)).statusCode).toBe(200);
+      },
+    );
+
+    it('answers 503 when the store cannot record the revocation', async () => {
+      const token = await webSessionToken();
+      webSessions.failRevokeWebSession = true;
+
+      const response = await logout(token);
+
+      // The one failure logout may report: a store that could not record it is a
+      // temporary fault the BFF must be able to tell from "already gone", or it
+      // would clear a cookie whose session is still live.
+      expect(response.statusCode).toBe(503);
+      expect(response.json().error.code).toBe('AUTH_WEB_SESSION_UNAVAILABLE');
+      expect(response.payload).not.toContain('web_session_token');
+    });
+
+    it('answers 503 when the deployment provisioned no client secret', async () => {
+      const token = await webSessionToken();
+      provisioned.secret = undefined;
+
+      const response = await logout(token);
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json().error.code).toBe('AUTH_WEB_SESSION_UNAVAILABLE');
+    });
+
+    it('marks every response no-store, whatever it answers', async () => {
+      const token = await webSessionToken();
+      const revoked = await logout(token);
+      const refused = await logout(token, { secret: 'wrong' });
+      const unavailable = await (async () => {
+        webSessions.failRevokeWebSession = true;
+        return logout('z'.repeat(43));
+      })();
+      const unknown = await logout('z'.repeat(43));
+
+      for (const response of [revoked, refused, unavailable, unknown]) {
+        expect(response.headers['cache-control']).toBe('no-store');
+      }
+    });
+
+    it('rejects an unknown field at the boundary', async () => {
+      const token = await webSessionToken();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: LOGOUT_URL,
+        headers: {
+          'content-type': 'application/json',
+          'x-aihub-client-secret': CLIENT_SECRET,
+        },
+        payload: { web_session_token: token, all_devices: true },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expect((await exchange(token)).statusCode).toBe(200);
+    });
+
+    it('keeps the client secret and the token out of every log line', async () => {
+      const token = await webSessionToken();
+      await logout(token);
+      await logout(token, { secret: 'wrong-secret-value' });
+
+      const written = log.text();
+      expect(written).not.toContain(CLIENT_SECRET);
+      expect(written).not.toContain('wrong-secret-value');
+      expect(written).not.toContain(token);
+      for (const [hash] of state.webSessions) {
+        expect(written).not.toContain(hash);
+      }
+    });
+  });
+
+  describe('password reset', () => {
+    beforeEach(() => {
+      seedActiveAccount();
+      seedOtherActiveAccount();
+    });
+
+    it('ends every web session of the account and no session of another', async () => {
+      const thisDevice = await webSessionToken();
+      const otherDevice = await webSessionToken();
+      const bystander = await create({
+        body: { email: OTHER_EMAIL, password: PASSWORD },
+      });
+      const bystanderToken = (
+        bystander.json() as { data: { web_session_token: string } }
+      ).data.web_session_token;
+      expect(state.webSessions.size).toBe(3);
+
+      const reset = await resetPassword(await openResetToken(EMAIL, USER_ID));
+
+      expect(reset.statusCode).toBe(204);
+      // Whoever knew the old password loses access from every Customer Web
+      // device, which is the whole point of ending them here.
+      expect((await exchange(thisDevice)).statusCode).toBe(401);
+      expect((await exchange(otherDevice)).statusCode).toBe(401);
+      // A different account is untouched: this is not a log-out-everyone route.
+      expect((await exchange(bystanderToken)).statusCode).toBe(200);
+      const sessions = [...state.webSessions.values()];
+      expect(
+        sessions
+          .filter((session) => session.userId === USER_ID)
+          .map((session) => session.revokedAt),
+      ).toEqual([clock.now(), clock.now()]);
+      expect(
+        sessions
+          .filter((session) => session.userId !== USER_ID)
+          .map((session) => session.revokedAt),
+      ).toEqual([undefined]);
+    });
+
+    it('leaves every web session of the account alive when the reset token expired', async () => {
+      const token = await webSessionToken();
+      const resetToken = await openResetToken(EMAIL, USER_ID);
+      clock.value = new Date(
+        [...state.passwordResetTokens.values()][0]?.expiresAt.getTime() ?? 0,
+      );
+
+      const response = await resetPassword(resetToken);
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe(
+        'AUTH_PASSWORD_RESET_TOKEN_INVALID',
+      );
+      expect((await exchange(token)).statusCode).toBe(200);
+      expect(storedSession().revokedAt).toBeUndefined();
+    });
+
+    it('leaves every web session of the account alive for an unknown reset token', async () => {
+      const token = await webSessionToken();
+
+      const response = await resetPassword('never-issued-reset-token');
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe(
+        'AUTH_PASSWORD_RESET_TOKEN_INVALID',
+      );
+      expect((await exchange(token)).statusCode).toBe(200);
+      expect(storedSession().revokedAt).toBeUndefined();
     });
   });
 });

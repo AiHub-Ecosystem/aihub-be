@@ -3,9 +3,27 @@ import type {
   ExchangeableWebSession,
   FindExchangeableWebSessionInput,
   RenewWebSessionInput,
+  RevokeUserWebSessionsInput,
+  RevokeWebSessionInput,
   WebSessionRepositoryPort,
 } from '@/modules/auth/application/web-session-repository.port';
 import type { PostgresAuthQueryClient } from './postgres-auth.client';
+
+/**
+ * Revokes every open Web Session of one account, with the same guard the
+ * per-session revocation uses, so a row that is already revoked keeps its first
+ * revocation instant.
+ *
+ * Exported because the password reset that ends an account's Refresh Sessions
+ * ends its Web Sessions in the same transaction: it cannot call through this
+ * adapter, because it has the transaction's query client rather than the pool,
+ * and it must run the identical statement so the two cannot drift.
+ */
+export const REVOKE_USER_WEB_SESSIONS_SQL = `
+        UPDATE web_sessions
+        SET revoked_at = $2
+        WHERE user_account_id = $1 AND revoked_at IS NULL
+      `;
 
 /**
  * Stores only the token hash. `last_renewed_at` starts equal to `created_at`:
@@ -90,5 +108,37 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
       ],
     );
     return rows.length > 0;
+  }
+
+  /**
+   * Idempotent by construction: one conditional `UPDATE` keyed by the stored
+   * hash, so an unknown, already-revoked, and live session all take the same
+   * statement and the last two answer whether a row moved rather than
+   * distinguishing themselves. No read, no lock, no account-wide revocation:
+   * this is the presented session and nothing else.
+   */
+  async revokeWebSession(input: RevokeWebSessionInput): Promise<boolean> {
+    const rows = await this.client.query(
+      `
+        UPDATE web_sessions
+        SET revoked_at = $2
+        WHERE token_hash = $1 AND revoked_at IS NULL
+        RETURNING id
+      `,
+      [input.tokenHash, input.revokedAt],
+    );
+    return rows.length > 0;
+  }
+
+  async revokeWebSessionsByUser(
+    input: RevokeUserWebSessionsInput,
+  ): Promise<number> {
+    const rows = await this.client.query(
+      `${REVOKE_USER_WEB_SESSIONS_SQL}
+        RETURNING id
+      `,
+      [input.userId, input.revokedAt],
+    );
+    return rows.length;
   }
 }

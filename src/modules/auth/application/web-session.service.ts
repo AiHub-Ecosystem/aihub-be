@@ -83,6 +83,21 @@ export interface WebSessionServicePort {
     ip: string,
     presentedClientSecret: string | undefined,
   ): Promise<IssuedUserAccessToken>;
+  /**
+   * End the one Web Session the caller presented. `token` is `undefined` when
+   * the request carried the credential somewhere this route refuses to read it
+   * from.
+   *
+   * Nothing here is a session failure, so nothing here is reported: a valid,
+   * revoked, unknown, expired, and malformed token all answer one bodyless
+   * `204`. Only a store that could not record the revocation answers `503`,
+   * because "could not end it" and "already ended" are different answers for a
+   * BFF clearing a cookie.
+   */
+  revokeWebSession(
+    input: { readonly token: string | undefined },
+    presentedClientSecret: string | undefined,
+  ): Promise<void>;
 }
 
 export const WEB_SESSION_SERVICE = Symbol('WEB_SESSION_SERVICE');
@@ -291,6 +306,46 @@ export class WebSessionService implements WebSessionServicePort {
     await this.renewSession(tokenHash, now);
 
     return this.accessTokenIssuer.issue(userId);
+  }
+
+  /**
+   * End exactly the presented session, quietly and idempotently.
+   *
+   * No rate-limit dimension, deliberately, and this is where a reader would look
+   * for one: logout has no session failure to count. Every token it is offered —
+   * valid, revoked, unknown, expired, malformed, or offered in a transport it
+   * refuses to read — answers the same `204`, so a counter here would only ever
+   * measure how often a BFF logs somebody out. Guessing opaque tokens is what
+   * the exchange's own `web_session_exchange_ip` and `web_session_exchange_token`
+   * dimensions are for, and logout does not widen them: presenting a token here
+   * does not look one up.
+   *
+   * Revoking by hash needs no read: the conditional update matches no row for an
+   * unknown, already-revoked, or expired session, which is the same `204` as a
+   * successful one.
+   */
+  async revokeWebSession(
+    input: { readonly token: string | undefined },
+    presentedClientSecret: string | undefined,
+  ): Promise<void> {
+    this.assertClientSecret(presentedClientSecret);
+
+    if (input.token === undefined || input.token.length === 0) {
+      return;
+    }
+
+    try {
+      await this.webSessions.revokeWebSession({
+        tokenHash: this.tokenIssuer.hash(input.token),
+        revokedAt: this.clock.now(),
+      });
+    } catch (error) {
+      // The only failure logout may report. A BFF that cannot tell "could not
+      // end it" from "already ended" would clear a cookie whose session is
+      // still live, so an unreachable store is a retryable `503` and not the
+      // quiet `204` every unusable session gets.
+      throw storeUnavailable(error);
+    }
   }
 
   /**

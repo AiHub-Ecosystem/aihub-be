@@ -33,6 +33,16 @@ export interface RenewWebSessionInput {
   readonly renewedAtBefore: Date;
 }
 
+export interface RevokeWebSessionInput {
+  readonly tokenHash: string;
+  readonly revokedAt: Date;
+}
+
+export interface RevokeUserWebSessionsInput {
+  readonly userId: string;
+  readonly revokedAt: Date;
+}
+
 /**
  * One Web Session row: the durable Customer Web login session AIHUB owns.
  *
@@ -46,6 +56,13 @@ export interface RenewWebSessionInput {
  * and reported as nothing renewed. There is no read-modify-write and no lock,
  * so concurrent BFF instances can exchange the same session freely.
  *
+ * Revocation is the other half of the same conditional style, and both forms
+ * are quiet: `revokeWebSession` answers whether a row moved — an unknown,
+ * already-revoked, or expired token matches nothing, which is a normal answer
+ * and not a failure — and `revokeWebSessionsByUser` revokes every open session
+ * of one account, which is the step a password reset performs inside the
+ * transaction that ends its Refresh Sessions.
+ *
  * Expired and revoked rows are not purged; `0033_web_sessions.sql` carries the
  * `ponytail:` note naming the ceiling.
  */
@@ -56,6 +73,9 @@ export interface WebSessionRepositoryPort {
   ): Promise<ExchangeableWebSession | undefined>;
   /** Answers whether the row was renewed; `false` is normal, not a failure. */
   renewWebSession(input: RenewWebSessionInput): Promise<boolean>;
+  /** Answers whether a session was revoked; `false` is normal, not a failure. */
+  revokeWebSession(input: RevokeWebSessionInput): Promise<boolean>;
+  revokeWebSessionsByUser(input: RevokeUserWebSessionsInput): Promise<number>;
 }
 
 export const WEB_SESSION_REPOSITORY = Symbol('WEB_SESSION_REPOSITORY');

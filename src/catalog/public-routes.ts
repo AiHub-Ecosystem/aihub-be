@@ -18,6 +18,7 @@ import {
   CreateWebSessionRequestSchema,
   CreateWebSessionResponseSchema,
   ExchangeWebSessionRequestSchema,
+  LogoutWebSessionRequestSchema,
 } from '@/contracts/auth/web-session';
 import {
   AvatarResponseSchema,
@@ -515,6 +516,22 @@ export const PUBLIC_ROUTES = {
     requestSchema: ExchangeWebSessionRequestSchema,
     responseSchema: LoginResponseSchema,
     errorStatuses: [400, 401, 429, 500, 503],
+  },
+  // Idempotent and quiet, so the route has no session failure to report and no
+  // rate-limit dimension of its own: a valid, revoked, unknown, expired, and
+  // malformed token all answer the same bodyless 204. Only the presented session
+  // is revoked, and there is no "log out all devices" route.
+  'auth.web_sessions.logout': {
+    method: 'POST',
+    path: '/v1/auth/web-sessions/logout',
+    callerAuth: 'bff-client-secret',
+    organizationResolution: 'none',
+    successStatus: 204,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: LogoutWebSessionRequestSchema,
+    responseSchema: null,
+    errorStatuses: [400, 401, 500, 503],
   },
   'sandbox.assertions.mint': {
     method: 'POST',

@@ -877,6 +877,36 @@ describe('buildOpenApiDocument', () => {
     expect(JSON.stringify(operation)).not.toContain('Set-Cookie');
   });
 
+  it('documents logout as the same server-to-server group, with no body and no session failure', () => {
+    const operation = build().paths['/v1/auth/web-sessions/logout']?.post;
+
+    expect(operation?.operationId).toBe('auth.web_sessions.logout');
+    expect(operation?.security).toEqual([{ BffClientSecret: [] }]);
+    expect(operation?.description).toContain('Server-to-server only');
+    expect(operation?.description).toContain('Customer Web BFF');
+    // One bodyless answer for every case, which is the reason a generated client
+    // needs no error handling here beyond the two failures it can meet.
+    const noContent = operation?.responses['204'] as
+      | Record<string, unknown>
+      | undefined;
+    expect(noContent).toBeDefined();
+    expect(noContent?.content).toBeUndefined();
+    expect(JSON.stringify(operation?.responses['204'])).toContain('no-store');
+    const refused = JSON.stringify(operation?.responses['401']);
+    expect(refused).toContain('UNAUTHORIZED');
+    expect(refused).not.toContain('AUTH_WEB_SESSION_INVALID');
+    // Only the presented session, and never a route that ends them all.
+    expect(operation?.description).toContain('the presented session');
+    expect(operation?.description).toContain('no log-out-all-devices route');
+    expect(JSON.stringify(build().paths)).not.toContain(
+      '/v1/auth/web-sessions/all',
+    );
+    expect(JSON.stringify(operation?.requestBody)).toContain(
+      'web_session_token',
+    );
+    expect(JSON.stringify(operation)).not.toContain('Set-Cookie');
+  });
+
   it('mints without an assertion, because issuing one is what it does', () => {
     const mint = build().paths[SANDBOX_MINT_PATH]?.post;
     const parameterRefs = (mint?.parameters ?? []).map(

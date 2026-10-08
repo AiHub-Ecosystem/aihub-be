@@ -3,6 +3,8 @@ import type {
   ExchangeableWebSession,
   FindExchangeableWebSessionInput,
   RenewWebSessionInput,
+  RevokeUserWebSessionsInput,
+  RevokeWebSessionInput,
   WebSessionRepositoryPort,
 } from '@/modules/auth/application/web-session-repository.port';
 import type { InMemoryAuthState } from '@/modules/auth/testing/in-memory-auth.state';
@@ -17,7 +19,10 @@ import type { InMemoryAuthState } from '@/modules/auth/testing/in-memory-auth.st
  *   one is refused rather than applied, which is what makes a caller-derived
  *   value safe;
  * - renewal is a single reassignment of the row's own fields, so concurrent
- *   exchanges of one session cannot interleave into a lost or doubled write.
+ *   exchanges of one session cannot interleave into a lost or doubled write;
+ * - revocation is idempotent and quiet: an unknown, already-revoked, or expired
+ *   session reports nothing revoked rather than throwing, which is what makes a
+ *   bodyless `204` correct for all of them.
  */
 export class InMemoryWebSessionAdapter implements WebSessionRepositoryPort {
   /** Fails the next durable write, as a database outage would. */
@@ -25,6 +30,8 @@ export class InMemoryWebSessionAdapter implements WebSessionRepositoryPort {
   /** Fails the next durable read, as an unreachable database would. */
   failFindWebSession = false;
   failRenewWebSession = false;
+  failRevokeWebSession = false;
+  failRevokeUserWebSessions = false;
 
   constructor(private readonly state: InMemoryAuthState) {}
 
@@ -77,5 +84,36 @@ export class InMemoryWebSessionAdapter implements WebSessionRepositoryPort {
     row.expiresAt = input.expiresAt;
     row.lastRenewedAt = input.renewedAt;
     return true;
+  }
+
+  async revokeWebSession(input: RevokeWebSessionInput): Promise<boolean> {
+    if (this.failRevokeWebSession) {
+      throw new Error('durable store unavailable');
+    }
+    const row = this.state.webSessions.get(input.tokenHash);
+    // No read-then-decide: the conditional update matches no row for a session
+    // that is unknown, already revoked, or expired, and all three are the same
+    // quiet answer to the caller.
+    if (row === undefined || row.revokedAt !== undefined) {
+      return false;
+    }
+    row.revokedAt = input.revokedAt;
+    return true;
+  }
+
+  async revokeWebSessionsByUser(
+    input: RevokeUserWebSessionsInput,
+  ): Promise<number> {
+    if (this.failRevokeUserWebSessions) {
+      throw new Error('durable store unavailable');
+    }
+    let revoked = 0;
+    for (const row of this.state.webSessions.values()) {
+      if (row.userId === input.userId && row.revokedAt === undefined) {
+        row.revokedAt = input.revokedAt;
+        revoked += 1;
+      }
+    }
+    return revoked;
   }
 }

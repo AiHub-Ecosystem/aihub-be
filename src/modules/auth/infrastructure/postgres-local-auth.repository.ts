@@ -35,6 +35,7 @@ import type {
   PostgresAuthQueryClient,
 } from './postgres-auth.client';
 import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
+import { REVOKE_USER_WEB_SESSIONS_SQL } from './postgres-web-session.repository';
 
 const INVALID: VerificationOutcome = { kind: 'invalid' };
 const VERIFIED: VerificationOutcome = { kind: 'verified' };
@@ -487,6 +488,14 @@ export class PostgresLocalAuthRepository
         `,
         [inspection.userId, input.now],
       );
+      // The same durable step, one more statement: whoever knew the old
+      // password loses every Customer Web session as well, and because both
+      // revocations ride this transaction a failure anywhere rolls both back, so
+      // an exchange racing it can never observe a half-revoked account.
+      await transaction.query(REVOKE_USER_WEB_SESSIONS_SQL, [
+        inspection.userId,
+        input.now,
+      ]);
       return { kind: 'reset' };
     });
   }
