@@ -15,7 +15,7 @@ import {
 
 const ROOT = join(__dirname, '../..');
 
-// `scripts/cli.mjs` loads its API-key generator and command runners from the
+// `scripts/cli/cli.mjs` loads its API-key generator and command runners from the
 // build, and runs `main()` the moment it is imported, so nothing but a real
 // process can exercise it. That left `key:create` broken for a stretch with no
 // test noticing. CI builds before this lane; a bare local run skips instead of
@@ -45,7 +45,7 @@ function cli(...args: string[]) {
 }
 
 function runCli(extraEnv: Record<string, string>, args: string[]) {
-  const result = spawnSync(process.execPath, ['scripts/cli.mjs', ...args], {
+  const result = spawnSync(process.execPath, ['scripts/cli/cli.mjs', ...args], {
     cwd: ROOT,
     encoding: 'utf8',
     timeout: 60_000,

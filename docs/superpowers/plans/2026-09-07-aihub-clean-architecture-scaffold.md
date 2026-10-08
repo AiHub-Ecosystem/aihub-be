@@ -60,7 +60,7 @@
     "type-check": "tsc --noEmit",
     "format": "biome format --write .",
     "lint": "biome check .",
-    "arch-check": "node scripts/check-architecture.mjs",
+    "arch-check": "node scripts/checks/check-architecture.mjs",
     "verify": "pnpm lint && pnpm type-check && pnpm test && pnpm arch-check"
   }
   ```
@@ -274,7 +274,7 @@ Run `pnpm test -- task1-grade-request.adapter.spec.ts`, `pnpm type-check`, and `
 **Files to create or update**
 
 - `.dependency-cruiser.cjs`
-- `scripts/check-architecture.mjs`
+- `scripts/checks/check-architecture.mjs`
 - `README.md`
 - `AGENTS.md` (only if command names or source paths changed during implementation)
 - `docs/superpowers/specs/2026-09-07-aihub/README.md` (only to add a scaffold status link; do not rewrite the spec)
@@ -282,7 +282,7 @@ Run `pnpm test -- task1-grade-request.adapter.spec.ts`, `pnpm type-check`, and `
 **Steps**
 
 - Configure `dependency-cruiser` with forbidden rules for: domain importing outer layers/frameworks; application importing infrastructure/presentation; presentation importing infrastructure implementations directly; modules importing another module’s infrastructure; and any source file importing secrets from `.env` at module load time.
-- Make `scripts/check-architecture.mjs` run dependency-cruiser against `src`, fail on violations, and print the violated rule plus source/target paths. Keep the script dependency-free beyond the installed CLI and Node standard library.
+- Make `scripts/checks/check-architecture.mjs` run dependency-cruiser against `src`, fail on violations, and print the violated rule plus source/target paths. Keep the script dependency-free beyond the installed CLI and Node standard library.
 - Add an explicit rule/test that the four catalog paths are unique, every public operation has a scope and timeout, and no downstream adapter contains a URL host literal. Routing hosts belong to environment-backed infrastructure added later.
 - Update `README.md` with the smallest useful onboarding loop: `pnpm install`, `pnpm dev`, health URL, `pnpm test`, `pnpm type-check`, `pnpm arch-check`, and `pnpm verify`. Link to `CONTEXT.md`, the spec README, and the source hierarchy; do not copy API schemas into the README.
 - Add a one-line scaffold status link in the spec README only if it improves discoverability. Leave all existing contract/spec text unchanged.

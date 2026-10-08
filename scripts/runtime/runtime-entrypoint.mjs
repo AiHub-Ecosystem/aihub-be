@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import process from 'node:process';
 
 const runtimeConnectionModule = new URL(
-  '../dist/modules/secrets/infrastructure/runtime-connection.environment.js',
+  '../../dist/modules/secrets/infrastructure/runtime-connection.environment.js',
   import.meta.url,
 );
 
@@ -21,7 +21,7 @@ async function main() {
   loadRuntimeConnectionEnvironment({ env: process.env });
 
   const target = process.argv[2] ?? 'dist/main.js';
-  // The target sees its own arguments: `runtime-entrypoint.mjs scripts/cli.mjs
+  // The target sees its own arguments: `runtime-entrypoint.mjs scripts/cli/cli.mjs
   // avatar:sweep` must reach the CLI as `avatar:sweep`, not as the path of the
   // script being run. Nothing else forwards arguments, so this is how an
   // operator command gets the runtime secrets inside a deployed container.
@@ -29,7 +29,7 @@ async function main() {
 
   const targetUrl = new URL(
     target.startsWith('dist/') || target.startsWith('scripts/')
-      ? `../${target}`
+      ? `../../${target}`
       : target,
     import.meta.url,
   );

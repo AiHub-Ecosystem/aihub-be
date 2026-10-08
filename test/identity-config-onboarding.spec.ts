@@ -12,7 +12,7 @@ function runCli(args: readonly string[]): Promise<CliResult> {
   return new Promise((resolve) => {
     execFile(
       process.execPath,
-      ['scripts/cli.mjs', ...args],
+      ['scripts/cli/cli.mjs', ...args],
       {
         cwd: process.cwd(),
         env: { ...process.env, DATABASE_URL: '' },

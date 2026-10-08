@@ -9,7 +9,7 @@ if (existsSync('.env')) {
 }
 
 const runtimeConnectionModule = new URL(
-  '../dist/modules/secrets/infrastructure/runtime-connection.environment.js',
+  '../../dist/modules/secrets/infrastructure/runtime-connection.environment.js',
   import.meta.url,
 );
 if (existsSync(runtimeConnectionModule)) {

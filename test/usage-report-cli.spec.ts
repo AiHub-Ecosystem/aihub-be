@@ -14,7 +14,7 @@ function runCli(
   return new Promise((resolve) => {
     execFile(
       process.execPath,
-      ['scripts/cli.mjs', ...args],
+      ['scripts/cli/cli.mjs', ...args],
       { cwd: process.cwd(), env },
       (error, stdout, stderr) => {
         const code = error?.code;
@@ -49,8 +49,8 @@ describe('usage report CLI', () => {
       'quota-reconcile.cjs',
     ];
 
-    expect(dockerfile).toContain('/app/scripts/load-cli-runner.cjs');
-    expect(dockerignore).toContain('!scripts/load-cli-runner.cjs');
+    expect(dockerfile).toContain('/app/scripts/cli/load-cli-runner.cjs');
+    expect(dockerignore).toContain('!scripts/cli/load-cli-runner.cjs');
     for (const loader of obsoleteLoaders) {
       expect(dockerfile).not.toContain(`/app/scripts/${loader}`);
       expect(dockerignore).not.toContain(`!scripts/${loader}`);

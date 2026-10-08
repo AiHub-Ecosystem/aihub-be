@@ -18,7 +18,7 @@ import {
 function loadFixture(name: string): object {
   return JSON.parse(
     readFileSync(
-      join(__dirname, '..', 'test', 'fixtures', 'ai-writing', name),
+      join(__dirname, '..', '..', 'test', 'fixtures', 'ai-writing', name),
       'utf8',
     ),
   ) as object;

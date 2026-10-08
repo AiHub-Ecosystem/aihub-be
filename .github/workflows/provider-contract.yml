@@ -34,7 +34,7 @@ jobs:
           node-version: 22
 
       - name: Fetch the published contract
-        run: node scripts/refresh-provider-contract.mjs
+        run: node scripts/generate/refresh-provider-contract.mjs
 
       - name: Fail when the provider's contract has moved
         run: |

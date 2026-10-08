@@ -13,7 +13,7 @@ function runCli(
   return new Promise((resolve) => {
     execFile(
       process.execPath,
-      ['scripts/cli.mjs', ...args],
+      ['scripts/cli/cli.mjs', ...args],
       { cwd: process.cwd(), env },
       (error, stdout, stderr) => {
         const code = error?.code;

@@ -3,10 +3,10 @@
 # its own health check. Answers one question: does this artifact start.
 # See docs/operations/ci-boot-check.md for what it does and does not prove.
 #
-#   scripts/image-boot-check.sh <image>
+#   scripts/ci/image-boot-check.sh <image>
 set -euo pipefail
 
-image="${1:?usage: scripts/image-boot-check.sh <image>}"
+image="${1:?usage: scripts/ci/image-boot-check.sh <image>}"
 timeout_seconds="${BOOT_CHECK_TIMEOUT_SECONDS:-90}"
 container="aihub-boot-check-$$"
 config_dir="$(mktemp -d)"

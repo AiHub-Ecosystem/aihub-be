@@ -8,7 +8,7 @@ import { ulid } from 'ulid';
 // The credential format is owned by the identity domain so that this CLI and
 // the self-service endpoint cannot drift apart in prefix, entropy, or hashing.
 const apiKeyModule = new URL(
-  '../dist/modules/identity/domain/api-key.js',
+  '../../dist/modules/identity/domain/api-key.js',
   import.meta.url,
 );
 
@@ -53,10 +53,10 @@ import { loadCliRunner } from './load-cli-runner.cjs';
 function cliRunnerDescriptor(name, exportName, unavailableMessage) {
   return {
     builtPath: fileURLToPath(
-      new URL(`../dist/cli/${name}.js`, import.meta.url),
+      new URL(`../../dist/cli/${name}.js`, import.meta.url),
     ),
     sourcePath: fileURLToPath(
-      new URL(`../src/cli/${name}.ts`, import.meta.url),
+      new URL(`../../src/cli/${name}.ts`, import.meta.url),
     ),
     exportName,
     unavailableMessage,
@@ -199,7 +199,7 @@ if (existsSync('.env')) {
 }
 
 const runtimeConnectionModule = new URL(
-  '../dist/modules/secrets/infrastructure/runtime-connection.environment.js',
+  '../../dist/modules/secrets/infrastructure/runtime-connection.environment.js',
   import.meta.url,
 );
 if (existsSync(runtimeConnectionModule)) {

@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
-import architectureConfig from '../.dependency-cruiser.cjs';
+import architectureConfig from '../../.dependency-cruiser.cjs';
 
 type DependencyCruiserConfig = typeof architectureConfig;
 
@@ -120,7 +120,7 @@ describe('cross-module import rule over the real tree', () => {
         'src',
       ],
       {
-        cwd: join(__dirname, '..'),
+        cwd: join(__dirname, '..', '..'),
         encoding: 'utf8',
         shell: true,
         // The JSON report for this tree is larger than spawnSync's 1 MiB
@@ -301,7 +301,7 @@ function withoutComments(source: string): string {
 }
 
 function commonFilesReadingEnvironment(): string[] {
-  const commonDirectory = join(__dirname, '..', 'src', 'common');
+  const commonDirectory = join(__dirname, '..', '..', 'src', 'common');
 
   return readdirSync(commonDirectory, { recursive: true, withFileTypes: true })
     .filter(
@@ -349,7 +349,7 @@ describe('common layer environment boundary', () => {
  */
 describe('cross-module table access', () => {
   function migrations(): string {
-    return join(__dirname, '..', 'database', 'migrations');
+    return join(__dirname, '..', '..', 'database', 'migrations');
   }
 
   function createdTables(): Set<string> {
@@ -389,9 +389,12 @@ describe('cross-module table access', () => {
     const modulesByTable = new Map<string, Set<string>>();
 
     for (const file of moduleInfrastructureFiles(
-      join(__dirname, '..', 'src', 'modules'),
+      join(__dirname, '..', '..', 'src', 'modules'),
     )) {
-      const module = relative(join(__dirname, '..', 'src', 'modules'), file)
+      const module = relative(
+        join(__dirname, '..', '..', 'src', 'modules'),
+        file,
+      )
         .split(/[\\/]/)
         .join('/')
         .split('/')[0];

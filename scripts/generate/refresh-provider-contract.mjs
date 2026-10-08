@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 const PROVIDERS = {
   speaking: {
     url: 'https://api-ielts-speaking.aihubproduction.com/openapi.json',
-    file: '../test/fixtures/ai-speaking/provider-openapi.snapshot.json',
+    file: '../../test/fixtures/ai-speaking/provider-openapi.snapshot.json',
   },
   // AI Writing publishes an OpenAPI document, but declares an empty response
   // schema for every grading endpoint, so there is nothing to compare against.

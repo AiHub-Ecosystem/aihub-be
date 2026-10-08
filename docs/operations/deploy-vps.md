@@ -129,7 +129,7 @@ repository script without committing credentials:
 ```powershell
 $env:SEAWEEDFS_ACCESS_KEY_ID = '<access-key>'
 $env:SEAWEEDFS_SECRET_ACCESS_KEY = '<secret-key>'
-node scripts/upload-speaking-audio.mjs --source E:\audios
+node scripts/cli/upload-speaking-audio.mjs --source E:\audios
 Remove-Item Env:\SEAWEEDFS_ACCESS_KEY_ID, Env:\SEAWEEDFS_SECRET_ACCESS_KEY
 ```
 
@@ -219,11 +219,11 @@ Start with a dry run in each environment:
 ```sh
 docker compose --env-file .env.production \
   -f docker-compose.production.yml \
-  exec -T app node scripts/runtime-entrypoint.mjs scripts/cli.mjs speaking:audio-upload-sweep --dry-run true
+  exec -T app node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs speaking:audio-upload-sweep --dry-run true
 
 docker compose --env-file .env.production \
   -f docker-compose.production.yml \
-  --profile sandbox exec -T app-sandbox node scripts/runtime-entrypoint.mjs scripts/cli.mjs speaking:audio-upload-sweep --dry-run true
+  --profile sandbox exec -T app-sandbox node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs speaking:audio-upload-sweep --dry-run true
 ```
 
 After reviewing the counts, run the same commands without `--dry-run true` and
@@ -253,20 +253,20 @@ only then enable the cron entry:
 ```sh
 docker compose --env-file .env.production \
   -f docker-compose.production.yml \
-  exec -T app node scripts/runtime-entrypoint.mjs scripts/cli.mjs avatar:sweep --dry-run true
+  exec -T app node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs avatar:sweep --dry-run true
 
 docker compose --env-file .env.production \
   -f docker-compose.production.yml \
-  exec -T app node scripts/runtime-entrypoint.mjs scripts/cli.mjs avatar:sweep
+  exec -T app node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs avatar:sweep
 
 docker compose --env-file .env.production \
   -f docker-compose.production.yml \
-  --profile sandbox exec -T app-sandbox node scripts/runtime-entrypoint.mjs scripts/cli.mjs avatar:sweep
+  --profile sandbox exec -T app-sandbox node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs avatar:sweep
 ```
 
 The production image has no `pnpm`, and `docker compose exec` skips the
 container entrypoint that loads the runtime secrets, so the command goes
-through `scripts/runtime-entrypoint.mjs`, which loads them and then hands the
+through `scripts/runtime/runtime-entrypoint.mjs`, which loads them and then hands the
 rest of the arguments to the CLI. Detach stdin (`</dev/null`) when running it
 from a script, or `exec` consumes the script's own input.
 
@@ -361,7 +361,7 @@ token. Validate the policy with the smoke script before starting the application
 AIHUB_VAULT_SMOKE_ALLOW=true \
 AIHUB_VAULT_SMOKE_AUTH_METHOD=approle \
 AIHUB_VAULT_ENVIRONMENT=production \
-  node scripts/vault-smoke.mjs
+  node scripts/ops/vault-smoke.mjs
 ```
 
 Run the smoke command from a Vault CLI session authenticated as the generated

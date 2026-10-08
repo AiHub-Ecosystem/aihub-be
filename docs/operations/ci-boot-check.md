@@ -20,7 +20,7 @@ its secrets.
 
 ```sh
 docker build -t aihub:image-boot .
-bash scripts/image-boot-check.sh aihub:image-boot
+bash scripts/ci/image-boot-check.sh aihub:image-boot
 ```
 
 The script generates the configuration, runs the container detached, polls
@@ -31,7 +31,7 @@ Git Bash on Windows as well as in CI.
 
 ## Minimum configuration to boot
 
-`scripts/ci-boot-config.cjs` is the source of truth. It writes:
+`scripts/ci/ci-boot-config.cjs` is the source of truth. It writes:
 
 - `runtime-secrets.json` and `connection-secrets.json`, in the shapes the
   Vault templates under `ops/vault/templates` render, mounted read-only at
@@ -44,7 +44,7 @@ User Access JWT (RSA) and sandbox assertion (EC P-256) signing keys are minted
 on each run, so no private key is committed. The production image refuses the
 environment secret source, so the files are required, exactly as on the VPS.
 
-`scripts/ci-boot-config.spec.ts` loads the generated secret files through the
+`scripts/ci/ci-boot-config.spec.ts` loads the generated secret files through the
 real runtime secret provider and connection loader, and checks that
 `boot.env` sets exactly the variables `docker-compose.production.yml` sets for
 the app. So a newly required secret, or a variable added to production, fails

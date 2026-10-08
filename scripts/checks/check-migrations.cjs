@@ -1,6 +1,6 @@
 /**
  * Expand-only migration contract check — library (CommonJS) seam for tests.
- * CLI is scripts/check-migrations.mjs which delegates here.
+ * CLI is scripts/checks/check-migrations.mjs which delegates here.
  */
 
 const ALTERNATIVES = {

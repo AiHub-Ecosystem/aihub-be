@@ -3,7 +3,7 @@
  * Writes the throwaway configuration the production image needs to boot, for
  * the CI image boot check (docs/operations/ci-boot-check.md).
  *
- *   node scripts/ci-boot-config.cjs <directory>
+ *   node scripts/ci/ci-boot-config.cjs <directory>
  *
  * Produces, in <directory>:
  * - runtime-secrets.json and connection-secrets.json, in the shapes the Vault
@@ -16,7 +16,7 @@
  * contacted at boot. The signing keys are minted on every run, so no private
  * key, fake or not, is ever committed. This file is the source of truth for
  * the minimum configuration a boot needs: when a loader starts requiring a new
- * value, scripts/ci-boot-config.spec.ts fails until it is added here.
+ * value, scripts/ci/ci-boot-config.spec.ts fails until it is added here.
  */
 
 const { generateKeyPairSync } = require('node:crypto');
@@ -118,7 +118,7 @@ module.exports = { writeBootConfig };
 if (require.main === module) {
   const directory = process.argv[2];
   if (directory === undefined) {
-    console.error('usage: node scripts/ci-boot-config.cjs <directory>');
+    console.error('usage: node scripts/ci/ci-boot-config.cjs <directory>');
     process.exit(2);
   }
   writeBootConfig(directory);

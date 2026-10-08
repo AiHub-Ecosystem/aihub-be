@@ -6,7 +6,7 @@
 
 - `src/**/*.spec.ts`
 - `test/**`
-- `scripts/check-architecture.mjs`
+- `scripts/checks/check-architecture.mjs` and `scripts/checks/check-architecture.spec.ts`
 - `jest.config.cjs`
 - `biome.json` only when required for verification
 

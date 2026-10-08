@@ -9,7 +9,7 @@ import { loadEnvFile } from 'node:process';
  *
  *   pnpm demo:bootstrap "Acme Edu"
  *
- * Wraps `scripts/cli.mjs` rather than talking to Postgres itself, so the
+ * Wraps `scripts/cli/cli.mjs` rather than talking to Postgres itself, so the
  * onboarding logic stays in one place. Needs DATABASE_URL reachable.
  */
 
@@ -47,7 +47,7 @@ function run(args) {
 }
 
 function cli(...args) {
-  return run(['scripts/cli.mjs', ...args]);
+  return run(['scripts/cli/cli.mjs', ...args]);
 }
 
 if (
@@ -72,7 +72,7 @@ if (actor.length === 0) {
 }
 
 // Signs once to force the key pair and JWKS to exist before identity:set.
-const assertion = run(['scripts/dev-sign-assertion.mjs']);
+const assertion = run(['scripts/cli/dev-sign-assertion.mjs']);
 
 const organizationId = cli(
   'org:create',
@@ -108,7 +108,7 @@ const apiKey = cli(
 
 appendFileSync(
   ENV_FILE,
-  `\n# Written by scripts/demo-bootstrap.mjs on ${new Date().toISOString()}\nDEMO_ORG_ID=${organizationId}\nDEMO_API_KEY=${apiKey}\n`,
+  `\n# Written by scripts/cli/demo-bootstrap.mjs on ${new Date().toISOString()}\nDEMO_ORG_ID=${organizationId}\nDEMO_API_KEY=${apiKey}\n`,
 );
 
 console.error(

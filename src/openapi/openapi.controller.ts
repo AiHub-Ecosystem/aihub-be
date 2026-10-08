@@ -7,7 +7,7 @@ import { buildOpenApiDocument } from './build-openapi-document';
 
 function readPackageVersion(): string {
   // `../../package.json` from the compiled `dist/openapi/`, matching the
-  // repo root the same way `scripts/generate-openapi.ts` does from `scripts/`.
+  // repo root the same way `scripts/generate/generate-openapi.ts` does from `scripts/generate/`.
   const packageJson = JSON.parse(
     readFileSync(join(__dirname, '../../package.json'), 'utf8'),
   ) as { version: string };

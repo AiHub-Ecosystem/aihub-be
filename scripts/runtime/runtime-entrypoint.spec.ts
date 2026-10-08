@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 const ENTRYPOINT = join(__dirname, 'runtime-entrypoint.mjs');
 const RUNTIME_CONNECTION_LOADER = join(
   __dirname,
-  '../dist/modules/secrets/infrastructure/runtime-connection.environment.js',
+  '../../dist/modules/secrets/infrastructure/runtime-connection.environment.js',
 );
 
 // The deploy log is the only place an operator sees why a container exited, so

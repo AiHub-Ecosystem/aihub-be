@@ -40,7 +40,7 @@ updates:
       # still flow through the group above. Remove an entry once its migration
       # is done, then let Dependabot propose the major on its own.
       #
-      # typescript 7 drops the compiler API that scripts/check-import-style.ts
+      # typescript 7 drops the compiler API that scripts/checks/check-import-style.ts
       # reads; jest 30 and biome 2 change their configuration formats; and
       # @types/node must follow the Node major the image actually runs.
       - dependency-name: "typescript"

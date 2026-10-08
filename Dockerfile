@@ -42,9 +42,9 @@ RUN groupadd --system --gid 10001 aihub \
 COPY --from=build --chown=10001:10001 /app/node_modules ./node_modules
 COPY --from=build --chown=10001:10001 /app/dist ./dist
 COPY --from=build --chown=10001:10001 /app/package.json ./package.json
-COPY --from=build --chown=10001:10001 /app/scripts/cli.mjs /app/scripts/cli-options.cjs /app/scripts/load-cli-runner.cjs ./scripts/
-COPY --from=build --chown=10001:10001 /app/scripts/migrate.mjs ./scripts/migrate.mjs
-COPY --from=build --chown=10001:10001 /app/scripts/runtime-entrypoint.mjs ./scripts/runtime-entrypoint.mjs
+COPY --from=build --chown=10001:10001 /app/scripts/cli/cli.mjs /app/scripts/cli/cli-options.cjs /app/scripts/cli/load-cli-runner.cjs ./scripts/cli/
+COPY --from=build --chown=10001:10001 /app/scripts/cli/migrate.mjs ./scripts/cli/migrate.mjs
+COPY --from=build --chown=10001:10001 /app/scripts/runtime/runtime-entrypoint.mjs ./scripts/runtime/runtime-entrypoint.mjs
 COPY --from=build --chown=10001:10001 /app/database/migrations ./database/migrations
 
 USER 10001:10001
@@ -53,4 +53,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3000/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
 
-ENTRYPOINT ["node", "scripts/runtime-entrypoint.mjs"]
+ENTRYPOINT ["node", "scripts/runtime/runtime-entrypoint.mjs"]

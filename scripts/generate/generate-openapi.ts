@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { buildOpenApiDocument } from '@/openapi/build-openapi-document';
 
 const packageJson = JSON.parse(
-  readFileSync(join(__dirname, '../package.json'), 'utf8'),
+  readFileSync(join(__dirname, '../../package.json'), 'utf8'),
 ) as { version: string };
 
 const document = buildOpenApiDocument(packageJson.version);

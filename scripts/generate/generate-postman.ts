@@ -7,12 +7,12 @@ import {
 } from '@/postman/build-postman-collection';
 
 const packageJson = JSON.parse(
-  readFileSync(join(__dirname, '../package.json'), 'utf8'),
+  readFileSync(join(__dirname, '../../package.json'), 'utf8'),
 ) as { version: string };
 const openApiDocument = JSON.parse(
-  readFileSync(join(__dirname, '../openapi.json'), 'utf8'),
+  readFileSync(join(__dirname, '../../openapi.json'), 'utf8'),
 ) as unknown;
-const collectionPath = join(__dirname, '../aihub.postman_collection.json');
+const collectionPath = join(__dirname, '../../aihub.postman_collection.json');
 
 async function main(): Promise<void> {
   const generated = await buildPostmanCollection(

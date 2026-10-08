@@ -6,7 +6,7 @@ paths:
   - "src/config/**"
   - "src/modules/**"
   - "src/cli/**"
-  - "scripts/ci-boot-config.cjs"
+  - "scripts/ci/ci-boot-config.cjs"
 ---
 
 # Runtime configuration

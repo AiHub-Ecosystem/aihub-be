@@ -617,5 +617,5 @@ API keys, and idempotency records is acceptable.
 - [Generated OpenAPI specification](../openapi.json)
 - [Request lifecycle](superpowers/specs/2026-09-07-aihub/02-request-lifecycle.md)
 - [Authentication and identity design](superpowers/specs/2026-09-07-aihub/05-auth-identity.md)
-- [Demo bootstrap script](../scripts/demo-bootstrap.mjs)
-- [Demo assertion script](../scripts/dev-sign-assertion.mjs)
+- [Demo bootstrap script](../scripts/cli/demo-bootstrap.mjs)
+- [Demo assertion script](../scripts/cli/dev-sign-assertion.mjs)

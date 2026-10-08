@@ -1,6 +1,6 @@
 # Database migrations — expand-only contract
 
-`database/migrations/*.sql` is applied in filename order by `scripts/migrate.mjs`. Two application versions run against one schema during rolling deploys, so the check `scripts/check-migrations.mjs` enforces the expand-only contract in `pnpm verify` (and CI).
+`database/migrations/*.sql` is applied in filename order by `scripts/cli/migrate.mjs`. Two application versions run against one schema during rolling deploys, so the check `scripts/checks/check-migrations.mjs` enforces the expand-only contract in `pnpm verify` (and CI).
 
 ## Permitted / forbidden
 

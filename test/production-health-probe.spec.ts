@@ -2,7 +2,7 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 
 const { probeProductionHealth } =
-  require('../scripts/probe-production-health.cjs') as {
+  require('../scripts/ops/probe-production-health.cjs') as {
     probeProductionHealth: (hostname?: string) => Promise<boolean>;
   };
 
@@ -121,6 +121,6 @@ describe('production health probe', () => {
     expect(workflow).toContain(
       'AIHUB_PRODUCTION_HOST: ${{ vars.AIHUB_PRODUCTION_HOST }}',
     );
-    expect(workflow).toContain('node scripts/probe-production-health.cjs');
+    expect(workflow).toContain('node scripts/ops/probe-production-health.cjs');
   });
 });

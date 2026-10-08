@@ -18,12 +18,12 @@ Infer the repo from `git remote -v`; `gh` does this automatically when run insid
 
 The issue body shape is not repeated here: `/to-issues` carries the template, and it is the single source for it. What this repo owns is what its surfaces _are_, because a criterion that names one loosely cannot be verified by reading a file.
 
-An acceptance criterion names a surface by the path an operator or the build actually touches. "Gone from the CLI dispatcher" was not checkable in #337: `scripts/cli.mjs` never dispatched those two commands. The CLI has two distinct surfaces, and a criterion should say which one it means.
+An acceptance criterion names a surface by the path an operator or the build actually touches. "Gone from the CLI dispatcher" was not checkable in #337: `scripts/cli/cli.mjs` never dispatched those two commands. The CLI has two distinct surfaces, and a criterion should say which one it means.
 
-- **`scripts/cli.mjs`** — the `pnpm cli` dispatcher. It maps a command word to a `src/cli/*.ts` runner through `cliRunnerDescriptor` and `loadCliRunner`. Every `pnpm cli <command>` subcommand has a case here.
-- **`scripts/<tool>.cjs`** — a standalone entry script for a tool that is not a `pnpm cli` subcommand, loaded from `dist/cli/*.js` or the `.ts` source. Such a tool needs both its `.cjs` wrapper and a `package.json` script, and appears in neither `scripts/cli.mjs` nor `knip.json` entry evidence unless something else reaches it.
+- **`scripts/cli/cli.mjs`** — the `pnpm cli` dispatcher. It maps a command word to a `src/cli/*.ts` runner through `cliRunnerDescriptor` and `loadCliRunner`. Every `pnpm cli <command>` subcommand has a case here.
+- **`scripts/cli/<tool>.cjs`** — a standalone entry script for a tool that is not a `pnpm cli` subcommand, loaded from `dist/cli/*.js` or the `.ts` source. Such a tool needs both its `.cjs` wrapper and a `package.json` script, and appears in neither `scripts/cli/cli.mjs` nor `knip.json` entry evidence unless something else reaches it.
 
-Say which one: "gone from `scripts/cli.mjs`" or "its `scripts/<tool>.cjs` entry script is removed". When a criterion cannot be verified by reading one file, name the file.
+Say which one: "gone from `scripts/cli/cli.mjs`" or "its `scripts/cli/<tool>.cjs` entry script is removed". When a criterion cannot be verified by reading one file, name the file.
 
 ## Closing an issue
 

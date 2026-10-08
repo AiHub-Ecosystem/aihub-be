@@ -250,7 +250,7 @@ async function probeOperation<TInput, TOutput>(
 }
 
 function loadFixture<T>(relativePath: string): T {
-  const absolute = join(__dirname, '..', relativePath);
+  const absolute = join(__dirname, '..', '..', relativePath);
   return JSON.parse(readFileSync(absolute, 'utf8')) as T;
 }
 

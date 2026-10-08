@@ -100,8 +100,8 @@ services:
     <<: *app-common
     profiles:
       - migration
-    entrypoint: ["node", "scripts/runtime-entrypoint.mjs"]
-    command: ["scripts/migrate.mjs"]
+    entrypoint: ["node", "scripts/runtime/runtime-entrypoint.mjs"]
+    command: ["scripts/cli/migrate.mjs"]
     environment: *app-environment
     networks: *app-database-networks
     volumes:
@@ -116,8 +116,8 @@ services:
     profiles:
       - migration
       - sandbox
-    entrypoint: ["node", "scripts/runtime-entrypoint.mjs"]
-    command: ["scripts/migrate.mjs"]
+    entrypoint: ["node", "scripts/runtime/runtime-entrypoint.mjs"]
+    command: ["scripts/cli/migrate.mjs"]
     environment:
       <<: *app-environment
       AIHUB_RUNTIME_DATABASE_SCOPE: sandbox

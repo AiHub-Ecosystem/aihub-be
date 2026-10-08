@@ -13,7 +13,7 @@
   "husky": true,
   "lint-staged": true,
   "github-actions": true,
-  // Shell operator scripts (scripts/*.sh) are outside knip scope entirely:
+  // Shell operator scripts (scripts/**/*.sh) are outside knip scope entirely:
   // knip does not parse shell, and they are referenced only from operator
   // docs. No ignore entries are spent on them; audit separately if desired.
   // Entry evidence below is the union the spec requires: package script
@@ -28,7 +28,7 @@
     // Nest bootstrap: package `start` points at dist/main.js; the nest plugin
     // does not always map that back to the TypeScript entry on its own.
     "src/main.ts",
-    // Operator CLI surfaces. scripts/cli.mjs resolves each one through
+    // Operator CLI surfaces. scripts/cli/cli.mjs resolves each one through
     // cliRunnerDescriptor and loadCliRunner, which picks `dist/cli/*.js` in
     // production and the `.ts` source under tsx, so knip cannot follow those
     // imports statically. Entry status also treats their exports as public
@@ -38,20 +38,20 @@
     "src/cli/usage-prune.ts",
     // Container runtime evidence that package.json scripts do not name:
     // Dockerfile ENTRYPOINT; compose uses the same bootstrap as entrypoint.
-    "scripts/runtime-entrypoint.mjs",
+    "scripts/runtime/runtime-entrypoint.mjs",
     // Operator CLI invoked by a documented host path (docs/operations), not by
     // package scripts, tests, or the container image; live runbook command.
-    "scripts/upload-speaking-audio.mjs",
-    // Hand-written types for scripts/cli-options.cjs (plain CJS); the spec
+    "scripts/cli/upload-speaking-audio.mjs",
+    // Hand-written types for scripts/cli/cli-options.cjs (plain CJS); the spec
     // and cli.mjs reach the .cjs through TypeScript, so without this knip
     // reports a live file as unused.
-    "scripts/cli-options.d.cts",
-    // Hand-written types for scripts/check-migrations.cjs — same reason.
-    "scripts/check-migrations.d.cts",
-    // Hand-written types for scripts/ci-boot-config.cjs — same reason.
-    "scripts/ci-boot-config.d.cts",
-    // Hand-written types for scripts/verify-summary.cjs — same reason.
-    "scripts/verify-summary.d.cts"
+    "scripts/cli/cli-options.d.cts",
+    // Hand-written types for scripts/checks/check-migrations.cjs — same reason.
+    "scripts/checks/check-migrations.d.cts",
+    // Hand-written types for scripts/ci/ci-boot-config.cjs — same reason.
+    "scripts/ci/ci-boot-config.d.cts",
+    // Hand-written types for scripts/checks/verify-summary.cjs — same reason.
+    "scripts/checks/verify-summary.d.cts"
   ],
   "ignoreBinaries": [
     // HashiCorp Vault CLI — operator workstation/image binary, not an npm package.

@@ -4,14 +4,14 @@ const ESC = String.fromCharCode(27);
 
 const PASSING = [
   '$ pnpm knip && pnpm lint && pnpm test',
-  '$ node scripts/knip.mjs',
+  '$ node scripts/checks/knip.mjs',
   '$ jest',
   `${ESC}[32mPASS${ESC}[39m src/a.spec.ts`,
   'Test Suites: 172 passed, 172 total',
   'Tests:       1657 passed, 1657 total',
-  '$ node scripts/check-architecture.mjs',
+  '$ node scripts/checks/check-architecture.mjs',
   'x 14 dependency violations (0 errors, 14 warnings). 476 modules.',
-  '$ node scripts/validate-openapi.mjs',
+  '$ node scripts/checks/validate-openapi.mjs',
   'openapi.json is valid OpenAPI 3.1',
 ].join('\n');
 
@@ -40,7 +40,7 @@ describe('summarize', () => {
   it('names the step that failed and quotes what it printed', () => {
     const log = [
       '$ pnpm knip && pnpm lint',
-      '$ node scripts/knip.mjs',
+      '$ node scripts/checks/knip.mjs',
       '$ oxlint . && biome check .',
       `src/a.spec.ts:25:5: ${ESC}[31merror${ESC}[39m jest(no-conditional-expect): Unexpected conditional expect`,
       '[ELIFECYCLE] Command failed with exit code 1.',
@@ -61,10 +61,10 @@ describe('summarize', () => {
   it('lists failing Jest files and tests instead of the whole step', () => {
     const log = [
       '$ jest',
-      'FAIL scripts/check-architecture.spec.ts (6.953 s)',
+      'FAIL scripts/checks/check-architecture.spec.ts (6.953 s)',
       '  ● cross-module import rule › reports the 10 cross-module imports',
       '    SyntaxError: Unexpected end of JSON input',
-      'FAIL test/cli-loader.spec.ts',
+      'FAIL test/cli/cli-loader.spec.ts',
       '  ● cli loader › loads a built runner',
       'Test Suites: 2 failed, 170 passed, 172 total',
       'Tests:       13 failed, 1644 passed, 1657 total',
@@ -73,8 +73,8 @@ describe('summarize', () => {
 
     const text = summarize(log, 1, '/tmp/v.log');
 
-    expect(text).toContain('FAIL scripts/check-architecture.spec.ts');
-    expect(text).toContain('FAIL test/cli-loader.spec.ts');
+    expect(text).toContain('FAIL scripts/checks/check-architecture.spec.ts');
+    expect(text).toContain('FAIL test/cli/cli-loader.spec.ts');
     expect(text).toContain(
       '● cross-module import rule › reports the 10 cross-module imports',
     );

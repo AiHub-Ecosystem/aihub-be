@@ -15,10 +15,10 @@ catches that within the run interval instead of reactively from a customer.
 ```sh
 pnpm canary:ai-writing
 # or directly:
-tsx scripts/canary-ai-writing.ts
+tsx scripts/ops/canary-ai-writing.ts
 ```
 
-**Source:** [`scripts/canary-ai-writing.ts`](../../scripts/canary-ai-writing.ts)
+**Source:** [`scripts/ops/canary-ai-writing.ts`](../../scripts/ops/canary-ai-writing.ts)
 
 ## Environment variables
 
@@ -134,7 +134,7 @@ is Phase 4 `webhook_endpoints` territory.
 ## Testing
 
 ```sh
-pnpm test -- scripts/canary-ai-writing.spec.ts
+pnpm test -- scripts/ops/canary-ai-writing.spec.ts
 ```
 
 The spec uses MockAgent (undici) to replay both fixture responses without

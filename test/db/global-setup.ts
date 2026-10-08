@@ -17,7 +17,7 @@ const MIGRATIONS_DIR = join(__dirname, '../../database/migrations');
 /**
  * Rebuilds the lane's database from the repository's own migration files.
  *
- * They are applied here rather than by shelling out to `scripts/migrate.mjs`:
+ * They are applied here rather than by shelling out to `scripts/cli/migrate.mjs`:
  * that script loads the runtime connection environment when `dist/` is built,
  * which overwrites `DATABASE_URL` and would point this lane at whatever
  * database the developer's runtime secrets name. Reading the same files keeps

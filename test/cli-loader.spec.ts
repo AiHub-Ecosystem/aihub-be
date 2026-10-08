@@ -28,7 +28,9 @@ function isRunnerLoader(value: unknown): value is RunnerLoader {
 const requireScript = createRequire(
   join(process.cwd(), 'test', 'cli-loader.spec.ts'),
 );
-const loaderModule: unknown = requireScript('../scripts/load-cli-runner.cjs');
+const loaderModule: unknown = requireScript(
+  '../scripts/cli/load-cli-runner.cjs',
+);
 if (!isRunnerLoader(loaderModule)) {
   throw new Error('generic CLI runner loader is unavailable');
 }

@@ -2,7 +2,7 @@
 /**
  * Expand-only migration contract check.
  *
- * Mirrors scripts/check-architecture.mjs: reads database/migrations/*.sql,
+ * Mirrors scripts/checks/check-architecture.mjs: reads database/migrations/*.sql,
  * fails on forbidden expand-only patterns, prints file:line statement + alternative.
  *
  * What it checks (narrow, honest):

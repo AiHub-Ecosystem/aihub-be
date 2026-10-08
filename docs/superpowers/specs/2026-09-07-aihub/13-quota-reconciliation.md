@@ -103,7 +103,7 @@ connection strings, credentials, request bodies, or downstream responses.
 
 ## Project Structure
 
-- `scripts/cli.mjs` — parses the command and options and composes the
+- `scripts/cli/cli.mjs` — parses the command and options and composes the
   reconciliation use case; it remains the cron entry point for existing CLI
   commands.
 - `src/modules/metering/application/` — owns the reconciliation use case and

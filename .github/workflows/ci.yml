@@ -213,7 +213,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The operator CLI smoke test spawns `scripts/cli.mjs`, which loads its
+      # The operator CLI smoke test spawns `scripts/cli/cli.mjs`, which loads its
       # API-key generator and command runners from the build.
       - name: Build application
         run: pnpm build
@@ -335,7 +335,7 @@ jobs:
             VCS_REF=${{ github.sha }}
 
       - name: Boot the image and wait for its health check
-        run: bash scripts/image-boot-check.sh aihub:image-boot
+        run: bash scripts/ci/image-boot-check.sh aihub:image-boot
 
       # Only the push-only job needs this archive. Pull requests build and boot
       # without entering production or receiving its secrets.

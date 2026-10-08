@@ -9,7 +9,7 @@ import { runOperatorCommand } from './operator-command-context';
 import { purgeApiKeyCache } from './organization-status';
 
 /**
- * A credential `scripts/cli.mjs` already generated. The raw value is carried
+ * A credential `scripts/cli/cli.mjs` already generated. The raw value is carried
  * only to be printed after commit; it never reaches the repository.
  */
 export interface GeneratedApiKeyCredential {

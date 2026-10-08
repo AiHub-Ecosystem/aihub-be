@@ -132,7 +132,7 @@ function run() {
 
   const windows = process.platform === 'win32';
   const child = spawn(windows ? 'pnpm.cmd' : 'pnpm', ['verify'], {
-    cwd: join(__dirname, '..'),
+    cwd: join(__dirname, '..', '..'),
     shell: windows,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
