@@ -6,7 +6,7 @@ import type {
   RevokeWebSessionInput,
   WebSessionRepositoryPort,
 } from '@/modules/auth/application/web-session-repository.port';
-import type { PostgresAuthQueryClient } from './postgres-auth.client';
+import type { PostgresAuthClient } from './postgres-auth.client';
 
 export const INSERT_WEB_SESSION_SQL = `
         INSERT INTO web_sessions (
@@ -38,16 +38,35 @@ export const REVOKE_USER_WEB_SESSIONS_SQL = `
  * measure from without a separate column.
  */
 export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
-  constructor(private readonly client: PostgresAuthQueryClient) {}
+  constructor(private readonly client: PostgresAuthClient) {}
 
-  async createWebSession(input: CreateWebSessionInput): Promise<void> {
-    await this.client.query(INSERT_WEB_SESSION_SQL, [
-      input.sessionId,
-      input.userId,
-      input.token.hash,
-      input.now,
-      input.token.expiresAt,
-    ]);
+  async createWebSession(input: CreateWebSessionInput): Promise<boolean> {
+    return this.client.transaction(async (transaction) => {
+      // Serialize the checked insert with reset, while allowing parallel logins.
+      const accounts = await transaction.query(
+        'SELECT status FROM user_accounts WHERE id = $1 FOR SHARE',
+        [input.userId],
+      );
+      if (accounts[0]?.['status'] !== 'active') return false;
+
+      // A fresh statement after the lock avoids retaining a pre-reset identity snapshot.
+      const identities = await transaction.query(
+        `SELECT password_hash FROM auth_identities
+         WHERE user_account_id = $1 AND provider = 'password'`,
+        [input.userId],
+      );
+      if (identities[0]?.['password_hash'] !== input.expectedPasswordHash) {
+        return false;
+      }
+      await transaction.query(INSERT_WEB_SESSION_SQL, [
+        input.sessionId,
+        input.userId,
+        input.token.hash,
+        input.now,
+        input.token.expiresAt,
+      ]);
+      return true;
+    });
   }
 
   async findExchangeableWebSession(

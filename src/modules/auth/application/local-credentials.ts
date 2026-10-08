@@ -52,13 +52,34 @@ async function enforceLoginLimits(
   }
 }
 
+/** The verified password snapshot must still match when a session is committed. */
+export interface AuthenticatedCredentials {
+  readonly userId: string;
+  readonly email: string;
+  readonly passwordHash: string;
+}
+
+export async function rejectCredentials(
+  rateLimiter: AuthRateLimiterPort,
+  ip: string,
+  email: string,
+): Promise<never> {
+  await enforceLoginLimits(rateLimiter, ip, email);
+  throw new AppError({
+    code: 'AUTH_CREDENTIALS_INVALID',
+    message: 'Email or password is invalid',
+    retryable: false,
+  });
+}
+
 /**
  * The one credential check every route accepting an email and a password runs,
  * and the reason there is only one. A failure consumes the login limits before
  * it answers, which is what keeps a guessing caller inside them; a second
  * implementation would be the one that adds a bypass.
  *
- * Returns the authenticated user id. Throws `AUTH_CREDENTIALS_INVALID` for a
+ * Returns the authenticated account and the verified credential snapshot.
+ * Throws `AUTH_CREDENTIALS_INVALID` for a
  * wrong password, an unknown email, a pending-verification account, and a
  * disabled account alike: the caller learns nothing about which it was.
  */
@@ -66,7 +87,7 @@ export async function authenticateCredentials(
   ports: CredentialCheckPorts,
   input: { readonly email: string; readonly password: string },
   ip: string,
-): Promise<string> {
+): Promise<AuthenticatedCredentials> {
   let normalized: { readonly email: string; readonly password: string };
   try {
     normalized = normalizeLogin(input);
@@ -88,13 +109,12 @@ export async function authenticateCredentials(
     !passwordMatches ||
     identity.status !== 'active'
   ) {
-    await enforceLoginLimits(ports.rateLimiter, ip, normalized.email);
-    throw new AppError({
-      code: 'AUTH_CREDENTIALS_INVALID',
-      message: 'Email or password is invalid',
-      retryable: false,
-    });
+    return rejectCredentials(ports.rateLimiter, ip, normalized.email);
   }
 
-  return identity.userId;
+  return {
+    userId: identity.userId,
+    email: normalized.email,
+    passwordHash: identity.passwordHash,
+  };
 }

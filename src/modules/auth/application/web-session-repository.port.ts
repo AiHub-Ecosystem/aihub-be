@@ -3,6 +3,8 @@ import type { IssuedWebSessionToken } from './web-session-token.port';
 export interface CreateWebSessionInput {
   readonly sessionId: string;
   readonly userId: string;
+  /** The hash Argon2 verified; rechecked while serialized with password reset. */
+  readonly expectedPasswordHash: string;
   readonly token: IssuedWebSessionToken;
   readonly now: Date;
 }
@@ -58,7 +60,10 @@ export interface RevokeWebSessionInput {
  * `ponytail:` note naming the ceiling.
  */
 export interface WebSessionRepositoryPort {
-  createWebSession(input: CreateWebSessionInput): Promise<void>;
+  /** Atomically creates a session for a still-active, unchanged password identity.
+   * Returns false when credentials changed; throws when persistence failed.
+   */
+  createWebSession(input: CreateWebSessionInput): Promise<boolean>;
   findExchangeableWebSession(
     input: FindExchangeableWebSessionInput,
   ): Promise<ExchangeableWebSession | undefined>;

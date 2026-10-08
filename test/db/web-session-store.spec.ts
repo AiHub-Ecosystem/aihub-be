@@ -86,12 +86,14 @@ async function createWebSession(
   options: { readonly createdAt?: Date; readonly expiresAt: Date },
 ): Promise<string> {
   const hash = tokenHash();
-  await webSessions.createWebSession({
+  const created = await webSessions.createWebSession({
     sessionId: `wbs_${ulid()}`,
     userId,
+    expectedPasswordHash: STORED_PASSWORD_HASH,
     token: { raw: 'raw-web-session-token', hash, expiresAt: options.expiresAt },
     now: options.createdAt ?? NOW,
   });
+  expect(created).toBe(true);
   return hash;
 }
 
@@ -257,6 +259,7 @@ describe('the Web Session credential on PostgreSQL', () => {
     });
 
     const duplicate = webSessions.createWebSession({
+      expectedPasswordHash: STORED_PASSWORD_HASH,
       sessionId: `wbs_${ulid()}`,
       userId,
       token: {
@@ -524,6 +527,110 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
       passwordHash: identity.rows[0]?.password_hash ?? '',
     };
   }
+
+  function pauseBeforeCommit(): {
+    readonly client: PostgresAuthClient;
+    readonly locked: Promise<number>;
+    readonly release: () => void;
+  } {
+    let release = () => {};
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let report = (_pid: number) => {};
+    const locked = new Promise<number>((resolve) => {
+      report = resolve;
+    });
+    return {
+      locked,
+      release,
+      client: {
+        ...client,
+        transaction: <T>(
+          callback: (transaction: PostgresAuthQueryClient) => Promise<T>,
+        ) =>
+          client.transaction(async (transaction) => {
+            const result = await callback(transaction);
+            const rows = await transaction.query(
+              'SELECT pg_backend_pid() AS pid',
+              [],
+            );
+            const pid = rows[0]?.['pid'];
+            if (typeof pid !== 'number')
+              throw new Error('transaction reported no backend pid');
+            report(pid);
+            await released;
+            return result;
+          }),
+      },
+    };
+  }
+
+  it.each(['reset', 'login'] as const)(
+    'leaves no usable session from the old password when %s takes the lock first',
+    async (firstOperation) => {
+      const { userId, resetHash } = await seedResetTarget();
+      const paused = pauseBeforeCommit();
+      const hash = tokenHash();
+      const create = (repository: PostgresWebSessionRepository) =>
+        repository.createWebSession({
+          sessionId: `wbs_${ulid()}`,
+          userId,
+          expectedPasswordHash: STORED_PASSWORD_HASH,
+          token: {
+            raw: 'racing-login-token',
+            hash,
+            expiresAt: new Date(NOW.getTime() + 30 * DAY),
+          },
+          now: RESET_AT,
+        });
+      const reset = (repository: PostgresLocalAuthRepository) =>
+        repository.consumePasswordReset({
+          tokenHash: resetHash,
+          passwordHash: resetPasswordHash,
+          now: RESET_AT,
+        });
+      const first =
+        firstOperation === 'reset'
+          ? reset(new PostgresLocalAuthRepository(paused.client))
+          : create(new PostgresWebSessionRepository(paused.client));
+      let second: Promise<unknown> | undefined;
+      try {
+        const pid = await Promise.race([
+          paused.locked,
+          first.then(() => {
+            throw new Error('transaction finished before the commit barrier');
+          }),
+        ]);
+        second =
+          firstOperation === 'reset' ? create(webSessions) : reset(localAuth);
+        await waitForBlockedBy(pool, pid);
+        paused.release();
+        const results = await Promise.all([first, second]);
+        expect(results).toEqual(
+          firstOperation === 'reset'
+            ? [{ kind: 'reset' }, false]
+            : [true, { kind: 'reset' }],
+        );
+        expect(await durableState(userId)).toEqual({
+          revokedSessions: firstOperation === 'reset' ? 2 : 3,
+          openSessions: 0,
+          revokedRefreshTokens: 1,
+          consumedResetTokens: 1,
+          passwordHash: resetPasswordHash,
+        });
+        expect(
+          await webSessions.findExchangeableWebSession({
+            tokenHash: hash,
+            now: RESET_AT,
+          }),
+        ).toBeUndefined();
+      } finally {
+        paused.release();
+        await Promise.allSettled([first, second]);
+      }
+    },
+  );
 
   it('ends the Refresh Sessions and the Web Sessions of the account together', async () => {
     const { userId, resetHash } = await seedResetTarget();

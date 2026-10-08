@@ -339,8 +339,12 @@ export class LocalAuthService {
     input: { readonly email: string; readonly password: string },
     ip: string,
   ): Promise<IssuedSession> {
-    const userId = await authenticateCredentials(this.credentials, input, ip);
-    return this.startLoginSession(userId, this.clock.now());
+    const credentials = await authenticateCredentials(
+      this.credentials,
+      input,
+      ip,
+    );
+    return this.startLoginSession(credentials.userId, this.clock.now());
   }
 
   private get credentials(): CredentialCheckPorts {

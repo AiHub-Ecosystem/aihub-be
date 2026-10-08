@@ -346,6 +346,32 @@ describe('web session HTTP boundary', () => {
     });
   }
 
+  it('rejects the old password when reset commits during password verification', async () => {
+    seedActiveAccount();
+    const resetToken = await openResetToken(EMAIL, USER_ID);
+    const verifying = jest
+      .spyOn(hasher, 'verify')
+      .mockImplementationOnce(async () => {
+        expect((await resetPassword(resetToken)).statusCode).toBe(204);
+        // Argon2 successfully verified the old hash fetched before the reset.
+        return true;
+      });
+    try {
+      const response = await create();
+      expect(response.statusCode).toBe(401);
+      expect(response.json().error.code).toBe('AUTH_CREDENTIALS_INVALID');
+      expect(response.payload).not.toContain('web_session_token');
+      expect(response.headers['cache-control']).toBe('no-store');
+      expect(state.webSessions.size).toBe(0);
+      expect(limiter.calls.map((call) => call.scope)).toEqual([
+        'login_ip',
+        'login_email',
+      ]);
+    } finally {
+      verifying.mockRestore();
+    }
+  });
+
   it('creates one web session for a valid password and returns its token and expiry in the body', async () => {
     seedActiveAccount();
 

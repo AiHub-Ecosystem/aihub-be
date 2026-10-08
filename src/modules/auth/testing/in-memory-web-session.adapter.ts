@@ -33,9 +33,16 @@ export class InMemoryWebSessionAdapter implements WebSessionRepositoryPort {
 
   constructor(private readonly state: InMemoryAuthState) {}
 
-  async createWebSession(input: CreateWebSessionInput): Promise<void> {
+  async createWebSession(input: CreateWebSessionInput): Promise<boolean> {
     if (this.failCreateWebSession) {
       throw new Error('durable store unavailable');
+    }
+    const account = this.state.accounts.get(input.userId);
+    if (
+      account?.status !== 'active' ||
+      account.passwordHash !== input.expectedPasswordHash
+    ) {
+      return false;
     }
     this.state.webSessions.set(input.token.hash, {
       sessionId: input.sessionId,
@@ -46,6 +53,7 @@ export class InMemoryWebSessionAdapter implements WebSessionRepositoryPort {
       lastRenewedAt: input.now,
       revokedAt: undefined,
     });
+    return true;
   }
 
   async findExchangeableWebSession(

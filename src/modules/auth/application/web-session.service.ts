@@ -3,7 +3,11 @@ import type { IdMinter } from '@/common/ids/prefixed-id';
 import { enforceAuthRateLimit } from './auth-rate-limit';
 import { type AuthRateLimiterPort } from './auth-rate-limiter.port';
 import { type LocalAuthServiceClock } from './local-auth.service';
-import { authenticateCredentials } from './local-credentials';
+import {
+  type AuthenticatedCredentials,
+  authenticateCredentials,
+  rejectCredentials,
+} from './local-credentials';
 import { type PasswordHasherPort } from './password-hasher.port';
 import {
   type IssuedUserAccessToken,
@@ -103,7 +107,7 @@ export class WebSessionService implements WebSessionServicePort {
   ): Promise<CreatedWebSession> {
     // The same check, dummy hash, and login limits login applies, so this route
     // adds no way around them.
-    const userId = await authenticateCredentials(
+    const credentials = await authenticateCredentials(
       {
         userAccounts: this.userAccounts,
         passwordHasher: this.passwordHasher,
@@ -114,7 +118,12 @@ export class WebSessionService implements WebSessionServicePort {
     );
 
     const now = this.clock.now();
-    return this.commitSession(userId, this.tokenIssuer.issue(now), now);
+    return this.commitSession(
+      credentials,
+      this.tokenIssuer.issue(now),
+      now,
+      ip,
+    );
   }
 
   /**
@@ -306,19 +315,26 @@ export class WebSessionService implements WebSessionServicePort {
    * tell a temporary fault from a bad credential and keep no half state.
    */
   private async commitSession(
-    userId: string,
+    credentials: AuthenticatedCredentials,
     token: ReturnType<WebSessionTokenIssuerPort['issue']>,
     now: Date,
+    ip: string,
   ): Promise<CreatedWebSession> {
+    let created: boolean;
     try {
-      await this.webSessions.createWebSession({
+      created = await this.webSessions.createWebSession({
         sessionId: this.newSessionId(now),
-        userId,
+        userId: credentials.userId,
+        expectedPasswordHash: credentials.passwordHash,
         token,
         now,
       });
     } catch (error) {
       throw webSessionUnavailable(error);
+    }
+
+    if (!created) {
+      await rejectCredentials(this.rateLimiter, ip, credentials.email);
     }
 
     return { token: token.raw, expiresAt: token.expiresAt };
