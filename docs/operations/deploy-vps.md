@@ -394,6 +394,30 @@ curl --fail https://api.example.com/health
 
 Run the two Sandbox-profile commands only when `AIHUB_SANDBOX_ENABLED=true`.
 
+### Release order when a rollout adds a runtime secret
+
+CD deploys `main` and never restarts `vault-agent`. A merge that adds a new
+runtime secret therefore races the Agent: if the image boots before the Agent has
+rendered the new value, the deployment fails its startup check rather than
+serving a half-configured process.
+
+For any release that introduces a Vault-backed secret, do this in order, before
+the merge to `main`:
+
+1. Stage the secret's template on the host, as the operator session from
+   [Prerequisites](#prerequisites) — never as the runtime AppRole identity.
+2. Restart `vault-agent` and confirm both bundles re-render and authentication
+   or renewal is logged. Inspect it the way
+   [Checking deployed state](#checking-deployed-state) describes; a running
+   container is not by itself evidence of authentication.
+3. Merge to `main` and let CD deploy.
+
+The Customer Web BFF client secret (the Web Session route group's
+`X-AIHUB-Client-Secret`) shipped under this rule. Production and staging refuse
+to boot without it, and the Web Session routes answer `503` rather than admitting
+every caller when the value is absent, so a missed step fails loudly instead of
+opening a route.
+
 The `vault-agent` healthcheck requires both rendered bundles and a reachable
 `metrics_only` listener bound to the Agent container's loopback. This listener
 does not add capabilities to the runtime AppRole. Healthcheck output names the
