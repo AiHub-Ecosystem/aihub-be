@@ -559,6 +559,27 @@ async function rethrowMutationFailure(
   throw identityStoreError('Identity store is unavailable');
 }
 
+function prepareMembershipMutation(
+  client: PostgresIdentityClient,
+  input: OrganizationMembershipMutationInput,
+): {
+  readonly stamp: ReturnType<typeof auditStamp>;
+  readonly refuse: (draft: OrganizationAuditDraft) => void;
+  readonly rethrow: (error: unknown) => Promise<never>;
+} {
+  validateMutationInput(input);
+  const stamp = auditStamp(input, input.userId, input.context.receivedAt);
+  let refused: OrganizationAuditDraft | undefined;
+
+  return {
+    stamp,
+    refuse: (draft) => {
+      refused = draft;
+    },
+    rethrow: (error) => rethrowMutationFailure(client, stamp, refused, error),
+  };
+}
+
 function mapRosterRow(value: unknown): RosterRow | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -833,10 +854,7 @@ export class PostgresOrganizationMembershipRepository
   async changeRole(
     input: ChangeOrganizationMemberRoleInput,
   ): Promise<OrganizationMembershipMutationResult> {
-    validateMutationInput(input);
-    const stamp = auditStamp(input, input.userId, input.context.receivedAt);
-    let refused: OrganizationAuditDraft | undefined;
-
+    const mutation = prepareMembershipMutation(this.client, input);
     try {
       return await this.client.transaction(async (transaction) => {
         const { caller, target } = await lockMutationContext(
@@ -846,10 +864,8 @@ export class PostgresOrganizationMembershipRepository
         );
         const decision = mutationDecision('change_role', caller, target);
         if (target !== undefined && decision?.kind === 'forbidden') {
-          refused = roleChangedAuditDraft(
-            target,
-            input.role,
-            'insufficient_authority',
+          mutation.refuse(
+            roleChangedAuditDraft(target, input.role, 'insufficient_authority'),
           );
         }
         const authorizedTarget = requireAuthorizedMutationTarget(
@@ -865,10 +881,12 @@ export class PostgresOrganizationMembershipRepository
           authorizedTarget.role === 'owner' &&
           (await isLastActiveOwner(transaction, input.organizationId))
         ) {
-          refused = roleChangedAuditDraft(
-            authorizedTarget,
-            input.role,
-            'owner_required',
+          mutation.refuse(
+            roleChangedAuditDraft(
+              authorizedTarget,
+              input.role,
+              'owner_required',
+            ),
           );
           throw ownerRequired();
         }
@@ -881,23 +899,20 @@ export class PostgresOrganizationMembershipRepository
         const updated = mapUpdatedMembership(rows[0]);
         await recordOrganizationAuditEvent(
           transaction,
-          stamp,
+          mutation.stamp,
           roleChangedAuditDraft(authorizedTarget, updated.role),
         );
         return mutationResult(authorizedTarget, updated.role, updated.status);
       });
     } catch (error) {
-      return rethrowMutationFailure(this.client, stamp, refused, error);
+      return mutation.rethrow(error);
     }
   }
 
   async disable(
     input: OrganizationMembershipMutationInput,
   ): Promise<OrganizationMembershipMutationResult> {
-    validateMutationInput(input);
-    const stamp = auditStamp(input, input.userId, input.context.receivedAt);
-    let refused: OrganizationAuditDraft | undefined;
-
+    const mutation = prepareMembershipMutation(this.client, input);
     try {
       return await this.client.transaction(async (transaction) => {
         const { caller, target } = await lockMutationContext(
@@ -907,9 +922,8 @@ export class PostgresOrganizationMembershipRepository
         );
         const decision = mutationDecision('disable', caller, target);
         if (target !== undefined && decision?.kind === 'forbidden') {
-          refused = membershipDisabledAuditDraft(
-            target,
-            'insufficient_authority',
+          mutation.refuse(
+            membershipDisabledAuditDraft(target, 'insufficient_authority'),
           );
         }
         const authorizedTarget = requireAuthorizedMutationTarget(
@@ -925,9 +939,8 @@ export class PostgresOrganizationMembershipRepository
           authorizedTarget.role === 'owner' &&
           (await isLastActiveOwner(transaction, input.organizationId))
         ) {
-          refused = membershipDisabledAuditDraft(
-            authorizedTarget,
-            'owner_required',
+          mutation.refuse(
+            membershipDisabledAuditDraft(authorizedTarget, 'owner_required'),
           );
           throw ownerRequired();
         }
@@ -942,23 +955,20 @@ export class PostgresOrganizationMembershipRepository
         }
         await recordOrganizationAuditEvent(
           transaction,
-          stamp,
+          mutation.stamp,
           membershipDisabledAuditDraft(authorizedTarget),
         );
         return mutationResult(authorizedTarget, updated.role, updated.status);
       });
     } catch (error) {
-      return rethrowMutationFailure(this.client, stamp, refused, error);
+      return mutation.rethrow(error);
     }
   }
 
   async transfer(
     input: OrganizationMembershipMutationInput,
   ): Promise<OrganizationMembershipMutationResult> {
-    validateMutationInput(input);
-    const stamp = auditStamp(input, input.userId, input.context.receivedAt);
-    let refused: OrganizationAuditDraft | undefined;
-
+    const mutation = prepareMembershipMutation(this.client, input);
     try {
       return await this.client.transaction(async (transaction) => {
         const { caller, target } = await lockMutationContext(
@@ -968,10 +978,12 @@ export class PostgresOrganizationMembershipRepository
         );
         const decision = mutationDecision('transfer', caller, target);
         if (target !== undefined && decision?.kind === 'forbidden') {
-          refused = ownerTransferredAuditDraft(
-            target,
-            caller.username,
-            'insufficient_authority',
+          mutation.refuse(
+            ownerTransferredAuditDraft(
+              target,
+              caller.username,
+              'insufficient_authority',
+            ),
           );
         }
         const authorizedTarget = requireAuthorizedMutationTarget(
@@ -1005,13 +1017,13 @@ export class PostgresOrganizationMembershipRepository
         // Transfer is atomic and produces one event for both role changes.
         await recordOrganizationAuditEvent(
           transaction,
-          stamp,
+          mutation.stamp,
           ownerTransferredAuditDraft(authorizedTarget, caller.username),
         );
         return mutationResult(authorizedTarget, promoted.role, promoted.status);
       });
     } catch (error) {
-      return rethrowMutationFailure(this.client, stamp, refused, error);
+      return mutation.rethrow(error);
     }
   }
 
