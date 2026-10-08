@@ -26,10 +26,10 @@ function isRunnerLoader(value: unknown): value is RunnerLoader {
 }
 
 const requireScript = createRequire(
-  join(process.cwd(), 'test', 'cli-loader.spec.ts'),
+  join(process.cwd(), 'test', 'cli', 'cli-loader.spec.ts'),
 );
 const loaderModule: unknown = requireScript(
-  '../scripts/cli/load-cli-runner.cjs',
+  '../../scripts/cli/load-cli-runner.cjs',
 );
 if (!isRunnerLoader(loaderModule)) {
   throw new Error('generic CLI runner loader is unavailable');
@@ -89,7 +89,12 @@ describe('loadCliRunner', () => {
   });
 
   it('falls back to all six TypeScript sources when built paths are absent', async () => {
-    const loaderPath = join(process.cwd(), 'scripts', 'load-cli-runner.cjs');
+    const loaderPath = join(
+      process.cwd(),
+      'scripts',
+      'cli',
+      'load-cli-runner.cjs',
+    );
     const sourceRunners = [
       ['organization-status.ts', 'runOrganizationStatusCommand'],
       ['organization-first-owner.ts', 'runAttachFirstOwnerCommand'],
