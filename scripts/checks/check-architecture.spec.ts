@@ -1,5 +1,13 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 
 import architectureConfig from '../../.dependency-cruiser.cjs';
@@ -94,6 +102,83 @@ describe('cross-module import rules', () => {
   it('excludes spec files from the importing side', () => {
     expect(crossModuleRule?.from.pathNot).toBe('[.]spec[.]ts$');
   });
+});
+
+describe('layer rules on feature-first Identity paths', () => {
+  it.each([
+    {
+      fromLayer: 'application',
+      toLayer: 'infrastructure',
+      rule: 'application-no-outer-layers',
+    },
+    {
+      fromLayer: 'presentation',
+      toLayer: 'infrastructure',
+      rule: 'presentation-no-infrastructure',
+    },
+    {
+      fromLayer: 'infrastructure',
+      toLayer: 'presentation',
+      rule: 'infrastructure-no-presentation',
+    },
+  ])(
+    'rejects an import from $fromLayer into $toLayer',
+    ({ fromLayer, toLayer, rule }) => {
+      const fixtureRoot = mkdtempSync(
+        join(tmpdir(), 'aihub-identity-architecture-'),
+      );
+      const featureRoot = join(
+        fixtureRoot,
+        'src',
+        'modules',
+        'identity',
+        'architecture-fixture',
+      );
+      const sourceFile = join(featureRoot, fromLayer, 'probe.ts');
+      const dependencyFile = join(featureRoot, toLayer, 'dependency.ts');
+
+      try {
+        mkdirSync(join(featureRoot, fromLayer), { recursive: true });
+        mkdirSync(join(featureRoot, toLayer), { recursive: true });
+        writeFileSync(
+          sourceFile,
+          `import { dependency } from '../${toLayer}/dependency';\nvoid dependency;\n`,
+        );
+        writeFileSync(dependencyFile, 'export const dependency = true;\n');
+        writeFileSync(
+          join(fixtureRoot, 'tsconfig.json'),
+          JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+        );
+
+        const result = spawnSync(
+          process.execPath,
+          [
+            join(
+              process.cwd(),
+              'node_modules',
+              'dependency-cruiser',
+              'bin',
+              'dependency-cruiser.mjs',
+            ),
+            '--config',
+            join(process.cwd(), '.dependency-cruiser.cjs'),
+            '--output-type',
+            'err-long',
+            'src',
+          ],
+          {
+            cwd: fixtureRoot,
+            encoding: 'utf8',
+          },
+        );
+
+        expect(result.status).not.toBe(0);
+        expect(`${result.stdout}\n${result.stderr}`).toContain(rule);
+      } finally {
+        rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 /**

@@ -343,6 +343,14 @@ module.exports = {
       to: { path: '^src/.*/infrastructure/|^src/downstream/' },
     },
     {
+      name: 'infrastructure-no-presentation',
+      severity: 'error',
+      comment:
+        'Infrastructure implements application ports and points inward, not at presentation code.',
+      from: { path: '^src/.*/infrastructure/' },
+      to: { path: '^src/.*/presentation/' },
+    },
+    {
       name: 'module-code-no-infrastructure-import',
       severity: 'error',
       comment:
