@@ -1009,7 +1009,7 @@ export async function buildPostmanCollection(
         key: 'webSessionClientSecret',
         value: 'REPLACE_WITH_THE_CUSTOMER_WEB_BFF_CLIENT_SECRET',
         description:
-          'Customer Web BFF client secret for the server-to-server Web Session routes. A fake placeholder: the real value comes from Vault and never from the repository.',
+          'Customer Web BFF client secret for the server-to-server Web Session routes. A fake placeholder: the real value is provisioned per deployment and must never be committed here.',
       },
     ],
     item: [
