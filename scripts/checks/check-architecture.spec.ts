@@ -7,7 +7,6 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 
 import architectureConfig from '../../.dependency-cruiser.cjs';
@@ -125,15 +124,15 @@ describe('layer rules on feature-first Identity paths', () => {
     'rejects an import from $fromLayer into $toLayer',
     ({ fromLayer, toLayer, rule }) => {
       const fixtureRoot = mkdtempSync(
-        join(tmpdir(), 'aihub-identity-architecture-'),
+        join(
+          process.cwd(),
+          'src',
+          'modules',
+          'identity',
+          '.tmp-identity-architecture-',
+        ),
       );
-      const featureRoot = join(
-        fixtureRoot,
-        'src',
-        'modules',
-        'identity',
-        'architecture-fixture',
-      );
+      const featureRoot = fixtureRoot;
       const sourceFile = join(featureRoot, fromLayer, 'probe.ts');
       const dependencyFile = join(featureRoot, toLayer, 'dependency.ts');
 
@@ -151,24 +150,12 @@ describe('layer rules on feature-first Identity paths', () => {
         );
 
         const result = spawnSync(
-          process.execPath,
-          [
-            join(
-              process.cwd(),
-              'node_modules',
-              'dependency-cruiser',
-              'bin',
-              'dependency-cruiser.mjs',
-            ),
-            '--config',
-            join(process.cwd(), '.dependency-cruiser.cjs'),
-            '--output-type',
-            'err-long',
-            'src',
-          ],
+          process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+          ['arch-check'],
           {
-            cwd: fixtureRoot,
+            cwd: process.cwd(),
             encoding: 'utf8',
+            shell: process.platform === 'win32',
           },
         );
 
