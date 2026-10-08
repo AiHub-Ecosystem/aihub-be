@@ -2917,6 +2917,70 @@
       }
     },
     {
+      "id": "82f880ad-2945-43c2-8653-3f35908cdfd5",
+      "name": "Exchange a Web Session for a User Access JWT",
+      "request": {
+        "name": "Exchange a Web Session for a User Access JWT",
+        "description": {
+          "content": "Server-to-server only, Customer Web BFF. The stateless exchange: every call signs a fresh User Access JWT through the same issuer as POST /v1/auth/login, with the same claims, audience, issuer, and 15-minute lifetime, and AIHUB stores nothing for it. The Web Session token travels in this body and nowhere else — a token offered in a cookie, an authorization header, or a query parameter is refused. A successful exchange slides the Web Session expiry 30 days forward and writes nothing when the last renewal is less than about an hour old, so concurrent exchanges need no lock and no shared store. AIHUB keeps no record of an issued JWT, so a BFF may cache one in process until shortly before it expires; a JWT signed before a logout therefore stays valid for up to 15 minutes.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "auth", "web-sessions", "exchange"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "apikey",
+          "apikey": [
+            {
+              "key": "key",
+              "value": "X-AIHUB-Client-Secret"
+            },
+            {
+              "key": "value",
+              "value": "{{apiKey}}"
+            },
+            {
+              "key": "in",
+              "value": "header"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"web_session_token\": \"<string>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
       "name": "D1 handover test cases (docs/history/aihub-deliverable-1-historical-contract.md §G)",
       "item": [
         {

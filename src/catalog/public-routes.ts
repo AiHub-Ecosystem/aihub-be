@@ -17,6 +17,7 @@ import {
   CreateWebSessionFromVerificationRequestSchema,
   CreateWebSessionRequestSchema,
   CreateWebSessionResponseSchema,
+  ExchangeWebSessionRequestSchema,
 } from '@/contracts/auth/web-session';
 import {
   AvatarResponseSchema,
@@ -499,6 +500,20 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: CreateWebSessionFromVerificationRequestSchema,
     responseSchema: CreateWebSessionResponseSchema,
+    errorStatuses: [400, 401, 429, 500, 503],
+  },
+  // The stateless exchange. Same envelope as login, no cookie, and AIHUB keeps
+  // no record of the JWT it signs: only the sliding session expiry is durable.
+  'auth.web_sessions.exchange': {
+    method: 'POST',
+    path: '/v1/auth/web-sessions/exchange',
+    callerAuth: 'bff-client-secret',
+    organizationResolution: 'none',
+    successStatus: 200,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: ExchangeWebSessionRequestSchema,
+    responseSchema: LoginResponseSchema,
     errorStatuses: [400, 401, 429, 500, 503],
   },
   'sandbox.assertions.mint': {

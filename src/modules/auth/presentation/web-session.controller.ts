@@ -19,12 +19,17 @@ import {
   type CreateWebSessionRequest,
   CreateWebSessionRequestSchema,
   type CreateWebSessionResponse,
+  type ExchangeWebSessionRequest,
+  ExchangeWebSessionRequestSchema,
 } from '@/contracts/auth/web-session';
 import {
   WEB_SESSION_SERVICE,
   type WebSessionServicePort,
 } from '@/modules/auth/application/web-session.service';
-import { clientSecretFrom } from '@/modules/auth/presentation/refresh-cookie';
+import {
+  clientSecretFrom,
+  hasAlternateWebSessionSource,
+} from '@/modules/auth/presentation/refresh-cookie';
 
 /** The one envelope both creation routes answer, so a BFF reads them alike. */
 function createdWebSession(
@@ -38,6 +43,16 @@ function createdWebSession(
     },
     meta: { request_id: String(request.id) },
   };
+}
+
+/** The JWT envelope `POST /v1/auth/login` already publishes. */
+interface AccessTokenEnvelope {
+  readonly data: {
+    readonly access_token: string;
+    readonly token_type: 'Bearer';
+    readonly expires_in: number;
+  };
+  readonly meta: { readonly request_id: string };
 }
 
 /**
@@ -114,5 +129,46 @@ export class WebSessionController {
 
     reply.status(201);
     return createdWebSession(request, created);
+  }
+
+  @Post(PUBLIC_ROUTES['auth.web_sessions.exchange'].path)
+  @HttpCode(PUBLIC_ROUTES['auth.web_sessions.exchange'].successStatus)
+  @Header('Cache-Control', 'no-store')
+  async exchangeWebSession(
+    @Req() request: FastifyRequest,
+    @Body() body: unknown,
+  ): Promise<AccessTokenEnvelope> {
+    if (!Value.Check(ExchangeWebSessionRequestSchema, body)) {
+      throw invalidRequest();
+    }
+    const input = Value.Parse(
+      ExchangeWebSessionRequestSchema,
+      body,
+    ) as ExchangeWebSessionRequest;
+
+    const exchanged = await this.service.exchangeWebSession(
+      // The credential belongs in this body and nowhere else, so a token
+      // offered in a cookie, an authorization header, or a query parameter is
+      // not quietly honoured: it is read from nowhere, which is the same
+      // generic session failure as any other unusable session.
+      {
+        token: hasAlternateWebSessionSource(request)
+          ? undefined
+          : input.web_session_token,
+      },
+      request.ip || 'unknown',
+      clientSecretFrom(request),
+    );
+
+    // The envelope login answers, field for field: an integrator already parses
+    // one, and a BFF caching this JWT in process needs no new shape.
+    return {
+      data: {
+        access_token: exchanged.token,
+        token_type: 'Bearer',
+        expires_in: exchanged.expiresIn,
+      },
+      meta: { request_id: String(request.id) },
+    };
   }
 }

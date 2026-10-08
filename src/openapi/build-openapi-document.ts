@@ -374,6 +374,25 @@ function webSessionRefusedResponse(): Record<string, unknown> {
   };
 }
 
+/**
+ * The exchange's two 401 codes, and nothing finer: a missing or wrong client
+ * secret, and the one generic code every unusable session answers.
+ */
+function webSessionExchangeRefusedResponse(): Record<string, unknown> {
+  return {
+    description:
+      'Client secret missing or wrong, or the Web Session token is expired, revoked, unknown, malformed, or belongs to an account that is not active',
+    content: {
+      'application/json': {
+        schema: errorResponseSchema([
+          'UNAUTHORIZED',
+          'AUTH_WEB_SESSION_INVALID',
+        ]),
+      },
+    },
+  };
+}
+
 function publishedLocalAuthRequestSchema(schema: TSchema): TSchema {
   // The three routes that publish a password re-state the policy so a generated
   // client enforces it, which means restating the object rather than merging a
@@ -658,6 +677,46 @@ function webSessionPathItems(): Record<string, Record<string, unknown>> {
           // 204 is not an error: the email is verified and no session was
           // granted, which is the same answer POST /v1/auth/verify-email gives.
           '204': { description: 'Email verified; no Web Session created.' },
+        },
+      },
+    },
+    [routePathOf('auth.web_sessions.exchange')]: {
+      post: {
+        operationId: 'auth.web_sessions.exchange',
+        summary: 'Exchange a Web Session for a User Access JWT',
+        description:
+          'Server-to-server only, Customer Web BFF. The stateless exchange: every call signs a fresh User Access JWT through the same issuer as POST /v1/auth/login, with the same claims, audience, issuer, and 15-minute lifetime, and AIHUB stores nothing for it. The Web Session token travels in this body and nowhere else — a token offered in a cookie, an authorization header, or a query parameter is refused. A successful exchange slides the Web Session expiry 30 days forward and writes nothing when the last renewal is less than about an hour old, so concurrent exchanges need no lock and no shared store. AIHUB keeps no record of an issued JWT, so a BFF may cache one in process until shortly before it expires; a JWT signed before a logout therefore stays valid for up to 15 minutes.',
+        ...routeIdentityScopeOf('auth.web_sessions.exchange'),
+        ...routeSecurityOf('auth.web_sessions.exchange'),
+        parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: routeSchemaOf('auth.web_sessions.exchange', 'request'),
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description:
+              'User Access JWT issued. Same envelope as POST /v1/auth/login; no cookie is set for this route.',
+            headers: {
+              'Cache-Control': {
+                schema: { type: 'string', enum: ['no-store'] },
+              },
+            },
+            content: {
+              'application/json': {
+                schema: routeSchemaOf('auth.web_sessions.exchange', 'response'),
+              },
+            },
+          },
+          ...routeErrorResponsesOf('auth.web_sessions.exchange'),
+          // One code for every session that cannot be exchanged — expired,
+          // revoked, unknown, malformed, or a non-active account — so the BFF
+          // clears the cookie and asks for a sign-in without learning which.
+          '401': webSessionExchangeRefusedResponse(),
         },
       },
     },

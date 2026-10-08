@@ -847,6 +847,36 @@ describe('buildOpenApiDocument', () => {
     expect(request).not.toContain('password');
   });
 
+  it('documents the exchange as the same server-to-server group', () => {
+    const doc = build();
+    const operation = doc.paths['/v1/auth/web-sessions/exchange']?.post;
+
+    expect(operation?.operationId).toBe('auth.web_sessions.exchange');
+    expect(operation?.security).toEqual([{ BffClientSecret: [] }]);
+    expect(operation?.description).toContain('Server-to-server only');
+    expect(operation?.description).toContain('Customer Web BFF');
+    // Same envelope as login, and the BFF is told it may cache the JWT: that is
+    // the whole reason the route can be stateless.
+    const success = JSON.stringify(operation?.responses['200']);
+    expect(success).toContain('access_token');
+    expect(success).toContain('no-store');
+    expect(operation?.description).toContain('cache one in process');
+    // The published contract states the sliding renewal, so a BFF can reason
+    // about when it is asked to sign in again.
+    expect(operation?.description).toContain('30 days forward');
+    // One generic code for every unusable session, plus the client secret one.
+    const refused = JSON.stringify(operation?.responses['401']);
+    expect(refused).toContain('AUTH_WEB_SESSION_INVALID');
+    expect(refused).toContain('UNAUTHORIZED');
+    expect(refused).not.toContain('AUTH_REFRESH_TOKEN_INVALID');
+    // The token is a body field, and nothing publishes a way to pass it in a
+    // cookie or a header.
+    expect(JSON.stringify(operation?.requestBody)).toContain(
+      'web_session_token',
+    );
+    expect(JSON.stringify(operation)).not.toContain('Set-Cookie');
+  });
+
   it('mints without an assertion, because issuing one is what it does', () => {
     const mint = build().paths[SANDBOX_MINT_PATH]?.post;
     const parameterRefs = (mint?.parameters ?? []).map(

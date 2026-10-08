@@ -1,10 +1,15 @@
 import { AppError } from '@/common/errors/app-error';
 import type { IdMinter } from '@/common/ids/prefixed-id';
 import { constantTimeEquals } from '@/common/security/constant-time-equals';
+import { OPAQUE_TOKEN_BINDINGS } from '@/common/security/opaque-token-issuer';
 import { type AuthRateLimiterPort } from './auth-rate-limiter.port';
 import { type LocalAuthServiceClock } from './local-auth.service';
 import { authenticateCredentials } from './local-credentials';
 import { type PasswordHasherPort } from './password-hasher.port';
+import {
+  type IssuedUserAccessToken,
+  type UserAccessTokenIssuerPort,
+} from './user-access-token.port';
 import { type UserAccountRepositoryPort } from './user-account.port';
 import {
   browserBindingHash,
@@ -15,6 +20,33 @@ import { type VerificationTokenPort } from './verification-token.port';
 import { type WebSessionClientSecretPort } from './web-session-client-secret.port';
 import { type WebSessionRepositoryPort } from './web-session-repository.port';
 import { type WebSessionTokenIssuerPort } from './web-session-token.port';
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * The exchange's own limits, modelled on the refresh pair and deliberately at
+ * the same numbers: `refresh_ip` 20/5min and `refresh_token` 5/15min. An
+ * attacker guessing opaque tokens is in the same position as one guessing
+ * refresh tokens, and a Customer Web BFF fronts many users from few IPs, so a
+ * per-IP window looser than the per-token window is the pair that fits both.
+ * Only failures consume them: a BFF exchanging a session it holds consumes
+ * nothing and never has its window reset by a success.
+ */
+const EXCHANGE_RATE_LIMITS = {
+  ip: { scope: 'web_session_exchange_ip', limit: 20, windowMs: 5 * 60 * 1000 },
+  token: {
+    scope: 'web_session_exchange_token',
+    limit: 5,
+    windowMs: 15 * 60 * 1000,
+  },
+} as const satisfies Record<
+  'ip' | 'token',
+  {
+    readonly scope: Parameters<AuthRateLimiterPort['consume']>[0]['scope'];
+    readonly limit: number;
+    readonly windowMs: number;
+  }
+>;
 
 export interface CreatedWebSession {
   readonly token: string;
@@ -41,6 +73,16 @@ export interface WebSessionServicePort {
     ip: string,
     presentedClientSecret: string | undefined,
   ): Promise<CreatedWebSession | undefined>;
+  /**
+   * Trade a Web Session for a User Access JWT. `token` is `undefined` when the
+   * request carried the credential somewhere this route refuses to read it
+   * from, which is one generic failure like any other unusable session.
+   */
+  exchangeWebSession(
+    input: { readonly token: string | undefined },
+    ip: string,
+    presentedClientSecret: string | undefined,
+  ): Promise<IssuedUserAccessToken>;
 }
 
 export const WEB_SESSION_SERVICE = Symbol('WEB_SESSION_SERVICE');
@@ -69,6 +111,20 @@ function invalidVerificationToken(): AppError {
 }
 
 /**
+ * One code for every session that cannot be exchanged: expired, revoked,
+ * unknown, malformed, or belonging to an account that is no longer active. The
+ * caller clears the cookie and asks for a sign-in either way, so the reason is
+ * recorded for diagnostics and never published.
+ */
+function invalidWebSession(): AppError {
+  return new AppError({
+    code: 'AUTH_WEB_SESSION_INVALID',
+    message: 'Web session is invalid',
+    retryable: false,
+  });
+}
+
+/**
  * The Web Session slice of the auth module, kept beside local login rather
  * than inside it so each Web Session route owns a method here and a route in
  * one controller: this file creates from a password and from a verification
@@ -89,6 +145,7 @@ export class WebSessionService implements WebSessionServicePort {
     private readonly clock: LocalAuthServiceClock,
     private readonly verificationTokenStore: VerificationTokenRepositoryPort,
     private readonly verificationTokens: VerificationTokenPort,
+    private readonly accessTokenIssuer: UserAccessTokenIssuerPort,
   ) {}
 
   async createWebSession(
@@ -174,6 +231,89 @@ export class WebSessionService implements WebSessionServicePort {
   }
 
   /**
+   * The stateless exchange: read the session, mint a JWT, and slide the
+   * session's expiry forward. Nothing is locked and nothing is stored for the
+   * JWT, so the BFF may run as many instances as it likes and repeat a call.
+   */
+  async exchangeWebSession(
+    input: { readonly token: string | undefined },
+    ip: string,
+    presentedClientSecret: string | undefined,
+  ): Promise<IssuedUserAccessToken> {
+    this.assertClientSecret(presentedClientSecret);
+
+    if (input.token === undefined || input.token.length === 0) {
+      await this.enforceExchangeFailureLimits(ip);
+      throw invalidWebSession();
+    }
+
+    const tokenHash = this.tokenIssuer.hash(input.token);
+    const now = this.clock.now();
+
+    let userId: string;
+    try {
+      const session = await this.webSessions.findExchangeableWebSession({
+        tokenHash,
+        now,
+      });
+      // An active account is the condition of the exchange, checked beside the
+      // session rather than inside it: disabling an account has to stop every
+      // session it owns, not revoke them.
+      if (session === undefined) {
+        await this.enforceExchangeFailureLimits(ip, tokenHash);
+        throw invalidWebSession();
+      }
+      const status = await this.userAccounts.findUserAccountStatus(
+        session.userId,
+      );
+      if (status !== 'active') {
+        await this.enforceExchangeFailureLimits(ip, tokenHash);
+        throw invalidWebSession();
+      }
+      userId = session.userId;
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      // The store owns the rows, so an outage here is a temporary fault the
+      // caller must be able to tell from a bad session: `503`, and no
+      // credential, so the BFF keeps its cookie.
+      throw storeUnavailable(error);
+    }
+
+    const accessToken = await this.accessTokenIssuer.issue(userId);
+    // The renewal is a side effect of the exchange, not a step in it: the JWT
+    // is already minted, so a throttled write, a write another instance won, or
+    // a store that cannot record it must not cost the caller the credential it
+    // just earned. A missed renewal costs at most an hour of session life, and
+    // the next exchange renews it.
+    await this.renewSession(tokenHash, now);
+    return accessToken;
+  }
+
+  /**
+   * Forward-only sliding expiry, throttled to one write per hour. The repository
+   * matches no row when the last renewal is too recent, when the session was
+   * revoked or expired in between, or when another request won the update first;
+   * none of those is an exchange failure. A store that throws is not one either:
+   * the exchange is what the caller asked for, and it has already answered.
+   */
+  private async renewSession(tokenHash: string, now: Date): Promise<void> {
+    try {
+      await this.webSessions.renewWebSession({
+        tokenHash,
+        expiresAt: new Date(
+          now.getTime() + OPAQUE_TOKEN_BINDINGS.webSession.ttlMs,
+        ),
+        renewedAt: now,
+        renewedAtBefore: new Date(now.getTime() - HOUR_MS),
+      });
+    } catch {
+      // Deliberately swallowed: see the method comment.
+    }
+  }
+
+  /**
    * Fail closed: the token reaches the BFF only after its row is committed. A
    * durable-store outage is a retryable 503 rather than a 500, so the BFF can
    * tell a temporary fault from a bad credential and keep no half state.
@@ -217,6 +357,36 @@ export class WebSessionService implements WebSessionServicePort {
         message: 'Client secret is missing or invalid',
         retryable: false,
       });
+    }
+  }
+
+  /**
+   * Failures only, exactly as the refresh route counts them: a working BFF
+   * exchanging a session it holds never touches a counter, so a rate-limited
+   * caller is one that first presented a session AIHUB could not use. The token
+   * dimension is keyed by the stored hash, never by the raw credential.
+   */
+  private async enforceExchangeFailureLimits(
+    ip: string,
+    tokenHash?: string,
+  ): Promise<void> {
+    for (const limit of [
+      { ...EXCHANGE_RATE_LIMITS.ip, key: ip },
+      ...(tokenHash === undefined
+        ? []
+        : [{ ...EXCHANGE_RATE_LIMITS.token, key: tokenHash }]),
+    ]) {
+      const result = await this.rateLimiter.consume(limit);
+      if (!result.allowed) {
+        throw new AppError({
+          code: 'RATE_LIMITED',
+          message: 'Too many requests',
+          retryable: true,
+          ...(result.retryAfterMs === undefined
+            ? {}
+            : { retryAfterMs: result.retryAfterMs }),
+        });
+      }
     }
   }
 }

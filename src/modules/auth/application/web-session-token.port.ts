@@ -13,6 +13,12 @@ export interface IssuedWebSessionToken {
 
 export interface WebSessionTokenIssuerPort {
   issue(now: Date): IssuedWebSessionToken;
+  /**
+   * The one digest `issue` stores, exposed so a later request can recognise a
+   * raw token AIHUB did not issue here — the exchange lookup, and the
+   * per-token rate-limit key.
+   */
+  hash(raw: string): string;
 }
 
 export const WEB_SESSION_TOKEN_ISSUER = Symbol('WEB_SESSION_TOKEN_ISSUER');

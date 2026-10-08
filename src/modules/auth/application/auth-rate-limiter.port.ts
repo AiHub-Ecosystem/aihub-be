@@ -12,6 +12,8 @@ export type AuthRateLimitScope =
   | 'reset_token'
   | 'refresh_ip'
   | 'refresh_token'
+  | 'web_session_exchange_ip'
+  | 'web_session_exchange_token'
   | 'organization_invitation_user'
   | 'organization_invitation_organization'
   | 'organization_invitation_email';

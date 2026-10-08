@@ -83,3 +83,29 @@ export const CreateWebSessionResponseSchema = Type.Object(
 export type CreateWebSessionResponse = Static<
   typeof CreateWebSessionResponseSchema
 >;
+
+/**
+ * The one credential a Customer Web BFF exchanges for a User Access JWT. It
+ * travels in this body and nowhere else: a token offered in a cookie, an
+ * `Authorization` header, or a query parameter is refused, so this route has no
+ * alternate source to fall back to.
+ *
+ * The value is a bounded string rather than a pattern. A token that is not a
+ * Web Session is a failed exchange (`401`), not a malformed request, so a
+ * caller learns nothing about which part of the value was wrong.
+ */
+export const ExchangeWebSessionRequestSchema = Type.Object(
+  {
+    web_session_token: Type.String({
+      minLength: 1,
+      maxLength: 512,
+      description:
+        'The opaque token AIHUB returned when the Web Session was created. Expired, revoked, unknown, and malformed tokens all fail alike.',
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export type ExchangeWebSessionRequest = Static<
+  typeof ExchangeWebSessionRequestSchema
+>;

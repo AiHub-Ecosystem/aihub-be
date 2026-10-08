@@ -32,7 +32,13 @@ export interface InMemoryWebSession {
   readonly userId: string;
   readonly tokenHash: string;
   readonly createdAt: Date;
-  readonly expiresAt: Date;
+  /**
+   * Mutable because renewal is an update, not a replacement: the adapter moves
+   * it forward exactly as the conditional `UPDATE` does, and a test that
+   * arranges a revoked or already-renewed session assigns `revokedAt` the same
+   * way the store would.
+   */
+  expiresAt: Date;
   lastRenewedAt: Date;
   revokedAt: Date | undefined;
 }

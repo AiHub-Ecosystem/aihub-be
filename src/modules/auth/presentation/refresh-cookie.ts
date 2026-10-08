@@ -92,3 +92,19 @@ export function hasAlternateRefreshSource(request: FastifyRequest): boolean {
     hasDuplicateCookie(request, REFRESH_COOKIE_NAME)
   );
 }
+
+/**
+ * The Web Session token has exactly one transport: the request body. This route
+ * reads no cookie at all, unlike the refresh routes above, so ANY cookie — the
+ * refresh cookie included — any `Authorization` header, and any query value all
+ * mean the caller offered the credential somewhere AIHUB does not read it from.
+ * Refusing keeps one unambiguous channel instead of a route whose credential
+ * source depends on which transport happened to arrive.
+ */
+export function hasAlternateWebSessionSource(request: FastifyRequest): boolean {
+  return (
+    request.headers.authorization !== undefined ||
+    hasQueryValue(request.query) ||
+    Object.keys(request.cookies ?? {}).length > 0
+  );
+}
