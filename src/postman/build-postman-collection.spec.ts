@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm';
 import type { CollectionDefinition } from 'postman-collection';
 import { Collection } from 'postman-collection';
 
@@ -147,6 +148,87 @@ describe('buildPostmanCollection', () => {
       ]),
     );
   });
+
+  async function verificationScript(): Promise<string> {
+    const collection = await build();
+    const items = collection.item as readonly PostmanItem[];
+    const folder = items.find(
+      (item) =>
+        item.name === 'Customer Web Web Sessions (server-to-server, BFF only)',
+    );
+    const script = folder?.item?.find(
+      (item) =>
+        item.name === 'Create a Web Session from a Verification Sign-in',
+    )?.event?.[0]?.script.exec;
+    if (script === undefined)
+      throw new Error('BFF verification script missing');
+    return script.join('\n');
+  }
+
+  function runVerificationScript(
+    script: string,
+    code: number,
+    payload: string,
+  ): void {
+    runInNewContext(
+      script,
+      {
+        pm: {
+          response: {
+            code,
+            json: () => JSON.parse(payload),
+            text: () => payload,
+          },
+          test: (_name: string, test: () => void) => test(),
+          expect: (value: unknown) => ({
+            to: {
+              be: {
+                oneOf: (accepted: readonly unknown[]) =>
+                  expect(accepted).toContain(value),
+                a: (type: string) => expect(typeof value).toBe(type),
+              },
+              eql: (expected: unknown) => expect(value).toEqual(expected),
+            },
+          }),
+        },
+      },
+      { timeout: 1_000 },
+    );
+  }
+
+  it.each([
+    [
+      201,
+      JSON.stringify({
+        data: {
+          web_session_token: 'opaque-token',
+          expires_at: '2026-11-07T00:00:00.000Z',
+        },
+      }),
+    ],
+    [204, ''],
+  ])(
+    'executes the generated BFF verification test for accepted status %i',
+    async (code, payload) => {
+      const script = await verificationScript();
+      expect(() => runVerificationScript(script, code, payload)).not.toThrow();
+    },
+  );
+
+  it.each([
+    [200, '{}', 'toContain'],
+    [400, '{"error":{"code":"AUTH_VERIFICATION_TOKEN_INVALID"}}', 'toContain'],
+    [201, '{"data":{}}', 'toBe'],
+    [204, '{"data":{"web_session_token":"unexpected"}}', 'toEqual'],
+  ])(
+    'fails the generated BFF verification test for invalid response %i %s',
+    async (code, payload, message) => {
+      const script = await verificationScript();
+      expect(() => runVerificationScript(script, code, payload)).toThrow(
+        message,
+      );
+    },
+  );
 
   it('documents saved identity readiness without exposing JWKS configuration', async () => {
     const collection = await build();

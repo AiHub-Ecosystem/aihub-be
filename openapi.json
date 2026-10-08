@@ -38,6 +38,12 @@
         "in": "cookie",
         "name": "__Host-aihub_refresh",
         "description": "Host-only Secure HttpOnly cookie containing the opaque refresh credential."
+      },
+      "BffClientSecret": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-AIHUB-Client-Secret",
+        "description": "Server-to-server only, Customer Web BFF. Static client secret proving the caller is the AIHUB-owned Customer Web backend. Not a browser credential and not an Organization key: a browser never sends it, and these routes are not for a browser to call."
       }
     },
     "parameters": {
@@ -130,7 +136,7 @@
         }
       },
       "Error401": {
-        "description": "UNAUTHORIZED | USER_IDENTITY_REQUIRED | INVALID_USER_IDENTITY | AUTH_CREDENTIALS_INVALID | AUTH_REFRESH_TOKEN_INVALID | AUTH_USER_ACCESS_TOKEN_REQUIRED | AUTH_USER_ACCESS_TOKEN_INVALID",
+        "description": "UNAUTHORIZED | USER_IDENTITY_REQUIRED | INVALID_USER_IDENTITY | AUTH_CREDENTIALS_INVALID | AUTH_REFRESH_TOKEN_INVALID | AUTH_USER_ACCESS_TOKEN_REQUIRED | AUTH_USER_ACCESS_TOKEN_INVALID | AUTH_WEB_SESSION_INVALID",
         "content": {
           "application/json": {
             "schema": {
@@ -171,6 +177,10 @@
                         },
                         {
                           "const": "AUTH_USER_ACCESS_TOKEN_INVALID",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AUTH_WEB_SESSION_INVALID",
                           "type": "string"
                         }
                       ]
@@ -558,7 +568,7 @@
         }
       },
       "Error503": {
-        "description": "IDENTITY_PROVIDER_UNAVAILABLE | IDENTITY_JWKS_SOURCE_UNAVAILABLE | IDENTITY_CONFIG_CACHE_UNAVAILABLE | AVATAR_STORAGE_UNAVAILABLE | SPEAKING_AUDIO_STORAGE_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
+        "description": "IDENTITY_PROVIDER_UNAVAILABLE | IDENTITY_JWKS_SOURCE_UNAVAILABLE | IDENTITY_CONFIG_CACHE_UNAVAILABLE | AUTH_WEB_SESSION_UNAVAILABLE | AVATAR_STORAGE_UNAVAILABLE | SPEAKING_AUDIO_STORAGE_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
         "content": {
           "application/json": {
             "schema": {
@@ -583,6 +593,10 @@
                         },
                         {
                           "const": "IDENTITY_CONFIG_CACHE_UNAVAILABLE",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AUTH_WEB_SESSION_UNAVAILABLE",
                           "type": "string"
                         },
                         {
@@ -8358,6 +8372,648 @@
           },
           "500": {
             "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
+    "/v1/auth/web-sessions": {
+      "post": {
+        "operationId": "auth.web_sessions.create",
+        "summary": "Create a Web Session from an email and password",
+        "description": "Server-to-server only, Customer Web BFF. AIHUB stores only the token hash, never sets a cookie for this route, and applies the same credential checks and login rate limits as POST /v1/auth/login.",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BffClientSecret": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": {
+                    "minLength": 1,
+                    "maxLength": 320,
+                    "type": "string"
+                  },
+                  "password": {
+                    "minLength": 12,
+                    "maxLength": 128,
+                    "description": "12–128 Unicode code points; no normalization.",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Web Session created. The opaque token travels in this body, never in a cookie: the Customer Web BFF stores it in its own HttpOnly cookie.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["web_session_token", "expires_at"],
+                      "properties": {
+                        "web_session_token": {
+                          "pattern": "^[A-Za-z0-9_-]{43}$",
+                          "description": "Opaque 32-byte credential, base64url. AIHUB stores only its SHA-256 hash.",
+                          "type": "string"
+                        },
+                        "expires_at": {
+                          "format": "date-time",
+                          "description": "ISO 8601 instant the session expires. Sliding: a successful exchange moves it 30 days forward.",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "description": "Client secret missing or wrong, or the email and password are not an active account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["error"],
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "anyOf": [
+                            {
+                              "const": "UNAUTHORIZED",
+                              "type": "string"
+                            },
+                            {
+                              "const": "AUTH_CREDENTIALS_INVALID",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "retry_after_ms": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "properties": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/v1/auth/web-sessions/verification": {
+      "post": {
+        "operationId": "auth.web_sessions.verification",
+        "summary": "Create a Web Session from a verification token",
+        "description": "Server-to-server only, Customer Web BFF. The verification token and the Signup Browser Binding received at signup: a binding that does not match verifies the email and answers 204 with no session, and one token creates at most one session whichever route reaches it first. Applies the verification attempt budget per token hash, so Customer Web BFF users behind a shared proxy address do not consume one shared IP counter.",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BffClientSecret": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": {
+                    "minLength": 1,
+                    "maxLength": 512,
+                    "description": "The verification token AIHUB emailed. One token creates at most one session, whatever its kind.",
+                    "type": "string"
+                  },
+                  "browser_binding": {
+                    "pattern": "^[A-Za-z0-9_-]{43}$",
+                    "description": "Signup Browser Binding: 32 random bytes, base64url. Optional; binds the issued verification token to the requesting browser.",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Web Session created. The opaque token travels in this body, never in a cookie: the Customer Web BFF stores it in its own HttpOnly cookie.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["web_session_token", "expires_at"],
+                      "properties": {
+                        "web_session_token": {
+                          "pattern": "^[A-Za-z0-9_-]{43}$",
+                          "description": "Opaque 32-byte credential, base64url. AIHUB stores only its SHA-256 hash.",
+                          "type": "string"
+                        },
+                        "expires_at": {
+                          "format": "date-time",
+                          "description": "ISO 8601 instant the session expires. Sliding: a successful exchange moves it 30 days forward.",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Email verified; no Web Session created."
+          },
+          "400": {
+            "description": "Malformed request or invalid verification token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["error"],
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "anyOf": [
+                            {
+                              "const": "INVALID_REQUEST",
+                              "type": "string"
+                            },
+                            {
+                              "const": "AUTH_VERIFICATION_TOKEN_INVALID",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "retry_after_ms": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "properties": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Client secret missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["error"],
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "const": "UNAUTHORIZED",
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "retry_after_ms": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "properties": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/v1/auth/web-sessions/exchange": {
+      "post": {
+        "operationId": "auth.web_sessions.exchange",
+        "summary": "Exchange a Web Session for a User Access JWT",
+        "description": "Server-to-server only, Customer Web BFF. The stateless exchange: every call signs a fresh User Access JWT through the same issuer as POST /v1/auth/login, with the same claims, audience, issuer, and 15-minute lifetime, and AIHUB stores nothing for it. The Web Session token travels in this body and nowhere else — a token offered in a cookie, an authorization header, or a query parameter is refused. A successful exchange slides the Web Session expiry 30 days forward and writes nothing when the last renewal is less than about an hour old, so concurrent exchanges need no lock and no shared store. AIHUB keeps no record of an issued JWT, so a BFF may cache one in process until shortly before it expires; a JWT signed before a logout therefore stays valid for up to 15 minutes.",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BffClientSecret": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["web_session_token"],
+                "properties": {
+                  "web_session_token": {
+                    "minLength": 1,
+                    "maxLength": 512,
+                    "description": "The opaque token AIHUB returned when the Web Session was created. Expired, revoked, unknown, and malformed tokens all fail alike.",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User Access JWT issued. Same envelope as POST /v1/auth/login; no cookie is set for this route.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["access_token", "token_type", "expires_in"],
+                      "properties": {
+                        "access_token": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "token_type": {
+                          "const": "Bearer",
+                          "type": "string"
+                        },
+                        "expires_in": {
+                          "const": 900,
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "description": "Client secret missing or wrong, or the Web Session token is expired, revoked, unknown, malformed, or belongs to an account that is not active",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["error"],
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "anyOf": [
+                            {
+                              "const": "UNAUTHORIZED",
+                              "type": "string"
+                            },
+                            {
+                              "const": "AUTH_WEB_SESSION_INVALID",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "retry_after_ms": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "properties": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/v1/auth/web-sessions/logout": {
+      "post": {
+        "operationId": "auth.web_sessions.logout",
+        "summary": "Revoke a Web Session",
+        "description": "Server-to-server only, Customer Web BFF. Idempotent and quiet: a valid, already-revoked, unknown, expired, and malformed token all answer the same bodyless 204, so a stale tab or a repeated logout never shows a confusing error and no caller can probe which sessions exist. Only the presented session is revoked — the account’s other devices stay signed in. The Web Session token travels in this body and nowhere else; offered in a cookie, an authorization header, or a query parameter it is read from nowhere, so nothing is revoked. A password reset is what ends every Web Session of an account; there is no log-out-all-devices route. A JWT signed before a logout stays valid for up to 15 minutes.",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BffClientSecret": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["web_session_token"],
+                "properties": {
+                  "web_session_token": {
+                    "minLength": 1,
+                    "maxLength": 512,
+                    "description": "The opaque token AIHUB returned when the Web Session was created. Revoked, unknown, expired, and malformed tokens all answer 204 alike, and only the presented session is revoked.",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Session revoked, or already revoked, unknown, or expired. One bodyless answer for every case, and no cookie is set for this route.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "description": "Client secret missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["error"],
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "const": "UNAUTHORIZED",
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "retry_after_ms": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "properties": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
           }
         }
       }

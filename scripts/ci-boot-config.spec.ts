@@ -76,6 +76,8 @@ describe('CI boot configuration', () => {
     });
 
     expect(env.NODE_ENV).toBe('production');
+    expect(env.AIHUB_WEB_SESSION_CLIENT_SECRET).toBeUndefined();
+    expect(provider.getSnapshot().webSession?.clientSecret).toBeTruthy();
     expect(provider.getSnapshot().userAccessJwt.privateKeyPem).toContain(
       'BEGIN PRIVATE KEY',
     );

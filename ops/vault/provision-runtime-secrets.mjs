@@ -147,6 +147,7 @@ const bundles = [
     'sandbox-assertion',
   ],
   ['email-outbox.json', ['current_key_id', 'keys'], 'email-outbox'],
+  ['web-session.json', ['client_secret'], 'web-session'],
 ];
 
 for (const [fileName, keys, bundleName] of bundles) {
@@ -158,5 +159,5 @@ for (const [fileName, keys, bundleName] of bundles) {
 }
 
 console.log(
-  `Vault provisioning completed for ${environment}: policy, AppRole, and nine KV bundles updated`,
+  `Vault provisioning completed for ${environment}: policy, AppRole, and ten KV bundles updated`,
 );

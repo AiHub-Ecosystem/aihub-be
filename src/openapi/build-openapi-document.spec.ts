@@ -339,6 +339,7 @@ describe('buildOpenApiDocument', () => {
       bearer: 'BearerAuth',
       'api-key': 'ApiKeyAuth',
       'refresh-cookie': 'RefreshCookie',
+      'bff-client-secret': 'BffClientSecret',
       none: '',
     };
 
@@ -799,6 +800,123 @@ describe('buildOpenApiDocument', () => {
       'password',
     );
     expect(JSON.stringify(register?.responses['201'])).not.toContain('token');
+  });
+
+  it('publishes only verification-specific Web Session failures', () => {
+    const responses =
+      build().paths['/v1/auth/web-sessions/verification']?.post?.responses;
+    const unauthorized = JSON.stringify(responses?.['401']);
+    expect(unauthorized).toContain('UNAUTHORIZED');
+    expect(unauthorized).not.toContain('AUTH_CREDENTIALS_INVALID');
+    expect(unauthorized).not.toContain('password');
+    expect(JSON.stringify(responses?.['400'])).toContain(
+      'AUTH_VERIFICATION_TOKEN_INVALID',
+    );
+  });
+
+  it('labels the Web Session route as server-to-server for the Customer Web BFF', () => {
+    const doc = build();
+    const operation = doc.paths['/v1/auth/web-sessions']?.post;
+    const scheme = doc.components.securitySchemes?.BffClientSecret as
+      | Record<string, unknown>
+      | undefined;
+
+    expect(operation?.operationId).toBe('auth.web_sessions.create');
+    expect(operation?.security).toEqual([{ BffClientSecret: [] }]);
+    expect(operation?.responses['201']).toBeDefined();
+    expect(JSON.stringify(operation?.responses['201'])).toContain('no-store');
+    // One generic 401: a wrong client secret and a wrong password answer alike.
+    expect(JSON.stringify(operation?.responses['401'])).toContain(
+      'AUTH_CREDENTIALS_INVALID',
+    );
+    expect(JSON.stringify(operation?.responses['401'])).toContain(
+      'UNAUTHORIZED',
+    );
+    expect(scheme).toMatchObject({
+      type: 'apiKey',
+      in: 'header',
+      name: 'X-AIHUB-Client-Secret',
+    });
+    expect(scheme?.description).toContain('Server-to-server only');
+    expect(scheme?.description).toContain('Customer Web BFF');
+  });
+
+  it('documents Verification Sign-in as the same server-to-server group', () => {
+    const operation = build().paths['/v1/auth/web-sessions/verification']?.post;
+
+    expect(operation?.operationId).toBe('auth.web_sessions.verification');
+    expect(operation?.security).toEqual([{ BffClientSecret: [] }]);
+    expect(operation?.description).toContain('Server-to-server only');
+    expect(operation?.description).toContain('Customer Web BFF');
+    // 204 is the verify-only answer, not an error.
+    expect(operation?.responses['204']).toBeDefined();
+    expect(operation?.responses['201']).toBeDefined();
+    expect(JSON.stringify(operation?.responses['201'])).toContain('no-store');
+    const request = JSON.stringify(operation?.requestBody);
+    expect(request).toContain('browser_binding');
+    // The email itself is a credential: the published request must not carry
+    // one, and the published response must not leak the raw token elsewhere.
+    expect(request).not.toContain('password');
+  });
+
+  it('documents the exchange as the same server-to-server group', () => {
+    const doc = build();
+    const operation = doc.paths['/v1/auth/web-sessions/exchange']?.post;
+
+    expect(operation?.operationId).toBe('auth.web_sessions.exchange');
+    expect(operation?.security).toEqual([{ BffClientSecret: [] }]);
+    expect(operation?.description).toContain('Server-to-server only');
+    expect(operation?.description).toContain('Customer Web BFF');
+    // Same envelope as login, and the BFF is told it may cache the JWT: that is
+    // the whole reason the route can be stateless.
+    const success = JSON.stringify(operation?.responses['200']);
+    expect(success).toContain('access_token');
+    expect(success).toContain('no-store');
+    expect(operation?.description).toContain('cache one in process');
+    // The published contract states the sliding renewal, so a BFF can reason
+    // about when it is asked to sign in again.
+    expect(operation?.description).toContain('30 days forward');
+    // One generic code for every unusable session, plus the client secret one.
+    const refused = JSON.stringify(operation?.responses['401']);
+    expect(refused).toContain('AUTH_WEB_SESSION_INVALID');
+    expect(refused).toContain('UNAUTHORIZED');
+    expect(refused).not.toContain('AUTH_REFRESH_TOKEN_INVALID');
+    // The token is a body field, and nothing publishes a way to pass it in a
+    // cookie or a header.
+    expect(JSON.stringify(operation?.requestBody)).toContain(
+      'web_session_token',
+    );
+    expect(JSON.stringify(operation)).not.toContain('Set-Cookie');
+  });
+
+  it('documents logout as the same server-to-server group, with no body and no session failure', () => {
+    const operation = build().paths['/v1/auth/web-sessions/logout']?.post;
+
+    expect(operation?.operationId).toBe('auth.web_sessions.logout');
+    expect(operation?.security).toEqual([{ BffClientSecret: [] }]);
+    expect(operation?.description).toContain('Server-to-server only');
+    expect(operation?.description).toContain('Customer Web BFF');
+    // One bodyless answer for every case, which is the reason a generated client
+    // needs no error handling here beyond the two failures it can meet.
+    const noContent = operation?.responses['204'] as
+      | Record<string, unknown>
+      | undefined;
+    expect(noContent).toBeDefined();
+    expect(noContent?.content).toBeUndefined();
+    expect(JSON.stringify(operation?.responses['204'])).toContain('no-store');
+    const refused = JSON.stringify(operation?.responses['401']);
+    expect(refused).toContain('UNAUTHORIZED');
+    expect(refused).not.toContain('AUTH_WEB_SESSION_INVALID');
+    // Only the presented session, and never a route that ends them all.
+    expect(operation?.description).toContain('the presented session');
+    expect(operation?.description).toContain('no log-out-all-devices route');
+    expect(JSON.stringify(build().paths)).not.toContain(
+      '/v1/auth/web-sessions/all',
+    );
+    expect(JSON.stringify(operation?.requestBody)).toContain(
+      'web_session_token',
+    );
+    expect(JSON.stringify(operation)).not.toContain('Set-Cookie');
   });
 
   it('mints without an assertion, because issuing one is what it does', () => {

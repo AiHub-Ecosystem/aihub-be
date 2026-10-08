@@ -18,14 +18,21 @@ secret/aihub/{environment}/database
 secret/aihub/{environment}/redis
 secret/aihub/{environment}/sandbox-assertion
 secret/aihub/{environment}/email-outbox
+secret/aihub/{environment}/web-session
 ```
 
-The first six bundles are part of the V1 runtime-secret document. The
-database, Redis, and sandbox-assertion bundles are rendered into a separate
+All bundles except database, Redis, and sandbox-assertion are part of the V1
+runtime-secret document. Those three bundles are rendered into a separate
 connection document because they are process bootstrap configuration. The
 Speaking question catalog uses the SeaweedFS bundle to create short-lived read
 URLs for the public sample-audio endpoint, and the Resend bundle supplies the
-verification-email provider credential.
+verification-email provider credential. The `web-session` bundle holds the one
+static secret the Customer Web BFF proves itself with on the Web Session routes;
+it is required in production and staging. Provisioning its KV value can precede
+the release, but rendering its new root key would break the previous image's
+strict document reader. Keep the live templates unchanged until all old-image
+consumers are stopped, then render and replace the image in the same maintenance
+window. Follow the [coordinated release and rollback sequence](../../docs/operations/deploy-vps.md#release-order-when-a-rollout-adds-a-runtime-secret).
 
 ## Policy bootstrap
 
@@ -40,8 +47,8 @@ vault policy write aihub-production-runtime ops/vault/policies/aihub-production-
 
 The repository also includes an explicit operator-only provisioning helper. It
 expects a mode-700 directory with `ai-speaking.json`, `ai-writing.json`,
-`seaweedfs.json`, `resend.json`, `user-access-jwt.json`, and
-`email-outbox.json` containing only the flat bundle keys. It passes file paths
+`seaweedfs.json`, `resend.json`, `user-access-jwt.json`, `email-outbox.json`,
+and `web-session.json` containing only the flat bundle keys. It passes file paths
 to the Vault CLI, never secret values:
 
 ```powershell
@@ -50,6 +57,16 @@ $env:AIHUB_VAULT_ENVIRONMENT = 'staging'
 $env:AIHUB_VAULT_CREDENTIALS_DIR = 'C:\secure\aihub-vault\staging'
 $env:AIHUB_VAULT_AGENT_CIDR = '172.16.2.1/32'
 pnpm vault:provision
+```
+
+`web-session.json` is required by the helper for the selected environment. It
+contains only `client_secret`, a non-empty string shared with the Customer Web
+BFF:
+
+```json
+{
+  "client_secret": "<BFF client secret>"
+}
 ```
 
 Every value in a bundle file is a string. In `email-outbox.json` that includes
@@ -88,7 +105,7 @@ or a revoked token. `bound_cidr_list` is the constraint Vault requires when
 `bind_secret_id` is off.
 
 The helper writes the selected policy, creates an AppRole with a short token
-TTL and bounded maximum TTL, and writes all eight KV bundles. The credential
+TTL and bounded maximum TTL, and writes all ten KV bundles. The credential
 directory must also contain `database.json`, `redis.json`, and
 `sandbox-assertion.json` with the flat keys used by the connection template.
 `database.json` contains `url`, `sandbox_url`, and

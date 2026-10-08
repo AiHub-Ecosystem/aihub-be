@@ -1,5 +1,6 @@
 import type { InsertEmailDeliveryRequestInput } from './email-delivery-request.port';
 import type { IssuedRefreshToken } from './refresh-token.port';
+import type { IssuedWebSessionToken } from './web-session-token.port';
 
 export interface ResendVerificationTarget {
   readonly email: string;
@@ -30,15 +31,28 @@ export interface ConsumeVerificationTokenInput {
   readonly tokenHash: string;
   readonly browserBindingHash?: string;
   /**
-   * The pre-issued Refresh Session a Verification Sign-in commits together
-   * with its claim and the verification that precedes it (ADR-0054). It is
-   * stored only when the sign-in is actually granted, so a request that merely
-   * verifies leaves no session behind.
+   * The pre-issued session a Verification Sign-in commits together with its
+   * claim and the verification that precedes it (ADR-0054). It is stored only
+   * when the sign-in is actually granted, so a request that merely verifies
+   * leaves no session behind.
+   *
+   * The kind is part of the input rather than a second claim method, because
+   * "one verification token creates at most one session in total" is only
+   * enforceable when both kinds pass through the same conditional claim. A
+   * caller picks the kind; it never picks the row.
    */
-  readonly signInSession: {
-    readonly token: IssuedRefreshToken;
-    readonly issuedAt: Date;
-  };
+  readonly signInSession:
+    | {
+        readonly kind: 'refresh';
+        readonly token: IssuedRefreshToken;
+        readonly issuedAt: Date;
+      }
+    | {
+        readonly kind: 'web-session';
+        readonly sessionId: string;
+        readonly token: IssuedWebSessionToken;
+        readonly issuedAt: Date;
+      };
   readonly now: Date;
 }
 

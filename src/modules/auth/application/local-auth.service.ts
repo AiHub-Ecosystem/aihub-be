@@ -6,7 +6,6 @@ import {
   type NormalizedRegistration,
   type RegistrationInput,
   normalizeEmail,
-  normalizeLogin,
   normalizeRegistration,
   validatePassword,
 } from '@/modules/auth/domain/local-auth';
@@ -22,6 +21,10 @@ import {
   type IssuedSession,
   RefreshRotationCommittedError,
 } from './local-auth-service.port';
+import {
+  type CredentialCheckPorts,
+  authenticateCredentials,
+} from './local-credentials';
 import { type PasswordHasherPort } from './password-hasher.port';
 import { type PasswordResetTokenRepositoryPort } from './password-reset-token-repository.port';
 import { type PasswordResetTokenPort } from './password-reset-token.port';
@@ -35,6 +38,10 @@ import {
   type UserAccessTokenIssuerPort,
 } from './user-access-token.port';
 import { type UserAccountRepositoryPort } from './user-account.port';
+import {
+  browserBindingHash,
+  enforceVerificationRateLimit,
+} from './verification-sign-in';
 import { type VerificationTokenRepositoryPort } from './verification-token-repository.port';
 import { type VerificationTokenPort } from './verification-token.port';
 
@@ -43,16 +50,9 @@ const LOCAL_AUTH_RATE_LIMITS = {
     ip: { scope: 'register_ip', limit: 5, windowMs: 15 * 60 * 1000 },
     email: { scope: 'register_email', limit: 3, windowMs: 24 * 60 * 60 * 1000 },
   },
-  verify: {
-    ip: { scope: 'verify_ip', limit: 10, windowMs: 5 * 60 * 1000 },
-  },
   resend: {
     ip: { scope: 'resend_ip', limit: 3, windowMs: 15 * 60 * 1000 },
     email: { scope: 'resend_email', limit: 3, windowMs: 24 * 60 * 60 * 1000 },
-  },
-  login: {
-    ip: { scope: 'login_ip', limit: 20, windowMs: 5 * 60 * 1000 },
-    email: { scope: 'login_email', limit: 5, windowMs: 15 * 60 * 1000 },
   },
   refresh: {
     ip: { scope: 'refresh_ip', limit: 20, windowMs: 5 * 60 * 1000 },
@@ -67,8 +67,6 @@ const LOCAL_AUTH_RATE_LIMITS = {
     token: { scope: 'reset_token', limit: 5, windowMs: 15 * 60 * 1000 },
   },
 } as const;
-const DUMMY_PASSWORD_HASH =
-  '$argon2id$v=19$m=65536,t=3,p=1$SoHl8YUBzXgiAZ4xlgNZyg$qwZIFOa2OcIOgiHLRYImWLsza4k9/T4ZZvvhiWrD41k';
 const PASSWORD_RECOVERY_MESSAGE =
   'If the account exists and is eligible, AIHUB has accepted a request to send password reset instructions.';
 
@@ -153,7 +151,7 @@ export class LocalAuthService {
         tokenId: issued.id,
         tokenHash: issued.hash,
         tokenExpiresAt: issued.expiresAt,
-        ...this.bindingHash(browserBinding),
+        ...browserBindingHash(this.tokenIssuer, browserBinding),
         // Committed with the account or not at all (ADR-0074).
         emailDelivery: this.emailDeliveryRequest(
           'verification_email',
@@ -190,9 +188,7 @@ export class LocalAuthService {
     ip: string,
     browserBinding?: string,
   ): Promise<IssuedSession | undefined> {
-    await this.enforceRateLimits([
-      { ...LOCAL_AUTH_RATE_LIMITS.verify.ip, key: ip },
-    ]);
+    await enforceVerificationRateLimit(this.rateLimiter, ip);
 
     const now = this.clock.now();
     // Pre-issued so Verification Sign-in commits the one-time claim and its
@@ -201,8 +197,8 @@ export class LocalAuthService {
     const refreshToken = this.refreshTokenIssuer.issue(now);
     const outcome = await this.verificationTokens.consumeVerificationToken({
       tokenHash: this.tokenIssuer.hash(token),
-      ...this.bindingHash(browserBinding),
-      signInSession: { token: refreshToken, issuedAt: now },
+      ...browserBindingHash(this.tokenIssuer, browserBinding),
+      signInSession: { kind: 'refresh', token: refreshToken, issuedAt: now },
       now,
     });
     if (outcome.kind === 'invalid') {
@@ -247,7 +243,7 @@ export class LocalAuthService {
       tokenId: issued.id,
       tokenHash: issued.hash,
       tokenExpiresAt: issued.expiresAt,
-      ...this.bindingHash(browserBinding),
+      ...browserBindingHash(this.tokenIssuer, browserBinding),
       emailDelivery: this.emailDeliveryRequest(
         'verification_email',
         {
@@ -343,45 +339,20 @@ export class LocalAuthService {
     input: { readonly email: string; readonly password: string },
     ip: string,
   ): Promise<IssuedSession> {
-    let normalized: { readonly email: string; readonly password: string };
-    try {
-      normalized = normalizeLogin(input);
-    } catch (error) {
-      throw invalidRequest(error);
-    }
-
-    const identity = await this.userAccounts.findLoginIdentityByEmail(
-      normalized.email,
+    const credentials = await authenticateCredentials(
+      this.credentials,
+      input,
+      ip,
     );
-    const passwordHash = identity?.passwordHash ?? DUMMY_PASSWORD_HASH;
-    const passwordMatches = await this.passwordHasher.verify(
-      normalized.password,
-      passwordHash,
-    );
+    return this.startLoginSession(credentials.userId, this.clock.now());
+  }
 
-    if (
-      identity === undefined ||
-      !passwordMatches ||
-      identity.status !== 'active'
-    ) {
-      await this.enforceRateLimits([
-        {
-          ...LOCAL_AUTH_RATE_LIMITS.login.ip,
-          key: ip,
-        },
-        {
-          ...LOCAL_AUTH_RATE_LIMITS.login.email,
-          key: normalized.email,
-        },
-      ]);
-      throw new AppError({
-        code: 'AUTH_CREDENTIALS_INVALID',
-        message: 'Email or password is invalid',
-        retryable: false,
-      });
-    }
-
-    return this.startLoginSession(identity.userId, this.clock.now());
+  private get credentials(): CredentialCheckPorts {
+    return {
+      userAccounts: this.userAccounts,
+      passwordHasher: this.passwordHasher,
+      rateLimiter: this.rateLimiter,
+    };
   }
 
   /**
@@ -418,15 +389,6 @@ export class LocalAuthService {
       expiresIn: accessToken.expiresIn,
       refreshToken: refreshToken.raw,
     };
-  }
-
-  /** The Signup Browser Binding is stored and compared only as a hash. */
-  private bindingHash(browserBinding: string | undefined): {
-    readonly browserBindingHash?: string;
-  } {
-    return browserBinding === undefined
-      ? {}
-      : { browserBindingHash: this.tokenIssuer.hash(browserBinding) };
   }
 
   /**

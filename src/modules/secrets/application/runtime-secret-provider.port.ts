@@ -26,6 +26,15 @@ export interface UserAccessJwtRuntimeSecrets {
   readonly keyId: string;
 }
 
+/**
+ * The Customer Web BFF client secret. Absent in a local environment that never
+ * provisioned one, which is not the same as "no caller": the Web Session routes
+ * read the absence and refuse rather than serve an open route.
+ */
+export interface WebSessionRuntimeSecrets {
+  readonly clientSecret: string;
+}
+
 export interface RuntimeSecretSnapshot {
   readonly aiSpeaking: AiSpeakingRuntimeSecrets;
   readonly aiWriting: AiWritingRuntimeSecrets;
@@ -33,6 +42,7 @@ export interface RuntimeSecretSnapshot {
   readonly userAccessJwt: UserAccessJwtRuntimeSecrets;
   readonly seaweedfs?: SeaweedFsRuntimeSecrets;
   readonly emailOutbox: EmailOutboxRuntimeSecrets;
+  readonly webSession?: WebSessionRuntimeSecrets;
 }
 
 export interface RuntimeSecretProvider {

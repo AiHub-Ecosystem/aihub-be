@@ -3,6 +3,7 @@
 - Status: Accepted
 - Related issue: #94
 - Supersedes: ADR-0020 — Amends: ADR-0021 — Updates notes: ADR-0022, ADR-0027
+- Amended by: [ADR-0081](0081-aihub-owned-customer-web-web-sessions.md) — the "Session and authorization boundary" section below is superseded
 
 AIHUB becomes the source of truth for User Accounts, Auth Identities, invitations, membership status and roles, and user-facing session authorization of the Customer Web sandbox. Clerk is not a fallback provider. This supersedes ADR-0020's Managed-IdP decision and amends only the identity clauses of ADR-0021, whose non-identity grading invariants remain in force unchanged. The UI and BFF keep one origin, the browser stays free of provider and API credentials, and the existing sandbox Organization mapping, server-held Sandbox API key, per-request assertion, no-store grading behavior, and safe error boundary all survive the move.
 

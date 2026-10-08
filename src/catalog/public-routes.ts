@@ -14,6 +14,13 @@ import {
   VerifyEmailRequestSchema,
 } from '@/contracts/auth/local-auth';
 import {
+  CreateWebSessionFromVerificationRequestSchema,
+  CreateWebSessionRequestSchema,
+  CreateWebSessionResponseSchema,
+  ExchangeWebSessionRequestSchema,
+  LogoutWebSessionRequestSchema,
+} from '@/contracts/auth/web-session';
+import {
   AvatarResponseSchema,
   AvatarUploadResponseSchema,
   CreateAvatarUploadRequestSchema,
@@ -65,7 +72,18 @@ import type { IdempotencyMode } from './operation-catalog';
  * How a route learns who is calling it, which decides the `security` entry the
  * document publishes.
  */
-export type CallerAuth = 'bearer' | 'refresh-cookie' | 'api-key' | 'none';
+/**
+ * `bff-client-secret` is the static Customer Web BFF secret in
+ * `X-AIHUB-Client-Secret`. It is a caller-auth kind of its own rather than a
+ * variant of `api-key` because it identifies a BFF, not an Organization, and
+ * because the document must label it as server-to-server only.
+ */
+export type CallerAuth =
+  | 'bearer'
+  | 'refresh-cookie'
+  | 'api-key'
+  | 'bff-client-secret'
+  | 'none';
 
 /**
  * How a route learns which Organization it acts on.
@@ -460,6 +478,60 @@ export const PUBLIC_ROUTES = {
     requestSchema: EmptyAuthRequestSchema,
     responseSchema: null,
     errorStatuses: [400, 500],
+  },
+  'auth.web_sessions.create': {
+    method: 'POST',
+    path: '/v1/auth/web-sessions',
+    callerAuth: 'bff-client-secret',
+    organizationResolution: 'none',
+    successStatus: 201,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: CreateWebSessionRequestSchema,
+    responseSchema: CreateWebSessionResponseSchema,
+    errorStatuses: [400, 401, 429, 500, 503],
+  },
+  'auth.web_sessions.verification': {
+    method: 'POST',
+    path: '/v1/auth/web-sessions/verification',
+    callerAuth: 'bff-client-secret',
+    organizationResolution: 'none',
+    successStatus: 201,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: CreateWebSessionFromVerificationRequestSchema,
+    responseSchema: CreateWebSessionResponseSchema,
+    errorStatuses: [400, 401, 429, 500, 503],
+  },
+  // The stateless exchange. Same envelope as login, no cookie, and AIHUB keeps
+  // no record of the JWT it signs: only the sliding session expiry is durable.
+  'auth.web_sessions.exchange': {
+    method: 'POST',
+    path: '/v1/auth/web-sessions/exchange',
+    callerAuth: 'bff-client-secret',
+    organizationResolution: 'none',
+    successStatus: 200,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: ExchangeWebSessionRequestSchema,
+    responseSchema: LoginResponseSchema,
+    errorStatuses: [400, 401, 429, 500, 503],
+  },
+  // Idempotent and quiet, so the route has no session failure to report and no
+  // rate-limit dimension of its own: a valid, revoked, unknown, expired, and
+  // malformed token all answer the same bodyless 204. Only the presented session
+  // is revoked, and there is no "log out all devices" route.
+  'auth.web_sessions.logout': {
+    method: 'POST',
+    path: '/v1/auth/web-sessions/logout',
+    callerAuth: 'bff-client-secret',
+    organizationResolution: 'none',
+    successStatus: 204,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: LogoutWebSessionRequestSchema,
+    responseSchema: null,
+    errorStatuses: [400, 401, 500, 503],
   },
   'sandbox.assertions.mint': {
     method: 'POST',

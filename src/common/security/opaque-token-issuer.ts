@@ -13,12 +13,6 @@ const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/**
- * The three bindings that share this issuer shape. The `prefix` and `ttlMs`
- * here are the durable values written to Postgres, so they are named once
- * beside the issuer rather than spelled as bare literals at each call site,
- * where a TTL typo would compile silently and ship.
- */
 export const OPAQUE_TOKEN_BINDINGS = {
   passwordReset: { prefix: 'prt_', ttlMs: HOUR },
   verification: { prefix: 'evt_', ttlMs: DAY },

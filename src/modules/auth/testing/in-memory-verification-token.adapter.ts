@@ -17,6 +17,9 @@ const VERIFIED: VerificationOutcome = { kind: 'verified' };
 export class InMemoryVerificationTokenAdapter
   implements VerificationTokenRepositoryPort
 {
+  /** Fails the session write inside the claim, as a durable store outage would. */
+  failSessionWrite = false;
+
   constructor(private readonly state: InMemoryAuthState) {}
 
   async rotateVerificationToken(
@@ -86,6 +89,14 @@ export class InMemoryVerificationTokenAdapter
     return this.signInIfBound(token, input);
   }
 
+  /**
+   * The one claim a verification token has, whatever session kind asked for it.
+   * Setting `signedInAt` before the write is what makes a second request — and
+   * a request for the other session kind — see the token as already spent, so
+   * "at most one session in total" is a property of this state rather than of
+   * two code paths agreeing. A failed write releases the claim, mirroring the
+   * rollback Postgres does with the whole transaction.
+   */
   private signInIfBound(
     token: InMemoryVerificationToken,
     input: ConsumeVerificationTokenInput,
@@ -100,14 +111,37 @@ export class InMemoryVerificationTokenAdapter
     }
 
     token.signedInAt = input.now;
-    this.state.refreshTokens.set(input.signInSession.token.hash, {
-      tokenId: input.signInSession.token.id,
-      familyId: input.signInSession.token.familyId,
-      userId: token.userId,
-      expiresAt: input.signInSession.token.expiresAt,
-      usedAt: undefined,
-      revokedAt: undefined,
-    });
+    try {
+      if (input.signInSession.kind === 'refresh') {
+        const refresh = input.signInSession;
+        this.state.refreshTokens.set(refresh.token.hash, {
+          tokenId: refresh.token.id,
+          familyId: refresh.token.familyId,
+          userId: token.userId,
+          expiresAt: refresh.token.expiresAt,
+          usedAt: undefined,
+          revokedAt: undefined,
+        });
+      } else {
+        if (this.failSessionWrite) {
+          throw new Error('durable store unavailable');
+        }
+        const session = input.signInSession;
+        this.state.webSessions.set(session.token.hash, {
+          sessionId: session.sessionId,
+          userId: token.userId,
+          tokenHash: session.token.hash,
+          createdAt: session.issuedAt,
+          expiresAt: session.token.expiresAt,
+          lastRenewedAt: session.issuedAt,
+          revokedAt: undefined,
+        });
+      }
+    } catch (error) {
+      token.signedInAt = undefined;
+      throw error;
+    }
+
     return { kind: 'signed_in', userId: token.userId };
   }
 }

@@ -10,6 +10,7 @@ interface RuntimeField {
   readonly defaultValue?: string | number | boolean;
   readonly values?: readonly string[];
   readonly requiredIn?: readonly RuntimeMode[];
+  /** Require env-mode values, limited to requiredIn when modes are specified. */
   readonly requiredWhenSecretSource?: boolean;
   readonly secret?: boolean;
   readonly allowEmpty?: boolean;
@@ -148,6 +149,13 @@ const fields = {
     kind: 'string',
     secret: true,
     requiredWhenSecretSource: true,
+  },
+  // Local env-mode value only; agent-file mode validates the Vault bundle.
+  AIHUB_WEB_SESSION_CLIENT_SECRET: {
+    kind: 'string',
+    secret: true,
+    requiredWhenSecretSource: true,
+    requiredIn: PROD_MODES,
   },
   EMAIL_OUTBOX_CURRENT_KEY_ID: {
     kind: 'string',
@@ -316,8 +324,11 @@ export function loadRuntimeConfiguration(
 
     if (
       value === undefined &&
-      (field.requiredIn?.includes(modeValue as RuntimeMode) ||
-        (field.requiredWhenSecretSource && secretSource === 'env'))
+      (field.requiredWhenSecretSource
+        ? secretSource === 'env' &&
+          (field.requiredIn === undefined ||
+            field.requiredIn.includes(modeValue as RuntimeMode))
+        : field.requiredIn?.includes(modeValue as RuntimeMode))
     ) {
       problems.push(name);
     }

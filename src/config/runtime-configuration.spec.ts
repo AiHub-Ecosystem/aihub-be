@@ -102,6 +102,66 @@ describe('runtime configuration', () => {
     ).toEqual(['staging', 'production']);
   });
 
+  it('requires the BFF environment secret only for the environment secret source', () => {
+    const secret = runtimeEnvironmentMetadata.AIHUB_WEB_SESSION_CLIENT_SECRET;
+
+    expect(secret).toMatchObject({
+      type: 'string',
+      secret: true,
+      requiredIn: ['staging', 'production'],
+      requiredWhenSecretSource: true,
+    });
+
+    const reportedIn = (mode: string, source = 'env'): readonly string[] => {
+      try {
+        loadRuntimeConfiguration({
+          NODE_ENV: mode,
+          AIHUB_RUNTIME_SECRET_SOURCE: source,
+        });
+        return [];
+      } catch (error) {
+        return (error as RuntimeConfigurationError).variableNames;
+      }
+    };
+
+    // Only this variable's own absence is asserted: an instance missing other
+    // required settings fails for its own reasons.
+    expect(reportedIn('production')).toContain(
+      'AIHUB_WEB_SESSION_CLIENT_SECRET',
+    );
+    expect(reportedIn('staging')).toContain('AIHUB_WEB_SESSION_CLIENT_SECRET');
+    for (const mode of ['production', 'staging']) {
+      expect(reportedIn(mode, 'agent-file')).not.toContain(
+        'AIHUB_WEB_SESSION_CLIENT_SECRET',
+      );
+    }
+    expect(reportedIn('development')).not.toContain(
+      'AIHUB_WEB_SESSION_CLIENT_SECRET',
+    );
+    expect(reportedIn('test')).not.toContain('AIHUB_WEB_SESSION_CLIENT_SECRET');
+  });
+
+  it.each(['production', 'staging'] as const)(
+    'boots %s configuration without an environment copy of the Vault BFF secret',
+    (mode) => {
+      const config = loadRuntimeConfiguration({
+        NODE_ENV: mode,
+        AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
+        AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
+        AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connection-secrets.json',
+        DATABASE_URL: 'postgres://fake:fake@db.test.invalid/aihub',
+        REDIS_URL: 'redis://redis.test.invalid/0',
+        AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+        AIHUB_PRODUCTION_HOST: 'api.test.invalid',
+        DOWNSTREAM_AI_WRITING_URL: 'https://writing.test.invalid',
+        DOWNSTREAM_AI_SPEAKING_URL: 'https://speaking.test.invalid',
+        RESEND_FROM: 'no-reply@test.invalid',
+        CUSTOMER_WEB_BASE_URL: 'https://customer.test.invalid',
+      });
+      expect(config.AIHUB_WEB_SESSION_CLIENT_SECRET).toBeUndefined();
+    },
+  );
+
   it('keeps secret values out of the Nest application config provider', () => {
     const configuration = appConfig();
 
@@ -110,5 +170,6 @@ describe('runtime configuration', () => {
     expect(configuration).not.toHaveProperty(
       'AIHUB_USER_ACCESS_JWT_PRIVATE_KEY',
     );
+    expect(configuration).not.toHaveProperty('AIHUB_WEB_SESSION_CLIENT_SECRET');
   });
 });

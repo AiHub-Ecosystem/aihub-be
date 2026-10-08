@@ -41,6 +41,7 @@ function runtimeSecrets() {
       private_key_pem: privateKeyPem('rsa', { modulusLength: 2048 }),
       key_id: FAKE,
     },
+    'web-session': { client_secret: FAKE },
     seaweedfs: { access_key_id: FAKE, secret_access_key: FAKE },
     'email-outbox': {
       current_key_id: FAKE,

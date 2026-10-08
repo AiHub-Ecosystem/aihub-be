@@ -2789,6 +2789,262 @@
       }
     },
     {
+      "id": "93730afb-f7aa-43e9-8ea3-27cbb5a1b22b",
+      "name": "Create a Web Session from an email and password",
+      "request": {
+        "name": "Create a Web Session from an email and password",
+        "description": {
+          "content": "Server-to-server only, Customer Web BFF. AIHUB stores only the token hash, never sets a cookie for this route, and applies the same credential checks and login rate limits as POST /v1/auth/login.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "auth", "web-sessions"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "apikey",
+          "apikey": [
+            {
+              "key": "key",
+              "value": "X-AIHUB-Client-Secret"
+            },
+            {
+              "key": "value",
+              "value": "{{apiKey}}"
+            },
+            {
+              "key": "in",
+              "value": "header"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"<string>\",\n  \"password\": \"<string>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "40857b6b-af38-4ffa-a3c8-4793cd5f3c7d",
+      "name": "Create a Web Session from a verification token",
+      "request": {
+        "name": "Create a Web Session from a verification token",
+        "description": {
+          "content": "Server-to-server only, Customer Web BFF. The verification token and the Signup Browser Binding received at signup: a binding that does not match verifies the email and answers 204 with no session, and one token creates at most one session whichever route reaches it first. Applies the verification attempt budget per token hash, so Customer Web BFF users behind a shared proxy address do not consume one shared IP counter.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "auth", "web-sessions", "verification"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "apikey",
+          "apikey": [
+            {
+              "key": "key",
+              "value": "X-AIHUB-Client-Secret"
+            },
+            {
+              "key": "value",
+              "value": "{{apiKey}}"
+            },
+            {
+              "key": "in",
+              "value": "header"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"<string>\",\n  \"browser_binding\": \"<string>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "82f880ad-2945-43c2-8653-3f35908cdfd5",
+      "name": "Exchange a Web Session for a User Access JWT",
+      "request": {
+        "name": "Exchange a Web Session for a User Access JWT",
+        "description": {
+          "content": "Server-to-server only, Customer Web BFF. The stateless exchange: every call signs a fresh User Access JWT through the same issuer as POST /v1/auth/login, with the same claims, audience, issuer, and 15-minute lifetime, and AIHUB stores nothing for it. The Web Session token travels in this body and nowhere else — a token offered in a cookie, an authorization header, or a query parameter is refused. A successful exchange slides the Web Session expiry 30 days forward and writes nothing when the last renewal is less than about an hour old, so concurrent exchanges need no lock and no shared store. AIHUB keeps no record of an issued JWT, so a BFF may cache one in process until shortly before it expires; a JWT signed before a logout therefore stays valid for up to 15 minutes.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "auth", "web-sessions", "exchange"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "apikey",
+          "apikey": [
+            {
+              "key": "key",
+              "value": "X-AIHUB-Client-Secret"
+            },
+            {
+              "key": "value",
+              "value": "{{apiKey}}"
+            },
+            {
+              "key": "in",
+              "value": "header"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"web_session_token\": \"<string>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "30b4cc95-d15d-4e69-931b-4dc6a98a05e7",
+      "name": "Revoke a Web Session",
+      "request": {
+        "name": "Revoke a Web Session",
+        "description": {
+          "content": "Server-to-server only, Customer Web BFF. Idempotent and quiet: a valid, already-revoked, unknown, expired, and malformed token all answer the same bodyless 204, so a stale tab or a repeated logout never shows a confusing error and no caller can probe which sessions exist. Only the presented session is revoked — the account’s other devices stay signed in. The Web Session token travels in this body and nowhere else; offered in a cookie, an authorization header, or a query parameter it is read from nowhere, so nothing is revoked. A password reset is what ends every Web Session of an account; there is no log-out-all-devices route. A JWT signed before a logout stays valid for up to 15 minutes.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "auth", "web-sessions", "logout"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "apikey",
+          "apikey": [
+            {
+              "key": "key",
+              "value": "X-AIHUB-Client-Secret"
+            },
+            {
+              "key": "value",
+              "value": "{{apiKey}}"
+            },
+            {
+              "key": "in",
+              "value": "header"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"web_session_token\": \"<string>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
       "name": "D1 handover test cases (docs/history/aihub-deliverable-1-historical-contract.md §G)",
       "item": [
         {
@@ -3830,6 +4086,170 @@
           ]
         }
       ]
+    },
+    {
+      "name": "Customer Web Web Sessions (server-to-server, BFF only)",
+      "item": [
+        {
+          "name": "Create a Web Session from a password login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-AIHUB-Client-Secret",
+                "value": "{{webSessionClientSecret}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"REPLACE_WITH_A_REGISTERED_EMAIL\",\n  \"password\": \"REPLACE_WITH_THE_PASSWORD\"\n}"
+            },
+            "url": "{{baseUrl}}/v1/auth/web-sessions",
+            "description": "Server-to-server only, Customer Web BFF. Signs a user in and answers an opaque Web Session token plus its expiry in the body. AIHUB sets no cookie: the BFF puts the token in its own HttpOnly cookie and keeps nothing else. The session lasts 30 days and renews as it is used."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('answers the web session token and its expiry in the body', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.data.web_session_token).to.be.a('string');",
+                  "  pm.expect(body.data.expires_at).to.be.a('string');",
+                  "});",
+                  "pm.test('sets no cookie', function () {",
+                  "  pm.expect(pm.response.headers.get('Set-Cookie')).to.be.undefined;",
+                  "});",
+                  "pm.environment.set(\"webSessionToken\", pm.response.json().data.web_session_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create a Web Session from a Verification Sign-in",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-AIHUB-Client-Secret",
+                "value": "{{webSessionClientSecret}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"REPLACE_WITH_A_VERIFICATION_TOKEN\",\n  \"browser_binding\": \"REPLACE_WITH_A_SIGNUP_BROWSER_BINDING\"\n}"
+            },
+            "url": "{{baseUrl}}/v1/auth/web-sessions/verification",
+            "description": "Server-to-server only, Customer Web BFF. A verification token plus the Signup Browser Binding the Customer Web received, so the user is signed in right after verifying without typing a password again. A 204 means the email was verified but no browser matched the binding, which is the same answer the browser-facing verify route gives."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('verification answers 201 or 204', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([201, 204]);",
+                  "});",
+                  "pm.test('a 201 answers a session and a 204 signs nobody in', function () {",
+                  "  if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.data.web_session_token).to.be.a('string');",
+                  "    pm.expect(body.data.expires_at).to.be.a('string');",
+                  "  } else if (pm.response.code === 204) {",
+                  "    pm.expect(pm.response.text()).to.eql('');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Exchange a Web Session for a User Access JWT",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-AIHUB-Client-Secret",
+                "value": "{{webSessionClientSecret}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"web_session_token\": \"{{webSessionToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/v1/auth/web-sessions/exchange",
+            "description": "Server-to-server only, Customer Web BFF. Every call signs a fresh 15-minute JWT, so a multi-instance BFF needs no shared store and no lock. A successful exchange slides the session 30 days forward, writing at most once an hour. AIHUB stores no JWT, so the BFF may cache one in process until shortly before it expires and a JWT signed before a logout can stay valid for up to 15 minutes. Any bad session answers one generic 401; an infrastructure failure answers 503 with no credential, so keep the cookie and retry."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('answers the same envelope as login', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.data.access_token).to.be.a('string');",
+                  "  pm.expect(body.data.token_type).to.eql('Bearer');",
+                  "  pm.expect(body.data.expires_in).to.eql(900);",
+                  "});",
+                  "pm.environment.set(\"bearerToken\", pm.response.json().data.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout a Web Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-AIHUB-Client-Secret",
+                "value": "{{webSessionClientSecret}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"web_session_token\": \"{{webSessionToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/v1/auth/web-sessions/logout",
+            "description": "Server-to-server only, Customer Web BFF. Revokes only the presented session and answers 204. Logging out twice, or from a stale tab, answers 204 as well. Other devices stay signed in; a password reset is what ends every session of the account."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 204', function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "event": [],
@@ -3842,6 +4262,11 @@
     {
       "key": "apiKey",
       "value": "REPLACE_WITH_A_VALID_ORGANIZATION_API_KEY"
+    },
+    {
+      "key": "webSessionToken",
+      "value": "REPLACE_WITH_A_WEB_SESSION_TOKEN",
+      "description": "Opaque Web Session token answered by the create routes. The exchange and logout requests read it from here; the create route stores it after a successful call."
     },
     {
       "key": "refreshToken",
@@ -3879,6 +4304,11 @@
       "key": "organizationId",
       "value": "REPLACE_WITH_AN_ORGANIZATION_ID",
       "description": "Organization targeted by the management invitation route."
+    },
+    {
+      "key": "webSessionClientSecret",
+      "value": "REPLACE_WITH_THE_CUSTOMER_WEB_BFF_CLIENT_SECRET",
+      "description": "Customer Web BFF client secret for the server-to-server Web Session routes. A fake placeholder: the real value is provisioned per deployment and must never be committed here."
     }
   ],
   "auth": {

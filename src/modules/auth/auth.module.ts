@@ -58,6 +58,19 @@ import {
   VERIFICATION_TOKEN,
   type VerificationTokenPort,
 } from './application/verification-token.port';
+import {
+  WEB_SESSION_CLIENT_SECRET,
+  type WebSessionClientSecretPort,
+} from './application/web-session-client-secret.port';
+import { WEB_SESSION_ID } from './application/web-session-id.port';
+import { WEB_SESSION_POLICY } from './application/web-session-policy';
+import { WEB_SESSION_REPOSITORY } from './application/web-session-repository.port';
+import { WEB_SESSION_SERVICE } from './application/web-session-service.port';
+import {
+  WEB_SESSION_TOKEN_ISSUER,
+  type WebSessionTokenIssuerPort,
+} from './application/web-session-token.port';
+import { WebSessionService } from './application/web-session.service';
 import { Argon2PasswordHasher } from './infrastructure/argon2-password.hasher';
 import { CryptoRefreshToken } from './infrastructure/crypto-refresh-token';
 import {
@@ -82,10 +95,13 @@ import {
   PostgresEmailDispatchStore,
 } from './infrastructure/postgres-email-delivery-request.repository';
 import { PostgresLocalAuthRepository } from './infrastructure/postgres-local-auth.repository';
+import { PostgresWebSessionRepository } from './infrastructure/postgres-web-session.repository';
 import { RedisAuthRateLimiter } from './infrastructure/redis-auth-rate-limiter';
 import { ResendEmailSender } from './infrastructure/resend-email.sender';
 import { LocalAuthController } from './presentation/local-auth.controller';
 import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
+import { WebSessionClientGuard } from './presentation/web-session-client.guard';
+import { WebSessionController } from './presentation/web-session.controller';
 import {
   AUTH_POSTGRES_READINESS,
   type AuthPostgresReadiness,
@@ -93,7 +109,7 @@ import {
 
 @Module({
   imports: [RuntimeConfigurationModule, SecretsModule],
-  controllers: [LocalAuthController],
+  controllers: [LocalAuthController, WebSessionController],
   providers: [
     {
       provide: POSTGRES_AUTH_CLIENT,
@@ -133,6 +149,56 @@ import {
     {
       provide: REFRESH_SESSION_REPOSITORY,
       useExisting: PostgresLocalAuthRepository,
+    },
+    {
+      // Web Sessions live in their own table beside the four refresh tables, so
+      // they get their own adapter over the same pool: the pool and its shutdown
+      // stay single without this module's data living in one giant class.
+      provide: PostgresWebSessionRepository,
+      inject: [POSTGRES_AUTH_CLIENT],
+      useFactory: (client: PostgresAuthClient): PostgresWebSessionRepository =>
+        new PostgresWebSessionRepository(client),
+    },
+    {
+      provide: WEB_SESSION_REPOSITORY,
+      useExisting: PostgresWebSessionRepository,
+    },
+    {
+      provide: WEB_SESSION_TOKEN_ISSUER,
+      useFactory: (): WebSessionTokenIssuerPort =>
+        opaqueTokenIssuer(WEB_SESSION_POLICY.prefix, WEB_SESSION_POLICY.ttlMs),
+    },
+    {
+      provide: WEB_SESSION_ID,
+      useFactory: () => prefixedIdGenerator(WEB_SESSION_POLICY.prefix),
+    },
+    {
+      // The runtime provider owns the live value; absent local configuration fails closed.
+      provide: WEB_SESSION_CLIENT_SECRET,
+      inject: [RUNTIME_SECRET_PROVIDER],
+      useFactory: (
+        provider: RuntimeSecretProvider,
+      ): WebSessionClientSecretPort => ({
+        resolve: () => provider.getSnapshot().webSession?.clientSecret,
+      }),
+    },
+    {
+      provide: WEB_SESSION_SERVICE,
+      useFactory: (
+        ...ports: ConstructorParameters<typeof WebSessionService>
+      ): WebSessionService => new WebSessionService(...ports),
+      inject: [
+        WEB_SESSION_REPOSITORY,
+        WEB_SESSION_TOKEN_ISSUER,
+        WEB_SESSION_ID,
+        USER_ACCOUNT_REPOSITORY,
+        PASSWORD_HASHER,
+        AUTH_RATE_LIMITER,
+        AUTH_CLOCK,
+        VERIFICATION_TOKEN_REPOSITORY,
+        VERIFICATION_TOKEN,
+        USER_ACCESS_TOKEN_ISSUER,
+      ],
     },
     { provide: PASSWORD_HASHER, useClass: Argon2PasswordHasher },
     {
@@ -298,6 +364,7 @@ import {
       ],
     },
     UserAccessJwtGuard,
+    WebSessionClientGuard,
   ],
   exports: [
     AUTH_POSTGRES_READINESS,

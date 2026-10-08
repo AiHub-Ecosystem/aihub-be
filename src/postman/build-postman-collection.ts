@@ -36,6 +36,16 @@ const USER_IDENTITY_HEADER = {
   value: '{{userIdentity}}',
 } as const;
 
+const BFF_CLIENT_SECRET_HEADER = {
+  key: 'X-AIHUB-Client-Secret',
+  value: '{{webSessionClientSecret}}',
+} as const;
+
+const WEB_SESSION_CREATE_PATH = '/v1/auth/web-sessions';
+const WEB_SESSION_VERIFICATION_PATH = '/v1/auth/web-sessions/verification';
+const WEB_SESSION_EXCHANGE_PATH = '/v1/auth/web-sessions/exchange';
+const WEB_SESSION_LOGOUT_PATH = '/v1/auth/web-sessions/logout';
+
 const TASK1_GRADE_PATH = '/v1/ielts/writing/task1/grade';
 const TASK2_GRADE_PATH = '/v1/ielts/writing/task2/grade';
 const SPEAKING_GRADE_JSON_PATH = '/v1/ielts/speaking/grading-json';
@@ -521,6 +531,91 @@ const SPEAKING_SAMPLE_ANSWER_SCENARIOS: readonly Scenario[] = [
 ];
 
 /**
+ * The four server-to-server Web Session routes, for the Customer Web BFF only.
+ * These are not an integrator surface: the browser never holds the credential,
+ * and every call needs the BFF's own static client secret in its own header.
+ * The secret is a fake placeholder like every other credential here, so nothing
+ * real can be committed and the folder is safe to open.
+ */
+const WEB_SESSION_SCENARIOS: readonly Scenario[] = [
+  {
+    name: 'Create a Web Session from a password login',
+    description:
+      'Server-to-server only, Customer Web BFF. Signs a user in and answers an opaque Web Session token plus its expiry in the body. AIHUB sets no cookie: the BFF puts the token in its own HttpOnly cookie and keeps nothing else. The session lasts 30 days and renews as it is used.',
+    path: WEB_SESSION_CREATE_PATH,
+    headers: [JSON_HEADER, BFF_CLIENT_SECRET_HEADER],
+    body: {
+      email: 'REPLACE_WITH_A_REGISTERED_EMAIL',
+      password: 'REPLACE_WITH_THE_PASSWORD',
+    },
+    testScript: [
+      assertStatus(201),
+      "pm.test('answers the web session token and its expiry in the body', function () {",
+      '  const body = pm.response.json();',
+      "  pm.expect(body.data.web_session_token).to.be.a('string');",
+      "  pm.expect(body.data.expires_at).to.be.a('string');",
+      '});',
+      "pm.test('sets no cookie', function () {",
+      "  pm.expect(pm.response.headers.get('Set-Cookie')).to.be.undefined;",
+      '});',
+      'pm.environment.set("webSessionToken", pm.response.json().data.web_session_token);',
+    ],
+  },
+  {
+    name: 'Create a Web Session from a Verification Sign-in',
+    description:
+      'Server-to-server only, Customer Web BFF. A verification token plus the Signup Browser Binding the Customer Web received, so the user is signed in right after verifying without typing a password again. A 204 means the email was verified but no browser matched the binding, which is the same answer the browser-facing verify route gives.',
+    path: WEB_SESSION_VERIFICATION_PATH,
+    headers: [JSON_HEADER, BFF_CLIENT_SECRET_HEADER],
+    body: {
+      token: 'REPLACE_WITH_A_VERIFICATION_TOKEN',
+      browser_binding: 'REPLACE_WITH_A_SIGNUP_BROWSER_BINDING',
+    },
+    testScript: [
+      "pm.test('verification answers 201 or 204', function () {",
+      '  pm.expect(pm.response.code).to.be.oneOf([201, 204]);',
+      '});',
+      "pm.test('a 201 answers a session and a 204 signs nobody in', function () {",
+      '  if (pm.response.code === 201) {',
+      '    const body = pm.response.json();',
+      "    pm.expect(body.data.web_session_token).to.be.a('string');",
+      "    pm.expect(body.data.expires_at).to.be.a('string');",
+      '  } else if (pm.response.code === 204) {',
+      "    pm.expect(pm.response.text()).to.eql('');",
+      '  }',
+      '});',
+    ],
+  },
+  {
+    name: 'Exchange a Web Session for a User Access JWT',
+    description:
+      'Server-to-server only, Customer Web BFF. Every call signs a fresh 15-minute JWT, so a multi-instance BFF needs no shared store and no lock. A successful exchange slides the session 30 days forward, writing at most once an hour. AIHUB stores no JWT, so the BFF may cache one in process until shortly before it expires and a JWT signed before a logout can stay valid for up to 15 minutes. Any bad session answers one generic 401; an infrastructure failure answers 503 with no credential, so keep the cookie and retry.',
+    path: WEB_SESSION_EXCHANGE_PATH,
+    headers: [JSON_HEADER, BFF_CLIENT_SECRET_HEADER],
+    body: { web_session_token: '{{webSessionToken}}' },
+    testScript: [
+      assertStatus(200),
+      "pm.test('answers the same envelope as login', function () {",
+      '  const body = pm.response.json();',
+      "  pm.expect(body.data.access_token).to.be.a('string');",
+      "  pm.expect(body.data.token_type).to.eql('Bearer');",
+      '  pm.expect(body.data.expires_in).to.eql(900);',
+      '});',
+      'pm.environment.set("bearerToken", pm.response.json().data.access_token);',
+    ],
+  },
+  {
+    name: 'Logout a Web Session',
+    description:
+      'Server-to-server only, Customer Web BFF. Revokes only the presented session and answers 204. Logging out twice, or from a stale tab, answers 204 as well. Other devices stay signed in; a password reset is what ends every session of the account.',
+    path: WEB_SESSION_LOGOUT_PATH,
+    headers: [JSON_HEADER, BFF_CLIENT_SECRET_HEADER],
+    body: { web_session_token: '{{webSessionToken}}' },
+    testScript: [assertStatus(204)],
+  },
+];
+
+/**
  * Deep-removes every property named `key`. Used to drop the `response`
  * arrays openapi-to-postmanv2 attaches to each auto-converted operation —
  * schema-faked example responses for an `additionalProperties: true` object
@@ -870,6 +965,12 @@ export async function buildPostmanCollection(
       },
       { key: 'apiKey', value: 'REPLACE_WITH_A_VALID_ORGANIZATION_API_KEY' },
       {
+        key: 'webSessionToken',
+        value: 'REPLACE_WITH_A_WEB_SESSION_TOKEN',
+        description:
+          'Opaque Web Session token answered by the create routes. The exchange and logout requests read it from here; the create route stores it after a successful call.',
+      },
+      {
         key: 'refreshToken',
         value: 'REPLACE_WITH_A_REFRESH_COOKIE_VALUE',
         description:
@@ -911,6 +1012,12 @@ export async function buildPostmanCollection(
         description:
           'Organization targeted by the management invitation route.',
       },
+      {
+        key: 'webSessionClientSecret',
+        value: 'REPLACE_WITH_THE_CUSTOMER_WEB_BFF_CLIENT_SECRET',
+        description:
+          'Customer Web BFF client secret for the server-to-server Web Session routes. A fake placeholder: the real value is provisioned per deployment and must never be committed here.',
+      },
     ],
     item: [
       ...base.item,
@@ -933,6 +1040,10 @@ export async function buildPostmanCollection(
       {
         name: 'Speaking sample answer',
         item: SPEAKING_SAMPLE_ANSWER_SCENARIOS.map(scenarioToItem),
+      },
+      {
+        name: 'Customer Web Web Sessions (server-to-server, BFF only)',
+        item: WEB_SESSION_SCENARIOS.map(scenarioToItem),
       },
     ],
   };

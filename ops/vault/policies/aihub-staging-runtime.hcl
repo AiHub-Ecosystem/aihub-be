@@ -34,3 +34,7 @@ path "secret/data/aihub/staging/sandbox-assertion" {
 path "secret/data/aihub/staging/email-outbox" {
   capabilities = ["read"]
 }
+
+path "secret/data/aihub/staging/web-session" {
+  capabilities = ["read"]
+}
