@@ -376,10 +376,11 @@ docker compose --env-file .env.production \
   -f docker-compose.production.yml config --quiet
 ```
 
-Before a rollout that changes the Vault Agent configuration or healthcheck,
-manually create and stage a fresh one-use AppRole SecretID. Compose recreates
-the Agent when its service configuration changes, and the existing SecretID
-has already been consumed. CD does not issue SecretIDs.
+Before recreating Vault Agent, verify its operator-provisioned role ID file.
+The current AppRole uses `bind_secret_id=false`, so the Agent re-authenticates
+with that role ID and needs no one-use SecretID. CD does not provision the role
+or recreate the Agent. A rollout that changes the rendered document schema must
+follow the coordinated release sequence below before changing mounted files.
 
 Build or pull the release, start dependencies and Vault Agent, run migrations once,
 then start the app:
@@ -399,27 +400,51 @@ Run the two Sandbox-profile commands only when `AIHUB_SANDBOX_ENABLED=true`.
 
 ### Release order when a rollout adds a runtime secret
 
-CD deploys `main` and never restarts `vault-agent`. A merge that adds a new
-runtime secret therefore races the Agent: if the image boots before the Agent has
-rendered the new value, the deployment fails its startup check rather than
-serving a half-configured process.
+CD deploys `main` and never restarts `vault-agent`. The new image must have its
+required secrets at startup, but the rendered document must also remain valid
+for every image still using it. The pre-Web-Session image rejects the new
+`web-session` root key, so rendering that key while an old container can restart
+is unsafe. Production and staging use the following coordinated cutover, with
+planned downtime for the application:
 
-For any release that introduces a Vault-backed secret, do this in order, before
-the merge to `main`:
+1. Provision the new KV bundle and its read policy first. Keep the live Agent
+   templates and rendered documents unchanged; keep new templates outside the
+   Agent's mounted paths until the cutover. Record the previous image digest and
+   preserve its non-secret templates and deployment manifests for rollback.
+2. Hold automatic CD **before merging** and wait for any running deployment to
+   finish. Disable the CD workflow for this operator-managed release, or hold it
+   with deployment protection before its manifest-sync step. CD copies templates
+   into the Agent's mounted paths, so holding only app startup is too late.
+3. Merge, wait for successful CI, and pull the verified immutable release image.
+   Keep CD held; the old image and compatible secret document continue serving
+   while the new image is prepared.
+4. Enter the maintenance window. Suspend scheduled CLI jobs and wait for old jobs
+   to finish. Explicitly stop every old-image consumer of the shared document:
+   `app` and, when enabled, `app-sandbox`. Use Compose `stop` so
+   `restart: unless-stopped` cannot restart them against the new document.
+5. With old consumers stopped, install the new deployment manifests and Agent
+   templates, then recreate `vault-agent` so it loads the new bind-mounted files.
+   Confirm both documents render, the `web-session` bundle has a non-empty
+   `client_secret`, and recent authentication
+   or renewal is logged. Check without printing secret values, using
+   [Checking deployed state](#checking-deployed-state); a running container alone
+   is not evidence of authentication.
+6. Run migrations with the verified new image and replace the stopped application
+   containers with that image. Use `--no-deps` only after the Agent checks above,
+   as CD does. Check production and enabled sandbox health, then resume CLI jobs
+   and automatic CD for the same release.
 
-1. Stage the secret's template on the host, as the operator session from
-   [Prerequisites](#prerequisites) — never as the runtime AppRole identity.
-2. Restart `vault-agent` and confirm both bundles re-render and authentication
-   or renewal is logged. Inspect it the way
-   [Checking deployed state](#checking-deployed-state) describes; a running
-   container is not by itself evidence of authentication.
-3. Merge to `main` and let CD deploy.
+For rollback, keep CD and CLI jobs held and stop the new application containers
+first. Restore the previous Agent templates and manifests, recreate the Agent,
+and confirm it has rendered the old-compatible document **without** the
+`web-session` root key before starting the previous image. Rolling back only the
+image leaves the old reader unable to boot. Do not delete database data as part
+of this secret-document rollback.
 
-The Customer Web BFF client secret (the Web Session route group's
-`X-AIHUB-Client-Secret`) shipped under this rule. Production and staging refuse
-to boot without it, and the Web Session routes answer `503` rather than admitting
-every caller when the value is absent, so a missed step fails loudly instead of
-opening a route.
+The Customer Web BFF client secret authenticates the Web Session route group's
+`X-AIHUB-Client-Secret`. Production and staging refuse to boot without its
+rendered bundle; missing development/test configuration makes the routes answer
+`503` rather than admitting every caller.
 
 The `vault-agent` healthcheck requires both rendered bundles and a reachable
 `metrics_only` listener bound to the Agent container's loopback. This listener
@@ -448,8 +473,8 @@ authentication. A successful `vault status` is not evidence of Agent
 authentication; it reports Vault server state. CD uses `--no-deps` for
 migrations and app startup only after its direct bundle and recent-auth checks,
 so Compose's stale health state cannot block a release. CD never recreates the
-Agent; changing its service configuration still requires a fresh one-use
-AppRole SecretID staged by an operator.
+Agent; an operator recreates it with the provisioned role ID during the
+coordinated cutover.
 
 The migration container is one-shot. Do not run `docker compose down -v`; the
 Postgres and Redis data belong to the existing VPS stacks. Back up the existing

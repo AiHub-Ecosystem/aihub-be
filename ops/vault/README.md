@@ -28,8 +28,11 @@ Speaking question catalog uses the SeaweedFS bundle to create short-lived read
 URLs for the public sample-audio endpoint, and the Resend bundle supplies the
 verification-email provider credential. The `web-session` bundle holds the one
 static secret the Customer Web BFF proves itself with on the Web Session routes;
-it is required in production and staging, so stage it and restart vault-agent
-before merging a change that needs it.
+it is required in production and staging. Provisioning its KV value can precede
+the release, but rendering its new root key would break the previous image's
+strict document reader. Keep the live templates unchanged until all old-image
+consumers are stopped, then render and replace the image in the same maintenance
+window. Follow the [coordinated release and rollback sequence](../../docs/operations/deploy-vps.md#release-order-when-a-rollout-adds-a-runtime-secret).
 
 ## Policy bootstrap
 

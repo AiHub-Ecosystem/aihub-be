@@ -36,7 +36,7 @@ The BFF exchanges a session for a short-lived User Access JWT on demand, which i
 - A session state outage is a control-plane database concern, so backup, inspection and incident response use the store AIHUB already runs.
 - Expired and revoked rows are not purged yet. This is a deliberate ceiling: add a scheduled purge when the table grows enough to matter.
 - Existing Bearer-token and API-key clients see no change. The Web Session routes are additive and may deploy before the frontend cutover.
-- Release depends on Vault: the secret's Vault template must be staged and `vault-agent` restarted before the merge to `main`, because CD deploys `main` and never restarts the agent. A production or staging image without the secret refuses to boot.
+- Release depends on a coordinated Vault/image cutover: provision the KV value first, hold CD before manifest sync, and stop old-image consumers before rendering the new `web-session` root key. The old reader rejects that key, while the new production/staging image refuses to boot without it. Replace the image in the same maintenance window; rollback restores an old-compatible render before starting the old image. See the [release runbook](../operations/deploy-vps.md#release-order-when-a-rollout-adds-a-runtime-secret).
 - Existing frontend Redis sessions are not migrated. At cutover users sign in again once and the flow fails closed, following ADR-0046's "Session state is never migrated".
 
 Production and staging validate the required `web-session.client_secret` in the rendered Vault bundle at startup. They need no copy in the host environment or Docker metadata. The schema variable remains an optional development/test env-mode input; without it, the presentation guard returns `503`.
