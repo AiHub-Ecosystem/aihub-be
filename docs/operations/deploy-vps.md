@@ -952,13 +952,14 @@ fi
 
 Wait for every selected service's container health to become `healthy`; verify
 the container revision label equals `rollback_sha`, and check the public
-`/health` on every enabled hostname. Then make one authenticated request to each
-hostname using the dedicated demo API key file on the VPS. The assertion-mint
-route makes no downstream call and its response contains a short-lived
-credential, so discard the body and print only the HTTP status:
+`/health` on every enabled hostname. The demo API key below is Sandbox-scoped,
+and `/v1/sandbox/assertions` is intentionally unavailable on Production. Never
+send this key to the Production hostname. Use it only for the Sandbox auth
+probe. The probe mints a short-lived credential, so discard the body and print
+only the HTTP status:
 
 ```bash
-probe_auth() {
+probe_sandbox_auth() {
   (
     set -euo pipefail
     local host="$1" dir config body status
@@ -984,21 +985,26 @@ probe_auth() {
   )
 }
 
-AIHUB_PRODUCTION_HOST="$(sed -n 's/^AIHUB_PRODUCTION_HOST=//p' .env.production | tail -n 1)"
 AIHUB_SANDBOX_HOST="$(sed -n 's/^AIHUB_SANDBOX_HOST=//p' .env.production | tail -n 1)"
 AIHUB_SANDBOX_ENABLED="$(sed -n 's/^AIHUB_SANDBOX_ENABLED=//p' .env.production | tail -n 1)"
-test -n "$AIHUB_PRODUCTION_HOST"
-probe_auth "$AIHUB_PRODUCTION_HOST"
 if [ "$AIHUB_SANDBOX_ENABLED" = true ]; then
   test -n "$AIHUB_SANDBOX_HOST"
-  probe_auth "$AIHUB_SANDBOX_HOST"
+  probe_sandbox_auth "$AIHUB_SANDBOX_HOST"
 fi
 ```
 
 The demo key is restricted to the configured demo Organization. Do not use a
 customer key or the Speaking grading smoke for this rollback check: this route
-proves API-key authentication without spending model quota. If any health or
-authenticated probe fails, keep CD disabled and treat rollback as unconfirmed.
+proves Sandbox API-key authentication without spending model quota. The VPS
+currently has no documented Production test key, and the Sandbox key cannot
+prove Production authentication. A Production auth check needs a separately
+provisioned Production-scoped test key and an approved no-side-effect
+authenticated request; until that exists and succeeds, #289's authenticated
+Production criterion is incomplete. If the Sandbox key returns `401`, stop and
+provision a valid Sandbox test key through the CLI procedure in
+[`sandbox-provisioning.md`](sandbox-provisioning.md); do not copy a key from
+another environment. If any required health or auth probe fails, keep CD
+disabled and treat rollback as unconfirmed.
 The `/metrics` scrape also exposes unknown queued rows in the fixed
 `aihub_email_outbox_queued{kind="unknown"}` series and their oldest age; raw
 stored values are never metric labels.
@@ -1009,8 +1015,9 @@ Use this variant only after CD is disabled, no deploy run is active, Sandbox
 is enabled, and the rollback image passed the registry/cache checks above. It
 changes the shared desired `AIHUB_IMAGE` in `.env.production`, but recreates
 only `app-sandbox`; the running Production container must keep the same ID and
-revision throughout. Run it in the same Bash session as `probe_auth` above so
-the recovery timer includes the authenticated probes. Only rehearse after a
+revision throughout. Run it in the same Bash session as
+`probe_sandbox_auth` above so the recovery timer includes that probe. Only
+rehearse after a
 normal later release has written a new stored value in Sandbox. Confirm that
 value exists using release-specific evidence without printing payloads or
 secrets; do not seed the database manually to simulate a writer release.
@@ -1062,8 +1069,7 @@ AIHUB_PRODUCTION_HOST="$(sed -n 's/^AIHUB_PRODUCTION_HOST=//p' .env.production |
 AIHUB_SANDBOX_HOST="$(sed -n 's/^AIHUB_SANDBOX_HOST=//p' .env.production | tail -n 1)"
 curl --fail --silent --show-error "https://$AIHUB_PRODUCTION_HOST/health" >/dev/null
 curl --fail --silent --show-error "https://$AIHUB_SANDBOX_HOST/health" >/dev/null
-probe_auth "$AIHUB_PRODUCTION_HOST"
-probe_auth "$AIHUB_SANDBOX_HOST"
+probe_sandbox_auth "$AIHUB_SANDBOX_HOST"
 recovery_seconds="$(($(date +%s) - recovery_started))"
 printf 'sandbox_sha=%s production_sha=%s recovery_seconds=%s\n' \
   "$sandbox_sha" "$production_sha_after" "$recovery_seconds"
@@ -1075,6 +1081,8 @@ Confirm the unknown-value metric and that valid outbox rows continue through the
 normal monitoring/dispatch checks without exposing the stored value. After
 recording the result, use the fix-forward release procedure in **Resume CD**;
 enabling the workflow alone does not replay a missed deploy.
+This Sandbox rehearsal does not substitute for the Production authenticated
+request described above.
 
 ### Resume CD
 
