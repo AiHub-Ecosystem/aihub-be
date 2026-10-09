@@ -57,11 +57,26 @@ function configuredHosts(
   return hosts;
 }
 
+function hostnameFromHostHeader(request: FastifyRequest): string {
+  const host = request.headers.host;
+  if (host === undefined) return '';
+
+  try {
+    return new URL(`http://${host}`).hostname
+      .replace(/^\[|\]$/g, '')
+      .trim()
+      .toLowerCase()
+      .replace(/\.$/, '');
+  } catch {
+    return '';
+  }
+}
+
 export function resolveAihubEnvironment(
   request: FastifyRequest,
   config: RequestEnvironmentConfig,
 ): AihubEnvironment {
-  const hostname = request.hostname.trim().toLowerCase().replace(/\.$/, '');
+  const hostname = hostnameFromHostHeader(request);
   const publicEnvironment = configuredHosts(config).get(hostname);
   if (publicEnvironment !== undefined) return publicEnvironment;
 

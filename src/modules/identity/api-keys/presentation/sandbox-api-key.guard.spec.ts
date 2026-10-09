@@ -21,7 +21,7 @@ const authenticated: AuthenticatedApiKey = {
 
 function request(overrides: Record<string, unknown> = {}) {
   return {
-    headers: { 'x-api-key': 'aihub_sk_value' },
+    headers: { host: 'sandbox.aihub.test', 'x-api-key': 'aihub_sk_value' },
     hostname: 'sandbox.aihub.test',
     ip: '203.0.113.7',
     ...overrides,
@@ -125,7 +125,17 @@ describe('SandboxApiKeyGuard', () => {
 
   it('refuses a host that is not bound to an environment', async () => {
     await expect(
-      guard().canActivate(context(request({ hostname: 'evil.example.com' }))),
+      guard().canActivate(
+        context(
+          request({
+            hostname: 'evil.example.com',
+            headers: {
+              host: 'evil.example.com',
+              'x-api-key': 'aihub_sk_value',
+            },
+          }),
+        ),
+      ),
     ).rejects.toMatchObject({ code: 'ENVIRONMENT_NOT_ALLOWED' });
   });
 });

@@ -8,8 +8,8 @@ import {
   resolveAihubEnvironment,
 } from './request-environment';
 
-function request(hostname: string): FastifyRequest {
-  return { hostname } as FastifyRequest;
+function request(hostname: string, hostHeader = hostname): FastifyRequest {
+  return { hostname, headers: { host: hostHeader } } as FastifyRequest;
 }
 
 function configuration(
@@ -36,6 +36,15 @@ describe('resolveAihubEnvironment', () => {
     expect(
       resolveAihubEnvironment(request('sandbox.aihubproduction.com'), config),
     ).toBe('sandbox');
+  });
+
+  it('uses the routed Host header instead of a forwarded hostname', () => {
+    expect(
+      resolveAihubEnvironment(
+        request('sandbox.aihubproduction.com', 'api.aihubproduction.com:443'),
+        configuration(),
+      ),
+    ).toBe('production');
   });
 
   it('derives all four environments from configured hostnames', () => {
