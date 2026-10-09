@@ -17,34 +17,75 @@
 set -u
 
 expected="${1:-}"
-containers=(
-  "production aihub-production-app-1"
-  "sandbox aihub-production-app-sandbox-1"
-)
+api_config=/etc/nginx/conf.d/aihub-api.conf
+sandbox_config=/etc/nginx/conf.d/sandbox.conf
 docker=(sudo -n docker)
+repository_url=https://github.com/AiHub-Ecosystem/aihub-be
 status=0
 
-for entry in "${containers[@]}"; do
-  label=${entry%% *}
-  name=${entry#* }
+active_port() {
+  local config="$1" ports=()
+  mapfile -t ports < <(sed -nE 's#^[[:space:]]*proxy_pass http://127\.0\.0\.1:([0-9]+);.*#\1#p' "$config" | sort -u)
+  [ "${#ports[@]}" -eq 1 ] || return 1
+  printf '%s\n' "${ports[0]}"
+}
 
-  info=$("${docker[@]}" inspect "$name" --format \
+container_for_port() {
+  local tier="$1" port="$2" service id selected= matches=0
+  local -a ids=()
+  mapfile -t ids < <("${docker[@]}" ps --all --quiet --filter "publish=$port" \
+    --filter "label=org.opencontainers.image.source=$repository_url")
+  for id in "${ids[@]}"; do
+    service="$("${docker[@]}" inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$id" \
+      </dev/null 2>/dev/null)" || continue
+    case "$tier:$service" in
+      production:app | production:app-slot-b | sandbox:app-sandbox | sandbox:app-sandbox-slot-b) ;;
+      *) continue ;;
+    esac
+    selected="$id"
+    matches=$((matches + 1))
+  done
+  [ "$matches" -eq 1 ] || return 1
+  printf '%s\n' "$selected"
+}
+
+for label in production sandbox; do
+  config="$api_config"
+  if [ "$label" = sandbox ]; then
+    config="$sandbox_config"
+    if [ ! -f "$config" ]; then
+      printf '%-10s SKIP disabled\n' "$label"
+      continue
+    fi
+  fi
+  if ! port="$(active_port "$config")"; then
+    printf '%-10s FAIL cannot read a single active nginx upstream\n' "$label"
+    status=1
+    continue
+  fi
+  if ! container="$(container_for_port "$label" "$port")"; then
+    printf '%-10s FAIL no unique AIHUB container for nginx upstream port=%s\n' "$label" "$port"
+    status=1
+    continue
+  fi
+
+  info=$("${docker[@]}" inspect "$container" --format \
     '{{index .Config.Labels "org.opencontainers.image.revision"}} {{.State.Status}} {{.State.Health.Status}} {{.RestartCount}} {{.State.StartedAt}}' \
     </dev/null 2>/dev/null) || {
-    printf '%-10s MISSING container %s\n' "$label" "$name"
+    printf '%-10s MISSING container for upstream port=%s\n' "$label" "$port"
     status=1
     continue
   }
   read -r revision state health restarts started <<<"$info"
 
   # Lines since this container started, so an old crash does not count.
-  errors=$("${docker[@]}" logs --since "$started" "$name" </dev/null 2>&1 \
+  errors=$("${docker[@]}" logs --since "$started" "$container" </dev/null 2>&1 \
     | grep -ciE '"level":"error"|\bERROR\b|\bFATAL\b|unhandled|exception')
 
-  health_probe=$("${docker[@]}" exec "$name" node -e \
+  health_probe=$("${docker[@]}" exec "$container" node -e \
     "fetch('http://127.0.0.1:3000/health').then(r=>console.log(r.status)).catch(()=>console.log('ERR'))" \
     </dev/null 2>&1 | tail -n 1)
-  readiness_probe=$("${docker[@]}" exec "$name" node -e \
+  readiness_probe=$("${docker[@]}" exec "$container" node -e \
     "fetch('http://127.0.0.1:3000/ready').then(r=>console.log(r.status)).catch(()=>console.log('ERR'))" \
     </dev/null 2>&1 | tail -n 1)
 

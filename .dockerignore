@@ -20,6 +20,9 @@ scripts/cli/*
 !scripts/runtime/
 scripts/runtime/*
 !scripts/runtime/runtime-entrypoint.mjs
+!scripts/ops/
+scripts/ops/*
+!scripts/ops/probe-runtime-dependencies.cjs
 database/*
 !database/migrations/
 !database/migrations/*.sql

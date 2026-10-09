@@ -817,12 +817,19 @@ The Production handoff matrix is split by safety boundary:
   success mappings are covered by the Speaking HTTP seam tests; do not corrupt
   live provider credentials or deliberately overload Production to manufacture
   those failures.
-- Compose checks each container's local health. After those gates pass, CD
-  probes `https://AIHUB_PRODUCTION_HOST/health` from the GitHub runner and
-  requires a 2xx response without following redirects. It retries failures for
-  at most two minutes (10 seconds per request, 5 seconds between attempts),
-  logs status or request errors without response bodies, and fails the job
-  without rolling back. Rollback uses the immutable `AIHUB_IMAGE` tag described
+- After Compose health passes, CD requests `/health` through each enabled public
+  hostname from the GitHub runner. It does not follow redirects or read response
+  bodies. CD then runs
+  `scripts/ops/probe-runtime-dependencies.cjs` inside each deployed app
+  container: the private `/ready` route must report Postgres and Redis up, and
+  the container must complete a TCP connection or verified TLS handshake to
+  both configured AI service hosts. These probes send no HTTP request to either
+  provider, so they do not authenticate or exercise grading/model behavior.
+  Failures identify the hostname or dependency name and a safe status/code; raw
+  response bodies and configured URLs are not logged. Sandbox checks are skipped
+  when `AIHUB_SANDBOX_ENABLED=false`. This smoke fails CD after the current
+  single-container deploy but does not automatically roll back; #224 adds that
+  behavior. Rollback currently uses the immutable `AIHUB_IMAGE` tag described
   below.
 
 ## Rollback
@@ -831,10 +838,50 @@ Set `AIHUB_IMAGE` to the previous immutable image tag, run
 `docker compose ... up -d app`, and verify `/health` plus one authenticated
 request before reopening traffic. Never roll back by deleting the database volume.
 
+## Approved blue-green rollout target (#224)
+
+This is the accepted target in [ADR-0085](../adr/0085-per-tier-blue-green-cutover.md),
+not the behavior of the current CD workflow. Do not enable it until #224 is
+implemented and the manual rollback in #289 has been completed and rehearsed.
+
+Deploy Production, then Sandbox, one tier at a time. Keep the current tier
+serving while one candidate starts from the immutable CI SHA. Require private
+`/ready`, switch only that tier's AIHUB nginx upstream through the fixed helper
+in [ADR-0079](../adr/0079-managed-nginx-configuration-on-shared-vps.md), and
+run #113's public-edge and in-container dependency smoke against the candidate.
+Reject a candidate if its OOM state is set or its restart count increases during
+startup or smoke; this triggers rollback while the old service is still
+available. Confirm rollback with the same dependency smoke on the restored
+service. Retain the old service until smoke passes and Fastify has drained
+accepted work within the 90-second grace period. The
+validated upstream is the active-slot source of truth; the immutable image SHA
+and #289's durable record identify the release. `.env.production` is not the
+last-good release record.
+
+Timestamped public `/health` results are appended to
+`.aihub-deploy-state/edge-probes.tsv`. Resource snapshots also record each
+AIHUB container's state, OOM flag, and restart count.
+
+Allow at most three AIHUB application containers total, reusing the single
+candidate for Sandbox after Production is verified and drained. Roll back only
+the tier whose smoke failed. A rollback is confirmed only when nginx validation
+and reload succeed and public health plus smoke pass on that tier's hostname.
+If confirmation fails, preserve both slots, fail CD, stop subsequent deploys,
+and require operator repair through #289. Do not touch other nginx sites or
+ports 80/443.
+
+Before enabling CD, rehearse a controlled post-cutover smoke failure and capture
+the automatic rollback evidence. During each rollout and its rehearsal, probe
+every enabled public hostname's `/health` every second; require no failed probes
+and no OOM, and record host/container CPU, memory, and OOM events. The live host has two
+vCPUs and shared workloads, so choose CPU limits from measured headroom with
+the third container before rollout. A running deployment is not cancelled;
+the latest pending release wins.
+
 ## GitHub Actions CD
 
 The `CI` workflow publishes the image it booted to GHCR under the commit sha.
-The `CD` workflow then deploys that immutable image over SSH: it resolves the
+The `CD` workflow currently deploys that immutable image over SSH: it resolves the
 sha, checks the registry still holds the digest `CI` published, and only then
 reaches the VPS. The VPS must already be prepared using this runbook, with the
 Compose files and `.env.production` in the app directory. The deploy user must

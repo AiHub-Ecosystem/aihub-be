@@ -45,6 +45,7 @@ COPY --from=build --chown=10001:10001 /app/dist ./dist
 COPY --from=build --chown=10001:10001 /app/package.json ./package.json
 COPY --from=build --chown=10001:10001 /app/scripts/cli/cli.mjs /app/scripts/cli/cli-options.cjs /app/scripts/cli/load-cli-runner.cjs ./scripts/cli/
 COPY --from=build --chown=10001:10001 /app/scripts/cli/migrate.mjs ./scripts/cli/migrate.mjs
+COPY --from=build --chown=10001:10001 /app/scripts/ops/probe-runtime-dependencies.cjs ./scripts/ops/probe-runtime-dependencies.cjs
 COPY --from=build --chown=10001:10001 /app/scripts/runtime/runtime-entrypoint.mjs ./scripts/runtime/runtime-entrypoint.mjs
 COPY --from=build --chown=10001:10001 /app/database/migrations ./database/migrations
 

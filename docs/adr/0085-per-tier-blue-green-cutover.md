@@ -1,0 +1,20 @@
+# ADR-0085: Deploy each tier with a bounded blue-green cutover
+
+- Status: Accepted
+- Date: 2026-10-09
+- Related: [#224](https://github.com/AiHub-Ecosystem/aihub-be/issues/224), [#114](https://github.com/AiHub-Ecosystem/aihub-be/issues/114), [#113](https://github.com/AiHub-Ecosystem/aihub-be/issues/113), [#289](https://github.com/AiHub-Ecosystem/aihub-be/issues/289), [#111](https://github.com/AiHub-Ecosystem/aihub-be/issues/111), [#112](https://github.com/AiHub-Ecosystem/aihub-be/issues/112), [ADR-0064](0064-ci-publishes-the-image-it-booted.md), [ADR-0076](0076-terminus-readiness-and-opossum-breakers.md), [ADR-0079](0079-managed-nginx-configuration-on-shared-vps.md)
+- Amends: [deployment roadmap §N.1–N.3](../superpowers/specs/2026-09-07-aihub/10-deployment-roadmap.md)
+
+The deployment roadmap's earlier four-vCPU, two-replica rolling design does not match the shared production host or the approved release path. The live host has two vCPUs and also runs AI Speaking and shared dependencies. Follow this ADR for deployment work; keep the roadmap's other historical architecture details out of the active rollout contract.
+
+Deploy Production first and Sandbox second, one tier at a time. Each tier switches from its active service to a candidate running the immutable CI image. Keep the active service serving while the candidate starts and passes private `/ready`; change only the matching AIHUB nginx upstream through the fixed helper in ADR-0079. Run the public-edge smoke from #113 after each switch. A failure restores only that tier's previous upstream. If Production passes and Sandbox fails, Production stays on the new release while Sandbox returns to its previous release, and CD fails with both tier SHAs reported.
+
+Keep no more than three AIHUB application containers running: the two current tier services and one candidate. Reuse that candidate capacity for the next tier only after the previous tier's public smoke passes and its old service has drained. Keep both slots for the tier being cut over available until rollback no longer needs the old one. Use Fastify graceful shutdown within the existing 90-second grace period; do not add a separate in-flight request counter.
+
+The validated nginx upstream for each tier is the active-slot source of truth. Immutable image tags and the durable release record from #289 identify the release SHA. `.env.production` describes desired Compose configuration and is not the active or last-good release record. The candidate must pass local `/ready` before cutover; public `/health` probes and #113's dependency-aware smoke run after cutover.
+
+During each rollout and its controlled rehearsal, probe each enabled public hostname's `/health` every second and capture edge results plus host/container CPU, memory, and OOM evidence. No public probe may fail and no container may OOM. The shared host has two vCPUs, so select per-container CPU limits from measured headroom with the temporary third container and existing workloads; do not assume the older four-vCPU estimate. Do not enable the rollout until the limits and the resource rehearsal pass.
+
+Complete and rehearse the operator rollback in #289 before enabling blue-green CD; implementation of #224 may proceed in parallel. A rollback counts as successful only when the fixed helper validates/reloads the restored upstream and the affected public hostname passes health and smoke checks. If that cannot be confirmed, preserve both slots, fail CD, stop subsequent deployments, and require operator repair through the #289 procedure. A running deployment is not cancelled; when another release is queued, the latest pending release wins.
+
+Database changes remain expand-only and compatible with both running releases. This decision does not permit changes to other nginx sites or host ports 80/443.
