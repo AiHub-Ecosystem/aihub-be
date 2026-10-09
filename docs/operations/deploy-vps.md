@@ -848,8 +848,12 @@ Deploy Production, then Sandbox, one tier at a time. Keep the current tier
 serving while one candidate starts from the immutable CI SHA. Require private
 `/ready`, switch only that tier's AIHUB nginx upstream through the fixed helper
 in [ADR-0079](../adr/0079-managed-nginx-configuration-on-shared-vps.md), and
-run #113's public-edge smoke. Retain the old service until smoke passes and
-Fastify has drained accepted work within the 90-second grace period. The
+run #113's public-edge and in-container dependency smoke against the candidate.
+Reject a candidate if its OOM state is set or its restart count increases during
+startup or smoke; this triggers rollback while the old service is still
+available. Confirm rollback with the same dependency smoke on the restored
+service. Retain the old service until smoke passes and Fastify has drained
+accepted work within the 90-second grace period. The
 validated upstream is the active-slot source of truth; the immutable image SHA
 and #289's durable record identify the release. `.env.production` is not the
 last-good release record.

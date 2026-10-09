@@ -46,8 +46,9 @@ candidate must pass private `/ready` before the deployment changes that tier's
 AIHUB nginx upstream. Validate and reload only the dedicated AIHUB nginx files
 through the fixed helper described by [ADR-0079](../../../adr/0079-managed-nginx-configuration-on-shared-vps.md).
 Then run the public-edge smoke from #113. If it fails, restore the prior
-upstream and verify public health and smoke on the affected hostname before
-calling rollback successful.
+upstream and verify public health and the in-container dependency smoke on the
+affected tier before calling rollback successful. Reject a candidate if its
+OOM state is set or its restart count increases during startup or smoke.
 
 Keep the old service until the smoke succeeds and its in-flight requests drain
 under the 90-second shutdown grace period. If Production succeeds and Sandbox

@@ -17,6 +17,7 @@ APP_DIR=${APP_DIR:?APP_DIR is required}
 AIHUB_IMAGE=${AIHUB_IMAGE:-}
 COMMAND=${1:-}
 TIER=${2:-}
+candidate_restart_baseline=0
 
 cd "$APP_DIR"
 mkdir -p "$STATE_DIR"
@@ -144,6 +145,21 @@ container_ready() {
     >/dev/null 2>&1
 }
 
+candidate_state_safe() {
+  local id="$1" baseline_restart_count="$2" state status oom_killed restart_count
+  state="$(sudo -n docker inspect --format '{{.State.Status}} {{.State.OOMKilled}} {{.RestartCount}}' "$id")" || return 1
+  read -r status oom_killed restart_count <<<"$state"
+  if [[ "$status" != running || "$oom_killed" != false || "$restart_count" != "$baseline_restart_count" ]]; then
+    printf 'candidate state is unsafe status=%s oom_killed=%s restart_count=%s baseline=%s\n' \
+      "$status" "$oom_killed" "$restart_count" "$baseline_restart_count" >&2
+    return 1
+  fi
+}
+
+probe_container_dependencies() {
+  sudo -n docker exec "$1" node scripts/ops/probe-runtime-dependencies.cjs
+}
+
 probe_host() {
   local tier="$1" hostname="$2" status
   status="$(curl --silent --show-error --max-time 4 -o /dev/null -w '%{http_code}' \
@@ -234,8 +250,12 @@ capture_resources() {
     printf 'vcpus=%s\n' "$(nproc)"
     free -b
     sudo -n docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}} {{.MemPerc}}'
-    sudo -n docker ps --filter "label=org.opencontainers.image.source=${REPOSITORY_URL}" \
-      --format '{{.Names}} {{.Status}}'
+    while IFS= read -r id; do
+      [[ -n "$id" ]] || continue
+      sudo -n docker inspect --format \
+        '{{.Name}} revision={{index .Config.Labels "org.opencontainers.image.revision"}} state={{.State.Status}} oom_killed={{.State.OOMKilled}} restart_count={{.RestartCount}}' \
+        "$id"
+    done < <(sudo -n docker ps -aq --filter "label=org.opencontainers.image.source=${REPOSITORY_URL}")
   } >>"$log"
   chmod 600 "$log"
   printf 'resource evidence: %s\n' "$log"
@@ -261,11 +281,14 @@ record_release() {
 }
 
 wait_service_ready() {
-  local service="$1" timeout_seconds="${2:-120}" id status
+  local service="$1" timeout_seconds="${2:-120}" expected_id="${3:-}" expected_restart_count="${4:-}" id status
   for ((attempt = 0; attempt < timeout_seconds; attempt += 1)); do
     probe_all || return 1
     id="$(container_id "$service")"
     if [[ -n "$id" ]]; then
+      if [[ -n "$expected_restart_count" ]]; then
+        [[ "$id" == "$expected_id" ]] && candidate_state_safe "$id" "$expected_restart_count" || return 1
+      fi
       status="$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$id" 2>/dev/null || true)"
       if container_ready "$id" "$status"; then
         printf '%s ready revision=%s\n' "$service" "$(container_revision "$id")"
@@ -284,16 +307,26 @@ wait_service_ready() {
 }
 
 start_candidate() {
-  local service="$1" expected_count="$2"
-  "${compose[@]}" pull "$service"
-  "${compose[@]}" up -d --no-deps --no-build "$service"
-  assert_container_count "$expected_count"
-  wait_service_ready "$service"
+  local service="$1" expected_count="$2" previous_id previous_restart_count id
+  previous_id="$(container_id "$service")"
+  previous_restart_count=0
+  if [[ -n "$previous_id" ]]; then
+    previous_restart_count="$(sudo -n docker inspect --format '{{.RestartCount}}' "$previous_id")"
+  fi
+  "${compose[@]}" pull "$service" || return 1
+  "${compose[@]}" up -d --no-deps --no-build "$service" || return 1
+  id="$(container_id "$service")"
+  candidate_restart_baseline=0
+  if [[ -n "$id" && "$id" == "$previous_id" ]]; then
+    candidate_restart_baseline="$previous_restart_count"
+  fi
+  assert_container_count "$expected_count" || return 1
+  wait_service_ready "$service" 120 "$id" "$candidate_restart_baseline" || return 1
   capture_resources "candidate-${service}"
 }
 
 rollback_current_tier() {
-  local tier="$1" old_slot="$2" new_slot="$3" old_service new_service api_slot sandbox_slot
+  local tier="$1" old_slot="$2" new_slot="$3" old_service new_service old_id api_slot sandbox_slot
   old_service="$(service_for_slot "$tier" "$old_slot")"
   new_service="$(service_for_slot "$tier" "$new_slot")"
   api_slot="$(active_slot production "$API_CONFIG")"
@@ -319,6 +352,11 @@ rollback_current_tier() {
   [[ "$tier" == sandbox ]] && tier_host="$sandbox_host"
   if ! probe_host "$tier" "$tier_host"; then
     printf 'rollback edge check failed; both slots remain available\n' >&2
+    return 1
+  fi
+  old_id="$(container_id "$old_service")"
+  if ! probe_container_dependencies "$old_id"; then
+    printf 'rollback dependency smoke failed; both slots remain available\n' >&2
     return 1
   fi
   "${compose[@]}" stop "$new_service"
@@ -352,6 +390,7 @@ deploy_tier() {
   local expected_count=3
   [[ "$sandbox_enabled" == false ]] && expected_count=2
   start_candidate "$new_service" "$expected_count" || {
+    capture_resources "failed-candidate-${new_service}" || true
     "${compose[@]}" stop "$new_service" >/dev/null 2>&1 || true
     clear_pending
     return 1
@@ -374,10 +413,18 @@ deploy_tier() {
   elif ! probe_window 15; then
     failed=1
   fi
+  if ! probe_container_dependencies "$new_id"; then
+    printf '%s candidate dependency smoke failed\n' "$tier" >&2
+    failed=1
+  fi
   if ! container_ready "$new_id" "$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$new_id")"; then
     failed=1
   fi
+  if ! candidate_state_safe "$new_id" "$candidate_restart_baseline"; then
+    failed=1
+  fi
   if [[ "$failed" -eq 1 ]]; then
+    capture_resources "failed-cutover-${tier}" || true
     rollback_current_tier "$tier" "$old_slot" "$new_slot" || return 1
     if [[ "$inject_failure" == true ]]; then
       printf '%s rollback rehearsal passed\n' "$tier"
@@ -388,6 +435,12 @@ deploy_tier() {
   fi
 
   "${compose[@]}" stop "$old_service"
+  if ! candidate_state_safe "$new_id" "$candidate_restart_baseline"; then
+    capture_resources "failed-drain-${tier}" || true
+    rollback_current_tier "$tier" "$old_slot" "$new_slot" || return 1
+    printf '%s candidate restarted during drain; previous slot restored\n' "$tier" >&2
+    return 1
+  fi
   record_release deploy "$tier" "$old_slot" "$old_sha" "$new_slot" "$(container_revision "$new_id")"
   clear_pending
   capture_resources "committed-${tier}"
