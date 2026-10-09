@@ -181,6 +181,76 @@ describe('JwksKeyProvider', () => {
     expect(fetches).toBe(1);
   });
 
+  it('reserves process capacity while a forced refresh waits for its lock', async () => {
+    const cache = new FakeCache();
+    let markLockRequested: (() => void) | undefined;
+    let releaseLock: ((lock: JwksRefreshLock) => void) | undefined;
+    const lockRequested = new Promise<void>((resolve) => {
+      markLockRequested = resolve;
+    });
+    const lock = new Promise<JwksRefreshLock>((resolve) => {
+      releaseLock = resolve;
+    });
+    cache.tryAcquireRefresh = () => {
+      markLockRequested?.();
+      return lock;
+    };
+
+    let heldFetches = 0;
+    let markHeldFetchesStarted: (() => void) | undefined;
+    let markForcedFetchStarted: (() => void) | undefined;
+    const heldFetchesStarted = new Promise<void>((resolve) => {
+      markHeldFetchesStarted = resolve;
+    });
+    const forcedFetchStarted = new Promise<void>((resolve) => {
+      markForcedFetchStarted = resolve;
+    });
+    const provider = new JwksKeyProvider(
+      cache,
+      async (url) => {
+        if (url.includes('/held/')) {
+          heldFetches += 1;
+          if (heldFetches === 7) markHeldFetchesStarted?.();
+          return new Promise<Response>(() => undefined);
+        }
+        if (url.includes('/forced/')) markForcedFetchStarted?.();
+        return new Response(JSON.stringify(jwks));
+      },
+      publicLookup(),
+    );
+
+    const held = Array.from({ length: 7 }, (_, index) =>
+      provider.validateRemote({
+        organizationId: `org_held_${index}`,
+        url: `https://id.acme.edu/held/${index}`,
+      }),
+    );
+    await heldFetchesStarted;
+
+    const forced = provider.resolve({
+      organizationId: 'org_forced',
+      config: configWithUrl('https://id.acme.edu/forced/jwks.json'),
+      forceRefresh: true,
+    });
+    await lockRequested;
+
+    await expect(
+      provider.validateRemote({
+        organizationId: 'org_eighth',
+        url: 'https://id.acme.edu/eighth/jwks.json',
+      }),
+    ).rejects.toMatchObject({
+      code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+      retryable: true,
+    });
+
+    releaseLock?.({ acquired: true, available: true });
+    await forcedFetchStarted;
+    await expect(forced).resolves.toEqual(jwks);
+    expect(heldFetches).toBe(7);
+    void held;
+  });
+
   it('caps concurrent Organizations, serves usable stale keys, and rejects cold validation', async () => {
     const cache = new FakeCache();
     cache.entry = { jwks, freshUntil: 1_000, staleUntil: 3_000 };
@@ -262,6 +332,48 @@ describe('JwksKeyProvider', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('uses successful A records when the AAAA query misses the DNS deadline', async () => {
+    const cancel = jest.fn();
+    const fetcher = jest.fn(async () => new Response(JSON.stringify(jwks)));
+    const provider = new JwksKeyProvider(new FakeCache(), fetcher, () => ({
+      resolve4: async () => ['8.8.8.8'],
+      resolve6: () => new Promise<string[]>(() => undefined),
+      cancel,
+    }));
+
+    await expect(
+      provider.validateRemote({
+        organizationId: 'org_acme',
+        url: remoteConfig.jwksUrl ?? '',
+      }),
+    ).resolves.toBeUndefined();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the successful address family when the other family returns an error', async () => {
+    const provider = new JwksKeyProvider(
+      new FakeCache(),
+      async () => new Response(JSON.stringify(jwks)),
+      () => ({
+        resolve4: async () => ['8.8.8.8'],
+        resolve6: async () => {
+          throw Object.assign(new Error('DNS server failure'), {
+            code: 'ESERVFAIL',
+          });
+        },
+        cancel: jest.fn(),
+      }),
+    );
+
+    await expect(
+      provider.validateRemote({
+        organizationId: 'org_acme',
+        url: remoteConfig.jwksUrl ?? '',
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it('does not let an in-flight old-config fetch repopulate the new cache version', async () => {

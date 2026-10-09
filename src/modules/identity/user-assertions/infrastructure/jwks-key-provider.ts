@@ -38,6 +38,7 @@ interface DnsResolver {
 }
 
 type DnsResolverFactory = () => DnsResolver;
+type DnsResult<T> = PromiseSettledResult<T>;
 
 const defaultResolverFactory: DnsResolverFactory = () =>
   new Resolver({ timeout: JWKS_DNS_TIMEOUT_MS, tries: 1 });
@@ -248,37 +249,68 @@ async function resolveHost(
   }
 
   const resolver = resolverFactory();
+  let cancelled = false;
+  const cancelResolver = () => {
+    if (!cancelled) {
+      cancelled = true;
+      resolver.cancel();
+    }
+  };
   try {
     const dnsDeadlineAt = Math.min(
       deadlineAt,
       Date.now() + JWKS_DNS_TIMEOUT_MS,
     );
-    const [ipv4, ipv6] = await withDeadline(
-      Promise.allSettled([
-        resolver.resolve4(normalizedHost),
-        resolver.resolve6(normalizedHost),
-      ]),
-      dnsDeadlineAt,
+    let ipv4: DnsResult<string[]> | undefined;
+    let ipv6: DnsResult<string[]> | undefined;
+    const resolve = <T>(operation: () => Promise<T>) => {
+      try {
+        return operation().then<DnsResult<T>, DnsResult<T>>(
+          (value) => ({ status: 'fulfilled', value }),
+          (reason: unknown) => ({ status: 'rejected', reason }),
+        );
+      } catch (reason) {
+        return Promise.resolve<DnsResult<T>>({ status: 'rejected', reason });
+      }
+    };
+    const ipv4Lookup = resolve(() => resolver.resolve4(normalizedHost)).then(
+      (result) => (ipv4 = result),
     );
+    const ipv6Lookup = resolve(() => resolver.resolve6(normalizedHost)).then(
+      (result) => (ipv6 = result),
+    );
+    try {
+      await withDeadline(Promise.all([ipv4Lookup, ipv6Lookup]), dnsDeadlineAt);
+    } catch {
+      cancelResolver();
+    }
+
     const addresses: DnsAddress[] = [];
+    let lookupError: unknown;
     for (const [result, addressFamily] of [
       [ipv4, 4],
       [ipv6, 6],
     ] as const) {
-      if (result.status === 'fulfilled') {
+      if (result?.status === 'fulfilled') {
         addresses.push(
           ...result.value.map((address) => ({
             address,
             family: addressFamily,
           })),
         );
-      } else if (!isNoDnsRecord(result.reason)) {
-        throw result.reason;
+      } else if (
+        result?.status === 'rejected' &&
+        !isNoDnsRecord(result.reason)
+      ) {
+        lookupError ??= result.reason;
       }
+    }
+    if (addresses.length === 0 && lookupError !== undefined) {
+      throw lookupError;
     }
     return addresses;
   } catch (error) {
-    resolver.cancel();
+    cancelResolver();
     throw error;
   }
 }
@@ -412,6 +444,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     string,
     Promise<JwksRefreshLock>
   >();
+  private readonly refreshReservations = new Map<string, string>();
   private readonly flights = new Map<
     string,
     {
@@ -474,30 +507,34 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     if (
       input.forceRefresh &&
       activeFlight === undefined &&
-      this.flights.size < JWKS_MAX_CONCURRENT_ORGANIZATIONS
+      this.reserveRefreshSlot(input.organizationId, flightKey)
     ) {
-      const lock = await this.acquireRefreshLock(input.organizationId);
-      if (!lock.available) {
-        if (!this.flights.has(input.organizationId)) {
-          const cooldownUntil = this.localRefreshCooldown.get(
-            input.organizationId,
-          );
-          if (cooldownUntil !== undefined && cooldownUntil > now) {
-            return cached?.jwks ?? { keys: [] };
+      try {
+        const lock = await this.acquireRefreshLock(input.organizationId);
+        if (!lock.available) {
+          if (!this.flights.has(input.organizationId)) {
+            const cooldownUntil = this.localRefreshCooldown.get(
+              input.organizationId,
+            );
+            if (cooldownUntil !== undefined && cooldownUntil > now) {
+              return cached?.jwks ?? { keys: [] };
+            }
+            this.localRefreshCooldown.set(
+              input.organizationId,
+              now + JWKS_REFRESH_COOLDOWN_MS,
+            );
           }
-          this.localRefreshCooldown.set(
+        } else if (!lock.acquired) {
+          const reread = await this.cache.getJwks(
             input.organizationId,
-            now + JWKS_REFRESH_COOLDOWN_MS,
+            configVersion,
           );
+          return reread.generation === cacheGeneration
+            ? (reread.entry?.jwks ?? cached?.jwks ?? { keys: [] })
+            : { keys: [] };
         }
-      } else if (!lock.acquired) {
-        const reread = await this.cache.getJwks(
-          input.organizationId,
-          configVersion,
-        );
-        return reread.generation === cacheGeneration
-          ? (reread.entry?.jwks ?? cached?.jwks ?? { keys: [] })
-          : { keys: [] };
+      } finally {
+        this.releaseRefreshSlot(input.organizationId, flightKey);
       }
     }
 
@@ -540,6 +577,31 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     return flight;
   }
 
+  private reserveRefreshSlot(organizationId: string, key: string): boolean {
+    const existing = this.refreshReservations.get(organizationId);
+    if (existing !== undefined) {
+      return existing === key;
+    }
+    const occupied = new Set([
+      ...this.flights.keys(),
+      ...this.refreshReservations.keys(),
+    ]);
+    if (
+      !occupied.has(organizationId) &&
+      occupied.size >= JWKS_MAX_CONCURRENT_ORGANIZATIONS
+    ) {
+      return false;
+    }
+    this.refreshReservations.set(organizationId, key);
+    return true;
+  }
+
+  private releaseRefreshSlot(organizationId: string, key: string): void {
+    if (this.refreshReservations.get(organizationId) === key) {
+      this.refreshReservations.delete(organizationId);
+    }
+  }
+
   private fetchRemoteForOrganization(
     organizationId: string,
     url: string,
@@ -551,7 +613,18 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
         ? existing.promise
         : Promise.reject(sourceUnavailable(true));
     }
-    if (this.flights.size >= JWKS_MAX_CONCURRENT_ORGANIZATIONS) {
+    const reservation = this.refreshReservations.get(organizationId);
+    if (reservation !== undefined && reservation !== key) {
+      return Promise.reject(sourceUnavailable(true));
+    }
+    const occupied = new Set([
+      ...this.flights.keys(),
+      ...this.refreshReservations.keys(),
+    ]);
+    if (
+      !occupied.has(organizationId) &&
+      occupied.size >= JWKS_MAX_CONCURRENT_ORGANIZATIONS
+    ) {
       return Promise.reject(sourceUnavailable(true));
     }
 
