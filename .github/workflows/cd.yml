@@ -348,11 +348,90 @@ jobs:
 
           REMOTE
 
-      - name: Verify production health URL
+      - name: Read configured deployment tiers
+        id: tiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          tier_config="$(ssh "${ssh_opts[@]}" "$target" \
+            "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -eu
+          cd "$APP_DIR"
+          sandbox_enabled="$(sed -n 's/^AIHUB_SANDBOX_ENABLED=//p' .env.production | tail -n 1 | tr -d '\r')"
+          sandbox_host="$(sed -n 's/^AIHUB_SANDBOX_HOST=//p' .env.production | tail -n 1 | tr -d '\r')"
+          [ -n "$sandbox_enabled" ] || sandbox_enabled=false
+          if [ "$sandbox_enabled" != true ] && [ "$sandbox_enabled" != false ]; then
+            printf 'AIHUB_SANDBOX_ENABLED must be true or false\n' >&2
+            exit 1
+          fi
+          if [ "$sandbox_enabled" = true ] && [ -z "$sandbox_host" ]; then
+            printf 'AIHUB_SANDBOX_HOST is required when Sandbox is enabled\n' >&2
+            exit 1
+          fi
+          if [ "$sandbox_enabled" = true ]; then
+            case "$sandbox_host" in
+              *[!A-Za-z0-9.-]*)
+                printf 'AIHUB_SANDBOX_HOST must be a DNS hostname\n' >&2
+                exit 1
+                ;;
+            esac
+            if [ "${#sandbox_host}" -gt 253 ]; then
+              printf 'AIHUB_SANDBOX_HOST is too long\n' >&2
+              exit 1
+            fi
+          else
+            sandbox_host=
+          fi
+          printf '%s\t%s\n' "$sandbox_enabled" "$sandbox_host"
+          REMOTE
+          )"
+          IFS=$'\t' read -r sandbox_enabled sandbox_host <<<"$tier_config"
+          printf 'sandbox_enabled=%s\nsandbox_host=%s\n' \
+            "$sandbox_enabled" "$sandbox_host" >> "$GITHUB_OUTPUT"
+
+      - name: Verify public edge health
         shell: bash
         env:
           AIHUB_PRODUCTION_HOST: ${{ vars.AIHUB_PRODUCTION_HOST }}
-        run: node scripts/ops/probe-production-health.cjs
+          AIHUB_SANDBOX_ENABLED: ${{ steps.tiers.outputs.sandbox_enabled }}
+          AIHUB_SANDBOX_HOST: ${{ steps.tiers.outputs.sandbox_host }}
+          AIHUB_PROBE_WINDOW_SECONDS: "1"
+        run: node scripts/ops/probe-public-edge.cjs
+
+      - name: Verify application dependency reachability
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          services=(app)
+          if [ "$AIHUB_SANDBOX_ENABLED" = true ]; then
+            services+=(app-sandbox)
+          fi
+          for service in "${services[@]}"; do
+            service_arg="$(printf '%q' "$service")"
+            ssh "${ssh_opts[@]}" "$target" \
+              "APP_DIR=$app_dir_arg AIHUB_SERVICE=$service_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          compose=(sudo -n docker compose --env-file .env.production -f docker-compose.production.yml)
+          if [ "$AIHUB_SERVICE" = app-sandbox ]; then
+            compose+=(--profile sandbox)
+          fi
+          container_id="$("${compose[@]}" ps -q "$AIHUB_SERVICE")"
+          if [ -z "$container_id" ]; then
+            printf 'deployed service is missing: %s\n' "$AIHUB_SERVICE" >&2
+            exit 1
+          fi
+          sudo -n docker exec "$container_id" node scripts/ops/probe-runtime-dependencies.cjs
+          REMOTE
+          done
+        env:
+          AIHUB_SANDBOX_ENABLED: ${{ steps.tiers.outputs.sandbox_enabled }}
 
       - name: Log out of GHCR on VPS
         if: always()

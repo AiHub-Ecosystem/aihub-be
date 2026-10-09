@@ -7,19 +7,19 @@
 ## N.1 Compose Stack
 
 ```
-nginx       :80 :443, host TLS termination, load balances app-1/app-2
-app-1       aihub application, replica 1
-app-2       aihub application, replica 2
-postgres    16, dedicated persistent volume, NOT exposed to host ports
-redis       noeviction, 15-minute RDB snapshot, NOT exposed to host ports
-prometheus  scrapes app-1, app-2 /metrics
-loki        ingests JSON logs via docker log driver
-grafana     dashboards + alert routing
+nginx            :80 :443, host TLS termination; AIHUB API and Sandbox upstreams
+app              active Production service on its loopback port
+app-sandbox      active Sandbox service on its loopback port when enabled
+candidate        one temporary release service on an alternate loopback port
+postgres/redis   existing shared services, not exposed on host ports
 ```
 
-8 containers running on a single **4 vCPU / 8GB RAM** VPS (e.g. Hetzner CPX31 ~€15/month).
-
-Two application replicas are configured **not for peak throughput**, but for zero-downtime rolling deployments and single-process crash isolation.
+The production host has **2 vCPUs** and is shared with AI Speaking and its
+database, Redis, and MinIO. Do not use the older four-vCPU estimate as a resource
+budget. Blue-green deployment uses at most three AIHUB application containers:
+the active Production and Sandbox services plus one temporary candidate. Measure
+CPU and memory on the live host with that candidate and existing workloads, then
+set per-container limits before enabling the rollout.
 
 ## N.2 Graceful Shutdown — Critical for Long-Running AI Inference
 
@@ -34,23 +34,44 @@ process.on("SIGTERM", async () => {
 });
 ```
 
-Grading requests can take up to 60 seconds. Docker's default shutdown behavior sends `SIGKILL` after **10 seconds** — meaning naive deployments sever student grading evaluations mid-stream **after token fees have already been billed**. These two lines of configuration prevent deployments from causing customer-visible errors.
+Grading requests can take up to 60 seconds; keep the existing 90-second grace
+period and let Fastify finish accepted requests before stopping the old service.
+The edge smoke must pass before the old slot is removed.
 
-## N.3 Rolling Deployment Script
+## N.3 Per-tier Blue-Green Deployment
 
-```bash
-docker compose pull app-1 app-2
-for c in app-1 app-2; do
-  docker compose up -d --no-deps "$c"
-  until curl -sf "http://$c:3000/health"; do sleep 2; done   # wait until healthy before rolling next
-done
-```
+Deploy Production, then Sandbox, sequentially. For each enabled tier, start one
+candidate from the immutable CI SHA while the active service keeps serving. The
+candidate must pass private `/ready` before the deployment changes that tier's
+AIHUB nginx upstream. Validate and reload only the dedicated AIHUB nginx files
+through the fixed helper described by [ADR-0079](../../../adr/0079-managed-nginx-configuration-on-shared-vps.md).
+Then run the public-edge smoke from #113. If it fails, restore the prior
+upstream and verify public health and smoke on the affected hostname before
+calling rollback successful.
 
-The deployment waits for each application health check before rotating an upstream; host nginx continues serving the existing upstream during rollout. **Kubernetes is not required to achieve zero-downtime rolling deployments.**
+Keep the old service until the smoke succeeds and its in-flight requests drain
+under the 90-second shutdown grace period. If Production succeeds and Sandbox
+fails, retain the Production release and roll back only Sandbox. If rollback
+cannot be confirmed, keep both slots, fail CD, and stop later deployments for
+operator repair. The validated nginx upstream identifies each tier's active
+slot; immutable image tags and #289's durable release record identify its SHA.
+Do not use `.env.production` as active-release state.
 
-CI: GitHub Actions compiles image → pushes to GHCR → executes deployment script via SSH.
+Use at most three AIHUB application containers and one candidate at a time. The
+candidate is reused for Sandbox only after the Production cutover and drain are
+complete. During each rollout and its rehearsal, probe each enabled public
+`/health` every second, record edge and host/container CPU, memory, and OOM
+evidence, and require zero failed probes and no OOM. Set CPU limits from measured headroom on the real
+two-vCPU shared host before enabling CD. A running deployment is not cancelled;
+the latest pending release replaces older pending releases.
 
-Database migrations execute **prior** to app deployment, following the strict **expand-only** pattern:
+Complete and rehearse the manual rollback in #289 before enabling blue-green CD;
+implementation may proceed before that gate. Keep migration compatibility
+expand-only while both release versions may run. The earlier §N.1–N.3 text
+assumed four vCPUs and two rolling replicas; [ADR-0085](../../../adr/0085-per-tier-blue-green-cutover.md)
+records the accepted replacement decision.
+
+Database migrations execute **prior** to candidate startup, following the strict **expand-only** pattern:
 
 ```
 PERMITTED:  CREATE TABLE, ADD nullable column, CREATE INDEX CONCURRENTLY

@@ -51,6 +51,29 @@ x-app-environment: &app-environment
   # Do not set until WISPACE confirms the dedicated private Audio bucket.
   SEAWEEDFS_AUDIO_ASSET_BUCKET: ${SEAWEEDFS_AUDIO_ASSET_BUCKET:-}
 
+x-app-service: &app-service
+  <<: *app-common
+  networks: *app-database-networks
+  restart: unless-stopped
+  stop_grace_period: 90s
+  volumes:
+    - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro
+  depends_on:
+    vault-agent:
+      condition: service_healthy
+  healthcheck: &app-healthcheck
+    test:
+      [
+        "CMD",
+        "node",
+        "-e",
+        "fetch('http://127.0.0.1:3000/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+      ]
+    interval: 10s
+    timeout: 5s
+    start_period: 20s
+    retries: 12
+
 services:
   vault-agent:
     image: ${VAULT_IMAGE:-hashicorp/vault:1.21.4}
@@ -130,33 +153,21 @@ services:
     restart: "no"
 
   app:
-    <<: *app-common
+    <<: *app-service
     environment: *app-environment
-    networks: *app-database-networks
     ports:
       - "127.0.0.1:${AIHUB_APP_PORT:-3021}:3000"
-    restart: unless-stopped
-    stop_grace_period: 90s
-    volumes:
-      - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro
-    depends_on:
-      vault-agent:
-        condition: service_healthy
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:3000/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
-        ]
-      interval: 10s
-      timeout: 5s
-      start_period: 20s
-      retries: 12
+
+  app-slot-b:
+    <<: *app-service
+    profiles:
+      - blue-green
+    environment: *app-environment
+    ports:
+      - "127.0.0.1:3023:3000"
 
   app-sandbox:
-    <<: *app-common
+    <<: *app-service
     profiles:
       - sandbox
     environment:
@@ -172,28 +183,23 @@ services:
       SEAWEEDFS_USER_ASSET_BUCKET: ${SEAWEEDFS_SANDBOX_USER_ASSET_BUCKET:-}
       # Set only after WISPACE confirms the dedicated private Sandbox bucket.
       SEAWEEDFS_AUDIO_ASSET_BUCKET: ${SEAWEEDFS_SANDBOX_AUDIO_ASSET_BUCKET:-}
-    networks: *app-database-networks
     ports:
       - "127.0.0.1:${AIHUB_SANDBOX_APP_PORT:-3022}:3000"
-    restart: unless-stopped
-    stop_grace_period: 90s
-    volumes:
-      - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro
-    depends_on:
-      vault-agent:
-        condition: service_healthy
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:3000/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
-        ]
-      interval: 10s
-      timeout: 5s
-      start_period: 20s
-      retries: 12
+
+  app-sandbox-slot-b:
+    <<: *app-service
+    profiles:
+      - sandbox
+      - blue-green
+    environment:
+      <<: *app-environment
+      AIHUB_RUNTIME_DATABASE_SCOPE: sandbox
+      AIHUB_SANDBOX_ORG_IDS: ${AIHUB_SANDBOX_ORG_IDS:-}
+      CUSTOMER_WEB_BASE_URL: ${CUSTOMER_WEB_SANDBOX_BASE_URL:-}
+      SEAWEEDFS_USER_ASSET_BUCKET: ${SEAWEEDFS_SANDBOX_USER_ASSET_BUCKET:-}
+      SEAWEEDFS_AUDIO_ASSET_BUCKET: ${SEAWEEDFS_SANDBOX_AUDIO_ASSET_BUCKET:-}
+    ports:
+      - "127.0.0.1:3024:3000"
 
 networks:
   backend:

@@ -17,16 +17,47 @@
 set -u
 
 expected="${1:-}"
-containers=(
-  "production aihub-production-app-1"
-  "sandbox aihub-production-app-sandbox-1"
-)
+api_config=/etc/nginx/conf.d/aihub-api.conf
+sandbox_config=/etc/nginx/conf.d/sandbox.conf
 docker=(sudo -n docker)
 status=0
 
-for entry in "${containers[@]}"; do
-  label=${entry%% *}
-  name=${entry#* }
+active_port() {
+  local config="$1" ports=()
+  mapfile -t ports < <(sed -nE 's#^[[:space:]]*proxy_pass http://127\.0\.0\.1:([0-9]+);.*#\1#p' "$config" | sort -u)
+  [ "${#ports[@]}" -eq 1 ] || return 1
+  printf '%s\n' "${ports[0]}"
+}
+
+container_for_port() {
+  case "$1:$2" in
+    production:3021) printf aihub-production-app-1 ;;
+    production:3023) printf aihub-production-app-slot-b-1 ;;
+    sandbox:3022) printf aihub-production-app-sandbox-1 ;;
+    sandbox:3024) printf aihub-production-app-sandbox-slot-b-1 ;;
+    *) return 1 ;;
+  esac
+}
+
+for label in production sandbox; do
+  config="$api_config"
+  if [ "$label" = sandbox ]; then
+    config="$sandbox_config"
+    if [ ! -f "$config" ]; then
+      printf '%-10s SKIP disabled\n' "$label"
+      continue
+    fi
+  fi
+  if ! port="$(active_port "$config")"; then
+    printf '%-10s FAIL cannot read a single active nginx upstream\n' "$label"
+    status=1
+    continue
+  fi
+  if ! name="$(container_for_port "$label" "$port")"; then
+    printf '%-10s FAIL unsupported nginx upstream port=%s\n' "$label" "$port"
+    status=1
+    continue
+  fi
 
   info=$("${docker[@]}" inspect "$name" --format \
     '{{index .Config.Labels "org.opencontainers.image.revision"}} {{.State.Status}} {{.State.Health.Status}} {{.RestartCount}} {{.State.StartedAt}}' \
