@@ -161,9 +161,15 @@ probe_container_dependencies() {
 }
 
 probe_host() {
-  local tier="$1" hostname="$2" status
+  local tier="$1" hostname="$2" status started_at
+  started_at="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
   status="$(curl --silent --show-error --max-time 4 -o /dev/null -w '%{http_code}' \
     "https://${hostname}/health" 2>/dev/null || printf request_error)"
+  printf '%s\t%s\t%s\t%s\n' "$started_at" "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" "$tier" "$status" \
+    >>"$STATE_DIR/edge-probes.tsv" || {
+    printf 'could not record public edge probe for %s\n' "$tier" >&2
+    return 1
+  }
   if [[ "$status" =~ ^2[0-9][0-9]$ ]]; then
     return 0
   fi
@@ -172,19 +178,45 @@ probe_host() {
 }
 
 probe_all() {
-  local failed=0
-  probe_host production "$production_host" || failed=1
+  local failed=0 production_pid sandbox_pid=
+  probe_host production "$production_host" &
+  production_pid="$!"
   if [[ "$sandbox_enabled" == true ]]; then
-    probe_host sandbox "$sandbox_host" || failed=1
+    probe_host sandbox "$sandbox_host" &
+    sandbox_pid="$!"
   fi
+  wait "$production_pid" || failed=1
+  [[ -z "$sandbox_pid" ]] || wait "$sandbox_pid" || failed=1
   return "$failed"
 }
 
 probe_window() {
-  local seconds="$1" failed=0
+  local seconds="$1" failed=0 attempt next_at delay running_pids pid
+  local -a probe_pids=() pending_pids=()
+  next_at=$SECONDS
   for ((attempt = 0; attempt < seconds; attempt += 1)); do
-    probe_all || failed=1
-    sleep 1
+    delay=$((next_at - SECONDS))
+    if ((delay > 0)); then sleep "$delay"; fi
+    probe_host production "$production_host" &
+    probe_pids+=("$!")
+    if [[ "$sandbox_enabled" == true ]]; then
+      probe_host sandbox "$sandbox_host" &
+      probe_pids+=("$!")
+    fi
+    next_at=$((next_at + 1))
+    running_pids=" $(jobs -pr | tr '\n' ' ') "
+    pending_pids=()
+    for pid in "${probe_pids[@]}"; do
+      if [[ "$running_pids" == *" $pid "* ]]; then
+        pending_pids+=("$pid")
+      elif ! wait "$pid"; then
+        failed=1
+      fi
+    done
+    probe_pids=("${pending_pids[@]}")
+  done
+  for pid in "${probe_pids[@]}"; do
+    wait "$pid" || failed=1
   done
   return "$failed"
 }
@@ -510,6 +542,17 @@ deploy() {
   probe_window 10
 }
 
+restore_active_after_rollback_failure() {
+  local service="$1" id="$2" api_slot="$3" sandbox_slot="$4"
+  if ! container_running "$id"; then
+    "${compose[@]}" start "$service" || return 1
+    wait_service_ready "$service" 120 "" "" false || return 1
+  fi
+  apply_slots "$api_slot" "$sandbox_slot" || return 1
+  probe_window 10 || return 1
+  probe_container_dependencies "$id"
+}
+
 rollback() {
   local tier="$1" line old_slot old_sha new_slot new_sha
   [[ "$tier" == production || "$tier" == sandbox ]] || {
@@ -529,7 +572,8 @@ rollback() {
   compose=(sudo -n docker compose --env-file .env.production --env-file "$DEPLOY_ENV" -f docker-compose.production.yml --profile blue-green)
   [[ "$sandbox_enabled" == false ]] || compose+=(--profile sandbox)
 
-  local current_api current_sandbox current_slot candidate_service active_service active_id
+  local current_api current_sandbox current_slot candidate_service active_service active_id candidate_id
+  local active_api active_sandbox expected_count failed
   current_api="$(active_slot production "$API_CONFIG")"
   current_sandbox=a
   [[ "$sandbox_enabled" == false ]] || current_sandbox="$(active_slot sandbox "$SANDBOX_CONFIG")"
@@ -541,24 +585,70 @@ rollback() {
   }
   candidate_service="$(service_for_slot "$tier" "$old_slot")"
   active_service="$(service_for_slot "$tier" "$new_slot")"
-  "${compose[@]}" pull "$candidate_service"
-  "${compose[@]}" up -d --no-deps --no-build "$candidate_service"
-  wait_service_ready "$candidate_service"
+  active_id="$(container_id "$active_service")"
+  if [[ -z "$active_id" ]] || ! container_running "$active_id"; then
+    printf 'active %s slot %s is not running; refusing manual rollback\n' "$tier" "$new_slot" >&2
+    return 1
+  fi
+  active_api="$current_api"
+  active_sandbox="$current_sandbox"
+  expected_count=3
+  [[ "$sandbox_enabled" == true ]] || expected_count=2
+  start_candidate "$candidate_service" "$expected_count" || {
+    capture_resources "failed-rollback-${tier}" || true
+    "${compose[@]}" stop "$candidate_service" >/dev/null 2>&1 || true
+    return 1
+  }
+  candidate_id="$(container_id "$candidate_service")"
   if [[ "$tier" == production ]]; then
     current_api="$old_slot"
   else
     current_sandbox="$old_slot"
   fi
-  apply_slots "$current_api" "$current_sandbox"
-  if ! probe_window 15; then
-    if [[ "$tier" == production ]]; then current_api="$new_slot"; else current_sandbox="$new_slot"; fi
-    apply_slots "$current_api" "$current_sandbox"
-    probe_all || true
-    printf 'manual rollback was not confirmed; both slots remain available\n' >&2
+  if ! apply_slots "$current_api" "$current_sandbox"; then
+    if restore_active_after_rollback_failure "$active_service" "$active_id" "$active_api" "$active_sandbox"; then
+      "${compose[@]}" stop "$candidate_service" || return 1
+    else
+      printf 'manual rollback failed and restoring the active slot was not confirmed\n' >&2
+    fi
     return 1
   fi
-  "${compose[@]}" stop "$active_service"
-  active_id="$(container_id "$active_service")"
+  failed=0
+  probe_window 15 || failed=1
+  probe_container_dependencies "$candidate_id" || failed=1
+  if ! container_ready "$candidate_id" "$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$candidate_id")"; then
+    failed=1
+  fi
+  candidate_state_safe "$candidate_id" "$candidate_restart_baseline" || failed=1
+  if [[ "$failed" -eq 1 ]]; then
+    capture_resources "failed-rollback-smoke-${tier}" || true
+    if restore_active_after_rollback_failure "$active_service" "$active_id" "$active_api" "$active_sandbox"; then
+      "${compose[@]}" stop "$candidate_service" || return 1
+      printf 'manual rollback smoke failed; previous release remains active\n' >&2
+    else
+      printf 'manual rollback was not confirmed; preserve both slots for operator repair\n' >&2
+    fi
+    return 1
+  fi
+  if ! "${compose[@]}" stop "$active_service"; then
+    capture_resources "failed-rollback-drain-${tier}" || true
+    if restore_active_after_rollback_failure "$active_service" "$active_id" "$active_api" "$active_sandbox"; then
+      "${compose[@]}" stop "$candidate_service" || return 1
+    else
+      printf 'manual rollback stop failed and recovery was not confirmed; preserve both slots for operator repair\n' >&2
+    fi
+    return 1
+  fi
+  if ! candidate_state_safe "$candidate_id" "$candidate_restart_baseline"; then
+    capture_resources "failed-rollback-drain-${tier}" || true
+    if restore_active_after_rollback_failure "$active_service" "$active_id" "$active_api" "$active_sandbox"; then
+      "${compose[@]}" stop "$candidate_service" || return 1
+      printf 'manual rollback candidate restarted during drain; previous release restored\n' >&2
+    else
+      printf 'manual rollback drain failed and recovery was not confirmed; preserve both slots for operator repair\n' >&2
+    fi
+    return 1
+  fi
   record_release rollback "$tier" "$new_slot" "$(container_revision "$active_id")" "$old_slot" "$old_sha"
   clear_pending
   printf '%s rolled back to %s\n' "$tier" "$old_sha"

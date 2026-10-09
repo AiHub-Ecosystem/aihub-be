@@ -858,6 +858,10 @@ validated upstream is the active-slot source of truth; the immutable image SHA
 and #289's durable record identify the release. `.env.production` is not the
 last-good release record.
 
+Timestamped public `/health` results are appended to
+`.aihub-deploy-state/edge-probes.tsv`. Resource snapshots also record each
+AIHUB container's state, OOM flag, and restart count.
+
 Allow at most three AIHUB application containers total, reusing the single
 candidate for Sandbox after Production is verified and drained. Roll back only
 the tier whose smoke failed. A rollback is confirmed only when nginx validation

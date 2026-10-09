@@ -29,3 +29,4 @@ demo-jwks.json
 .pnpm-store/
 .worktrees/
 bash.exe.stackdump
+.aihub-deploy-state/
