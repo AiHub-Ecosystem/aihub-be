@@ -281,9 +281,11 @@ record_release() {
 }
 
 wait_service_ready() {
-  local service="$1" timeout_seconds="${2:-120}" expected_id="${3:-}" expected_restart_count="${4:-}" id status
+  local service="$1" timeout_seconds="${2:-120}" expected_id="${3:-}" expected_restart_count="${4:-}" check_edge="${5:-true}" id status
   for ((attempt = 0; attempt < timeout_seconds; attempt += 1)); do
-    probe_all || return 1
+    if [[ "$check_edge" == true ]]; then
+      probe_all || return 1
+    fi
     id="$(container_id "$service")"
     if [[ -n "$id" ]]; then
       if [[ -n "$expected_restart_count" ]]; then
@@ -335,15 +337,15 @@ rollback_current_tier() {
     sandbox_slot="$(active_slot sandbox "$SANDBOX_CONFIG")"
   fi
   if ! container_running "$(container_id "$old_service")"; then
-    "${compose[@]}" start "$old_service"
-    wait_service_ready "$old_service"
+    "${compose[@]}" start "$old_service" || return 1
+    wait_service_ready "$old_service" 120 "" "" false || return 1
   fi
   if [[ "$tier" == production ]]; then
     api_slot="$old_slot"
   else
     sandbox_slot="$old_slot"
   fi
-  apply_slots "$api_slot" "$sandbox_slot"
+  apply_slots "$api_slot" "$sandbox_slot" || return 1
   if ! probe_window 10; then
     printf 'rollback could not be confirmed; both slots remain available\n' >&2
     return 1
@@ -359,10 +361,10 @@ rollback_current_tier() {
     printf 'rollback dependency smoke failed; both slots remain available\n' >&2
     return 1
   fi
-  "${compose[@]}" stop "$new_service"
+  "${compose[@]}" stop "$new_service" || return 1
   record_release rollback "$tier" "$new_slot" "$(container_revision "$(container_id "$new_service")")" \
-    "$old_slot" "$(container_revision "$(container_id "$old_service")")"
-  clear_pending
+    "$old_slot" "$(container_revision "$(container_id "$old_service")")" || return 1
+  clear_pending || return 1
   printf '%s rollback confirmed\n' "$tier"
 }
 
