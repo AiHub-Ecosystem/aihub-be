@@ -10,7 +10,7 @@ fi
 audio_file=$1
 base_url=${AIHUB_BASE_URL:-https://api.aihubproduction.com}
 app_container=${AIHUB_APP_CONTAINER:-aihub-production-app-1}
-api_key_file=${AIHUB_API_KEY_FILE:-/home/ngoc_anh/speaking-gateway-test-api-key}
+api_key_file=${AIHUB_API_KEY_FILE:?Set AIHUB_API_KEY_FILE to the API key file for AIHUB_BASE_URL}
 private_key_file=${AIHUB_ASSERTION_PRIVATE_KEY_FILE:-/home/ngoc_anh/speaking-gateway-test-private.pem}
 issuer=${AIHUB_ASSERTION_ISSUER:-https://wispace.aihubproduction.com}
 kid=${AIHUB_ASSERTION_KID:-wispace-speaking-test-2026-09}
