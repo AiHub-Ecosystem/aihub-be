@@ -554,8 +554,9 @@ helper updates; CD cannot replace its code.
 Do not enable this CD step until migration and bootstrap are complete. The API
 and Sandbox configs keep the 27 MiB request ceiling, 75-second proxy timeouts,
 forwarding headers, HSTS, hidden nginx version, and edge 404s for `/metrics`
-and `/ready`. `Host` forwarding is load-bearing because the app resolves its
-runtime environment from that header.
+and `/ready`. Both `Host` and `X-Forwarded-Host` are set from nginx's routed
+`$host`; the latter must not pass through caller input because the app resolves
+its runtime environment from the hostname.
 
 Speaking gzip is scoped to JSON responses from the two grading routes. The
 multipart audio request passes unchanged, and request buffering is disabled

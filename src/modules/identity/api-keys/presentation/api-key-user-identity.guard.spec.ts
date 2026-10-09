@@ -33,6 +33,7 @@ const resolved: ResolvedUserIdentity = {
 function request(headers: Record<string, unknown> = {}) {
   return {
     headers: {
+      host: 'api.acme-real-domain.com',
       'x-api-key': 'aihub_sk_value',
       'x-user-identity': 'student-123',
       ...headers,

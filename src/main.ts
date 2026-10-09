@@ -9,6 +9,7 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 
+import { APP_FASTIFY_PROXY_OPTIONS } from './app-fastify-proxy-options';
 import { AppModule } from './app.module';
 import { registerMetricsRoute } from './common/observability/metrics.route';
 import { createRequestLogging } from './common/observability/request-logger';
@@ -25,6 +26,7 @@ export async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({
+      ...APP_FASTIFY_PROXY_OPTIONS,
       // The structured request log, on Fastify's own Pino. One line per
       // response, built by the metering module's completion hook below.
       ...createRequestLogging(),

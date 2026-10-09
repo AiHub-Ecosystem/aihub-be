@@ -25,7 +25,7 @@ const baseKey: AuthenticatedApiKey = {
 
 function request(overrides: Record<string, unknown> = {}) {
   return {
-    headers: { 'x-api-key': 'aihub_sk_value' },
+    headers: { host: 'api.aihub.test', 'x-api-key': 'aihub_sk_value' },
     hostname: 'api.aihub.test',
     ip: '203.0.113.7',
     ...overrides,
