@@ -43,13 +43,13 @@ request below. Unknown public fields are invalid.
 
 Public fields:
 
-| Field        | Type   | Required | Limits                                                                                          |
-| ------------ | ------ | -------- | ----------------------------------------------------------------------------------------------- |
-| `question`   | string | yes      | 1–2,000 characters                                                                              |
-| `chart_type` | enum   | yes      | `Bar Chart`, `Line Graph`, `Pie Chart`, `Table`, `Map`, `Process Diagram`, or `Multiple Graphs` |
-| `image_url`  | URI    | yes      | maximum 2,000 characters                                                                        |
-| `essay`      | string | yes      | 1–20,000 characters                                                                             |
-| `language`   | `vi`   | no       | Current downstream grading output is Vietnamese.                                                |
+| Field        | Type   | Required | Limits                                                                                                        |
+| ------------ | ------ | -------- | ------------------------------------------------------------------------------------------------------------- |
+| `question`   | string | yes      | 1–2,000 characters                                                                                            |
+| `chart_type` | enum   | yes      | `Bar Chart`, `Line Graph`, `Pie Chart`, `Table`, `Map`, `Process Diagram`, or `Multiple Graphs`               |
+| `image_url`  | URI    | yes      | HTTPS URL on any public host; maximum 2,000 characters; readable without credentials or an expiring signature |
+| `essay`      | string | yes      | 1–20,000 characters                                                                                           |
+| `language`   | `vi`   | no       | Current downstream grading output is Vietnamese.                                                              |
 
 Provider mapping:
 
@@ -61,6 +61,19 @@ Provider mapping:
   "url": "<image_url>"
 }
 ```
+
+### Task 1 image retrieval
+
+The provider fetches the Task 1 image from its own network position and must
+treat `url` as untrusted input. It requires HTTPS, rejects URL userinfo, and
+sends no customer credentials, cookies, or authentication headers. It resolves
+all IPv4 and IPv6 answers and refuses the fetch if resolution fails or any
+answer is non-public or special-use. The connection is pinned to a checked
+address while TLS verification uses the original hostname. Redirects are not
+followed. The response body is limited to 10 MiB and the total deadline is
+10 seconds across DNS, connection, and download. Rejected fetches use the
+existing provider error contract and never return a successful grade or
+internal network details.
 
 ### Task 2
 

@@ -22,6 +22,33 @@ describe('Writing contracts', () => {
     ).toBe(false);
   });
 
+  it('requires Task 1 image URLs to use HTTPS while accepting any public host', () => {
+    expect(
+      Value.Check(GradeTask1RequestSchema, {
+        ...TASK1_GRADE,
+        image_url: 'https://charts.customer.example/chart.png',
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(GradeTask1RequestSchema, {
+        ...TASK1_GRADE,
+        image_url: 'HTTPS://charts.customer.example/chart.png',
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(GradeTask1RequestSchema, {
+        ...TASK1_GRADE,
+        image_url: 'http://charts.customer.example/chart.png',
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(GradeTask1RequestSchema, {
+        ...TASK1_GRADE,
+        image_url: 'ftp://charts.customer.example/chart.png',
+      }),
+    ).toBe(false);
+  });
+
   it('accepts chart types exactly as the downstream stores them', () => {
     expect(
       Value.Check(GradeTask1RequestSchema, {

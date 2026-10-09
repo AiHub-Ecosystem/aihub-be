@@ -560,9 +560,12 @@ curl -X POST https://api.example.com/v1/ielts/writing/task1/grade \
 
 The `image_url` above is a real, reachable URL; the API host is a placeholder
 for your own deployment. The difference is deliberate: the AI Writing service
-fetches the chart itself, outside your request, so the image URL must be
-publicly readable with no signature and no credential. Replace it with your
-own chart's URL when you supply your own essay.
+fetches the chart itself, outside your request. Use an HTTPS URL from any
+public host; it must be readable with an unauthenticated GET and must not rely
+on credentials or an expiring signature. The accepted provider contract requires
+the URL to resolve only to public addresses and return the image directly,
+without a redirect. Fetches are limited to 10 MiB and 10 seconds. Replace it
+with your own chart's URL when you supply your own essay.
 
 The `image_url` above points at a sample chart AIHUB hosts, showing UK
 telephone call minutes from 1995 to 2002, and the question and essay in that
