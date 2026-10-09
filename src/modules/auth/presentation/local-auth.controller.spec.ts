@@ -6,6 +6,7 @@ import {
 import { Test } from '@nestjs/testing';
 import { Value } from '@sinclair/typebox/value';
 
+import { APP_FASTIFY_PROXY_OPTIONS } from '@/app-fastify-proxy-options';
 import { AppModule } from '@/app.module';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { ReadCurrentUserResponseSchema } from '@/contracts/auth/local-auth';
@@ -152,12 +153,16 @@ class PasswordResetTokenFake implements PasswordResetTokenPort {
 class LimiterFake implements AuthRateLimiterPort {
   allowed = true;
   calls: Parameters<AuthRateLimiterPort['consume']>[0][] = [];
+  blockedKeys = new Set<string>();
 
   async consume(
     input: Parameters<AuthRateLimiterPort['consume']>[0],
   ): Promise<{ allowed: boolean }> {
     this.calls.push(input);
-    return { allowed: this.allowed };
+    return {
+      allowed:
+        this.allowed && !this.blockedKeys.has(`${input.scope}:${input.key}`),
+    };
   }
 }
 
@@ -262,7 +267,10 @@ describe('local auth HTTP boundary', () => {
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
-      new FastifyAdapter({ genReqId: () => generateRequestId() }),
+      new FastifyAdapter({
+        ...APP_FASTIFY_PROXY_OPTIONS,
+        genReqId: () => generateRequestId(),
+      }),
     );
     const fastify = app.getHttpAdapter().getInstance();
     await Reflect.apply(fastify.register, fastify, [fastifyCookie]);
@@ -280,12 +288,44 @@ describe('local auth HTTP boundary', () => {
     hasher.verifyByHash = false;
     limiter.allowed = true;
     limiter.calls = [];
+    limiter.blockedKeys.clear();
     accessTokenIssuer.fail = false;
     refreshSessions.failCreateRefreshSession = false;
     refreshSessions.failFindRefreshToken = false;
     tokenIssuer.reset();
     passwordResetTokenIssuer.reset();
     refreshTokenIssuer.reset();
+  });
+
+  it('uses the address nginx appends for separate local-auth IP budgets', async () => {
+    limiter.blockedKeys.add('login_ip:198.51.100.10');
+
+    const blockedCaller = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      remoteAddress: '172.16.7.1',
+      headers: {
+        'x-forwarded-for': '198.51.100.11, 198.51.100.10',
+      },
+      payload: { email: 'blocked@example.com', password: 'wrong password' },
+    });
+    const otherCaller = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      remoteAddress: '172.16.7.1',
+      headers: {
+        'x-forwarded-for': '198.51.100.10, 198.51.100.11',
+      },
+      payload: { email: 'other@example.com', password: 'wrong password' },
+    });
+
+    expect(blockedCaller.statusCode).toBe(429);
+    expect(otherCaller.statusCode).toBe(401);
+    expect(
+      limiter.calls
+        .filter((call) => call.scope === 'login_ip')
+        .map((call) => call.key),
+    ).toEqual(['198.51.100.10', '198.51.100.11']);
   });
 
   /** An account holder who already verified their email. */
