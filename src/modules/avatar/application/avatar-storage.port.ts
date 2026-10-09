@@ -24,13 +24,12 @@ export interface ListedAvatarObject {
  */
 export interface AvatarStoragePort {
   /**
-   * A short-lived URL that writes exactly one object, with its content type,
-   * length, and cache header bound into the signature.
+   * A short-lived URL that signs the object's content type and cache header.
+   * Completion verifies the size that actually landed.
    */
   createUploadUrl(input: {
     readonly objectKey: string;
     readonly contentType: AvatarContentType;
-    readonly byteSize: number;
   }): Promise<AvatarUploadUrl>;
   /**
    * The published, unsigned origin URL of an object (ADR-0069). Throws

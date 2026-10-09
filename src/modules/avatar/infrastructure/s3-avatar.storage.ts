@@ -100,7 +100,6 @@ export class S3AvatarStorage implements AvatarStoragePort {
   async createUploadUrl(input: {
     readonly objectKey: string;
     readonly contentType: AvatarContentType;
-    readonly byteSize: number;
   }): Promise<AvatarUploadUrl> {
     const { signer, bucket } = this.require(input.objectKey);
     if (signer === undefined) {
@@ -116,19 +115,12 @@ export class S3AvatarStorage implements AvatarStoragePort {
           Bucket: bucket,
           Key: input.objectKey,
           ContentType: input.contentType,
-          ContentLength: input.byteSize,
           CacheControl: AVATAR_CACHE_CONTROL,
         }),
         {
           expiresIn: AVATAR_UPLOAD_URL_TTL_SECONDS,
-          // Bound into the signature so a client cannot sign one image and
-          // send another. Storage may still not enforce it; completion
-          // re-checks what landed.
-          signableHeaders: new Set([
-            'content-type',
-            'content-length',
-            'cache-control',
-          ]),
+          // Browser Fetch controls Content-Length; completion checks stored size.
+          signableHeaders: new Set(['content-type', 'cache-control']),
         },
       );
       return { url, expiresAt };

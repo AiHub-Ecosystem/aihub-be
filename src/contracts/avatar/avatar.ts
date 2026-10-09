@@ -40,8 +40,9 @@ export const CreateAvatarUploadRequestSchema = Type.Object(
 );
 
 /**
- * Everything a client needs to send the bytes straight to storage. The headers
- * are part of the signature: sending different values fails the upload.
+ * Everything a client needs to send the bytes straight to storage. Content
+ * type and cache policy are signed; completion verifies the stored size because
+ * browser Fetch controls Content-Length.
  */
 export const AvatarUploadResponseSchema = Type.Object(
   {

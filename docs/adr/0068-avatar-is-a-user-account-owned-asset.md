@@ -31,9 +31,10 @@ customer-uploaded asset AIHUB builds.
    unset, the Avatar routes answer `AVATAR_STORAGE_UNAVAILABLE`. The bucket
    allows anonymous read and denies listing: the Avatar is published, not
    signed ([ADR-0069](0069-avatar-is-published-not-signed.md)).
-4. AIHUB mints the upload URL as ADR-0065 describes: a presigned `PUT` with the
-   content type and length bound into the signature, so the bytes never pass
-   through AIHUB.
+4. AIHUB mints a presigned `PUT` with the content type and cache policy bound
+   into the signature, so the bytes never pass through AIHUB. `Content-Length`
+   reports the declared size but is not signed because browser Fetch controls
+   that header; completion checks the actual stored size.
 5. The record is written only when the client completes the upload, after
    AIHUB has checked the stored object's size and type. No upload intent is
    stored between the two calls; completion rebuilds the key from the
@@ -58,8 +59,9 @@ never proxying bytes, applies unchanged.
   Organization does not touch them.
 - Deleting an account will have to delete its Avatar first: the record refers
   to the account with `ON DELETE RESTRICT`.
-- The completion check is the guarantee. Whether SeaweedFS enforces a signed
-  `Content-Length` is unverified, and the check holds either way.
+- Browser Fetch controls `Content-Length`, so the upload URL does not sign it.
+  Completion checks the actual stored object and deletes an oversized upload;
+  an uncompleted oversized object can remain until the daily sweep removes it.
 - If the database fails between deleting the previous object and changing
   the record, the record briefly names an object that no longer exists, until
   the completion is retried. This is the price of having no pending-deletion
