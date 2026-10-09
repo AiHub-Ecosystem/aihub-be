@@ -458,7 +458,7 @@ start_candidate() {
 }
 
 rollback_current_tier() {
-  local tier="$1" old_slot="$2" new_slot="$3" old_service new_service old_id api_slot sandbox_slot
+  local tier="$1" old_slot="$2" new_slot="$3" old_service new_service old_id new_id api_slot sandbox_slot
   old_service="$(service_for_slot "$tier" "$old_slot")"
   new_service="$(service_for_slot "$tier" "$new_slot")"
   api_slot="$(active_slot production "$API_CONFIG")"
@@ -489,6 +489,11 @@ rollback_current_tier() {
   old_id="$(container_id "$old_service")"
   if ! probe_container_dependencies "$old_id"; then
     printf 'rollback dependency smoke failed; both slots remain available\n' >&2
+    return 1
+  fi
+  new_id="$(container_id "$new_service")"
+  if ! app_containers_safe "" "$new_id"; then
+    printf 'rollback could not be confirmed; an application container restarted or OOMed\n' >&2
     return 1
   fi
   "${compose[@]}" stop "$new_service" || return 1
@@ -539,10 +544,9 @@ deploy_tier() {
   [[ "$tier" == sandbox ]] && tier_host="$sandbox_host"
 
   failed=0
+  probe_window 15 || failed=1
   if [[ "$inject_failure" == true ]]; then
     printf 'rehearsal: injecting a failed post-cutover smoke for %s\n' "$tier" >&2
-    failed=1
-  elif ! probe_window 15; then
     failed=1
   fi
   if ! probe_container_dependencies "$new_id"; then
@@ -625,6 +629,44 @@ preflight() {
   probe_all
 }
 
+failed_edge_tiers() {
+  local log="$STATE_DIR/edge-probes.tsv" offset="$1" tier host
+  local -a tiers=()
+  mapfile -t tiers < <(
+    tail -c "+$((offset + 1))" "$log" 2>/dev/null \
+      | awk -F '\t' '$4 !~ /^2[0-9][0-9]$/ { print $3 }' | sort -u
+  )
+  if [[ "${#tiers[@]}" -eq 0 ]]; then
+    # No attributable sample, so probe each host once rather than leave a tier live.
+    for tier in production sandbox; do
+      if [[ "$tier" == sandbox && "$sandbox_enabled" != true ]]; then
+        continue
+      fi
+      host="$production_host"
+      if [[ "$tier" == sandbox ]]; then
+        host="$sandbox_host"
+      fi
+      probe_host "$tier" "$host" || tiers+=("$tier")
+    done
+  fi
+  [[ "${#tiers[@]}" -eq 0 ]] || printf '%s\n' "${tiers[@]}"
+}
+
+final_edge_window() {
+  local seconds="$1" log="$STATE_DIR/edge-probes.tsv" offset=0 tier
+  local -a failing_tiers=()
+  [[ -f "$log" ]] && offset="$(stat -c %s "$log")"
+  probe_window "$seconds" && return 0
+  # Both tiers already stopped their old services, so a failure here has to
+  # restore the recorded release instead of exiting with the outage live.
+  mapfile -t failing_tiers < <(failed_edge_tiers "$offset")
+  for tier in "${failing_tiers[@]}"; do
+    printf 'final edge probe failed for %s; rolling that tier back\n' "$tier" >&2
+    rollback "$tier" || printf '%s rollback was not confirmed; preserve both slots for operator repair\n' "$tier" >&2
+  done
+  return 1
+}
+
 deploy() {
   [[ -n "$AIHUB_IMAGE" ]] || { printf 'AIHUB_IMAGE is required\n' >&2; return 1; }
   preflight
@@ -640,7 +682,7 @@ deploy() {
   if [[ "$sandbox_enabled" == true ]]; then
     deploy_tier sandbox
   fi
-  probe_window 10
+  final_edge_window 10
 }
 
 restore_active_after_rollback_failure() {
