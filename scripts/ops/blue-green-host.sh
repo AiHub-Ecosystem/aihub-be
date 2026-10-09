@@ -239,13 +239,22 @@ app_containers_safe() {
   done
   for ((i = 0; i < ${#app_container_baseline_ids[@]}; i += 1)); do
     id="${app_container_baseline_ids[i]}"
-    [[ "$id" == "$excluded_id" ]] && continue
     expected_restart_count="${app_container_baseline_restarts[i]}"
     state="$(sudo -n docker inspect --format '{{.State.Status}} {{.State.OOMKilled}} {{.RestartCount}}' "$id")" || {
       printf 'could not inspect baseline AIHUB application container id=%s\n' "$id" >&2
       return 1
     }
     read -r status oom_killed restart_count <<<"$state"
+    if [[ "$id" == "$excluded_id" ]]; then
+      # A drained container is allowed to be stopped, but never to have OOMed or
+      # restarted while it was finishing an in-flight request.
+      if [[ "$oom_killed" != false || "$restart_count" != "$expected_restart_count" ]]; then
+        printf 'drained AIHUB application container changed id=%s status=%s oom_killed=%s restart_count=%s baseline=%s\n' \
+          "$id" "$status" "$oom_killed" "$restart_count" "$expected_restart_count" >&2
+        return 1
+      fi
+      continue
+    fi
     if [[ "$status" != running || "$oom_killed" != false || "$restart_count" != "$expected_restart_count" ]]; then
       printf 'baseline AIHUB application container changed id=%s status=%s oom_killed=%s restart_count=%s baseline=%s\n' \
         "$id" "$status" "$oom_killed" "$restart_count" "$expected_restart_count" >&2
@@ -291,11 +300,13 @@ probe_all() {
 probe_window() {
   # An optional stop file ends the window early, but only once every probe it
   # already launched has appended its sample; otherwise a shutdown could race
-  # an in-flight curl and lose the failure it recorded.
-  local seconds="$1" stop_file="${2:-}" failed=0 attempt next_at delay running_pids pid
+  # an in-flight curl and lose the failure it recorded. With a stop file, a
+  # zero-second window runs until that file appears.
+  local seconds="$1" stop_file="${2:-}" failed=0 attempt=0 next_at delay running_pids pid
   local -a probe_pids=() pending_pids=()
   next_at=$SECONDS
-  for ((attempt = 0; attempt < seconds; attempt += 1)); do
+  while [[ -n "$stop_file" && ! -f "$stop_file" ]] ||
+    { [[ -z "$stop_file" ]] && ((attempt < seconds)); }; do
     delay=$((next_at - SECONDS))
     if ((delay > 0)); then sleep "$delay"; fi
     if [[ -z "$stop_file" || ! -f "$stop_file" ]]; then
@@ -320,6 +331,7 @@ probe_window() {
     if [[ -n "$stop_file" && -f "$stop_file" && "${#probe_pids[@]}" -eq 0 ]]; then
       break
     fi
+    attempt=$((attempt + 1))
   done
   for pid in "${probe_pids[@]}"; do
     wait "$pid" || failed=1
@@ -478,7 +490,7 @@ start_candidate() {
   # Only monitor where the active edge is expected to be healthy: the manual
   # rollback starts its candidate while the public edge is known to be failing.
   if [[ "$check_edge" == true ]]; then
-    edge_monitor_start 600
+    edge_monitor_start 0
   else
     edge_monitor_failures=""
   fi
@@ -515,7 +527,7 @@ drain_old_slot() {
   local service="$1" status=0
   # Compose waits out stop_grace_period (90s) on in-flight work, so the edge
   # monitor has to span the drain and record_release has to see its samples.
-  edge_monitor_start 300
+  edge_monitor_start 0
   "${compose[@]}" stop "$service" || status=$?
   edge_monitor_stop
   return "$status"
@@ -569,7 +581,7 @@ rollback_current_tier() {
 
 deploy_tier() {
   local tier="$1" inject_failure="${2:-false}" api_slot sandbox_slot old_slot new_slot old_service new_service
-  local old_id old_sha new_id tier_host failed
+  local old_id old_sha new_id tier_host failed drain_status
   api_slot="$(active_slot production "$API_CONFIG")"
   sandbox_slot=a
   if [[ "$sandbox_enabled" == true ]]; then
@@ -637,8 +649,10 @@ deploy_tier() {
     return 1
   fi
 
-  drain_old_slot "$old_service"
-  if [[ -n "$edge_monitor_failures" ]] || ! candidate_state_safe "$new_id" "$candidate_restart_baseline" ||
+  drain_status=0
+  drain_old_slot "$old_service" || drain_status=$?
+  if [[ "$drain_status" -ne 0 || -n "$edge_monitor_failures" ]] ||
+    ! candidate_state_safe "$new_id" "$candidate_restart_baseline" ||
     ! app_containers_safe "$old_id" "$new_id"; then
     capture_resources "failed-drain-${tier}" || true
     rollback_current_tier "$tier" "$old_slot" "$new_slot" || return 1
@@ -740,10 +754,23 @@ deploy() {
   # restart or OOM caused here would otherwise become the accepted baseline.
   capture_running_app_baseline || return 1
   compose_migrate=("${compose[@]}" --profile migration)
-  "${compose_migrate[@]}" run --no-deps --rm migrate </dev/null
-  if [[ "$sandbox_enabled" == true ]]; then
+  edge_monitor_start 0
+  migration_status=0
+  "${compose_migrate[@]}" run --no-deps --rm migrate </dev/null || migration_status=$?
+  if [[ "$sandbox_enabled" == true && "$migration_status" -eq 0 ]]; then
     compose_sandbox_migrate=("${compose[@]}" --profile migration)
-    "${compose_sandbox_migrate[@]}" run --no-deps --rm migrate-sandbox </dev/null
+    "${compose_sandbox_migrate[@]}" run --no-deps --rm migrate-sandbox </dev/null || migration_status=$?
+  fi
+  edge_monitor_stop
+  if [[ "$migration_status" -ne 0 ]]; then
+    capture_resources failed-migration || true
+    printf 'a migration failed\n' >&2
+    return 1
+  fi
+  if [[ -n "$edge_monitor_failures" ]]; then
+    capture_resources failed-migration || true
+    printf 'public edge probe failed while migrations ran: %s\n' "$edge_monitor_failures" >&2
+    return 1
   fi
   if ! app_containers_safe "" ""; then
     capture_resources failed-migration || true
