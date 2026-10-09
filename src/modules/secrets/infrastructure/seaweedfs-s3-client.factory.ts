@@ -28,6 +28,8 @@ export function createSeaweedFsS3Client(
     endpoint,
     region,
     forcePathStyle: true,
+    // Browser PUTs cannot satisfy an SDK placeholder checksum created before upload.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
     credentials: {
       accessKeyId: options.credentials.accessKeyId,
       secretAccessKey: options.credentials.secretAccessKey,

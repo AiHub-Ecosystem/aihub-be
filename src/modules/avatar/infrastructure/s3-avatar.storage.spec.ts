@@ -64,7 +64,7 @@ function thrown(run: () => unknown): unknown {
 
 describe('S3AvatarStorage', () => {
   describe('upload URL', () => {
-    it('signs content type and cache policy, but not browser-managed length', async () => {
+    it('signs upload metadata without browser-managed length or SDK checksums', async () => {
       const { url, expiresAt } = await storage().createUploadUrl({
         objectKey: KEY,
         contentType: 'image/png',
@@ -83,6 +83,10 @@ describe('S3AvatarStorage', () => {
       expect(
         parsed.searchParams.get('X-Amz-SignedHeaders')?.split(';'),
       ).not.toContain('content-length');
+      expect(parsed.searchParams.has('x-amz-checksum-crc32')).toBe(false);
+      expect(parsed.searchParams.has('x-amz-sdk-checksum-algorithm')).toBe(
+        false,
+      );
       expect(expiresAt).toEqual(new Date('2026-10-02T10:05:00.000Z'));
     });
 
