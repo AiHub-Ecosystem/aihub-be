@@ -205,6 +205,21 @@ describe('email outbox backlog metrics', () => {
     expect(reads).toBe(3);
   });
 
+  it('counts queued rows with a kind this release does not recognize', async () => {
+    setEmailOutboxBacklogSource(async () => [
+      { kind: 'unknown', queued: 2, oldestAgeSeconds: 45 },
+    ]);
+
+    expect(await sample('aihub_email_outbox_queued', { kind: 'unknown' })).toBe(
+      '2',
+    );
+    expect(
+      await sample('aihub_email_outbox_oldest_queued_age_seconds', {
+        kind: 'unknown',
+      }),
+    ).toBe('45');
+  });
+
   it('drops the series when the queue cannot be read, rather than repeating a stale value', async () => {
     let healthy = true;
     setEmailOutboxBacklogSource(async () => {

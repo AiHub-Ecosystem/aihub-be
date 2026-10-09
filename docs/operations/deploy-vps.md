@@ -834,9 +834,224 @@ The Production handoff matrix is split by safety boundary:
 
 ## Rollback
 
-Set `AIHUB_IMAGE` to the previous immutable image tag, run
-`docker compose ... up -d app`, and verify `/health` plus one authenticated
-request before reopening traffic. Never roll back by deleting the database volume.
+The active workflow is still the direct Compose deployment. It records each
+successful tier's replaced and deployed commit SHA in
+`$APP_DIR/.aihub-deploy-state/direct-releases.tsv` (directory mode `0700`, file
+mode `0600`) and adds the same rows to the CD Actions summary. Each row is
+`run_id`, UTC time, tier, previous SHA, deployed SHA. A failed CD run may leave
+`direct-release-pending.tsv`; it is not successful history. Use the latest
+successful run summary and host history together when choosing the last known
+good SHA. `.env.production` is the desired image setting, not release history.
+
+### Pause CD and select the rollback target
+
+From an authenticated GitHub CLI session, stop new CD workflow runs, then wait
+for any run already deploying to finish. Disabling a workflow does not cancel a
+run already in progress:
+
+```sh
+gh workflow disable cd.yml
+gh run list --workflow cd.yml --status in_progress
+gh workflow list --all
+```
+
+Do not change the host while a CD run is applying a release. Verify CD is
+disabled, then inspect the last successful rows on the host and its matching
+Actions summary. If the current running SHA is the deployed SHA in the latest
+successful row, that row's previous SHA is the rollback candidate, provided it
+is still known good and its tag exists. If a failed CD run replaced the image
+before the history step, use the most recent successful deployed SHA that
+differs from the running SHA. After a manual rollback, the restored SHA should
+match an earlier deployed row. Never infer the previous SHA from
+`.env.production`.
+
+GHCR was checked on 2026-10-09: the private package had 150 tagged versions,
+the oldest tagged version was from 2026-09-18, and the current and preceding
+commit-SHA image tags were present. This repository has no image cleanup
+workflow. ADR-0064 says SHA tags are not deleted; retain all SHA tags until #115
+decides a finite retention depth. Before rollback, verify the chosen tag is
+still listed in the private package and locally pullable. Prefer the previous
+image already cached on the host. If it is absent, use an operator-managed
+`read:packages` credential through `docker login --password-stdin`, pull the
+immutable SHA, and log out; never put the token in `.env.production` or a
+command argument. The rollback command below checks the local cache and
+performs that temporary login only when the target image is absent.
+
+### Roll back the direct Compose release
+
+Use the exact 40-character target SHA selected above. This updates both enabled
+tiers to the same image, matching the current CD behavior. It leaves the
+expand-only schema in place and never deletes the database volume or runs a
+down-migration. In the same Bash session, record `recovery_started=$(date +%s)`
+immediately before changing `AIHUB_IMAGE`; once all health and authenticated
+probes pass, calculate `recovery_seconds=$(($(date +%s) - recovery_started))`
+and save it in the rehearsal table or incident notes:
+
+```bash
+set -euo pipefail
+# Use the deployment directory configured as VPS_APP_DIR.
+: "${APP_DIR:?set APP_DIR to VPS_APP_DIR}"
+cd "$APP_DIR"
+rollback_sha='PASTE_40_CHARACTER_SHA_HERE'
+[[ "$rollback_sha" =~ ^[a-f0-9]{40}$ ]]
+rollback_image="ghcr.io/aihub-ecosystem/aihub-be:$rollback_sha"
+if ! sudo -n docker image inspect "$rollback_image" >/dev/null 2>&1; then
+  read -r -p 'GHCR username: ' GHCR_USERNAME
+  read -r -s -p 'GHCR read:packages token: ' GHCR_PULL_TOKEN
+  printf '\n'
+  if ! printf '%s' "$GHCR_PULL_TOKEN" | sudo -n docker login ghcr.io \
+    --username "$GHCR_USERNAME" --password-stdin; then
+    unset GHCR_PULL_TOKEN
+    exit 1
+  fi
+  pull_status=0
+  sudo -n docker pull "$rollback_image" || pull_status=$?
+  sudo -n docker logout ghcr.io >/dev/null 2>&1 || true
+  unset GHCR_PULL_TOKEN
+  test "$pull_status" -eq 0
+fi
+env_tmp="$(mktemp .env.production.rollback.XXXXXX)"
+awk '!/^AIHUB_IMAGE=/' .env.production >"$env_tmp"
+printf 'AIHUB_IMAGE=%s\n' "$rollback_image" >>"$env_tmp"
+chmod 600 "$env_tmp"
+mv "$env_tmp" .env.production
+compose=(sudo -n docker compose --env-file .env.production -f docker-compose.production.yml)
+services=(app)
+if grep -qx 'AIHUB_SANDBOX_ENABLED=true' .env.production; then
+  compose+=(--profile sandbox)
+  services+=(app-sandbox)
+fi
+"${compose[@]}" up -d --no-deps --no-build "${services[@]}"
+
+for service in "${services[@]}"; do
+  container_id="$("${compose[@]}" ps -q "$service")"
+  health=starting
+  for attempt in $(seq 1 45); do
+    health="$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$container_id")"
+    [ "$health" = healthy ] && break
+    [ "$health" != unhealthy ] || break
+    sleep 2
+  done
+  test "$health" = healthy
+  revision="$(sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$container_id")"
+  test "$revision" = "$rollback_sha"
+  sudo -n docker exec "$container_id" node scripts/ops/probe-runtime-dependencies.cjs
+done
+
+AIHUB_PRODUCTION_HOST="$(sed -n 's/^AIHUB_PRODUCTION_HOST=//p' .env.production | tail -n 1)"
+AIHUB_SANDBOX_HOST="$(sed -n 's/^AIHUB_SANDBOX_HOST=//p' .env.production | tail -n 1)"
+curl --fail --silent --show-error "https://$AIHUB_PRODUCTION_HOST/health" >/dev/null
+if grep -qx 'AIHUB_SANDBOX_ENABLED=true' .env.production; then
+  curl --fail --silent --show-error "https://$AIHUB_SANDBOX_HOST/health" >/dev/null
+fi
+```
+
+Wait for every selected service's container health to become `healthy`; verify
+the container revision label equals `rollback_sha`, and check the public
+`/health` on every enabled hostname. Then make one authenticated request to each
+hostname using the dedicated demo API key file on the VPS. The assertion-mint
+route makes no downstream call and its response contains a short-lived
+credential, so discard the body and print only the HTTP status:
+
+```bash
+probe_auth() {
+  (
+    set -euo pipefail
+    local host="$1" dir config body status
+    test -r /home/ngoc_anh/speaking-gateway-test-api-key
+    dir="$(mktemp -d)"
+    chmod 700 "$dir"
+    config="$dir/curl.conf"
+    body="$dir/body.json"
+    trap 'rm -f "$config" "$body"; rmdir "$dir"' EXIT
+    printf '{"user_id":"rollback-probe"}\n' >"$body"
+    chmod 600 "$body"
+    {
+      printf 'url = "https://%s/v1/sandbox/assertions"\n' "$host"
+      printf 'request = "POST"\n'
+      printf 'header = "X-API-Key: %s"\n' "$(cat /home/ngoc_anh/speaking-gateway-test-api-key)"
+      printf 'header = "Content-Type: application/json"\n'
+      printf 'data-binary = "@%s"\n' "$body"
+    } >"$config"
+    chmod 600 "$config"
+    status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --config "$config")"
+    printf '%s %s\n' "$host" "$status"
+    test "$status" = 200
+  )
+}
+
+AIHUB_PRODUCTION_HOST="$(sed -n 's/^AIHUB_PRODUCTION_HOST=//p' .env.production | tail -n 1)"
+AIHUB_SANDBOX_HOST="$(sed -n 's/^AIHUB_SANDBOX_HOST=//p' .env.production | tail -n 1)"
+AIHUB_SANDBOX_ENABLED="$(sed -n 's/^AIHUB_SANDBOX_ENABLED=//p' .env.production | tail -n 1)"
+test -n "$AIHUB_PRODUCTION_HOST"
+probe_auth "$AIHUB_PRODUCTION_HOST"
+if [ "$AIHUB_SANDBOX_ENABLED" = true ]; then
+  test -n "$AIHUB_SANDBOX_HOST"
+  probe_auth "$AIHUB_SANDBOX_HOST"
+fi
+```
+
+The demo key is restricted to the configured demo Organization. Do not use a
+customer key or the Speaking grading smoke for this rollback check: this route
+proves API-key authentication without spending model quota. If any health or
+authenticated probe fails, keep CD disabled and treat rollback as unconfirmed.
+The `/metrics` scrape also exposes unknown queued rows in the fixed
+`aihub_email_outbox_queued{kind="unknown"}` series and their oldest age; raw
+stored values are never metric labels.
+
+### Resume CD
+
+Keep CD disabled until the release cause is fixed and the rollback target has
+passed the health and authenticated probes. Confirm no CD run is active, then
+enable the workflow:
+
+```sh
+gh run list --workflow cd.yml --status in_progress
+gh workflow enable cd.yml
+gh workflow list --all
+```
+
+If `main` advanced while CD was paused, do not assume enabling replays a missed
+`workflow_run` event. Verify the latest successful CI run for `main`, then
+explicitly rerun that run only after the fix-forward release is ready to deploy.
+Follow the CD run through the public probes and the release-history summary.
+
+### Rollback triggers and contract migrations
+
+Start rollback when any release gate fails after deployment: a service fails
+its container health check within 90 seconds, an enabled hostname has a failed
+`/health` probe during the CD probe window, `/ready` reports Postgres or Redis
+down, a deployed container OOMs or its restart count increases, or the
+authenticated smoke does not return `200`. Also roll back a reproducible
+customer-facing regression when evidence ties it to the release. A downstream
+provider outage by itself is not evidence that the app image caused the failure;
+confirm provider-independent health and authentication first. If rollback does
+not restore those checks, keep CD paused and repair forward.
+
+Ordinary migrations remain expand-only, and #484 adds the two-release rule for
+new persisted values plus additive configuration and Vault keys. Before any
+approved contract migration, attach a reviewed migration-specific rollback
+plan to the release. It must name the tested reverse migration or forward-fix
+path, the write/traffic pause, and the database backup to preserve. During a
+rollback, pause CD, stop writes as the plan requires, run only that reviewed and
+rehearsed migration step, then start the previous image and repeat all probes.
+If no safe reverse path was approved, do not run an improvised down-migration or
+restore a backup over newer writes; fix forward instead. For strict Vault
+bundle changes such as the Web Session key, restore the previous compatible
+templates and Agent render before restarting the old image; follow the
+[coordinated secret cutover](#release-order-when-a-rollout-adds-a-runtime-secret).
+
+### Rehearsal record
+
+Run one rehearsal against enabled Sandbox during a quiet window. Record UTC
+date, the deployed SHA, rollback target SHA, the commands/probes used, and the
+elapsed time from starting rollback until health and authenticated probes pass.
+Keep Production serving throughout. Do not enable blue-green CD as part of this
+rehearsal; it remains gated by #289 and ADR-0085.
+
+| Date (UTC)                                                                     | Sandbox SHA before | SHA restored | Steps and probe results | Recovery time |
+| ------------------------------------------------------------------------------ | ------------------ | ------------ | ----------------------- | ------------- |
+| Pending: after the #484 reader release and a later stored-value writer release | Pending            | Pending      | Pending                 | Pending       |
 
 ## Approved blue-green rollout target (#224)
 

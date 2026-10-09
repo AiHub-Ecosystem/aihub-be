@@ -16,6 +16,7 @@ import {
   EMAIL_DELIVERY_KINDS,
   EMAIL_DELIVERY_REQUEST_STATUSES,
 } from '@/modules/auth/application/email-delivery-request.port';
+import { Logger } from '@nestjs/common';
 
 import {
   dateValue,
@@ -65,6 +66,7 @@ const CLAIM_SQL = `
     SELECT id
     FROM email_delivery_requests
     WHERE status = 'queued'
+      AND kind = ANY($5::text[])
       AND attempts < 3
       AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
       AND (
@@ -166,6 +168,7 @@ const FAIL_EXHAUSTED_SQL = `
       last_error_code = 'outcome_unknown', payload_ciphertext = NULL,
       completed_at = $1, lease_owner = NULL, lease_expires_at = NULL
   WHERE status = 'queued'
+    AND kind = ANY($2::text[])
     AND attempts >= 3
     AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
   RETURNING id
@@ -201,6 +204,7 @@ const CANCEL_STALE_SQL = `
       payload_ciphertext = NULL, completed_at = $1,
       lease_owner = NULL, lease_expires_at = NULL
   WHERE status = 'queued'
+    AND kind = ANY($3::text[])
     AND created_at <= $2
     AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
   RETURNING id, kind, status, payload_ciphertext, attempts, last_attempt_at,
@@ -213,11 +217,12 @@ const CANCEL_STALE_SQL = `
  * than from the poller, so it keeps rising when no instance is dispatching.
  */
 const BACKLOG_SQL = `
-  SELECT kind, count(*)::int AS queued,
+  SELECT CASE WHEN kind = ANY($2::text[]) THEN kind ELSE 'unknown' END AS kind,
+         count(*)::int AS queued,
          EXTRACT(EPOCH FROM ($1::timestamptz - min(created_at)))::float8 AS oldest_age_seconds
   FROM email_delivery_requests
   WHERE status = 'queued'
-  GROUP BY kind
+  GROUP BY 1
 `;
 
 /**
@@ -239,6 +244,7 @@ const CLAIM_UNREPORTED_FAILURES_SQL = `
     SELECT id
     FROM email_delivery_requests
     WHERE status = 'failed'
+      AND kind = ANY($4::text[])
       AND failure_reported_at IS NULL
       AND last_error_code IS NOT NULL
       AND (failure_notify_lease_expires_at IS NULL
@@ -278,6 +284,42 @@ function storeError(message: string): AppError {
   return new AppError({ code: 'INTERNAL_ERROR', message, retryable: false });
 }
 
+const logger = new Logger('EmailOutboxDispatch');
+let lastReportedUnknownKindCount = 0;
+
+function reportUnknownKindRows(count: number): void {
+  if (count === lastReportedUnknownKindCount) return;
+  lastReportedUnknownKindCount = count;
+  if (count > 0) {
+    logger.warn(
+      `Skipped ${count} email delivery requests with unrecognized kinds`,
+    );
+  }
+}
+
+function isKnownEmailDeliveryKind(value: unknown): value is EmailDeliveryKind {
+  return (
+    typeof value === 'string' &&
+    EMAIL_DELIVERY_KINDS.some((kind) => kind === value)
+  );
+}
+
+function toKnownRecords(
+  rows: readonly Record<string, unknown>[],
+): readonly EmailDeliveryRequestRecord[] {
+  const records: EmailDeliveryRequestRecord[] = [];
+  let skipped = 0;
+  for (const row of rows) {
+    if (typeof row.kind === 'string' && !isKnownEmailDeliveryKind(row.kind)) {
+      skipped += 1;
+      continue;
+    }
+    records.push(toRecord(row));
+  }
+  reportUnknownKindRows(skipped);
+  return records;
+}
+
 /**
  * Every column crosses a reader, so a row the table could not have produced is
  * refused rather than asserted into a record. The error code and cancellation
@@ -286,7 +328,7 @@ function storeError(message: string): AppError {
  */
 /** One kind's share of the queue, as the backlog metrics expose it. */
 export interface EmailDeliveryBacklogRow {
-  readonly kind: EmailDeliveryKind;
+  readonly kind: EmailDeliveryKind | 'unknown';
   readonly queued: number;
   readonly oldestAgeSeconds: number;
 }
@@ -295,7 +337,10 @@ function toBacklogRow(value: unknown): EmailDeliveryBacklogRow {
   if (!isRecord(value)) {
     throw storeError('Email delivery backlog is invalid');
   }
-  const kind = oneOf(value, 'kind', EMAIL_DELIVERY_KINDS);
+  const kind =
+    value.kind === 'unknown'
+      ? 'unknown'
+      : oneOf(value, 'kind', EMAIL_DELIVERY_KINDS);
   const queued = integerValue(value, 'queued');
   const oldestAgeSeconds = value.oldest_age_seconds;
   if (
@@ -440,8 +485,11 @@ export class PostgresEmailDeliveryRequestRepository
     client: EmailDeliveryQueryClient,
     input: { at: Date },
   ): Promise<readonly EmailDeliveryRequestRecord[]> {
-    const rows = await client.query(FAIL_EXHAUSTED_SQL, [input.at]);
-    return rows.map(toRecord);
+    const rows = await client.query(FAIL_EXHAUSTED_SQL, [
+      input.at,
+      EMAIL_DELIVERY_KINDS,
+    ]);
+    return toKnownRecords(rows);
   }
 
   async markCancelled(
@@ -479,16 +527,24 @@ export class PostgresEmailDeliveryRequestRepository
     const rows = await client.query(CANCEL_STALE_SQL, [
       input.at,
       input.createdAtOrBefore,
+      EMAIL_DELIVERY_KINDS,
     ]);
-    return rows.map(toRecord);
+    return toKnownRecords(rows);
   }
 
   async backlog(
     client: EmailDeliveryQueryClient,
     input: { now: Date },
   ): Promise<readonly EmailDeliveryBacklogRow[]> {
-    const rows = await client.query(BACKLOG_SQL, [input.now]);
-    return rows.map(toBacklogRow);
+    const rows = await client.query(BACKLOG_SQL, [
+      input.now,
+      EMAIL_DELIVERY_KINDS,
+    ]);
+    const backlog = rows.map(toBacklogRow);
+    reportUnknownKindRows(
+      backlog.find((row) => row.kind === 'unknown')?.queued ?? 0,
+    );
+    return backlog;
   }
 
   async claim(
@@ -500,8 +556,9 @@ export class PostgresEmailDeliveryRequestRepository
       input.limit,
       input.owner,
       String(input.leaseMs),
+      EMAIL_DELIVERY_KINDS,
     ]);
-    return rows.map(toRecord);
+    return toKnownRecords(rows);
   }
 
   async claimUnreportedFailures(
@@ -512,8 +569,9 @@ export class PostgresEmailDeliveryRequestRepository
       input.limit,
       input.now,
       new Date(input.now.getTime() + input.leaseMs),
+      EMAIL_DELIVERY_KINDS,
     ]);
-    return rows.map(toRecord);
+    return toKnownRecords(rows);
   }
 
   async markFailureReported(

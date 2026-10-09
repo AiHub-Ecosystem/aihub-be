@@ -53,3 +53,11 @@ An ADR's statements about an external system (a host, a bucket, a vendor's behav
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
 > _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+
+## Release compatibility
+
+Expand-only migrations preserve the schema shape across adjacent releases; they do not make new persisted values, runtime configuration, or Vault template keys compatible with N-1.
+
+- Ship a new persisted enum/value in two releases. Release N-1 first learns to read or safely skip the value without writing it; a later release starts writing it only after that reader is deployed.
+- Add environment variables and Vault template keys without renaming or removing existing keys in the same release. Remove an old key only in a later release after no deployed image reads it. Where a strict Vault bundle reader rejects an added key, follow the coordinated cutover and rollback sequence in `docs/operations/deploy-vps.md` and the applicable ADR.
+- For every PR that changes persisted values or runtime configuration, name the old-reader behavior and the release that starts writing/removing the value or key. Keep unknown-value telemetry bounded and free of payloads or secret values.
