@@ -18,6 +18,8 @@ AIHUB_IMAGE=${AIHUB_IMAGE:-}
 COMMAND=${1:-}
 TIER=${2:-}
 candidate_restart_baseline=0
+app_container_baseline_ids=()
+app_container_baseline_restarts=()
 
 cd "$APP_DIR"
 mkdir -p "$STATE_DIR"
@@ -33,6 +35,17 @@ read_env() {
   sed -n "s/^${key}=//p" .env.production | tail -n 1 | tr -d '\r'
 }
 
+configured_port() {
+  local key="$1" default="$2" value
+  value="$(read_env "$key")"
+  [[ -n "$value" ]] || value="$default"
+  if ! [[ "$value" =~ ^[0-9]{1,5}$ ]] || ((10#$value < 1 || 10#$value > 65535)); then
+    printf '%s must be a valid TCP port\n' "$key" >&2
+    return 1
+  fi
+  printf '%s\n' "$((10#$value))"
+}
+
 sandbox_enabled="$(read_env AIHUB_SANDBOX_ENABLED)"
 if [[ -z "$sandbox_enabled" ]]; then
   sandbox_enabled=false
@@ -41,6 +54,21 @@ if [[ "$sandbox_enabled" != true && "$sandbox_enabled" != false ]]; then
   printf 'AIHUB_SANDBOX_ENABLED must be true or false\n' >&2
   exit 1
 fi
+
+production_slot_a_port="$(configured_port AIHUB_APP_PORT 3021)"
+sandbox_slot_a_port="$(configured_port AIHUB_SANDBOX_APP_PORT 3022)"
+reserved_ports=("$production_slot_a_port" 3023)
+if [[ "$sandbox_enabled" == true ]]; then
+  reserved_ports+=("$sandbox_slot_a_port" 3024)
+fi
+for ((i = 0; i < ${#reserved_ports[@]}; i += 1)); do
+  for ((j = i + 1; j < ${#reserved_ports[@]}; j += 1)); do
+    if [[ "${reserved_ports[i]}" == "${reserved_ports[j]}" ]]; then
+      printf 'AIHUB deployment slots cannot share port %s\n' "${reserved_ports[i]}" >&2
+      exit 1
+    fi
+  done
+done
 
 production_host="$(read_env AIHUB_PRODUCTION_HOST)"
 sandbox_host="$(read_env AIHUB_SANDBOX_HOST)"
@@ -79,8 +107,12 @@ fi
 
 slot_for_port() {
   local tier="$1" port="$2"
+  if [[ "$tier:$port" == "production:$production_slot_a_port" || \
+    "$tier:$port" == "sandbox:$sandbox_slot_a_port" ]]; then
+    printf a
+    return 0
+  fi
   case "$tier:$port" in
-    production:3021 | sandbox:3022) printf a ;;
     production:3023 | sandbox:3024) printf b ;;
     *) printf 'unsupported %s upstream port: %s\n' "$tier" "$port" >&2; return 1 ;;
   esac
@@ -88,9 +120,9 @@ slot_for_port() {
 
 port_for_slot() {
   case "$1:$2" in
-    production:a) printf 3021 ;;
+    production:a) printf '%s' "$production_slot_a_port" ;;
     production:b) printf 3023 ;;
-    sandbox:a) printf 3022 ;;
+    sandbox:a) printf '%s' "$sandbox_slot_a_port" ;;
     sandbox:b) printf 3024 ;;
     *) printf 'unknown deployment slot: %s %s\n' "$1" "$2" >&2; return 1 ;;
   esac
@@ -154,6 +186,68 @@ candidate_state_safe() {
       "$status" "$oom_killed" "$restart_count" "$baseline_restart_count" >&2
     return 1
   fi
+}
+
+capture_running_app_baseline() {
+  local id state status oom_killed restart_count
+  local -a ids=()
+  app_container_baseline_ids=()
+  app_container_baseline_restarts=()
+  mapfile -t ids < <(sudo -n docker ps --quiet --filter "label=org.opencontainers.image.source=${REPOSITORY_URL}")
+  if [[ "${#ids[@]}" -eq 0 ]]; then
+    printf 'no running AIHUB application containers found for rollout baseline\n' >&2
+    return 1
+  fi
+  for id in "${ids[@]}"; do
+    state="$(sudo -n docker inspect --format '{{.State.Status}} {{.State.OOMKilled}} {{.RestartCount}}' "$id")" || return 1
+    read -r status oom_killed restart_count <<<"$state"
+    if [[ "$status" != running || "$oom_killed" != false ]]; then
+      printf 'AIHUB application container is unsafe before candidate start id=%s status=%s oom_killed=%s\n' \
+        "$id" "$status" "$oom_killed" >&2
+      return 1
+    fi
+    app_container_baseline_ids+=("$id")
+    app_container_baseline_restarts+=("$restart_count")
+  done
+}
+
+app_containers_safe() {
+  local excluded_id="${1:-}" candidate_id="${2:-}" id current_id known_id known state status oom_killed restart_count expected_restart_count i running_ids_output
+  local -a running_ids=()
+  running_ids_output="$(sudo -n docker ps --quiet --filter "label=org.opencontainers.image.source=${REPOSITORY_URL}")" || return 1
+  if [[ -n "$running_ids_output" ]]; then
+    mapfile -t running_ids <<<"$running_ids_output"
+  fi
+  for current_id in "${running_ids[@]}"; do
+    if [[ "$current_id" == "$excluded_id" ]]; then
+      printf 'drained AIHUB application container is still running id=%s\n' "$current_id" >&2
+      return 1
+    fi
+    [[ -n "$candidate_id" && "$current_id" == "$candidate_id" ]] && continue
+    known=false
+    for known_id in "${app_container_baseline_ids[@]}"; do
+      [[ "$current_id" == "$known_id" ]] && known=true && break
+    done
+    if [[ "$known" != true ]]; then
+      printf 'unexpected running AIHUB application container id=%s\n' "$current_id" >&2
+      return 1
+    fi
+  done
+  for ((i = 0; i < ${#app_container_baseline_ids[@]}; i += 1)); do
+    id="${app_container_baseline_ids[i]}"
+    [[ "$id" == "$excluded_id" ]] && continue
+    expected_restart_count="${app_container_baseline_restarts[i]}"
+    state="$(sudo -n docker inspect --format '{{.State.Status}} {{.State.OOMKilled}} {{.RestartCount}}' "$id")" || {
+      printf 'could not inspect baseline AIHUB application container id=%s\n' "$id" >&2
+      return 1
+    }
+    read -r status oom_killed restart_count <<<"$state"
+    if [[ "$status" != running || "$oom_killed" != false || "$restart_count" != "$expected_restart_count" ]]; then
+      printf 'baseline AIHUB application container changed id=%s status=%s oom_killed=%s restart_count=%s baseline=%s\n' \
+        "$id" "$status" "$oom_killed" "$restart_count" "$expected_restart_count" >&2
+      return 1
+    fi
+  done
 }
 
 probe_container_dependencies() {
@@ -313,7 +407,7 @@ record_release() {
 }
 
 wait_service_ready() {
-  local service="$1" timeout_seconds="${2:-120}" expected_id="${3:-}" expected_restart_count="${4:-}" check_edge="${5:-true}" id status
+  local service="$1" timeout_seconds="${2:-120}" expected_id="${3:-}" expected_restart_count="${4:-}" check_edge="${5:-true}" check_app_containers="${6:-false}" id status
   for ((attempt = 0; attempt < timeout_seconds; attempt += 1)); do
     if [[ "$check_edge" == true ]]; then
       probe_all || return 1
@@ -322,6 +416,9 @@ wait_service_ready() {
     if [[ -n "$id" ]]; then
       if [[ -n "$expected_restart_count" ]]; then
         [[ "$id" == "$expected_id" ]] && candidate_state_safe "$id" "$expected_restart_count" || return 1
+        if [[ "$check_app_containers" == true ]]; then
+          app_containers_safe "" "$expected_id" || return 1
+        fi
       fi
       status="$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$id" 2>/dev/null || true)"
       if container_ready "$id" "$status"; then
@@ -347,6 +444,7 @@ start_candidate() {
   if [[ -n "$previous_id" ]]; then
     previous_restart_count="$(sudo -n docker inspect --format '{{.RestartCount}}' "$previous_id")"
   fi
+  capture_running_app_baseline || return 1
   "${compose[@]}" pull "$service" || return 1
   "${compose[@]}" up -d --no-deps --no-build "$service" || return 1
   id="$(container_id "$service")"
@@ -355,7 +453,7 @@ start_candidate() {
     candidate_restart_baseline="$previous_restart_count"
   fi
   assert_container_count "$expected_count" || return 1
-  wait_service_ready "$service" 120 "$id" "$candidate_restart_baseline" || return 1
+  wait_service_ready "$service" 120 "$id" "$candidate_restart_baseline" true true || return 1
   capture_resources "candidate-${service}"
 }
 
@@ -457,6 +555,9 @@ deploy_tier() {
   if ! candidate_state_safe "$new_id" "$candidate_restart_baseline"; then
     failed=1
   fi
+  if ! app_containers_safe "" "$new_id"; then
+    failed=1
+  fi
   if [[ "$failed" -eq 1 ]]; then
     capture_resources "failed-cutover-${tier}" || true
     rollback_current_tier "$tier" "$old_slot" "$new_slot" || return 1
@@ -469,10 +570,10 @@ deploy_tier() {
   fi
 
   "${compose[@]}" stop "$old_service"
-  if ! candidate_state_safe "$new_id" "$candidate_restart_baseline"; then
+  if ! candidate_state_safe "$new_id" "$candidate_restart_baseline" || ! app_containers_safe "$old_id" "$new_id"; then
     capture_resources "failed-drain-${tier}" || true
     rollback_current_tier "$tier" "$old_slot" "$new_slot" || return 1
-    printf '%s candidate restarted during drain; previous slot restored\n' "$tier" >&2
+    printf '%s application container changed during drain; previous slot restored\n' "$tier" >&2
     return 1
   fi
   record_release deploy "$tier" "$old_slot" "$old_sha" "$new_slot" "$(container_revision "$new_id")"
@@ -620,6 +721,7 @@ rollback() {
     failed=1
   fi
   candidate_state_safe "$candidate_id" "$candidate_restart_baseline" || failed=1
+  app_containers_safe "" "$candidate_id" || failed=1
   if [[ "$failed" -eq 1 ]]; then
     capture_resources "failed-rollback-smoke-${tier}" || true
     if restore_active_after_rollback_failure "$active_service" "$active_id" "$active_api" "$active_sandbox"; then
@@ -639,11 +741,11 @@ rollback() {
     fi
     return 1
   fi
-  if ! candidate_state_safe "$candidate_id" "$candidate_restart_baseline"; then
+  if ! candidate_state_safe "$candidate_id" "$candidate_restart_baseline" || ! app_containers_safe "$active_id" "$candidate_id"; then
     capture_resources "failed-rollback-drain-${tier}" || true
     if restore_active_after_rollback_failure "$active_service" "$active_id" "$active_api" "$active_sandbox"; then
       "${compose[@]}" stop "$candidate_service" || return 1
-      printf 'manual rollback candidate restarted during drain; previous release restored\n' >&2
+      printf 'manual rollback application container changed during drain; previous release restored\n' >&2
     else
       printf 'manual rollback drain failed and recovery was not confirmed; preserve both slots for operator repair\n' >&2
     fi
