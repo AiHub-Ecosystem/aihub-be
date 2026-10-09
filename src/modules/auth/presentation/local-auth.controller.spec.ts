@@ -4,9 +4,11 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { ReadCurrentUserResponseSchema } from '@/contracts/auth/local-auth';
 import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
@@ -34,7 +36,9 @@ import {
 } from '@/modules/auth/application/refresh-token.port';
 import {
   USER_ACCESS_TOKEN_ISSUER,
+  USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenIssuerPort,
+  type UserAccessTokenVerifierPort,
 } from '@/modules/auth/application/user-access-token.port';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
 import { VERIFICATION_TOKEN_REPOSITORY } from '@/modules/auth/application/verification-token-repository.port';
@@ -220,6 +224,14 @@ describe('local auth HTTP boundary', () => {
     passwordResetTokenIssuer = new PasswordResetTokenFake();
     refreshTokenIssuer = new RefreshTokenIssuerFake();
     accessTokenIssuer = new AccessTokenIssuerFake();
+    const accessTokenVerifier: UserAccessTokenVerifierPort = {
+      verify: async (token) => {
+        if (token === 'valid.user.access') {
+          return { userId: USER_ID, jti: 'jti_current_user' };
+        }
+        throw new Error('invalid token');
+      },
+    };
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -243,6 +255,8 @@ describe('local auth HTTP boundary', () => {
       .useValue(limiter)
       .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
       .useValue(accessTokenIssuer)
+      .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
+      .useValue(accessTokenVerifier)
       .overrideProvider(REFRESH_TOKEN_ISSUER)
       .useValue(refreshTokenIssuer)
       .compile();
@@ -279,6 +293,7 @@ describe('local auth HTTP boundary', () => {
     seedAccount(state, {
       userId: USER_ID,
       email: EMAIL,
+      username: 'person_01',
       passwordHash: '$argon2id$fake',
     });
   }
@@ -332,6 +347,33 @@ describe('local auth HTTP boundary', () => {
       cipher.decrypt(request.payloadCiphertext),
     ) as EmailDeliveryPayload;
   }
+
+  it('returns only the authenticated account username with no-store caching', async () => {
+    seedActiveAccount();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/me',
+      headers: { authorization: 'Bearer valid.user.access' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(Value.Check(ReadCurrentUserResponseSchema, response.json())).toBe(
+      true,
+    );
+    expect(response.json()).toEqual({
+      data: { username: 'person_01' },
+      meta: { request_id: expect.stringMatching(/^req_/) },
+    });
+  });
+
+  it('requires a Bearer user access token for the current account', async () => {
+    const response = await app.inject({ method: 'GET', url: '/v1/me' });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.code).toBe('AUTH_USER_ACCESS_TOKEN_REQUIRED');
+  });
 
   it('registers and acknowledges first and repeated verification through HTTP', async () => {
     const register = await app.inject({

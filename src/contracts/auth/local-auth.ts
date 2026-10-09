@@ -120,6 +120,24 @@ export const LoginResponseSchema = Type.Object(
 
 export type LoginResponse = Static<typeof LoginResponseSchema>;
 
+export const ReadCurrentUserResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      { username: Type.String({ minLength: 1, maxLength: 64 }) },
+      { additionalProperties: false },
+    ),
+    meta: Type.Object(
+      { request_id: Type.String({ minLength: 1 }) },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export type ReadCurrentUserResponse = Static<
+  typeof ReadCurrentUserResponseSchema
+>;
+
 export const EmptyAuthRequestSchema = Type.Object(
   {},
   { additionalProperties: false },

@@ -559,6 +559,21 @@ export class PostgresLocalAuthRepository
     return status;
   }
 
+  async findActiveUsername(userId: string): Promise<string | undefined> {
+    const rows = await this.client.query(
+      "SELECT username FROM user_accounts WHERE id = $1 AND status = 'active'",
+      [userId],
+    );
+    const username = rows[0]?.username;
+    if (username === undefined) {
+      return undefined;
+    }
+    if (typeof username !== 'string') {
+      throw new Error('active account username projection is invalid');
+    }
+    return username;
+  }
+
   async createRefreshSession(input: CreateRefreshSessionInput): Promise<void> {
     await this.insertRefreshSession(this.client, input);
   }

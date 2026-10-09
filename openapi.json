@@ -8377,6 +8377,117 @@
         }
       }
     },
+    "/v1/me": {
+      "get": {
+        "operationId": "me.profile.read",
+        "summary": "Read the current AIHUB account profile",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The authenticated AIHUB User Account profile",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["username"],
+                      "properties": {
+                        "username": {
+                          "minLength": 1,
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "head": {
+        "operationId": "me.profile.read.head",
+        "summary": "Retrieve response headers",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; same headers as GET, without a response body.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Same status as GET, without a response body."
+          },
+          "500": {
+            "description": "Same status as GET, without a response body."
+          },
+          "503": {
+            "description": "Same status as GET, without a response body."
+          }
+        },
+        "description": "Returns the same status and headers as GET without a response body."
+      }
+    },
     "/v1/auth/web-sessions": {
       "post": {
         "operationId": "auth.web_sessions.create",

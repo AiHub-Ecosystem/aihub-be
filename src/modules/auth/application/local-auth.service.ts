@@ -100,6 +100,14 @@ function invalidPasswordResetToken(): AppError {
   });
 }
 
+function invalidUserAccessToken(): AppError {
+  return new AppError({
+    code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
+    message: 'User access token is invalid',
+    retryable: false,
+  });
+}
+
 /**
  * Built by the auth module's composition root, which passes every port
  * explicitly, so this class carries no framework decorators and the clock is
@@ -121,6 +129,14 @@ export class LocalAuthService {
     private readonly clock: LocalAuthServiceClock,
     private readonly newEmailDeliveryId: IdMinter,
   ) {}
+
+  async currentUser(userId: string): Promise<{ readonly username: string }> {
+    const username = await this.userAccounts.findActiveUsername(userId);
+    if (username === undefined) {
+      throw invalidUserAccessToken();
+    }
+    return { username };
+  }
 
   async register(
     input: RegistrationInput,

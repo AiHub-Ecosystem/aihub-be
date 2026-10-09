@@ -410,6 +410,28 @@ describe('PostgresLocalAuthRepository', () => {
     ).resolves.toBe('disabled');
   });
 
+  it('reads the username only for the active bearer account', async () => {
+    const client = new FakeClient();
+    client.queryResponses = [[{ username: 'person_01' }]];
+
+    await expect(
+      new PostgresLocalAuthRepository(client).findActiveUsername(
+        'usr_01J00000000000000000000000',
+      ),
+    ).resolves.toBe('person_01');
+    expect(client.queries[0]?.text).toContain("status = 'active'");
+    expect(client.queries[0]?.values).toEqual([
+      'usr_01J00000000000000000000000',
+    ]);
+
+    client.queryResponses = [[]];
+    await expect(
+      new PostgresLocalAuthRepository(client).findActiveUsername(
+        'usr_01J00000000000000000000000',
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   it('persists only the refresh hash and rotates under a row lock', async () => {
     const client = new FakeClient();
     const repository = new PostgresLocalAuthRepository(client);

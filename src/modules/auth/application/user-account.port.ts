@@ -36,6 +36,7 @@ export interface UserAccountRepositoryPort {
   findUserAccountStatus(
     userId: string,
   ): Promise<LocalAccountStatus | undefined>;
+  findActiveUsername(userId: string): Promise<string | undefined>;
 }
 
 export const USER_ACCOUNT_REPOSITORY = Symbol('USER_ACCOUNT_REPOSITORY');

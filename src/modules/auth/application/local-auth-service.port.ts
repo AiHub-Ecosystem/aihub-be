@@ -12,6 +12,7 @@ export interface IssuedSession {
 }
 
 export interface LocalAuthServicePort {
+  currentUser(userId: string): Promise<{ readonly username: string }>;
   register(
     input: RegisterRequest,
     ip: string,
