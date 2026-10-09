@@ -181,6 +181,58 @@ describe('JwksKeyProvider', () => {
     expect(fetches).toBe(1);
   });
 
+  it('joins a matching local flight when another process owns the refresh lock', async () => {
+    const cache = new FakeCache();
+    const staleJwks = { keys: [] };
+    cache.entry = { jwks: staleJwks, freshUntil: 1_000, staleUntil: 3_000 };
+    let markLockRequested: (() => void) | undefined;
+    let releaseLock: ((lock: JwksRefreshLock) => void) | undefined;
+    const lockRequested = new Promise<void>((resolve) => {
+      markLockRequested = resolve;
+    });
+    const lock = new Promise<JwksRefreshLock>((resolve) => {
+      releaseLock = resolve;
+    });
+    cache.tryAcquireRefresh = () => {
+      markLockRequested?.();
+      return lock;
+    };
+
+    let finishFetch: ((response: Response) => void) | undefined;
+    let markFetchStarted: (() => void) | undefined;
+    const fetchStarted = new Promise<void>((resolve) => {
+      markFetchStarted = resolve;
+    });
+    const provider = new JwksKeyProvider(
+      cache,
+      async () => {
+        markFetchStarted?.();
+        return new Promise<Response>((resolve) => {
+          finishFetch = resolve;
+        });
+      },
+      publicLookup(),
+      () => 2_000,
+    );
+
+    const forced = provider.resolve({
+      organizationId: 'org_acme',
+      config: remoteConfig,
+      forceRefresh: true,
+    });
+    await lockRequested;
+    const regular = provider.resolve({
+      organizationId: 'org_acme',
+      config: remoteConfig,
+    });
+    await fetchStarted;
+
+    releaseLock?.({ acquired: false, available: true });
+    finishFetch?.(new Response(JSON.stringify(jwks)));
+
+    await expect(Promise.all([forced, regular])).resolves.toEqual([jwks, jwks]);
+  });
+
   it('reserves process capacity while a forced refresh waits for its lock', async () => {
     const cache = new FakeCache();
     let markLockRequested: (() => void) | undefined;

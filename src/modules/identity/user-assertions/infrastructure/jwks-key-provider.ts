@@ -525,6 +525,10 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
             );
           }
         } else if (!lock.acquired) {
+          const localFlight = this.flights.get(input.organizationId);
+          if (localFlight?.key === flightKey) {
+            return localFlight.promise;
+          }
           const reread = await this.cache.getJwks(
             input.organizationId,
             configVersion,
