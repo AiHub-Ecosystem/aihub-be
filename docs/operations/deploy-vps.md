@@ -868,10 +868,12 @@ match an earlier deployed row. Never infer the previous SHA from
 GHCR was checked on 2026-10-09: the private package had 150 tagged versions,
 the oldest tagged version was from 2026-09-18, and the current and preceding
 commit-SHA image tags were present. This repository has no image cleanup
-workflow. ADR-0064 says SHA tags are not deleted; retain all SHA tags until #115
-decides a finite retention depth. Before rollback, verify the chosen tag is
-still listed in the private package and locally pullable. Prefer the previous
-image already cached on the host. If it is absent, use an operator-managed
+workflow. The rollback retention floor is two SHA tags: the current release and
+its previous successful release. ADR-0064 currently retains every SHA tag; do
+not add cleanup that removes this floor. #115 may set a finite depth later, but
+it must preserve at least these two releases. Before rollback, verify the
+chosen tag is still listed in the private package and locally pullable. Prefer
+the previous image already cached on the host. If it is absent, use an operator-managed
 `read:packages` credential through `docker login --password-stdin`, pull the
 immutable SHA, and log out; never put the token in `.env.production` or a
 command argument. The rollback command below checks the local cache and
@@ -885,7 +887,9 @@ expand-only schema in place and never deletes the database volume or runs a
 down-migration. In the same Bash session, record `recovery_started=$(date +%s)`
 immediately before changing `AIHUB_IMAGE`; once all health and authenticated
 probes pass, calculate `recovery_seconds=$(($(date +%s) - recovery_started))`
-and save it in the rehearsal table or incident notes:
+and save it in the incident notes. This full-tier command is for an incident;
+use the Sandbox-only procedure below for a rehearsal so Production keeps
+serving its current container.
 
 ```bash
 set -euo pipefail
@@ -998,6 +1002,79 @@ authenticated probe fails, keep CD disabled and treat rollback as unconfirmed.
 The `/metrics` scrape also exposes unknown queued rows in the fixed
 `aihub_email_outbox_queued{kind="unknown"}` series and their oldest age; raw
 stored values are never metric labels.
+
+### Sandbox-only rehearsal rollback
+
+Use this variant only after CD is disabled, no deploy run is active, Sandbox
+is enabled, and the rollback image passed the registry/cache checks above. It
+changes the shared desired `AIHUB_IMAGE` in `.env.production`, but recreates
+only `app-sandbox`; the running Production container must keep the same ID and
+revision throughout. Run it in the same Bash session as `probe_auth` above so
+the recovery timer includes the authenticated probes. Only rehearse after a
+normal later release has written a new stored value in Sandbox. Confirm that
+value exists using release-specific evidence without printing payloads or
+secrets; do not seed the database manually to simulate a writer release.
+
+```bash
+set -euo pipefail
+: "${APP_DIR:?set APP_DIR to VPS_APP_DIR}"
+cd "$APP_DIR"
+test "$(sed -n 's/^AIHUB_SANDBOX_ENABLED=//p' .env.production | tail -n 1)" = true
+rollback_sha='PASTE_40_CHARACTER_SHA_HERE'
+[[ "$rollback_sha" =~ ^[a-f0-9]{40}$ ]]
+rollback_image="ghcr.io/aihub-ecosystem/aihub-be:$rollback_sha"
+sudo -n docker image inspect "$rollback_image" >/dev/null
+production_compose=(sudo -n docker compose --env-file .env.production -f docker-compose.production.yml)
+sandbox_compose=(sudo -n docker compose --profile sandbox --env-file .env.production -f docker-compose.production.yml)
+production_id_before="$("${production_compose[@]}" ps -q app)"
+test -n "$production_id_before"
+production_sha_before="$(sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$production_id_before")"
+sandbox_id_before="$("${sandbox_compose[@]}" ps -q app-sandbox)"
+test -n "$sandbox_id_before"
+sandbox_sha_before="$(sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$sandbox_id_before")"
+printf 'sandbox_before_sha=%s production_before_sha=%s\n' "$sandbox_sha_before" "$production_sha_before"
+recovery_started="$(date +%s)"
+env_tmp="$(mktemp .env.production.rollback.XXXXXX)"
+trap 'rm -f "$env_tmp"' EXIT
+awk '!/^AIHUB_IMAGE=/' .env.production >"$env_tmp"
+printf 'AIHUB_IMAGE=%s\n' "$rollback_image" >>"$env_tmp"
+chmod 600 "$env_tmp"
+mv "$env_tmp" .env.production
+trap - EXIT
+"${sandbox_compose[@]}" up -d --no-deps --no-build app-sandbox
+sandbox_id="$("${sandbox_compose[@]}" ps -q app-sandbox)"
+health=starting
+for attempt in $(seq 1 45); do
+  health="$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$sandbox_id")"
+  [ "$health" = healthy ] && break
+  [ "$health" != unhealthy ] || break
+  sleep 2
+done
+test "$health" = healthy
+sandbox_sha="$(sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$sandbox_id")"
+test "$sandbox_sha" = "$rollback_sha"
+sudo -n docker exec "$sandbox_id" node scripts/ops/probe-runtime-dependencies.cjs
+production_id_after="$("${production_compose[@]}" ps -q app)"
+test "$production_id_after" = "$production_id_before"
+production_sha_after="$(sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$production_id_after")"
+test "$production_sha_after" = "$production_sha_before"
+AIHUB_PRODUCTION_HOST="$(sed -n 's/^AIHUB_PRODUCTION_HOST=//p' .env.production | tail -n 1)"
+AIHUB_SANDBOX_HOST="$(sed -n 's/^AIHUB_SANDBOX_HOST=//p' .env.production | tail -n 1)"
+curl --fail --silent --show-error "https://$AIHUB_PRODUCTION_HOST/health" >/dev/null
+curl --fail --silent --show-error "https://$AIHUB_SANDBOX_HOST/health" >/dev/null
+probe_auth "$AIHUB_PRODUCTION_HOST"
+probe_auth "$AIHUB_SANDBOX_HOST"
+recovery_seconds="$(($(date +%s) - recovery_started))"
+printf 'sandbox_sha=%s production_sha=%s recovery_seconds=%s\n' \
+  "$sandbox_sha" "$production_sha_after" "$recovery_seconds"
+```
+
+If any command fails, keep CD disabled and do not mark the rehearsal successful.
+Record the Sandbox SHA before rollback and the restored SHA in the table below.
+Confirm the unknown-value metric and that valid outbox rows continue through the
+normal monitoring/dispatch checks without exposing the stored value. After
+recording the result, use the fix-forward release procedure in **Resume CD**;
+enabling the workflow alone does not replay a missed deploy.
 
 ### Resume CD
 
