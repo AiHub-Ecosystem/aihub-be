@@ -3619,7 +3619,7 @@
       "post": {
         "operationId": "me.avatar.uploads.create",
         "summary": "Request an Avatar upload URL",
-        "description": "Mints a presigned `PUT` URL that writes exactly one object for the signed-in AIHUB User Account, with the declared content type, the length, and `Cache-Control: public, max-age=3600` bound into the signature. Send the image bytes straight to that URL with all three returned headers; they never pass through AIHUB. Nothing is recorded until the upload is completed, which must happen within one hour of the upload. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar may request one to replace it.",
+        "description": "Mints a presigned `PUT` URL that writes one object for the signed-in AIHUB User Account, with the declared content type and `Cache-Control: public, max-age=3600` bound into the signature. `Content-Length` reports the declared size but is not signed because browser Fetch controls it; send the image as the request body and let the browser manage that header. The bytes go straight to storage, never through AIHUB. Nothing is recorded until completion verifies the stored object, including its actual size and type, within one hour of upload. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar may request one to replace it.",
         "x-identity-scope": "none",
         "security": [
           {

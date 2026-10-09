@@ -91,7 +91,6 @@ export class AvatarUploadService {
     const signed = await this.storage.createUploadUrl({
       objectKey: avatarObjectKey(input.userId, assetId),
       contentType,
-      byteSize,
     });
     return {
       assetId,

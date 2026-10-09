@@ -53,7 +53,6 @@ class FakeAvatarStorage implements AvatarStoragePort {
   readonly signed: Array<{
     objectKey: string;
     contentType: string;
-    byteSize: number;
   }> = [];
   readonly deleted: string[] = [];
   unavailable = false;
@@ -62,7 +61,6 @@ class FakeAvatarStorage implements AvatarStoragePort {
   async createUploadUrl(input: {
     readonly objectKey: string;
     readonly contentType: string;
-    readonly byteSize: number;
   }) {
     if (this.unavailable) throw storageUnavailable();
     this.signed.push({ ...input });
@@ -206,7 +204,6 @@ describe('Avatar upload HTTP flow', () => {
         {
           objectKey: `users/${USER_ID}/avatar/${body.data.asset_id}/original`,
           contentType: 'image/png',
-          byteSize: 1234,
         },
       ]);
       expect(repository.avatars.size).toBe(0);

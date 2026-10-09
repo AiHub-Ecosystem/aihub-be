@@ -64,11 +64,10 @@ function thrown(run: () => unknown): unknown {
 
 describe('S3AvatarStorage', () => {
   describe('upload URL', () => {
-    it('presigns one PUT with the content type, length, and cache header in the signature', async () => {
+    it('signs content type and cache policy, but not browser-managed length', async () => {
       const { url, expiresAt } = await storage().createUploadUrl({
         objectKey: KEY,
         contentType: 'image/png',
-        byteSize: 1234,
       });
 
       const parsed = new URL(url);
@@ -79,13 +78,11 @@ describe('S3AvatarStorage', () => {
       expect(
         parsed.searchParams.get('X-Amz-SignedHeaders')?.split(';'),
       ).toEqual(
-        expect.arrayContaining([
-          'cache-control',
-          'content-length',
-          'content-type',
-          'host',
-        ]),
+        expect.arrayContaining(['cache-control', 'content-type', 'host']),
       );
+      expect(
+        parsed.searchParams.get('X-Amz-SignedHeaders')?.split(';'),
+      ).not.toContain('content-length');
       expect(expiresAt).toEqual(new Date('2026-10-02T10:05:00.000Z'));
     });
 
@@ -93,7 +90,6 @@ describe('S3AvatarStorage', () => {
       const { url } = await storage().createUploadUrl({
         objectKey: KEY,
         contentType: 'image/png',
-        byteSize: 1,
       });
 
       expect(url).not.toContain('super-secret-value');
@@ -109,7 +105,6 @@ describe('S3AvatarStorage', () => {
         storage().createUploadUrl({
           objectKey,
           contentType: 'image/png',
-          byteSize: 1,
         }),
       ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
     });
@@ -169,7 +164,6 @@ describe('S3AvatarStorage', () => {
           unconfigured.createUploadUrl({
             objectKey: KEY,
             contentType: 'image/png',
-            byteSize: 1,
           }),
         ).rejects.toMatchObject({
           code: 'AVATAR_STORAGE_UNAVAILABLE',
@@ -200,7 +194,6 @@ describe('S3AvatarStorage', () => {
       }).createUploadUrl({
         objectKey: KEY,
         contentType: 'image/png',
-        byteSize: 1,
       });
 
       expect(new URL(url).pathname).toBe(`/from-config-bucket/${KEY}`);
