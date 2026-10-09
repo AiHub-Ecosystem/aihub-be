@@ -110,13 +110,13 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Speaking sample answer:** a publicly fetchable recording of a candidate's
   answer to one Speaking prompt; it is distinct from audio that reads the
   prompt and from caller-uploaded Pass-through audio.
-- **Published image URL:** an HTTPS reference to a Writing chart image on the
-  same `s3.wispace.app` origin, readable by a plain unauthenticated `GET`
-  because the AI Writing service retrieves it outside the customer's request
-  and cannot authenticate ([ADR-0060](docs/adr/0060-writing-task1-sample-image-is-published-not-signed.md)).
-  Its public-read policy belongs to its bucket, not to the shared origin.
-  _Avoid_: calling it an approved asset URL, or reading publication policy as
-  a statement about the origin, which is not a trust boundary.
+- **Published image URL:** an HTTPS reference supplied for a Writing Task 1
+  chart, publicly readable without a signature or credentials. Customers may
+  host the image on any public host; the AIHUB sample remains on `s3.wispace.app`
+  ([ADR-0084](docs/adr/0084-writing-task1-public-image-fetch-boundary.md)); its
+  sample storage remains as recorded in [ADR-0060](docs/adr/0060-writing-task1-sample-image-is-published-not-signed.md).
+  _Avoid_: calling it an approved asset URL, or treating the sample image's
+  host as the only supported host.
 - **JSON-by-URL grading:** the synchronous Speaking grading transport that
   carries an approved audio URL; it is a fallback transport beside multipart
   grading, not the async grading job.

@@ -40,7 +40,11 @@ export const GradeTask1RequestSchema = Type.Object(
     question: Type.String({ minLength: 1, maxLength: 2_000 }),
     chart_type: ChartTypeSchema,
     essay: Type.String({ minLength: 1, maxLength: 20_000 }),
-    image_url: Type.String({ format: 'uri', maxLength: 2_000 }),
+    image_url: Type.String({
+      format: 'uri',
+      pattern: '^[hH][tT][tT][pP][sS]://',
+      maxLength: 2_000,
+    }),
     language: Type.Optional(LanguageSchema),
   },
   { additionalProperties: false },
