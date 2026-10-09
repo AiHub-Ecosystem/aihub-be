@@ -1,12 +1,14 @@
 import {
   Body,
   Controller,
+  Get,
   Header,
   HttpCode,
   Inject,
   Post,
   Req,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
@@ -18,6 +20,7 @@ import {
   ForgotPasswordRequestSchema,
   LoginRequestSchema,
   type LoginResponse,
+  type ReadCurrentUserResponse,
   RegisterRequestSchema,
   type ResendVerificationRequest,
   ResendVerificationRequestSchema,
@@ -40,6 +43,7 @@ import {
   hasAlternateRefreshSource,
   refreshCookieFrom,
 } from './refresh-cookie';
+import { UserAccessJwtGuard } from './user-access-jwt.guard';
 
 interface RegisterEnvelope {
   readonly data: {
@@ -58,6 +62,18 @@ interface ForgotPasswordEnvelope {
 
 function parseEmptyBody(body: unknown): void {
   parseRequestBody(EmptyAuthRequestSchema, body);
+}
+
+function authenticatedUserId(request: FastifyRequest): string {
+  const userId = request.aihubUser?.userId;
+  if (userId === undefined) {
+    throw new AppError({
+      code: 'INTERNAL_ERROR',
+      message: 'Authenticated user context is missing',
+      retryable: false,
+    });
+  }
+  return userId;
 }
 
 /** Sets the refresh cookie and returns the envelope every session-issuing route shares. */
@@ -94,6 +110,22 @@ export class LocalAuthController {
     @Inject(LOCAL_AUTH_SERVICE)
     private readonly service: LocalAuthServicePort,
   ) {}
+
+  @Get(PUBLIC_ROUTES['me.profile.read'].path)
+  @UseGuards(UserAccessJwtGuard)
+  @HttpCode(PUBLIC_ROUTES['me.profile.read'].successStatus)
+  @Header('Cache-Control', 'no-store')
+  async currentUser(
+    @Req() request: FastifyRequest,
+  ): Promise<ReadCurrentUserResponse> {
+    const profile = await this.service.currentUser(
+      authenticatedUserId(request),
+    );
+    return {
+      data: profile,
+      meta: { request_id: String(request.id) },
+    };
+  }
 
   @Post(PUBLIC_ROUTES['auth.register'].path)
   @HttpCode(PUBLIC_ROUTES['auth.register'].successStatus)

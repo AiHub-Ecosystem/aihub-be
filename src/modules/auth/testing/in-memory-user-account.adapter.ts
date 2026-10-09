@@ -62,4 +62,9 @@ export class InMemoryUserAccountAdapter implements UserAccountRepositoryPort {
   ): Promise<LocalAccountStatus | undefined> {
     return this.state.accounts.get(userId)?.status;
   }
+
+  async findActiveUsername(userId: string): Promise<string | undefined> {
+    const account = this.state.accounts.get(userId);
+    return account?.status === 'active' ? account.username : undefined;
+  }
 }

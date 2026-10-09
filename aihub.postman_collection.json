@@ -2789,6 +2789,85 @@
       }
     },
     {
+      "id": "ea706a80-448b-47a6-9654-8978cf310c25",
+      "name": "Read the current AIHUB account profile",
+      "request": {
+        "name": "Read the current AIHUB account profile",
+        "description": {},
+        "url": {
+          "path": ["v1", "me"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "4892b560-1ceb-46c5-8cd2-4c7b33956eb7",
+      "name": "Retrieve response headers",
+      "request": {
+        "name": "Retrieve response headers",
+        "description": {
+          "content": "Returns the same status and headers as GET without a response body.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "me"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          }
+        ],
+        "method": "HEAD",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
       "id": "93730afb-f7aa-43e9-8ea3-27cbb5a1b22b",
       "name": "Create a Web Session from an email and password",
       "request": {

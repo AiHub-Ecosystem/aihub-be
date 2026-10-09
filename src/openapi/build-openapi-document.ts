@@ -518,6 +518,22 @@ function localAuthPathItems(): Record<string, Record<string, unknown>> {
     },
     ...routeErrorResponsesOf('auth.logout'),
   };
+  const currentUserResponses = {
+    '200': {
+      description: 'The authenticated AIHUB User Account profile',
+      headers: {
+        'Cache-Control': {
+          schema: { type: 'string', enum: ['no-store'] },
+        },
+      },
+      content: {
+        'application/json': {
+          schema: routeSchemaOf('me.profile.read', 'response'),
+        },
+      },
+    },
+    ...routeErrorResponsesOf('me.profile.read'),
+  };
 
   const operation = (
     operationId: PublicRouteId,
@@ -595,6 +611,16 @@ function localAuthPathItems(): Record<string, Record<string, unknown>> {
       logoutResponses,
       false,
     ),
+    [routePathOf('me.profile.read')]: {
+      get: {
+        operationId: 'me.profile.read',
+        summary: 'Read the current AIHUB account profile',
+        ...routeIdentityScopeOf('me.profile.read'),
+        ...routeSecurityOf('me.profile.read'),
+        parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+        responses: currentUserResponses,
+      },
+    },
   };
 }
 
