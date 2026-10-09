@@ -203,11 +203,15 @@ describe('tenant isolation for identity boundaries', () => {
         headers: { 'content-type': 'application/json' },
       });
     };
-    const lookup = async () => [{ address: '8.8.8.8', family: 4 }];
+    const resolver = () => ({
+      resolve4: async () => ['8.8.8.8'],
+      resolve6: async () => [],
+      cancel: () => undefined,
+    });
     const provider = new JwksKeyProvider(
       identityStore,
       fetcher,
-      lookup,
+      resolver,
       Date.now,
     );
     const verifier = new UserIdentityResolver(
