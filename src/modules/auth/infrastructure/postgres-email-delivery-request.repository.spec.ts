@@ -1,3 +1,5 @@
+import { Logger } from '@nestjs/common';
+
 import type { EmailDeliveryQueryClient } from './postgres-email-delivery-request.repository';
 import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
 
@@ -38,6 +40,40 @@ function claim(row: Record<string, unknown>) {
 }
 
 describe('PostgresEmailDeliveryRequestRepository', () => {
+  it('skips an unknown kind without failing valid rows in the same claim', async () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const knownId = 'edr_01J00000000000000000000001';
+    const client: EmailDeliveryQueryClient = {
+      query: async () => [
+        queuedRow({
+          kind: 'carrier_pigeon_email',
+          payload_ciphertext: 'secret',
+        }),
+        queuedRow({ id: knownId }),
+      ],
+    };
+
+    try {
+      const claimed = await new PostgresEmailDeliveryRequestRepository().claim(
+        client,
+        { owner: 'instance-a', limit: 10, leaseMs: 105_000, now: NOW },
+      );
+
+      expect(claimed.map(({ id }) => id)).toEqual([knownId]);
+      expect(warn).toHaveBeenCalledWith(
+        'Skipped 1 email delivery requests with unrecognized kinds',
+      );
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(
+        'carrier_pigeon_email',
+      );
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('secret');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('maps a queued claim onto the declared record', async () => {
     const claimed = await claim(queuedRow());
 
@@ -75,7 +111,7 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
   });
 
   it.each([
-    ['a kind outside the table vocabulary', { kind: 'carrier_pigeon_email' }],
+    ['a non-string kind', { kind: 42 }],
     ['a status outside the table vocabulary', { status: 'dispatched' }],
     [
       'an error code outside the bounded set',
@@ -106,4 +142,20 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
       });
     },
   );
+
+  it('keeps unknown kinds visible as one bounded backlog bucket', async () => {
+    const repository = new PostgresEmailDeliveryRequestRepository();
+    const backlog = await repository.backlog(
+      clientReturning({
+        kind: 'unknown',
+        queued: 2,
+        oldest_age_seconds: 45,
+      }),
+      { now: NOW },
+    );
+
+    expect(backlog).toEqual([
+      { kind: 'unknown', queued: 2, oldestAgeSeconds: 45 },
+    ]);
+  });
 });

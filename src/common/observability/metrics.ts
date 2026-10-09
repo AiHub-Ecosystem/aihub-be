@@ -83,8 +83,13 @@ const EMAIL_DELIVERY_KIND_LABELS: readonly EmailDeliveryKindLabel[] = [
   'organization_invite_email',
 ];
 
+const EMAIL_OUTBOX_BACKLOG_KIND_LABELS: readonly (
+  | EmailDeliveryKindLabel
+  | 'unknown'
+)[] = [...EMAIL_DELIVERY_KIND_LABELS, 'unknown'];
+
 export interface EmailOutboxBacklogSample {
-  readonly kind: EmailDeliveryKindLabel;
+  readonly kind: EmailDeliveryKindLabel | 'unknown';
   readonly queued: number;
   readonly oldestAgeSeconds: number;
 }
@@ -110,7 +115,7 @@ function readEmailOutboxBacklog(): Promise<void> {
   pendingBacklogRead ??= (async () => {
     try {
       const samples = await source();
-      for (const kind of EMAIL_DELIVERY_KIND_LABELS) {
+      for (const kind of EMAIL_OUTBOX_BACKLOG_KIND_LABELS) {
         const sample = samples.find((entry) => entry.kind === kind);
         emailOutboxQueued.set({ kind }, sample?.queued ?? 0);
         emailOutboxOldestAge.set({ kind }, sample?.oldestAgeSeconds ?? 0);
@@ -127,7 +132,7 @@ function readEmailOutboxBacklog(): Promise<void> {
 
 const emailOutboxQueued = new Gauge({
   name: 'aihub_email_outbox_queued',
-  help: 'Email Delivery Requests waiting for dispatch.',
+  help: 'Email Delivery Requests queued, including rows with unknown kinds.',
   labelNames: ['kind'],
   registers: [registry],
   collect: readEmailOutboxBacklog,
