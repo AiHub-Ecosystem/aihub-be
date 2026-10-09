@@ -12,7 +12,7 @@ The app listens on its container interface and its host ports bind to loopback. 
 
 ## Decision
 
-Configure the app's Fastify adapter to trust only the immediate socket peer `172.16.7.1`. Fastify 5.12.5 deliberately disables hop-count-only trust, so `trustProxy: 1` would ignore forwarded addresses. With the host Docker gateway trusted, the rightmost forwarded address is the caller address nginx observed and appended. Use Fastify's `request.ip` as the common IP value for local-auth and API-key failure counters. Do not trust an unbounded proxy chain or parse `X-Real-IP` separately.
+Configure the app's Fastify adapter to trust only the immediate socket peer `172.16.7.1`. Fastify 5.12.5 deliberately disables hop-count-only trust, so `trustProxy: 1` would ignore forwarded addresses. With the host Docker gateway trusted, the rightmost forwarded address is the caller address nginx observed and appended. Both managed nginx configs overwrite `X-Forwarded-Host` with the routed `$host`, so a caller cannot use the newly trusted proxy to choose the authentication environment. Use Fastify's `request.ip` as the common IP value for local-auth and API-key failure counters. Do not trust an unbounded proxy chain or parse `X-Real-IP` separately.
 
 Keep `/ready` tied to the raw socket peer so it remains private when reached through a proxy. Web Session routes continue to see the BFF as their network caller; end-user-aware BFF limits remain with #436.
 
@@ -20,5 +20,6 @@ Keep `/ready` tied to the raw socket peer so it remains private when reached thr
 
 - Public callers receive separate IP-scoped auth and API-key failure budgets. Existing thresholds, windows, email dimensions, and counter behavior stay unchanged.
 - A caller-supplied left side of `X-Forwarded-For` cannot choose the public caller's bucket because nginx appends its observed address and Fastify only accepts forwarded addresses from the host gateway.
+- A caller-supplied `X-Forwarded-Host` cannot override the routed `Host` and change environment binding at the app.
 - Direct container peers are not trusted to supply forwarded addresses; their socket address remains their bucket. If Docker recreates the backend network with another gateway, update the trusted peer before rollout or public requests will again share the socket-peer bucket.
 - The API-key failure counter existed in production by at least 2026-09-14; local-auth IP limits were added on 2026-09-19. With proxy trust disabled, those callers shared the app's socket-peer bucket during that exposure window, so one caller's failures could consume the shared budget for others.

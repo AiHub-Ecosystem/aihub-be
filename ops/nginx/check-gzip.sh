@@ -15,18 +15,29 @@ cleanup() {
 }
 trap cleanup EXIT
 
+for config in aihub-api.conf sandbox.conf; do
+  if ! grep -Fq 'proxy_set_header X-Forwarded-Host $host;' "$repo_root/ops/nginx/$config"; then
+    printf '%s must overwrite X-Forwarded-Host from the routed Host.\n' "$config" >&2
+    exit 1
+  fi
+done
+
 node -e '
   const { createServer } = require("node:http");
-  const { readFileSync } = require("node:fs");
+  const { appendFileSync, readFileSync } = require("node:fs");
   const body = readFileSync(process.argv[1]);
-  createServer((_request, response) => {
+  createServer((request, response) => {
+    appendFileSync(process.argv[2], `${JSON.stringify({
+      host: request.headers.host,
+      forwardedHost: request.headers["x-forwarded-host"],
+    })}\n`);
     response.writeHead(200, {
       "Content-Type": "application/json",
       "Content-Length": body.length,
     });
     response.end(body);
   }).listen(3021, "127.0.0.1");
-' "$fixture" &
+' "$fixture" "$tmp/upstream-headers.jsonl" &
 backend_pid=$!
 
 for _ in $(seq 1 50); do
@@ -64,6 +75,20 @@ EOF
 
 nginx -t -p "$tmp/" -c "$tmp/nginx.conf"
 nginx -p "$tmp/" -c "$tmp/nginx.conf"
+
+curl --silent --show-error -o /dev/null \
+  -H 'Host: api.aihubproduction.com' \
+  -H 'X-Forwarded-Host: sandbox.aihubproduction.com' \
+  http://127.0.0.1:18080/host-header-check
+node -e '
+  const { readFileSync } = require("node:fs");
+  const requests = readFileSync(process.argv[1], "utf8").trim().split("\n");
+  const forwarded = JSON.parse(requests.at(-1));
+  if (forwarded.host !== "api.aihubproduction.com" ||
+      forwarded.forwardedHost !== "api.aihubproduction.com") {
+    throw new Error(`Nginx forwarded caller-controlled host: ${JSON.stringify(forwarded)}`);
+  }
+' "$tmp/upstream-headers.jsonl"
 
 for route in grading grading-json; do
   headers="$tmp/$route.headers"
