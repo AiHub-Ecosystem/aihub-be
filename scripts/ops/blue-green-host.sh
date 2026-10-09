@@ -18,6 +18,7 @@ AIHUB_IMAGE=${AIHUB_IMAGE:-}
 COMMAND=${1:-}
 TIER=${2:-}
 candidate_restart_baseline=0
+drain_edge_failures=""
 app_container_baseline_ids=()
 app_container_baseline_restarts=()
 
@@ -438,7 +439,7 @@ wait_service_ready() {
 }
 
 start_candidate() {
-  local service="$1" expected_count="$2" previous_id previous_restart_count id
+  local service="$1" expected_count="$2" check_edge="${3:-true}" previous_id previous_restart_count id
   previous_id="$(container_id "$service")"
   previous_restart_count=0
   if [[ -n "$previous_id" ]]; then
@@ -453,8 +454,25 @@ start_candidate() {
     candidate_restart_baseline="$previous_restart_count"
   fi
   assert_container_count "$expected_count" || return 1
-  wait_service_ready "$service" 120 "$id" "$candidate_restart_baseline" true true || return 1
+  wait_service_ready "$service" 120 "$id" "$candidate_restart_baseline" "$check_edge" true || return 1
   capture_resources "candidate-${service}"
+}
+
+drain_old_slot() {
+  local service="$1"
+  # Compose waits out stop_grace_period (90s) on in-flight work, so the edge
+  # monitor has to span the drain and record_release has to see its samples.
+  # The monitor is stopped once the drain ends and the verdict comes from the
+  # probe log, so a fast drain does not wait out the window.
+  local log="$STATE_DIR/edge-probes.tsv" offset=0 monitor_pid status=0
+  [[ -f "$log" ]] && offset="$(stat -c %s "$log")"
+  probe_window 120 &
+  monitor_pid="$!"
+  "${compose[@]}" stop "$service" || status=$?
+  kill "$monitor_pid" 2>/dev/null || true
+  wait "$monitor_pid" 2>/dev/null || true
+  drain_edge_failures="$(failed_edge_tiers "$offset")"
+  return "$status"
 }
 
 rollback_current_tier() {
@@ -573,11 +591,12 @@ deploy_tier() {
     return 1
   fi
 
-  "${compose[@]}" stop "$old_service"
-  if ! candidate_state_safe "$new_id" "$candidate_restart_baseline" || ! app_containers_safe "$old_id" "$new_id"; then
+  drain_old_slot "$old_service"
+  if [[ -n "$drain_edge_failures" ]] || ! candidate_state_safe "$new_id" "$candidate_restart_baseline" ||
+    ! app_containers_safe "$old_id" "$new_id"; then
     capture_resources "failed-drain-${tier}" || true
     rollback_current_tier "$tier" "$old_slot" "$new_slot" || return 1
-    printf '%s application container changed during drain; previous slot restored\n' "$tier" >&2
+    printf '%s failed while the old slot drained; previous slot restored\n' "$tier" >&2
     return 1
   fi
   record_release deploy "$tier" "$old_slot" "$old_sha" "$new_slot" "$(container_revision "$new_id")"
@@ -737,7 +756,10 @@ rollback() {
   active_sandbox="$current_sandbox"
   expected_count=3
   [[ "$sandbox_enabled" == true ]] || expected_count=2
-  start_candidate "$candidate_service" "$expected_count" || {
+  # nginx still points at the slot being replaced, so probing the edge here would
+  # only re-confirm the failure that triggered this rollback; it is validated
+  # after apply_slots instead.
+  start_candidate "$candidate_service" "$expected_count" false || {
     capture_resources "failed-rollback-${tier}" || true
     "${compose[@]}" stop "$candidate_service" >/dev/null 2>&1 || true
     return 1
@@ -774,7 +796,7 @@ rollback() {
     fi
     return 1
   fi
-  if ! "${compose[@]}" stop "$active_service"; then
+  if ! drain_old_slot "$active_service"; then
     capture_resources "failed-rollback-drain-${tier}" || true
     if restore_active_after_rollback_failure "$active_service" "$active_id" "$active_api" "$active_sandbox"; then
       "${compose[@]}" stop "$candidate_service" || return 1
@@ -783,11 +805,12 @@ rollback() {
     fi
     return 1
   fi
-  if ! candidate_state_safe "$candidate_id" "$candidate_restart_baseline" || ! app_containers_safe "$active_id" "$candidate_id"; then
+  if [[ -n "$drain_edge_failures" ]] || ! candidate_state_safe "$candidate_id" "$candidate_restart_baseline" ||
+    ! app_containers_safe "$active_id" "$candidate_id"; then
     capture_resources "failed-rollback-drain-${tier}" || true
     if restore_active_after_rollback_failure "$active_service" "$active_id" "$active_api" "$active_sandbox"; then
       "${compose[@]}" stop "$candidate_service" || return 1
-      printf 'manual rollback application container changed during drain; previous release restored\n' >&2
+      printf 'manual rollback failed while the active slot drained; previous release restored\n' >&2
     else
       printf 'manual rollback drain failed and recovery was not confirmed; preserve both slots for operator repair\n' >&2
     fi
