@@ -129,7 +129,11 @@ describe('identity configuration save and next assertion verification', () => {
         remoteFetches += 1;
         return new Response(JSON.stringify(newJwks));
       },
-      async () => [{ address: '8.8.8.8', family: 4 }],
+      () => ({
+        resolve4: async () => ['8.8.8.8'],
+        resolve6: async () => [],
+        cancel: jest.fn(),
+      }),
     );
     const setter = new SetOrganizationIdentityConfig(
       membership,

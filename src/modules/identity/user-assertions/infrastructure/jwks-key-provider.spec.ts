@@ -81,7 +81,12 @@ class FakeCache implements JwksCachePort {
 }
 
 function publicLookup(address = '8.8.8.8') {
-  return async () => [{ address, family: address.includes(':') ? 6 : 4 }];
+  const family = address.includes(':') ? 6 : 4;
+  return () => ({
+    resolve4: async () => (family === 4 ? [address] : []),
+    resolve6: async () => (family === 6 ? [address] : []),
+    cancel: jest.fn(),
+  });
 }
 
 function configWithUrl(jwksUrl: string): OrganizationIdentityConfig {
@@ -114,6 +119,313 @@ describe('JwksKeyProvider', () => {
       headers: { accept: 'application/json' },
     });
     expect(cache.setCount).toBe(1);
+  });
+
+  it('coalesces concurrent JWKS resolutions for the same Organization and config', async () => {
+    const cache = new FakeCache();
+    let fetches = 0;
+    const provider = new JwksKeyProvider(
+      cache,
+      async () => {
+        fetches += 1;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return new Response(JSON.stringify(jwks));
+      },
+      publicLookup(),
+    );
+
+    await expect(
+      Promise.all([
+        provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
+        provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
+      ]),
+    ).resolves.toEqual([jwks, jwks]);
+    expect(fetches).toBe(1);
+  });
+
+  it('coalesces concurrent forced refreshes before acquiring the Redis refresh lock', async () => {
+    const cache = new FakeCache();
+    let lockRequests = 0;
+    cache.tryAcquireRefresh = async () => {
+      lockRequests += 1;
+      return lockRequests === 1
+        ? { acquired: true, available: true }
+        : { acquired: false, available: true };
+    };
+    let fetches = 0;
+    const provider = new JwksKeyProvider(
+      cache,
+      async () => {
+        fetches += 1;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return new Response(JSON.stringify(jwks));
+      },
+      publicLookup(),
+    );
+
+    await expect(
+      Promise.all([
+        provider.resolve({
+          organizationId: 'org_acme',
+          config: remoteConfig,
+          forceRefresh: true,
+        }),
+        provider.resolve({
+          organizationId: 'org_acme',
+          config: remoteConfig,
+          forceRefresh: true,
+        }),
+      ]),
+    ).resolves.toEqual([jwks, jwks]);
+    expect(lockRequests).toBe(1);
+    expect(fetches).toBe(1);
+  });
+
+  it('joins a matching local flight when another process owns the refresh lock', async () => {
+    const cache = new FakeCache();
+    const staleJwks = { keys: [] };
+    cache.entry = { jwks: staleJwks, freshUntil: 1_000, staleUntil: 3_000 };
+    let markLockRequested: (() => void) | undefined;
+    let releaseLock: ((lock: JwksRefreshLock) => void) | undefined;
+    const lockRequested = new Promise<void>((resolve) => {
+      markLockRequested = resolve;
+    });
+    const lock = new Promise<JwksRefreshLock>((resolve) => {
+      releaseLock = resolve;
+    });
+    cache.tryAcquireRefresh = () => {
+      markLockRequested?.();
+      return lock;
+    };
+
+    let finishFetch: ((response: Response) => void) | undefined;
+    let markFetchStarted: (() => void) | undefined;
+    const fetchStarted = new Promise<void>((resolve) => {
+      markFetchStarted = resolve;
+    });
+    const provider = new JwksKeyProvider(
+      cache,
+      async () => {
+        markFetchStarted?.();
+        return new Promise<Response>((resolve) => {
+          finishFetch = resolve;
+        });
+      },
+      publicLookup(),
+      () => 2_000,
+    );
+
+    const forced = provider.resolve({
+      organizationId: 'org_acme',
+      config: remoteConfig,
+      forceRefresh: true,
+    });
+    await lockRequested;
+    const regular = provider.resolve({
+      organizationId: 'org_acme',
+      config: remoteConfig,
+    });
+    await fetchStarted;
+
+    releaseLock?.({ acquired: false, available: true });
+    finishFetch?.(new Response(JSON.stringify(jwks)));
+
+    await expect(Promise.all([forced, regular])).resolves.toEqual([jwks, jwks]);
+  });
+
+  it('reserves process capacity while a forced refresh waits for its lock', async () => {
+    const cache = new FakeCache();
+    let markLockRequested: (() => void) | undefined;
+    let releaseLock: ((lock: JwksRefreshLock) => void) | undefined;
+    const lockRequested = new Promise<void>((resolve) => {
+      markLockRequested = resolve;
+    });
+    const lock = new Promise<JwksRefreshLock>((resolve) => {
+      releaseLock = resolve;
+    });
+    cache.tryAcquireRefresh = () => {
+      markLockRequested?.();
+      return lock;
+    };
+
+    let heldFetches = 0;
+    let markHeldFetchesStarted: (() => void) | undefined;
+    let markForcedFetchStarted: (() => void) | undefined;
+    const heldFetchesStarted = new Promise<void>((resolve) => {
+      markHeldFetchesStarted = resolve;
+    });
+    const forcedFetchStarted = new Promise<void>((resolve) => {
+      markForcedFetchStarted = resolve;
+    });
+    const provider = new JwksKeyProvider(
+      cache,
+      async (url) => {
+        if (url.includes('/held/')) {
+          heldFetches += 1;
+          if (heldFetches === 7) markHeldFetchesStarted?.();
+          return new Promise<Response>(() => undefined);
+        }
+        if (url.includes('/forced/')) markForcedFetchStarted?.();
+        return new Response(JSON.stringify(jwks));
+      },
+      publicLookup(),
+    );
+
+    const held = Array.from({ length: 7 }, (_, index) =>
+      provider.validateRemote({
+        organizationId: `org_held_${index}`,
+        url: `https://id.acme.edu/held/${index}`,
+      }),
+    );
+    await heldFetchesStarted;
+
+    const forced = provider.resolve({
+      organizationId: 'org_forced',
+      config: configWithUrl('https://id.acme.edu/forced/jwks.json'),
+      forceRefresh: true,
+    });
+    await lockRequested;
+
+    await expect(
+      provider.validateRemote({
+        organizationId: 'org_eighth',
+        url: 'https://id.acme.edu/eighth/jwks.json',
+      }),
+    ).rejects.toMatchObject({
+      code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+      retryable: true,
+    });
+
+    releaseLock?.({ acquired: true, available: true });
+    await forcedFetchStarted;
+    await expect(forced).resolves.toEqual(jwks);
+    expect(heldFetches).toBe(7);
+    void held;
+  });
+
+  it('caps concurrent Organizations, serves usable stale keys, and rejects cold validation', async () => {
+    const cache = new FakeCache();
+    cache.entry = { jwks, freshUntil: 1_000, staleUntil: 3_000 };
+    let fetches = 0;
+    let markFull: (() => void) | undefined;
+    const full = new Promise<void>((resolve) => {
+      markFull = resolve;
+    });
+    const provider = new JwksKeyProvider(
+      cache,
+      async () => {
+        fetches += 1;
+        if (fetches === 8) markFull?.();
+        return new Promise<Response>(() => undefined);
+      },
+      publicLookup(),
+      () => 2_000,
+    );
+
+    const active = Array.from({ length: 8 }, (_, index) =>
+      provider.validateRemote({
+        organizationId: `org_${index}`,
+        url: remoteConfig.jwksUrl ?? '',
+      }),
+    );
+    await full;
+
+    await expect(
+      provider.resolve({
+        organizationId: 'org_stale',
+        config: remoteConfig,
+      }),
+    ).resolves.toEqual(jwks);
+    await expect(
+      provider.validateRemote({
+        organizationId: 'org_cold',
+        url: remoteConfig.jwksUrl ?? '',
+      }),
+    ).rejects.toMatchObject({
+      code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+      httpStatus: 503,
+      retryable: true,
+    });
+    expect(fetches).toBe(8);
+    void active;
+  });
+
+  it('cancels its dedicated DNS resolver at the one-second DNS deadline', async () => {
+    jest.useFakeTimers();
+    const cancel = jest.fn();
+    const resolver = {
+      resolve4: () => new Promise<string[]>(() => undefined),
+      resolve6: () => new Promise<string[]>(() => undefined),
+      cancel,
+    };
+    const provider = new JwksKeyProvider(
+      new FakeCache(),
+      async () => new Response(JSON.stringify(jwks)),
+      () => resolver,
+    );
+
+    try {
+      const validation = provider.validateRemote({
+        organizationId: 'org_acme',
+        url: remoteConfig.jwksUrl ?? '',
+      });
+      const rejection = validation.then(
+        () => {
+          throw new Error('Silent DNS unexpectedly resolved');
+        },
+        (error: unknown) => error,
+      );
+      await jest.advanceTimersByTimeAsync(1_000);
+      await expect(rejection).resolves.toMatchObject({
+        code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+        retryable: true,
+      });
+      expect(cancel).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('uses successful A records when the AAAA query misses the DNS deadline', async () => {
+    const cancel = jest.fn();
+    const fetcher = jest.fn(async () => new Response(JSON.stringify(jwks)));
+    const provider = new JwksKeyProvider(new FakeCache(), fetcher, () => ({
+      resolve4: async () => ['8.8.8.8'],
+      resolve6: () => new Promise<string[]>(() => undefined),
+      cancel,
+    }));
+
+    await expect(
+      provider.validateRemote({
+        organizationId: 'org_acme',
+        url: remoteConfig.jwksUrl ?? '',
+      }),
+    ).resolves.toBeUndefined();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the successful address family when the other family returns an error', async () => {
+    const provider = new JwksKeyProvider(
+      new FakeCache(),
+      async () => new Response(JSON.stringify(jwks)),
+      () => ({
+        resolve4: async () => ['8.8.8.8'],
+        resolve6: async () => {
+          throw Object.assign(new Error('DNS server failure'), {
+            code: 'ESERVFAIL',
+          });
+        },
+        cancel: jest.fn(),
+      }),
+    );
+
+    await expect(
+      provider.validateRemote({
+        organizationId: 'org_acme',
+        url: remoteConfig.jwksUrl ?? '',
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it('does not let an in-flight old-config fetch repopulate the new cache version', async () => {
@@ -199,6 +511,55 @@ describe('JwksKeyProvider', () => {
     expect(fetchCount).toBe(2);
   });
 
+  it('does not coalesce a post-purge lookup with the invalidated cache generation', async () => {
+    const cache = new FakeCache();
+    let finishOldFetch: ((response: Response) => void) | undefined;
+    let markOldFetchStarted: (() => void) | undefined;
+    const oldFetchStarted = new Promise<void>((resolve) => {
+      markOldFetchStarted = resolve;
+    });
+    let fetchCount = 0;
+    const provider = new JwksKeyProvider(
+      cache,
+      async () => {
+        fetchCount += 1;
+        if (fetchCount === 1) {
+          markOldFetchStarted?.();
+          return new Promise<Response>((resolve) => {
+            finishOldFetch = resolve;
+          });
+        }
+        return new Response(JSON.stringify(jwks));
+      },
+      publicLookup(),
+    );
+    const config = { ...remoteConfig, jwksCacheVersion: '1' };
+
+    const oldResolution = provider.resolve({
+      organizationId: 'org_acme',
+      config,
+    });
+    await oldFetchStarted;
+    await cache.deleteJwks('org_acme', '1');
+    const retryResolution = provider.resolve({
+      organizationId: 'org_acme',
+      config,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await expect(retryResolution).rejects.toMatchObject({
+      code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+      httpStatus: 503,
+    });
+    finishOldFetch?.(new Response(JSON.stringify(jwks)));
+    await expect(oldResolution).resolves.toEqual(jwks);
+    await expect(
+      provider.resolve({ organizationId: 'org_acme', config }),
+    ).resolves.toEqual(jwks);
+    expect(fetchCount).toBe(2);
+  });
+
   it('uses a fresh cache entry without fetching again', async () => {
     const cache = new FakeCache();
     cache.entry = {
@@ -253,19 +614,51 @@ describe('JwksKeyProvider', () => {
         fetches += 1;
         return new Response(JSON.stringify(jwks));
       },
-      async () => {
-        lookups += 1;
-        return [{ address: '8.8.8.8', family: 4 }];
-      },
+      () => ({
+        resolve4: async () => {
+          lookups += 1;
+          return ['8.8.8.8'];
+        },
+        resolve6: async () => [],
+        cancel: jest.fn(),
+      }),
       () => 1_000,
     );
 
-    await provider.validateRemote(remoteConfig.jwksUrl ?? '');
+    await provider.validateRemote({
+      organizationId: 'org_acme',
+      url: remoteConfig.jwksUrl ?? '',
+    });
 
     expect(fetches).toBe(1);
     expect(lookups).toBe(1);
     expect(cache.setCount).toBe(0);
     expect(cache.entry?.jwks).toEqual({ keys: [] });
+  });
+
+  it('coalesces owner validation and assertion lookup for the same Organization and JWKS URL', async () => {
+    const cache = new FakeCache();
+    let fetches = 0;
+    const provider = new JwksKeyProvider(
+      cache,
+      async () => {
+        fetches += 1;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return new Response(JSON.stringify(jwks));
+      },
+      publicLookup(),
+    );
+
+    await expect(
+      Promise.all([
+        provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
+        provider.validateRemote({
+          organizationId: 'org_acme',
+          url: remoteConfig.jwksUrl ?? '',
+        }),
+      ]),
+    ).resolves.toEqual([jwks, undefined]);
+    expect(fetches).toBe(1);
   });
 
   it('does not accept an unsafe URL from cached keys during save validation', async () => {
@@ -280,7 +673,10 @@ describe('JwksKeyProvider', () => {
     );
 
     await expect(
-      provider.validateRemote(remoteConfig.jwksUrl ?? ''),
+      provider.validateRemote({
+        organizationId: 'org_acme',
+        url: remoteConfig.jwksUrl ?? '',
+      }),
     ).rejects.toMatchObject({
       code: 'IDENTITY_JWKS_URL_UNSAFE',
       retryable: false,
@@ -296,7 +692,10 @@ describe('JwksKeyProvider', () => {
     );
 
     await expect(
-      provider.validateRemote('http://id.acme.edu/keys'),
+      provider.validateRemote({
+        organizationId: 'org_acme',
+        url: 'http://id.acme.edu/keys',
+      }),
     ).rejects.toMatchObject({
       code: 'IDENTITY_JWKS_URL_UNSAFE',
       httpStatus: 400,
@@ -387,7 +786,10 @@ describe('JwksKeyProvider', () => {
       );
 
       await expect(
-        provider.validateRemote(remoteConfig.jwksUrl ?? ''),
+        provider.validateRemote({
+          organizationId: 'org_acme',
+          url: remoteConfig.jwksUrl ?? '',
+        }),
       ).rejects.toMatchObject({
         code: 'IDENTITY_JWKS_URL_UNSAFE',
         retryable: false,
@@ -411,7 +813,10 @@ describe('JwksKeyProvider', () => {
     );
 
     await expect(
-      provider.validateRemote(remoteConfig.jwksUrl ?? ''),
+      provider.validateRemote({
+        organizationId: 'org_acme',
+        url: remoteConfig.jwksUrl ?? '',
+      }),
     ).rejects.toMatchObject({
       code: 'IDENTITY_JWKS_URL_UNSAFE',
       retryable: false,
@@ -423,10 +828,17 @@ describe('JwksKeyProvider', () => {
     const dnsFailure = new JwksKeyProvider(
       new FakeCache(),
       async () => new Response(JSON.stringify(jwks)),
-      async () => Promise.reject(new Error('private DNS details')),
+      () => ({
+        resolve4: async () => Promise.reject(new Error('private DNS details')),
+        resolve6: async () => [],
+        cancel: jest.fn(),
+      }),
     );
     await expect(
-      dnsFailure.validateRemote(remoteConfig.jwksUrl ?? ''),
+      dnsFailure.validateRemote({
+        organizationId: 'org_acme',
+        url: remoteConfig.jwksUrl ?? '',
+      }),
     ).rejects.toMatchObject({
       code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
       httpStatus: 503,
@@ -439,7 +851,10 @@ describe('JwksKeyProvider', () => {
       publicLookup(),
     );
     await expect(
-      networkFailure.validateRemote(remoteConfig.jwksUrl ?? ''),
+      networkFailure.validateRemote({
+        organizationId: 'org_acme',
+        url: remoteConfig.jwksUrl ?? '',
+      }),
     ).rejects.toMatchObject({
       code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
       retryable: true,
@@ -464,7 +879,10 @@ describe('JwksKeyProvider', () => {
       );
 
       await expect(
-        provider.validateRemote(remoteConfig.jwksUrl ?? ''),
+        provider.validateRemote({
+          organizationId: 'org_acme',
+          url: remoteConfig.jwksUrl ?? '',
+        }),
       ).rejects.toMatchObject({
         code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
         httpStatus: 503,
@@ -483,7 +901,10 @@ describe('JwksKeyProvider', () => {
       );
 
       await expect(
-        provider.validateRemote(remoteConfig.jwksUrl ?? ''),
+        provider.validateRemote({
+          organizationId: 'org_acme',
+          url: remoteConfig.jwksUrl ?? '',
+        }),
       ).rejects.toMatchObject({
         code: 'IDENTITY_JWKS_INVALID',
         httpStatus: 400,

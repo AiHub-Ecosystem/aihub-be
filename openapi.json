@@ -772,6 +772,7 @@
                   },
                   "image_url": {
                     "format": "uri",
+                    "pattern": "^[hH][tT][tT][pP][sS]://",
                     "maxLength": 2000,
                     "type": "string"
                   },

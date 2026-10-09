@@ -144,7 +144,10 @@ export class SetOrganizationIdentityConfig {
     }
 
     if (jwksUrl !== null) {
-      await this.keys.validateRemote(jwksUrl);
+      await this.keys.validateRemote({
+        organizationId: input.organizationId,
+        url: jwksUrl,
+      });
     }
 
     const saved = await this.configs.saveForOwner({

@@ -1,4 +1,4 @@
-import { lookup as dnsLookup } from 'node:dns/promises';
+import { Resolver } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
 import { Agent, type Dispatcher, fetch as undiciFetch } from 'undici';
@@ -12,6 +12,7 @@ import type {
 import type {
   JwksCacheEntry,
   JwksCachePort,
+  JwksRefreshLock,
 } from '@/modules/identity/user-assertions/application/jwks-cache.port';
 import type { JwksKeyProviderPort } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
 import { identityProviderUnavailable } from '@/modules/identity/user-assertions/application/user-identity-errors';
@@ -19,8 +20,10 @@ import { identityProviderUnavailable } from '@/modules/identity/user-assertions/
 export const JWKS_FRESH_TTL_MS = 15 * 60 * 1_000;
 export const JWKS_STALE_TTL_MS = 24 * 60 * 60 * 1_000;
 export const JWKS_REFRESH_COOLDOWN_MS = 5 * 60 * 1_000;
+export const JWKS_DNS_TIMEOUT_MS = 1_000;
 export const JWKS_FETCH_TIMEOUT_MS = 3_000;
 export const JWKS_MAX_RESPONSE_BYTES = 64 * 1024;
+export const JWKS_MAX_CONCURRENT_ORGANIZATIONS = 8;
 const JWKS_DISPATCHER = Symbol('JWKS_DISPATCHER');
 
 interface DnsAddress {
@@ -28,10 +31,17 @@ interface DnsAddress {
   readonly family: number;
 }
 
-type DnsLookup = (
-  hostname: string,
-  options: { readonly all: true; readonly verbatim: true },
-) => Promise<readonly DnsAddress[]>;
+interface DnsResolver {
+  resolve4(hostname: string): Promise<string[]>;
+  resolve6(hostname: string): Promise<string[]>;
+  cancel(): void;
+}
+
+type DnsResolverFactory = () => DnsResolver;
+type DnsResult<T> = PromiseSettledResult<T>;
+
+const defaultResolverFactory: DnsResolverFactory = () =>
+  new Resolver({ timeout: JWKS_DNS_TIMEOUT_MS, tries: 1 });
 
 interface FetchInit {
   readonly [JWKS_DISPATCHER]?: Dispatcher;
@@ -218,9 +228,19 @@ function isUnsafeAddress(address: string): boolean {
       : true;
 }
 
-async function defaultLookup(
+function isNoDnsRecord(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error.code === 'ENODATA' || error.code === 'ENOTFOUND')
+  );
+}
+
+async function resolveHost(
   hostname: string,
-  options: { readonly all: true; readonly verbatim: true },
+  resolverFactory: DnsResolverFactory,
+  deadlineAt: number,
 ): Promise<readonly DnsAddress[]> {
   const normalizedHost = hostname.replace(/^\[|\]$/g, '');
   const family = isIP(normalizedHost);
@@ -228,22 +248,82 @@ async function defaultLookup(
     return [{ address: normalizedHost, family }];
   }
 
-  return (await dnsLookup(normalizedHost, options)).flatMap((address) =>
-    address.family === 4 || address.family === 6
-      ? [{ address: address.address, family: address.family }]
-      : [],
-  );
+  const resolver = resolverFactory();
+  let cancelled = false;
+  const cancelResolver = () => {
+    if (!cancelled) {
+      cancelled = true;
+      resolver.cancel();
+    }
+  };
+  try {
+    const dnsDeadlineAt = Math.min(
+      deadlineAt,
+      Date.now() + JWKS_DNS_TIMEOUT_MS,
+    );
+    let ipv4: DnsResult<string[]> | undefined;
+    let ipv6: DnsResult<string[]> | undefined;
+    const resolve = <T>(operation: () => Promise<T>) => {
+      try {
+        return operation().then<DnsResult<T>, DnsResult<T>>(
+          (value) => ({ status: 'fulfilled', value }),
+          (reason: unknown) => ({ status: 'rejected', reason }),
+        );
+      } catch (reason) {
+        return Promise.resolve<DnsResult<T>>({ status: 'rejected', reason });
+      }
+    };
+    const ipv4Lookup = resolve(() => resolver.resolve4(normalizedHost)).then(
+      (result) => (ipv4 = result),
+    );
+    const ipv6Lookup = resolve(() => resolver.resolve6(normalizedHost)).then(
+      (result) => (ipv6 = result),
+    );
+    try {
+      await withDeadline(Promise.all([ipv4Lookup, ipv6Lookup]), dnsDeadlineAt);
+    } catch {
+      cancelResolver();
+    }
+
+    const addresses: DnsAddress[] = [];
+    let lookupError: unknown;
+    for (const [result, addressFamily] of [
+      [ipv4, 4],
+      [ipv6, 6],
+    ] as const) {
+      if (result?.status === 'fulfilled') {
+        addresses.push(
+          ...result.value.map((address) => ({
+            address,
+            family: addressFamily,
+          })),
+        );
+      } else if (
+        result?.status === 'rejected' &&
+        !isNoDnsRecord(result.reason)
+      ) {
+        lookupError ??= result.reason;
+      }
+    }
+    if (addresses.length === 0 && lookupError !== undefined) {
+      throw lookupError;
+    }
+    return addresses;
+  } catch (error) {
+    cancelResolver();
+    throw error;
+  }
 }
 
 async function assertSafeHost(
   hostname: string,
-  lookup: DnsLookup,
+  resolverFactory: DnsResolverFactory,
   deadlineAt: number,
 ): Promise<readonly DnsAddress[]> {
   let addresses: readonly DnsAddress[];
   try {
     addresses = await withDeadline(
-      lookup(hostname, { all: true, verbatim: true }),
+      resolveHost(hostname, resolverFactory, deadlineAt),
       deadlineAt,
     );
   } catch (cause) {
@@ -360,16 +440,36 @@ async function readLimitedBody(response: FetchResponse): Promise<string> {
 
 export class JwksKeyProvider implements JwksKeyProviderPort {
   private readonly localRefreshCooldown = new Map<string, number>();
+  private readonly refreshLockFlights = new Map<
+    string,
+    Promise<JwksRefreshLock>
+  >();
+  private readonly refreshReservations = new Map<string, string>();
+  private readonly flights = new Map<
+    string,
+    {
+      readonly key: string;
+      readonly promise: Promise<PublicJsonWebKeySet>;
+    }
+  >();
 
   constructor(
     private readonly cache: JwksCachePort,
     private readonly fetcher: Fetcher = defaultFetcher,
-    private readonly lookup: DnsLookup = defaultLookup,
+    private readonly resolverFactory: DnsResolverFactory = defaultResolverFactory,
     private readonly now: () => number = () => Date.now(),
   ) {}
 
-  async validateRemote(url: string): Promise<void> {
-    await this.fetchRemote(url);
+  async validateRemote(input: {
+    readonly organizationId: string;
+    readonly url: string;
+  }): Promise<void> {
+    const snapshot = await this.cache.getJwks(input.organizationId, '1');
+    await this.fetchRemoteForOrganization(
+      input.organizationId,
+      input.url,
+      JSON.stringify([snapshot.generation, input.url]),
+    );
   }
 
   async resolve(input: {
@@ -401,32 +501,53 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       return cached.jwks;
     }
 
-    if (input.forceRefresh) {
-      const lock = await this.cache.tryAcquireRefresh(input.organizationId);
-      if (!lock.available) {
-        const cooldownUntil = this.localRefreshCooldown.get(
-          input.organizationId,
-        );
-        if (cooldownUntil !== undefined && cooldownUntil > now) {
-          return cached?.jwks ?? { keys: [] };
+    const flightKey = JSON.stringify([cacheGeneration, input.config.jwksUrl]);
+    const activeFlight = this.flights.get(input.organizationId);
+
+    if (
+      input.forceRefresh &&
+      activeFlight === undefined &&
+      this.reserveRefreshSlot(input.organizationId, flightKey)
+    ) {
+      try {
+        const lock = await this.acquireRefreshLock(input.organizationId);
+        if (!lock.available) {
+          if (!this.flights.has(input.organizationId)) {
+            const cooldownUntil = this.localRefreshCooldown.get(
+              input.organizationId,
+            );
+            if (cooldownUntil !== undefined && cooldownUntil > now) {
+              return cached?.jwks ?? { keys: [] };
+            }
+            this.localRefreshCooldown.set(
+              input.organizationId,
+              now + JWKS_REFRESH_COOLDOWN_MS,
+            );
+          }
+        } else if (!lock.acquired) {
+          const localFlight = this.flights.get(input.organizationId);
+          if (localFlight?.key === flightKey) {
+            return localFlight.promise;
+          }
+          const reread = await this.cache.getJwks(
+            input.organizationId,
+            configVersion,
+          );
+          return reread.generation === cacheGeneration
+            ? (reread.entry?.jwks ?? cached?.jwks ?? { keys: [] })
+            : { keys: [] };
         }
-        this.localRefreshCooldown.set(
-          input.organizationId,
-          now + JWKS_REFRESH_COOLDOWN_MS,
-        );
-      } else if (!lock.acquired) {
-        const reread = await this.cache.getJwks(
-          input.organizationId,
-          configVersion,
-        );
-        return reread.generation === cacheGeneration
-          ? (reread.entry?.jwks ?? cached?.jwks ?? { keys: [] })
-          : { keys: [] };
+      } finally {
+        this.releaseRefreshSlot(input.organizationId, flightKey);
       }
     }
 
     try {
-      const jwks = await this.fetchRemote(input.config.jwksUrl);
+      const jwks = await this.fetchRemoteForOrganization(
+        input.organizationId,
+        input.config.jwksUrl,
+        flightKey,
+      );
       const entry: JwksCacheEntry = {
         jwks,
         freshUntil: now + JWKS_FRESH_TTL_MS,
@@ -442,6 +563,89 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       }
       throw identityProviderUnavailable(error);
     }
+  }
+
+  private acquireRefreshLock(organizationId: string): Promise<JwksRefreshLock> {
+    const existing = this.refreshLockFlights.get(organizationId);
+    if (existing !== undefined) {
+      return existing;
+    }
+
+    let flight: Promise<JwksRefreshLock>;
+    flight = this.cache.tryAcquireRefresh(organizationId).finally(() => {
+      if (this.refreshLockFlights.get(organizationId) === flight) {
+        this.refreshLockFlights.delete(organizationId);
+      }
+    });
+    this.refreshLockFlights.set(organizationId, flight);
+    return flight;
+  }
+
+  private reserveRefreshSlot(organizationId: string, key: string): boolean {
+    const existing = this.refreshReservations.get(organizationId);
+    if (existing !== undefined) {
+      return existing === key;
+    }
+    const occupied = new Set([
+      ...this.flights.keys(),
+      ...this.refreshReservations.keys(),
+    ]);
+    if (
+      !occupied.has(organizationId) &&
+      occupied.size >= JWKS_MAX_CONCURRENT_ORGANIZATIONS
+    ) {
+      return false;
+    }
+    this.refreshReservations.set(organizationId, key);
+    return true;
+  }
+
+  private releaseRefreshSlot(organizationId: string, key: string): void {
+    if (this.refreshReservations.get(organizationId) === key) {
+      this.refreshReservations.delete(organizationId);
+    }
+  }
+
+  private fetchRemoteForOrganization(
+    organizationId: string,
+    url: string,
+    key = url,
+  ): Promise<PublicJsonWebKeySet> {
+    const existing = this.flights.get(organizationId);
+    if (existing !== undefined) {
+      return existing.key === key
+        ? existing.promise
+        : Promise.reject(sourceUnavailable(true));
+    }
+    const reservation = this.refreshReservations.get(organizationId);
+    if (reservation !== undefined && reservation !== key) {
+      return Promise.reject(sourceUnavailable(true));
+    }
+    const occupied = new Set([
+      ...this.flights.keys(),
+      ...this.refreshReservations.keys(),
+    ]);
+    if (
+      !occupied.has(organizationId) &&
+      occupied.size >= JWKS_MAX_CONCURRENT_ORGANIZATIONS
+    ) {
+      return Promise.reject(sourceUnavailable(true));
+    }
+
+    let flight: {
+      readonly key: string;
+      readonly promise: Promise<PublicJsonWebKeySet>;
+    };
+    const promise = Promise.resolve()
+      .then(() => this.fetchRemote(url))
+      .finally(() => {
+        if (this.flights.get(organizationId) === flight) {
+          this.flights.delete(organizationId);
+        }
+      });
+    flight = { key, promise };
+    this.flights.set(organizationId, flight);
+    return promise;
   }
 
   private async fetchRemote(urlValue: string): Promise<PublicJsonWebKeySet> {
@@ -463,7 +667,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     const deadlineAt = Date.now() + JWKS_FETCH_TIMEOUT_MS;
     const addresses = await assertSafeHost(
       url.hostname,
-      this.lookup,
+      this.resolverFactory,
       deadlineAt,
     );
     const remainingMs = Math.max(1, deadlineAt - Date.now());

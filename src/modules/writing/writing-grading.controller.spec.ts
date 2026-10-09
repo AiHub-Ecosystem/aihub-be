@@ -42,6 +42,7 @@ const task2Request = fixture('grade-task2.request.json') as {
 describe('Writing grading HTTP flow', () => {
   let app: NestFastifyApplication;
   let mockAgent: MockAgent;
+  let task1DownstreamCalls = 0;
   let task2DownstreamCalls = 0;
   const originalEnv = {
     allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
@@ -71,7 +72,10 @@ describe('Writing grading HTTP flow', () => {
         }),
         headers: { authorization: 'Bearer writing-token' },
       })
-      .reply(200, fixture('grade-task1.response.json'))
+      .reply(200, () => {
+        task1DownstreamCalls += 1;
+        return fixture('grade-task1.response.json');
+      })
       .persist();
     pool
       .intercept({
@@ -141,6 +145,62 @@ describe('Writing grading HTTP flow', () => {
     expect(body.meta.operation).toBe('writing.task1.grade');
     // The downstream chain-of-thought must never reach a public response.
     expect(response.payload).not.toContain('layer1_errors');
+  });
+
+  it('forwards a public HTTPS image URL from a customer host unchanged', async () => {
+    const imageUrl = 'https://charts.customer.example/chart.png';
+    mockAgent
+      .get('https://ai-writing.test')
+      .intercept({
+        method: 'POST',
+        path: '/grading-feedback-task1',
+        body: JSON.stringify({
+          question: task1Request.question,
+          topic: task1Request.topic,
+          essay: task1Request.essay,
+          url: imageUrl,
+        }),
+        headers: { authorization: 'Bearer writing-token' },
+      })
+      .reply(200, () => {
+        task1DownstreamCalls += 1;
+        return fixture('grade-task1.response.json');
+      });
+
+    const before = task1DownstreamCalls;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/grade',
+      headers: { 'idempotency-key': 'fixture-task1-customer-host-image' },
+      payload: {
+        question: task1Request.question,
+        chart_type: task1Request.topic,
+        essay: task1Request.essay,
+        image_url: imageUrl,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(task1DownstreamCalls).toBe(before + 1);
+  });
+
+  it('rejects a non-HTTPS Task 1 image URL before downstream dispatch', async () => {
+    const before = task1DownstreamCalls;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/grade',
+      headers: { 'idempotency-key': 'fixture-task1-http-image-url' },
+      payload: {
+        question: task1Request.question,
+        chart_type: task1Request.topic,
+        essay: task1Request.essay,
+        image_url: 'http://charts.customer.example/chart.png',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expect(task1DownstreamCalls).toBe(before);
   });
 
   it('replays a completed Task 1 result and marks the response', async () => {
