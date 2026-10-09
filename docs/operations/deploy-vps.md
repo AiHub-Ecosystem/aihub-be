@@ -796,19 +796,24 @@ renewed by certbot on the host, not by this stack.
 ## AI Speaking Production handoff
 
 The release image contains the authenticated multipart smoke helper. Run it from
-the VPS with a real WAV fixture after a deployment; the helper reads the
-temporary test API key and assertion-signing key from their restricted files,
-keeps them out of output, and removes its in-container key copy on exit:
+the VPS with a real WAV fixture after a deployment; set
+`AIHUB_API_KEY_FILE` to a restricted file containing a key for the same tier as
+`AIHUB_BASE_URL`. The helper reads that key and the assertion-signing key from
+their restricted files, keeps them out of output, and removes its in-container
+key copy on exit:
 
 ```sh
-bash /home/ngoc_anh/speaking-gateway-smoke.sh \
+AIHUB_API_KEY_FILE=/path/to/production-scoped-api-key \
+  bash /home/ngoc_anh/speaking-gateway-smoke.sh \
   /home/ngoc_anh/aihub-speaking-contract-probe.wav
 ```
 
 Expected output is `HTTP_STATUS=200`. The request is sent to
 `https://api.aihubproduction.com/v1/ielts/speaking/grading` by default and must
 return the normalized `{data, meta}` envelope. Run the same helper with an
-explicit `AIHUB_BASE_URL` when validating another environment.
+explicit `AIHUB_BASE_URL` and a key file scoped to that environment when
+validating another tier. The helper has no default API-key path; never send a
+Sandbox key to Production.
 
 The Production handoff matrix is split by safety boundary:
 
@@ -953,59 +958,75 @@ fi
 
 Wait for every selected service's container health to become `healthy`; verify
 the container revision label equals `rollback_sha`, and check the public
-`/health` on every enabled hostname. The demo API key below is Sandbox-scoped,
-and `/v1/sandbox/assertions` is intentionally unavailable on Production. Never
-send this key to the Production hostname. Use it only for the Sandbox auth
-probe. The probe mints a short-lived credential, so discard the body and print
-only the HTTP status:
+`/health` on every enabled hostname. Provision temporary, least-scope API keys
+separately for Production and Sandbox with `key:create` from
+[`sandbox-provisioning.md`](sandbox-provisioning.md), setting `--envs` to only
+the intended tier and recording the issuance under the operator's AIHUB
+username. Store each raw key in a mode-`600` file outside the repository. Set
+`AIHUB_PRODUCTION_API_KEY_FILE` and, when Sandbox is enabled,
+`AIHUB_SANDBOX_API_KEY_FILE` to those separate paths. Never send a Sandbox key
+to Production or reuse a Production key on Sandbox.
+
+Use an active Sandbox Organization on the Sandbox allowlist with an active
+identity configuration for the Sandbox key. Use an active Production test
+Organization with the `speaking` entitlement and no active identity
+configuration for the Production key. The Sandbox probe mints a short-lived
+credential, so discard the body and print only the HTTP status. The Production
+probe sends an empty JSON object to the Speaking JSON route; its request schema
+rejects the body with `400` after API key and User Identity authentication but
+before downstream dispatch. It proves Production authentication without
+calling the AI provider. It still updates the API key's `last_used_at` and
+consumes one rate-limit slot.
 
 ```bash
-probe_sandbox_auth() {
+probe_auth() {
   (
     set -euo pipefail
-    local host="$1" dir config body status
-    test -r /home/ngoc_anh/speaking-gateway-test-api-key
+    local host="$1" key_file="$2" path="$3" expected="$4" json="$5" identity="${6:-}" dir config body status
+    test -r "$key_file"
     dir="$(mktemp -d)"
     chmod 700 "$dir"
     config="$dir/curl.conf"
     body="$dir/body.json"
     trap 'rm -f "$config" "$body"; rmdir "$dir"' EXIT
-    printf '{"user_id":"rollback-probe"}\n' >"$body"
+    printf '%s\n' "$json" >"$body"
     chmod 600 "$body"
     {
-      printf 'url = "https://%s/v1/sandbox/assertions"\n' "$host"
+      printf 'url = "https://%s%s"\n' "$host" "$path"
       printf 'request = "POST"\n'
-      printf 'header = "X-API-Key: %s"\n' "$(cat /home/ngoc_anh/speaking-gateway-test-api-key)"
+      printf 'header = "X-API-Key: %s"\n' "$(cat "$key_file")"
       printf 'header = "Content-Type: application/json"\n'
+      if [ -n "$identity" ]; then
+        printf 'header = "X-User-Identity: %s"\n' "$identity"
+      fi
       printf 'data-binary = "@%s"\n' "$body"
     } >"$config"
     chmod 600 "$config"
     status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --config "$config")"
     printf '%s %s\n' "$host" "$status"
-    test "$status" = 200
+    test "$status" = "$expected"
   )
 }
 
+: "${AIHUB_PRODUCTION_API_KEY_FILE:?set to the Production-scoped API key file}"
+probe_auth "$AIHUB_PRODUCTION_HOST" "$AIHUB_PRODUCTION_API_KEY_FILE" \
+  /v1/ielts/speaking/grading-json 400 '{}' rollback-probe
 AIHUB_SANDBOX_HOST="$(sed -n 's/^AIHUB_SANDBOX_HOST=//p' .env.production | tail -n 1)"
 AIHUB_SANDBOX_ENABLED="$(sed -n 's/^AIHUB_SANDBOX_ENABLED=//p' .env.production | tail -n 1)"
 if [ "$AIHUB_SANDBOX_ENABLED" = true ]; then
   test -n "$AIHUB_SANDBOX_HOST"
-  probe_sandbox_auth "$AIHUB_SANDBOX_HOST"
+  : "${AIHUB_SANDBOX_API_KEY_FILE:?set to the Sandbox-scoped API key file}"
+  probe_auth "$AIHUB_SANDBOX_HOST" "$AIHUB_SANDBOX_API_KEY_FILE" \
+    /v1/sandbox/assertions 200 '{"user_id":"rollback-probe"}'
 fi
 ```
 
-The demo key is restricted to the configured demo Organization. Do not use a
-customer key or the Speaking grading smoke for this rollback check: this route
-proves Sandbox API-key authentication without spending model quota. The VPS
-currently has no documented Production test key, and the Sandbox key cannot
-prove Production authentication. A Production auth check needs a separately
-provisioned Production-scoped test key and an approved no-side-effect
-authenticated request; until that exists and succeeds, #289's authenticated
-Production criterion is incomplete. If the Sandbox key returns `401`, stop and
-provision a valid Sandbox test key through the CLI procedure in
-[`sandbox-provisioning.md`](sandbox-provisioning.md); do not copy a key from
-another environment. If any required health or auth probe fails, keep CD
-disabled and treat rollback as unconfirmed.
+Use a dedicated test Organization for each key; the Production test
+Organization must have no active identity configuration so `rollback-probe` is
+accepted as a Declared User ID. Do not use a customer key or the successful
+Speaking grading smoke for this rollback check. Revoke both temporary keys and
+remove their files after the rehearsal. If either probe does not return its
+expected status, keep CD disabled and treat rollback as unconfirmed.
 The `/metrics` scrape also exposes unknown queued rows in the fixed
 `aihub_email_outbox_queued{kind="unknown"}` series and their oldest age; raw
 stored values are never metric labels.
@@ -1017,15 +1038,17 @@ is enabled, and the rollback image passed the registry/cache checks above. It
 changes the shared desired `AIHUB_IMAGE` in `.env.production`, but recreates
 only `app-sandbox`; the running Production container must keep the same ID and
 revision throughout. Run it in the same Bash session as
-`probe_sandbox_auth` above so the recovery timer includes that probe. Only
-rehearse after a
-normal later release has written a new stored value in Sandbox. Confirm that
+`probe_auth` above so the recovery timer includes the Production and Sandbox
+auth probes. Only rehearse after a normal later release has written a new
+stored value in Sandbox. Confirm that
 value exists using release-specific evidence without printing payloads or
 secrets; do not seed the database manually to simulate a writer release.
 
 ```bash
 set -euo pipefail
 : "${APP_DIR:?set APP_DIR to VPS_APP_DIR}"
+: "${AIHUB_PRODUCTION_API_KEY_FILE:?set to the Production-scoped API key file}"
+: "${AIHUB_SANDBOX_API_KEY_FILE:?set to the Sandbox-scoped API key file}"
 cd "$APP_DIR"
 test "$(sed -n 's/^AIHUB_SANDBOX_ENABLED=//p' .env.production | tail -n 1)" = true
 rollback_sha='PASTE_40_CHARACTER_SHA_HERE'
@@ -1070,7 +1093,10 @@ AIHUB_PRODUCTION_HOST="$(sed -n 's/^AIHUB_PRODUCTION_HOST=//p' .env.production |
 AIHUB_SANDBOX_HOST="$(sed -n 's/^AIHUB_SANDBOX_HOST=//p' .env.production | tail -n 1)"
 curl --fail --silent --show-error "https://$AIHUB_PRODUCTION_HOST/health" >/dev/null
 curl --fail --silent --show-error "https://$AIHUB_SANDBOX_HOST/health" >/dev/null
-probe_sandbox_auth "$AIHUB_SANDBOX_HOST"
+probe_auth "$AIHUB_PRODUCTION_HOST" "$AIHUB_PRODUCTION_API_KEY_FILE" \
+  /v1/ielts/speaking/grading-json 400 '{}' rollback-probe
+probe_auth "$AIHUB_SANDBOX_HOST" "$AIHUB_SANDBOX_API_KEY_FILE" \
+  /v1/sandbox/assertions 200 '{"user_id":"rollback-probe"}'
 recovery_seconds="$(($(date +%s) - recovery_started))"
 printf 'sandbox_sha=%s production_sha=%s recovery_seconds=%s\n' \
   "$sandbox_sha" "$production_sha_after" "$recovery_seconds"
