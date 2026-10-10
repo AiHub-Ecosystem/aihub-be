@@ -62,6 +62,12 @@ for (const file of collectTypeScriptFiles(downstreamDirectory)) {
 const srcDirectory = join(root, 'src');
 const configurationDirectory = join(srcDirectory, 'config');
 const cliDirectory = join(srcDirectory, 'cli');
+const postgresPoolFactoryPath = join(
+  srcDirectory,
+  'common',
+  'postgres',
+  'postgres-pool.ts',
+);
 for (const file of collectTypeScriptFiles(srcDirectory)) {
   if (
     file.endsWith('.spec.ts') ||
@@ -75,6 +81,31 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
   if (/\bprocess\.env\b/.test(source)) {
     fail(
       `${relative(root, file)} reads process.env outside the configuration boundary; inject validated configuration instead`,
+    );
+  }
+}
+
+for (const file of collectTypeScriptFiles(srcDirectory)) {
+  if (file.endsWith('.spec.ts') || file === postgresPoolFactoryPath) {
+    continue;
+  }
+
+  const source = readFileSync(file, 'utf8');
+  const importsPgPool =
+    /\bimport\s*\{[^}]*\bPool\b(?:\s+as\s+\w+)?[^}]*\}\s*from\s*['"]pg['"]/.test(
+      source,
+    ) || /\bimport\s+(?:\*\s+as\s+\w+|\w+)\s+from\s*['"]pg['"]/.test(source);
+  if (importsPgPool && /\bnew\s+(?:\w+\.)?\w*Pool\s*\(/.test(source)) {
+    fail(
+      `${relative(root, file)} constructs a PostgreSQL pool directly; use createPostgresPool so every pool observes connection errors`,
+    );
+  }
+  if (
+    /\bDrizzleModule\s*\.\s*forRootAsync\s*\(/.test(source) &&
+    /\bdrizzle\s*,\s*connection\s*:/.test(source)
+  ) {
+    fail(
+      `${relative(root, file)} lets Drizzle create an unmonitored PostgreSQL pool; pass a database built with createPostgresPool`,
     );
   }
 }

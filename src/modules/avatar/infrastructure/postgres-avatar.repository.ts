@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { createPostgresPool } from '@/common/postgres/postgres-pool';
 
 import { AppError } from '@/common/errors/app-error';
 import type {
@@ -177,7 +177,7 @@ export function createAvatarQueryClient(
       close: async () => undefined,
     };
   }
-  const pool = new Pool({
+  const pool = createPostgresPool('avatar', {
     connectionString: databaseUrl,
     max: 5,
     connectionTimeoutMillis: 1_000,
