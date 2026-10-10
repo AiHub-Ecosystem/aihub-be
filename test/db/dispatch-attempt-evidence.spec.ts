@@ -369,12 +369,12 @@ describe('durable dispatch-attempt evidence', () => {
     );
   }, 90_000);
 
-  it('applies unresolved metric exclusions against real Postgres rows', async () => {
+  it('applies timeout usage and retired-operation rules against real Postgres rows', async () => {
     const repository = new PostgresDispatchAttemptRepository(
       createPostgresMeteringClient(testDatabaseUrl()),
     );
     const requestIds = Array.from(
-      { length: 5 },
+      { length: 9 },
       () => `req_dispatch_metric_${ulid()}`,
     );
     const attemptIds = requestIds.map(() => randomUUID());
@@ -386,46 +386,98 @@ describe('durable dispatch-attempt evidence', () => {
     const baselineCount =
       baseline.find((sample) => sample.operation === 'writing.task1.grade')
         ?.count ?? 0;
+    const baselineOtherCount =
+      baseline.find((sample) => sample.operation === 'other')?.count ?? 0;
 
     try {
       const attempts = [
-        { outcome: null, unknownAfter: overdue },
-        { outcome: null, unknownAfter: overdue },
-        { outcome: null, unknownAfter: future },
-        { outcome: 'response_received', unknownAfter: overdue },
-        { outcome: 'outcome_unknown', unknownAfter: overdue },
+        {
+          operation: 'writing.task1.grade',
+          outcome: null,
+          unknownAfter: overdue,
+        },
+        {
+          operation: 'writing.task1.grade',
+          outcome: null,
+          unknownAfter: overdue,
+        },
+        {
+          operation: 'writing.task1.grade',
+          outcome: null,
+          unknownAfter: future,
+        },
+        {
+          operation: 'writing.task1.grade',
+          outcome: 'response_received',
+          unknownAfter: overdue,
+        },
+        {
+          operation: 'writing.task1.grade',
+          outcome: 'outcome_unknown',
+          unknownAfter: overdue,
+        },
+        {
+          operation: 'writing.task1.grade',
+          outcome: null,
+          unknownAfter: overdue,
+        },
+        {
+          operation: 'writing.task1.grade',
+          outcome: null,
+          unknownAfter: overdue,
+        },
+        {
+          operation: 'writing.retired.grade',
+          outcome: null,
+          unknownAfter: overdue,
+        },
+        {
+          operation: 'speaking.retired.grade',
+          outcome: null,
+          unknownAfter: overdue,
+        },
       ] as const;
       for (const [index, attempt] of attempts.entries()) {
         await pool.query(
           `INSERT INTO dispatch_attempts
              (attempt_id, request_id, organization_id, operation, created_at,
               unknown_after, outcome)
-           VALUES ($1, $2, 'org_dispatch_metric_test',
-                   'writing.task1.grade', $3, $4, $5)`,
+           VALUES ($1, $2, 'org_dispatch_metric_test', $3, $4, $5, $6)`,
           [
             attemptIds[index],
             requestIds[index],
+            attempt.operation,
             createdAt,
             attempt.unknownAfter,
             attempt.outcome,
           ],
         );
       }
-      await pool.query(
-        `INSERT INTO usage_records
+      for (const [index, errorCode, outcome, status] of [
+        [1, null, 'success', 200],
+        [5, 'AI_SERVICE_TIMEOUT', 'downstream_error', 504],
+        [6, 'AI_SERVICE_TIMEOUT', 'downstream_error', 504],
+      ] as const) {
+        await pool.query(
+          `INSERT INTO usage_records
            (request_id, organization_id, api_key_id, service, operation,
-            environment, outcome, http_status, metering_status, total_ms)
+            environment, outcome, http_status, error_code, metering_status,
+            total_ms)
          VALUES ($1, 'org_dispatch_metric_test', 'ak_dispatch_metric_test',
-                 'ai-writing', 'writing.task1.grade', 'production',
-                 'success', 200, 'complete', 0)`,
-        [requestIds[1]],
-      );
+                 'ai-writing', 'writing.task1.grade', 'production', $2, $3,
+                 $4, 'complete', 0)`,
+          [requestIds[index], outcome, status, errorCode],
+        );
+      }
 
       const samples = await repository.getUnresolvedByOperation();
       const unresolvedCount =
         samples.find((sample) => sample.operation === 'writing.task1.grade')
           ?.count ?? 0;
-      expect(unresolvedCount - baselineCount).toBe(2);
+      expect(unresolvedCount - baselineCount).toBe(4);
+      const otherCount =
+        samples.find((sample) => sample.operation === 'other')?.count ?? 0;
+      expect(otherCount - baselineOtherCount).toBe(2);
     } finally {
       await pool.query('DELETE FROM usage_records WHERE request_id = ANY($1)', [
         requestIds,

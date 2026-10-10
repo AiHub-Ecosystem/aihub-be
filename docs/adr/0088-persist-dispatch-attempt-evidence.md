@@ -38,10 +38,15 @@ operation timeout in force when the attempt was created.
 
 Expose a bounded `/metrics` gauge grouped by operation. At scrape time, query
 Postgres for attempts past `unknown_after` whose outcome is absent or unknown,
-excluding any attempt whose request ID has a `usage_records` row. Do not add a
-scheduled state-transition worker or manual override. A failure to persist a
-known downstream outcome must not change a successful response already
-returned to the customer.
+excluding attempts with matching final usage evidence. An `AI_SERVICE_TIMEOUT`
+usage row is not final evidence by itself: required-idempotency Writing may
+return that timeout while the grading call continues in the background. Keep
+those attempts visible until dispatch outcome evidence is recorded or the
+retention window expires. Aggregate retired operation IDs under the bounded
+`other` label so historical rows cannot invalidate the whole scrape. Do not
+add a scheduled state-transition worker or manual override. A failure to
+persist a known downstream outcome must not change a successful response
+already returned to the customer.
 
 Report unresolved attempts as unresolved/unpriced in the cost-report work
 tracked by #457; do not assign an amount without authoritative provider usage

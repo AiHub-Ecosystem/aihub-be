@@ -198,7 +198,7 @@ export function setEmailOutboxBacklogSource(
 }
 
 export interface DispatchAttemptUnresolvedSample {
-  readonly operation: OperationId;
+  readonly operation: OperationId | 'other';
   readonly count: number;
 }
 
@@ -238,7 +238,7 @@ function readDispatchAttemptUnresolved(): Promise<void> {
 
 const dispatchAttemptsUnresolved = new Gauge({
   name: 'aihub_dispatch_attempts_unresolved',
-  help: 'AI Service dispatch attempts past their deadline without final evidence or usage.',
+  help: 'AI Service dispatch attempts past their deadline without final dispatch evidence.',
   labelNames: ['operation'],
   registers: [registry],
   collect: readDispatchAttemptUnresolved,

@@ -1,3 +1,4 @@
+import { OPERATION_IDS } from '@/catalog/operation-id';
 import type { DispatchAttemptStart } from '@/modules/metering/public/dispatch-attempts';
 import {
   INSERT_DISPATCH_ATTEMPT_SQL,
@@ -68,9 +69,12 @@ describe('PostgresDispatchAttemptRepository', () => {
     },
   );
 
-  it('returns only unresolved attempts after their stored deadline with no usage row', async () => {
+  it('returns unresolved counts with a bounded fallback for retired operations', async () => {
     const client = new FakePostgres();
-    client.rows = [{ operation: 'writing.task1.grade', unresolved_count: '2' }];
+    client.rows = [
+      { operation: 'writing.task1.grade', unresolved_count: '2' },
+      { operation: 'other', unresolved_count: '3' },
+    ];
     const repository = new PostgresDispatchAttemptRepository(client);
 
     await expect(repository.getUnresolvedByOperation()).resolves.toEqual([
@@ -78,13 +82,18 @@ describe('PostgresDispatchAttemptRepository', () => {
       { operation: 'writing.task2.grade', count: 0 },
       { operation: 'speaking.grading', count: 0 },
       { operation: 'speaking.grading-json', count: 0 },
+      { operation: 'other', count: 3 },
     ]);
     expect(client.queries).toEqual([
-      { text: UNRESOLVED_DISPATCH_ATTEMPTS_SQL, values: [] },
+      { text: UNRESOLVED_DISPATCH_ATTEMPTS_SQL, values: [OPERATION_IDS] },
     ]);
     expect(UNRESOLVED_DISPATCH_ATTEMPTS_SQL).toContain('unknown_after');
     expect(UNRESOLVED_DISPATCH_ATTEMPTS_SQL).toContain('usage_records');
     expect(UNRESOLVED_DISPATCH_ATTEMPTS_SQL).toContain('outcome_unknown');
+    expect(UNRESOLVED_DISPATCH_ATTEMPTS_SQL).toContain(
+      "error_code IS DISTINCT FROM 'AI_SERVICE_TIMEOUT'",
+    );
+    expect(UNRESOLVED_DISPATCH_ATTEMPTS_SQL).toContain('ANY($1::text[])');
   });
 
   it('returns zero counts for every operation when no attempt is unresolved', async () => {

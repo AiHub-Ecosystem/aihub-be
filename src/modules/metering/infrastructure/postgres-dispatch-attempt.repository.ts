@@ -36,7 +36,10 @@ export const UPDATE_DISPATCH_ATTEMPT_OUTCOME_SQL = `
 `;
 
 export const UNRESOLVED_DISPATCH_ATTEMPTS_SQL = `
-  SELECT attempt.operation,
+  SELECT CASE
+           WHEN attempt.operation = ANY($1::text[]) THEN attempt.operation
+           ELSE 'other'
+         END AS operation,
          COUNT(*)::bigint AS unresolved_count
   FROM dispatch_attempts AS attempt
   WHERE attempt.unknown_after < clock_timestamp()
@@ -45,8 +48,9 @@ export const UNRESOLVED_DISPATCH_ATTEMPTS_SQL = `
       SELECT 1
       FROM usage_records AS usage
       WHERE usage.request_id = attempt.request_id
+        AND usage.error_code IS DISTINCT FROM 'AI_SERVICE_TIMEOUT'
     )
-  GROUP BY attempt.operation
+  GROUP BY 1
 `;
 
 function countFromRow(value: unknown): DispatchAttemptUnresolvedSample {
@@ -60,7 +64,7 @@ function countFromRow(value: unknown): DispatchAttemptUnresolvedSample {
         ? Number(value.unresolved_count)
         : Number.NaN;
   if (
-    !isOperationId(value.operation) ||
+    (!isOperationId(value.operation) && value.operation !== 'other') ||
     !Number.isSafeInteger(count) ||
     count < 0
   ) {
@@ -99,14 +103,22 @@ export class PostgresDispatchAttemptRepository
   async getUnresolvedByOperation(): Promise<
     readonly DispatchAttemptUnresolvedSample[]
   > {
-    const rows = await this.client.query(UNRESOLVED_DISPATCH_ATTEMPTS_SQL, []);
+    const rows = await this.client.query(UNRESOLVED_DISPATCH_ATTEMPTS_SQL, [
+      OPERATION_IDS,
+    ]);
     const counts = new Map(
       rows.map(countFromRow).map(({ operation, count }) => [operation, count]),
     );
-    return OPERATION_IDS.map((operation) => ({
-      operation,
-      count: counts.get(operation) ?? 0,
-    }));
+    const otherCount = counts.get('other');
+    return [
+      ...OPERATION_IDS.map((operation) => ({
+        operation,
+        count: counts.get(operation) ?? 0,
+      })),
+      ...(otherCount === undefined
+        ? []
+        : [{ operation: 'other' as const, count: otherCount }]),
+    ];
   }
 
   async close(): Promise<void> {
