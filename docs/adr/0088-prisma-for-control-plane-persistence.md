@@ -33,6 +33,23 @@ Prisma replaces Drizzle as the control-plane persistence standard. The decision 
 - `$queryRawUnsafe` returns `bigint`, `numeric`, `bytea`, and timestamp values differently from `pg`. Each slice relies on its existing repository and integration specs to catch the difference in its row mapping.
 - Migration SQL is still reviewed by hand; generation removes the second hand-maintained copy of the schema, not the review.
 
+## Runtime fit
+
+Settled in #81. `@prisma/adapter-pg` runs on the existing `pg` pool: `PrismaPg`
+takes a `pg.Pool` directly, so `createPostgresPool` keeps building it and the
+driver adapter issues its statements through that pool's own connections. A
+generated-client query, an interactive `$transaction`, and the pool's own
+`totalCount`/`idleCount` accounting were each checked against a real PostgreSQL
+16 database built from the migration history; the adapter opened no connection
+of its own. #81 and #383 therefore still apply: one pool per distinct connection
+URL, carrying over the existing `max`, connection timeout, and idle timeout, and
+the server-side statement and lock timeouts #383 plans.
+
+`PrismaPg` reads the pool positionally — `new PrismaPg(pool)` — not as
+`{ pool }`. The second shape is silently ignored and the adapter then builds
+its own pool against a default host, which surfaces as `ECONNREFUSED` rather
+than as a configuration error.
+
 ## Considered options
 
 - **Keep Drizzle and finish it (ADR-0071).** Rejected by the owner: Drizzle had reached 7 of 32 implementations, so switching cost about what finishing would, and Prisma's schema-first workflow and team familiarity were preferred.

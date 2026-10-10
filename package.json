@@ -80,6 +80,7 @@
     "@biomejs/biome": "^1.9.4",
     "@nestjs/cli": "^12.0.8",
     "@nestjs/testing": "^12.1.2",
+    "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
     "@seriousme/openapi-schema-validator": "^2.11.0",
     "@swc/cli": "^0.8.1",

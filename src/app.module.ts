@@ -9,6 +9,7 @@ import { GatewayModule } from './modules/gateway/gateway.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { MeteringModule } from './modules/metering/metering.module';
 import { HttpExceptionFilter } from './modules/metering/presentation/http-exception.filter';
+import { PersistenceModule } from './modules/persistence/persistence.module';
 import { SpeakingModule } from './modules/speaking/speaking.module';
 import { WritingModule } from './modules/writing/writing.module';
 import { OpenApiModule } from './openapi/openapi.module';
@@ -16,6 +17,7 @@ import { OpenApiModule } from './openapi/openapi.module';
 @Module({
   imports: [
     RuntimeConfigurationModule,
+    PersistenceModule,
     HealthModule,
     AuthModule,
     AvatarModule,

@@ -118,7 +118,14 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
 const PRISMA_CLIENT_SPECIFIER = /from\s*['"]@prisma-client\//;
 
 for (const file of collectTypeScriptFiles(srcDirectory)) {
-  if (file.endsWith('.spec.ts') || file.split(sep).includes('infrastructure')) {
+  // `infrastructure` is the layer that owns persistence. `src/modules/persistence`
+  // is that same seam named as a module: it builds the shared clients every other
+  // module receives, so it has to import the generated client to do it.
+  const isPersistenceCode =
+    file.split(sep).includes('infrastructure') ||
+    file.includes(`${sep}modules${sep}persistence${sep}`);
+
+  if (file.endsWith('.spec.ts') || isPersistenceCode) {
     continue;
   }
 

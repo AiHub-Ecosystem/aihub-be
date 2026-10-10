@@ -25,6 +25,11 @@ import { AuthModule } from '@/modules/auth/auth.module';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
 import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
 import {
+  CONTROL_PLANE_PRISMA_CLIENT,
+  CONTROL_PLANE_READ_PRISMA_CLIENT,
+  type PrismaClientHolder,
+} from '@/modules/persistence/application/persistence-client.port';
+import {
   RUNTIME_CONNECTION_CONFIGURATION,
   type RuntimeConnectionConfigurationPort,
 } from '@/modules/secrets/application/runtime-connection-configuration.port';
@@ -138,7 +143,6 @@ import {
   createIdentityDrizzleClient,
   createPostgresIdentityClient,
 } from './shared/infrastructure/postgres-identity.client';
-import { checkPostgresIdentityDatabase } from './shared/infrastructure/postgres-readiness';
 import {
   RedisAuthFailureCounter,
   RedisIdentityStore,
@@ -248,28 +252,15 @@ function drizzleDatabaseOptions(
   providers: [
     {
       provide: IDENTITY_POSTGRES_READINESS,
-      inject: [
-        RUNTIME_CONNECTION_CONFIGURATION,
-        getDrizzleToken(IDENTITY_WRITE_DATABASE),
-        getDrizzleToken(IDENTITY_READ_DATABASE),
-      ],
+      inject: [CONTROL_PLANE_PRISMA_CLIENT, CONTROL_PLANE_READ_PRISMA_CLIENT],
       useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
-        writeDb: IdentityDatabase,
-        readDb: IdentityDatabase,
+        controlPlane: PrismaClientHolder,
+        controlPlaneRead: PrismaClientHolder,
       ): IdentityPostgresReadiness => ({
         checkControlPlaneWrite: (timeoutMs) =>
-          checkPostgresIdentityDatabase(
-            writeDb,
-            configuration.controlPlaneDatabaseUrl,
-            timeoutMs,
-          ),
+          controlPlane.checkConnection(timeoutMs),
         checkControlPlaneRead: (timeoutMs) =>
-          checkPostgresIdentityDatabase(
-            readDb,
-            configuration.controlPlaneReadDatabaseUrl,
-            timeoutMs,
-          ),
+          controlPlaneRead.checkConnection(timeoutMs),
       }),
     },
     {

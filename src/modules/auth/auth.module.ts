@@ -14,6 +14,10 @@ import {
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import { EmailDeliveryPoller } from '@/modules/auth/application/email-delivery-poller';
 import {
+  type PrismaClientHolder,
+  RUNTIME_PRISMA_CLIENT,
+} from '@/modules/persistence/application/persistence-client.port';
+import {
   RUNTIME_CONNECTION_CONFIGURATION,
   type RuntimeConnectionConfigurationPort,
 } from '@/modules/secrets/application/runtime-connection-configuration.port';
@@ -133,9 +137,9 @@ import {
     },
     {
       provide: AUTH_POSTGRES_READINESS,
-      inject: [POSTGRES_AUTH_CLIENT],
-      useFactory: (client: PostgresAuthClient): AuthPostgresReadiness => ({
-        check: (timeoutMs) => client.checkConnection(timeoutMs),
+      inject: [RUNTIME_PRISMA_CLIENT],
+      useFactory: (runtime: PrismaClientHolder): AuthPostgresReadiness => ({
+        check: (timeoutMs) => runtime.checkConnection(timeoutMs),
       }),
     },
     {
