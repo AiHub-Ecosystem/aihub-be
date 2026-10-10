@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { createPostgresPool } from '@/common/postgres/postgres-pool';
 
 import { AppError } from '@/common/errors/app-error';
 import type {
@@ -495,7 +495,7 @@ export function createSpeakingAudioQueryClient(
     };
   }
 
-  const pool = new Pool({
+  const pool = createPostgresPool('speaking-audio-upload', {
     connectionString: databaseUrl,
     max: 5,
     connectionTimeoutMillis: 1_000,

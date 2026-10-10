@@ -135,8 +135,8 @@ import { OrganizationController } from './organizations/presentation/organizatio
 import { identityDrizzleSchema } from './shared/infrastructure/drizzle-identity-schema';
 import {
   type IdentityDatabase,
+  createIdentityDrizzleClient,
   createPostgresIdentityClient,
-  identityDrizzleConnectionOptions,
 } from './shared/infrastructure/postgres-identity.client';
 import { checkPostgresIdentityDatabase } from './shared/infrastructure/postgres-readiness';
 import {
@@ -196,16 +196,15 @@ function controlPlaneReadDatabaseUrl(
 const IDENTITY_READ_DATABASE = 'identity-read';
 const IDENTITY_WRITE_DATABASE = 'identity-write';
 
-function drizzleDatabaseOptions(databaseUrl: string) {
+function drizzleDatabaseOptions(
+  databaseUrl: string,
+  poolName: 'identity-read' | 'identity-write',
+) {
   if (databaseUrl.trim().length === 0) {
     return { db: drizzle.mock({ schema: identityDrizzleSchema }) };
   }
 
-  return {
-    drizzle,
-    connection: identityDrizzleConnectionOptions(databaseUrl),
-    schema: identityDrizzleSchema,
-  };
+  return { db: createIdentityDrizzleClient(databaseUrl, poolName).db };
 }
 
 @Module({
@@ -221,14 +220,20 @@ function drizzleDatabaseOptions(databaseUrl: string) {
       imports: [SecretsModule],
       inject: [RUNTIME_CONNECTION_CONFIGURATION],
       useFactory: (configuration: RuntimeConnectionConfigurationPort) =>
-        drizzleDatabaseOptions(controlPlaneReadDatabaseUrl(configuration)),
+        drizzleDatabaseOptions(
+          controlPlaneReadDatabaseUrl(configuration),
+          IDENTITY_READ_DATABASE,
+        ),
     }),
     DrizzleModule.forRootAsync({
       name: IDENTITY_WRITE_DATABASE,
       imports: [SecretsModule],
       inject: [RUNTIME_CONNECTION_CONFIGURATION],
       useFactory: (configuration: RuntimeConnectionConfigurationPort) =>
-        drizzleDatabaseOptions(controlPlaneDatabaseUrl(configuration)),
+        drizzleDatabaseOptions(
+          controlPlaneDatabaseUrl(configuration),
+          IDENTITY_WRITE_DATABASE,
+        ),
     }),
   ],
   controllers: [

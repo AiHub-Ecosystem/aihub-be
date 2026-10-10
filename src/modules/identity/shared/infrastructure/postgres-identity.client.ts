@@ -1,6 +1,8 @@
 import { type NodePgDatabase, drizzle } from 'drizzle-orm/node-postgres';
-import { Pool, type PoolConfig } from 'pg';
+import { type PoolConfig } from 'pg';
 
+import type { PostgresPoolName } from '@/common/observability/metrics';
+import { createPostgresPool } from '@/common/postgres/postgres-pool';
 import { identityDrizzleSchema } from './drizzle-identity-schema';
 
 export interface PostgresIdentityClient {
@@ -53,6 +55,7 @@ function missingDatabaseUrl(): never {
 
 export function createPostgresIdentityClient(
   databaseUrl: string,
+  poolName: PostgresPoolName = 'identity',
 ): PostgresIdentityClient & PostgresIdentityTransactionalClient {
   if (databaseUrl.trim().length === 0) {
     return {
@@ -62,7 +65,10 @@ export function createPostgresIdentityClient(
     };
   }
 
-  const pool = new Pool(identityDrizzleConnectionOptions(databaseUrl));
+  const pool = createPostgresPool(
+    poolName,
+    identityDrizzleConnectionOptions(databaseUrl),
+  );
 
   return {
     async query(
@@ -169,12 +175,16 @@ function unconfiguredDrizzleClient(): IdentityDrizzleClient {
 
 export function createIdentityDrizzleClient(
   databaseUrl: string,
+  poolName: 'identity-read' | 'identity-write' = 'identity-write',
 ): IdentityDrizzleClient {
   if (databaseUrl.trim().length === 0) {
     return unconfiguredDrizzleClient();
   }
 
-  const pool = new Pool(identityDrizzleConnectionOptions(databaseUrl));
+  const pool = createPostgresPool(
+    poolName,
+    identityDrizzleConnectionOptions(databaseUrl),
+  );
   const db = drizzle(pool, { schema: identityDrizzleSchema });
 
   return {

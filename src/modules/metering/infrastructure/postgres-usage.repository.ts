@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { createPostgresPool } from '@/common/postgres/postgres-pool';
 
 import type {
   UsageAggregate,
@@ -31,7 +31,7 @@ export function createPostgresMeteringClient(
     };
   }
 
-  const pool = new Pool({
+  const pool = createPostgresPool('metering', {
     connectionString: databaseUrl,
     max: 10,
     connectionTimeoutMillis: 1_000,

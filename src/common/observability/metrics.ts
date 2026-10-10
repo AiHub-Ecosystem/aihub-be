@@ -68,6 +68,37 @@ const emailDeliveryFailedTotal = new Counter({
   registers: [registry],
 });
 
+const postgresPoolErrorsTotal = new Counter({
+  name: 'aihub_postgres_pool_errors_total',
+  help: 'PostgreSQL pool and checked-out client errors by pool and SQLSTATE class.',
+  labelNames: ['pool', 'sqlstate_class'],
+  registers: [registry],
+});
+
+export type PostgresPoolName =
+  | 'auth'
+  | 'idempotency'
+  | 'sandbox-dispatch-budget'
+  | 'avatar'
+  | 'speaking-audio-upload'
+  | 'metering'
+  | 'identity'
+  | 'identity-read'
+  | 'identity-write'
+  | 'integration-test';
+
+export function recordPostgresPoolError(
+  pool: PostgresPoolName,
+  errorCode: unknown,
+): string {
+  const sqlstateClass =
+    typeof errorCode === 'string' && /^[A-Z0-9]{5}$/.test(errorCode)
+      ? errorCode.slice(0, 2)
+      : 'unknown';
+  postgresPoolErrorsTotal.inc({ pool, sqlstate_class: sqlstateClass });
+  return sqlstateClass;
+}
+
 export type EmailDeliveryKindLabel =
   | 'verification_email'
   | 'password_reset_email'

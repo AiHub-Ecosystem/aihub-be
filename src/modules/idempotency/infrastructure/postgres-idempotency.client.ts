@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { createPostgresPool } from '@/common/postgres/postgres-pool';
 
 export interface PostgresIdempotencyClient {
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
@@ -17,7 +17,7 @@ export function createPostgresIdempotencyClient(
     };
   }
 
-  const pool = new Pool({
+  const pool = createPostgresPool('idempotency', {
     connectionString: databaseUrl,
     max: 10,
     connectionTimeoutMillis: 1_000,

@@ -1,4 +1,6 @@
-import { Pool, type QueryConfig } from 'pg';
+import { type QueryConfig } from 'pg';
+
+import { createPostgresPool } from '@/common/postgres/postgres-pool';
 
 export interface PostgresAuthQueryClient {
   query(
@@ -35,7 +37,7 @@ export function createPostgresAuthClient(
     };
   }
 
-  const pool = new Pool({
+  const pool = createPostgresPool('auth', {
     connectionString: databaseUrl,
     max: 10,
     connectionTimeoutMillis: 1_000,

@@ -1,4 +1,6 @@
-import { Pool } from 'pg';
+import { type Pool } from 'pg';
+
+import { createPostgresPool } from '@/common/postgres/postgres-pool';
 
 import type {
   SandboxDispatchBudgetPort,
@@ -17,7 +19,7 @@ export class PostgresSandboxDispatchBudget
     private readonly now: () => Date = () => new Date(),
   ) {
     if (databaseUrl.trim().length > 0) {
-      this.pool = new Pool({
+      this.pool = createPostgresPool('sandbox-dispatch-budget', {
         connectionString: databaseUrl,
         max: 4,
         connectionTimeoutMillis: 1_000,
