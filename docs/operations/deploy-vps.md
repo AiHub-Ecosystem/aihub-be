@@ -525,17 +525,27 @@ and their Certbot blocks stay operator-managed.
 
 ### Managed nginx configuration
 
-The operator-managed `/etc/nginx/conf.d/aihub.conf` contains the API hostname
-alongside the apex frontend, Certbot redirects, and legacy alias. Before CD can
-own the AIHUB blocks, perform this one-time migration during a supervised
-change window:
+The operator-managed `/etc/nginx/conf.d/aihub.conf` retains the apex frontend,
+Certbot redirects, and legacy alias. CD manages the API and Sandbox files
+`/etc/nginx/conf.d/aihub-api.conf` and `/etc/nginx/conf.d/sandbox.conf`. On a
+host being migrated to these managed files, perform this one-time migration
+during a supervised change window:
 
 1. Back up `/etc/nginx` and capture current behavior of both AIHUB hosts and at
    least one unrelated site.
 2. Copy only the TLS and port-80 `api.aihubproduction.com` server blocks into
    `/etc/nginx/conf.d/aihub-api.conf`. Preserve the frontend/apex blocks,
    Certbot redirects, and `aihub-api.aihubproduction.com` alias in `aihub.conf`.
-3. Run `sudo nginx -t`, reload once, then verify `/health` on both AIHUB hosts,
+3. If `nginx -t` reports `aihubproduction.com` or
+   `www.aihubproduction.com` conflicting on port 80, inspect the active blocks
+   with `sudo nginx -T`. On this VPS, `/etc/nginx/sites-enabled/aihub` was a
+   stale HTTP proxy for those names, duplicating the canonical redirects in
+   `conf.d/aihub.conf`. Back up the file and disable only that stale port-80
+   block after confirming the canonical redirects remain enabled. Do not
+   disable the apex TLS/frontend blocks in `conf.d/aihub.conf` or change other
+   sites. Stop and investigate if the warning names another host or file.
+4. Run `sudo nginx -t`, reload once, then verify apex and `www` HTTP redirect
+   to HTTPS, `/health` on both AIHUB hosts,
    `/metrics` and `/ready` return 404, and the unrelated site still works.
    Probe the public grading route without an API key; it must return the app's
    JSON `401` without dispatching to the provider or consuming quota:
@@ -553,8 +563,15 @@ change window:
    only accepts status 200, 403, and 404. CI verifies compressed `200` verdict
    responses and `Vary: Accept-Encoding` using the captured fixture.
 
-4. Prepare the staging directory and install the reviewed helper as root before
+5. Prepare the staging directory and install the reviewed helper as root before
    enabling its CD invocation.
+
+Production cleanup completed 2026-10-10: the stale port-80 block in
+`/etc/nginx/sites-available/aihub` was disabled; its symlink remains enabled but
+contains no server block. The canonical redirects and frontend TLS blocks stay
+in `conf.d/aihub.conf`. After reload, `nginx -t` was clean, apex and `www` HTTP
+returned 301, and Production, Sandbox, and an unrelated site's HTTPS health
+probes returned 200.
 
 ```sh
 sudo install -d -o <deploy-user> -g <deploy-user> -m 0750 \
