@@ -1,8 +1,13 @@
 allowBuilds:
   "@biomejs/biome": true
+  # Prisma's schema engine. The generated client is Rust-free (ADR-0088), but the
+  # dev-dependency CLI still needs this binary for `db pull` and `migrate diff`,
+  # and it runs only in the build stage and in CI - never in the runtime image.
+  "@prisma/engines": true
   "@swc/core": true
   argon2: true
   esbuild: true
+  prisma: true
   protobufjs: false
 
 # Each override lifts a development-only dependency past an open advisory.

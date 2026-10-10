@@ -7,7 +7,9 @@
     "node": ">=22.22.3"
   },
   "scripts": {
-    "build": "nest build",
+    "build": "nest build && node scripts/generate/generate-prisma-client.mjs --runtime",
+    "generate:prisma-client": "node scripts/generate/generate-prisma-client.mjs",
+    "generate:migration": "node scripts/generate/generate-migration.mjs",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "migrate": "node scripts/cli/migrate.mjs",
@@ -22,11 +24,11 @@
     "test:capacity-benchmark": "node --test scripts/ops/capacity-benchmark.spec.mjs",
     "vault:provision": "node ops/vault/provision-runtime-secrets.mjs",
     "vault:smoke": "node scripts/ops/vault-smoke.mjs",
-    "test": "jest",
+    "test": "node scripts/generate/generate-prisma-client.mjs && jest",
     "test:db": "jest --config jest.config.db.cjs --runInBand",
     "test:tenant-isolation": "jest --config jest.config.tenant-isolation.cjs --runInBand",
     "test:watch": "jest --watch",
-    "type-check": "tsc --noEmit",
+    "type-check": "node scripts/generate/generate-prisma-client.mjs && tsc --noEmit",
     "type-check:tsgo": "tsgo --noEmit",
     "format": "biome format --write .",
     "lint": "oxlint . && biome check .",
@@ -35,6 +37,7 @@
     "check:imports": "tsx scripts/checks/check-import-style.ts",
     "check:imports:dist": "tsx scripts/checks/check-import-style.ts --dist",
     "check:migrations": "node scripts/checks/check-migrations.mjs",
+    "check:prisma-drift": "node scripts/checks/check-prisma-drift.mjs",
     "knip": "node scripts/checks/knip.mjs",
     "verify:summary": "node scripts/checks/verify-summary.cjs",
     "provider:refresh": "node scripts/generate/refresh-provider-contract.mjs",
@@ -77,6 +80,7 @@
     "@biomejs/biome": "^1.9.4",
     "@nestjs/cli": "^12.0.8",
     "@nestjs/testing": "^12.1.2",
+    "@prisma/client": "7.10.0",
     "@seriousme/openapi-schema-validator": "^2.11.0",
     "@swc/cli": "^0.8.1",
     "@swc/core": "1.16.2",
@@ -96,6 +100,7 @@
     "oxlint-tsgolint": "7.0.2003",
     "postman-collection": "^5.3.1",
     "prettier": "^3.9.9",
+    "prisma": "7.10.0",
     "tsx": "^4.23.15",
     "typescript": "^5.7.3"
   }

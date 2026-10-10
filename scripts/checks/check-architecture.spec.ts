@@ -632,3 +632,76 @@ describe('request bodies reach their contract through parseRequestBody', () => {
     }
   });
 });
+
+describe('the generated Prisma client stays inside infrastructure', () => {
+  const srcRoot = join(__dirname, '..', '..', 'src');
+
+  function runArchCheck(): { status: number | null; output: string } {
+    const result = spawnSync(
+      process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+      ['arch-check'],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        shell: process.platform === 'win32',
+      },
+    );
+
+    return {
+      status: result.status,
+      output: `${result.stdout}\n${result.stderr}`,
+    };
+  }
+
+  it('fails an application file that imports the generated client', () => {
+    const fixtureRoot = mkdtempSync(
+      join(srcRoot, 'modules', 'identity', '.tmp-prisma-boundary-'),
+    );
+    const offending = join(fixtureRoot, 'application', 'probe.use-case.ts');
+
+    try {
+      mkdirSync(join(fixtureRoot, 'application'), { recursive: true });
+      writeFileSync(
+        offending,
+        `import { PrismaClient } from '@prisma-client/client';\n\nexport type Probe = PrismaClient;\n`,
+      );
+      writeFileSync(
+        join(fixtureRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+      );
+
+      const { status, output } = runArchCheck();
+
+      expect(status).not.toBe(0);
+      expect(output).toContain('only infrastructure may');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts the same import inside infrastructure', () => {
+    const fixtureRoot = mkdtempSync(
+      join(srcRoot, 'modules', 'identity', '.tmp-prisma-boundary-ok-'),
+    );
+    const allowed = join(fixtureRoot, 'infrastructure', 'probe.repository.ts');
+
+    try {
+      mkdirSync(join(fixtureRoot, 'infrastructure'), { recursive: true });
+      writeFileSync(
+        allowed,
+        `import { PrismaClient } from '@prisma-client/client';\n\nexport type Probe = PrismaClient;\n`,
+      );
+      writeFileSync(
+        join(fixtureRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+      );
+
+      const { status, output } = runArchCheck();
+
+      expect(output).not.toContain('only infrastructure may');
+      expect(status).toBe(0);
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+});

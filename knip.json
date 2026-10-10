@@ -55,6 +55,8 @@
     "scripts/cli/cli-options.d.cts",
     // Hand-written types for scripts/checks/check-migrations.cjs — same reason.
     "scripts/checks/check-migrations.d.cts",
+    // Hand-written types for scripts/checks/prisma-drift.cjs — same reason.
+    "scripts/checks/prisma-drift.d.cts",
     // Hand-written types for scripts/ci/ci-boot-config.cjs — same reason.
     "scripts/ci/ci-boot-config.d.cts",
     // Hand-written types for scripts/checks/verify-summary.cjs — same reason.

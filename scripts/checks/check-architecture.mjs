@@ -110,6 +110,25 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
   }
 }
 
+// Prisma types never reach application or domain code: infrastructure maps
+// rows to the port types those layers already speak, and a repository is the
+// only place a Prisma model belongs. Matching the specifier here rather than
+// in dependency-cruiser is deliberate - the generated client is written outside
+// `src/`, so dependency-cruiser never reads it as a module edge.
+const PRISMA_CLIENT_SPECIFIER = /from\s*['"]@prisma-client\//;
+
+for (const file of collectTypeScriptFiles(srcDirectory)) {
+  if (file.endsWith('.spec.ts') || file.split(sep).includes('infrastructure')) {
+    continue;
+  }
+
+  if (PRISMA_CLIENT_SPECIFIER.test(readFileSync(file, 'utf8'))) {
+    fail(
+      `${relative(root, file)} imports the generated Prisma client; only infrastructure may, because Prisma types stay inside the persistence layer (ADR-0088)`,
+    );
+  }
+}
+
 const secretsInfrastructureDirectory = join(
   srcDirectory,
   'modules',
