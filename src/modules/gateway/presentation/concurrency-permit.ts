@@ -1,3 +1,7 @@
+import {
+  backgroundWorkSettled,
+  backgroundWorkStarted,
+} from '@/common/http/background-work-drain';
 import type { ConcurrencyLease } from '@/modules/gateway/application/concurrency-limiter.port';
 
 export interface ConcurrencyPermit {
@@ -41,7 +45,11 @@ export function createConcurrencyPermit(
 
   return {
     holdForBackground: () => {
+      if (backgroundStarted) {
+        return;
+      }
       backgroundStarted = true;
+      backgroundWorkStarted();
     },
     responseFinished: releaseIfSettled,
     requestFinished: async () => {
@@ -49,8 +57,17 @@ export function createConcurrencyPermit(
       await releaseIfSettled();
     },
     backgroundFinished: async () => {
+      if (backgroundSettled) {
+        return;
+      }
       backgroundSettled = true;
-      await releaseIfSettled();
+      try {
+        await releaseIfSettled();
+      } finally {
+        if (backgroundStarted) {
+          backgroundWorkSettled();
+        }
+      }
     },
   };
 }

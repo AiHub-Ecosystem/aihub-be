@@ -16,12 +16,15 @@ import {
 
 const configuration = getRuntimeConfiguration();
 const exporterEndpoint = configuration.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
+const SHUTDOWN_TIMEOUT_MS = 5_000;
+let sdk: NodeSDK | undefined;
+let shutdownPromise: Promise<void> | undefined;
 
 export const tracingEnabled =
   exporterEndpoint !== undefined && exporterEndpoint.length > 0;
 
 if (exporterEndpoint !== undefined && exporterEndpoint.length > 0) {
-  const sdk = new NodeSDK({
+  sdk = new NodeSDK({
     serviceName: configuration.OTEL_SERVICE_NAME,
     sampler: new AlwaysOnSampler(),
     textMapPropagator: new W3CTraceContextPropagator(),
@@ -50,9 +53,35 @@ if (exporterEndpoint !== undefined && exporterEndpoint.length > 0) {
   });
 
   sdk.start();
-  process.once('beforeExit', () => {
-    void sdk.shutdown().catch(() => undefined);
-  });
+}
+
+export function shutdownOpenTelemetry(): Promise<void> {
+  if (sdk === undefined) {
+    return Promise.resolve();
+  }
+  if (shutdownPromise !== undefined) {
+    return shutdownPromise;
+  }
+
+  shutdownPromise = (async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        sdk?.shutdown() ?? Promise.resolve(),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, SHUTDOWN_TIMEOUT_MS);
+        }),
+      ]);
+    } catch {
+      // Export failure must not hold the process past the deployment grace period.
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    }
+  })();
+
+  return shutdownPromise;
 }
 
 export const requestTracer = tracingEnabled

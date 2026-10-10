@@ -1212,12 +1212,23 @@ Reject a candidate if its OOM state is set or its restart count increases during
 startup or smoke; this triggers rollback while the old service is still
 available. Confirm rollback with the same dependency smoke on the restored
 service. Retain the old service until smoke passes, then wait for Compose's
-90-second stop grace. This drain is safe only after #284 makes shutdown wait
-for both in-flight HTTP requests and background idempotent work before closing
-clients; keep CD disabled until that change and its lifecycle test pass. The
+150-second stop grace. The budget is 60 seconds for HTTP drain, 75 seconds for
+background idempotent work, and 5 seconds for telemetry export, with 10 seconds
+of margin. This drain is safe only after #284 makes shutdown wait for both
+in-flight HTTP requests and background idempotent work before closing clients;
+keep CD disabled until that change and its lifecycle test pass. The
 validated upstream is the active-slot source of truth; the immutable image SHA
 and #289's durable record identify the release. `.env.production` is not the
 last-good release record.
+
+Before each deploy, the helper reconciles `AIHUB_SANDBOX_ENABLED` with the
+managed Sandbox route. Disabling Sandbox removes and validates the route before
+stopping both Sandbox slots, then confirms only Production remains. Enabling it
+without a route first confirms Sandbox containers are absent; after the
+Production cutover, it starts Sandbox, checks private readiness and dependencies,
+adds the route, and checks the public health window. The initial Sandbox release
+is recorded as `disabled -> slot A`, so manual rollback can remove the route and
+stop Sandbox without looking for a nonexistent previous image.
 
 Timestamped public `/health` results are appended to
 `.aihub-deploy-state/edge-probes.tsv`. Labeled resource snapshots in

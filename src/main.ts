@@ -1,13 +1,14 @@
 import './config/load-local-environment';
 import './config/bootstrap-runtime-configuration';
-import { requestTracer } from './common/observability/open-telemetry';
+import { GracefulFastifyAdapter } from './common/http/graceful-fastify-adapter';
+import {
+  requestTracer,
+  shutdownOpenTelemetry,
+} from './common/observability/open-telemetry';
 
 import fastifyCookie from '@fastify/cookie';
 import { NestFactory } from '@nestjs/core';
-import {
-  FastifyAdapter,
-  type NestFastifyApplication,
-} from '@nestjs/platform-fastify';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 
 import { APP_FASTIFY_PROXY_OPTIONS } from './app-fastify-proxy-options';
 import { AppModule } from './app.module';
@@ -25,18 +26,21 @@ export async function bootstrap(): Promise<void> {
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({
-      ...APP_FASTIFY_PROXY_OPTIONS,
-      // The structured request log, on Fastify's own Pino. One line per
-      // response, built by the metering module's completion hook below.
-      ...createRequestLogging(),
-      // Outer ceiling only. Each operation carries its own `maxBodyBytes`.
-      bodyLimit: MAX_BODY_BYTES,
-      // Makes `request.id` the canonical AIHUB request id, so the exception
-      // filter and every log line agree without extra middleware. Client-sent
-      // ids are never trusted; correlation travels in `X-Correlation-Id`.
-      genReqId: () => generateRequestId(),
-    }),
+    new GracefulFastifyAdapter(
+      {
+        ...APP_FASTIFY_PROXY_OPTIONS,
+        // The structured request log, on Fastify's own Pino. One line per
+        // response, built by the metering module's completion hook below.
+        ...createRequestLogging(),
+        // Outer ceiling only. Each operation carries its own `maxBodyBytes`.
+        bodyLimit: MAX_BODY_BYTES,
+        // Makes `request.id` the canonical AIHUB request id, so the exception
+        // filter and every log line agree without extra middleware. Client-sent
+        // ids are never trusted; correlation travels in `X-Correlation-Id`.
+        genReqId: () => generateRequestId(),
+      },
+      shutdownOpenTelemetry,
+    ),
   );
 
   app.enableShutdownHooks();
