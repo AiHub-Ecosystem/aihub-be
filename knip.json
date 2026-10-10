@@ -51,7 +51,9 @@
     // Hand-written types for scripts/ci/ci-boot-config.cjs — same reason.
     "scripts/ci/ci-boot-config.d.cts",
     // Hand-written types for scripts/checks/verify-summary.cjs — same reason.
-    "scripts/checks/verify-summary.d.cts"
+    "scripts/checks/verify-summary.d.cts",
+    // Spawned as a separate process by the Postgres crash-durability test.
+    "test/db/dispatch-attempt-crash.worker.ts"
   ],
   "ignoreBinaries": [
     // HashiCorp Vault CLI — operator workstation/image binary, not an npm package.

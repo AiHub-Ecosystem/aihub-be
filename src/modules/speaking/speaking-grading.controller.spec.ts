@@ -22,6 +22,10 @@ import {
 } from '@/modules/gateway/application/grading-orchestrator.port';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
 import {
+  METERING_DISPATCH_ATTEMPT_RECORDER,
+  type RecordDispatchAttemptPort,
+} from '@/modules/metering/public/dispatch-attempts';
+import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,
 } from './application/speaking-multipart-parser.port';
@@ -111,6 +115,11 @@ function waitForAbort(signal: AbortSignal): Promise<never> {
   });
 }
 
+const noDispatchAttempts: RecordDispatchAttemptPort = {
+  beginAttempt: async () => 'speaking-test-attempt',
+  recordOutcome: async () => undefined,
+};
+
 describe('Speaking grading HTTP flow', () => {
   let app: NestFastifyApplication;
   let mockAgent: MockAgent;
@@ -197,6 +206,8 @@ describe('Speaking grading HTTP flow', () => {
           },
         ),
       )
+      .overrideProvider(METERING_DISPATCH_ATTEMPT_RECORDER)
+      .useValue(noDispatchAttempts)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(

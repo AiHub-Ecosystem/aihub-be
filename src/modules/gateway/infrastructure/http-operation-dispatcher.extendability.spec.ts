@@ -31,6 +31,10 @@ describe('HttpOperationDispatcher fifth-operation extensibility', () => {
       httpClient,
       { mint: async () => 'token-abc' },
       [fifthAdapter],
+      {
+        beginAttempt: async () => 'attempt-test',
+        recordOutcome: async () => undefined,
+      },
     );
 
     const result = await dispatcher.dispatch(
@@ -48,6 +52,7 @@ describe('HttpOperationDispatcher fifth-operation extensibility', () => {
         requestId: 'req-fifth',
         receivedAt: new Date(),
         deadlineMs: 5_000,
+        organizationId: 'org_test',
         scopes: [],
       }),
     );

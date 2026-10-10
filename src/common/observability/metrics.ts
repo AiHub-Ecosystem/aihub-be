@@ -195,6 +195,62 @@ export function setEmailOutboxBacklogSource(
   }
 }
 
+export interface DispatchAttemptUnresolvedSample {
+  readonly operation: string;
+  readonly count: number;
+}
+
+type DispatchAttemptUnresolvedSource = () => Promise<
+  readonly DispatchAttemptUnresolvedSample[]
+>;
+
+let dispatchAttemptUnresolvedSource:
+  | DispatchAttemptUnresolvedSource
+  | undefined;
+let pendingDispatchAttemptRead: Promise<void> | undefined;
+
+function readDispatchAttemptUnresolved(): Promise<void> {
+  const source = dispatchAttemptUnresolvedSource;
+  if (source === undefined) {
+    dispatchAttemptsUnresolved.reset();
+    return Promise.resolve();
+  }
+  pendingDispatchAttemptRead ??= (async () => {
+    try {
+      const samples = await source();
+      dispatchAttemptsUnresolved.reset();
+      for (const sample of samples) {
+        dispatchAttemptsUnresolved.set(
+          { operation: sample.operation },
+          sample.count,
+        );
+      }
+    } catch {
+      dispatchAttemptsUnresolved.reset();
+    } finally {
+      pendingDispatchAttemptRead = undefined;
+    }
+  })();
+  return pendingDispatchAttemptRead;
+}
+
+const dispatchAttemptsUnresolved = new Gauge({
+  name: 'aihub_dispatch_attempts_unresolved',
+  help: 'AI Service dispatch attempts past their deadline without final evidence or usage.',
+  labelNames: ['operation'],
+  registers: [registry],
+  collect: readDispatchAttemptUnresolved,
+});
+
+export function setDispatchAttemptUnresolvedSource(
+  source: DispatchAttemptUnresolvedSource | undefined,
+): void {
+  dispatchAttemptUnresolvedSource = source;
+  if (source === undefined) {
+    dispatchAttemptsUnresolved.reset();
+  }
+}
+
 /**
  * Only called from the Request Completion hook, where the operation is the
  * catalog's own identifier. A label value is therefore bounded by the

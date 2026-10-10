@@ -8,6 +8,10 @@ import { createRequestContext } from '@/common/request-context/request-context.f
 import type { SpeakingGradeInput } from '@/contracts/speaking/grading';
 import type { GradeTask1Request } from '@/contracts/writing/grading';
 import {
+  METERING_DISPATCH_ATTEMPT_RECORDER,
+  type RecordDispatchAttemptPort,
+} from '@/modules/metering/public/dispatch-attempts';
+import {
   RUNTIME_SECRET_PROVIDER,
   type RuntimeSecretProvider,
 } from '@/modules/secrets/application/runtime-secret-provider.port';
@@ -24,6 +28,11 @@ const writingResponse = JSON.parse(
 const speakingResponse = JSON.parse(
   readFileSync(join(FIXTURES, 'ai-speaking/grading.response.json'), 'utf8'),
 ) as unknown;
+
+const noDispatchAttempts: RecordDispatchAttemptPort = {
+  beginAttempt: async () => 'gateway-test-attempt',
+  recordOutcome: async () => undefined,
+};
 
 interface ObservedRequest {
   readonly path: string;
@@ -104,6 +113,8 @@ describe('Gateway runtime-secret wiring', () => {
     })
       .overrideProvider(RUNTIME_SECRET_PROVIDER)
       .useValue(fakeProvider)
+      .overrideProvider(METERING_DISPATCH_ATTEMPT_RECORDER)
+      .useValue(noDispatchAttempts)
       .compile();
   });
 
@@ -125,6 +136,7 @@ describe('Gateway runtime-secret wiring', () => {
       requestId: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
       receivedAt: new Date(),
       deadlineMs: 10_000,
+      organizationId: 'org_gateway_test',
       userId: 'snapshot-user',
       scopes: [],
     });

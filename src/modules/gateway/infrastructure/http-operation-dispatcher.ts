@@ -14,6 +14,10 @@ import type {
   ResponseFor,
 } from '@/modules/gateway/application/operation-dispatcher.port';
 import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
+import type {
+  DispatchAttemptOutcome,
+  RecordDispatchAttemptPort,
+} from '@/modules/metering/public/dispatch-attempts';
 import { extractDownstreamTelemetry } from '@/modules/metering/public/telemetry';
 import {
   type DownstreamHttpClient,
@@ -137,6 +141,15 @@ function dispatchTimedOut(): AppError {
   });
 }
 
+function dispatchEvidenceUnavailable(cause: unknown): AppError {
+  return new AppError({
+    code: 'INTERNAL_ERROR',
+    message: 'Dispatch evidence is temporarily unavailable',
+    retryable: true,
+    cause,
+  });
+}
+
 export class HttpOperationDispatcher implements OperationDispatcherPort {
   // `unknown` on both sides is the one place a dispatch table for a
   // heterogeneous set of adapters has to erase the per-operation types the
@@ -155,6 +168,7 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
     private readonly httpClient: DownstreamHttpClient,
     private readonly tokenIssuer: InternalTokenIssuerPort,
     adapters: readonly DownstreamAdapter<unknown, unknown>[],
+    private readonly dispatchAttempts: RecordDispatchAttemptPort,
     private readonly sandboxBudget?: SandboxDispatchBudgetPort,
   ) {
     this.adapters = new Map(
@@ -228,9 +242,29 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
     }
     const startedAt = performance.now();
     let response: InternalAIServiceResponse<unknown> | undefined;
+    let downstreamResponseStatus: number | undefined;
     let downstreamDispatchStarted = false;
+    let attemptId: string | undefined;
 
     try {
+      if (signal.aborted || deadlineExpired()) {
+        throw dispatchTimedOut();
+      }
+      if (context.organizationId === undefined) {
+        throw dispatchEvidenceUnavailable(
+          new Error('organization context is required'),
+        );
+      }
+      try {
+        attemptId = await this.dispatchAttempts.beginAttempt({
+          requestId: context.requestId,
+          organizationId: context.organizationId,
+          operation,
+          operationTimeoutMs: context.operationTimeoutMs,
+        });
+      } catch (error) {
+        throw dispatchEvidenceUnavailable(error);
+      }
       if (signal.aborted || deadlineExpired()) {
         throw dispatchTimedOut();
       }
@@ -241,7 +275,11 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
         requestId: context.requestId,
         deadlineMs: timeoutMs,
         signal,
+        onResponseReceived: (statusCode) => {
+          downstreamResponseStatus = statusCode;
+        },
       });
+      await this.recordAttemptOutcome(attemptId, 'response_received');
 
       if (response.status < 200 || response.status >= 300) {
         throw mapDownstreamStatus(response.status);
@@ -264,10 +302,23 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
           : { aiProcessingMs: telemetry.aiProcessingMs }),
       } as DispatchResult<ResponseFor<O>>;
     } catch (error) {
+      if (attemptId !== undefined && response === undefined) {
+        let outcome: DispatchAttemptOutcome;
+        if (downstreamResponseStatus !== undefined) {
+          outcome = 'response_received';
+        } else if (
+          !downstreamDispatchStarted ||
+          isDefinitelyNotDispatched(error)
+        ) {
+          outcome = 'not_dispatched';
+        } else {
+          outcome = 'outcome_unknown';
+        }
+        await this.recordAttemptOutcome(attemptId, outcome);
+      }
       if (
         sandboxRequest &&
-        (isDefinitelyNotDispatched(error) ||
-          (!downstreamDispatchStarted && (signal.aborted || deadlineExpired())))
+        (!downstreamDispatchStarted || isDefinitelyNotDispatched(error))
       ) {
         await this.sandboxBudget
           ?.release(context.requestId)
@@ -281,7 +332,8 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
         ? loggedDownstreamErrorCode(error)
         : undefined;
       if (errorCode !== undefined) {
-        const downstreamStatus = response?.status ?? null;
+        const downstreamStatus =
+          response?.status ?? downstreamResponseStatus ?? null;
         const downstreamMs = Math.max(
           0,
           Math.round(performance.now() - startedAt),
@@ -308,6 +360,17 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
       }
 
       throw error;
+    }
+  }
+
+  private async recordAttemptOutcome(
+    attemptId: string,
+    outcome: DispatchAttemptOutcome,
+  ): Promise<void> {
+    try {
+      await this.dispatchAttempts.recordOutcome(attemptId, outcome);
+    } catch {
+      this.logger.warn('Dispatch attempt outcome could not be recorded');
     }
   }
 }

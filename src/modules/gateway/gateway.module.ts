@@ -15,6 +15,11 @@ import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempoten
 import type { IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
 import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
 import {
+  DispatchAttemptModule,
+  METERING_DISPATCH_ATTEMPT_RECORDER,
+  type RecordDispatchAttemptPort,
+} from '@/modules/metering/public/dispatch-attempts';
+import {
   RUNTIME_CONNECTION_CONFIGURATION,
   type RuntimeConnectionConfigurationPort,
 } from '@/modules/secrets/application/runtime-connection-configuration.port';
@@ -60,7 +65,12 @@ import { QuotaGuard } from './presentation/quota.guard';
 import { RateLimitGuard } from './presentation/rate-limit.guard';
 
 @Module({
-  imports: [RuntimeConfigurationModule, SecretsModule, IdempotencyModule],
+  imports: [
+    RuntimeConfigurationModule,
+    SecretsModule,
+    IdempotencyModule,
+    DispatchAttemptModule,
+  ],
   providers: [
     {
       provide: REDIS_GATEWAY_CLIENT,
@@ -146,6 +156,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       useFactory: (
         httpClient: DownstreamHttpClient,
         tokenIssuer: ConfiguredTokenIssuer,
+        dispatchAttempts: RecordDispatchAttemptPort,
         sandboxBudget: SandboxDispatchBudgetPort,
       ): HttpOperationDispatcher =>
         new HttpOperationDispatcher(
@@ -157,11 +168,13 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
             speakingGradingAdapter,
             speakingGradingJsonAdapter,
           ],
+          dispatchAttempts,
           sandboxBudget,
         ),
       inject: [
         DownstreamHttpClient,
         INTERNAL_TOKEN_ISSUER,
+        METERING_DISPATCH_ATTEMPT_RECORDER,
         SANDBOX_DISPATCH_BUDGET,
       ],
     },

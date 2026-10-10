@@ -76,6 +76,11 @@ const issuer: InternalTokenIssuerPort = {
   mint: async () => 'internal-token',
 };
 
+const noDispatchAttempts = {
+  beginAttempt: async () => 'attempt-test',
+  recordOutcome: async () => undefined,
+};
+
 describe('HttpOperationDispatcher telemetry', () => {
   let agent: MockAgent;
 
@@ -100,6 +105,7 @@ describe('HttpOperationDispatcher telemetry', () => {
       new DownstreamHttpClient('https://ai-writing.test', agent),
       issuer,
       [adapter],
+      noDispatchAttempts,
     );
     const result = await dispatcher.dispatch(
       'writing.task1.grade',
@@ -108,6 +114,7 @@ describe('HttpOperationDispatcher telemetry', () => {
         requestId: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
         receivedAt: new Date(),
         deadlineMs: 5_000,
+        organizationId: 'org_test',
         scopes: [],
       }),
     );

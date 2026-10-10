@@ -39,6 +39,7 @@ export function createRequestContext(
     requestId: input.requestId,
     receivedAt,
     deadlineAt,
+    operationTimeoutMs: input.deadlineMs,
     scopes: [...input.scopes],
     signal,
   };

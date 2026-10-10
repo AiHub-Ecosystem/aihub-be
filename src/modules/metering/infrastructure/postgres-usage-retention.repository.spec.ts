@@ -3,6 +3,7 @@ import type {
   UsageRetentionPort,
 } from '@/modules/metering/application/usage-retention';
 import {
+  DISPATCH_ATTEMPT_RETENTION_BATCH_SQL,
   PostgresUsageRetentionRepository,
   USAGE_RETENTION_BATCH_SQL,
 } from './postgres-usage-retention.repository';
@@ -30,9 +31,17 @@ class FakeTransaction implements PostgresTransactionClient {
 class FakePostgres implements PostgresMeteringClient {
   readonly transactionClient = new FakeTransaction();
   transactionCalls = 0;
+  readonly queries: Array<{
+    readonly text: string;
+    readonly values: readonly unknown[];
+  }> = [];
 
-  async query(): Promise<readonly unknown[]> {
-    return [];
+  async query(
+    text: string,
+    values: readonly unknown[],
+  ): Promise<readonly unknown[]> {
+    this.queries.push({ text, values });
+    return this.transactionClient.rows;
   }
 
   async transaction<T>(
@@ -111,5 +120,27 @@ describe('PostgresUsageRetentionRepository', () => {
       after.requestId,
       1000,
     ]);
+  });
+
+  it('prunes dispatch evidence in bounded strict-cutoff batches', async () => {
+    const client = new FakePostgres();
+    client.transactionClient.rows = [{ attempt_id: 'expired-attempt' }];
+    const repository = new PostgresUsageRetentionRepository(client);
+    const cutoff = new Date('2025-03-01T00:00:00.000Z');
+
+    await expect(repository.pruneDispatchAttempts(cutoff, 1000)).resolves.toBe(
+      1,
+    );
+
+    expect(client.queries).toEqual([
+      {
+        text: DISPATCH_ATTEMPT_RETENTION_BATCH_SQL,
+        values: [cutoff, 1000],
+      },
+    ]);
+    expect(DISPATCH_ATTEMPT_RETENTION_BATCH_SQL).toContain(
+      'FOR UPDATE SKIP LOCKED',
+    );
+    expect(DISPATCH_ATTEMPT_RETENTION_BATCH_SQL).toContain('created_at < $1');
   });
 });

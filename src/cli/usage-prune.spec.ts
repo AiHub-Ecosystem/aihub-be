@@ -14,6 +14,10 @@ class FakeUsageRetentionPort implements UsageRetentionPort {
     return this.batch;
   }
 
+  async pruneDispatchAttempts(): Promise<number> {
+    return 0;
+  }
+
   async close(): Promise<void> {
     if (this.closeError !== undefined) {
       throw this.closeError;
@@ -32,6 +36,7 @@ describe('formatUsageRetentionEvent', () => {
         batchSize: 1000,
         batches: 2,
         deleted: 1234,
+        dispatchAttemptsDeleted: 567,
         status: 'completed',
       }),
     ).toBe(
@@ -42,6 +47,7 @@ describe('formatUsageRetentionEvent', () => {
         batch_size: 1000,
         batches: 2,
         deleted: 1234,
+        dispatch_attempts_deleted: 567,
         status: 'completed',
       }),
     );
@@ -57,6 +63,7 @@ describe('formatUsageRetentionEvent', () => {
         batchSize: 1000,
         batches: 0,
         deleted: 0,
+        dispatchAttemptsDeleted: 0,
         status: 'failed',
         errorCode: 'CONFIGURATION_MISSING',
       }),
@@ -68,6 +75,7 @@ describe('formatUsageRetentionEvent', () => {
         batch_size: 1000,
         batches: 0,
         deleted: 0,
+        dispatch_attempts_deleted: 0,
         status: 'failed',
         error_code: 'CONFIGURATION_MISSING',
       }),
@@ -108,6 +116,7 @@ describe('runUsagePruneCommand', () => {
         batch_size: 1000,
         batches: 0,
         deleted: 0,
+        dispatch_attempts_deleted: 0,
         status: 'completed',
       },
     ]);
@@ -149,6 +158,7 @@ describe('runUsagePruneCommand', () => {
         batch_size: 1000,
         batches: 0,
         deleted: 0,
+        dispatch_attempts_deleted: 0,
         status: 'failed',
         error_code: 'DATABASE_FAILURE',
       },
@@ -175,6 +185,7 @@ describe('runUsagePruneCommand', () => {
         batch_size: 1000,
         batches: 0,
         deleted: 0,
+        dispatch_attempts_deleted: 0,
         status: 'failed',
         error_code: 'CONFIGURATION_MISSING',
       }),

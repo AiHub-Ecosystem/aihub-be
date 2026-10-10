@@ -142,7 +142,8 @@ beforeAll(async () => {
   await sandbox.query(
     `TRUNCATE organization_audit_events, organization_identity_configs,
        api_keys, organization_invitations, organization_members,
-       auth_identities, user_accounts, idempotency_records, usage_records,
+       auth_identities, user_accounts, idempotency_records, dispatch_attempts,
+       usage_records,
        sandbox_dispatch_reservations, organizations CASCADE`,
   );
   await controlPlane.query(
@@ -344,7 +345,7 @@ beforeEach(async () => {
   downstreamCalls = 0;
   await redis.flushdb();
   await sandbox.query(
-    'TRUNCATE sandbox_dispatch_reservations, idempotency_records, usage_records',
+    'TRUNCATE sandbox_dispatch_reservations, idempotency_records, dispatch_attempts, usage_records',
   );
   await controlPlane.query(
     "UPDATE organizations SET status = 'active' WHERE id = $1",
