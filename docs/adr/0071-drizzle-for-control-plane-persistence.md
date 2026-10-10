@@ -1,6 +1,6 @@
 # ADR-0071: Drizzle is the control-plane persistence standard
 
-- Status: Accepted
+- Status: Superseded by [ADR-0088](0088-prisma-for-control-plane-persistence.md)
 - Date: 2026-10-04
 - Related issues: [#37](https://github.com/AiHub-Ecosystem/aihub-be/issues/37), [#38](https://github.com/AiHub-Ecosystem/aihub-be/issues/38), [#39](https://github.com/AiHub-Ecosystem/aihub-be/issues/39), [#40](https://github.com/AiHub-Ecosystem/aihub-be/issues/40), [#9](https://github.com/AiHub-Ecosystem/aihub-be/issues/9)
 - Related: [ADR-0016](0016-metering-boundary-and-billing-evidence.md)

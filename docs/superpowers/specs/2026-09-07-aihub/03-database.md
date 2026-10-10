@@ -9,7 +9,7 @@
 - **PK = Prefixed ULID, `text` type**: `org_01J8…`, `ak_01J8…`, `req_01J8…`. Self-describing in logs and responses, naturally sortable chronologically (excellent index locality), avoids leaking volume metrics unlike auto-incrementing bigints. Generated in the application, never in the DB.
 - **Soft delete = `status` column**, no `deleted_at`. Revoked API keys are never physically deleted — required for audit trails.
 - **Audit fields**: `created_at` on every table; `updated_at` on mutable tables.
-- **Driver: Drizzle** — this schema uses `text[]`, partial indexes, `ON CONFLICT`, and BRIN; Drizzle keeps SQL close to the metal, whereas Prisma struggles with exactly these constructs.
+- **Driver: Prisma** — `schema.prisma` is the source of the generated client and of new migration SQL; objects it cannot declare (partial indexes, triggers, `CHECK`, BRIN) stay in SQL migrations, and locking queries use TypedSQL. See [ADR-0088](../../../adr/0088-prisma-for-control-plane-persistence.md).
 
 <a id="e2-ddl"></a>
 
