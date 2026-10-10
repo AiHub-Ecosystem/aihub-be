@@ -114,6 +114,8 @@ EMAIL_OUTBOX_CURRENT_KEY_ID=local-2026-10
 EMAIL_OUTBOX_KEYS={"local-2026-10":"<the value the command printed>"}
 ```
 
+CI reads this guide and `.env.example` to keep the setup instructions aligned.
+
 Rotating later means adding the new id to `EMAIL_OUTBOX_KEYS` and pointing
 `EMAIL_OUTBOX_CURRENT_KEY_ID` at it, while keeping the old id until nothing is
 sealed with it. An instance that lacks a key cannot read the rows sealed with
