@@ -1313,3 +1313,10 @@ The workflow uses the commit SHA as the only release tag; nothing publishes
 `latest`, so a rollback remains the immutable-image procedure above pointing at
 an earlier SHA. Keep all runtime, database, Vault, and downstream credentials
 in the VPS/Vault setup; never add them to GitHub Actions or the repository.
+
+Before any host change, CD fetches `main` and requires the completed CI run's
+SHA to still be its tip. It reads the running revision of each enabled tier
+from `org.opencontainers.image.revision` and refuses a target that is already
+running or older than that revision. To intentionally deploy an older release,
+use the deliberate rollback procedure in #289; rerunning an old CI run is not
+a rollback mechanism.
