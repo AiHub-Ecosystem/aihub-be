@@ -1,7 +1,7 @@
 export {
-  METERING_DISPATCH_ATTEMPT_RECORDER,
+  DISPATCH_ATTEMPT_RECORD,
   type DispatchAttemptOutcome,
-  type RecordDispatchAttemptPort,
+  type DispatchAttemptRecordPort,
   type DispatchAttemptStart,
-} from '@/modules/metering/application/dispatch-attempt-recorder.port';
+} from '@/modules/metering/application/dispatch-attempt-record.port';
 export { DispatchAttemptModule } from '@/modules/metering/dispatch-attempt.module';

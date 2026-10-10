@@ -2,14 +2,13 @@ import { randomUUID } from 'node:crypto';
 
 import type { OnModuleDestroy } from '@nestjs/common';
 
-import type { OperationId } from '@/catalog/operation-id';
 import { OPERATION_IDS, isOperationId } from '@/catalog/operation-id';
 import type { DispatchAttemptUnresolvedSample } from '@/common/observability/metrics';
 import type {
   DispatchAttemptOutcome,
+  DispatchAttemptRecordPort,
   DispatchAttemptStart,
-  RecordDispatchAttemptPort,
-} from '@/modules/metering/application/dispatch-attempt-recorder.port';
+} from '@/modules/metering/application/dispatch-attempt-record.port';
 import {
   type PostgresMeteringClient,
   createPostgresMeteringClient,
@@ -67,11 +66,11 @@ function countFromRow(value: unknown): DispatchAttemptUnresolvedSample {
   ) {
     throw new Error('dispatch attempt metric row is invalid');
   }
-  return { operation: value.operation as OperationId, count };
+  return { operation: value.operation, count };
 }
 
 export class PostgresDispatchAttemptRepository
-  implements RecordDispatchAttemptPort, OnModuleDestroy
+  implements DispatchAttemptRecordPort, OnModuleDestroy
 {
   constructor(private readonly client: PostgresMeteringClient) {}
 

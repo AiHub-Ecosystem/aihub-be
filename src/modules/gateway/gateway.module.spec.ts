@@ -7,10 +7,8 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { SpeakingGradeInput } from '@/contracts/speaking/grading';
 import type { GradeTask1Request } from '@/contracts/writing/grading';
-import {
-  METERING_DISPATCH_ATTEMPT_RECORDER,
-  type RecordDispatchAttemptPort,
-} from '@/modules/metering/public/dispatch-attempts';
+import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
+import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import {
   RUNTIME_SECRET_PROVIDER,
   type RuntimeSecretProvider,
@@ -28,11 +26,6 @@ const writingResponse = JSON.parse(
 const speakingResponse = JSON.parse(
   readFileSync(join(FIXTURES, 'ai-speaking/grading.response.json'), 'utf8'),
 ) as unknown;
-
-const noDispatchAttempts: RecordDispatchAttemptPort = {
-  beginAttempt: async () => 'gateway-test-attempt',
-  recordOutcome: async () => undefined,
-};
 
 interface ObservedRequest {
   readonly path: string;
@@ -113,8 +106,8 @@ describe('Gateway runtime-secret wiring', () => {
     })
       .overrideProvider(RUNTIME_SECRET_PROVIDER)
       .useValue(fakeProvider)
-      .overrideProvider(METERING_DISPATCH_ATTEMPT_RECORDER)
-      .useValue(noDispatchAttempts)
+      .overrideProvider(DISPATCH_ATTEMPT_RECORD)
+      .useValue(noOpDispatchAttemptRecord)
       .compile();
   });
 

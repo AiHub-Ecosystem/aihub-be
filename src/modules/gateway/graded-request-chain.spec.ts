@@ -18,10 +18,8 @@ import { generateRequestId } from '@/common/request-context/request-id';
 import { IDEMPOTENCY_REPOSITORY } from '@/modules/idempotency/application/idempotency-repository.port';
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
 import { REQUIRED_OPERATION_METADATA } from '@/modules/identity/shared/presentation/require-operation.decorator';
-import {
-  METERING_DISPATCH_ATTEMPT_RECORDER,
-  type RecordDispatchAttemptPort,
-} from '@/modules/metering/public/dispatch-attempts';
+import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
+import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { SpeakingGradingController } from '@/modules/speaking/presentation/speaking-grading.controller';
 import { WritingGradingController } from '@/modules/writing/presentation/writing-grading.controller';
 import { DownstreamHttpClient } from './infrastructure/downstream-http.client';
@@ -80,11 +78,6 @@ const EXPECTED_ORDER = [
   'QuotaGuard',
   'ConcurrencyPermitInterceptor',
 ] as const;
-
-const noDispatchAttempts: RecordDispatchAttemptPort = {
-  beginAttempt: async () => 'graded-chain-test-attempt',
-  recordOutcome: async () => undefined,
-};
 
 describe('graded request chain', () => {
   let app: NestFastifyApplication;
@@ -151,8 +144,8 @@ describe('graded request chain', () => {
       .useValue(new DownstreamHttpClient('https://ai-writing.test', mockAgent))
       .overrideProvider(IDEMPOTENCY_REPOSITORY)
       .useValue(new InMemoryIdempotencyRepository())
-      .overrideProvider(METERING_DISPATCH_ATTEMPT_RECORDER)
-      .useValue(noDispatchAttempts)
+      .overrideProvider(DISPATCH_ATTEMPT_RECORD)
+      .useValue(noOpDispatchAttemptRecord)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(

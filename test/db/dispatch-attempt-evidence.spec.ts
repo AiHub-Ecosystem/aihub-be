@@ -1,13 +1,15 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { type Server, createServer } from 'node:http';
+import { type Server, createServer, request as httpRequest } from 'node:http';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 
 import { ulid } from 'ulid';
 
+import { generateApiKey } from '@/modules/identity/domain/api-key';
 import { calculateUsageRetentionCutoff } from '@/modules/metering/application/usage-retention';
+import { PostgresDispatchAttemptRepository } from '@/modules/metering/infrastructure/postgres-dispatch-attempt.repository';
 import { PostgresUsageRetentionRepository } from '@/modules/metering/infrastructure/postgres-usage-retention.repository';
 import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/postgres-usage.repository';
 import {
@@ -16,6 +18,10 @@ import {
   sandboxTestRedisUrl,
   testDatabaseUrl,
 } from './database';
+import {
+  createTenantIdentity,
+  signUserAssertion,
+} from './tenant-isolation/fixtures';
 
 interface TestWorker {
   readonly child: ChildProcess;
@@ -24,7 +30,7 @@ interface TestWorker {
 }
 
 const ESSAY_MARKER = 'dispatch-attempt-crash-essay-marker';
-const REQUEST_TIMEOUT_MS = 1000;
+const OPERATION_PATH = '/v1/ielts/writing/task1/grade';
 
 function listen(server: Server): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -40,17 +46,19 @@ function listen(server: Server): Promise<string> {
   });
 }
 
-async function startWorker(
-  mode: 'dispatch' | 'metrics',
-  configuration: {
-    readonly requestId: string;
-    readonly organizationId: string;
-    readonly downstreamUrl: string;
-  },
-): Promise<TestWorker> {
+async function startWorker(configuration: {
+  readonly downstreamUrl: string;
+}): Promise<TestWorker> {
   const worker = spawn(
     process.execPath,
-    ['--import', 'tsx', join(__dirname, 'dispatch-attempt-crash.worker.ts')],
+    [
+      join(process.cwd(), 'node_modules/jest/bin/jest.js'),
+      '--config',
+      'jest.config.db-worker.cjs',
+      '--runInBand',
+      '--runTestsByPath',
+      join(__dirname, 'dispatch-attempt-crash.worker.spec.ts'),
+    ],
     {
       cwd: process.cwd(),
       env: {
@@ -68,9 +76,6 @@ async function startWorker(
         AIHUB_STAGING_HOST: 'api.staging.test',
         AIHUB_DEVELOPMENT_HOST: 'api.development.test',
         AIHUB_SANDBOX_HOST: 'api.sandbox.test',
-        DISPATCH_TEST_REQUEST_ID: configuration.requestId,
-        DISPATCH_TEST_ORGANIZATION_ID: configuration.organizationId,
-        DISPATCH_TEST_TIMEOUT_MS: String(REQUEST_TIMEOUT_MS),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
@@ -85,7 +90,7 @@ async function startWorker(
     const timeout = setTimeout(() => {
       lines.close();
       reject(new Error(`AIHUB test worker did not start: ${stderr}`));
-    }, 20_000);
+    }, 45_000);
     lines.on('line', (line) => {
       const port = Number(line.match(/^AIHUB_TEST_READY:(\d+)$/)?.[1]);
       if (Number.isSafeInteger(port) && port > 0) {
@@ -131,12 +136,58 @@ function monthKey(now: Date): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
+function sendGradingRequest(
+  appUrl: string,
+  apiKey: string,
+  assertion: string,
+  idempotencyKey: string,
+): Promise<{ status: number; body: string } | undefined> {
+  const app = new URL(appUrl);
+  return new Promise((resolve) => {
+    const request = httpRequest(
+      {
+        hostname: app.hostname,
+        port: Number(app.port),
+        path: OPERATION_PATH,
+        method: 'POST',
+        headers: {
+          host: 'api.production.test',
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'x-user-identity': assertion,
+          'idempotency-key': idempotencyKey,
+        },
+      },
+      (response) => {
+        let body = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk: string) => {
+          body += chunk;
+        });
+        response.on('end', () =>
+          resolve({ status: response.statusCode ?? 0, body }),
+        );
+      },
+    );
+    request.on('error', () => resolve(undefined));
+    request.end(
+      JSON.stringify({
+        question: 'Crash durability test',
+        chart_type: 'Bar Chart',
+        essay: ESSAY_MARKER,
+        image_url: 'https://example.com/chart.png',
+      }),
+    );
+  });
+}
+
 describe('durable dispatch-attempt evidence', () => {
   const pool = createTestPool();
   const redis = createSandboxTestRedis();
   let provider: Server | undefined;
   let dispatchWorker: TestWorker | undefined;
   let metricsWorker: TestWorker | undefined;
+  let crashOrganizationId: string | undefined;
 
   afterEach(async () => {
     await dispatchWorker?.stop();
@@ -148,6 +199,34 @@ describe('durable dispatch-attempt evidence', () => {
       await new Promise<void>((resolve) => provider?.close(() => resolve()));
       provider = undefined;
     }
+    if (crashOrganizationId !== undefined) {
+      await pool.query('DELETE FROM usage_records WHERE organization_id = $1', [
+        crashOrganizationId,
+      ]);
+      await pool.query(
+        'DELETE FROM dispatch_attempts WHERE organization_id = $1',
+        [crashOrganizationId],
+      );
+      await pool.query(
+        'DELETE FROM idempotency_records WHERE organization_id = $1',
+        [crashOrganizationId],
+      );
+      await pool.query(
+        'DELETE FROM sandbox_dispatch_reservations WHERE organization_id = $1',
+        [crashOrganizationId],
+      );
+      await pool.query('DELETE FROM api_keys WHERE organization_id = $1', [
+        crashOrganizationId,
+      ]);
+      await pool.query(
+        'DELETE FROM organization_identity_configs WHERE organization_id = $1',
+        [crashOrganizationId],
+      );
+      await pool.query('DELETE FROM organizations WHERE id = $1', [
+        crashOrganizationId,
+      ]);
+      crashOrganizationId = undefined;
+    }
   });
 
   afterAll(async () => {
@@ -155,9 +234,45 @@ describe('durable dispatch-attempt evidence', () => {
     await pool.end();
   });
 
-  it('survives a real process kill and appears unresolved after restart without usage or quota', async () => {
-    const requestId = `req_${ulid()}`;
+  it('survives a real AIHUB Nest process kill and restart without usage or quota', async () => {
     const organizationId = `org_dispatch_crash_${ulid().toLowerCase()}`;
+    crashOrganizationId = organizationId;
+    const baselineRepository = new PostgresDispatchAttemptRepository(
+      createPostgresMeteringClient(testDatabaseUrl()),
+    );
+    const baseline = await baselineRepository.getUnresolvedByOperation();
+    const baselineCount =
+      baseline.find((sample) => sample.operation === 'writing.task1.grade')
+        ?.count ?? 0;
+    await baselineRepository.close();
+    const apiKey = generateApiKey(`ak_dispatch_crash_${ulid().toLowerCase()}`);
+    const identity = await createTenantIdentity(
+      'https://identity.dispatch-crash.test',
+      `dispatch-crash-${ulid().toLowerCase()}`,
+    );
+    const assertion = await signUserAssertion(identity, new Date());
+    await pool.query(
+      `INSERT INTO organizations
+         (id, name, entitlements, rate_limit_rpm, max_concurrent,
+          monthly_request_quota, hard_stop_on_quota)
+       VALUES ($1, 'Dispatch crash test', ARRAY['writing'], 600, 20, 10, true)`,
+      [organizationId],
+    );
+    await pool.query(
+      `INSERT INTO api_keys
+         (id, organization_id, key_hash, key_prefix, name, scopes,
+          allowed_environments, status)
+       VALUES ($1, $2, decode($3, 'hex'), $4, 'Dispatch crash test',
+         ARRAY['writing.grade'], ARRAY['production'], 'active')`,
+      [apiKey.id, organizationId, apiKey.hash, apiKey.prefix],
+    );
+    await pool.query(
+      `INSERT INTO organization_identity_configs
+         (organization_id, issuer, jwks_url, public_keys_jwks,
+          allowed_algorithms, max_assertion_ttl_seconds, status)
+       VALUES ($1, $2, NULL, $3::jsonb, ARRAY['RS256'], 300, 'active')`,
+      [organizationId, identity.issuer, JSON.stringify(identity.jwks)],
+    );
     let resolveProviderReceived!: () => void;
     const providerReceived = new Promise<void>((resolve) => {
       resolveProviderReceived = resolve;
@@ -168,25 +283,48 @@ describe('durable dispatch-attempt evidence', () => {
     });
     const providerUrl = await listen(provider);
 
-    dispatchWorker = await startWorker('dispatch', {
-      requestId,
-      organizationId,
+    await redis.del(`aihub:v1:quota:${organizationId}:${monthKey(new Date())}`);
+    dispatchWorker = await startWorker({
       downstreamUrl: providerUrl,
     });
-    const customerRequest = fetch(
-      `${dispatchWorker.url}/__test/dispatch-attempts/dispatch`,
-      { method: 'POST', signal: AbortSignal.timeout(20_000) },
-    ).catch(() => undefined);
-    await providerReceived;
+    const customerResponse = sendGradingRequest(
+      dispatchWorker.url,
+      apiKey.raw,
+      assertion,
+      `dispatch-crash-${ulid()}`,
+    );
+    let dispatchWaitTimer: NodeJS.Timeout | undefined;
+    const dispatchStarted = await Promise.race([
+      providerReceived.then(() => 'provider_received'),
+      customerResponse.then((response) =>
+        response === undefined
+          ? 'customer_disconnected'
+          : `customer_response_${response.status}:${response.body}`,
+      ),
+      new Promise<string>(
+        (resolve) =>
+          (dispatchWaitTimer = setTimeout(
+            () => resolve('dispatch_wait_timeout'),
+            10_000,
+          )),
+      ),
+    ]);
+    if (dispatchWaitTimer !== undefined) clearTimeout(dispatchWaitTimer);
+    if (dispatchStarted !== 'provider_received') {
+      throw new Error(
+        `AIHUB did not reach the mock AI Service: ${dispatchStarted}`,
+      );
+    }
 
     const workerExit = once(dispatchWorker.child, 'exit');
     dispatchWorker.child.kill('SIGKILL');
     await workerExit;
     dispatchWorker = undefined;
-    await customerRequest;
+    await customerResponse;
 
     const attempt = await pool.query<{
       attempt_id: string;
+      request_id: string;
       operation: string;
       outcome: string | null;
       unknown_after: Date;
@@ -194,8 +332,8 @@ describe('durable dispatch-attempt evidence', () => {
     }>(
       `SELECT attempt_id, operation, outcome, unknown_after,
               row_to_json(dispatch_attempts) AS stored
-       FROM dispatch_attempts WHERE request_id = $1`,
-      [requestId],
+       FROM dispatch_attempts WHERE organization_id = $1`,
+      [organizationId],
     );
     expect(attempt.rows).toHaveLength(1);
     expect(attempt.rows[0]).toMatchObject({
@@ -205,7 +343,7 @@ describe('durable dispatch-attempt evidence', () => {
     expect(JSON.stringify(attempt.rows[0]?.stored)).not.toContain(ESSAY_MARKER);
     expect(
       await pool.query('SELECT 1 FROM usage_records WHERE request_id = $1', [
-        requestId,
+        attempt.rows[0]?.request_id,
       ]),
     ).toMatchObject({ rowCount: 0 });
     expect(
@@ -214,23 +352,90 @@ describe('durable dispatch-attempt evidence', () => {
       ),
     ).toBeNull();
 
-    metricsWorker = await startWorker('metrics', {
-      requestId,
-      organizationId,
+    await pool.query(
+      `UPDATE dispatch_attempts
+       SET unknown_after = clock_timestamp() - INTERVAL '1 millisecond'
+       WHERE attempt_id = $1`,
+      [attempt.rows[0]?.attempt_id],
+    );
+    metricsWorker = await startWorker({
       downstreamUrl: providerUrl,
     });
-    const deadlineAt = attempt.rows[0]!.unknown_after.getTime();
-    if (deadlineAt > Date.now()) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, deadlineAt - Date.now() + 20),
-      );
-    }
     const metrics = await fetch(`${metricsWorker.url}/metrics`).then(
       (response) => response.text(),
     );
     expect(metrics).toContain(
-      'aihub_dispatch_attempts_unresolved{operation="writing.task1.grade"} 1',
+      `aihub_dispatch_attempts_unresolved{operation="writing.task1.grade"} ${baselineCount + 1}`,
     );
+  }, 90_000);
+
+  it('applies unresolved metric exclusions against real Postgres rows', async () => {
+    const repository = new PostgresDispatchAttemptRepository(
+      createPostgresMeteringClient(testDatabaseUrl()),
+    );
+    const requestIds = Array.from(
+      { length: 5 },
+      () => `req_dispatch_metric_${ulid()}`,
+    );
+    const attemptIds = requestIds.map(() => randomUUID());
+    const now = new Date();
+    const createdAt = new Date(now.getTime() - 10_000);
+    const overdue = new Date(now.getTime() - 1_000);
+    const future = new Date(now.getTime() + 60_000);
+    const baseline = await repository.getUnresolvedByOperation();
+    const baselineCount =
+      baseline.find((sample) => sample.operation === 'writing.task1.grade')
+        ?.count ?? 0;
+
+    try {
+      const attempts = [
+        { outcome: null, unknownAfter: overdue },
+        { outcome: null, unknownAfter: overdue },
+        { outcome: null, unknownAfter: future },
+        { outcome: 'response_received', unknownAfter: overdue },
+        { outcome: 'outcome_unknown', unknownAfter: overdue },
+      ] as const;
+      for (const [index, attempt] of attempts.entries()) {
+        await pool.query(
+          `INSERT INTO dispatch_attempts
+             (attempt_id, request_id, organization_id, operation, created_at,
+              unknown_after, outcome)
+           VALUES ($1, $2, 'org_dispatch_metric_test',
+                   'writing.task1.grade', $3, $4, $5)`,
+          [
+            attemptIds[index],
+            requestIds[index],
+            createdAt,
+            attempt.unknownAfter,
+            attempt.outcome,
+          ],
+        );
+      }
+      await pool.query(
+        `INSERT INTO usage_records
+           (request_id, organization_id, api_key_id, service, operation,
+            environment, outcome, http_status, metering_status, total_ms)
+         VALUES ($1, 'org_dispatch_metric_test', 'ak_dispatch_metric_test',
+                 'ai-writing', 'writing.task1.grade', 'production',
+                 'success', 200, 'complete', 0)`,
+        [requestIds[1]],
+      );
+
+      const samples = await repository.getUnresolvedByOperation();
+      const unresolvedCount =
+        samples.find((sample) => sample.operation === 'writing.task1.grade')
+          ?.count ?? 0;
+      expect(unresolvedCount - baselineCount).toBe(2);
+    } finally {
+      await pool.query('DELETE FROM usage_records WHERE request_id = ANY($1)', [
+        requestIds,
+      ]);
+      await pool.query(
+        'DELETE FROM dispatch_attempts WHERE attempt_id = ANY($1::uuid[])',
+        [attemptIds],
+      );
+      await repository.close();
+    }
   });
 
   it('prunes only dispatch evidence strictly older than the retention cutoff in bounded batches', async () => {

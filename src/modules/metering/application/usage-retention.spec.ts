@@ -173,7 +173,7 @@ describe('UsageRetentionService', () => {
         () => new Date('2026-09-19T02:30:00.000Z'),
       ).prune(),
     ).resolves.toMatchObject({
-      batches: 2,
+      batches: 0,
       deleted: 0,
       dispatchAttemptsDeleted: 1002,
     });

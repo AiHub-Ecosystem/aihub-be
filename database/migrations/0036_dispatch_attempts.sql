@@ -2,12 +2,7 @@ CREATE TABLE IF NOT EXISTS dispatch_attempts (
   attempt_id uuid PRIMARY KEY,
   request_id text NOT NULL,
   organization_id text NOT NULL,
-  operation text NOT NULL CHECK (operation IN (
-    'writing.task1.grade',
-    'writing.task2.grade',
-    'speaking.grading',
-    'speaking.grading-json'
-  )),
+  operation text NOT NULL,
   created_at timestamptz NOT NULL,
   unknown_after timestamptz NOT NULL,
   outcome text CHECK (outcome IN (

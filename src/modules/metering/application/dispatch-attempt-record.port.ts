@@ -12,7 +12,7 @@ export interface DispatchAttemptStart {
   readonly operationTimeoutMs: number;
 }
 
-export interface RecordDispatchAttemptPort {
+export interface DispatchAttemptRecordPort {
   beginAttempt(input: DispatchAttemptStart): Promise<string>;
   recordOutcome(
     attemptId: string,
@@ -20,6 +20,4 @@ export interface RecordDispatchAttemptPort {
   ): Promise<void>;
 }
 
-export const METERING_DISPATCH_ATTEMPT_RECORDER = Symbol(
-  'METERING_DISPATCH_ATTEMPT_RECORDER',
-);
+export const DISPATCH_ATTEMPT_RECORD = Symbol('DISPATCH_ATTEMPT_RECORD');

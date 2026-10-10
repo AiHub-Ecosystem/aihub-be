@@ -1,5 +1,7 @@
 import { Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 
+import type { OperationId } from '@/catalog/operation-id';
+
 /**
  * The metric names spec section L.2 fixes. Issue #198 owns five of the
  * eight; the protection-state metrics (`aihub_rejected_total`,
@@ -196,7 +198,7 @@ export function setEmailOutboxBacklogSource(
 }
 
 export interface DispatchAttemptUnresolvedSample {
-  readonly operation: string;
+  readonly operation: OperationId;
   readonly count: number;
 }
 

@@ -16,6 +16,11 @@ incurred cost.
 
 ## Decision
 
+Dispatch evidence lives in a separate Nest module because `MeteringModule`
+already imports `GatewayModule`; keeping the gateway-facing recorder out of
+`MeteringModule` avoids a dependency cycle and lets the dispatch pool own its
+lifecycle.
+
 Persist one mutable Postgres dispatch-attempt row for each outbound call before
 calling the AI Service. Store the request ID, Organization, operation, creation
 time, and the attempt's fixed `unknown_after` deadline. Do not store essay,

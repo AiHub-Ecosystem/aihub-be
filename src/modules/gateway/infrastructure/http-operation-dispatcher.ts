@@ -16,7 +16,7 @@ import type {
 import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import type {
   DispatchAttemptOutcome,
-  RecordDispatchAttemptPort,
+  DispatchAttemptRecordPort,
 } from '@/modules/metering/public/dispatch-attempts';
 import { extractDownstreamTelemetry } from '@/modules/metering/public/telemetry';
 import {
@@ -144,8 +144,8 @@ function dispatchTimedOut(): AppError {
 function dispatchEvidenceUnavailable(cause: unknown): AppError {
   return new AppError({
     code: 'INTERNAL_ERROR',
-    message: 'Dispatch evidence is temporarily unavailable',
-    retryable: true,
+    message: 'Internal server error',
+    retryable: false,
     cause,
   });
 }
@@ -168,7 +168,7 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
     private readonly httpClient: DownstreamHttpClient,
     private readonly tokenIssuer: InternalTokenIssuerPort,
     adapters: readonly DownstreamAdapter<unknown, unknown>[],
-    private readonly dispatchAttempts: RecordDispatchAttemptPort,
+    private readonly dispatchAttempts: DispatchAttemptRecordPort,
     private readonly sandboxBudget?: SandboxDispatchBudgetPort,
   ) {
     this.adapters = new Map(
@@ -302,24 +302,24 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
           : { aiProcessingMs: telemetry.aiProcessingMs }),
       } as DispatchResult<ResponseFor<O>>;
     } catch (error) {
+      const definitelyNotDispatched = isDefinitelyNotDispatched(error);
+      const notDispatched =
+        !downstreamDispatchStarted || definitelyNotDispatched;
+      const releaseSandboxReservation =
+        definitelyNotDispatched ||
+        (!downstreamDispatchStarted && (signal.aborted || deadlineExpired()));
       if (attemptId !== undefined && response === undefined) {
         let outcome: DispatchAttemptOutcome;
         if (downstreamResponseStatus !== undefined) {
           outcome = 'response_received';
-        } else if (
-          !downstreamDispatchStarted ||
-          isDefinitelyNotDispatched(error)
-        ) {
+        } else if (notDispatched) {
           outcome = 'not_dispatched';
         } else {
           outcome = 'outcome_unknown';
         }
         await this.recordAttemptOutcome(attemptId, outcome);
       }
-      if (
-        sandboxRequest &&
-        (!downstreamDispatchStarted || isDefinitelyNotDispatched(error))
-      ) {
+      if (sandboxRequest && releaseSandboxReservation) {
         await this.sandboxBudget
           ?.release(context.requestId)
           .catch(() =>

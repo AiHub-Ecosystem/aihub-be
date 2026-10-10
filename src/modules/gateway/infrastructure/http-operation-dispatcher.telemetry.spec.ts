@@ -8,6 +8,7 @@ import type {
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { DownstreamRequest } from '@/downstream/downstream.types';
 import type { InternalTokenIssuerPort } from '@/modules/gateway/application/internal-token-issuer.port';
+import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { DownstreamHttpClient } from './downstream-http.client';
 import { HttpOperationDispatcher } from './http-operation-dispatcher';
 
@@ -76,11 +77,6 @@ const issuer: InternalTokenIssuerPort = {
   mint: async () => 'internal-token',
 };
 
-const noDispatchAttempts = {
-  beginAttempt: async () => 'attempt-test',
-  recordOutcome: async () => undefined,
-};
-
 describe('HttpOperationDispatcher telemetry', () => {
   let agent: MockAgent;
 
@@ -105,7 +101,7 @@ describe('HttpOperationDispatcher telemetry', () => {
       new DownstreamHttpClient('https://ai-writing.test', agent),
       issuer,
       [adapter],
-      noDispatchAttempts,
+      noOpDispatchAttemptRecord,
     );
     const result = await dispatcher.dispatch(
       'writing.task1.grade',

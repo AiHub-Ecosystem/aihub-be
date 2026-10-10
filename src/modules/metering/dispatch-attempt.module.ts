@@ -5,7 +5,7 @@ import {
   type RuntimeConnectionConfigurationPort,
 } from '@/modules/secrets/application/runtime-connection-configuration.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
-import { METERING_DISPATCH_ATTEMPT_RECORDER } from './application/dispatch-attempt-recorder.port';
+import { DISPATCH_ATTEMPT_RECORD } from './application/dispatch-attempt-record.port';
 import { DispatchAttemptMetricsRegistrar } from './infrastructure/dispatch-attempt-metrics.registrar';
 import {
   PostgresDispatchAttemptRepository,
@@ -26,11 +26,11 @@ import {
         ),
     },
     {
-      provide: METERING_DISPATCH_ATTEMPT_RECORDER,
+      provide: DISPATCH_ATTEMPT_RECORD,
       useExisting: PostgresDispatchAttemptRepository,
     },
     DispatchAttemptMetricsRegistrar,
   ],
-  exports: [METERING_DISPATCH_ATTEMPT_RECORDER],
+  exports: [DISPATCH_ATTEMPT_RECORD],
 })
 export class DispatchAttemptModule {}

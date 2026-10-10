@@ -4,6 +4,7 @@ import type { OperationId } from '@/catalog/operation-id';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { DownstreamRequest } from '@/downstream/downstream.types';
+import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { DownstreamHttpClient } from './downstream-http.client';
 import { HttpOperationDispatcher } from './http-operation-dispatcher';
 
@@ -31,10 +32,7 @@ describe('HttpOperationDispatcher fifth-operation extensibility', () => {
       httpClient,
       { mint: async () => 'token-abc' },
       [fifthAdapter],
-      {
-        beginAttempt: async () => 'attempt-test',
-        recordOutcome: async () => undefined,
-      },
+      noOpDispatchAttemptRecord,
     );
 
     const result = await dispatcher.dispatch(

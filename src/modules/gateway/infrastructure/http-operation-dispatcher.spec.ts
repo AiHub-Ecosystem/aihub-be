@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { MockAgent } from 'undici';
 
 import { AppError } from '@/common/errors/app-error';
+import { createInternalErrorEnvelope } from '@/common/errors/error-envelope';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type {
   GradeResponse,
@@ -13,9 +14,10 @@ import type { InternalTokenIssuerPort } from '@/modules/gateway/application/inte
 import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import type {
   DispatchAttemptOutcome,
+  DispatchAttemptRecordPort,
   DispatchAttemptStart,
-  RecordDispatchAttemptPort,
 } from '@/modules/metering/public/dispatch-attempts';
+import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { DownstreamHttpClient } from './downstream-http.client';
 import { HttpOperationDispatcher } from './http-operation-dispatcher';
 
@@ -61,18 +63,13 @@ class FakeTokenIssuer implements InternalTokenIssuerPort {
   }
 }
 
-const noDispatchAttempts: RecordDispatchAttemptPort = {
-  beginAttempt: async () => 'attempt-test',
-  recordOutcome: async () => undefined,
-};
-
 function fakeDispatchAttempts() {
   const starts: DispatchAttemptStart[] = [];
   const outcomes: Array<{
     readonly attemptId: string;
     readonly outcome: DispatchAttemptOutcome;
   }> = [];
-  const recorder: RecordDispatchAttemptPort = {
+  const recorder: DispatchAttemptRecordPort = {
     beginAttempt: jest.fn(async (input) => {
       starts.push(input);
       return 'attempt-test';
@@ -171,7 +168,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(),
       [],
-      noDispatchAttempts,
+      noOpDispatchAttemptRecord,
     );
 
     // No interceptor registered at all: if the dispatcher tried to reach the
@@ -230,7 +227,7 @@ describe('HttpOperationDispatcher', () => {
     });
   });
 
-  it('fails closed with a retryable internal error when the durable record cannot be created', async () => {
+  it('fails closed with the existing internal error envelope when the durable record cannot be created', async () => {
     const attempts = fakeDispatchAttempts();
     attempts.recorder.beginAttempt = jest
       .fn()
@@ -247,13 +244,17 @@ describe('HttpOperationDispatcher', () => {
       attempts.recorder,
     );
 
-    await expect(
-      dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
-    ).rejects.toMatchObject({
-      code: 'INTERNAL_ERROR',
-      httpStatus: 500,
-      retryable: true,
-    });
+    const requestContext = context();
+    const error = await dispatcher
+      .dispatch('writing.task1.grade', gradeInput, requestContext)
+      .then(
+        () => undefined,
+        (reason: unknown) => reason,
+      );
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).toEnvelope(requestContext.requestId)).toEqual(
+      createInternalErrorEnvelope(requestContext.requestId),
+    );
     expect(request).not.toHaveBeenCalled();
   });
 
@@ -364,7 +365,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
-      noDispatchAttempts,
+      noOpDispatchAttemptRecord,
       budget,
     );
 
@@ -398,7 +399,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
-      noDispatchAttempts,
+      noOpDispatchAttemptRecord,
       budget,
     );
 
@@ -424,7 +425,7 @@ describe('HttpOperationDispatcher', () => {
       new DownstreamHttpClient('https://ai-writing.test', mockAgent),
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
-      noDispatchAttempts,
+      noOpDispatchAttemptRecord,
       budget,
     );
 
@@ -446,7 +447,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
-      noDispatchAttempts,
+      noOpDispatchAttemptRecord,
       budget,
     );
 
@@ -471,7 +472,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
-      noDispatchAttempts,
+      noOpDispatchAttemptRecord,
     );
 
     await expect(
@@ -511,7 +512,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
-      noDispatchAttempts,
+      noOpDispatchAttemptRecord,
     );
 
     await expect(
@@ -631,7 +632,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(tokenMarker),
       [fakeGradeAdapter('/grade', originalError)],
-      noDispatchAttempts,
+      noOpDispatchAttemptRecord,
     );
 
     await expect(
@@ -677,7 +678,7 @@ describe('HttpOperationDispatcher', () => {
         new DownstreamHttpClient('https://ai-writing.test', mockAgent),
         new FakeTokenIssuer('token'),
         [fakeGradeAdapter('/grade', error)],
-        noDispatchAttempts,
+        noOpDispatchAttemptRecord,
       );
 
       await expect(

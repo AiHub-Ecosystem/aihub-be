@@ -233,7 +233,6 @@ export class UsageRetentionService {
         if (batchDeleted === 0) {
           break;
         }
-        batches += 1;
         dispatchAttemptsDeleted += batchDeleted;
       }
 

@@ -52,8 +52,8 @@
     "scripts/ci/ci-boot-config.d.cts",
     // Hand-written types for scripts/checks/verify-summary.cjs — same reason.
     "scripts/checks/verify-summary.d.cts",
-    // Spawned as a separate process by the Postgres crash-durability test.
-    "test/db/dispatch-attempt-crash.worker.ts"
+    // Child Jest config for the Postgres crash-durability worker process.
+    "jest.config.db-worker.cjs"
   ],
   "ignoreBinaries": [
     // HashiCorp Vault CLI — operator workstation/image binary, not an npm package.
