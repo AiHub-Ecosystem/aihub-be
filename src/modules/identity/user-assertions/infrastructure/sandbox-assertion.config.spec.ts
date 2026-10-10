@@ -19,6 +19,7 @@ function configuration(
     NODE_ENV: 'test',
     AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
     AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
+    AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
     AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
     AIHUB_SANDBOX_ORG_IDS: 'org_sandbox',
     AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY: PEM,

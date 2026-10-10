@@ -52,6 +52,20 @@ export class InMemoryUserAccountAdapter implements UserAccountRepositoryPort {
     }
     return {
       userId: account.userId,
+      email: account.email,
+      passwordHash: account.passwordHash,
+      status: account.status,
+    };
+  }
+
+  async findLoginIdentityByUserId(
+    userId: string,
+  ): Promise<LoginIdentity | undefined> {
+    const account = this.state.accounts.get(userId);
+    if (account === undefined) return undefined;
+    return {
+      userId: account.userId,
+      email: account.email,
       passwordHash: account.passwordHash,
       status: account.status,
     };

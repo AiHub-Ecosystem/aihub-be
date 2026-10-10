@@ -7,6 +7,7 @@ import {
   loadRuntimeConfiguration,
   runtimeEnvironmentMetadata,
 } from '@/config/runtime-configuration';
+import { createAuthMfaCipher } from '@/modules/auth/infrastructure/auth-mfa-secret.cipher';
 import { ConfiguredRuntimeSecretProvider } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
 import { loadRuntimeConnectionEnvironment } from '@/modules/secrets/infrastructure/runtime-connection.environment';
 import { writeBootConfig } from './ci-boot-config.cjs';
@@ -103,6 +104,23 @@ describe('CI boot configuration', () => {
     );
   });
 
+  it('writes a separate MFA keyring the auth cipher accepts', () => {
+    writeBootConfig(directory);
+    const env = readBootEnv(directory);
+    const cipher = createAuthMfaCipher({
+      source: env.AIHUB_RUNTIME_SECRET_SOURCE,
+      secretsFile: join(directory, 'auth-mfa-secrets.json'),
+      values: {},
+    });
+    const binding = { userId: 'usr_ci', factorId: 'mfa_ci' };
+    const encrypted = cipher.encrypt('ci-boot-totp-secret', binding);
+
+    expect(cipher.decrypt(encrypted.keyId, encrypted.ciphertext, binding)).toBe(
+      'ci-boot-totp-secret',
+    );
+    expect(encrypted.ciphertext).not.toContain('ci-boot-totp-secret');
+  });
+
   // The secret loaders above cannot see the non-secret variables; this keeps
   // them in step with what production actually sets.
   it('sets exactly the variables production sets for the app', () => {
@@ -176,13 +194,15 @@ describe('CI boot configuration', () => {
     const keys = (): string[] => [
       readFileSync(join(directory, 'runtime-secrets.json'), 'utf8'),
       readFileSync(join(directory, 'connection-secrets.json'), 'utf8'),
+      readFileSync(join(directory, 'auth-mfa-secrets.json'), 'utf8'),
     ];
     writeBootConfig(directory);
-    const [firstRuntime, firstConnection] = keys();
+    const [firstRuntime, firstConnection, firstMfa] = keys();
     writeBootConfig(directory);
-    const [secondRuntime, secondConnection] = keys();
+    const [secondRuntime, secondConnection, secondMfa] = keys();
 
     expect(secondRuntime).not.toBe(firstRuntime);
     expect(secondConnection).not.toBe(firstConnection);
+    expect(secondMfa).not.toBe(firstMfa);
   });
 });

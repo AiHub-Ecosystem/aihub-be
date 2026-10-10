@@ -10,6 +10,8 @@ export const EMAIL_DELIVERY_KINDS = [
   'verification_email',
   'password_reset_email',
   'organization_invite_email',
+  'mfa_enabled_notification',
+  'mfa_removed_notification',
 ] as const;
 
 export type EmailDeliveryKind = (typeof EMAIL_DELIVERY_KINDS)[number];
@@ -36,9 +38,14 @@ export interface OrganizationInviteEmailDeliveryPayload
   readonly role: OrganizationInviteEmailInput['role'];
 }
 
+export interface MfaSecurityNotificationPayload {
+  readonly email: string;
+}
+
 export type EmailDeliveryPayload =
   | AuthEmailDeliveryPayload
-  | OrganizationInviteEmailDeliveryPayload;
+  | OrganizationInviteEmailDeliveryPayload
+  | MfaSecurityNotificationPayload;
 
 declare const emailDeliveryTransactionBrand: unique symbol;
 

@@ -17,9 +17,33 @@ export class InMemoryRefreshSessionAdapter
 
   constructor(private readonly state: InMemoryAuthState) {}
 
-  async createRefreshSession(input: CreateRefreshSessionInput): Promise<void> {
+  async createRefreshSession(
+    input: CreateRefreshSessionInput,
+  ): Promise<boolean> {
     if (this.failCreateRefreshSession) {
       throw new Error('durable store unavailable');
+    }
+    if (this.state.accounts.get(input.userId)?.status !== 'active')
+      return false;
+    const factor = this.state.mfaFactors.get(input.userId);
+    if (factor?.status === 'enabled') {
+      if (
+        input.mfaProof?.kind === 'totp' &&
+        input.mfaProof.factorId === factor.factorId
+      ) {
+        // The application verified this factor snapshot before the transaction.
+      } else if (
+        input.mfaProof?.kind === 'recovery' &&
+        this.state.recoveryCodes
+          .get(input.userId)
+          ?.delete(input.mfaProof.codeHash)
+      ) {
+        // Recovery proof consumption and session creation share this write.
+      } else {
+        return false;
+      }
+    } else if (input.mfaProof !== undefined) {
+      return false;
     }
     this.state.refreshTokens.set(input.token.hash, {
       tokenId: input.token.id,
@@ -29,6 +53,7 @@ export class InMemoryRefreshSessionAdapter
       usedAt: undefined,
       revokedAt: undefined,
     });
+    return true;
   }
 
   async findRefreshTokenByHash(

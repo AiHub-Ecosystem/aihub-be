@@ -1,3 +1,4 @@
+import type { MfaSessionProof } from './auth-mfa-repository.port';
 import type { IssuedWebSessionToken } from './web-session-token.port';
 
 export interface CreateWebSessionInput {
@@ -7,6 +8,7 @@ export interface CreateWebSessionInput {
   readonly expectedPasswordHash: string;
   readonly token: IssuedWebSessionToken;
   readonly now: Date;
+  readonly mfaProof?: MfaSessionProof;
 }
 
 export interface FindExchangeableWebSessionInput {

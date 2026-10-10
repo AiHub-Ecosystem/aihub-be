@@ -183,6 +183,20 @@ class RecordingSender implements EmailSenderPort {
     await this.record('organization_invite_email', input, options);
   }
 
+  async sendMfaSecurityNotification(
+    input: unknown,
+    options?: EmailDispatchOptions,
+  ): Promise<void> {
+    const action = (input as { readonly action?: string }).action;
+    await this.record(
+      action === 'removed'
+        ? 'mfa_removed_notification'
+        : 'mfa_enabled_notification',
+      input,
+      options,
+    );
+  }
+
   private async record(
     kind: EmailDeliveryKind,
     input: unknown,
@@ -279,6 +293,24 @@ function harness(
 }
 
 describe('EmailDeliveryPoller', () => {
+  it('dispatches MFA security notices without checking credential actionability', async () => {
+    const payload: EmailDeliveryPayload = { email: 'person@example.com' };
+    const { poller, store, sender, credentials } = harness({ payload });
+    store.claimResult = [claimed({ kind: 'mfa_removed_notification' })];
+
+    const summary = await poller.runOnce();
+
+    expect(summary.providerAccepted).toBe(1);
+    expect(credentials.checked).toEqual([]);
+    expect(sender.sends).toEqual([
+      {
+        kind: 'mfa_removed_notification',
+        input: { email: 'person@example.com', action: 'removed' },
+        idempotencyKey: ROW_ID,
+      },
+    ]);
+  });
+
   it('hands an actionable verification request to the provider and records acceptance', async () => {
     const { poller, store, sender } = harness();
     store.claimResult = [claimed()];
@@ -519,6 +551,9 @@ describe('EmailDeliveryPoller', () => {
         call += 1;
       },
       async sendOrganizationInviteEmail() {
+        call += 1;
+      },
+      async sendMfaSecurityNotification() {
         call += 1;
       },
     } as EmailSenderPort;

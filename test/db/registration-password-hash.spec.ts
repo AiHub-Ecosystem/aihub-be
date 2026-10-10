@@ -45,6 +45,8 @@ class DiscardingSender implements EmailSenderPort {
   async sendPasswordResetEmail(): Promise<void> {}
 
   async sendOrganizationInviteEmail(): Promise<void> {}
+
+  async sendMfaSecurityNotification(): Promise<void> {}
 }
 
 class RateLimiterFake implements AuthRateLimiterPort {

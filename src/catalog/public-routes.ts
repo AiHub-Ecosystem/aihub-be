@@ -7,6 +7,7 @@ import {
   ForgotPasswordResponseSchema,
   LoginRequestSchema,
   LoginResponseSchema,
+  LoginResultResponseSchema,
   ReadCurrentUserResponseSchema,
   RegisterRequestSchema,
   RegisterResponseSchema,
@@ -15,9 +16,17 @@ import {
   VerifyEmailRequestSchema,
 } from '@/contracts/auth/local-auth';
 import {
+  BeginMfaEnrollmentRequestSchema,
+  BeginMfaEnrollmentResponseSchema,
+  ConfirmMfaEnrollmentRequestSchema,
+  ConfirmMfaEnrollmentResponseSchema,
+  RemoveMfaFactorRequestSchema,
+} from '@/contracts/auth/mfa';
+import {
   CreateWebSessionFromVerificationRequestSchema,
   CreateWebSessionRequestSchema,
   CreateWebSessionResponseSchema,
+  CreateWebSessionResultResponseSchema,
   ExchangeWebSessionRequestSchema,
   LogoutWebSessionRequestSchema,
 } from '@/contracts/auth/web-session';
@@ -117,6 +126,7 @@ export interface PublicRouteDef {
   readonly callerAuth: CallerAuth;
   readonly organizationResolution: OrganizationResolution;
   readonly successStatus: 200 | 201 | 202 | 204;
+  readonly alternateSuccessStatuses?: readonly (200 | 201 | 202 | 204)[];
   /**
    * What the document publishes as `x-identity-scope`, or `null` when the
    * document omits the extension.
@@ -402,10 +412,47 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'none',
     organizationResolution: 'none',
     successStatus: 200,
+    alternateSuccessStatuses: [202],
     publishedIdentityScope: 'none',
     idempotency: 'none',
     requestSchema: LoginRequestSchema,
-    responseSchema: LoginResponseSchema,
+    responseSchema: LoginResultResponseSchema,
+    errorStatuses: [400, 401, 429, 500],
+  },
+  'auth.mfa.enrollment': {
+    method: 'POST',
+    path: '/v1/auth/mfa/enrollment',
+    callerAuth: 'bearer',
+    organizationResolution: 'none',
+    successStatus: 200,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: BeginMfaEnrollmentRequestSchema,
+    responseSchema: BeginMfaEnrollmentResponseSchema,
+    errorStatuses: [400, 401, 409, 429, 500],
+  },
+  'auth.mfa.enrollment.confirm': {
+    method: 'POST',
+    path: '/v1/auth/mfa/enrollment/confirm',
+    callerAuth: 'bearer',
+    organizationResolution: 'none',
+    successStatus: 200,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: ConfirmMfaEnrollmentRequestSchema,
+    responseSchema: ConfirmMfaEnrollmentResponseSchema,
+    errorStatuses: [400, 401, 429, 500],
+  },
+  'auth.mfa.remove': {
+    method: 'DELETE',
+    path: '/v1/auth/mfa',
+    callerAuth: 'bearer',
+    organizationResolution: 'none',
+    successStatus: 204,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: RemoveMfaFactorRequestSchema,
+    responseSchema: null,
     errorStatuses: [400, 401, 429, 500],
   },
   'auth.verify_email': {
@@ -498,10 +545,11 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bff-client-secret',
     organizationResolution: 'none',
     successStatus: 201,
+    alternateSuccessStatuses: [202],
     publishedIdentityScope: 'none',
     idempotency: 'none',
     requestSchema: CreateWebSessionRequestSchema,
-    responseSchema: CreateWebSessionResponseSchema,
+    responseSchema: CreateWebSessionResultResponseSchema,
     errorStatuses: [400, 401, 429, 500, 503],
   },
   'auth.web_sessions.verification': {

@@ -18,7 +18,7 @@ import type { EmailDeliveryQueryClient } from './postgres-email-delivery-request
  * `consumed_at` is that close: verification consumed or superseded, password
  * reset consumed, invitation accepted, superseded, or revoked.
  */
-const CHECK_SQL: Readonly<Record<EmailDeliveryKind, string>> = {
+const CHECK_SQL: Readonly<Partial<Record<EmailDeliveryKind, string>>> = {
   verification_email: `
     SELECT expires_at, consumed_at FROM email_verification_tokens WHERE token_hash = $1
   `,
@@ -46,9 +46,9 @@ export class PostgresEmailCredentialRepository
     readonly tokenHash: string;
     readonly now: Date;
   }): Promise<EmailCredentialState> {
-    const rows = await this.client.query(CHECK_SQL[input.kind], [
-      input.tokenHash,
-    ]);
+    const sql = CHECK_SQL[input.kind];
+    if (sql === undefined) return 'missing';
+    const rows = await this.client.query(sql, [input.tokenHash]);
     const row = rows[0];
     if (row === undefined) {
       return 'missing';

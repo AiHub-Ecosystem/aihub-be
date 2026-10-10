@@ -1,9 +1,11 @@
+import type { MfaSessionProof } from './auth-mfa-repository.port';
 import type { IssuedRefreshToken } from './refresh-token.port';
 
 export interface CreateRefreshSessionInput {
   readonly userId: string;
   readonly token: IssuedRefreshToken;
   readonly issuedAt: Date;
+  readonly mfaProof?: MfaSessionProof;
 }
 
 export interface RefreshTokenRecord {
@@ -45,7 +47,7 @@ export interface RotateRefreshTokenInput {
  * token is presented.
  */
 export interface RefreshSessionRepositoryPort {
-  createRefreshSession(input: CreateRefreshSessionInput): Promise<void>;
+  createRefreshSession(input: CreateRefreshSessionInput): Promise<boolean>;
   findRefreshTokenByHash(
     tokenHash: string,
   ): Promise<RefreshTokenRecord | undefined>;

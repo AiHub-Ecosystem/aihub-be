@@ -148,6 +148,7 @@ const bundles = [
   ],
   ['email-outbox.json', ['current_key_id', 'keys'], 'email-outbox'],
   ['web-session.json', ['client_secret'], 'web-session'],
+  ['auth-mfa.json', ['current_key_id', 'keys'], 'auth-mfa'],
 ];
 
 for (const [fileName, keys, bundleName] of bundles) {
@@ -159,5 +160,5 @@ for (const [fileName, keys, bundleName] of bundles) {
 }
 
 console.log(
-  `Vault provisioning completed for ${environment}: policy, AppRole, and ten KV bundles updated`,
+  `Vault provisioning completed for ${environment}: policy, AppRole, and eleven KV bundles updated`,
 );

@@ -63,6 +63,7 @@ describe('Organization invitation acceptance HTTP flow', () => {
       sendOrganizationInviteEmail: async (
         _input: OrganizationInviteEmailInput,
       ) => undefined,
+      sendMfaSecurityNotification: async () => undefined,
     };
     const verifier: UserAccessTokenVerifierPort = {
       verify: async (token: string) => {

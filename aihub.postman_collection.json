@@ -2460,7 +2460,175 @@
         "auth": null,
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"<string>\",\n  \"password\": \"<string>\"\n}",
+          "raw": "{\n  \"email\": \"<string>\",\n  \"password\": \"<string>\",\n  \"mfa_code\": \"<string>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "f0b5b3df-0a19-4882-b32b-883426f0821e",
+      "name": "Begin TOTP enrollment",
+      "request": {
+        "name": "Begin TOTP enrollment",
+        "description": {
+          "content": "Requires a fresh password. The encrypted pending secret is disclosed only by this no-store response; confirm it before the factor is enabled.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "auth", "mfa", "enrollment"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"password\": \"<aihub-password-policy>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "281d90a2-724f-47e2-864c-76705e43b61c",
+      "name": "Confirm TOTP enrollment",
+      "request": {
+        "name": "Confirm TOTP enrollment",
+        "description": {
+          "content": "A valid code enables the factor and returns eight recovery codes once. Their hashes and the security notification are committed in the same transaction.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "auth", "mfa", "enrollment", "confirm"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"<string>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "d010f002-5317-4bff-a683-dc356f4a9c72",
+      "name": "Remove TOTP factor",
+      "request": {
+        "name": "Remove TOTP factor",
+        "description": {
+          "content": "Requires a fresh password or TOTP code. Removal ends all Refresh Sessions and Web Sessions; already-issued stateless User Access JWTs remain valid for at most 15 minutes.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "auth", "mfa"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "DELETE",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{bearerToken}}"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"password\": \"<aihub-password-policy>\"\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -2873,7 +3041,7 @@
       "request": {
         "name": "Create a Web Session from an email and password",
         "description": {
-          "content": "Server-to-server only, Customer Web BFF. AIHUB stores only the token hash, never sets a cookie for this route, and applies the same credential checks and login rate limits as POST /v1/auth/login.",
+          "content": "Server-to-server only, Customer Web BFF. AIHUB stores only the token hash, never sets a cookie for this route, and applies the same credential checks and login rate limits as POST /v1/auth/login. When MFA is enabled, a missing code returns 202 MFA_REQUIRED without creating a Web Session; the next request resubmits email, password, and TOTP or recovery code. Customer Web keeps the password only in transient form memory and clears it when the flow ends.",
           "type": "text/plain"
         },
         "url": {
@@ -2918,7 +3086,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"<string>\",\n  \"password\": \"<string>\"\n}",
+          "raw": "{\n  \"email\": \"<string>\",\n  \"password\": \"<string>\",\n  \"mfa_code\": \"<string>\"\n}",
           "options": {
             "raw": {
               "language": "json"

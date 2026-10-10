@@ -18,9 +18,14 @@ import { PUBLIC_API_SERVERS } from '@/config/runtime-configuration';
 import {
   ForgotPasswordResponseSchema,
   LoginResponseSchema,
+  MfaRequiredResponseSchema,
   PASSWORD_POLICY_DESCRIPTION,
   RegisterResponseSchema,
 } from '@/contracts/auth/local-auth';
+import {
+  BeginMfaEnrollmentResponseSchema,
+  ConfirmMfaEnrollmentResponseSchema,
+} from '@/contracts/auth/mfa';
 import { CreateWebSessionResponseSchema } from '@/contracts/auth/web-session';
 import {
   DEFAULT_ORGANIZATION_AUDIT_PAGE_SIZE,
@@ -444,6 +449,14 @@ function localAuthPathItems(): Record<string, Record<string, unknown>> {
       },
       content: { 'application/json': { schema: LoginResponseSchema } },
     },
+    '202': {
+      description:
+        'Password accepted; TOTP or an unused recovery code is required before a Refresh Session is created.',
+      headers: {
+        'Cache-Control': { schema: { type: 'string', enum: ['no-store'] } },
+      },
+      content: { 'application/json': { schema: MfaRequiredResponseSchema } },
+    },
     ...routeErrorResponsesOf('auth.login'),
   };
   const verifyResponses = {
@@ -571,6 +584,106 @@ function localAuthPathItems(): Record<string, Record<string, unknown>> {
       publishedLocalAuthRequestSchema(routeSchemaOf('auth.login', 'request')),
       loginResponses,
     ),
+    [routePathOf('auth.mfa.enrollment')]: {
+      post: {
+        operationId: 'auth.mfa.enrollment',
+        summary: 'Begin TOTP enrollment',
+        description:
+          'Requires a fresh password. The encrypted pending secret is disclosed only by this no-store response; confirm it before the factor is enabled.',
+        ...routeIdentityScopeOf('auth.mfa.enrollment'),
+        ...routeSecurityOf('auth.mfa.enrollment'),
+        parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: routeSchemaOf('auth.mfa.enrollment', 'request'),
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description:
+              'Pending authenticator secret and otpauth URI; shown before confirmation only.',
+            headers: {
+              'Cache-Control': {
+                schema: { type: 'string', enum: ['no-store'] },
+              },
+            },
+            content: {
+              'application/json': { schema: BeginMfaEnrollmentResponseSchema },
+            },
+          },
+          ...routeErrorResponsesOf('auth.mfa.enrollment'),
+        },
+      },
+    },
+    [routePathOf('auth.mfa.enrollment.confirm')]: {
+      post: {
+        operationId: 'auth.mfa.enrollment.confirm',
+        summary: 'Confirm TOTP enrollment',
+        description:
+          'A valid code enables the factor and returns eight recovery codes once. Their hashes and the security notification are committed in the same transaction.',
+        ...routeIdentityScopeOf('auth.mfa.enrollment.confirm'),
+        ...routeSecurityOf('auth.mfa.enrollment.confirm'),
+        parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: routeSchemaOf('auth.mfa.enrollment.confirm', 'request'),
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description:
+              'One-time recovery codes. Store them securely; AIHUB cannot show them again.',
+            headers: {
+              'Cache-Control': {
+                schema: { type: 'string', enum: ['no-store'] },
+              },
+            },
+            content: {
+              'application/json': {
+                schema: ConfirmMfaEnrollmentResponseSchema,
+              },
+            },
+          },
+          ...routeErrorResponsesOf('auth.mfa.enrollment.confirm'),
+        },
+      },
+    },
+    [routePathOf('auth.mfa.remove')]: {
+      delete: {
+        operationId: 'auth.mfa.remove',
+        summary: 'Remove TOTP factor',
+        description:
+          'Requires a fresh password or TOTP code. Removal ends all Refresh Sessions and Web Sessions; already-issued stateless User Access JWTs remain valid for at most 15 minutes.',
+        ...routeIdentityScopeOf('auth.mfa.remove'),
+        ...routeSecurityOf('auth.mfa.remove'),
+        parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: routeSchemaOf('auth.mfa.remove', 'request'),
+            },
+          },
+        },
+        responses: {
+          '204': {
+            description: 'Factor removed and durable sessions revoked.',
+            headers: {
+              'Cache-Control': {
+                schema: { type: 'string', enum: ['no-store'] },
+              },
+            },
+          },
+          ...routeErrorResponsesOf('auth.mfa.remove'),
+        },
+      },
+    },
     [routePathOf('auth.verify_email')]: operation(
       'auth.verify_email',
       'Verify a local account email address',
@@ -643,6 +756,16 @@ function webSessionPathItems(): Record<string, Record<string, unknown>> {
         'application/json': { schema: CreateWebSessionResponseSchema },
       },
     },
+    '202': {
+      description:
+        'Password accepted; submit the same email/password and a TOTP or unused recovery code in the next request. Customer Web keeps the password only in transient form memory, never local or session storage.',
+      headers: {
+        'Cache-Control': { schema: { type: 'string', enum: ['no-store'] } },
+      },
+      content: {
+        'application/json': { schema: MfaRequiredResponseSchema },
+      },
+    },
     ...routeErrorResponsesOf('auth.web_sessions.create'),
     // One generic 401 covers a missing or wrong client secret and a wrong,
     // unknown, pending-verification, or disabled credential alike: the route
@@ -656,7 +779,7 @@ function webSessionPathItems(): Record<string, Record<string, unknown>> {
         operationId: 'auth.web_sessions.create',
         summary: 'Create a Web Session from an email and password',
         description:
-          'Server-to-server only, Customer Web BFF. AIHUB stores only the token hash, never sets a cookie for this route, and applies the same credential checks and login rate limits as POST /v1/auth/login.',
+          'Server-to-server only, Customer Web BFF. AIHUB stores only the token hash, never sets a cookie for this route, and applies the same credential checks and login rate limits as POST /v1/auth/login. When MFA is enabled, a missing code returns 202 MFA_REQUIRED without creating a Web Session; the next request resubmits email, password, and TOTP or recovery code. Customer Web keeps the password only in transient form memory and clears it when the flow ends.',
         ...routeIdentityScopeOf('auth.web_sessions.create'),
         ...routeSecurityOf('auth.web_sessions.create'),
         parameters: [{ $ref: '#/components/parameters/CorrelationId' }],

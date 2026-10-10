@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Header,
   HttpCode,
@@ -20,6 +21,7 @@ import {
   ForgotPasswordRequestSchema,
   LoginRequestSchema,
   type LoginResponse,
+  type LoginResultResponse,
   type ReadCurrentUserResponse,
   RegisterRequestSchema,
   type ResendVerificationRequest,
@@ -28,6 +30,17 @@ import {
   type VerifyEmailRequest,
   VerifyEmailRequestSchema,
 } from '@/contracts/auth/local-auth';
+import {
+  BeginMfaEnrollmentRequestSchema,
+  type BeginMfaEnrollmentResponse,
+  ConfirmMfaEnrollmentRequestSchema,
+  type ConfirmMfaEnrollmentResponse,
+  RemoveMfaFactorRequestSchema,
+} from '@/contracts/auth/mfa';
+import {
+  AUTH_MFA_SERVICE,
+  type AuthMfaServicePort,
+} from '@/modules/auth/application/auth-mfa-repository.port';
 import {
   type IssuedSession,
   LOCAL_AUTH_SERVICE,
@@ -109,6 +122,8 @@ export class LocalAuthController {
   constructor(
     @Inject(LOCAL_AUTH_SERVICE)
     private readonly service: LocalAuthServicePort,
+    @Inject(AUTH_MFA_SERVICE)
+    private readonly mfa: AuthMfaServicePort,
   ) {}
 
   @Get(PUBLIC_ROUTES['me.profile.read'].path)
@@ -157,10 +172,73 @@ export class LocalAuthController {
     @Req() request: FastifyRequest,
     @Body() body: unknown,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<LoginResponse> {
+  ): Promise<LoginResultResponse> {
     const input = parseRequestBody(LoginRequestSchema, body);
     const result = await this.service.login(input, requestIp(request));
-    return sessionEnvelope(request, reply, result);
+    if (result.kind === 'mfa-required') {
+      reply.status(202);
+      return {
+        data: { status: 'MFA_REQUIRED' },
+        meta: { request_id: String(request.id) },
+      };
+    }
+    return sessionEnvelope(request, reply, result.session);
+  }
+
+  @Post(PUBLIC_ROUTES['auth.mfa.enrollment'].path)
+  @HttpCode(PUBLIC_ROUTES['auth.mfa.enrollment'].successStatus)
+  @UseGuards(UserAccessJwtGuard)
+  @Header('Cache-Control', 'no-store')
+  async beginMfaEnrollment(
+    @Req() request: FastifyRequest,
+    @Body() body: unknown,
+  ): Promise<BeginMfaEnrollmentResponse> {
+    const input = parseRequestBody(BeginMfaEnrollmentRequestSchema, body);
+    const enrollment = await this.mfa.beginEnrollment({
+      userId: authenticatedUserId(request),
+      password: input.password,
+      ip: requestIp(request),
+    });
+    return {
+      data: { secret: enrollment.secret, otpauth_uri: enrollment.otpauthUri },
+      meta: { request_id: String(request.id) },
+    };
+  }
+
+  @Post(PUBLIC_ROUTES['auth.mfa.enrollment.confirm'].path)
+  @HttpCode(PUBLIC_ROUTES['auth.mfa.enrollment.confirm'].successStatus)
+  @UseGuards(UserAccessJwtGuard)
+  @Header('Cache-Control', 'no-store')
+  async confirmMfaEnrollment(
+    @Req() request: FastifyRequest,
+    @Body() body: unknown,
+  ): Promise<ConfirmMfaEnrollmentResponse> {
+    const input = parseRequestBody(ConfirmMfaEnrollmentRequestSchema, body);
+    const recoveryCodes = await this.mfa.confirmEnrollment({
+      userId: authenticatedUserId(request),
+      code: input.code,
+      ip: requestIp(request),
+    });
+    return {
+      data: { recovery_codes: [...recoveryCodes] },
+      meta: { request_id: String(request.id) },
+    };
+  }
+
+  @Delete(PUBLIC_ROUTES['auth.mfa.remove'].path)
+  @HttpCode(PUBLIC_ROUTES['auth.mfa.remove'].successStatus)
+  @UseGuards(UserAccessJwtGuard)
+  @Header('Cache-Control', 'no-store')
+  async removeMfaFactor(
+    @Req() request: FastifyRequest,
+    @Body() body: unknown,
+  ): Promise<void> {
+    const proof = parseRequestBody(RemoveMfaFactorRequestSchema, body);
+    await this.mfa.removeFactor({
+      userId: authenticatedUserId(request),
+      proof,
+      ip: requestIp(request),
+    });
   }
 
   @Post(PUBLIC_ROUTES['auth.refresh'].path)

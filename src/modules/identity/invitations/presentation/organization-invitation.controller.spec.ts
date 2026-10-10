@@ -13,6 +13,7 @@ import {
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
+  type MfaSecurityNotificationInput,
   type OrganizationInviteEmailInput,
   type PasswordResetEmailInput,
   type VerificationEmailInput,
@@ -137,6 +138,9 @@ describe('Organization invitation HTTP flow', () => {
       ),
       sendOrganizationInviteEmail: jest.fn(
         async (_input: OrganizationInviteEmailInput) => undefined,
+      ),
+      sendMfaSecurityNotification: jest.fn(
+        async (_input: MfaSecurityNotificationInput) => undefined,
       ),
     };
 

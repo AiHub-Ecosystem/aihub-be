@@ -38,3 +38,7 @@ path "secret/data/aihub/development/email-outbox" {
 path "secret/data/aihub/development/web-session" {
   capabilities = ["read"]
 }
+
+path "secret/data/aihub/development/auth-mfa" {
+  capabilities = ["read"]
+}

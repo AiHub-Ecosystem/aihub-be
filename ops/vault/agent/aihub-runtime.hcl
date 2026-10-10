@@ -32,6 +32,12 @@ template {
 }
 
 template {
+  source      = "/etc/aihub/vault/auth-mfa-secrets.json.ctmpl"
+  destination = "/run/secrets/aihub/auth-mfa-secrets.json"
+  perms       = "0600"
+}
+
+template {
   source      = "/etc/aihub/vault/connection-secrets.json.ctmpl"
   destination = "/run/secrets/aihub/connection-secrets.json"
   perms       = "0600"

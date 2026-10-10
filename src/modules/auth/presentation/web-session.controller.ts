@@ -20,6 +20,7 @@ import {
   type CreateWebSessionRequest,
   CreateWebSessionRequestSchema,
   type CreateWebSessionResponse,
+  type CreateWebSessionResultResponse,
   type ExchangeWebSessionRequest,
   ExchangeWebSessionRequestSchema,
   type LogoutWebSessionRequest,
@@ -71,18 +72,26 @@ export class WebSessionController {
   async createWebSession(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
-  ): Promise<CreateWebSessionResponse> {
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<CreateWebSessionResultResponse> {
     const input: CreateWebSessionRequest = parseRequestBody(
       CreateWebSessionRequestSchema,
       body,
     );
 
-    const created = await this.service.createWebSession(
+    const result = await this.service.createWebSession(
       input,
       requestIp(request),
     );
 
-    return createdWebSession(request, created);
+    if (result.kind === 'mfa-required') {
+      reply.status(202);
+      return {
+        data: { status: 'MFA_REQUIRED' },
+        meta: { request_id: String(request.id) },
+      };
+    }
+    return createdWebSession(request, result.session);
   }
 
   // No `@HttpCode`: the status is the request's answer, not a fixed success

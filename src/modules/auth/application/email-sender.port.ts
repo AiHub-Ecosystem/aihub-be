@@ -25,6 +25,11 @@ export interface OrganizationInviteEmailInput {
   readonly expiresAt: Date;
 }
 
+export interface MfaSecurityNotificationInput {
+  readonly email: string;
+  readonly action: 'enabled' | 'removed';
+}
+
 /**
  * Dispatch metadata rather than message content. The idempotency key is stable
  * per Email Delivery Request, so an attempt whose outcome the poller never
@@ -45,6 +50,10 @@ export interface EmailSenderPort {
   ): Promise<void>;
   sendOrganizationInviteEmail(
     input: OrganizationInviteEmailInput,
+    options?: EmailDispatchOptions,
+  ): Promise<void>;
+  sendMfaSecurityNotification(
+    input: MfaSecurityNotificationInput,
     options?: EmailDispatchOptions,
   ): Promise<void>;
 }

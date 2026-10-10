@@ -44,6 +44,26 @@ export class InMemoryWebSessionAdapter implements WebSessionRepositoryPort {
     ) {
       return false;
     }
+    const factor = this.state.mfaFactors.get(input.userId);
+    if (factor?.status === 'enabled') {
+      if (
+        input.mfaProof?.kind === 'totp' &&
+        input.mfaProof.factorId === factor.factorId
+      ) {
+        // The application verified this factor snapshot before the transaction.
+      } else if (
+        input.mfaProof?.kind === 'recovery' &&
+        this.state.recoveryCodes
+          .get(input.userId)
+          ?.delete(input.mfaProof.codeHash)
+      ) {
+        // Recovery proof consumption and session creation share this write.
+      } else {
+        return false;
+      }
+    } else if (input.mfaProof !== undefined) {
+      return false;
+    }
     this.state.webSessions.set(input.token.hash, {
       sessionId: input.sessionId,
       userId: input.userId,

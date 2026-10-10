@@ -5,12 +5,20 @@ export interface CreatedWebSession {
   readonly expiresAt: Date;
 }
 
+export type CreateWebSessionOutcome =
+  | { readonly kind: 'created'; readonly session: CreatedWebSession }
+  | { readonly kind: 'mfa-required' };
+
 /** Use cases for a BFF already authenticated by the presentation boundary. */
 export interface WebSessionServicePort {
   createWebSession(
-    input: { readonly email: string; readonly password: string },
+    input: {
+      readonly email: string;
+      readonly password: string;
+      readonly mfa_code?: string;
+    },
     ip: string,
-  ): Promise<CreatedWebSession>;
+  ): Promise<CreateWebSessionOutcome>;
   /**
    * Verification Sign-in. Answers the Web Session when the Signup Browser
    * Binding matched and this token's one claim was won, and `undefined` when

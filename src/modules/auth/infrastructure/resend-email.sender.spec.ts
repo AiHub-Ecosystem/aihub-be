@@ -128,6 +128,35 @@ describe('ResendEmailSender', () => {
     ).rejects.toThrow('Resend email delivery failed');
   });
 
+  it('sends MFA security notices without factor secrets or recovery codes', async () => {
+    const calls: Array<{ input: string; init: RequestInit | undefined }> = [];
+    const sender = new ResendEmailSender(
+      { apiKey: 'resend-secret' },
+      'AIHUB <no-reply@example.com>',
+      async (input, init) => {
+        calls.push({ input, init });
+        return { ok: true };
+      },
+    );
+
+    await sender.sendMfaSecurityNotification(
+      { email: 'person@example.com', action: 'removed' },
+      { idempotencyKey: 'edr_test' },
+    );
+
+    const body = String(calls[0]?.init?.body);
+    expect(JSON.parse(body)).toMatchObject({
+      to: ['person@example.com'],
+      subject: 'AIHUB two-factor authentication removed',
+    });
+    expect(body).toContain('all refresh and web sessions were ended');
+    expect(body).not.toContain('secret');
+    expect(body).not.toContain('recovery');
+    expect(calls[0]?.init?.headers).toMatchObject({
+      'Idempotency-Key': 'edr_test',
+    });
+  });
+
   describe('with a configured Customer Web base URL', () => {
     function senderWithBase(
       base: string | undefined,

@@ -56,6 +56,7 @@ const requiredPaths = [
   `secret/aihub/${environment}/database`,
   `secret/aihub/${environment}/redis`,
   `secret/aihub/${environment}/sandbox-assertion`,
+  `secret/aihub/${environment}/auth-mfa`,
 ];
 
 for (const path of requiredPaths) {

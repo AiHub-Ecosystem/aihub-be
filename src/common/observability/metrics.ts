@@ -56,7 +56,7 @@ const meteringIncompleteTotal = new Counter({
 });
 
 /**
- * The three email kinds are the whole label domain, so this counter cannot grow
+ * The bounded email kinds are the whole label domain, so this counter cannot grow
  * a series per recipient. A cancellation is deliberately absent: ADR-0074 calls
  * it expected lifecycle handling, so paging on it would train operators to
  * ignore the counter that does page.
@@ -71,7 +71,9 @@ const emailDeliveryFailedTotal = new Counter({
 export type EmailDeliveryKindLabel =
   | 'verification_email'
   | 'password_reset_email'
-  | 'organization_invite_email';
+  | 'organization_invite_email'
+  | 'mfa_enabled_notification'
+  | 'mfa_removed_notification';
 
 export function recordEmailDeliveryFailed(kind: EmailDeliveryKindLabel): void {
   emailDeliveryFailedTotal.inc({ kind });
@@ -81,6 +83,8 @@ const EMAIL_DELIVERY_KIND_LABELS: readonly EmailDeliveryKindLabel[] = [
   'verification_email',
   'password_reset_email',
   'organization_invite_email',
+  'mfa_enabled_notification',
+  'mfa_removed_notification',
 ];
 
 const EMAIL_OUTBOX_BACKLOG_KIND_LABELS: readonly (

@@ -14,6 +14,9 @@ AIHUB supports two explicit sources:
 - `AIHUB_RUNTIME_CONNECTION_SECRETS_FILE=<agent-rendered JSON path>` —
   database, Redis, and sandbox signing material. The process bootstrap selects
   the production or sandbox connection before Nest wiring.
+- `AIHUB_AUTH_MFA_SECRETS_FILE=<agent-rendered JSON path>` — the separately
+  rendered TOTP secret keyring. It stays outside the existing strict runtime
+  JSON document so an N-1 image can keep reading its unchanged schema.
 
 If a required bundle is missing or malformed, startup fails closed. A process
 that has already loaded a valid snapshot keeps using its in-memory snapshot
@@ -23,14 +26,20 @@ during a temporary Vault/Agent outage; it does not read Vault per request.
 
 1. Apply the matching policy from `ops/vault/policies/` with an operator
    session. Never use the AIHUB runtime identity for policy administration.
-2. Create the eight KV v2 bundles: `ai-speaking`, `ai-writing`, `seaweedfs`,
+2. Create the KV v2 bundles: `ai-speaking`, `ai-writing`, `seaweedfs`,
    `resend`, `user-access-jwt`, `database`, `redis`, and `sandbox-assertion`.
-3. Provision the environment AppRole and configure Vault Agent to render both
-   templates under the AIHUB service account.
+   Before deploying an MFA writer, also provision `email-outbox`, `web-session`,
+   and `auth-mfa`; the latter contains `current_key_id` and a JSON string of
+   key IDs mapped to 32-byte base64 keys.
+3. Provision the environment AppRole and configure Vault Agent to render all
+   three files under the AIHUB service account.
 4. Set the rendered-file paths in the deployment config channel. Do not put
    runtime credential values in `.env.production`.
 5. Start one instance and run the opt-in AppRole smoke test. Verify health,
-   Speaking/Writing dispatch, authentication, and redacted logs.
+   Speaking/Writing dispatch, authentication, and redacted logs. The N-1 image
+   ignores the new standalone MFA file and ignores the two new outbox kinds via
+   the already-deployed unknown-kind reader; only the MFA writer release emits
+   those kinds.
 6. Roll the change across the deployment only after the first instance is
    healthy, then remove the migrated long-lived credentials from deployment
    environments.

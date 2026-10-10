@@ -13,6 +13,10 @@ import { createRequestLogging } from '@/common/observability/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { LoginResponseSchema } from '@/contracts/auth/local-auth';
 import {
+  AUTH_MFA_SERVICE,
+  type AuthMfaServicePort,
+} from '@/modules/auth/application/auth-mfa-repository.port';
+import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from '@/modules/auth/application/auth-rate-limiter.port';
@@ -99,6 +103,26 @@ class LimiterFake implements AuthRateLimiterPort {
   }
 }
 
+class MfaFake implements AuthMfaServicePort {
+  loginResult: Awaited<ReturnType<AuthMfaServicePort['loginProof']>> = {
+    kind: 'none',
+  };
+
+  async loginProof() {
+    return this.loginResult;
+  }
+
+  async beginEnrollment() {
+    return { secret: 'A'.repeat(32), otpauthUri: 'otpauth://totp/AIHUB:test' };
+  }
+
+  async confirmEnrollment() {
+    return ['ABCD-EFGH-IJKL-MNOP'];
+  }
+
+  async removeFactor(): Promise<void> {}
+}
+
 const OTHER_USER_ID = 'usr_01J00000000000000000000001';
 const OTHER_EMAIL = 'someone-else@example.com';
 
@@ -145,6 +169,7 @@ describe('web session HTTP boundary', () => {
   let passwordResetTokens: InMemoryPasswordResetTokenAdapter;
   let passwordResetTokenIssuer: PasswordResetTokenPort;
   const log = new CapturedLog();
+  const mfa = new MfaFake();
 
   beforeAll(async () => {
     state = createInMemoryAuthState();
@@ -176,6 +201,8 @@ describe('web session HTTP boundary', () => {
       .useValue(clock)
       .overrideProvider(WEB_SESSION_CLIENT_SECRET)
       .useValue({ resolve: () => provisioned.secret })
+      .overrideProvider(AUTH_MFA_SERVICE)
+      .useValue(mfa)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -215,6 +242,7 @@ describe('web session HTTP boundary', () => {
     limiter.calls = [];
     clock.value = new Date(NOW.getTime());
     provisioned.secret = CLIENT_SECRET;
+    mfa.loginResult = { kind: 'none' };
     log.reset();
   });
 
@@ -386,6 +414,20 @@ describe('web session HTTP boundary', () => {
     expect(body.data.expires_at).toBe('2026-11-07T00:00:00.000Z');
     expect(body.meta.request_id).toMatch(/^req_/);
     expect(state.webSessions.size).toBe(1);
+  });
+
+  it('returns MFA_REQUIRED without issuing a Web Session token', async () => {
+    seedActiveAccount();
+    mfa.loginResult = { kind: 'required' };
+
+    const response = await create();
+
+    expect(response.statusCode).toBe(202);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers['set-cookie']).toBeUndefined();
+    expect(response.json().data).toEqual({ status: 'MFA_REQUIRED' });
+    expect(response.payload).not.toContain('web_session_token');
+    expect(state.webSessions.size).toBe(0);
   });
 
   it('stores only the token hash and never sets a cookie', async () => {

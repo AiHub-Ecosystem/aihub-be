@@ -19,6 +19,7 @@ secret/aihub/{environment}/redis
 secret/aihub/{environment}/sandbox-assertion
 secret/aihub/{environment}/email-outbox
 secret/aihub/{environment}/web-session
+secret/aihub/{environment}/auth-mfa
 ```
 
 All bundles except database, Redis, and sandbox-assertion are part of the V1
@@ -48,7 +49,7 @@ vault policy write aihub-production-runtime ops/vault/policies/aihub-production-
 The repository also includes an explicit operator-only provisioning helper. It
 expects a mode-700 directory with `ai-speaking.json`, `ai-writing.json`,
 `seaweedfs.json`, `resend.json`, `user-access-jwt.json`, `email-outbox.json`,
-and `web-session.json` containing only the flat bundle keys. It passes file paths
+`web-session.json`, and `auth-mfa.json` containing only the flat bundle keys. It passes file paths
 to the Vault CLI, never secret values:
 
 ```powershell
@@ -99,13 +100,19 @@ constraint blocks logins from outside the VPS but does not distinguish one
 container on it from another. It is a network boundary, not per-container
 isolation; the policy is what limits what the resulting token can read.
 
+`auth-mfa.json` contains `current_key_id` and `keys`, both strings. `keys` is a
+JSON object encoded as a string and maps key IDs to 32-byte base64 AES keys.
+Keep previous key IDs in the map while enabled factors still reference them;
+the new runtime reads this separate file, which the previous image ignores.
+Provision this bundle and render the file before deploying the writer release.
+
 The role is provisioned with `bind_secret_id=false`, so the Agent's role ID is a
 complete credential and the Agent re-authenticates on its own after a restart
 or a revoked token. `bound_cidr_list` is the constraint Vault requires when
 `bind_secret_id` is off.
 
 The helper writes the selected policy, creates an AppRole with a short token
-TTL and bounded maximum TTL, and writes all ten KV bundles. The credential
+TTL and bounded maximum TTL, and writes all eleven KV bundles. The credential
 directory must also contain `database.json`, `redis.json`, and
 `sandbox-assertion.json` with the flat keys used by the connection template.
 `database.json` contains `url`, `sandbox_url`, and
@@ -124,9 +131,10 @@ smoke test.
 ## Agent template
 
 `templates/runtime-secrets.json.ctmpl` renders the JSON shape consumed by the
-AIHUB runtime-secret provider. `templates/connection-secrets.json.ctmpl`
-renders database, Redis, and sandbox bootstrap material. Set
-`AIHUB_VAULT_ENVIRONMENT` in the Agent process; both files are rendered under
+AIHUB runtime-secret provider. `templates/auth-mfa-secrets.json.ctmpl` renders
+the separate MFA keyring. `templates/connection-secrets.json.ctmpl` renders
+database, Redis, and sandbox bootstrap material. Set
+`AIHUB_VAULT_ENVIRONMENT` in the Agent process; all three files are rendered under
 the shared runtime directory.
 
 The rendered file must be readable only by the AIHUB service account. Its

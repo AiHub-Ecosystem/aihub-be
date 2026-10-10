@@ -1,5 +1,9 @@
 import { AppError } from '@/common/errors/app-error';
 import type { IdMinter } from '@/common/ids/prefixed-id';
+import type {
+  AuthMfaServicePort,
+  MfaSessionProof,
+} from './auth-mfa-repository.port';
 import { enforceAuthRateLimit } from './auth-rate-limit';
 import { type AuthRateLimiterPort } from './auth-rate-limiter.port';
 import { type LocalAuthServiceClock } from './local-auth.service';
@@ -24,6 +28,7 @@ import { webSessionUnavailable } from './web-session-errors';
 import { WEB_SESSION_POLICY } from './web-session-policy';
 import { type WebSessionRepositoryPort } from './web-session-repository.port';
 import {
+  type CreateWebSessionOutcome,
   type CreatedWebSession,
   type WebSessionServicePort,
 } from './web-session-service.port';
@@ -99,12 +104,17 @@ export class WebSessionService implements WebSessionServicePort {
     private readonly verificationTokenStore: VerificationTokenRepositoryPort,
     private readonly verificationTokens: VerificationTokenPort,
     private readonly accessTokenIssuer: UserAccessTokenIssuerPort,
+    private readonly mfa: AuthMfaServicePort,
   ) {}
 
   async createWebSession(
-    input: { readonly email: string; readonly password: string },
+    input: {
+      readonly email: string;
+      readonly password: string;
+      readonly mfa_code?: string;
+    },
     ip: string,
-  ): Promise<CreatedWebSession> {
+  ): Promise<CreateWebSessionOutcome> {
     // The same check, dummy hash, and login limits login applies, so this route
     // adds no way around them.
     const credentials = await authenticateCredentials(
@@ -116,6 +126,11 @@ export class WebSessionService implements WebSessionServicePort {
       input,
       ip,
     );
+    const mfa = await this.mfa.loginProof(credentials.userId, input.mfa_code);
+    if (mfa.kind === 'required') return { kind: 'mfa-required' };
+    if (mfa.kind === 'invalid') {
+      await rejectCredentials(this.rateLimiter, ip, credentials.email);
+    }
 
     const now = this.clock.now();
     return this.commitSession(
@@ -123,6 +138,7 @@ export class WebSessionService implements WebSessionServicePort {
       this.tokenIssuer.issue(now),
       now,
       ip,
+      mfa.kind === 'proved' ? mfa.proof : undefined,
     );
   }
 
@@ -319,7 +335,8 @@ export class WebSessionService implements WebSessionServicePort {
     token: ReturnType<WebSessionTokenIssuerPort['issue']>,
     now: Date,
     ip: string,
-  ): Promise<CreatedWebSession> {
+    mfaProof?: MfaSessionProof,
+  ): Promise<CreateWebSessionOutcome> {
     let created: boolean;
     try {
       created = await this.webSessions.createWebSession({
@@ -328,6 +345,7 @@ export class WebSessionService implements WebSessionServicePort {
         expectedPasswordHash: credentials.passwordHash,
         token,
         now,
+        ...(mfaProof === undefined ? {} : { mfaProof }),
       });
     } catch (error) {
       throw webSessionUnavailable(error);
@@ -337,7 +355,10 @@ export class WebSessionService implements WebSessionServicePort {
       await rejectCredentials(this.rateLimiter, ip, credentials.email);
     }
 
-    return { token: token.raw, expiresAt: token.expiresAt };
+    return {
+      kind: 'created',
+      session: { token: token.raw, expiresAt: token.expiresAt },
+    };
   }
 
   /**

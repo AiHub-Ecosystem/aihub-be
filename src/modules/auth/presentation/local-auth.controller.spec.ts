@@ -11,6 +11,10 @@ import { AppModule } from '@/app.module';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { ReadCurrentUserResponseSchema } from '@/contracts/auth/local-auth';
 import {
+  AUTH_MFA_SERVICE,
+  type AuthMfaServicePort,
+} from '@/modules/auth/application/auth-mfa-repository.port';
+import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from '@/modules/auth/application/auth-rate-limiter.port';
@@ -166,6 +170,26 @@ class LimiterFake implements AuthRateLimiterPort {
   }
 }
 
+class MfaFake implements AuthMfaServicePort {
+  loginResult: Awaited<ReturnType<AuthMfaServicePort['loginProof']>> = {
+    kind: 'none',
+  };
+
+  async loginProof() {
+    return this.loginResult;
+  }
+
+  async beginEnrollment() {
+    return { secret: 'A'.repeat(32), otpauthUri: 'otpauth://totp/AIHUB:test' };
+  }
+
+  async confirmEnrollment() {
+    return ['ABCD-EFGH-IJKL-MNOP'];
+  }
+
+  async removeFactor(): Promise<void> {}
+}
+
 class AccessTokenIssuerFake implements UserAccessTokenIssuerPort {
   fail = false;
 
@@ -215,6 +239,7 @@ describe('local auth HTTP boundary', () => {
   let passwordResetTokenIssuer: PasswordResetTokenFake;
   let refreshTokenIssuer: RefreshTokenIssuerFake;
   let accessTokenIssuer: AccessTokenIssuerFake;
+  let mfa: MfaFake;
 
   beforeAll(async () => {
     state = createInMemoryAuthState();
@@ -229,6 +254,7 @@ describe('local auth HTTP boundary', () => {
     passwordResetTokenIssuer = new PasswordResetTokenFake();
     refreshTokenIssuer = new RefreshTokenIssuerFake();
     accessTokenIssuer = new AccessTokenIssuerFake();
+    mfa = new MfaFake();
     const accessTokenVerifier: UserAccessTokenVerifierPort = {
       verify: async (token) => {
         if (token === 'valid.user.access') {
@@ -264,6 +290,8 @@ describe('local auth HTTP boundary', () => {
       .useValue(accessTokenVerifier)
       .overrideProvider(REFRESH_TOKEN_ISSUER)
       .useValue(refreshTokenIssuer)
+      .overrideProvider(AUTH_MFA_SERVICE)
+      .useValue(mfa)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -293,6 +321,7 @@ describe('local auth HTTP boundary', () => {
     refreshSessions.failCreateRefreshSession = false;
     refreshSessions.failFindRefreshToken = false;
     tokenIssuer.reset();
+    mfa.loginResult = { kind: 'none' };
     passwordResetTokenIssuer.reset();
     refreshTokenIssuer.reset();
   });
@@ -406,6 +435,48 @@ describe('local auth HTTP boundary', () => {
       data: { username: 'person_01' },
       meta: { request_id: expect.stringMatching(/^req_/) },
     });
+  });
+
+  it('returns enrollment material and recovery codes only from their no-store MFA endpoints', async () => {
+    seedActiveAccount();
+    const headers = {
+      authorization: 'Bearer valid.user.access',
+      'content-type': 'application/json',
+    };
+
+    const enrollment = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/mfa/enrollment',
+      headers,
+      payload: { password: 'correct horse battery' },
+    });
+    expect(enrollment.statusCode).toBe(200);
+    expect(enrollment.headers['cache-control']).toBe('no-store');
+    expect(enrollment.json().data).toEqual({
+      secret: 'A'.repeat(32),
+      otpauth_uri: 'otpauth://totp/AIHUB:test',
+    });
+
+    const confirmation = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/mfa/enrollment/confirm',
+      headers,
+      payload: { code: '123456' },
+    });
+    expect(confirmation.statusCode).toBe(200);
+    expect(confirmation.headers['cache-control']).toBe('no-store');
+    expect(confirmation.json().data.recovery_codes).toEqual([
+      'ABCD-EFGH-IJKL-MNOP',
+    ]);
+
+    const removal = await app.inject({
+      method: 'DELETE',
+      url: '/v1/auth/mfa',
+      headers,
+      payload: { password: 'correct horse battery' },
+    });
+    expect(removal.statusCode).toBe(204);
+    expect(removal.headers['cache-control']).toBe('no-store');
   });
 
   it('requires a Bearer user access token for the current account', async () => {
@@ -921,6 +992,24 @@ describe('local auth HTTP boundary', () => {
         ),
       ]),
     );
+  });
+
+  it('returns MFA_REQUIRED without setting a refresh cookie or creating a session', async () => {
+    seedActiveAccount();
+    mfa.loginResult = { kind: 'required' };
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: EMAIL, password: 'correct horse battery' },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers['set-cookie']).toBeUndefined();
+    expect(response.json().data).toEqual({ status: 'MFA_REQUIRED' });
+    expect(state.refreshTokens.size).toBe(0);
   });
 
   it('keeps unknown and inactive login failures generic', async () => {

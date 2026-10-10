@@ -128,10 +128,11 @@ jobs:
             "$target:$VPS_APP_DIR/ops/vault/agent/"
           scp "${scp_opts[@]}" \
             ops/vault/templates/runtime-secrets.json.ctmpl \
+            ops/vault/templates/auth-mfa-secrets.json.ctmpl \
             ops/vault/templates/connection-secrets.json.ctmpl \
             "$target:$VPS_APP_DIR/ops/vault/templates/"
           ssh "${ssh_opts[@]}" "$target" \
-            "test -s '$VPS_APP_DIR/docker-compose.production.yml' && test -s '$VPS_APP_DIR/ops/vault/agent/aihub-runtime.hcl' && test -s '$VPS_APP_DIR/ops/vault/templates/runtime-secrets.json.ctmpl' && test -s '$VPS_APP_DIR/ops/vault/templates/connection-secrets.json.ctmpl'"
+            "test -s '$VPS_APP_DIR/docker-compose.production.yml' && test -s '$VPS_APP_DIR/ops/vault/agent/aihub-runtime.hcl' && test -s '$VPS_APP_DIR/ops/vault/templates/runtime-secrets.json.ctmpl' && test -s '$VPS_APP_DIR/ops/vault/templates/auth-mfa-secrets.json.ctmpl' && test -s '$VPS_APP_DIR/ops/vault/templates/connection-secrets.json.ctmpl'"
 
       - name: Apply managed AIHUB nginx config
         if: ${{ vars.AIHUB_MANAGED_NGINX == 'true' }}
@@ -271,6 +272,7 @@ jobs:
           fi
           if ! sudo -n docker exec "$vault_container_id" sh -ec '
             test -s /run/secrets/aihub/runtime-secrets.json || { echo "runtime-secrets.json is missing or empty" >&2; exit 1; }
+            test -s /run/secrets/aihub/auth-mfa-secrets.json || { echo "auth-mfa-secrets.json is missing or empty" >&2; exit 1; }
             test -s /run/secrets/aihub/connection-secrets.json || { echo "connection-secrets.json is missing or empty" >&2; exit 1; }
             wget -q -T 2 -O /dev/null "http://127.0.0.1:8220/agent/v1/metrics?format=prometheus"
           '; then
