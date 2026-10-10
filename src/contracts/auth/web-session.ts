@@ -2,6 +2,7 @@ import { type Static, Type } from '@sinclair/typebox';
 
 import {
   BrowserBindingSchema,
+  MfaRequiredResponseSchema,
   PasswordSchema,
 } from '@/contracts/auth/local-auth';
 
@@ -15,6 +16,13 @@ export const CreateWebSessionRequestSchema = Type.Object(
   {
     email: Type.String({ minLength: 1, maxLength: 320 }),
     password: PasswordSchema,
+    mfa_code: Type.Optional(
+      Type.String({
+        minLength: 1,
+        maxLength: 64,
+        description: 'TOTP code or one-time recovery code.',
+      }),
+    ),
   },
   { additionalProperties: false },
 );
@@ -82,6 +90,14 @@ export const CreateWebSessionResponseSchema = Type.Object(
 
 export type CreateWebSessionResponse = Static<
   typeof CreateWebSessionResponseSchema
+>;
+
+export const CreateWebSessionResultResponseSchema = Type.Union([
+  CreateWebSessionResponseSchema,
+  MfaRequiredResponseSchema,
+]);
+export type CreateWebSessionResultResponse = Static<
+  typeof CreateWebSessionResultResponseSchema
 >;
 
 /**

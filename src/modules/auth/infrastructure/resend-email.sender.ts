@@ -1,6 +1,7 @@
 import type {
   EmailDispatchOptions,
   EmailSenderPort,
+  MfaSecurityNotificationInput,
   OrganizationInviteEmailInput,
   PasswordResetEmailInput,
   VerificationEmailInput,
@@ -263,6 +264,32 @@ export class ResendEmailSender implements EmailSenderPort {
           `This token expires at ${input.expiresAt.toISOString()}.`,
           ...this.deepLinkLine('/invite', input.token),
         ].join('\n'),
+      }),
+      signal: AbortSignal.timeout(EMAIL_ATTEMPT_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      throw new Error('Resend email delivery failed');
+    }
+  }
+
+  async sendMfaSecurityNotification(
+    input: MfaSecurityNotificationInput,
+    options?: EmailDispatchOptions,
+  ): Promise<void> {
+    const enabled = input.action === 'enabled';
+    const response = await this.fetch(RESEND_ENDPOINT, {
+      method: 'POST',
+      headers: this.headers(options),
+      body: JSON.stringify({
+        from: this.from,
+        to: [input.email],
+        subject: enabled
+          ? 'AIHUB two-factor authentication enabled'
+          : 'AIHUB two-factor authentication removed',
+        text: enabled
+          ? 'A TOTP second factor was enabled on your AIHUB account. If you did not make this change, contact AIHUB support immediately.'
+          : 'The TOTP second factor was removed from your AIHUB account and all refresh and web sessions were ended. If you did not make this change, contact AIHUB support immediately.',
       }),
       signal: AbortSignal.timeout(EMAIL_ATTEMPT_TIMEOUT_MS),
     });

@@ -398,6 +398,30 @@ curl --fail https://api.example.com/health
 
 Run the two Sandbox-profile commands only when `AIHUB_SANDBOX_ENABLED=true`.
 
+### Adding the standalone MFA keyring
+
+The MFA cipher reads `/run/secrets/aihub/auth-mfa-secrets.json`, separate from
+the strict `runtime-secrets.json` document. Prepare it before the first release
+that writes MFA state:
+
+1. Add the read path from `ops/vault/policies/aihub-production-runtime.hcl` to
+   the production runtime policy and provision
+   `secret/aihub/production/auth-mfa` with `current_key_id` and `keys`.
+2. Add
+   `AIHUB_AUTH_MFA_SECRETS_FILE=/run/secrets/aihub/auth-mfa-secrets.json` to
+   `.env.production`. Copy the new Agent HCL and template to the host, then
+   recreate only `vault-agent` so it starts rendering the separate keyring.
+3. Check that the keyring file exists, the Agent authenticated recently, and
+   the existing runtime and connection documents are unchanged. Do not print
+   any key values. The running N-1 app ignores the new file and its environment
+   variable, so it can keep serving during this preparation.
+4. Merge and deploy the writer release only after those checks. The deployed
+   #489 reader skips the new outbox kinds until the writer is present.
+
+Rollback to N-1 can leave the separate keyring file, Agent template, and Vault
+read grant in place. The old image ignores them, and the MFA migrations are
+additive; do not delete factor data or key versions during an image rollback.
+
 ### Release order when a rollout adds a runtime secret
 
 CD deploys `main` and never restarts `vault-agent`. The new image must have its
@@ -446,7 +470,7 @@ The Customer Web BFF client secret authenticates the Web Session route group's
 rendered bundle; missing development/test configuration makes the routes answer
 `503` rather than admitting every caller.
 
-The `vault-agent` healthcheck requires both rendered bundles and a reachable
+The `vault-agent` healthcheck requires all three rendered bundles and a reachable
 `metrics_only` listener bound to the Agent container's loopback. This listener
 does not add capabilities to the runtime AppRole. Healthcheck output names the
 failure without printing metric payloads or credentials. The deployed Agent's
@@ -455,7 +479,7 @@ metrics response does not currently include the documented
 both bundles are present, and an auth or renewal log occurred within the last
 hour instead of trusting that false-negative health state.
 
-To inspect the Agent manually, verify both bundles and that its metrics listener
+To inspect the Agent manually, verify all three bundles and that its metrics listener
 responds. Compose health alone is not evidence of authentication:
 
 ```sh
@@ -464,6 +488,7 @@ vault_container_id="$(sudo -n docker compose --env-file .env.production \
 sudo -n docker inspect --format '{{json .State.Health}}' "$vault_container_id"
 sudo -n docker exec "$vault_container_id" sh -ec \
   "test -s /run/secrets/aihub/runtime-secrets.json && \
+   test -s /run/secrets/aihub/auth-mfa-secrets.json && \
    test -s /run/secrets/aihub/connection-secrets.json && \
    wget -q -T 2 -O /dev/null 'http://127.0.0.1:8220/agent/v1/metrics?format=prometheus'"
 ```

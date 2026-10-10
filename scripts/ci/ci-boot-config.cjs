@@ -19,7 +19,7 @@
  * value, scripts/ci/ci-boot-config.spec.ts fails until it is added here.
  */
 
-const { generateKeyPairSync } = require('node:crypto');
+const { generateKeyPairSync, randomBytes } = require('node:crypto');
 const { mkdirSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
@@ -69,6 +69,13 @@ function connectionSecrets() {
   };
 }
 
+function authMfaSecrets() {
+  return {
+    current_key_id: FAKE,
+    keys: { [FAKE]: randomBytes(32).toString('base64') },
+  };
+}
+
 // Mirrors the app environment in docker-compose.production.yml.
 const BOOT_ENVIRONMENT = {
   NODE_ENV: 'production',
@@ -78,6 +85,7 @@ const BOOT_ENVIRONMENT = {
   AIHUB_ALLOW_UNAUTHENTICATED_DEV: 'false',
   AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
   AIHUB_RUNTIME_SECRETS_FILE: `${SECRETS_MOUNT}/runtime-secrets.json`,
+  AIHUB_AUTH_MFA_SECRETS_FILE: `${SECRETS_MOUNT}/auth-mfa-secrets.json`,
   AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: `${SECRETS_MOUNT}/connection-secrets.json`,
   AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
   AIHUB_USER_ACCESS_ISSUER: 'https://api.ci-boot.invalid',
@@ -103,6 +111,10 @@ function writeBootConfig(directory) {
   writeFileSync(
     join(directory, 'connection-secrets.json'),
     JSON.stringify(connectionSecrets()),
+  );
+  writeFileSync(
+    join(directory, 'auth-mfa-secrets.json'),
+    JSON.stringify(authMfaSecrets()),
   );
   writeFileSync(
     join(directory, 'boot.env'),

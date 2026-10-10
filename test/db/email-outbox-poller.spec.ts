@@ -297,6 +297,13 @@ class RecordingSender implements EmailSenderPort {
     await this.record('organization_invite_email', options);
   }
 
+  async sendMfaSecurityNotification(
+    _input: unknown,
+    options?: EmailDispatchOptions,
+  ): Promise<void> {
+    await this.record('mfa_enabled_notification', options);
+  }
+
   private async record(
     kind: EmailDeliveryKind,
     options: EmailDispatchOptions | undefined,
@@ -827,6 +834,9 @@ describe('email outbox dispatch poller', () => {
         },
         async sendOrganizationInviteEmail(input) {
           delivered.push(input);
+        },
+        async sendMfaSecurityNotification() {
+          throw new Error('wrong kind dispatched');
         },
       };
 

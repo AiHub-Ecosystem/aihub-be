@@ -305,7 +305,7 @@
         }
       },
       "Error409": {
-        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE | ORGANIZATION_MEMBER_EXISTS | ORGANIZATION_OWNER_REQUIRED | ORGANIZATION_IDENTITY_ISSUER_CONFLICT | ORGANIZATION_CREATION_LIMIT_REACHED | AVATAR_CHANGED",
+        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE | AUTH_MFA_ALREADY_ENABLED | ORGANIZATION_MEMBER_EXISTS | ORGANIZATION_OWNER_REQUIRED | ORGANIZATION_IDENTITY_ISSUER_CONFLICT | ORGANIZATION_CREATION_LIMIT_REACHED | AVATAR_CHANGED",
         "content": {
           "application/json": {
             "schema": {
@@ -326,6 +326,10 @@
                         },
                         {
                           "const": "AUTH_IDENTITY_UNAVAILABLE",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AUTH_MFA_ALREADY_ENABLED",
                           "type": "string"
                         },
                         {
@@ -7792,6 +7796,12 @@
                     "maxLength": 128,
                     "description": "12–128 Unicode code points; no normalization.",
                     "type": "string"
+                  },
+                  "mfa_code": {
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "TOTP code or one-time recovery code.",
+                    "type": "string"
                   }
                 }
               }
@@ -7853,6 +7863,334 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Password accepted; TOTP or an unused recovery code is required before a Refresh Session is created.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["status"],
+                      "properties": {
+                        "status": {
+                          "const": "MFA_REQUIRED",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
+    "/v1/auth/mfa/enrollment": {
+      "post": {
+        "operationId": "auth.mfa.enrollment",
+        "summary": "Begin TOTP enrollment",
+        "description": "Requires a fresh password. The encrypted pending secret is disclosed only by this no-store response; confirm it before the factor is enabled.",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["password"],
+                "properties": {
+                  "password": {
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "format": "aihub-password-policy",
+                    "description": "12–128 Unicode code points; no normalization.",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pending authenticator secret and otpauth URI; shown before confirmation only.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["secret", "otpauth_uri"],
+                      "properties": {
+                        "secret": {
+                          "minLength": 32,
+                          "maxLength": 32,
+                          "type": "string"
+                        },
+                        "otpauth_uri": {
+                          "minLength": 1,
+                          "maxLength": 512,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
+    "/v1/auth/mfa/enrollment/confirm": {
+      "post": {
+        "operationId": "auth.mfa.enrollment.confirm",
+        "summary": "Confirm TOTP enrollment",
+        "description": "A valid code enables the factor and returns eight recovery codes once. Their hashes and the security notification are committed in the same transaction.",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["code"],
+                "properties": {
+                  "code": {
+                    "pattern": "^\\d{6}$",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One-time recovery codes. Store them securely; AIHUB cannot show them again.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["recovery_codes"],
+                      "properties": {
+                        "recovery_codes": {
+                          "minItems": 8,
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "pattern": "^[A-Z2-7]{4}(?:-[A-Z2-7]{4}){3}$",
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        }
+      }
+    },
+    "/v1/auth/mfa": {
+      "delete": {
+        "operationId": "auth.mfa.remove",
+        "summary": "Remove TOTP factor",
+        "description": "Requires a fresh password or TOTP code. Removal ends all Refresh Sessions and Web Sessions; already-issued stateless User Access JWTs remain valid for at most 15 minutes.",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": ["password"],
+                    "properties": {
+                      "password": {
+                        "minLength": 1,
+                        "maxLength": 256,
+                        "format": "aihub-password-policy",
+                        "description": "12–128 Unicode code points; no normalization.",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": ["code"],
+                    "properties": {
+                      "code": {
+                        "pattern": "^\\d{6}$",
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Factor removed and durable sessions revoked.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
                 }
               }
             }
@@ -8492,7 +8830,7 @@
       "post": {
         "operationId": "auth.web_sessions.create",
         "summary": "Create a Web Session from an email and password",
-        "description": "Server-to-server only, Customer Web BFF. AIHUB stores only the token hash, never sets a cookie for this route, and applies the same credential checks and login rate limits as POST /v1/auth/login.",
+        "description": "Server-to-server only, Customer Web BFF. AIHUB stores only the token hash, never sets a cookie for this route, and applies the same credential checks and login rate limits as POST /v1/auth/login. When MFA is enabled, a missing code returns 202 MFA_REQUIRED without creating a Web Session; the next request resubmits email, password, and TOTP or recovery code. Customer Web keeps the password only in transient form memory and clears it when the flow ends.",
         "x-identity-scope": "none",
         "security": [
           {
@@ -8522,6 +8860,12 @@
                     "minLength": 12,
                     "maxLength": 128,
                     "description": "12–128 Unicode code points; no normalization.",
+                    "type": "string"
+                  },
+                  "mfa_code": {
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "TOTP code or one-time recovery code.",
                     "type": "string"
                   }
                 }
@@ -8560,6 +8904,50 @@
                         "expires_at": {
                           "format": "date-time",
                           "description": "ISO 8601 instant the session expires. Sliding: a successful exchange moves it 30 days forward.",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Password accepted; submit the same email/password and a TOTP or unused recovery code in the next request. Customer Web keeps the password only in transient form memory, never local or session storage.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["status"],
+                      "properties": {
+                        "status": {
+                          "const": "MFA_REQUIRED",
                           "type": "string"
                         }
                       }

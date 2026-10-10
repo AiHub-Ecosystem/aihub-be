@@ -9,6 +9,7 @@ import { InMemoryPasswordResetTokenAdapter } from '@/modules/auth/testing/in-mem
 import { InMemoryRefreshSessionAdapter } from '@/modules/auth/testing/in-memory-refresh-session.adapter';
 import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
 import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
+import type { AuthMfaServicePort } from './auth-mfa-repository.port';
 import type { AuthRateLimiterPort } from './auth-rate-limiter.port';
 import type { EmailPayloadCipherPort } from './email-delivery-request.port';
 import { LocalAuthService } from './local-auth.service';
@@ -173,6 +174,36 @@ class FakeClock {
   }
 }
 
+class FakeMfaService implements AuthMfaServicePort {
+  result: Awaited<ReturnType<AuthMfaServicePort['loginProof']>> = {
+    kind: 'none',
+  };
+
+  async loginProof() {
+    return this.result;
+  }
+
+  async beginEnrollment(): Promise<{
+    readonly secret: string;
+    readonly otpauthUri: string;
+  }> {
+    throw new Error('unused');
+  }
+
+  async confirmEnrollment(): Promise<readonly string[]> {
+    throw new Error('unused');
+  }
+
+  async removeFactor(): Promise<void> {
+    throw new Error('unused');
+  }
+}
+
+function sessionOf(outcome: Awaited<ReturnType<LocalAuthService['login']>>) {
+  if (outcome.kind !== 'session') throw new Error('MFA proof was required');
+  return outcome.session;
+}
+
 function service() {
   const state = createInMemoryAuthState();
   const userAccounts = new InMemoryUserAccountAdapter(state);
@@ -185,6 +216,7 @@ function service() {
   const limiter = new FakeLimiter();
   const hasher = new FakeHasher();
   const clock = new FakeClock();
+  const mfa = new FakeMfaService();
 
   const local = new LocalAuthService(
     userAccounts,
@@ -200,6 +232,7 @@ function service() {
     new FakeRefreshTokenIssuer(),
     clock,
     prefixedIdGenerator('edr_'),
+    mfa,
   );
   return {
     local,
@@ -212,6 +245,7 @@ function service() {
     limiter,
     hasher,
     clock,
+    mfa,
   };
 }
 
@@ -602,9 +636,12 @@ describe('LocalAuthService', () => {
         '203.0.113.7',
       ),
     ).resolves.toEqual({
-      accessToken: `jwt-for-${USER_ID}`,
-      expiresIn: 900,
-      refreshToken: 'refresh-1',
+      kind: 'session',
+      session: {
+        accessToken: `jwt-for-${USER_ID}`,
+        expiresIn: 900,
+        refreshToken: 'refresh-1',
+      },
     });
     expect(hasher.verified).toEqual(['  exact password  ']);
     expect(limiter.calls).not.toEqual(
@@ -613,6 +650,102 @@ describe('LocalAuthService', () => {
         expect.objectContaining({ scope: 'login_email' }),
       ]),
     );
+  });
+
+  it('requires an MFA proof before writing a session and counts invalid proof generically', async () => {
+    const required = service();
+    seedActiveAccount(required.state);
+    required.state.mfaFactors.set(USER_ID, {
+      factorId: 'mfa_01J00000000000000000000000',
+      status: 'enabled',
+      email: EMAIL,
+      secret: 'encrypted',
+    });
+    required.mfa.result = { kind: 'required' };
+
+    await expect(
+      required.local.login(
+        { email: EMAIL, password: 'correct horse battery' },
+        '203.0.113.7',
+      ),
+    ).resolves.toEqual({ kind: 'mfa-required' });
+    expect(required.state.refreshTokens.size).toBe(0);
+
+    required.mfa.result = { kind: 'invalid' };
+    await expect(
+      required.local.login(
+        { email: EMAIL, password: 'correct horse battery', mfa_code: 'bad' },
+        '203.0.113.7',
+      ),
+    ).rejects.toMatchObject({
+      code: 'AUTH_CREDENTIALS_INVALID',
+      httpStatus: 401,
+    });
+    expect(required.limiter.calls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ scope: 'login_ip' }),
+        expect.objectContaining({ scope: 'login_email' }),
+      ]),
+    );
+  });
+
+  it('consumes a recovery code only in the same write that creates its session', async () => {
+    const context = service();
+    seedActiveAccount(context.state);
+    const factorId = 'mfa_01J00000000000000000000000';
+    const codeHash = 'a'.repeat(64);
+    context.state.mfaFactors.set(USER_ID, {
+      factorId,
+      status: 'enabled',
+      email: EMAIL,
+      secret: 'encrypted',
+    });
+    context.state.recoveryCodes.set(USER_ID, new Set([codeHash]));
+    context.mfa.result = {
+      kind: 'proved',
+      proof: { kind: 'recovery', codeHash },
+    };
+
+    await expect(
+      context.local.login(
+        { email: EMAIL, password: 'correct horse battery', mfa_code: 'ABCD' },
+        '203.0.113.7',
+      ),
+    ).resolves.toMatchObject({ kind: 'session' });
+    expect(context.state.recoveryCodes.get(USER_ID)?.has(codeHash)).toBe(false);
+    expect(context.state.refreshTokens.size).toBe(1);
+
+    await expect(
+      context.local.login(
+        { email: EMAIL, password: 'correct horse battery', mfa_code: 'ABCD' },
+        '203.0.113.7',
+      ),
+    ).rejects.toMatchObject({ code: 'AUTH_CREDENTIALS_INVALID' });
+    expect(context.state.refreshTokens.size).toBe(1);
+  });
+
+  it('accepts a TOTP proof only for the matching active factor', async () => {
+    const context = service();
+    seedActiveAccount(context.state);
+    const factorId = 'mfa_01J00000000000000000000000';
+    context.state.mfaFactors.set(USER_ID, {
+      factorId,
+      status: 'enabled',
+      email: EMAIL,
+      secret: 'encrypted',
+    });
+    context.mfa.result = {
+      kind: 'proved',
+      proof: { kind: 'totp', factorId },
+    };
+
+    await expect(
+      context.local.login(
+        { email: EMAIL, password: 'correct horse battery', mfa_code: '123456' },
+        '203.0.113.7',
+      ),
+    ).resolves.toMatchObject({ kind: 'session' });
+    expect(context.state.refreshTokens.size).toBe(1);
   });
 
   it.each<[string, SeededAccount | undefined]>([
@@ -672,9 +805,11 @@ describe('LocalAuthService', () => {
   it('rotates a valid refresh credential and does not count successful refreshes', async () => {
     const { local, state, limiter } = service();
     seedActiveAccount(state);
-    const login = await local.login(
-      { email: EMAIL, password: 'correct horse battery' },
-      '203.0.113.7',
+    const login = sessionOf(
+      await local.login(
+        { email: EMAIL, password: 'correct horse battery' },
+        '203.0.113.7',
+      ),
     );
 
     await expect(
@@ -698,9 +833,11 @@ describe('LocalAuthService', () => {
   it('revokes the whole family when a rotated token is replayed', async () => {
     const { local, state } = service();
     seedActiveAccount(state);
-    const login = await local.login(
-      { email: EMAIL, password: 'correct horse battery' },
-      '203.0.113.7',
+    const login = sessionOf(
+      await local.login(
+        { email: EMAIL, password: 'correct horse battery' },
+        '203.0.113.7',
+      ),
     );
     const rotated = await local.refresh(login.refreshToken, '203.0.113.7');
 
@@ -716,13 +853,17 @@ describe('LocalAuthService', () => {
   it('logs out idempotently and leaves another login usable', async () => {
     const { local, state } = service();
     seedActiveAccount(state);
-    const first = await local.login(
-      { email: EMAIL, password: 'correct horse battery' },
-      '203.0.113.7',
+    const first = sessionOf(
+      await local.login(
+        { email: EMAIL, password: 'correct horse battery' },
+        '203.0.113.7',
+      ),
     );
-    const second = await local.login(
-      { email: EMAIL, password: 'correct horse battery' },
-      '203.0.113.7',
+    const second = sessionOf(
+      await local.login(
+        { email: EMAIL, password: 'correct horse battery' },
+        '203.0.113.7',
+      ),
     );
 
     await expect(local.logout(first.refreshToken)).resolves.toBeUndefined();
@@ -753,9 +894,11 @@ describe('LocalAuthService', () => {
   it('uses the strict expiry boundary and leaves the family available for audit', async () => {
     const { local, state, clock } = service();
     seedActiveAccount(state);
-    const login = await local.login(
-      { email: EMAIL, password: 'correct horse battery' },
-      '203.0.113.7',
+    const login = sessionOf(
+      await local.login(
+        { email: EMAIL, password: 'correct horse battery' },
+        '203.0.113.7',
+      ),
     );
     clock.value = new Date('2026-10-20T00:00:00.000Z');
 
@@ -773,9 +916,11 @@ describe('LocalAuthService', () => {
   it('rejects disabled accounts without consuming a failure limit for infrastructure errors', async () => {
     const { local, state, limiter } = service();
     seedActiveAccount(state);
-    const login = await local.login(
-      { email: EMAIL, password: 'correct horse battery' },
-      '203.0.113.7',
+    const login = sessionOf(
+      await local.login(
+        { email: EMAIL, password: 'correct horse battery' },
+        '203.0.113.7',
+      ),
     );
     setStatus(state, 'disabled');
 

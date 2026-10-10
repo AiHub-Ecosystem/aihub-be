@@ -82,6 +82,10 @@ class RecordingSender implements EmailSenderPort {
   async sendOrganizationInviteEmail(): Promise<void> {
     this.calls.push('sendOrganizationInviteEmail');
   }
+
+  async sendMfaSecurityNotification(): Promise<void> {
+    this.calls.push('sendMfaSecurityNotification');
+  }
 }
 
 class RateLimiterFake implements AuthRateLimiterPort {

@@ -94,6 +94,13 @@ export const LoginRequestSchema = Type.Object(
   {
     email: Type.String({ minLength: 1, maxLength: 320 }),
     password: PasswordSchema,
+    mfa_code: Type.Optional(
+      Type.String({
+        minLength: 1,
+        maxLength: 64,
+        description: 'TOTP code or one-time recovery code.',
+      }),
+    ),
   },
   { additionalProperties: false },
 );
@@ -119,6 +126,26 @@ export const LoginResponseSchema = Type.Object(
 );
 
 export type LoginResponse = Static<typeof LoginResponseSchema>;
+
+export const MfaRequiredResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      { status: Type.Literal('MFA_REQUIRED') },
+      { additionalProperties: false },
+    ),
+    meta: Type.Object(
+      { request_id: Type.String({ minLength: 1 }) },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const LoginResultResponseSchema = Type.Union([
+  LoginResponseSchema,
+  MfaRequiredResponseSchema,
+]);
+export type LoginResultResponse = Static<typeof LoginResultResponseSchema>;
 
 export const ReadCurrentUserResponseSchema = Type.Object(
   {

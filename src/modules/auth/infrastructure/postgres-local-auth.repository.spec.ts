@@ -380,6 +380,7 @@ describe('PostgresLocalAuthRepository', () => {
         {
           id: 'usr_01J00000000000000000000000',
           status: 'active',
+          canonical_email: input.email,
           password_hash: input.passwordHash,
         },
       ],
@@ -391,6 +392,7 @@ describe('PostgresLocalAuthRepository', () => {
       ),
     ).resolves.toEqual({
       userId: 'usr_01J00000000000000000000000',
+      email: input.email,
       status: 'active',
       passwordHash: input.passwordHash,
     });
@@ -435,14 +437,17 @@ describe('PostgresLocalAuthRepository', () => {
   it('persists only the refresh hash and rotates under a row lock', async () => {
     const client = new FakeClient();
     const repository = new PostgresLocalAuthRepository(client);
+    client.responses = [[{ status: 'active' }], []];
     await repository.createRefreshSession({
       userId: 'usr_01J00000000000000000000000',
       token: refreshToken,
       issuedAt: input.now,
     });
-    expect(client.queries[0]?.text).toContain('INSERT INTO refresh_tokens');
-    expect(client.queries[0]?.values).toContain(refreshToken.hash);
-    expect(JSON.stringify(client.queries[0])).not.toContain(refreshToken.raw);
+    const insert = client.queries.find((query) =>
+      query.text.includes('INSERT INTO refresh_tokens'),
+    );
+    expect(insert?.values).toContain(refreshToken.hash);
+    expect(JSON.stringify(client.queries)).not.toContain(refreshToken.raw);
 
     client.responses = [
       [

@@ -7,7 +7,10 @@ import {
   hashOpaqueToken,
   opaqueTokenIssuer,
 } from '@/common/security/opaque-token-issuer';
-import { appConfig } from '@/config/runtime-configuration';
+import {
+  appConfig,
+  getRuntimeSecretEnvironment,
+} from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import { EmailDeliveryPoller } from '@/modules/auth/application/email-delivery-poller';
 import {
@@ -19,6 +22,13 @@ import {
   type RuntimeSecretProvider,
 } from '@/modules/secrets/application/runtime-secret-provider.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
+import {
+  AUTH_MFA_CIPHER,
+  AUTH_MFA_ID,
+  AUTH_MFA_REPOSITORY,
+  AUTH_MFA_SERVICE,
+} from './application/auth-mfa-repository.port';
+import { AuthMfaService } from './application/auth-mfa.service';
 import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
@@ -72,6 +82,7 @@ import {
 } from './application/web-session-token.port';
 import { WebSessionService } from './application/web-session.service';
 import { Argon2PasswordHasher } from './infrastructure/argon2-password.hasher';
+import { createAuthMfaCipher } from './infrastructure/auth-mfa-secret.cipher';
 import { CryptoRefreshToken } from './infrastructure/crypto-refresh-token';
 import {
   EMAIL_OUTBOX_POLL_INTERVAL_MS,
@@ -84,6 +95,7 @@ import {
   JoseUserAccessTokenService,
   USER_ACCESS_TOKEN_CRYPTO,
 } from './infrastructure/jose-user-access-token.service';
+import { PostgresAuthMfaRepository } from './infrastructure/postgres-auth-mfa.repository';
 import {
   POSTGRES_AUTH_CLIENT,
   type PostgresAuthClient,
@@ -131,6 +143,39 @@ import {
       inject: [POSTGRES_AUTH_CLIENT],
       useFactory: (client: PostgresAuthClient): PostgresLocalAuthRepository =>
         new PostgresLocalAuthRepository(client),
+    },
+    {
+      provide: AUTH_MFA_REPOSITORY,
+      inject: [POSTGRES_AUTH_CLIENT],
+      useFactory: (client: PostgresAuthClient): PostgresAuthMfaRepository =>
+        new PostgresAuthMfaRepository(client),
+    },
+    {
+      provide: AUTH_MFA_CIPHER,
+      inject: [appConfig.KEY],
+      useFactory: (configuration: ConfigType<typeof appConfig>) =>
+        createAuthMfaCipher({
+          source: configuration.AIHUB_RUNTIME_SECRET_SOURCE,
+          secretsFile: configuration.AIHUB_AUTH_MFA_SECRETS_FILE,
+          values: getRuntimeSecretEnvironment(),
+        }),
+    },
+    { provide: AUTH_MFA_ID, useFactory: () => prefixedIdGenerator('mfa_') },
+    {
+      provide: AUTH_MFA_SERVICE,
+      useFactory: (...ports: ConstructorParameters<typeof AuthMfaService>) =>
+        new AuthMfaService(...ports),
+      inject: [
+        AUTH_MFA_REPOSITORY,
+        AUTH_MFA_CIPHER,
+        USER_ACCOUNT_REPOSITORY,
+        PASSWORD_HASHER,
+        AUTH_RATE_LIMITER,
+        EMAIL_PAYLOAD_CIPHER,
+        EMAIL_DELIVERY_ID,
+        AUTH_MFA_ID,
+        AUTH_CLOCK,
+      ],
     },
     // One Postgres adapter backs all four aggregate ports, so the pool and its
     // shutdown stay single.
@@ -198,6 +243,7 @@ import {
         VERIFICATION_TOKEN_REPOSITORY,
         VERIFICATION_TOKEN,
         USER_ACCESS_TOKEN_ISSUER,
+        AUTH_MFA_SERVICE,
       ],
     },
     { provide: PASSWORD_HASHER, useClass: Argon2PasswordHasher },
@@ -361,6 +407,7 @@ import {
         REFRESH_TOKEN_ISSUER,
         AUTH_CLOCK,
         EMAIL_DELIVERY_ID,
+        AUTH_MFA_SERVICE,
       ],
     },
     UserAccessJwtGuard,

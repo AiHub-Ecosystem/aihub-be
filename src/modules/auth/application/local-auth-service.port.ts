@@ -4,6 +4,9 @@ import type {
   RegisterRequest,
   ResetPasswordRequest,
 } from '@/contracts/auth/local-auth';
+export type LoginOutcome =
+  | { readonly kind: 'session'; readonly session: IssuedSession }
+  | { readonly kind: 'mfa-required' };
 
 export interface IssuedSession {
   readonly accessToken: string;
@@ -35,7 +38,7 @@ export interface LocalAuthServicePort {
     ip: string,
   ): Promise<{ readonly message: string }>;
   resetPassword(input: ResetPasswordRequest, ip: string): Promise<void>;
-  login(input: LoginRequest, ip: string): Promise<IssuedSession>;
+  login(input: LoginRequest, ip: string): Promise<LoginOutcome>;
   refresh(rawToken: string | undefined, ip: string): Promise<IssuedSession>;
   logout(rawToken: string | undefined): Promise<void>;
 }

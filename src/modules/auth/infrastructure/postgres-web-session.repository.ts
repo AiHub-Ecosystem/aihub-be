@@ -6,6 +6,7 @@ import type {
   RevokeWebSessionInput,
   WebSessionRepositoryPort,
 } from '@/modules/auth/application/web-session-repository.port';
+import { authorizeMfaSession } from './auth-mfa-session.guard';
 import type { PostgresAuthClient } from './postgres-auth.client';
 
 export const INSERT_WEB_SESSION_SQL = `
@@ -42,12 +43,15 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
 
   async createWebSession(input: CreateWebSessionInput): Promise<boolean> {
     return this.client.transaction(async (transaction) => {
-      // Serialize the checked insert with reset, while allowing parallel logins.
-      const accounts = await transaction.query(
-        'SELECT status FROM user_accounts WHERE id = $1 FOR SHARE',
-        [input.userId],
-      );
-      if (accounts[0]?.['status'] !== 'active') return false;
+      if (
+        !(await authorizeMfaSession(
+          transaction,
+          input.userId,
+          input.mfaProof,
+          input.now,
+        ))
+      )
+        return false;
 
       // A fresh statement after the lock avoids retaining a pre-reset identity snapshot.
       const identities = await transaction.query(

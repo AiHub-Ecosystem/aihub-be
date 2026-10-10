@@ -10,6 +10,10 @@ import {
   validatePassword,
 } from '@/modules/auth/domain/local-auth';
 import { AuthIdentityConflictError } from './auth-identity-conflict.error';
+import {
+  type AuthMfaServicePort,
+  type MfaSessionProof,
+} from './auth-mfa-repository.port';
 import { type AuthRateLimiterPort } from './auth-rate-limiter.port';
 import {
   type EmailDeliveryKind,
@@ -19,11 +23,13 @@ import {
 } from './email-delivery-request.port';
 import {
   type IssuedSession,
+  type LoginOutcome,
   RefreshRotationCommittedError,
 } from './local-auth-service.port';
 import {
   type CredentialCheckPorts,
   authenticateCredentials,
+  rejectCredentials,
 } from './local-credentials';
 import { type PasswordHasherPort } from './password-hasher.port';
 import { type PasswordResetTokenRepositoryPort } from './password-reset-token-repository.port';
@@ -128,6 +134,7 @@ export class LocalAuthService {
     private readonly refreshTokenIssuer: RefreshTokenIssuerPort,
     private readonly clock: LocalAuthServiceClock,
     private readonly newEmailDeliveryId: IdMinter,
+    private readonly mfa: AuthMfaServicePort,
   ) {}
 
   async currentUser(userId: string): Promise<{ readonly username: string }> {
@@ -352,15 +359,33 @@ export class LocalAuthService {
   }
 
   async login(
-    input: { readonly email: string; readonly password: string },
+    input: {
+      readonly email: string;
+      readonly password: string;
+      readonly mfa_code?: string;
+    },
     ip: string,
-  ): Promise<IssuedSession> {
+  ): Promise<LoginOutcome> {
     const credentials = await authenticateCredentials(
       this.credentials,
       input,
       ip,
     );
-    return this.startLoginSession(credentials.userId, this.clock.now());
+    const mfa = await this.mfa.loginProof(credentials.userId, input.mfa_code);
+    if (mfa.kind === 'required') return { kind: 'mfa-required' };
+    if (mfa.kind === 'invalid') {
+      return rejectCredentials(this.rateLimiter, ip, credentials.email);
+    }
+    const proof = mfa.kind === 'proved' ? mfa.proof : undefined;
+    return {
+      kind: 'session',
+      session: await this.startLoginSession(
+        credentials,
+        this.clock.now(),
+        ip,
+        proof,
+      ),
+    };
   }
 
   private get credentials(): CredentialCheckPorts {
@@ -377,16 +402,25 @@ export class LocalAuthService {
    * without an access token it could not pair with a cookie.
    */
   private async startLoginSession(
-    userId: string,
+    credentials: { readonly userId: string; readonly email: string },
     now: Date,
+    ip: string,
+    mfaProof?: MfaSessionProof,
   ): Promise<IssuedSession> {
     const refreshToken = this.refreshTokenIssuer.issue(now);
-    const session = await this.toIssuedSession(userId, refreshToken);
-    await this.refreshSessions.createRefreshSession({
-      userId,
+    const session = await this.toIssuedSession(
+      credentials.userId,
+      refreshToken,
+    );
+    const created = await this.refreshSessions.createRefreshSession({
+      userId: credentials.userId,
       token: refreshToken,
       issuedAt: now,
+      ...(mfaProof === undefined ? {} : { mfaProof }),
     });
+    if (!created) {
+      await rejectCredentials(this.rateLimiter, ip, credentials.email);
+    }
     return session;
   }
 

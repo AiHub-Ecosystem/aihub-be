@@ -24,6 +24,23 @@ Writing is a separate environment with its own key and allowance; see section
 
 ---
 
+## AIHUB account login through the Customer Web BFF
+
+The Customer Web browser does not call AIHUB login directly. Its BFF sends
+`POST /v1/auth/web-sessions` with the Customer Web client secret header and the
+user's email and password. A `201` response contains the Web Session token for
+the BFF to store in its host-only, HttpOnly cookie. If the password is correct
+and the account has TOTP enabled, AIHUB instead answers `202` with
+`{"data":{"status":"MFA_REQUIRED"}}` and issues no session token. The BFF
+then submits the same email and password plus `mfa_code`, containing either a
+six-digit TOTP code or an unused recovery code.
+
+There is no server-side login challenge: the browser keeps the password only in
+transient form memory while the user enters the second factor, and clears it on
+success, cancellation, or form reset. Do not place it in local/session storage,
+URLs, telemetry, or logs. Both responses are `no-store`; a page reload starts a
+new login attempt.
+
 ## 1. How the pieces fit
 
 AIHUB sits between your backend and the private AI services. Your end users

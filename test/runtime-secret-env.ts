@@ -21,3 +21,7 @@ process.env.EMAIL_OUTBOX_CURRENT_KEY_ID = 'jest-email-outbox-2026';
 process.env.EMAIL_OUTBOX_KEYS = JSON.stringify({
   'jest-email-outbox-2026': Buffer.alloc(32, 7).toString('base64'),
 });
+process.env.AIHUB_AUTH_MFA_CURRENT_KEY_ID = 'jest-auth-mfa-2026';
+process.env.AIHUB_AUTH_MFA_KEYS = JSON.stringify({
+  'jest-auth-mfa-2026': Buffer.alloc(32, 8).toString('base64'),
+});

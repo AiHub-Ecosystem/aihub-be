@@ -1,14 +1,15 @@
 import { OPAQUE_TOKEN_BINDINGS } from '@/common/security/opaque-token-issuer';
 
 import type {
-  AuthEmailDeliveryPayload,
   EmailCredentialActionabilityPort,
   EmailCredentialState,
   EmailDeliveryCancelReason,
   EmailDeliveryErrorCode,
   EmailDeliveryKind,
+  EmailDeliveryPayload,
   EmailDeliveryRequestRecord,
   EmailDispatchStorePort,
+  MfaSecurityNotificationPayload,
   OrganizationInviteEmailDeliveryPayload,
 } from './email-delivery-request.port';
 import { EmailPayloadUnknownKeyVersionError } from './email-delivery-request.port';
@@ -66,16 +67,18 @@ const INVITE_ROLES: readonly string[] = ['owner', 'admin', 'member'];
 function isPayloadFor(
   kind: EmailDeliveryKind,
   value: unknown,
-): value is AuthEmailDeliveryPayload {
+): value is EmailDeliveryPayload {
   if (typeof value !== 'object' || value === null) return false;
   const payload = value as Record<string, unknown>;
+  if (!isNonEmptyString(payload.email)) return false;
   if (
-    !isNonEmptyString(payload.email) ||
-    !isNonEmptyString(payload.token) ||
-    !isNonEmptyString(payload.expiresAt)
+    kind === 'mfa_enabled_notification' ||
+    kind === 'mfa_removed_notification'
   ) {
-    return false;
+    return Object.keys(payload).length === 1;
   }
+  if (!isNonEmptyString(payload.token) || !isNonEmptyString(payload.expiresAt))
+    return false;
   if (kind !== 'organization_invite_email') return true;
   return (
     isNonEmptyString(payload.organizationName) &&
@@ -330,7 +333,7 @@ export class EmailDeliveryPoller {
     'provider_accepted' | 'cancelled' | 'failed' | 'retried' | 'deferred'
   > {
     const now = this.now();
-    let payload: AuthEmailDeliveryPayload | undefined;
+    let payload: EmailDeliveryPayload | undefined;
     try {
       payload = this.readPayload(request);
     } catch {
@@ -342,18 +345,26 @@ export class EmailDeliveryPoller {
       return this.cancel(request, 'not_actionable', now);
     }
 
-    const expiry = Date.parse(payload.expiresAt);
-    if (!Number.isFinite(expiry) || expiry <= now.getTime()) {
-      return this.cancel(request, 'credential_expired', now);
-    }
+    if (
+      request.kind !== 'mfa_enabled_notification' &&
+      request.kind !== 'mfa_removed_notification'
+    ) {
+      if (!('token' in payload) || !('expiresAt' in payload)) {
+        return this.cancel(request, 'not_actionable', now);
+      }
+      const expiry = Date.parse(payload.expiresAt);
+      if (!Number.isFinite(expiry) || expiry <= now.getTime()) {
+        return this.cancel(request, 'credential_expired', now);
+      }
 
-    const state = await this.credentials.check({
-      kind: request.kind,
-      tokenHash: this.tokens.hash(payload.token),
-      now,
-    });
-    if (state !== 'actionable') {
-      return this.cancel(request, cancelReasonOf(state), now);
+      const state = await this.credentials.check({
+        kind: request.kind,
+        tokenHash: this.tokens.hash(payload.token),
+        now,
+      });
+      if (state !== 'actionable') {
+        return this.cancel(request, cancelReasonOf(state), now);
+      }
     }
 
     // The attempt is spent before the provider is called, not recorded after it
@@ -388,7 +399,7 @@ export class EmailDeliveryPoller {
    */
   private readPayload(
     request: EmailDeliveryRequestRecord,
-  ): AuthEmailDeliveryPayload | undefined {
+  ): EmailDeliveryPayload | undefined {
     const ciphertext = request.payloadCiphertext;
     if (ciphertext === null) return undefined;
     let parsed: unknown;
@@ -415,12 +426,29 @@ export class EmailDeliveryPoller {
 
   private async deliver(
     request: EmailDeliveryRequestRecord,
-    payload: AuthEmailDeliveryPayload,
+    payload: EmailDeliveryPayload,
   ): Promise<void> {
     // The row's own id is the provider idempotency key: it is already unique,
     // already durable, and already what every attempt of this request has
     // used, so an uncertain handoff can be retried without a second email.
     const options = { idempotencyKey: request.id };
+    if (
+      request.kind === 'mfa_enabled_notification' ||
+      request.kind === 'mfa_removed_notification'
+    ) {
+      await this.sender.sendMfaSecurityNotification(
+        {
+          email: (payload as MfaSecurityNotificationPayload).email,
+          action:
+            request.kind === 'mfa_enabled_notification' ? 'enabled' : 'removed',
+        },
+        options,
+      );
+      return;
+    }
+    if (!('token' in payload) || !('expiresAt' in payload)) {
+      throw new Error('email delivery payload is invalid');
+    }
     const expiresAt = new Date(Date.parse(payload.expiresAt));
 
     if (request.kind === 'organization_invite_email') {

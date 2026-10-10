@@ -43,6 +43,13 @@ export interface InMemoryWebSession {
   revokedAt: Date | undefined;
 }
 
+export interface InMemoryMfaFactor {
+  readonly factorId: string;
+  status: 'pending' | 'enabled';
+  readonly email: string;
+  readonly secret: string;
+}
+
 /**
  * The durable auth state one test owns. The in-memory adapters read and write
  * the same instance, so a cross-aggregate effect such as a password reset
@@ -59,6 +66,8 @@ export interface InMemoryAuthState {
   readonly refreshTokens: Map<string, RefreshTokenRecord>;
   /** Token hash -> web session. */
   readonly webSessions: Map<string, InMemoryWebSession>;
+  readonly mfaFactors: Map<string, InMemoryMfaFactor>;
+  readonly recoveryCodes: Map<string, Set<string>>;
   /** Email Delivery Requests recorded by the adapters, in call order. */
   readonly emailDeliveryRequests: InsertEmailDeliveryRequestInput[];
   /** Empties the durable state so the next test starts from nothing. */
@@ -72,6 +81,8 @@ export function createInMemoryAuthState(): InMemoryAuthState {
     passwordResetTokens: new Map(),
     refreshTokens: new Map(),
     webSessions: new Map(),
+    mfaFactors: new Map(),
+    recoveryCodes: new Map(),
     emailDeliveryRequests: [],
     reset() {
       this.accounts.clear();
@@ -79,6 +90,8 @@ export function createInMemoryAuthState(): InMemoryAuthState {
       this.passwordResetTokens.clear();
       this.refreshTokens.clear();
       this.webSessions.clear();
+      this.mfaFactors.clear();
+      this.recoveryCodes.clear();
       this.emailDeliveryRequests.length = 0;
     },
   };

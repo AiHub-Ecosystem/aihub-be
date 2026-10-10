@@ -7,6 +7,7 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { Value } from '@sinclair/typebox/value';
+import { AUTH_MFA_REPOSITORY } from './application/auth-mfa-repository.port';
 import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
@@ -25,6 +26,7 @@ import {
   type AuthRedisClient,
   RedisAuthRateLimiter,
 } from './infrastructure/redis-auth-rate-limiter';
+import { InMemoryAuthMfaAdapter } from './testing/in-memory-auth-mfa.adapter';
 import {
   createInMemoryAuthState,
   seedAccount,
@@ -63,6 +65,8 @@ describe('Web Session HTTP rate limits with Redis unavailable', () => {
       .useValue(new InMemoryVerificationTokenAdapter(state))
       .overrideProvider(WEB_SESSION_REPOSITORY)
       .useValue(new InMemoryWebSessionAdapter(state))
+      .overrideProvider(AUTH_MFA_REPOSITORY)
+      .useValue(new InMemoryAuthMfaAdapter(state))
       .overrideProvider(WEB_SESSION_CLIENT_SECRET)
       .useValue({ resolve: () => SECRET })
       .overrideProvider(PASSWORD_HASHER)

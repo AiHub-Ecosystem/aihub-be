@@ -18,6 +18,7 @@ export interface RegisterLocalAccountInput {
 
 export interface LoginIdentity {
   readonly userId: string;
+  readonly email: string;
   readonly passwordHash: string;
   readonly status: LocalAccountStatus;
 }
@@ -33,6 +34,7 @@ export interface LoginIdentity {
 export interface UserAccountRepositoryPort {
   register(input: RegisterLocalAccountInput): Promise<void>;
   findLoginIdentityByEmail(email: string): Promise<LoginIdentity | undefined>;
+  findLoginIdentityByUserId(userId: string): Promise<LoginIdentity | undefined>;
   findUserAccountStatus(
     userId: string,
   ): Promise<LocalAccountStatus | undefined>;

@@ -62,6 +62,10 @@ const fields = {
     values: ['env', 'agent-file'],
   },
   AIHUB_RUNTIME_SECRETS_FILE: { kind: 'string' },
+  AIHUB_AUTH_MFA_SECRETS_FILE: {
+    kind: 'string',
+    requiredIn: PROD_MODES,
+  },
   AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: { kind: 'string' },
   AIHUB_RUNTIME_DATABASE_SCOPE: {
     kind: 'enum',
@@ -163,6 +167,16 @@ const fields = {
     requiredWhenSecretSource: true,
   },
   EMAIL_OUTBOX_KEYS: {
+    kind: 'string',
+    secret: true,
+    requiredWhenSecretSource: true,
+  },
+  AIHUB_AUTH_MFA_CURRENT_KEY_ID: {
+    kind: 'string',
+    secret: true,
+    requiredWhenSecretSource: true,
+  },
+  AIHUB_AUTH_MFA_KEYS: {
     kind: 'string',
     secret: true,
     requiredWhenSecretSource: true,
@@ -382,6 +396,12 @@ export function loadRuntimeConfiguration(
     nonEmpty(raw.AIHUB_RUNTIME_SECRETS_FILE) === undefined
   ) {
     problems.push('AIHUB_RUNTIME_SECRETS_FILE');
+  }
+  if (
+    secretSource === 'agent-file' &&
+    nonEmpty(raw.AIHUB_AUTH_MFA_SECRETS_FILE) === undefined
+  ) {
+    problems.push('AIHUB_AUTH_MFA_SECRETS_FILE');
   }
   if (
     secretSource === 'env' &&

@@ -33,6 +33,7 @@ import type {
 } from '@/modules/auth/application/verification-token-repository.port';
 import type { IssuedWebSessionToken } from '@/modules/auth/application/web-session-token.port';
 import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
+import { authorizeMfaSession } from './auth-mfa-session.guard';
 import type {
   PostgresAuthClient,
   PostgresAuthQueryClient,
@@ -511,7 +512,7 @@ export class PostgresLocalAuthRepository
   ): Promise<LoginIdentity | undefined> {
     const rows = await this.client.query(
       `
-        SELECT ua.id, ua.status, ai.password_hash
+        SELECT ua.id, ua.status, ai.canonical_email, ai.password_hash
         FROM user_accounts ua
         JOIN auth_identities ai ON ai.user_account_id = ua.id
         WHERE ai.provider = 'password' AND ai.canonical_email = $1
@@ -524,6 +525,7 @@ export class PostgresLocalAuthRepository
     }
     if (
       typeof row.id !== 'string' ||
+      typeof row.canonical_email !== 'string' ||
       typeof row.password_hash !== 'string' ||
       (row.status !== 'pending_verification' &&
         row.status !== 'active' &&
@@ -533,6 +535,36 @@ export class PostgresLocalAuthRepository
     }
     return {
       userId: row.id,
+      email: row.canonical_email,
+      passwordHash: row.password_hash,
+      status: row.status,
+    };
+  }
+
+  async findLoginIdentityByUserId(
+    userId: string,
+  ): Promise<LoginIdentity | undefined> {
+    const rows = await this.client.query(
+      `SELECT ua.status, ai.canonical_email, ai.password_hash
+       FROM user_accounts ua
+       JOIN auth_identities ai ON ai.user_account_id = ua.id
+       WHERE ua.id = $1 AND ai.provider = 'password'`,
+      [userId],
+    );
+    const row = rows[0];
+    if (row === undefined) return undefined;
+    if (
+      typeof row.canonical_email !== 'string' ||
+      typeof row.password_hash !== 'string' ||
+      (row.status !== 'pending_verification' &&
+        row.status !== 'active' &&
+        row.status !== 'disabled')
+    ) {
+      throw new Error('local auth identity projection is invalid');
+    }
+    return {
+      userId,
+      email: row.canonical_email,
       passwordHash: row.password_hash,
       status: row.status,
     };
@@ -574,8 +606,20 @@ export class PostgresLocalAuthRepository
     return username;
   }
 
-  async createRefreshSession(input: CreateRefreshSessionInput): Promise<void> {
-    await this.insertRefreshSession(this.client, input);
+  async createRefreshSession(
+    input: CreateRefreshSessionInput,
+  ): Promise<boolean> {
+    return this.client.transaction(async (transaction) => {
+      const authorized = await authorizeMfaSession(
+        transaction,
+        input.userId,
+        input.mfaProof,
+        input.issuedAt,
+      );
+      if (!authorized) return false;
+      await this.insertRefreshSession(transaction, input);
+      return true;
+    });
   }
 
   async findRefreshTokenByHash(

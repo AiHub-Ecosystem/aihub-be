@@ -38,3 +38,7 @@ path "secret/data/aihub/staging/email-outbox" {
 path "secret/data/aihub/staging/web-session" {
   capabilities = ["read"]
 }
+
+path "secret/data/aihub/staging/auth-mfa" {
+  capabilities = ["read"]
+}
