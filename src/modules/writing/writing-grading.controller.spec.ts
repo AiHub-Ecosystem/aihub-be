@@ -14,6 +14,8 @@ import { generateRequestId } from '@/common/request-context/request-id';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
 import { IDEMPOTENCY_REPOSITORY } from '@/modules/idempotency/application/idempotency-repository.port';
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
+import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
+import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 
 const FIXTURES = join(__dirname, '../../../test/fixtures/ai-writing');
 
@@ -101,6 +103,8 @@ describe('Writing grading HTTP flow', () => {
       .useValue(new DownstreamHttpClient('https://ai-writing.test', mockAgent))
       .overrideProvider(IDEMPOTENCY_REPOSITORY)
       .useValue(new InMemoryIdempotencyRepository())
+      .overrideProvider(DISPATCH_ATTEMPT_RECORD)
+      .useValue(noOpDispatchAttemptRecord)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(

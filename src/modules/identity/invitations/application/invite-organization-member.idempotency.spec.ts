@@ -201,6 +201,7 @@ function context(organizationId: string, requestId: string): RequestContext {
     requestId,
     receivedAt,
     deadlineAt: new Date(receivedAt.getTime() + 5_000),
+    operationTimeoutMs: 5_000,
     organizationId,
     scopes: [],
     signal: new AbortController().signal,

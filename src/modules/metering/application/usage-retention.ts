@@ -19,6 +19,7 @@ export interface UsageRetentionBatch {
 
 export interface UsageRetentionPort {
   pruneBatch(request: UsageRetentionBatchRequest): Promise<UsageRetentionBatch>;
+  pruneDispatchAttempts(cutoff: Date, batchSize: number): Promise<number>;
   close?(): Promise<void>;
 }
 
@@ -52,6 +53,7 @@ export type UsageRetentionEvent =
       readonly batchSize: number;
       readonly batches: number;
       readonly deleted: number;
+      readonly dispatchAttemptsDeleted: number;
       readonly status: 'completed';
     }
   | {
@@ -62,6 +64,7 @@ export type UsageRetentionEvent =
       readonly batchSize: number;
       readonly batches: number;
       readonly deleted: number;
+      readonly dispatchAttemptsDeleted: number;
       readonly status: 'failed';
       readonly errorCode: UsagePruneErrorCode;
     };
@@ -70,6 +73,7 @@ export interface UsageRetentionSummary {
   readonly cutoff: Date;
   readonly batches: number;
   readonly deleted: number;
+  readonly dispatchAttemptsDeleted: number;
 }
 
 function validDate(value: Date): boolean {
@@ -152,6 +156,7 @@ export class UsageRetentionService {
     let cutoff: Date | null = null;
     let batches = 0;
     let deleted = 0;
+    let dispatchAttemptsDeleted = 0;
 
     try {
       cutoff = calculateUsageRetentionCutoff(startedAt);
@@ -205,7 +210,38 @@ export class UsageRetentionService {
         after = batch.nextCursor;
       }
 
-      const summary = { cutoff, batches, deleted } as const;
+      while (true) {
+        let batchDeleted: number;
+        try {
+          batchDeleted = await this.port.pruneDispatchAttempts(
+            cutoff,
+            this.batchSize,
+          );
+        } catch {
+          throw new UsagePruneError(
+            'DATABASE_FAILURE',
+            'dispatch attempt retention database operation failed',
+          );
+        }
+        if (
+          !Number.isSafeInteger(batchDeleted) ||
+          batchDeleted < 0 ||
+          batchDeleted > this.batchSize
+        ) {
+          invalidBatch();
+        }
+        if (batchDeleted === 0) {
+          break;
+        }
+        dispatchAttemptsDeleted += batchDeleted;
+      }
+
+      const summary = {
+        cutoff,
+        batches,
+        deleted,
+        dispatchAttemptsDeleted,
+      } as const;
       emit({
         type: 'completed',
         startedAt,
@@ -214,6 +250,7 @@ export class UsageRetentionService {
         batchSize: this.batchSize,
         batches,
         deleted,
+        dispatchAttemptsDeleted,
         status: 'completed',
       });
       return summary;
@@ -230,6 +267,7 @@ export class UsageRetentionService {
         batchSize: this.batchSize,
         batches,
         deleted,
+        dispatchAttemptsDeleted,
         status: 'failed',
         errorCode: safeError.code,
       });

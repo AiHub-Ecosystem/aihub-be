@@ -21,6 +21,8 @@ import {
   type GradingOrchestratorPort,
 } from '@/modules/gateway/application/grading-orchestrator.port';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
+import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
+import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,
@@ -197,6 +199,8 @@ describe('Speaking grading HTTP flow', () => {
           },
         ),
       )
+      .overrideProvider(DISPATCH_ATTEMPT_RECORD)
+      .useValue(noOpDispatchAttemptRecord)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(

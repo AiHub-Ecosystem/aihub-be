@@ -7,6 +7,8 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { SpeakingGradeInput } from '@/contracts/speaking/grading';
 import type { GradeTask1Request } from '@/contracts/writing/grading';
+import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
+import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import {
   RUNTIME_SECRET_PROVIDER,
   type RuntimeSecretProvider,
@@ -104,6 +106,8 @@ describe('Gateway runtime-secret wiring', () => {
     })
       .overrideProvider(RUNTIME_SECRET_PROVIDER)
       .useValue(fakeProvider)
+      .overrideProvider(DISPATCH_ATTEMPT_RECORD)
+      .useValue(noOpDispatchAttemptRecord)
       .compile();
   });
 
@@ -125,6 +129,7 @@ describe('Gateway runtime-secret wiring', () => {
       requestId: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
       receivedAt: new Date(),
       deadlineMs: 10_000,
+      organizationId: 'org_gateway_test',
       userId: 'snapshot-user',
       scopes: [],
     });

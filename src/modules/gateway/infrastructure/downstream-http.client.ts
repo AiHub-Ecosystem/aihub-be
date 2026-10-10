@@ -16,6 +16,7 @@ export interface DownstreamHttpRequestOptions {
   readonly requestId: string;
   readonly deadlineMs: number;
   readonly signal: AbortSignal;
+  readonly onResponseReceived?: (statusCode: number) => void;
 }
 
 type DownstreamBaseUrls =
@@ -190,6 +191,7 @@ export class DownstreamHttpClient {
     } catch (error) {
       throw transportError(error, options.signal.aborted);
     }
+    options.onResponseReceived?.(response.statusCode);
 
     let parsedBody: unknown;
     try {

@@ -100,6 +100,9 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Usage-reporting declaration:** the current contract expectation for one AI Service to return complete token usage; it distinguishes an unreported value that is expected from missing evidence that is an anomaly, and can change independently per service.
 - **Operation Catalog:** the typed code-owned mapping of a **dispatch operation's** public path, scope, identity mode, limits, timeout, and downstream operation. It holds only operations that reach an AI Service. _Avoid_: reading it as the registry of all Public API Routes.
 - **Dispatch operation:** a Public API Route authenticated by an API key and Scope that dispatches one typed request to an AI Service; every dispatch operation is in the Operation Catalog, and no non-dispatch Public API Route is.
+- **Dispatch attempt:** one outbound call from AIHUB to an AI Service for a Dispatch operation; each call has its own durable evidence row, distinct from the request's Metering record and from other attempts for the same request.
+- **Dispatch outcome:** the evidence for one Dispatch attempt: an HTTP response (including 4xx/5xx), a confirmed failure before send (`not_dispatched`), or an ambiguous result (`outcome_unknown`) when the request may have left AIHUB without a response. It is separate from the completed customer Request Outcome.
+- **Unresolved dispatch:** a Dispatch attempt whose stored `unknown_after` deadline has passed without a definitive outcome or a `usage_records` row for the same request ID; it signals uncertainty about downstream processing and cost, not proof that either occurred.
 - **Control-plane operation:** a Public API Route that acts on an Organization under the Bearer boundary. It carries no API-key Scope, resolves no User Identity, dispatches nothing to an AI Service, and takes no body limit or timeout from the Operation Catalog, because the body-limit and timeout hooks key on a static path and would silently skip it.
 - **Public API Route registry:** the code-owned list of every Public API Route that does not dispatch, in `src/catalog/public-routes.ts`; it partitions the Public API Routes with the Operation Catalog rather than duplicating them ([ADR-0059](docs/adr/0059-non-dispatch-public-api-routes-have-their-own-registry.md)). _Avoid_: reading it as a second Operation Catalog, or either registry as the registry of all Public API Routes.
 - **Downstream Adapter:** a pure mapper between a public operation and a private AI service contract; it never performs network I/O.
@@ -316,6 +319,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - [ADR-0016: Durable metering boundary and billing evidence](docs/adr/0016-metering-boundary-and-billing-evidence.md)
 - [ADR-0026: CLI boundary for usage completeness reporting](docs/adr/0026-usage-completeness-report-boundary.md)
 - [ADR-0023: Thirteen-month usage retention](docs/adr/0023-thirteen-month-usage-retention.md)
+- [ADR-0088: Persist evidence for each AI Service dispatch attempt](docs/adr/0088-persist-dispatch-attempt-evidence.md)
 - [Usage completeness report runbook](docs/operations/usage-completeness.md)
 - [ADR-0020: Invite-only customer-web identity boundary for sandbox MVP](docs/adr/0020-customer-web-identity-boundary.md) — superseded by ADR-0046 at the #94 cutover
 - [ADR-0046: Customer Web identity boundary on AIHUB auth and Organization Membership](docs/adr/0046-customer-web-aihub-auth-identity-boundary.md)

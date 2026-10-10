@@ -28,6 +28,7 @@ function emitFailure(
   cutoff: Date | null = null,
   batches = 0,
   deleted = 0,
+  dispatchAttemptsDeleted = 0,
 ): void {
   emit(
     formatUsageRetentionEvent({
@@ -38,6 +39,7 @@ function emitFailure(
       batchSize: USAGE_PRUNE_BATCH_SIZE,
       batches,
       deleted,
+      dispatchAttemptsDeleted,
       status: 'failed',
       errorCode,
     }),
@@ -62,6 +64,7 @@ export function formatUsageRetentionEvent(event: UsageRetentionEvent): string {
       batch_size: event.batchSize,
       batches: event.batches,
       deleted: event.deleted,
+      dispatch_attempts_deleted: event.dispatchAttemptsDeleted,
       status: event.status,
     });
   }
@@ -73,6 +76,7 @@ export function formatUsageRetentionEvent(event: UsageRetentionEvent): string {
     batch_size: event.batchSize,
     batches: event.batches,
     deleted: event.deleted,
+    dispatch_attempts_deleted: event.dispatchAttemptsDeleted,
     status: event.status,
     error_code: event.errorCode,
   });
@@ -140,6 +144,7 @@ export async function runUsagePruneCommand(
         summary?.cutoff ?? null,
         summary?.batches ?? 0,
         summary?.deleted ?? 0,
+        summary?.dispatchAttemptsDeleted ?? 0,
       );
       operationFailed = true;
       operationError = error;

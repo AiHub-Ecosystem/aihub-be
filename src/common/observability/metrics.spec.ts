@@ -2,6 +2,7 @@ import { METRICS_ROUTE_PATH, getMetrics } from './metrics';
 import {
   recordCompletedRequest,
   recordEmailDeliveryFailed,
+  setDispatchAttemptUnresolvedSource,
   setEmailOutboxBacklogSource,
 } from './metrics';
 
@@ -237,5 +238,45 @@ describe('email outbox backlog metrics', () => {
     healthy = false;
 
     expect(await getMetrics()).not.toContain('aihub_email_outbox_queued{');
+  });
+});
+
+describe('unresolved dispatch-attempt metrics', () => {
+  afterEach(() => {
+    setDispatchAttemptUnresolvedSource(undefined);
+  });
+
+  it('reads durable unresolved counts at scrape time by operation', async () => {
+    let reads = 0;
+    setDispatchAttemptUnresolvedSource(async () => {
+      reads += 1;
+      return [{ operation: GRADE, count: 2 }];
+    });
+
+    expect(
+      await sample('aihub_dispatch_attempts_unresolved', {
+        operation: GRADE,
+      }),
+    ).toBe('2');
+    expect(reads).toBe(1);
+  });
+
+  it('drops prior series when durable evidence cannot be read', async () => {
+    let healthy = true;
+    setDispatchAttemptUnresolvedSource(async () => {
+      if (!healthy) throw new Error('database unavailable');
+      return [{ operation: GRADE, count: 2 }];
+    });
+    expect(
+      await sample('aihub_dispatch_attempts_unresolved', {
+        operation: GRADE,
+      }),
+    ).toBe('2');
+
+    healthy = false;
+
+    expect(await getMetrics()).not.toContain(
+      'aihub_dispatch_attempts_unresolved{',
+    );
   });
 });

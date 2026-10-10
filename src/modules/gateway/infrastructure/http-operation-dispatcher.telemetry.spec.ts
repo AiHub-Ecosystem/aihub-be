@@ -8,6 +8,7 @@ import type {
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { DownstreamRequest } from '@/downstream/downstream.types';
 import type { InternalTokenIssuerPort } from '@/modules/gateway/application/internal-token-issuer.port';
+import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { DownstreamHttpClient } from './downstream-http.client';
 import { HttpOperationDispatcher } from './http-operation-dispatcher';
 
@@ -100,6 +101,7 @@ describe('HttpOperationDispatcher telemetry', () => {
       new DownstreamHttpClient('https://ai-writing.test', agent),
       issuer,
       [adapter],
+      noOpDispatchAttemptRecord,
     );
     const result = await dispatcher.dispatch(
       'writing.task1.grade',
@@ -108,6 +110,7 @@ describe('HttpOperationDispatcher telemetry', () => {
         requestId: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
         receivedAt: new Date(),
         deadlineMs: 5_000,
+        organizationId: 'org_test',
         scopes: [],
       }),
     );

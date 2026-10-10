@@ -10,12 +10,17 @@ import {
 class FakeUsageRetentionPort implements UsageRetentionPort {
   readonly requests: UsageRetentionBatchRequest[] = [];
   batches: UsageRetentionBatch[] = [];
+  dispatchAttemptBatches: number[] = [];
 
   async pruneBatch(
     request: UsageRetentionBatchRequest,
   ): Promise<UsageRetentionBatch> {
     this.requests.push(request);
     return this.batches.shift() ?? { deleted: 0 };
+  }
+
+  async pruneDispatchAttempts(): Promise<number> {
+    return this.dispatchAttemptBatches.shift() ?? 0;
   }
 }
 
@@ -55,6 +60,10 @@ class InMemoryUsageRetentionPort implements UsageRetentionPort {
       ? { deleted: 0 }
       : { deleted: candidates.length, nextCursor };
   }
+
+  async pruneDispatchAttempts(): Promise<number> {
+    return 0;
+  }
 }
 
 describe('UsageRetentionService', () => {
@@ -88,6 +97,7 @@ describe('UsageRetentionService', () => {
         cutoff: new Date('2025-02-28T02:30:00.000Z'),
         batches: 2,
         deleted: 3,
+        dispatchAttemptsDeleted: 0,
       },
     );
     expect(port.requests).toEqual([
@@ -150,6 +160,22 @@ describe('UsageRetentionService', () => {
       batches: 0,
       deleted: 0,
       status: 'completed',
+    });
+  });
+
+  it('prunes expired dispatch attempts in bounded batches even without usage rows', async () => {
+    const port = new FakeUsageRetentionPort();
+    port.dispatchAttemptBatches = [1000, 2, 0];
+
+    await expect(
+      new UsageRetentionService(
+        port,
+        () => new Date('2026-09-19T02:30:00.000Z'),
+      ).prune(),
+    ).resolves.toMatchObject({
+      batches: 0,
+      deleted: 0,
+      dispatchAttemptsDeleted: 1002,
     });
   });
 
@@ -222,6 +248,7 @@ describe('UsageRetentionService', () => {
       type: 'failed',
       batches: 1,
       deleted: 1000,
+      dispatchAttemptsDeleted: 0,
       status: 'failed',
       errorCode: 'DATABASE_FAILURE',
     });

@@ -115,6 +115,7 @@ function makeStubContext(signal: AbortSignal): RequestContext {
     requestId: ulid(),
     receivedAt: now,
     deadlineAt: new Date(now.getTime() + CANARY_TIMEOUT_MS),
+    operationTimeoutMs: CANARY_TIMEOUT_MS,
     scopes: [],
     signal,
   };

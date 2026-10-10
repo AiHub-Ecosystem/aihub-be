@@ -1,5 +1,7 @@
 import { Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 
+import type { OperationId } from '@/catalog/operation-id';
+
 /**
  * The metric names spec section L.2 fixes. Issue #198 owns five of the
  * eight; the protection-state metrics (`aihub_rejected_total`,
@@ -192,6 +194,62 @@ export function setEmailOutboxBacklogSource(
   if (source === undefined) {
     emailOutboxQueued.reset();
     emailOutboxOldestAge.reset();
+  }
+}
+
+export interface DispatchAttemptUnresolvedSample {
+  readonly operation: OperationId | 'other';
+  readonly count: number;
+}
+
+type DispatchAttemptUnresolvedSource = () => Promise<
+  readonly DispatchAttemptUnresolvedSample[]
+>;
+
+let dispatchAttemptUnresolvedSource:
+  | DispatchAttemptUnresolvedSource
+  | undefined;
+let pendingDispatchAttemptRead: Promise<void> | undefined;
+
+function readDispatchAttemptUnresolved(): Promise<void> {
+  const source = dispatchAttemptUnresolvedSource;
+  if (source === undefined) {
+    dispatchAttemptsUnresolved.reset();
+    return Promise.resolve();
+  }
+  pendingDispatchAttemptRead ??= (async () => {
+    try {
+      const samples = await source();
+      dispatchAttemptsUnresolved.reset();
+      for (const sample of samples) {
+        dispatchAttemptsUnresolved.set(
+          { operation: sample.operation },
+          sample.count,
+        );
+      }
+    } catch {
+      dispatchAttemptsUnresolved.reset();
+    } finally {
+      pendingDispatchAttemptRead = undefined;
+    }
+  })();
+  return pendingDispatchAttemptRead;
+}
+
+const dispatchAttemptsUnresolved = new Gauge({
+  name: 'aihub_dispatch_attempts_unresolved',
+  help: 'AI Service dispatch attempts past their deadline without final dispatch evidence.',
+  labelNames: ['operation'],
+  registers: [registry],
+  collect: readDispatchAttemptUnresolved,
+});
+
+export function setDispatchAttemptUnresolvedSource(
+  source: DispatchAttemptUnresolvedSource | undefined,
+): void {
+  dispatchAttemptUnresolvedSource = source;
+  if (source === undefined) {
+    dispatchAttemptsUnresolved.reset();
   }
 }
 

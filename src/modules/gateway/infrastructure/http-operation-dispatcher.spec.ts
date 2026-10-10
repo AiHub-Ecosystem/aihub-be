@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { MockAgent } from 'undici';
 
 import { AppError } from '@/common/errors/app-error';
+import { createInternalErrorEnvelope } from '@/common/errors/error-envelope';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type {
   GradeResponse,
@@ -11,6 +12,12 @@ import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { DownstreamRequest } from '@/downstream/downstream.types';
 import type { InternalTokenIssuerPort } from '@/modules/gateway/application/internal-token-issuer.port';
 import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
+import type {
+  DispatchAttemptOutcome,
+  DispatchAttemptRecordPort,
+  DispatchAttemptStart,
+} from '@/modules/metering/public/dispatch-attempts';
+import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { DownstreamHttpClient } from './downstream-http.client';
 import { HttpOperationDispatcher } from './http-operation-dispatcher';
 
@@ -56,11 +63,30 @@ class FakeTokenIssuer implements InternalTokenIssuerPort {
   }
 }
 
+function fakeDispatchAttempts() {
+  const starts: DispatchAttemptStart[] = [];
+  const outcomes: Array<{
+    readonly attemptId: string;
+    readonly outcome: DispatchAttemptOutcome;
+  }> = [];
+  const recorder: DispatchAttemptRecordPort = {
+    beginAttempt: jest.fn(async (input) => {
+      starts.push(input);
+      return 'attempt-test';
+    }),
+    recordOutcome: jest.fn(async (attemptId, outcome) => {
+      outcomes.push({ attemptId, outcome });
+    }),
+  };
+  return { recorder, starts, outcomes };
+}
+
 function context(deadlineMs = 5_000, signal?: AbortSignal) {
   return createRequestContext({
     requestId: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
     receivedAt: new Date(),
     deadlineMs,
+    organizationId: 'org_test',
     scopes: [],
     ...(signal === undefined ? {} : { signal }),
   });
@@ -142,6 +168,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(),
       [],
+      noOpDispatchAttemptRecord,
     );
 
     // No interceptor registered at all: if the dispatcher tried to reach the
@@ -154,6 +181,7 @@ describe('HttpOperationDispatcher', () => {
   });
 
   it('maps a downstream 5xx to a retryable unified error', async () => {
+    const attempts = fakeDispatchAttempts();
     mockAgent
       .get('https://ai-writing.test')
       .intercept({ method: 'POST', path: '/task-one' })
@@ -166,6 +194,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
+      attempts.recorder,
     );
 
     await expect(
@@ -187,15 +216,125 @@ describe('HttpOperationDispatcher', () => {
       message: 'downstream status 503',
     });
     expect(downstreamMs(logLine)).toBeGreaterThanOrEqual(0);
+    expect(attempts.outcomes).toEqual([
+      { attemptId: 'attempt-test', outcome: 'response_received' },
+    ]);
+    expect(attempts.starts[0]).toMatchObject({
+      requestId: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+      organizationId: 'org_test',
+      operation: 'writing.task1.grade',
+      operationTimeoutMs: 5_000,
+    });
+  });
+
+  it('fails closed and releases sandbox quota when the durable record cannot be created', async () => {
+    const attempts = fakeDispatchAttempts();
+    attempts.recorder.beginAttempt = jest
+      .fn()
+      .mockRejectedValue(new Error('database unavailable'));
+    const budget = fakeSandboxBudget();
+    const httpClient = new DownstreamHttpClient(
+      'https://ai-writing.test',
+      mockAgent,
+    );
+    const request = jest.spyOn(httpClient, 'request');
+    const dispatcher = new HttpOperationDispatcher(
+      httpClient,
+      new FakeTokenIssuer(),
+      [fakeGradeAdapter('/task-one')],
+      attempts.recorder,
+      budget,
+    );
+
+    const requestContext = sandboxContext();
+    const error = await dispatcher
+      .dispatch('writing.task1.grade', gradeInput, requestContext)
+      .then(
+        () => undefined,
+        (reason: unknown) => reason,
+      );
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).toEnvelope(requestContext.requestId)).toEqual(
+      createInternalErrorEnvelope(requestContext.requestId),
+    );
+    expect(request).not.toHaveBeenCalled();
+    expect(budget.releaseCalls).toEqual([requestContext.requestId]);
+  });
+
+  it('records a pre-send timeout if the durable write outlasts the operation deadline', async () => {
+    const attempts = fakeDispatchAttempts();
+    attempts.recorder.beginAttempt = jest.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      return 'attempt-test';
+    });
+    const httpClient = new DownstreamHttpClient(
+      'https://ai-writing.test',
+      mockAgent,
+    );
+    const request = jest.spyOn(httpClient, 'request');
+    const dispatcher = new HttpOperationDispatcher(
+      httpClient,
+      new FakeTokenIssuer(),
+      [fakeGradeAdapter('/task-one')],
+      attempts.recorder,
+    );
+
+    await expect(
+      dispatcher.dispatch('writing.task1.grade', gradeInput, context(100)),
+    ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
+    expect(request).not.toHaveBeenCalled();
+    expect(attempts.outcomes).toEqual([
+      { attemptId: 'attempt-test', outcome: 'not_dispatched' },
+    ]);
+  });
+
+  it('keeps a downstream success when recording its known outcome fails', async () => {
+    const attempts = fakeDispatchAttempts();
+    attempts.recorder.recordOutcome = jest
+      .fn()
+      .mockRejectedValue(new Error('database unavailable'));
+    mockAgent
+      .get('https://ai-writing.test')
+      .intercept({ method: 'POST', path: '/task-one' })
+      .reply(200, { ok: true });
+    const successfulAdapter: DownstreamAdapter<
+      GradeTask1Request,
+      GradeResponse
+    > = {
+      operation: 'writing.task1.grade',
+      downstream: 'ai-writing',
+      buildRequest: (input) => ({
+        method: 'POST',
+        path: '/task-one',
+        body: input,
+      }),
+      parseResponse: () => ({ overall_band: 7 }) as GradeResponse,
+    };
+    const dispatcher = new HttpOperationDispatcher(
+      new DownstreamHttpClient('https://ai-writing.test', mockAgent),
+      new FakeTokenIssuer(),
+      [successfulAdapter],
+      attempts.recorder,
+    );
+
+    await expect(
+      dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
+    ).resolves.toMatchObject({ data: { overall_band: 7 } });
+    expect(attempts.recorder.recordOutcome).toHaveBeenCalledWith(
+      'attempt-test',
+      'response_received',
+    );
   });
 
   it('releases a reservation when local downstream configuration proves the request was not sent', async () => {
+    const attempts = fakeDispatchAttempts();
     const budget = fakeSandboxBudget();
     const httpClient = new DownstreamHttpClient('', mockAgent);
     const dispatcher = new HttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
+      attempts.recorder,
       budget,
     );
 
@@ -211,6 +350,9 @@ describe('HttpOperationDispatcher', () => {
       },
     ]);
     expect(budget.releaseCalls).toEqual(['req_01J8QK3M7XW2P5NRTVA9BCDEFG']);
+    expect(attempts.outcomes).toEqual([
+      { attemptId: 'attempt-test', outcome: 'not_dispatched' },
+    ]);
   });
 
   it('does not reserve quota when the request is already aborted', async () => {
@@ -226,6 +368,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
+      noOpDispatchAttemptRecord,
       budget,
     );
 
@@ -259,6 +402,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
+      noOpDispatchAttemptRecord,
       budget,
     );
 
@@ -284,6 +428,7 @@ describe('HttpOperationDispatcher', () => {
       new DownstreamHttpClient('https://ai-writing.test', mockAgent),
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
+      noOpDispatchAttemptRecord,
       budget,
     );
 
@@ -305,6 +450,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
+      noOpDispatchAttemptRecord,
       budget,
     );
 
@@ -329,6 +475,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
+      noOpDispatchAttemptRecord,
     );
 
     await expect(
@@ -368,6 +515,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
+      noOpDispatchAttemptRecord,
     );
 
     await expect(
@@ -392,6 +540,7 @@ describe('HttpOperationDispatcher', () => {
   });
 
   it('logs a transport failure as unavailable without leaking its cause', async () => {
+    const attempts = fakeDispatchAttempts();
     const transportMarker = 'private transport failure marker';
     mockAgent
       .get('https://ai-writing.test')
@@ -405,6 +554,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
+      attempts.recorder,
     );
 
     await expect(
@@ -430,6 +580,35 @@ describe('HttpOperationDispatcher', () => {
     });
     expect(logLine).not.toContain(transportMarker);
     expect(downstreamMs(logLine)).toBeGreaterThanOrEqual(0);
+    expect(attempts.outcomes).toEqual([
+      { attemptId: 'attempt-test', outcome: 'outcome_unknown' },
+    ]);
+  });
+
+  it('records a received HTTP response when its body cannot be parsed', async () => {
+    const attempts = fakeDispatchAttempts();
+    mockAgent
+      .get('https://ai-writing.test')
+      .intercept({ method: 'POST', path: '/task-one' })
+      .reply(200, 'not-json');
+    const dispatcher = new HttpOperationDispatcher(
+      new DownstreamHttpClient('https://ai-writing.test', mockAgent),
+      new FakeTokenIssuer(),
+      [fakeGradeAdapter('/task-one')],
+      attempts.recorder,
+    );
+
+    await expect(
+      dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
+    ).rejects.toMatchObject({ code: 'AI_SERVICE_CONTRACT_VIOLATION' });
+
+    expect(attempts.outcomes).toEqual([
+      { attemptId: 'attempt-test', outcome: 'response_received' },
+    ]);
+    expect(JSON.parse(readLogLine(loggerError))).toMatchObject({
+      downstream_status: 200,
+      error_code: 'AI_SERVICE_CONTRACT_VIOLATION',
+    });
   });
 
   it('logs an adapter contract violation once without serializing request, token, or response content', async () => {
@@ -456,6 +635,7 @@ describe('HttpOperationDispatcher', () => {
       httpClient,
       new FakeTokenIssuer(tokenMarker),
       [fakeGradeAdapter('/grade', originalError)],
+      noOpDispatchAttemptRecord,
     );
 
     await expect(
@@ -501,6 +681,7 @@ describe('HttpOperationDispatcher', () => {
         new DownstreamHttpClient('https://ai-writing.test', mockAgent),
         new FakeTokenIssuer('token'),
         [fakeGradeAdapter('/grade', error)],
+        noOpDispatchAttemptRecord,
       );
 
       await expect(

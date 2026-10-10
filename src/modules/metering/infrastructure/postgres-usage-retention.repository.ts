@@ -30,6 +30,21 @@ export const USAGE_RETENTION_BATCH_SQL = [
   '  RETURNING usage.created_at, usage.request_id',
 ].join('\n');
 
+export const DISPATCH_ATTEMPT_RETENTION_BATCH_SQL = `
+  WITH candidates AS (
+    SELECT attempt_id
+    FROM dispatch_attempts
+    WHERE created_at < $1
+    ORDER BY created_at, attempt_id
+    LIMIT $2
+    FOR UPDATE SKIP LOCKED
+  )
+  DELETE FROM dispatch_attempts AS attempt
+  USING candidates
+  WHERE attempt.attempt_id = candidates.attempt_id
+  RETURNING attempt.attempt_id
+`;
+
 function cursorFromRow(value: unknown): UsageRetentionCursor {
   if (!isRecord(value) || typeof value.request_id !== 'string') {
     throw new Error('usage retention row is invalid');
@@ -73,6 +88,17 @@ export class PostgresUsageRetentionRepository implements UsageRetentionPort {
         ? { deleted: 0 }
         : { deleted: cursors.length, nextCursor };
     });
+  }
+
+  async pruneDispatchAttempts(
+    cutoff: Date,
+    batchSize: number,
+  ): Promise<number> {
+    const rows = await this.client.query(DISPATCH_ATTEMPT_RETENTION_BATCH_SQL, [
+      cutoff,
+      batchSize,
+    ]);
+    return rows.length;
   }
 
   async close(): Promise<void> {
