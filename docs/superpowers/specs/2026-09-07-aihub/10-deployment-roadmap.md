@@ -40,6 +40,11 @@ The edge smoke must pass before the old slot is removed.
 
 ## N.3 Per-tier Blue-Green Deployment
 
+The GitHub CD workflow is manually disabled while this target is rehearsed.
+Existing direct-Compose containers and their `direct-releases.tsv` history
+remain the source for the current release; re-enabling CD runs the blue-green
+helper and does not reset the nginx upstream to slot A.
+
 Deploy Production, then Sandbox, sequentially. For each enabled tier, start one
 candidate from the immutable CI SHA while the active service keeps serving. The
 candidate must pass private `/ready` before the deployment changes that tier's
@@ -57,6 +62,11 @@ cannot be confirmed, keep both slots, fail CD, and stop later deployments for
 operator repair. The validated nginx upstream identifies each tier's active
 slot; immutable image tags and #289's durable release record identify its SHA.
 Do not use `.env.production` as active-release state.
+
+The drain must include background idempotent work that continues after a
+response deadline, not only HTTP requests. #284 owns the shutdown order and
+deadline; keep CD disabled until its lifecycle test proves that the complete
+shutdown fits the configured grace period.
 
 Use at most three AIHUB application containers and one candidate at a time. The
 candidate is reused for Sandbox only after the Production cutover and drain are

@@ -12,6 +12,7 @@ readonly HISTORY_FILE=$STATE_DIR/releases.tsv
 readonly PENDING_FILE=$STATE_DIR/pending.tsv
 readonly DEPLOY_ENV=.aihub-deploy.env
 readonly LOCK_FILE=.aihub-deploy.lock
+RESOURCE_LOG=
 
 APP_DIR=${APP_DIR:?APP_DIR is required}
 AIHUB_IMAGE=${AIHUB_IMAGE:-}
@@ -58,6 +59,8 @@ if [[ "$sandbox_enabled" != true && "$sandbox_enabled" != false ]]; then
   printf 'AIHUB_SANDBOX_ENABLED must be true or false\n' >&2
   exit 1
 fi
+sandbox_routed=false
+sandbox_active_slot=a
 
 production_slot_a_port="$(configured_port AIHUB_APP_PORT 3021)"
 sandbox_slot_a_port="$(configured_port AIHUB_SANDBOX_APP_PORT 3022)"
@@ -76,12 +79,34 @@ done
 
 production_host="$(read_env AIHUB_PRODUCTION_HOST)"
 sandbox_host="$(read_env AIHUB_SANDBOX_HOST)"
+valid_hostname() {
+  local hostname="$1" label
+  local -a labels=()
+  [[ -n "$hostname" && ${#hostname} -le 253 && "$hostname" != *[!A-Za-z0-9.-]* ]] || return 1
+  [[ "$hostname" != .* && "$hostname" != *. ]] || return 1
+  IFS=. read -r -a labels <<<"$hostname"
+  for label in "${labels[@]}"; do
+    [[ -n "$label" && ${#label} -le 63 && "$label" != -* && "$label" != *- ]] || return 1
+  done
+}
 if [[ -z "$production_host" ]]; then
   printf 'AIHUB_PRODUCTION_HOST is required\n' >&2
   exit 1
 fi
+if ! valid_hostname "$production_host"; then
+  printf 'AIHUB_PRODUCTION_HOST must be a DNS hostname\n' >&2
+  exit 1
+fi
 if [[ "$sandbox_enabled" == true && -z "$sandbox_host" ]]; then
   printf 'AIHUB_SANDBOX_HOST is required when Sandbox is enabled\n' >&2
+  exit 1
+fi
+if [[ "$sandbox_enabled" == true ]] && ! valid_hostname "$sandbox_host"; then
+  printf 'AIHUB_SANDBOX_HOST must be a DNS hostname\n' >&2
+  exit 1
+fi
+if [[ "$sandbox_enabled" == true && -z "$(read_env AIHUB_SANDBOX_ORG_IDS)" ]]; then
+  printf 'AIHUB_SANDBOX_ORG_IDS is required when Sandbox is enabled\n' >&2
   exit 1
 fi
 
@@ -96,7 +121,24 @@ write_image_env() {
   AIHUB_IMAGE="$image"
 }
 
-if [[ -n "$AIHUB_IMAGE" ]]; then
+disable_sandbox_config() {
+  local tmp
+  tmp="$(mktemp .env.production.XXXXXX)" || return 1
+  awk '!/^AIHUB_SANDBOX_ENABLED=/' .env.production >"$tmp" || {
+    rm -f "$tmp"
+    return 1
+  }
+  printf 'AIHUB_SANDBOX_ENABLED=false\n' >>"$tmp" || {
+    rm -f "$tmp"
+    return 1
+  }
+  chmod --reference=.env.production "$tmp" && mv "$tmp" .env.production || {
+    rm -f "$tmp"
+    return 1
+  }
+}
+
+if [[ -n "$AIHUB_IMAGE" && ( "$COMMAND" == deploy || "$COMMAND" == rehearse ) ]]; then
   write_image_env "$AIHUB_IMAGE"
 fi
 
@@ -105,9 +147,7 @@ if [[ -f "$DEPLOY_ENV" ]]; then
   compose+=(--env-file "$DEPLOY_ENV")
 fi
 compose+=(-f docker-compose.production.yml --profile blue-green)
-if [[ "$sandbox_enabled" == true ]]; then
-  compose+=(--profile sandbox)
-fi
+compose+=(--profile sandbox)
 
 slot_for_port() {
   local tier="$1" port="$2"
@@ -168,6 +208,22 @@ container_revision() {
   sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$id"
 }
 
+save_service_logs() {
+  local service="$1" id revision stamp log_dir
+  id="$(container_id "$service")"
+  [[ -n "$id" ]] || return 0
+  revision="$(container_revision "$id" 2>/dev/null || true)"
+  [[ "$revision" =~ ^[a-f0-9]{40}$ ]] || revision=unknown
+  log_dir=deploy-logs
+  if ! mkdir -p "$log_dir" || ! chmod 700 "$log_dir"; then
+    return 0
+  fi
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  sudo -n docker logs --timestamps "$id" 2>&1 \
+    | tail -c 20000000 >"$log_dir/$service-${revision:0:7}-$stamp.log" || true
+  find "$log_dir" -name '*.log' -mtime +30 -delete 2>/dev/null || true
+}
+
 container_running() {
   local id="$1"
   [[ "$(sudo -n docker inspect --format '{{.State.Running}}' "$id")" == true ]]
@@ -176,9 +232,17 @@ container_running() {
 container_ready() {
   local id="$1" status="$2"
   [[ "$status" == healthy ]] || return 1
-  sudo -n docker exec "$id" node -e \
-    "fetch('http://127.0.0.1:3000/ready').then((r) => process.exit(r.status === 200 ? 0 : 1)).catch(() => process.exit(1))" \
-    >/dev/null 2>&1
+  sudo -n docker exec "$id" node -e '
+    require("/app/scripts/ops/probe-runtime-dependencies.cjs").probeReadiness()
+      .then((result) => {
+        console.log(result.name + ": " + (result.ok ? "PASS" : "FAIL") + " (" + result.result + ")");
+        process.exitCode = result.ok ? 0 : 1;
+      })
+      .catch(() => {
+        console.error("readiness probe failed unexpectedly");
+        process.exitCode = 1;
+      });
+  '
 }
 
 candidate_state_safe() {
@@ -288,7 +352,7 @@ probe_all() {
   local failed=0 production_pid sandbox_pid=
   probe_host production "$production_host" &
   production_pid="$!"
-  if [[ "$sandbox_enabled" == true ]]; then
+  if [[ "$sandbox_routed" == true ]]; then
     probe_host sandbox "$sandbox_host" &
     sandbox_pid="$!"
   fi
@@ -312,7 +376,7 @@ probe_window() {
     if [[ -z "$stop_file" || ! -f "$stop_file" ]]; then
       probe_host production "$production_host" &
       probe_pids+=("$!")
-      if [[ "$sandbox_enabled" == true ]]; then
+      if [[ "$sandbox_routed" == true ]]; then
         probe_host sandbox "$sandbox_host" &
         probe_pids+=("$!")
       fi
@@ -357,15 +421,15 @@ render_config() {
 }
 
 apply_slots() {
-  local api_slot="$1" sandbox_slot="$2" api_tmp sandbox_tmp
+  local api_slot="$1" sandbox_slot="$2" include_sandbox="${3:-$sandbox_routed}" api_tmp sandbox_tmp
   api_tmp="$(mktemp)"
   sandbox_tmp="$(mktemp)"
   render_config production "$api_slot" "$api_tmp"
-  if [[ "$sandbox_enabled" == true ]]; then
+  if [[ "$include_sandbox" == true ]]; then
     render_config sandbox "$sandbox_slot" "$sandbox_tmp"
   fi
   install -o "$(id -u)" -g "$(id -g)" -m 0644 "$api_tmp" "$NGINX_STAGING/aihub-api.conf"
-  if [[ "$sandbox_enabled" == true ]]; then
+  if [[ "$include_sandbox" == true ]]; then
     install -o "$(id -u)" -g "$(id -g)" -m 0644 "$sandbox_tmp" "$NGINX_STAGING/sandbox.conf"
   else
     rm -f "$NGINX_STAGING/sandbox.conf"
@@ -373,7 +437,7 @@ apply_slots() {
   rm -f "$api_tmp" "$sandbox_tmp"
   sudo -n "$NGINX_HELPER"
   [[ "$(active_slot production "$API_CONFIG")" == "$api_slot" ]]
-  if [[ "$sandbox_enabled" == true ]]; then
+  if [[ "$include_sandbox" == true ]]; then
     [[ "$(active_slot sandbox "$SANDBOX_CONFIG")" == "$sandbox_slot" ]]
   fi
 }
@@ -393,21 +457,78 @@ assert_container_count() {
   fi
 }
 
+stop_sandbox_services() {
+  local service id
+  for service in app-sandbox app-sandbox-slot-b; do
+    id="$(container_id "$service")"
+    if [[ -n "$id" ]] && container_running "$id"; then
+      "${compose[@]}" stop "$service" || return 1
+    fi
+  done
+}
+
+load_sandbox_route_state() {
+  sandbox_routed=false
+  sandbox_active_slot=a
+  if [[ -f "$SANDBOX_CONFIG" ]]; then
+    sandbox_active_slot="$(active_slot sandbox "$SANDBOX_CONFIG")" || return 1
+    sandbox_routed=true
+  fi
+}
+
+reconcile_sandbox_configuration() {
+  local api_slot
+  if [[ "$sandbox_enabled" == true ]]; then
+    load_sandbox_route_state || return 1
+    if [[ "$sandbox_routed" != true ]]; then
+      # With no managed route, stale direct-Compose Sandbox containers are not serving traffic.
+      stop_sandbox_services || return 1
+      assert_container_count 1 || return 1
+    fi
+    return 0
+  fi
+
+  api_slot="$(active_slot production "$API_CONFIG")" || return 1
+  if [[ -f "$SANDBOX_CONFIG" ]]; then
+    apply_slots "$api_slot" a false || return 1
+  fi
+  sandbox_routed=false
+  stop_sandbox_services || return 1
+  assert_container_count 1
+}
+
 capture_resources() {
-  local label="$1" log="$STATE_DIR/resources-$(date -u +%Y%m%dT%H%M%SZ).log"
+  local label="$1" log="$RESOURCE_LOG" total_before idle_before total_after idle_after host_cpu_percent vcpus ids
+  if [[ -z "$log" ]]; then
+    log="$STATE_DIR/resources-$(date -u +%Y%m%dT%H%M%SZ).log"
+    RESOURCE_LOG="$log"
+  fi
+  read -r total_before idle_before < <(
+    awk '$1 == "cpu" { print $2 + $3 + $4 + $5 + $6 + $7 + $8 + $9, $5 + $6; exit }' /proc/stat
+  ) || return 1
+  sleep 1 || return 1
+  read -r total_after idle_after < <(
+    awk '$1 == "cpu" { print $2 + $3 + $4 + $5 + $6 + $7 + $8 + $9, $5 + $6; exit }' /proc/stat
+  ) || return 1
+  host_cpu_percent="$(awk -v total_before="$total_before" -v idle_before="$idle_before" \
+    -v total_after="$total_after" -v idle_after="$idle_after" \
+    'BEGIN { delta = total_after - total_before; if (delta <= 0) exit 1; printf "%.2f", 100 * (delta - idle_after + idle_before) / delta }')" || return 1
+  vcpus="$(nproc)" || return 1
+  ids="$(sudo -n docker ps -aq --filter "label=org.opencontainers.image.source=${REPOSITORY_URL}")" || return 1
   {
-    printf 'label=%s at=%s\n' "$label" "$(date -u +%FT%TZ)"
-    printf 'vcpus=%s\n' "$(nproc)"
-    free -b
-    sudo -n docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}} {{.MemPerc}}'
+    printf 'label=%s at=%s\n' "$label" "$(date -u +%FT%TZ)" || return 1
+    printf 'vcpus=%s\n' "$vcpus" || return 1
+    printf 'host_cpu_percent=%s\n' "$host_cpu_percent" || return 1
+    free -b || return 1
+    sudo -n docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}} {{.MemPerc}}' || return 1
     while IFS= read -r id; do
       [[ -n "$id" ]] || continue
       sudo -n docker inspect --format \
         '{{.Name}} revision={{index .Config.Labels "org.opencontainers.image.revision"}} state={{.State.Status}} oom_killed={{.State.OOMKilled}} restart_count={{.RestartCount}}' \
-        "$id"
-    done < <(sudo -n docker ps -aq --filter "label=org.opencontainers.image.source=${REPOSITORY_URL}")
-  } >>"$log"
-  chmod 600 "$log"
+        "$id" || return 1
+    done <<<"$ids"
+  } >>"$log" || return 1
+  chmod 600 "$log" || return 1
   printf 'resource evidence: %s\n' "$log"
 }
 
@@ -511,7 +632,9 @@ prepare_candidate() {
     previous_restart_count="$(sudo -n docker inspect --format '{{.RestartCount}}' "$previous_id")"
   fi
   capture_running_app_baseline || return 1
+  save_service_logs "$service"
   "${compose[@]}" pull "$service" || return 1
+  assert_container_count "$((expected_count - 1))" || return 1
   "${compose[@]}" up -d --no-deps --no-build "$service" || return 1
   id="$(container_id "$service")"
   candidate_restart_baseline=0
@@ -525,7 +648,7 @@ prepare_candidate() {
 
 drain_old_slot() {
   local service="$1" status=0
-  # Compose waits out stop_grace_period (90s) on in-flight work, so the edge
+  # Compose waits out stop_grace_period (150s) on in-flight work, so the edge
   # monitor has to span the drain and record_release has to see its samples.
   edge_monitor_start 0
   "${compose[@]}" stop "$service" || status=$?
@@ -539,7 +662,7 @@ rollback_current_tier() {
   new_service="$(service_for_slot "$tier" "$new_slot")"
   api_slot="$(active_slot production "$API_CONFIG")"
   sandbox_slot=a
-  if [[ "$sandbox_enabled" == true ]]; then
+  if [[ "$sandbox_routed" == true ]]; then
     sandbox_slot="$(active_slot sandbox "$SANDBOX_CONFIG")"
   fi
   if ! container_running "$(container_id "$old_service")"; then
@@ -581,10 +704,10 @@ rollback_current_tier() {
 
 deploy_tier() {
   local tier="$1" inject_failure="${2:-false}" api_slot sandbox_slot old_slot new_slot old_service new_service
-  local old_id old_sha new_id tier_host failed drain_status
+  local old_id old_sha new_id failed drain_status
   api_slot="$(active_slot production "$API_CONFIG")"
   sandbox_slot=a
-  if [[ "$sandbox_enabled" == true ]]; then
+  if [[ "$sandbox_routed" == true ]]; then
     sandbox_slot="$(active_slot sandbox "$SANDBOX_CONFIG")"
   fi
   old_slot="$api_slot"
@@ -601,7 +724,7 @@ deploy_tier() {
   write_pending "$tier" "$old_slot" "$old_sha" "$new_slot" "$AIHUB_IMAGE"
 
   local expected_count=3
-  [[ "$sandbox_enabled" == false ]] && expected_count=2
+  [[ "$sandbox_routed" == false ]] && expected_count=2
   start_candidate "$new_service" "$expected_count" || {
     capture_resources "failed-candidate-${new_service}" || true
     "${compose[@]}" stop "$new_service" >/dev/null 2>&1 || true
@@ -616,9 +739,6 @@ deploy_tier() {
   fi
   apply_slots "$api_slot" "$sandbox_slot"
   new_id="$(container_id "$new_service")"
-  tier_host="$production_host"
-  [[ "$tier" == sandbox ]] && tier_host="$sandbox_host"
-
   failed=0
   probe_window 15 || failed=1
   if [[ "$inject_failure" == true ]]; then
@@ -638,6 +758,7 @@ deploy_tier() {
   if ! app_containers_safe "" "$new_id"; then
     failed=1
   fi
+  capture_resources "post-cutover-${tier}" || failed=1
   if [[ "$failed" -eq 1 ]]; then
     capture_resources "failed-cutover-${tier}" || true
     rollback_current_tier "$tier" "$old_slot" "$new_slot" || return 1
@@ -651,7 +772,9 @@ deploy_tier() {
 
   drain_status=0
   drain_old_slot "$old_service" || drain_status=$?
-  if [[ "$drain_status" -ne 0 || -n "$edge_monitor_failures" ]] ||
+  resource_status=0
+  capture_resources "drained-${tier}" || resource_status=1
+  if [[ "$drain_status" -ne 0 || "$resource_status" -ne 0 || -n "$edge_monitor_failures" ]] ||
     ! candidate_state_safe "$new_id" "$candidate_restart_baseline" ||
     ! app_containers_safe "$old_id" "$new_id"; then
     capture_resources "failed-drain-${tier}" || true
@@ -663,6 +786,63 @@ deploy_tier() {
   clear_pending
   capture_resources "committed-${tier}"
   printf '%s cutover complete old=%s new=%s\n' "$tier" "$old_sha" "$(container_revision "$new_id")"
+}
+
+cleanup_sandbox_bootstrap() {
+  local api_slot="$1" service="$2"
+  if ! apply_slots "$api_slot" a false; then
+    if ! load_sandbox_route_state || [[ "$sandbox_routed" == true ]]; then
+      printf 'Sandbox bootstrap route could not be removed; preserve its container for operator repair\n' >&2
+      return 1
+    fi
+  fi
+  sandbox_routed=false
+  "${compose[@]}" stop "$service" || return 1
+  clear_pending
+}
+
+bootstrap_sandbox() {
+  local service=app-sandbox api_slot id failed=0
+  api_slot="$(active_slot production "$API_CONFIG")"
+  write_pending sandbox disabled disabled a "$AIHUB_IMAGE"
+  if ! start_candidate "$service" 2 false; then
+    capture_resources failed-sandbox-bootstrap || true
+    "${compose[@]}" stop "$service" >/dev/null 2>&1 || true
+    clear_pending
+    return 1
+  fi
+  id="$(container_id "$service")"
+  if ! probe_container_dependencies "$id"; then
+    cleanup_sandbox_bootstrap "$api_slot" "$service" || return 1
+    printf 'Sandbox bootstrap dependency smoke failed\n' >&2
+    return 1
+  fi
+  if ! apply_slots "$api_slot" a true; then
+    load_sandbox_route_state || return 1
+    if [[ "$sandbox_routed" == true ]]; then
+      cleanup_sandbox_bootstrap "$api_slot" "$service" || return 1
+    else
+      "${compose[@]}" stop "$service" || return 1
+      clear_pending
+    fi
+    return 1
+  fi
+  sandbox_routed=true
+
+  probe_window 15 || failed=1
+  candidate_state_safe "$id" "$candidate_restart_baseline" || failed=1
+  app_containers_safe "" "$id" || failed=1
+  capture_resources post-cutover-sandbox-bootstrap || failed=1
+  if [[ "$failed" -eq 1 ]]; then
+    capture_resources failed-sandbox-bootstrap || true
+    cleanup_sandbox_bootstrap "$api_slot" "$service" || return 1
+    printf 'Sandbox bootstrap smoke failed; its route and container were removed\n' >&2
+    return 1
+  fi
+
+  record_release deploy sandbox disabled disabled a "$(container_revision "$id")"
+  clear_pending
+  printf 'Sandbox enabled active=%s\n' "$(container_revision "$id")"
 }
 
 preflight() {
@@ -683,8 +863,9 @@ preflight() {
     return 1
   }
   "${compose[@]}" config --quiet
+  check_vault_agent
   local expected_count=2
-  [[ "$sandbox_enabled" == false ]] && expected_count=1
+  [[ "$sandbox_routed" == false ]] && expected_count=1
   assert_container_count "$expected_count"
   local api_slot sandbox_slot service id status
   api_slot="$(active_slot production "$API_CONFIG")"
@@ -695,7 +876,7 @@ preflight() {
     printf 'active Production slot is not healthy and ready\n' >&2
     return 1
   }
-  if [[ "$sandbox_enabled" == true ]]; then
+  if [[ "$sandbox_routed" == true ]]; then
     sandbox_slot="$(active_slot sandbox "$SANDBOX_CONFIG")"
     service="$(service_for_slot sandbox "$sandbox_slot")"
     id="$(container_id "$service")"
@@ -708,6 +889,38 @@ preflight() {
   probe_all
 }
 
+check_vault_agent() {
+  local id running logs
+  id="$(container_id vault-agent)"
+  if [[ -z "$id" ]]; then
+    printf 'vault-agent container is missing\n' >&2
+    return 1
+  fi
+  running="$(sudo -n docker inspect --format '{{.State.Running}}' "$id" 2>/dev/null || true)"
+  if [[ "$running" != true ]]; then
+    printf 'vault-agent is not running\n' >&2
+    return 1
+  fi
+  if ! sudo -n docker exec "$id" sh -ec '
+    test -s /run/secrets/aihub/runtime-secrets.json
+    test -s /run/secrets/aihub/auth-mfa-secrets.json
+    test -s /run/secrets/aihub/connection-secrets.json
+    wget -q -T 2 -O /dev/null "http://127.0.0.1:8220/agent/v1/metrics?format=prometheus"
+  '; then
+    printf 'vault-agent bundles or metrics endpoint failed checks\n' >&2
+    return 1
+  fi
+  logs="$("${compose[@]}" logs --no-color --since 1h vault-agent 2>&1 || true)"
+  case "$logs" in
+    *"authentication successful"* | *"renewed auth token"*) ;;
+    *)
+      printf 'vault-agent has not authenticated in the last hour\n' >&2
+      printf '%s\n' "$logs" | tail -100 >&2
+      return 1
+      ;;
+  esac
+}
+
 failed_edge_tiers() {
   local log="$STATE_DIR/edge-probes.tsv" offset="$1" tier host
   local -a tiers=()
@@ -718,7 +931,7 @@ failed_edge_tiers() {
   if [[ "${#tiers[@]}" -eq 0 ]]; then
     # No attributable sample, so probe each host once rather than leave a tier live.
     for tier in production sandbox; do
-      if [[ "$tier" == sandbox && "$sandbox_enabled" != true ]]; then
+      if [[ "$tier" == sandbox && "$sandbox_routed" != true ]]; then
         continue
       fi
       host="$production_host"
@@ -762,6 +975,7 @@ deploy() {
     "${compose_sandbox_migrate[@]}" run --no-deps --rm migrate-sandbox </dev/null || migration_status=$?
   fi
   edge_monitor_stop
+  capture_resources after-migrations || migration_status=1
   if [[ "$migration_status" -ne 0 ]]; then
     capture_resources failed-migration || true
     printf 'a migration failed\n' >&2
@@ -780,7 +994,11 @@ deploy() {
   probe_all
   deploy_tier production
   if [[ "$sandbox_enabled" == true ]]; then
-    deploy_tier sandbox
+    if [[ "$sandbox_routed" == true ]]; then
+      deploy_tier sandbox
+    else
+      bootstrap_sandbox
+    fi
   fi
   final_edge_window 10
 }
@@ -796,6 +1014,54 @@ restore_active_after_rollback_failure() {
   probe_container_dependencies "$id"
 }
 
+rollback_sandbox_to_disabled() {
+  local slot="$1" sha="$2" api_slot service id
+  load_sandbox_route_state || return 1
+  [[ "$sandbox_routed" == true && "$sandbox_active_slot" == "$slot" ]] || {
+    printf 'Sandbox route does not match the recorded enabled release; refusing rollback\n' >&2
+    return 1
+  }
+  service="$(service_for_slot sandbox "$slot")"
+  id="$(container_id "$service")"
+  if [[ -z "$id" ]] || ! container_running "$id"; then
+    printf 'active Sandbox slot %s is not running; refusing rollback\n' "$slot" >&2
+    return 1
+  fi
+  api_slot="$(active_slot production "$API_CONFIG")"
+  write_pending sandbox "$slot" "$sha" disabled disabled
+  apply_slots "$api_slot" "$slot" false || return 1
+  sandbox_routed=false
+  if ! probe_window 10; then
+    if ! container_running "$id"; then
+      "${compose[@]}" start "$service" || return 1
+      wait_service_ready "$service" 120 "" "" false || return 1
+    fi
+    apply_slots "$api_slot" "$slot" true || return 1
+    sandbox_routed=true
+    if probe_window 10; then
+      clear_pending
+    fi
+    printf 'Production probe failed; Sandbox route was restored\n' >&2
+    return 1
+  fi
+  if ! stop_sandbox_services; then
+    if ! container_running "$id"; then
+      "${compose[@]}" start "$service" || return 1
+      wait_service_ready "$service" 120 "" "" false || return 1
+    fi
+    apply_slots "$api_slot" "$slot" true || return 1
+    sandbox_routed=true
+    clear_pending
+    printf 'Sandbox service could not be stopped; its route was restored\n' >&2
+    return 1
+  fi
+  disable_sandbox_config || return 1
+  assert_container_count 1 || return 1
+  record_release rollback sandbox "$slot" "$sha" disabled disabled
+  clear_pending
+  printf 'Sandbox disabled rollback confirmed\n'
+}
+
 rollback() {
   local tier="$1" line old_slot old_sha new_slot new_sha
   [[ "$tier" == production || "$tier" == sandbox ]] || {
@@ -806,20 +1072,28 @@ rollback() {
     printf 'Sandbox is not enabled\n' >&2
     return 1
   }
+  load_sandbox_route_state || return 1
   [[ -s "$HISTORY_FILE" ]] || { printf 'no release history exists\n' >&2; return 1; }
   line="$(awk -F '\t' -v tier="$tier" '$2 == "deploy" && $3 == tier { line=$0 } END { print line }' "$HISTORY_FILE")"
   [[ -n "$line" ]] || { printf 'no successful release history for %s\n' "$tier" >&2; return 1; }
+  check_vault_agent
   IFS=$'\t' read -r _ _ _ old_slot old_sha new_slot new_sha <<<"$line"
+  if [[ "$tier" == sandbox && "$old_slot" == disabled ]]; then
+    rollback_sandbox_to_disabled "$new_slot" "$new_sha"
+    return $?
+  fi
   AIHUB_IMAGE="ghcr.io/aihub-ecosystem/aihub-be:${old_sha}"
   write_image_env "$AIHUB_IMAGE"
   compose=(sudo -n docker compose --env-file .env.production --env-file "$DEPLOY_ENV" -f docker-compose.production.yml --profile blue-green)
-  [[ "$sandbox_enabled" == false ]] || compose+=(--profile sandbox)
+  compose+=(--profile sandbox)
 
   local current_api current_sandbox current_slot candidate_service active_service active_id candidate_id
   local active_api active_sandbox expected_count failed
   current_api="$(active_slot production "$API_CONFIG")"
   current_sandbox=a
-  [[ "$sandbox_enabled" == false ]] || current_sandbox="$(active_slot sandbox "$SANDBOX_CONFIG")"
+  if [[ "$sandbox_routed" == true ]]; then
+    current_sandbox="$(active_slot sandbox "$SANDBOX_CONFIG")"
+  fi
   current_slot="$current_api"
   [[ "$tier" == production ]] || current_slot="$current_sandbox"
   [[ "$current_slot" == "$new_slot" ]] || {
@@ -836,7 +1110,7 @@ rollback() {
   active_api="$current_api"
   active_sandbox="$current_sandbox"
   expected_count=3
-  [[ "$sandbox_enabled" == true ]] || expected_count=2
+  [[ "$sandbox_routed" == true ]] || expected_count=2
   # nginx still points at the slot being replaced, so probing the edge here would
   # only re-confirm the failure that triggered this rollback; it is validated
   # after apply_slots instead.
@@ -899,13 +1173,47 @@ rollback() {
   fi
   record_release rollback "$tier" "$new_slot" "$(container_revision "$active_id")" "$old_slot" "$old_sha"
   clear_pending
+  capture_resources "rollback-confirmed-${tier}" || true
   printf '%s rolled back to %s\n' "$tier" "$old_sha"
+}
+
+status_tier() {
+  local tier="$1" slot service id sha config="$API_CONFIG"
+  [[ "$tier" != sandbox ]] || config="$SANDBOX_CONFIG"
+  if ! slot="$(active_slot "$tier" "$config")"; then
+    printf '%s active_slot=unknown sha=unavailable\n' "$tier"
+    return 0
+  fi
+  service="$(service_for_slot "$tier" "$slot")"
+  id="$(container_id "$service" 2>/dev/null || true)"
+  if [[ -z "$id" ]]; then
+    printf '%s active_slot=%s sha=unavailable service=%s\n' "$tier" "$slot" "$service"
+    return 0
+  fi
+  sha="$(container_revision "$id" 2>/dev/null || true)"
+  [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || sha=unknown
+  printf '%s active_slot=%s sha=%s service=%s\n' "$tier" "$slot" "$sha" "$service"
+}
+
+status() {
+  status_tier production
+  if [[ "$sandbox_routed" == true ]]; then
+    status_tier sandbox
+  elif [[ "$sandbox_enabled" == true ]]; then
+    printf 'sandbox enabled but not routed\n'
+  else
+    printf 'sandbox disabled\n'
+  fi
+  if [[ -s "$PENDING_FILE" ]]; then
+    printf 'pending=%s\n' "$(tr '\t' ' ' <"$PENDING_FILE")"
+  fi
 }
 
 case "$COMMAND" in
   deploy)
+    reconcile_sandbox_configuration || exit 1
     expected=2
-    [[ "$sandbox_enabled" == false ]] && expected=1
+    [[ "$sandbox_routed" == false ]] && expected=1
     active_count="$(printf '%s\n' "$(app_container_names)" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
     if [[ "$active_count" -ne "$expected" ]]; then
       printf 'refusing rollout before migrations: found %s AIHUB application containers, expected %s active tier container(s)\n' \
@@ -918,8 +1226,13 @@ case "$COMMAND" in
   rollback)
     rollback "$TIER"
     ;;
+  status)
+    load_sandbox_route_state || exit 1
+    status
+    ;;
   rehearse)
-    [[ "$TIER" == sandbox && "$sandbox_enabled" == true ]] || {
+    load_sandbox_route_state || exit 1
+    [[ "$TIER" == sandbox && "$sandbox_enabled" == true && "$sandbox_routed" == true ]] || {
       printf 'rollback rehearsal is limited to enabled Sandbox\n' >&2
       exit 1
     }
@@ -928,7 +1241,7 @@ case "$COMMAND" in
     deploy_tier sandbox true
     ;;
   *)
-    printf 'usage: %s deploy | rollback <production|sandbox> | rehearse sandbox\n' "$0" >&2
+    printf 'usage: %s deploy | rollback <production|sandbox> | rehearse sandbox | status\n' "$0" >&2
     exit 2
     ;;
 esac

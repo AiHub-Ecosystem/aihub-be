@@ -10,9 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  # CI built, booted, and published the image for this sha; this job proves
-  # the registry still holds that one before anything touches the VPS
-  # (ADR-0064). It publishes nothing.
   resolve:
     name: Resolve image
     if: >-
@@ -58,10 +55,6 @@ jobs:
           image_name="ghcr.io/${REPOSITORY,,}"
           image="${image_name}:${IMAGE_TAG}"
           expected="$(tr -d '[:space:]' < image-digest.txt)"
-
-          # The manifest digest of what the registry holds for this tag, which
-          # is what `docker push` reported in CI. `docker image inspect` would
-          # report the local image ID instead, which is a different value.
           actual="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$image")"
           test -n "$actual"
           printf 'CI published: %s\nregistry holds:  %s\nimage:          %s\n' \
@@ -70,13 +63,13 @@ jobs:
             printf 'image digest mismatch: refusing to deploy %s\n' "$image" >&2
             exit 1
           fi
-          echo "image=${image}" >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
 
   deploy:
-    name: Deploy to VPS
+    name: Blue-green deploy to VPS
     needs: resolve
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     environment:
       name: production
     concurrency:
@@ -105,24 +98,36 @@ jobs:
           chmod 600 "$HOME/.ssh/aihub-deploy"
           chmod 644 "$HOME/.ssh/known_hosts"
 
-      - name: Check out deployment manifests
+      - name: Check out the image source revision
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Sync deployment manifests to VPS
+      - name: Sync deployment files to VPS
+        id: sync
         shell: bash
         run: |
-          set -eu
+          set -euo pipefail
           test -n "$VPS_APP_DIR"
           target="$VPS_USER@$VPS_HOST"
           ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
           scp_opts=(-i "$HOME/.ssh/aihub-deploy" -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
-          ssh "${ssh_opts[@]}" "$target" \
-            "mkdir -p '$VPS_APP_DIR/ops/vault/agent' '$VPS_APP_DIR/ops/vault/templates'"
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -eu
+          mkdir -p "$APP_DIR/scripts/ops" "$APP_DIR/ops/nginx" \
+            "$APP_DIR/ops/vault/agent" "$APP_DIR/ops/vault/templates"
+          REMOTE
           scp "${scp_opts[@]}" \
             docker-compose.production.yml \
             "$target:$VPS_APP_DIR/"
+          scp "${scp_opts[@]}" \
+            scripts/ops/blue-green-host.sh \
+            "$target:$VPS_APP_DIR/scripts/ops/"
+          scp "${scp_opts[@]}" \
+            ops/nginx/aihub-api.conf \
+            ops/nginx/sandbox.conf \
+            "$target:$VPS_APP_DIR/ops/nginx/"
           scp "${scp_opts[@]}" \
             ops/vault/agent/aihub-runtime.hcl \
             "$target:$VPS_APP_DIR/ops/vault/agent/"
@@ -131,50 +136,21 @@ jobs:
             ops/vault/templates/auth-mfa-secrets.json.ctmpl \
             ops/vault/templates/connection-secrets.json.ctmpl \
             "$target:$VPS_APP_DIR/ops/vault/templates/"
-          ssh "${ssh_opts[@]}" "$target" \
-            "test -s '$VPS_APP_DIR/docker-compose.production.yml' && test -s '$VPS_APP_DIR/ops/vault/agent/aihub-runtime.hcl' && test -s '$VPS_APP_DIR/ops/vault/templates/runtime-secrets.json.ctmpl' && test -s '$VPS_APP_DIR/ops/vault/templates/auth-mfa-secrets.json.ctmpl' && test -s '$VPS_APP_DIR/ops/vault/templates/connection-secrets.json.ctmpl'"
-
-      - name: Apply managed AIHUB nginx config
-        if: ${{ vars.AIHUB_MANAGED_NGINX == 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
-          scp_opts=(-i "$HOME/.ssh/aihub-deploy" -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
-          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
-          sandbox_enabled="$(ssh "${ssh_opts[@]}" "$target" \
-            "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -eu
-          sed -n 's/^AIHUB_SANDBOX_ENABLED=//p' "$APP_DIR/.env.production"
+          chmod 755 "$APP_DIR/scripts/ops/blue-green-host.sh"
+          test -s "$APP_DIR/docker-compose.production.yml"
+          test -s "$APP_DIR/scripts/ops/blue-green-host.sh"
+          test -s "$APP_DIR/ops/nginx/aihub-api.conf"
+          test -s "$APP_DIR/ops/nginx/sandbox.conf"
+          test -s "$APP_DIR/ops/vault/agent/aihub-runtime.hcl"
+          test -s "$APP_DIR/ops/vault/templates/runtime-secrets.json.ctmpl"
+          test -s "$APP_DIR/ops/vault/templates/auth-mfa-secrets.json.ctmpl"
+          test -s "$APP_DIR/ops/vault/templates/connection-secrets.json.ctmpl"
           REMOTE
-          )"
-          if [ -z "$sandbox_enabled" ]; then
-            sandbox_enabled=false
-          fi
-          if [ "$sandbox_enabled" != true ] && [ "$sandbox_enabled" != false ]; then
-            printf 'AIHUB_SANDBOX_ENABLED must be true or false\n' >&2
-            exit 1
-          fi
-
-          ssh "${ssh_opts[@]}" "$target" \
-            "test -d /var/lib/aihub-nginx-staging && test -w /var/lib/aihub-nginx-staging"
-          scp "${scp_opts[@]}" ops/nginx/aihub-api.conf \
-            "$target:/var/lib/aihub-nginx-staging/aihub-api.conf"
-          if [ "$sandbox_enabled" = true ]; then
-            scp "${scp_opts[@]}" ops/nginx/sandbox.conf \
-              "$target:/var/lib/aihub-nginx-staging/sandbox.conf"
-          else
-            ssh "${ssh_opts[@]}" "$target" \
-              "rm -f /var/lib/aihub-nginx-staging/sandbox.conf"
-          fi
-
-          ssh "${ssh_opts[@]}" "$target" \
-            "test -s /var/lib/aihub-nginx-staging/aihub-api.conf && if [ '$sandbox_enabled' = true ]; then test -s /var/lib/aihub-nginx-staging/sandbox.conf; else test ! -e /var/lib/aihub-nginx-staging/sandbox.conf; fi"
-          ssh "${ssh_opts[@]}" "$target" \
-            "sudo -n /usr/local/sbin/aihub-nginx-apply"
 
       - name: Log in to GHCR on VPS
+        id: ghcr_login
         shell: bash
         env:
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
@@ -190,344 +166,41 @@ jobs:
 
       - name: Deploy release
         shell: bash
-        env:
-          DEPLOY_RUN_ID: ${{ github.run_id }}
         run: |
-          set -eu
-          test -n "$VPS_APP_DIR"
+          set -euo pipefail
           target="$VPS_USER@$VPS_HOST"
           ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           image_arg="$(printf '%q' "$AIHUB_IMAGE")"
           ssh "${ssh_opts[@]}" "$target" \
-            "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg DEPLOY_RUN_ID=$DEPLOY_RUN_ID bash -se" <<'REMOTE'
-          set -eu
+            "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
+          set -euo pipefail
           cd "$APP_DIR"
-          previous_sandbox_enabled="$(sed -n 's/^AIHUB_SANDBOX_ENABLED=//p' .env.production | tail -n 1 | tr -d '\r')"
-          [ -n "$previous_sandbox_enabled" ] || previous_sandbox_enabled=false
-          previous_app_sha=none
-          previous_sandbox_sha=none
-          previous_app_id="$(sudo -n docker ps -q \
-            --filter label=com.docker.compose.project=aihub-production \
-            --filter label=com.docker.compose.service=app 2>/dev/null | head -n 1 || true)"
-          if [ -n "$previous_app_id" ]; then
-            previous_app_sha="$(sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$previous_app_id" 2>/dev/null || true)"
-            [[ "$previous_app_sha" =~ ^[a-f0-9]{40}$ ]] || previous_app_sha=unknown
-          fi
-          if [ "$previous_sandbox_enabled" = true ]; then
-            previous_sandbox_id="$(sudo -n docker ps -q \
-              --filter label=com.docker.compose.project=aihub-production \
-              --filter label=com.docker.compose.service=app-sandbox 2>/dev/null | head -n 1 || true)"
-            if [ -n "$previous_sandbox_id" ]; then
-              previous_sandbox_sha="$(sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$previous_sandbox_id" 2>/dev/null || true)"
-              [[ "$previous_sandbox_sha" =~ ^[a-f0-9]{40}$ ]] || previous_sandbox_sha=unknown
-            fi
-          fi
-          env_tmp="$(mktemp .env.production.tmp.XXXXXX)"
-          trap 'rm -f "$env_tmp"' EXIT
-          awk '!/^AIHUB_IMAGE=/' .env.production >"$env_tmp"
-          printf 'AIHUB_IMAGE=%s\n' "$AIHUB_IMAGE" >>"$env_tmp"
-          chmod 600 "$env_tmp"
-          mv "$env_tmp" .env.production
-          trap - EXIT
-          compose=(sudo -n docker compose --env-file .env.production -f docker-compose.production.yml)
-
-          "${compose[@]}" config --quiet
-
-          sandbox_enabled="$(sed -n 's/^AIHUB_SANDBOX_ENABLED=//p' .env.production)"
-          if [ -n "$sandbox_enabled" ] && [ "$sandbox_enabled" != true ] && [ "$sandbox_enabled" != false ]; then
-            printf 'AIHUB_SANDBOX_ENABLED must be true or false\n' >&2
-            exit 1
-          fi
-          sandbox_keys=(AIHUB_SANDBOX_HOST AIHUB_SANDBOX_ORG_IDS)
-          sandbox_set=0
-          if [ "$sandbox_enabled" = true ]; then
-            for key in "${sandbox_keys[@]}"; do
-              if grep -Eq "^${key}=.+$" .env.production; then
-                sandbox_set=$((sandbox_set + 1))
-              fi
-            done
-          fi
-          if [ "$sandbox_enabled" = true ] && [ "$sandbox_set" -ne "${#sandbox_keys[@]}" ]; then
-            printf 'sandbox configuration must set AIHUB_SANDBOX_ENABLED=true, AIHUB_SANDBOX_HOST, and AIHUB_SANDBOX_ORG_IDS together\n' >&2
-            exit 1
-          fi
-
-          # Do not recreate the Agent during CD: the role ID and the rendered
-          # bundles are provisioned out of band, and recreating here would race
-          # the operator cutover that pairs a re-provisioned role with the Agent
-          # that reads it. The Agent is durable now — it holds role_id only, with
-          # bind_secret_id=false — so it re-authenticates on its own and does not
-          # need a hand-issued secret_id to come back.
-          vault_container_id="$("${compose[@]}" ps -q vault-agent)"
-          if [ -z "$vault_container_id" ]; then
-            printf 'vault-agent container is missing; refusing to create it outside the operator cutover\n' >&2
-            exit 1
-          fi
-          vault_running="$(sudo -n docker inspect --format '{{.State.Running}}' "$vault_container_id" 2>/dev/null || true)"
-          if [ "$vault_running" != true ]; then
-            printf 'vault-agent is not running; refusing to recreate it outside the operator cutover\n' >&2
-            "${compose[@]}" logs --no-color --tail=100 vault-agent >&2 || true
-            exit 1
-          fi
-          if ! sudo -n docker exec "$vault_container_id" sh -ec '
-            test -s /run/secrets/aihub/runtime-secrets.json || { echo "runtime-secrets.json is missing or empty" >&2; exit 1; }
-            test -s /run/secrets/aihub/auth-mfa-secrets.json || { echo "auth-mfa-secrets.json is missing or empty" >&2; exit 1; }
-            test -s /run/secrets/aihub/connection-secrets.json || { echo "connection-secrets.json is missing or empty" >&2; exit 1; }
-            wget -q -T 2 -O /dev/null "http://127.0.0.1:8220/agent/v1/metrics?format=prometheus"
-          '; then
-            printf 'vault-agent is running but its rendered bundles or metrics endpoint failed checks\n' >&2
-            "${compose[@]}" logs --no-color --tail=100 vault-agent >&2 || true
-            exit 1
-          fi
-          # Render timestamps prove nothing here: the Agent only rewrites a
-          # template when its rendered bytes change, and the Agent is not
-          # recreated, so an unchanged secret correctly keeps an old mtime.
-          # What must hold is that the live AppRole session still works. The
-          # role issues one-hour tokens, so a success or renewal inside the
-          # last hour means the deploy never needed the operator to intervene.
-          # The deployed metrics endpoint does not expose the authenticated
-          # gauge, so the direct checks above and this auth-log guard replace
-          # the Compose service_healthy gate for this rollout.
-          vault_logs="$("${compose[@]}" logs --no-color --since 1h vault-agent 2>&1 || true)"
-          case "$vault_logs" in
-            *"authentication successful"* | *"renewed auth token"*) ;;
-            *)
-              printf 'vault-agent has not authenticated in the last hour; auto-auth is failing\n' >&2
-              printf '%s\n' "$vault_logs" | tail -100 >&2
-              exit 1
-              ;;
-          esac
-
-          services=(app)
-          compose_runtime=("${compose[@]}")
-          if [ "$sandbox_enabled" = true ]; then
-            "${compose[@]}" --profile sandbox pull app app-sandbox
-            # Host nginx terminates TLS and owns ports 80/443 on this VPS. The
-            # sandbox app binds a second loopback port; nginx publishes the
-            # configured hostname and never a wildcard or catch-all.
-            services+=(app-sandbox)
-            compose_runtime+=(--profile sandbox)
-          else
-            # Removing the service prevents a stale sandbox container from
-            # surviving after its deployment configuration is disabled. Host
-            # nginx remains an explicit operator-managed configuration.
-            "${compose[@]}" --profile sandbox rm --stop --force app-sandbox </dev/null || true
-            "${compose[@]}" pull app
-          fi
-
-          "${compose[@]}" --profile migration run --no-deps --rm migrate </dev/null
-          if [ "$sandbox_enabled" = true ]; then
-            "${compose[@]}" --profile migration --profile sandbox run --no-deps --rm migrate-sandbox </dev/null
-          fi
-
-          # A container's logs live and die with the container, and the next
-          # command replaces it, so what the running one logged is saved first.
-          # Without this, an error seen only in a log is gone after the next
-          # deploy. Best effort: nothing here may block a release.
-          log_dir="$APP_DIR/deploy-logs"
-          if mkdir -p "$log_dir" && chmod 700 "$log_dir"; then
-            stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-            for service in "${services[@]}"; do
-              running_id="$("${compose_runtime[@]}" ps -q "$service" 2>/dev/null || true)"
-              [ -n "$running_id" ] || continue
-              running_commit="$(sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$running_id" 2>/dev/null || true)"
-              # The last 20 MB, so a chatty container cannot fill the disk.
-              sudo -n docker logs --timestamps "$running_id" 2>&1 | tail -c 20000000 >"$log_dir/$service-${running_commit:0:7}-$stamp.log" || true
-            done
-            find "$log_dir" -name '*.log' -mtime +30 -delete 2>/dev/null || true
-          fi
-
-          "${compose_runtime[@]}" up -d --no-deps --no-build "${services[@]}"
-
-          for service in "${services[@]}"; do
-            container_id="$("${compose_runtime[@]}" ps -q "$service")"
-            test -n "$container_id"
-            healthy=0
-            status=""
-            for attempt in $(seq 1 45); do
-              status="$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$container_id" 2>/dev/null || true)"
-              if [ "$status" = healthy ]; then
-                healthy=1
-                break
-              fi
-              if [ "$status" = unhealthy ]; then
-                break
-              fi
-              sleep 2
-            done
-            if [ "$healthy" -ne 1 ]; then
-              "${compose_runtime[@]}" ps
-              printf '%s health status: %s\n' "$service" "$status" >&2
-              sudo -n docker inspect --format \
-                'container state={{.State.Status}} exit_code={{.State.ExitCode}} error={{.State.Error}} restart_count={{.RestartCount}}' \
-                "$container_id" >&2 || true
-              sudo -n docker inspect --format \
-                '{{range .State.Health.Log}}healthcheck exit_code={{.ExitCode}} output={{printf "%q" .Output}}\n{{end}}' \
-                "$container_id" >&2 || true
-              "${compose_runtime[@]}" logs --no-color --tail=100 "$service" >&2 || true
-              exit 1
-            fi
-          done
-
-          expected_sha="${AIHUB_IMAGE##*:}"
-          app_id="$("${compose[@]}" ps -q app)"
-          app_sha="$(sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$app_id")"
-          test "$app_sha" = "$expected_sha"
-          sandbox_sha=disabled
-          if [ "$sandbox_enabled" = true ]; then
-            sandbox_id="$("${compose_runtime[@]}" ps -q app-sandbox)"
-            sandbox_sha="$(sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$sandbox_id")"
-            test "$sandbox_sha" = "$expected_sha"
-          fi
-
-          state_dir="$APP_DIR/.aihub-deploy-state"
-          mkdir -p "$state_dir"
-          chmod 700 "$state_dir"
-          pending_tmp="$(mktemp "$state_dir/direct-release-pending.XXXXXX")"
-          trap 'rm -f "$pending_tmp"' EXIT
-          release_at="$(date -u +%FT%TZ)"
-          printf '%s\t%s\tproduction\t%s\t%s\n' \
-            "$DEPLOY_RUN_ID" "$release_at" "$previous_app_sha" "$app_sha" >"$pending_tmp"
-          if [ "$sandbox_enabled" = true ]; then
-            printf '%s\t%s\tsandbox\t%s\t%s\n' \
-              "$DEPLOY_RUN_ID" "$release_at" "$previous_sandbox_sha" "$sandbox_sha" >>"$pending_tmp"
-          fi
-          chmod 600 "$pending_tmp"
-          mv "$pending_tmp" "$state_dir/direct-release-pending.tsv"
-          trap - EXIT
-
+          ./scripts/ops/blue-green-host.sh deploy
           REMOTE
 
-      - name: Read configured deployment tiers
-        id: tiers
+      - name: Report active tier revisions
+        if: ${{ always() && steps.ssh.outcome == 'success' && steps.sync.outcome == 'success' }}
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
           target="$VPS_USER@$VPS_HOST"
           ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
-          tier_config="$(ssh "${ssh_opts[@]}" "$target" \
-            "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
-          set -eu
+          state="$(ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
           cd "$APP_DIR"
-          sandbox_enabled="$(sed -n 's/^AIHUB_SANDBOX_ENABLED=//p' .env.production | tail -n 1 | tr -d '\r')"
-          sandbox_host="$(sed -n 's/^AIHUB_SANDBOX_HOST=//p' .env.production | tail -n 1 | tr -d '\r')"
-          [ -n "$sandbox_enabled" ] || sandbox_enabled=false
-          if [ "$sandbox_enabled" != true ] && [ "$sandbox_enabled" != false ]; then
-            printf 'AIHUB_SANDBOX_ENABLED must be true or false\n' >&2
-            exit 1
-          fi
-          if [ "$sandbox_enabled" = true ] && [ -z "$sandbox_host" ]; then
-            printf 'AIHUB_SANDBOX_HOST is required when Sandbox is enabled\n' >&2
-            exit 1
-          fi
-          if [ "$sandbox_enabled" = true ]; then
-            case "$sandbox_host" in
-              *[!A-Za-z0-9.-]*)
-                printf 'AIHUB_SANDBOX_HOST must be a DNS hostname\n' >&2
-                exit 1
-                ;;
-            esac
-            if [ "${#sandbox_host}" -gt 253 ]; then
-              printf 'AIHUB_SANDBOX_HOST is too long\n' >&2
-              exit 1
-            fi
-          else
-            sandbox_host=
-          fi
-          printf '%s\t%s\n' "$sandbox_enabled" "$sandbox_host"
+          ./scripts/ops/blue-green-host.sh status
           REMOTE
           )"
-          IFS=$'\t' read -r sandbox_enabled sandbox_host <<<"$tier_config"
-          printf 'sandbox_enabled=%s\nsandbox_host=%s\n' \
-            "$sandbox_enabled" "$sandbox_host" >> "$GITHUB_OUTPUT"
-
-      - name: Verify public edge health
-        shell: bash
-        env:
-          AIHUB_PRODUCTION_HOST: ${{ vars.AIHUB_PRODUCTION_HOST }}
-          AIHUB_SANDBOX_ENABLED: ${{ steps.tiers.outputs.sandbox_enabled }}
-          AIHUB_SANDBOX_HOST: ${{ steps.tiers.outputs.sandbox_host }}
-          AIHUB_PROBE_WINDOW_SECONDS: "1"
-        run: node scripts/ops/probe-public-edge.cjs
-
-      - name: Verify application dependency reachability
-        shell: bash
-        run: |
-          set -euo pipefail
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
-          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
-          services=(app)
-          if [ "$AIHUB_SANDBOX_ENABLED" = true ]; then
-            services+=(app-sandbox)
-          fi
-          for service in "${services[@]}"; do
-            service_arg="$(printf '%q' "$service")"
-            ssh "${ssh_opts[@]}" "$target" \
-              "APP_DIR=$app_dir_arg AIHUB_SERVICE=$service_arg bash -se" <<'REMOTE'
-          set -euo pipefail
-          cd "$APP_DIR"
-          compose=(sudo -n docker compose --env-file .env.production -f docker-compose.production.yml)
-          if [ "$AIHUB_SERVICE" = app-sandbox ]; then
-            compose+=(--profile sandbox)
-          fi
-          container_id="$("${compose[@]}" ps -q "$AIHUB_SERVICE")"
-          if [ -z "$container_id" ]; then
-            printf 'deployed service is missing: %s\n' "$AIHUB_SERVICE" >&2
-            exit 1
-          fi
-          sudo -n docker exec "$container_id" node scripts/ops/probe-runtime-dependencies.cjs
-          REMOTE
-          done
-        env:
-          AIHUB_SANDBOX_ENABLED: ${{ steps.tiers.outputs.sandbox_enabled }}
-
-      - name: Record successful release history
-        shell: bash
-        env:
-          DEPLOY_RUN_ID: ${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
-          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
-          run_id_arg="$(printf '%q' "$DEPLOY_RUN_ID")"
-          release_records="$(ssh "${ssh_opts[@]}" "$target" \
-            "APP_DIR=$app_dir_arg DEPLOY_RUN_ID=$run_id_arg bash -se" <<'REMOTE'
-          set -euo pipefail
-          cd "$APP_DIR"
-          state_dir=.aihub-deploy-state
-          pending="$state_dir/direct-release-pending.tsv"
-          history="$state_dir/direct-releases.tsv"
-          test -s "$pending"
-          matches="$(awk -F '\t' -v run_id="$DEPLOY_RUN_ID" '$1 == run_id' "$pending")"
-          test -n "$matches"
-          mkdir -p "$state_dir"
-          chmod 700 "$state_dir"
-          if ! awk -F '\t' -v run_id="$DEPLOY_RUN_ID" '$1 == run_id { found=1 } END { exit !found }' "$history" 2>/dev/null; then
-            printf '%s\n' "$matches" >>"$history"
-            chmod 600 "$history"
-          fi
-          awk -F '\t' -v run_id="$DEPLOY_RUN_ID" '$1 == run_id' "$history"
-          rm -f "$pending"
-          REMOTE
-          )"
-          {
-            printf '## VPS release history\n\n'
-            printf '| Tier | Previous image SHA | Deployed image SHA |\n| --- | --- | --- |\n'
-            while IFS=$'\t' read -r run_id released_at tier previous_sha deployed_sha; do
-              [ -n "$tier" ] || continue
-              printf '| %s | %s | %s |\n' "$tier" "$previous_sha" "$deployed_sha"
-            done <<< "$release_records"
-          } >> "$GITHUB_STEP_SUMMARY"
+          printf '## Active tier revisions\n\n%s\n' "$state" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Log out of GHCR on VPS
-        if: always()
+        if: ${{ always() && steps.ghcr_login.outcome == 'success' }}
         continue-on-error: true
         shell: bash
         run: |
           target="$VPS_USER@$VPS_HOST"
           ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
-          ssh "${ssh_opts[@]}" "$target" "sudo -n docker logout ghcr.io >/dev/null 2>&1 || true"
+          ssh "${ssh_opts[@]}" "$target" "sudo -n docker logout ghcr.io"

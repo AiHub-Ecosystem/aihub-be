@@ -75,6 +75,52 @@ describe('runtime dependency probe', () => {
     expect(connect).toHaveBeenCalledWith('https://speaking.example/api');
   });
 
+  it('reports a Redis-only outage without blocking readiness', async () => {
+    await expect(
+      probeReadiness(
+        jest.fn().mockResolvedValue({
+          ok: false,
+          status: 503,
+          json: async () => ({
+            status: 'error',
+            dependencies: {
+              'runtime-postgres': 'up',
+              'control-plane-write-postgres': 'up',
+              'control-plane-read-postgres': 'up',
+              redis: 'down',
+            },
+          }),
+        }),
+      ),
+    ).resolves.toEqual({
+      name: 'postgres-redis',
+      ok: true,
+      result: 'REDIS_DOWN_ADVISORY',
+    });
+  });
+
+  it('still blocks readiness when Postgres and Redis are down together', async () => {
+    await expect(
+      probeReadiness(
+        jest.fn().mockResolvedValue({
+          ok: false,
+          status: 503,
+          json: async () => ({
+            status: 'error',
+            dependencies: {
+              'runtime-postgres': 'down',
+              redis: 'down',
+            },
+          }),
+        }),
+      ),
+    ).resolves.toEqual({
+      name: 'postgres-redis',
+      ok: false,
+      result: 'DOWN:runtime-postgres,redis',
+    });
+  });
+
   it('reports only safe dependency names and status when readiness fails', async () => {
     const result = await probeReadiness(
       jest.fn().mockResolvedValue({

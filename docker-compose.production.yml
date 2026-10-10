@@ -56,7 +56,8 @@ x-app-service: &app-service
   <<: *app-common
   networks: *app-database-networks
   restart: unless-stopped
-  stop_grace_period: 90s
+  # 60s HTTP drain + at most 75s background drain + 5s telemetry flush = 140s.
+  stop_grace_period: 150s
   volumes:
     - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro
   depends_on:

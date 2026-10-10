@@ -848,31 +848,36 @@ The Production handoff matrix is split by safety boundary:
   success mappings are covered by the Speaking HTTP seam tests; do not corrupt
   live provider credentials or deliberately overload Production to manufacture
   those failures.
-- After Compose health passes, CD requests `/health` through each enabled public
-  hostname from the GitHub runner. It does not follow redirects or read response
-  bodies. CD then runs
-  `scripts/ops/probe-runtime-dependencies.cjs` inside each deployed app
-  container: the private `/ready` route must report Postgres and Redis up, and
-  the container must complete a TCP connection or verified TLS handshake to
-  both configured AI service hosts. These probes send no HTTP request to either
+- The blue-green helper probes `/health` through every enabled public hostname
+  from the VPS once per second while the candidate starts, after cutover, and
+  during drain. It does not follow redirects or read response bodies. The helper
+  then runs `scripts/ops/probe-runtime-dependencies.cjs` inside the candidate:
+  private `/ready` must report runtime and configured control-plane Postgres
+  up; Redis is reported but a Redis-only failure is advisory because gateway
+  requests fail open. The container must also complete a TCP connection or
+  verified TLS handshake to both configured AI service hosts. These probes send
+  no HTTP request to either
   provider, so they do not authenticate or exercise grading/model behavior.
   Failures identify the hostname or dependency name and a safe status/code; raw
   response bodies and configured URLs are not logged. Sandbox checks are skipped
-  when `AIHUB_SANDBOX_ENABLED=false`. This smoke fails CD after the current
-  single-container deploy but does not automatically roll back; #224 adds that
-  behavior. Rollback currently uses the immutable `AIHUB_IMAGE` tag described
-  below.
+  when `AIHUB_SANDBOX_ENABLED=false`. The existing direct Compose release path
+  has no automatic rollback. The updated CD workflow uses the blue-green helper
+  when re-enabled; until then, use the direct rollback procedure below.
 
 ## Rollback
 
-The active workflow is still the direct Compose deployment. It records each
-successful tier's replaced and deployed commit SHA in
+The deployed release still uses the direct Compose history until the first
+successful blue-green cutover. Those direct releases record each successful
+tier's replaced and deployed commit SHA in
 `$APP_DIR/.aihub-deploy-state/direct-releases.tsv` (directory mode `0700`, file
 mode `0600`) and adds the same rows to the CD Actions summary. Each row is
 `run_id`, UTC time, tier, previous SHA, deployed SHA. A failed CD run may leave
 `direct-release-pending.tsv`; it is not successful history. Use the latest
 successful run summary and host history together when choosing the last known
 good SHA. `.env.production` is the desired image setting, not release history.
+The CD workflow is manually disabled. After the blue-green activation gates
+pass, its deploy job will call `scripts/ops/blue-green-host.sh`; it will not
+rewrite `.env.production` or reset nginx to slot A.
 
 ### Pause CD and select the rollback target
 
@@ -913,7 +918,7 @@ performs that temporary login only when the target image is absent.
 ### Roll back the direct Compose release
 
 Use the exact 40-character target SHA selected above. This updates both enabled
-tiers to the same image, matching the current CD behavior. It leaves the
+tiers to the same image, matching the legacy direct-Compose behavior. It leaves the
 expand-only schema in place and never deletes the database volume or runs a
 down-migration. In the same Bash session, record `recovery_started=$(date +%s)`
 immediately before changing `AIHUB_IMAGE`; once all health and authenticated
@@ -1192,9 +1197,11 @@ rehearsal; it remains gated by #289 and ADR-0085.
 
 ## Approved blue-green rollout target (#224)
 
-This is the accepted target in [ADR-0085](../adr/0085-per-tier-blue-green-cutover.md),
-not the behavior of the current CD workflow. Do not enable it until #224 is
-implemented and the manual rollback in #289 has been completed and rehearsed.
+This is the accepted target in [ADR-0085](../adr/0085-per-tier-blue-green-cutover.md).
+The CD workflow is currently disabled manually. Do not re-enable it until the
+implementation, automated Sandbox rollback rehearsal, manual rollback gate in
+#289, #284's background-work shutdown fix and lifecycle test, and live-host CPU
+limit measurement are complete.
 
 Deploy Production, then Sandbox, one tier at a time. Keep the current tier
 serving while one candidate starts from the immutable CI SHA. Require private
@@ -1204,15 +1211,31 @@ run #113's public-edge and in-container dependency smoke against the candidate.
 Reject a candidate if its OOM state is set or its restart count increases during
 startup or smoke; this triggers rollback while the old service is still
 available. Confirm rollback with the same dependency smoke on the restored
-service. Retain the old service until smoke passes and Fastify has drained
-accepted work within the 90-second grace period. The
+service. Retain the old service until smoke passes, then wait for Compose's
+150-second stop grace. The budget is 60 seconds for HTTP drain, 75 seconds for
+background idempotent work, and 5 seconds for telemetry export, with 10 seconds
+of margin. This drain is safe only after #284 makes shutdown wait for both
+in-flight HTTP requests and background idempotent work before closing clients;
+keep CD disabled until that change and its lifecycle test pass. The
 validated upstream is the active-slot source of truth; the immutable image SHA
 and #289's durable record identify the release. `.env.production` is not the
 last-good release record.
 
+Before each deploy, the helper reconciles `AIHUB_SANDBOX_ENABLED` with the
+managed Sandbox route. Disabling Sandbox removes and validates the route before
+stopping both Sandbox slots, then confirms only Production remains. Enabling it
+without a route first confirms Sandbox containers are absent; after the
+Production cutover, it starts Sandbox, checks private readiness and dependencies,
+adds the route, and checks the public health window. The initial Sandbox release
+is recorded as `disabled -> slot A`, so manual rollback can remove the route and
+stop Sandbox without looking for a nonexistent previous image.
+
 Timestamped public `/health` results are appended to
-`.aihub-deploy-state/edge-probes.tsv`. Resource snapshots also record each
-AIHUB container's state, OOM flag, and restart count.
+`.aihub-deploy-state/edge-probes.tsv`. Labeled resource snapshots in
+`.aihub-deploy-state/resources-*.log` include host CPU and memory, Docker CPU
+and memory for running containers, and state, OOM flag, and restart count for
+AIHUB containers. The helper also saves the inactive slot's last 20 MB of logs
+before Compose replaces that container.
 
 Allow at most three AIHUB application containers total, reusing the single
 candidate for Sandbox after Production is verified and drained. Roll back only
@@ -1225,26 +1248,49 @@ ports 80/443.
 Before enabling CD, rehearse a controlled post-cutover smoke failure and capture
 the automatic rollback evidence. During each rollout and its rehearsal, probe
 every enabled public hostname's `/health` every second; require no failed probes
-and no OOM, and record host/container CPU, memory, and OOM events. The live host has two
-vCPUs and shared workloads, so choose CPU limits from measured headroom with
-the third container before rollout. A running deployment is not cancelled;
+and no OOM, and record host/container CPU, memory, and OOM events. The live host
+has two vCPUs and shared workloads, so choose CPU limits from measured headroom
+with the third container before rollout. A running deployment is not cancelled;
 the latest pending release wins.
+
+This automatic window ends after cutover, smoke, drain, and the short final
+health check. It does not roll back a later error-rate or latency regression.
+Until #237/#240 provide the needed metrics and #292 defines SLO alerts, use
+existing alerts and the rehearsed #289 manual rollback for later regressions.
+
+The host helper supports `status`, `rollback production`, `rollback sandbox`,
+and `rehearse sandbox`. The rehearsal command deliberately injects a failed
+post-cutover smoke and succeeds only when Sandbox is restored and verified; it
+does not cut over Production. Use the immutable CI SHA for `AIHUB_IMAGE` when
+running it manually. The CD Actions summary reports the active SHA for each
+enabled tier after both successful and failed deploy attempts.
+
+After syncing the reviewed helper to the VPS and logging Docker into GHCR, run
+the Sandbox rehearsal from the deployment directory:
+
+```bash
+cd "$APP_DIR"
+APP_DIR="$PWD" AIHUB_IMAGE=ghcr.io/aihub-ecosystem/aihub-be:REPLACE_WITH_40_CHAR_CI_SHA \
+  ./scripts/ops/blue-green-host.sh rehearse sandbox
+APP_DIR="$PWD" ./scripts/ops/blue-green-host.sh status
+```
+
+Only use `rollback <tier>` after that tier has a successful blue-green deploy
+record in `releases.tsv`; the direct-Compose history above is not input to this
+helper.
 
 ## GitHub Actions CD
 
 The `CI` workflow publishes the image it booted to GHCR under the commit sha.
-The `CD` workflow currently deploys that immutable image over SSH: it resolves the
-sha, checks the registry still holds the digest `CI` published, and only then
-reaches the VPS. The VPS must already be prepared using this runbook, with the
-Compose files and `.env.production` in the app directory. The deploy user must
-be allowed to run Docker non-interactively, either directly or via
-passwordless `sudo -n docker`.
+The `CD` workflow is manually disabled. When re-enabled, it resolves the
+immutable SHA, checks the registry still holds the digest `CI` published, syncs
+the helper and deployment files, then calls the blue-green deploy command over
+SSH. The VPS must already be prepared using this runbook, with the Compose files
+and `.env.production` in the app directory. The deploy user must be allowed to
+run Docker non-interactively, either directly or via passwordless
+`sudo -n docker`.
 
-Create a protected GitHub Environment named `production` and add this variable
-and these secrets:
-
-- `AIHUB_PRODUCTION_HOST` (the public production DNS hostname from
-  `.env.production`; used by CD to probe the public health route)
+Create a protected GitHub Environment named `production` and add these secrets:
 
 - `VPS_HOST`
 - `VPS_USER`

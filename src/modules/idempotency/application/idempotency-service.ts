@@ -197,6 +197,8 @@ export class IdempotencyService implements IdempotencyServicePort {
       );
       throw timeoutError();
     }
+    // Current grading routes cap at 60s: background work can therefore need
+    // up to 60s after its response deadline; the shutdown budget allows 75s.
     const hardTimeoutMs = input.timeoutMs * 2;
     const hardDeadlineAt = new Date(this.now() + hardTimeoutMs);
     const controller = new AbortController();
