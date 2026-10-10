@@ -25,21 +25,33 @@ afterAll(async () => {
   await Promise.all([pool.end(), operator.end()]);
 });
 
-function poolErrorCount(metrics: string): number {
-  const line = metrics
+function poolErrorCount(
+  metrics: string,
+  sqlstateClasses: readonly string[] = [SQLSTATE_CLASS],
+): number {
+  const lines = metrics
     .split('\n')
-    .find((candidate) =>
+    .filter((candidate) =>
       candidate.startsWith(
-        `aihub_postgres_pool_errors_total{pool="${POOL_NAME}",sqlstate_class="${SQLSTATE_CLASS}"}`,
+        `aihub_postgres_pool_errors_total{pool="${POOL_NAME}",`,
       ),
     );
-  return line === undefined ? 0 : Number(line.split(' ').at(-1));
+  return lines
+    .filter((line) =>
+      sqlstateClasses.some((sqlstateClass) =>
+        line.includes(`sqlstate_class="${sqlstateClass}"`),
+      ),
+    )
+    .reduce((total, line) => total + Number(line.split(' ').at(-1)), 0);
 }
 
-async function waitForPoolErrorCount(previousCount: number): Promise<number> {
+async function waitForPoolErrorCount(
+  previousCount: number,
+  sqlstateClasses: readonly string[] = [SQLSTATE_CLASS],
+): Promise<number> {
   const deadline = Date.now() + 5_000;
   while (Date.now() < deadline) {
-    const count = poolErrorCount(await getMetrics());
+    const count = poolErrorCount(await getMetrics(), sqlstateClasses);
     if (count > previousCount) {
       return count;
     }
@@ -76,7 +88,8 @@ describe('PostgreSQL pool connection failures', () => {
 
   it('fails a transaction on a dropped checked-out connection and keeps the process alive', async () => {
     const processExitCode = process.exitCode;
-    const previousCount = poolErrorCount(await getMetrics());
+    const errorClasses = [SQLSTATE_CLASS, 'unknown'];
+    const previousCount = poolErrorCount(await getMetrics(), errorClasses);
     const client = await pool.connect();
 
     try {
@@ -91,7 +104,9 @@ describe('PostgreSQL pool connection failures', () => {
       client.release();
     }
 
-    expect(await waitForPoolErrorCount(previousCount)).toBe(previousCount + 1);
+    expect(await waitForPoolErrorCount(previousCount, errorClasses)).toBe(
+      previousCount + 1,
+    );
     expect(process.exitCode).toBe(processExitCode);
     await expect(pool.query('SELECT 1')).resolves.toMatchObject({
       rows: [{ '?column?': 1 }],
