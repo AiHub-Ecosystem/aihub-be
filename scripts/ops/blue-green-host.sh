@@ -261,7 +261,7 @@ capture_running_app_baseline() {
   local -a ids=()
   app_container_baseline_ids=()
   app_container_baseline_restarts=()
-  mapfile -t ids < <(sudo -n docker ps --quiet --filter "label=org.opencontainers.image.source=${REPOSITORY_URL}")
+  mapfile -t ids < <(sudo -n docker ps --no-trunc --quiet --filter "label=org.opencontainers.image.source=${REPOSITORY_URL}")
   if [[ "${#ids[@]}" -eq 0 ]]; then
     printf 'no running AIHUB application containers found for rollout baseline\n' >&2
     return 1
@@ -282,7 +282,7 @@ capture_running_app_baseline() {
 app_containers_safe() {
   local excluded_id="${1:-}" candidate_id="${2:-}" id current_id known_id known state status oom_killed restart_count expected_restart_count i running_ids_output
   local -a running_ids=()
-  running_ids_output="$(sudo -n docker ps --quiet --filter "label=org.opencontainers.image.source=${REPOSITORY_URL}")" || return 1
+  running_ids_output="$(sudo -n docker ps --no-trunc --quiet --filter "label=org.opencontainers.image.source=${REPOSITORY_URL}")" || return 1
   if [[ -n "$running_ids_output" ]]; then
     mapfile -t running_ids <<<"$running_ids_output"
   fi
