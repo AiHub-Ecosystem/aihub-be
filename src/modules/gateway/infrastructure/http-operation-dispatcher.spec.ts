@@ -227,11 +227,12 @@ describe('HttpOperationDispatcher', () => {
     });
   });
 
-  it('fails closed with the existing internal error envelope when the durable record cannot be created', async () => {
+  it('fails closed and releases sandbox quota when the durable record cannot be created', async () => {
     const attempts = fakeDispatchAttempts();
     attempts.recorder.beginAttempt = jest
       .fn()
       .mockRejectedValue(new Error('database unavailable'));
+    const budget = fakeSandboxBudget();
     const httpClient = new DownstreamHttpClient(
       'https://ai-writing.test',
       mockAgent,
@@ -242,9 +243,10 @@ describe('HttpOperationDispatcher', () => {
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
       attempts.recorder,
+      budget,
     );
 
-    const requestContext = context();
+    const requestContext = sandboxContext();
     const error = await dispatcher
       .dispatch('writing.task1.grade', gradeInput, requestContext)
       .then(
@@ -256,6 +258,7 @@ describe('HttpOperationDispatcher', () => {
       createInternalErrorEnvelope(requestContext.requestId),
     );
     expect(request).not.toHaveBeenCalled();
+    expect(budget.releaseCalls).toEqual([requestContext.requestId]);
   });
 
   it('records a pre-send timeout if the durable write outlasts the operation deadline', async () => {

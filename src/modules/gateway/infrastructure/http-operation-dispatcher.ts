@@ -305,9 +305,7 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
       const definitelyNotDispatched = isDefinitelyNotDispatched(error);
       const notDispatched =
         !downstreamDispatchStarted || definitelyNotDispatched;
-      const releaseSandboxReservation =
-        definitelyNotDispatched ||
-        (!downstreamDispatchStarted && (signal.aborted || deadlineExpired()));
+      const releaseSandboxReservation = notDispatched;
       if (attemptId !== undefined && response === undefined) {
         let outcome: DispatchAttemptOutcome;
         if (downstreamResponseStatus !== undefined) {

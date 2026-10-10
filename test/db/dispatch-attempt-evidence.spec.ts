@@ -330,7 +330,7 @@ describe('durable dispatch-attempt evidence', () => {
       unknown_after: Date;
       stored: Record<string, unknown>;
     }>(
-      `SELECT attempt_id, operation, outcome, unknown_after,
+      `SELECT attempt_id, request_id, operation, outcome, unknown_after,
               row_to_json(dispatch_attempts) AS stored
        FROM dispatch_attempts WHERE organization_id = $1`,
       [organizationId],
