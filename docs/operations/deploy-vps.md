@@ -1186,9 +1186,9 @@ elapsed time from starting rollback until health and authenticated probes pass.
 Keep Production serving throughout. Do not enable blue-green CD as part of this
 rehearsal; it remains gated by #289 and ADR-0085.
 
-| Date (UTC)                                                                     | Sandbox SHA before | SHA restored | Steps and probe results | Recovery time |
-| ------------------------------------------------------------------------------ | ------------------ | ------------ | ----------------------- | ------------- |
-| Pending: after the #484 reader release and a later stored-value writer release | Pending            | Pending      | Pending                 | Pending       |
+| Date (UTC) | Sandbox SHA before                       | SHA restored                             | Steps and probe results                                                                                                                                                                                                                                                                                                                                                                                                                | Recovery time                                           |
+| ---------- | ---------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| 2026-10-10 | 00d97c5dd44cc43dcc465ecf8889b7742ff9f22a | f17a570c9381584ecad88ee8604936added3c781 | Sandbox-only rollback; Production container ID and revision stayed unchanged; health/readiness and runtime dependencies passed; Production auth 400, Sandbox auth 200; N-1 unknown-kind metric=1 while password-reset row reached provider_accepted. Fixed forward to 00d97c5; MFA login 200 and unknown-kind metric returned to 0. Fixture setup intentionally held Sandbox stopped for about 6m46 before the rollback timer started. | 9s from changing the image through authenticated probes |
 
 ## Approved blue-green rollout target (#224)
 
