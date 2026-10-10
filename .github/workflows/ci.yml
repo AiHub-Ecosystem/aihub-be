@@ -7,18 +7,23 @@ on:
   pull_request:
     branches: [main]
 
-  # Filtered, because CD triggers on this workflow completing and would
-  # otherwise rebuild and redeploy production for a change that cannot reach
-  # the image. These paths are the ones `.dockerignore` already excludes, plus
-  # git's own checkout configuration. A push that touches any other path still
-  # runs: `paths-ignore` skips only when every changed file matches.
+  # Markdown is skipped unless a tracked spec reads it. The CI path-filter
+  # spec compares this allowlist with Markdown paths found in test sources.
   push:
     branches: [main]
-    paths-ignore:
-      - ".claude/**"
-      - ".gitattributes"
-      - ".gitignore"
-      - "**.md"
+    paths:
+      - "**"
+      - "!.claude/**"
+      - "!.gitattributes"
+      - "!.gitignore"
+      - "!*.md"
+      - "!**/*.md"
+      - "docs/adr/0060-writing-task1-sample-image-is-published-not-signed.md"
+      - "docs/history/aihub-deliverable-1-historical-contract.md"
+      - "docs/integration-guide.md"
+      - "docs/local-demo.md"
+      - "docs/operations/deploy-vps.md"
+      - "ops/vault/README.md"
 
   workflow_dispatch:
 

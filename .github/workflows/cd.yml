@@ -77,11 +77,47 @@ jobs:
       cancel-in-progress: false
     env:
       AIHUB_IMAGE: ${{ needs.resolve.outputs.image }}
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
       VPS_HOST: ${{ secrets.VPS_HOST }}
       VPS_USER: ${{ secrets.VPS_USER }}
       VPS_PORT: ${{ secrets.VPS_SSH_PORT || '22' }}
       VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
     steps:
+      - name: Check out the image source revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      # `workflow_run` checks out the completed run's commit above. Keep the
+      # guard itself from the current default-branch workflow so old reruns
+      # cannot lack the guard implementation.
+      - name: Check out the deployment guard
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .cd-guard
+          fetch-depth: 0
+
+      - name: Reject a stale CI revision before contacting the host
+        working-directory: .cd-guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_sha="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
+          if [ "$source_sha" != "$DEPLOY_SHA" ]; then
+            printf 'refusing to deploy: checked-out image source %s does not match CI run %s\n' \
+              "$source_sha" "$DEPLOY_SHA" >&2
+            exit 1
+          fi
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          main_sha="$(git rev-parse refs/remotes/origin/main)"
+          if [ "$DEPLOY_SHA" != "$main_sha" ]; then
+            printf 'refusing to deploy %s: it is not the current main tip (%s)\n' \
+              "$DEPLOY_SHA" "$main_sha" >&2
+            exit 1
+          fi
+
       - name: Configure SSH
         id: ssh
         shell: bash
@@ -98,10 +134,26 @@ jobs:
           chmod 600 "$HOME/.ssh/aihub-deploy"
           chmod 644 "$HOME/.ssh/known_hosts"
 
-      - name: Check out the image source revision
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Check host revisions and recheck main before writes
+        id: target_guard
+        working-directory: .cd-guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_APP_DIR"
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          state="$(ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/blue-green-host.sh status
+          REMOTE
+          )"
+          printf 'Host revisions before deployment:\n%s\n' "$state"
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          main_sha="$(git rev-parse refs/remotes/origin/main)"
+          printf '%s\n' "$state" | node scripts/ci/deploy-target-guard.cjs "$DEPLOY_SHA" "$main_sha"
 
       - name: Sync deployment files to VPS
         id: sync
