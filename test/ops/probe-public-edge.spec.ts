@@ -26,23 +26,21 @@ const { probeHost, startPublicHealthMonitor, validateHostname } =
   };
 
 describe('public edge health probe', () => {
-  it('runs public and dependency smoke checks for every enabled tier after CD', () => {
+  it('runs public and dependency smoke checks through the blue-green CD helper', () => {
     const workflow = readFileSync(
       resolve(__dirname, '../../.github/workflows/cd.yml'),
       'utf8',
     );
+    const deployHelper = readFileSync(
+      resolve(__dirname, '../../scripts/ops/blue-green-host.sh'),
+      'utf8',
+    );
 
-    expect(workflow).toContain('- name: Verify public edge health');
-    expect(workflow).toContain('node scripts/ops/probe-public-edge.cjs');
-    expect(workflow).toContain(
-      '- name: Verify application dependency reachability',
-    );
-    expect(workflow).toContain(
-      'AIHUB_SANDBOX_ENABLED: ${{ steps.tiers.outputs.sandbox_enabled }}',
-    );
-    expect(workflow).toContain(
-      'node scripts/ops/probe-runtime-dependencies.cjs',
-    );
+    expect(workflow).toContain('./scripts/ops/blue-green-host.sh deploy');
+    expect(deployHelper).toContain('probe_all');
+    expect(deployHelper).toContain('deploy_tier production');
+    expect(deployHelper).toContain('deploy_tier sandbox');
+    expect(deployHelper).toContain('probe_container_dependencies');
   });
 
   it('accepts a DNS hostname and rejects URL or path input', () => {

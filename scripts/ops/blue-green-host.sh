@@ -12,6 +12,7 @@ readonly HISTORY_FILE=$STATE_DIR/releases.tsv
 readonly PENDING_FILE=$STATE_DIR/pending.tsv
 readonly DEPLOY_ENV=.aihub-deploy.env
 readonly LOCK_FILE=.aihub-deploy.lock
+RESOURCE_LOG=
 
 APP_DIR=${APP_DIR:?APP_DIR is required}
 AIHUB_IMAGE=${AIHUB_IMAGE:-}
@@ -76,12 +77,34 @@ done
 
 production_host="$(read_env AIHUB_PRODUCTION_HOST)"
 sandbox_host="$(read_env AIHUB_SANDBOX_HOST)"
+valid_hostname() {
+  local hostname="$1" label
+  local -a labels=()
+  [[ -n "$hostname" && ${#hostname} -le 253 && "$hostname" != *[!A-Za-z0-9.-]* ]] || return 1
+  [[ "$hostname" != .* && "$hostname" != *. ]] || return 1
+  IFS=. read -r -a labels <<<"$hostname"
+  for label in "${labels[@]}"; do
+    [[ -n "$label" && ${#label} -le 63 && "$label" != -* && "$label" != *- ]] || return 1
+  done
+}
 if [[ -z "$production_host" ]]; then
   printf 'AIHUB_PRODUCTION_HOST is required\n' >&2
   exit 1
 fi
+if ! valid_hostname "$production_host"; then
+  printf 'AIHUB_PRODUCTION_HOST must be a DNS hostname\n' >&2
+  exit 1
+fi
 if [[ "$sandbox_enabled" == true && -z "$sandbox_host" ]]; then
   printf 'AIHUB_SANDBOX_HOST is required when Sandbox is enabled\n' >&2
+  exit 1
+fi
+if [[ "$sandbox_enabled" == true ]] && ! valid_hostname "$sandbox_host"; then
+  printf 'AIHUB_SANDBOX_HOST must be a DNS hostname\n' >&2
+  exit 1
+fi
+if [[ "$sandbox_enabled" == true && -z "$(read_env AIHUB_SANDBOX_ORG_IDS)" ]]; then
+  printf 'AIHUB_SANDBOX_ORG_IDS is required when Sandbox is enabled\n' >&2
   exit 1
 fi
 
@@ -96,7 +119,7 @@ write_image_env() {
   AIHUB_IMAGE="$image"
 }
 
-if [[ -n "$AIHUB_IMAGE" ]]; then
+if [[ -n "$AIHUB_IMAGE" && ( "$COMMAND" == deploy || "$COMMAND" == rehearse ) ]]; then
   write_image_env "$AIHUB_IMAGE"
 fi
 
@@ -168,6 +191,22 @@ container_revision() {
   sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$id"
 }
 
+save_service_logs() {
+  local service="$1" id revision stamp log_dir
+  id="$(container_id "$service")"
+  [[ -n "$id" ]] || return 0
+  revision="$(container_revision "$id" 2>/dev/null || true)"
+  [[ "$revision" =~ ^[a-f0-9]{40}$ ]] || revision=unknown
+  log_dir=deploy-logs
+  if ! mkdir -p "$log_dir" || ! chmod 700 "$log_dir"; then
+    return 0
+  fi
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  sudo -n docker logs --timestamps "$id" 2>&1 \
+    | tail -c 20000000 >"$log_dir/$service-${revision:0:7}-$stamp.log" || true
+  find "$log_dir" -name '*.log' -mtime +30 -delete 2>/dev/null || true
+}
+
 container_running() {
   local id="$1"
   [[ "$(sudo -n docker inspect --format '{{.State.Running}}' "$id")" == true ]]
@@ -176,9 +215,17 @@ container_running() {
 container_ready() {
   local id="$1" status="$2"
   [[ "$status" == healthy ]] || return 1
-  sudo -n docker exec "$id" node -e \
-    "fetch('http://127.0.0.1:3000/ready').then((r) => process.exit(r.status === 200 ? 0 : 1)).catch(() => process.exit(1))" \
-    >/dev/null 2>&1
+  sudo -n docker exec "$id" node -e '
+    require("/app/scripts/ops/probe-runtime-dependencies.cjs").probeReadiness()
+      .then((result) => {
+        console.log(result.name + ": " + (result.ok ? "PASS" : "FAIL") + " (" + result.result + ")");
+        process.exitCode = result.ok ? 0 : 1;
+      })
+      .catch(() => {
+        console.error("readiness probe failed unexpectedly");
+        process.exitCode = 1;
+      });
+  '
 }
 
 candidate_state_safe() {
@@ -394,20 +441,37 @@ assert_container_count() {
 }
 
 capture_resources() {
-  local label="$1" log="$STATE_DIR/resources-$(date -u +%Y%m%dT%H%M%SZ).log"
+  local label="$1" log="$RESOURCE_LOG" total_before idle_before total_after idle_after host_cpu_percent vcpus ids
+  if [[ -z "$log" ]]; then
+    log="$STATE_DIR/resources-$(date -u +%Y%m%dT%H%M%SZ).log"
+    RESOURCE_LOG="$log"
+  fi
+  read -r total_before idle_before < <(
+    awk '$1 == "cpu" { print $2 + $3 + $4 + $5 + $6 + $7 + $8 + $9, $5 + $6; exit }' /proc/stat
+  ) || return 1
+  sleep 1 || return 1
+  read -r total_after idle_after < <(
+    awk '$1 == "cpu" { print $2 + $3 + $4 + $5 + $6 + $7 + $8 + $9, $5 + $6; exit }' /proc/stat
+  ) || return 1
+  host_cpu_percent="$(awk -v total_before="$total_before" -v idle_before="$idle_before" \
+    -v total_after="$total_after" -v idle_after="$idle_after" \
+    'BEGIN { delta = total_after - total_before; if (delta <= 0) exit 1; printf "%.2f", 100 * (delta - idle_after + idle_before) / delta }')" || return 1
+  vcpus="$(nproc)" || return 1
+  ids="$(sudo -n docker ps -aq --filter "label=org.opencontainers.image.source=${REPOSITORY_URL}")" || return 1
   {
-    printf 'label=%s at=%s\n' "$label" "$(date -u +%FT%TZ)"
-    printf 'vcpus=%s\n' "$(nproc)"
-    free -b
-    sudo -n docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}} {{.MemPerc}}'
+    printf 'label=%s at=%s\n' "$label" "$(date -u +%FT%TZ)" || return 1
+    printf 'vcpus=%s\n' "$vcpus" || return 1
+    printf 'host_cpu_percent=%s\n' "$host_cpu_percent" || return 1
+    free -b || return 1
+    sudo -n docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}} {{.MemPerc}}' || return 1
     while IFS= read -r id; do
       [[ -n "$id" ]] || continue
       sudo -n docker inspect --format \
         '{{.Name}} revision={{index .Config.Labels "org.opencontainers.image.revision"}} state={{.State.Status}} oom_killed={{.State.OOMKilled}} restart_count={{.RestartCount}}' \
-        "$id"
-    done < <(sudo -n docker ps -aq --filter "label=org.opencontainers.image.source=${REPOSITORY_URL}")
-  } >>"$log"
-  chmod 600 "$log"
+        "$id" || return 1
+    done <<<"$ids"
+  } >>"$log" || return 1
+  chmod 600 "$log" || return 1
   printf 'resource evidence: %s\n' "$log"
 }
 
@@ -511,7 +575,9 @@ prepare_candidate() {
     previous_restart_count="$(sudo -n docker inspect --format '{{.RestartCount}}' "$previous_id")"
   fi
   capture_running_app_baseline || return 1
+  save_service_logs "$service"
   "${compose[@]}" pull "$service" || return 1
+  assert_container_count "$((expected_count - 1))" || return 1
   "${compose[@]}" up -d --no-deps --no-build "$service" || return 1
   id="$(container_id "$service")"
   candidate_restart_baseline=0
@@ -581,7 +647,7 @@ rollback_current_tier() {
 
 deploy_tier() {
   local tier="$1" inject_failure="${2:-false}" api_slot sandbox_slot old_slot new_slot old_service new_service
-  local old_id old_sha new_id tier_host failed drain_status
+  local old_id old_sha new_id failed drain_status
   api_slot="$(active_slot production "$API_CONFIG")"
   sandbox_slot=a
   if [[ "$sandbox_enabled" == true ]]; then
@@ -616,9 +682,6 @@ deploy_tier() {
   fi
   apply_slots "$api_slot" "$sandbox_slot"
   new_id="$(container_id "$new_service")"
-  tier_host="$production_host"
-  [[ "$tier" == sandbox ]] && tier_host="$sandbox_host"
-
   failed=0
   probe_window 15 || failed=1
   if [[ "$inject_failure" == true ]]; then
@@ -638,6 +701,7 @@ deploy_tier() {
   if ! app_containers_safe "" "$new_id"; then
     failed=1
   fi
+  capture_resources "post-cutover-${tier}" || failed=1
   if [[ "$failed" -eq 1 ]]; then
     capture_resources "failed-cutover-${tier}" || true
     rollback_current_tier "$tier" "$old_slot" "$new_slot" || return 1
@@ -651,7 +715,9 @@ deploy_tier() {
 
   drain_status=0
   drain_old_slot "$old_service" || drain_status=$?
-  if [[ "$drain_status" -ne 0 || -n "$edge_monitor_failures" ]] ||
+  resource_status=0
+  capture_resources "drained-${tier}" || resource_status=1
+  if [[ "$drain_status" -ne 0 || "$resource_status" -ne 0 || -n "$edge_monitor_failures" ]] ||
     ! candidate_state_safe "$new_id" "$candidate_restart_baseline" ||
     ! app_containers_safe "$old_id" "$new_id"; then
     capture_resources "failed-drain-${tier}" || true
@@ -683,6 +749,7 @@ preflight() {
     return 1
   }
   "${compose[@]}" config --quiet
+  check_vault_agent
   local expected_count=2
   [[ "$sandbox_enabled" == false ]] && expected_count=1
   assert_container_count "$expected_count"
@@ -706,6 +773,38 @@ preflight() {
     }
   fi
   probe_all
+}
+
+check_vault_agent() {
+  local id running logs
+  id="$(container_id vault-agent)"
+  if [[ -z "$id" ]]; then
+    printf 'vault-agent container is missing\n' >&2
+    return 1
+  fi
+  running="$(sudo -n docker inspect --format '{{.State.Running}}' "$id" 2>/dev/null || true)"
+  if [[ "$running" != true ]]; then
+    printf 'vault-agent is not running\n' >&2
+    return 1
+  fi
+  if ! sudo -n docker exec "$id" sh -ec '
+    test -s /run/secrets/aihub/runtime-secrets.json
+    test -s /run/secrets/aihub/auth-mfa-secrets.json
+    test -s /run/secrets/aihub/connection-secrets.json
+    wget -q -T 2 -O /dev/null "http://127.0.0.1:8220/agent/v1/metrics?format=prometheus"
+  '; then
+    printf 'vault-agent bundles or metrics endpoint failed checks\n' >&2
+    return 1
+  fi
+  logs="$("${compose[@]}" logs --no-color --since 1h vault-agent 2>&1 || true)"
+  case "$logs" in
+    *"authentication successful"* | *"renewed auth token"*) ;;
+    *)
+      printf 'vault-agent has not authenticated in the last hour\n' >&2
+      printf '%s\n' "$logs" | tail -100 >&2
+      return 1
+      ;;
+  esac
 }
 
 failed_edge_tiers() {
@@ -762,6 +861,7 @@ deploy() {
     "${compose_sandbox_migrate[@]}" run --no-deps --rm migrate-sandbox </dev/null || migration_status=$?
   fi
   edge_monitor_stop
+  capture_resources after-migrations || migration_status=1
   if [[ "$migration_status" -ne 0 ]]; then
     capture_resources failed-migration || true
     printf 'a migration failed\n' >&2
@@ -809,6 +909,7 @@ rollback() {
   [[ -s "$HISTORY_FILE" ]] || { printf 'no release history exists\n' >&2; return 1; }
   line="$(awk -F '\t' -v tier="$tier" '$2 == "deploy" && $3 == tier { line=$0 } END { print line }' "$HISTORY_FILE")"
   [[ -n "$line" ]] || { printf 'no successful release history for %s\n' "$tier" >&2; return 1; }
+  check_vault_agent
   IFS=$'\t' read -r _ _ _ old_slot old_sha new_slot new_sha <<<"$line"
   AIHUB_IMAGE="ghcr.io/aihub-ecosystem/aihub-be:${old_sha}"
   write_image_env "$AIHUB_IMAGE"
@@ -899,7 +1000,38 @@ rollback() {
   fi
   record_release rollback "$tier" "$new_slot" "$(container_revision "$active_id")" "$old_slot" "$old_sha"
   clear_pending
+  capture_resources "rollback-confirmed-${tier}" || true
   printf '%s rolled back to %s\n' "$tier" "$old_sha"
+}
+
+status_tier() {
+  local tier="$1" slot service id sha config="$API_CONFIG"
+  [[ "$tier" != sandbox ]] || config="$SANDBOX_CONFIG"
+  if ! slot="$(active_slot "$tier" "$config")"; then
+    printf '%s active_slot=unknown sha=unavailable\n' "$tier"
+    return 0
+  fi
+  service="$(service_for_slot "$tier" "$slot")"
+  id="$(container_id "$service" 2>/dev/null || true)"
+  if [[ -z "$id" ]]; then
+    printf '%s active_slot=%s sha=unavailable service=%s\n' "$tier" "$slot" "$service"
+    return 0
+  fi
+  sha="$(container_revision "$id" 2>/dev/null || true)"
+  [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || sha=unknown
+  printf '%s active_slot=%s sha=%s service=%s\n' "$tier" "$slot" "$sha" "$service"
+}
+
+status() {
+  status_tier production
+  if [[ "$sandbox_enabled" == true ]]; then
+    status_tier sandbox
+  else
+    printf 'sandbox disabled\n'
+  fi
+  if [[ -s "$PENDING_FILE" ]]; then
+    printf 'pending=%s\n' "$(tr '\t' ' ' <"$PENDING_FILE")"
+  fi
 }
 
 case "$COMMAND" in
@@ -918,6 +1050,9 @@ case "$COMMAND" in
   rollback)
     rollback "$TIER"
     ;;
+  status)
+    status
+    ;;
   rehearse)
     [[ "$TIER" == sandbox && "$sandbox_enabled" == true ]] || {
       printf 'rollback rehearsal is limited to enabled Sandbox\n' >&2
@@ -928,7 +1063,7 @@ case "$COMMAND" in
     deploy_tier sandbox true
     ;;
   *)
-    printf 'usage: %s deploy | rollback <production|sandbox> | rehearse sandbox\n' "$0" >&2
+    printf 'usage: %s deploy | rollback <production|sandbox> | rehearse sandbox | status\n' "$0" >&2
     exit 2
     ;;
 esac

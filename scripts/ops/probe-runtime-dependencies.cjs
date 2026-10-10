@@ -5,11 +5,12 @@ const tls = require('node:tls');
 
 const READINESS_URL = 'http://127.0.0.1:3000/ready';
 const PROBE_TIMEOUT_MS = 3_000;
-const REQUIRED_READINESS_CHECKS = ['runtime-postgres', 'redis'];
+const REQUIRED_READINESS_CHECKS = ['runtime-postgres'];
 const READINESS_CHECKS = [
   ...REQUIRED_READINESS_CHECKS,
   'control-plane-write-postgres',
   'control-plane-read-postgres',
+  'redis',
 ];
 const DOWNSTREAMS = [
   ['ai-writing', 'DOWNSTREAM_AI_WRITING_URL'],
@@ -95,28 +96,42 @@ async function probeReadiness(fetchImpl = fetch) {
       typeof body === 'object' &&
       body.dependencies &&
       typeof body.dependencies === 'object';
-    const down = hasDependencies
-      ? Object.entries(body.dependencies)
-          .filter(([, state]) => state !== 'up')
-          .map(([name]) => name)
-          .filter((name) => READINESS_CHECKS.includes(name))
-      : [];
-    const allUp =
-      hasDependencies &&
-      Object.values(body.dependencies).every((state) => state === 'up');
+    const entries = hasDependencies ? Object.entries(body.dependencies) : [];
+    const knownDependencies = entries.every(([name]) =>
+      READINESS_CHECKS.includes(name),
+    );
     const requiredChecksUp =
       hasDependencies &&
       REQUIRED_READINESS_CHECKS.every(
         (name) => body.dependencies[name] === 'up',
       );
+    const nonRedisDependenciesUp = entries
+      .filter(([name]) => name !== 'redis')
+      .every(([, state]) => state === 'up');
+    const redisState = hasDependencies ? body.dependencies.redis : undefined;
+    const allUp = entries.every(([, state]) => state === 'up');
+    const ready =
+      response.status === 200 &&
+      body.status === 'ok' &&
+      allUp &&
+      redisState === 'up';
+    // Gateway requests fail open on Redis outages; Postgres checks still gate.
+    const redisDegraded =
+      response.status === 503 &&
+      body.status === 'error' &&
+      redisState === 'down' &&
+      nonRedisDependenciesUp;
     if (
-      !response.ok ||
       !hasDependencies ||
-      Object.keys(body.dependencies).length === 0 ||
-      body.status !== 'ok' ||
-      !allUp ||
-      !requiredChecksUp
+      entries.length === 0 ||
+      !knownDependencies ||
+      !requiredChecksUp ||
+      (!ready && !redisDegraded)
     ) {
+      const down = entries
+        .filter(([, state]) => state !== 'up')
+        .map(([name]) => name)
+        .filter((name) => READINESS_CHECKS.includes(name));
       return {
         name: 'postgres-redis',
         ok: false,
@@ -129,7 +144,11 @@ async function probeReadiness(fetchImpl = fetch) {
       };
     }
 
-    return { name: 'postgres-redis', ok: response.ok, result: 'READY' };
+    return {
+      name: 'postgres-redis',
+      ok: true,
+      result: redisDegraded ? 'REDIS_DOWN_ADVISORY' : 'READY',
+    };
   } catch (error) {
     return {
       name: 'postgres-redis',
