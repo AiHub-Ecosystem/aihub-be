@@ -253,7 +253,6 @@ jobs:
           set -euo pipefail
           cd "$APP_DIR"
           ./scripts/ops/install-host-jobs.sh
-          ./scripts/ops/host-scheduled-job.sh report
           REMOTE
 
       - name: Report active tier revisions

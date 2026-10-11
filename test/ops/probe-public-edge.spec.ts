@@ -37,9 +37,19 @@ describe('public edge health probe', () => {
     );
 
     expect(workflow).toContain('./scripts/ops/blue-green-host.sh deploy');
+    expect(workflow).toContain('$VPS_APP_DIR/.aihub-host-jobs-candidate/');
+    expect(workflow.indexOf('      - name: Deploy release')).toBeLessThan(
+      workflow.indexOf(
+        '      - name: Install and smoke the scheduled host jobs',
+      ),
+    );
     expect(deployHelper).toContain('probe_all');
     expect(deployHelper).toContain('deploy_tier production');
     expect(deployHelper).toContain('deploy_tier sandbox');
+    expect(deployHelper).toContain(
+      'Sandbox rollout failed after Production cut over; rolling Production back',
+    );
+    expect(deployHelper).toContain('rollback production');
     expect(deployHelper).toContain('probe_container_dependencies');
   });
 

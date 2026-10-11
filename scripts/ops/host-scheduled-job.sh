@@ -5,7 +5,7 @@ set -uo pipefail
 readonly CONTAINER_RUNTIME_ENTRYPOINT='scripts/runtime/runtime-entrypoint.mjs'
 readonly CONTAINER_CLI='scripts/cli/cli.mjs'
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-readonly APP_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd -P)"
+readonly APP_DIR="${APP_DIR:-$(cd -- "$SCRIPT_DIR/../.." && pwd -P)}"
 export APP_DIR
 if [[ ${1:-} == avatar-sweep ]]; then
   default_log="$HOME/aihub-avatar-sweep.log"

@@ -960,6 +960,7 @@ final_edge_window() {
 }
 
 deploy() {
+  local sandbox_status=0
   [[ -n "$AIHUB_IMAGE" ]] || { printf 'AIHUB_IMAGE is required\n' >&2; return 1; }
   preflight
   capture_resources baseline
@@ -995,9 +996,14 @@ deploy() {
   deploy_tier production
   if [[ "$sandbox_enabled" == true ]]; then
     if [[ "$sandbox_routed" == true ]]; then
-      deploy_tier sandbox
+      deploy_tier sandbox || sandbox_status=$?
     else
-      bootstrap_sandbox
+      bootstrap_sandbox || sandbox_status=$?
+    fi
+    if [[ "$sandbox_status" -ne 0 ]]; then
+      printf 'Sandbox rollout failed after Production cut over; rolling Production back\n' >&2
+      rollback production || printf 'Production rollback after Sandbox failure was not confirmed\n' >&2
+      return 1
     fi
   fi
   final_edge_window 10

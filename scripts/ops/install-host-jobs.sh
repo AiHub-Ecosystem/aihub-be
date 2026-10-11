@@ -22,11 +22,51 @@ bash -n "$candidate_wrapper"
 tmp_dir="$(mktemp -d)"
 wrapper_next="$(mktemp "$wrapper.XXXXXX")"
 template_next="$(mktemp "$template.XXXXXX")"
-trap 'rm -rf -- "$tmp_dir"; rm -f -- "$wrapper_next" "$template_next"' EXIT
-install -m 755 "$candidate_wrapper" "$wrapper_next"
-install -m 644 "$candidate_template" "$template_next"
-mv -f -- "$wrapper_next" "$wrapper"
-mv -f -- "$template_next" "$template"
+transaction_active=false
+had_wrapper=false
+had_template=false
+had_crontab=false
+preserve_backup=false
+cleanup() {
+  local status=$?
+  if [[ "$transaction_active" == true ]]; then
+    printf 'scheduled host job activation failed; restoring previous state\n' >&2
+    if ! restore_previous; then
+      printf 'scheduled host job rollback failed; manual recovery is required\n' >&2
+      printf 'previous state backup retained at %s\n' "$tmp_dir" >&2
+      preserve_backup=true
+      status=1
+    fi
+  fi
+  [[ "$preserve_backup" == true ]] || rm -rf -- "$tmp_dir"
+  rm -f -- "$wrapper_next" "$template_next"
+  exit "$status"
+}
+restore_file() {
+  local backup="$1" destination="$2" mode="$3" restore_next
+  if [[ -e "$backup" ]]; then
+    restore_next="$(mktemp "$destination.XXXXXX")" || return 1
+    if ! install -m "$mode" "$backup" "$restore_next" || ! mv -f -- "$restore_next" "$destination"; then
+      rm -f -- "$restore_next"
+      return 1
+    fi
+  else
+    rm -f -- "$destination" || return 1
+  fi
+  return 0
+}
+restore_previous() {
+  local status=0
+  restore_file "$tmp_dir/wrapper.old" "$wrapper" 755 || status=1
+  restore_file "$tmp_dir/template.old" "$template" 644 || status=1
+  if [[ "$had_crontab" == true ]]; then
+    crontab "$current" || status=1
+  else
+    crontab -r || status=1
+  fi
+  return "$status"
+}
+trap cleanup EXIT
 
 current="$tmp_dir/current"
 filtered="$tmp_dir/filtered"
@@ -34,7 +74,7 @@ next="$tmp_dir/next"
 readback="$tmp_dir/readback"
 
 if crontab -l >"$current" 2>"$tmp_dir/crontab.err"; then
-  :
+  had_crontab=true
 else
   code=$?
   if [[ "$code" != 1 || -s "$current" ]]; then
@@ -79,15 +119,43 @@ awk -v app_dir="$APP_DIR" '
     print
   }
   END { if (replaced == 0) exit 1 }
-' "$template" >>"$next" || {
+' "$candidate_template" >>"$next" || {
   printf 'crontab template did not contain the deployment path token\n' >&2
   exit 1
 }
 
+if APP_DIR="$APP_DIR" bash "$candidate_wrapper" report; then
+  :
+else
+  code=$?
+  printf 'candidate scheduled-job smoke failed; live schedule was not changed\n' >&2
+  exit "$code"
+fi
+
+if [[ -e "$wrapper" ]]; then
+  cp -p -- "$wrapper" "$tmp_dir/wrapper.old"
+fi
+if [[ -e "$template" ]]; then
+  cp -p -- "$template" "$tmp_dir/template.old"
+fi
+install -m 755 "$candidate_wrapper" "$wrapper_next"
+install -m 644 "$candidate_template" "$template_next"
+
+transaction_active=true
+mv -f -- "$wrapper_next" "$wrapper"
+mv -f -- "$template_next" "$template"
 crontab "$next"
 crontab -l >"$readback"
 if ! cmp -s "$next" "$readback"; then
   printf 'installed crontab differs from the versioned AIHUB schedule\n' >&2
   exit 1
 fi
+if "$wrapper" report; then
+  :
+else
+  code=$?
+  printf 'installed scheduled-job smoke failed\n' >&2
+  exit "$code"
+fi
+transaction_active=false
 printf 'installed AIHUB scheduled jobs from %s\n' "$APP_DIR"

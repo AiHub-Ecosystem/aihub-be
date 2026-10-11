@@ -288,12 +288,16 @@ non-zero exit and on a missed run for either container.
 ### Scheduled operator jobs
 
 The versioned schedule is [`ops/host-jobs/aihub.crontab`](../../ops/host-jobs/aihub.crontab).
-CD installs it and `scripts/ops/host-scheduled-job.sh` after deployment by
-replacing only the `AIHUB MANAGED JOBS` block in the deploy user's crontab. It
-preserves unrelated entries and removes the old hand-installed AIHUB wrapper
-lines. `scripts/ops/install-host-jobs.sh` verifies the installed crontab before
-CD runs a read-only `usage:report` through the installed wrapper; a failure
-fails the CD run.
+CD stages it and `scripts/ops/host-scheduled-job.sh` before deployment, then
+`scripts/ops/install-host-jobs.sh` promotes them only after the release succeeds.
+The installer replaces only the `AIHUB MANAGED JOBS` block, preserves unrelated
+entries, removes the old hand-installed AIHUB wrapper lines, verifies the
+installed crontab, and runs a read-only `usage:report` smoke against the staged
+wrapper before promotion and the installed wrapper after promotion. A failed
+staged smoke leaves live state untouched; a failed installed smoke, promotion,
+or crontab verification restores the previous wrapper, template, and crontab.
+A failed Sandbox rollout after Production cutover also triggers a Production
+rollback attempt before CD exits.
 
 The schedule uses the VPS's UTC clock:
 
