@@ -22,6 +22,7 @@
     "canary:ai-writing": "tsx scripts/ops/canary-ai-writing.ts",
     "capacity:benchmark": "node scripts/ops/capacity-benchmark.mjs",
     "test:capacity-benchmark": "node --test scripts/ops/capacity-benchmark.spec.mjs",
+    "benchmark:control-plane": "node scripts/ops/benchmark-control-plane.mjs",
     "vault:provision": "node ops/vault/provision-runtime-secrets.mjs",
     "vault:smoke": "node scripts/ops/vault-smoke.mjs",
     "test": "node scripts/generate/generate-prisma-client.mjs && jest",

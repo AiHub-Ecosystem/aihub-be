@@ -50,6 +50,38 @@ the server-side statement and lock timeouts #383 plans.
 its own pool against a default host, which surfaces as `ECONNREFUSED` rather
 than as a configuration error.
 
+## Benchmark
+
+Run `pnpm build`, set `DB_LANE_ADMIN_URL` to the disposable PostgreSQL admin
+URL on `localhost:5433/postgres`, then run
+`pnpm benchmark:control-plane`. The harness compares raw `pg`, Drizzle, and
+Prisma on PostgreSQL 16 with a pool of 10, 100,000 API keys, 1,000,000 usage
+rows, and 100 organizations. For each implementation it runs two 5-second
+passes at 50 operations per second for API-key lookup, durable Metering insert,
+lookup followed by insert, and the request/token aggregate. Pass order is
+reversed on the second pass. The harness confirms equal fixture outputs before
+timing and reports p50/p95 latency, completed rate, statement round trips, and
+failures. The aggregate uses the same parameterized SQL in all three modes so
+this measurement compares database-client overhead; production repositories
+follow the TypedSQL endpoint above.
+
+The table records the range across the two passes. Latencies are milliseconds;
+each completed-rate cell shows raw `pg` / Drizzle / Prisma operations per second.
+
+| Operation               | Round trips (pg / Drizzle / Prisma) |         Raw pg p50 / p95 |         Drizzle p50 / p95 |          Prisma p50 / p95 | Completed rate/s (pg / Drizzle / Prisma) |
+| ----------------------- | ----------------------------------: | -----------------------: | ------------------------: | ------------------------: | ---------------------------------------: |
+| API-key lookup          |                           1 / 1 / 2 |    1.57–2.34 / 2.04–2.80 |     1.78–2.38 / 2.32–3.07 |     2.94–2.97 / 3.90–4.83 |  50.08–50.16 / 50.11–50.13 / 50.06–50.10 |
+| Durable Metering insert |                           1 / 1 / 1 |    2.63–2.80 / 3.32–3.63 |     2.79–3.07 / 3.64–3.86 |     3.47–3.68 / 4.38–5.59 |  50.06–50.17 / 50.08–50.09 / 50.13–50.16 |
+| Lookup then insert      |                           2 / 2 / 3 |  3.97–4.28 / 5.02–115.25 |     4.38–4.39 / 5.36–6.01 |     5.88–6.27 / 7.17–7.79 |        50.06–50.13 / 50.06 / 49.99–50.06 |
+| Request/token aggregate |                           1 / 1 / 1 | 9.83–10.43 / 11.50–13.12 | 10.06–10.60 / 11.79–12.49 | 10.46–10.49 / 12.06–12.55 |        49.99–50.05 / 50.04 / 50.03–50.08 |
+
+All scheduled operations completed without failures and the three modes returned
+equal fixture outputs. Prisma's API-key lookup uses two statements because the
+selected organization relation is fetched separately by the client. One raw
+`pg` lookup-then-insert pass had a 115.25 ms p95 while the other pass was about
+5 ms; treat that isolated tail as local-run noise. These short, single-host
+measurements are descriptive, not a capacity estimate or a performance gate.
+
 ## Considered options
 
 - **Keep Drizzle and finish it (ADR-0071).** Rejected by the owner: Drizzle had reached 7 of 32 implementations, so switching cost about what finishing would, and Prisma's schema-first workflow and team familiarity were preferred.
