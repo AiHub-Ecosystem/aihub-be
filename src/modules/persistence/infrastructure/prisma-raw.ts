@@ -44,13 +44,14 @@ function normalizeRawValue(value: unknown): unknown {
  * returned strings and `Buffer`. Repositories keep their existing port types by
  * mapping back to what `pg` produced.
  */
-export function normalizeRawRows<T extends Record<string, unknown>>(
+export function normalizeRawRows<T extends object>(
   rows: readonly T[],
 ): readonly T[] {
   return rows.map((source) => {
+    const values = source as Record<string, unknown>;
     const row: Record<string, unknown> = {};
-    for (const column of Object.keys(source)) {
-      row[column] = normalizeRawValue(source[column]);
+    for (const column of Object.keys(values)) {
+      row[column] = normalizeRawValue(values[column]);
     }
     return row as T;
   });
@@ -67,9 +68,20 @@ export function isRowlessWrite(text: string): boolean {
 }
 
 /**
+ * What Prisma reports for a model operation that failed on a database
+ * constraint, by the SQLSTATE `pg` would have thrown for it.
+ */
+const PRISMA_CODE_SQLSTATE: Readonly<Record<string, string>> = {
+  P2002: '23505', // unique_violation
+  P2003: '23503', // foreign_key_violation
+  P2034: '40001', // serialization_failure (write conflict or deadlock)
+};
+
+/**
  * Prisma wraps the driver's error, so callers that branch on a SQLSTATE
  * (unique violation, serialization failure) would not see `error.code`. This
- * returns the error `pg` used to throw.
+ * returns the error `pg` used to throw: from the driver's own code for a raw
+ * statement, and from Prisma's code for a model operation.
  */
 export function postgresError(error: unknown): unknown {
   if (typeof error !== 'object' || error === null) {
@@ -80,14 +92,24 @@ export function postgresError(error: unknown): unknown {
     typeof driverError === 'object' && driverError !== null
       ? Reflect.get(driverError, 'cause')
       : undefined;
-  const code =
+  const originalCode =
     typeof cause === 'object' && cause !== null
       ? Reflect.get(cause, 'originalCode')
       : undefined;
-  if (typeof code !== 'string') {
+  const prismaCode = Reflect.get(error, 'code');
+  const code =
+    typeof originalCode === 'string'
+      ? originalCode
+      : typeof prismaCode === 'string'
+        ? PRISMA_CODE_SQLSTATE[prismaCode]
+        : undefined;
+  if (code === undefined) {
     return error;
   }
-  const message = Reflect.get(cause as object, 'originalMessage');
+  const message =
+    typeof cause === 'object' && cause !== null
+      ? Reflect.get(cause, 'originalMessage')
+      : undefined;
   return Object.assign(
     new Error(typeof message === 'string' ? message : String(error)),
     { code, cause: error },

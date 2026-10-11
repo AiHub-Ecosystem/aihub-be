@@ -162,4 +162,26 @@ describe('raw SQL helpers', () => {
     });
     expect(postgresError('plain')).toBe('plain');
   });
+
+  it.each([
+    ['P2002', '23505'],
+    ['P2003', '23503'],
+    ['P2034', '40001'],
+  ])(
+    'reports a model operation failure %s as SQLSTATE %s',
+    (prisma, sqlstate) => {
+      const failure = { code: prisma, meta: { modelName: 'WebSession' } };
+
+      expect(postgresError(failure)).toMatchObject({
+        code: sqlstate,
+        cause: failure,
+      });
+    },
+  );
+
+  it('leaves a Prisma error with no SQLSTATE equivalent as it was', () => {
+    const failure = { code: 'P2025', meta: {} };
+
+    expect(postgresError(failure)).toBe(failure);
+  });
 });

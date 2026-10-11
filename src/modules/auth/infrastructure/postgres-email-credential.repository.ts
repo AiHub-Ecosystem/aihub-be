@@ -4,31 +4,16 @@ import type {
   EmailDeliveryKind,
 } from '@/modules/auth/application/email-delivery-request.port';
 
-import { type AuthSqlClient, authQueryRows } from './auth-prisma';
-import {
-  authStoreError,
-  dateValue,
-  isRecord,
-  nullableDateValue,
-} from './auth-row';
+import type { AuthSqlClient } from './auth-prisma';
+import { authStoreError } from './auth-row';
 
-/**
- * The three credential tables share one shape — a unique token hash, an expiry,
- * and a nullable durable close — so one statement per kind is the whole check.
- * `consumed_at` is that close: verification consumed or superseded, password
- * reset consumed, invitation accepted, superseded, or revoked.
- */
-const CHECK_SQL: Readonly<Partial<Record<EmailDeliveryKind, string>>> = {
-  verification_email: `
-    SELECT expires_at, consumed_at FROM email_verification_tokens WHERE token_hash = $1
-  `,
-  password_reset_email: `
-    SELECT expires_at, consumed_at FROM password_reset_tokens WHERE token_hash = $1
-  `,
-  organization_invite_email: `
-    SELECT expires_at, consumed_at FROM organization_invitations WHERE token_hash = $1
-  `,
-};
+/** The two columns of a credential row that decide whether it can be acted on. */
+interface CredentialState {
+  readonly expiresAt: Date;
+  readonly consumedAt: Date | null;
+}
+
+const CREDENTIAL = { expiresAt: true, consumedAt: true } as const;
 
 export class PostgresEmailCredentialRepository
   implements EmailCredentialActionabilityPort
@@ -46,19 +31,20 @@ export class PostgresEmailCredentialRepository
     readonly tokenHash: string;
     readonly now: Date;
   }): Promise<EmailCredentialState> {
-    const sql = CHECK_SQL[input.kind];
-    if (sql === undefined) return 'missing';
-    const rows = await authQueryRows(this.client, sql, [input.tokenHash]);
-    const row = rows[0];
-    if (row === undefined) {
+    const row = await this.credential(input.kind, input.tokenHash);
+    if (row === null) {
       return 'missing';
     }
 
-    const expiresAt = isRecord(row) ? dateValue(row, 'expires_at') : undefined;
-    const consumedAt = isRecord(row)
-      ? nullableDateValue(row, 'consumed_at')
-      : undefined;
-    if (expiresAt === undefined || consumedAt === undefined) {
+    const { expiresAt, consumedAt } = row;
+    // The generated client types both columns, but a row the table could not
+    // have produced is refused rather than decided on.
+    if (
+      !(expiresAt instanceof Date) ||
+      Number.isNaN(expiresAt.getTime()) ||
+      (consumedAt !== null &&
+        (!(consumedAt instanceof Date) || Number.isNaN(consumedAt.getTime())))
+    ) {
       throw authStoreError('Email credential data is invalid');
     }
 
@@ -66,5 +52,37 @@ export class PostgresEmailCredentialRepository
       return 'expired';
     }
     return consumedAt === null ? 'actionable' : 'closed';
+  }
+
+  /**
+   * The three credential tables share one shape: a unique token hash, an
+   * expiry, and a nullable durable close. `consumedAt` is that close:
+   * verification consumed or superseded, password reset consumed, invitation
+   * accepted, superseded, or revoked. A kind with no credential has none.
+   */
+  private credential(
+    kind: EmailDeliveryKind,
+    tokenHash: string,
+  ): Promise<CredentialState | null> {
+    const where = { tokenHash };
+    switch (kind) {
+      case 'verification_email':
+        return this.client.emailVerificationToken.findUnique({
+          where,
+          select: CREDENTIAL,
+        });
+      case 'password_reset_email':
+        return this.client.passwordResetToken.findUnique({
+          where,
+          select: CREDENTIAL,
+        });
+      case 'organization_invite_email':
+        return this.client.organizationInvitation.findUnique({
+          where,
+          select: CREDENTIAL,
+        });
+      default:
+        return Promise.resolve(null);
+    }
   }
 }

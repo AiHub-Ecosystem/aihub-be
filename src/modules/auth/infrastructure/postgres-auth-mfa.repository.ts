@@ -13,7 +13,7 @@ import {
   authTransaction,
 } from './auth-prisma';
 import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
-import { REVOKE_USER_WEB_SESSIONS_SQL } from './postgres-web-session.repository';
+import { revokeUserWebSessions } from './web-session-statements';
 
 export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
   constructor(
@@ -66,35 +66,28 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
       );
       if (existing[0]?.['status'] === 'enabled') return false;
       if (existing.length > 0) {
-        await authQueryRows(
-          transaction,
-          `UPDATE user_mfa_factors
-           SET factor_id = $2, secret_key_id = $3, secret_ciphertext = $4,
-               status = 'pending', updated_at = $5
-           WHERE user_account_id = $1`,
-          [
-            input.userId,
-            input.factorId,
-            input.keyId,
-            input.ciphertext,
-            input.now,
-          ],
-        );
+        await transaction.userMfaFactor.updateMany({
+          where: { userAccountId: input.userId },
+          data: {
+            factorId: input.factorId,
+            secretKeyId: input.keyId,
+            secretCiphertext: input.ciphertext,
+            status: 'pending',
+            updatedAt: input.now,
+          },
+        });
       } else {
-        await authQueryRows(
-          transaction,
-          `INSERT INTO user_mfa_factors (
-             factor_id, user_account_id, secret_key_id, secret_ciphertext,
-             status, created_at, updated_at
-           ) VALUES ($1, $2, $3, $4, 'pending', $5, $5)`,
-          [
-            input.factorId,
-            input.userId,
-            input.keyId,
-            input.ciphertext,
-            input.now,
-          ],
-        );
+        await transaction.userMfaFactor.create({
+          data: {
+            factorId: input.factorId,
+            userAccountId: input.userId,
+            secretKeyId: input.keyId,
+            secretCiphertext: input.ciphertext,
+            status: 'pending',
+            createdAt: input.now,
+            updatedAt: input.now,
+          },
+        });
       }
       return true;
     });
@@ -122,34 +115,26 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
         [input.userId],
       );
       if (factors[0]?.['factor_id'] !== input.factorId) return false;
-      const identities = await authQueryRows(
-        transaction,
-        `SELECT canonical_email FROM auth_identities
-         WHERE user_account_id = $1 AND provider = 'password'`,
-        [input.userId],
-      );
-      if (identities[0]?.['canonical_email'] !== input.email) return false;
+      const identity = await transaction.authIdentity.findFirst({
+        where: { userAccountId: input.userId, provider: 'password' },
+        select: { canonicalEmail: true },
+      });
+      if (identity?.canonicalEmail !== input.email) return false;
 
-      await authQueryRows(
-        transaction,
-        `UPDATE user_mfa_factors SET status = 'enabled', updated_at = $2
-         WHERE user_account_id = $1`,
-        [input.userId, input.now],
-      );
-      await authQueryRows(
-        transaction,
-        'DELETE FROM user_mfa_recovery_codes WHERE user_account_id = $1',
-        [input.userId],
-      );
-      for (const codeHash of input.recoveryCodeHashes) {
-        await authQueryRows(
-          transaction,
-          `INSERT INTO user_mfa_recovery_codes (
-             user_account_id, code_hash, created_at
-           ) VALUES ($1, $2, $3)`,
-          [input.userId, codeHash, input.now],
-        );
-      }
+      await transaction.userMfaFactor.updateMany({
+        where: { userAccountId: input.userId },
+        data: { status: 'enabled', updatedAt: input.now },
+      });
+      await transaction.userMfaRecoveryCode.deleteMany({
+        where: { userAccountId: input.userId },
+      });
+      await transaction.userMfaRecoveryCode.createMany({
+        data: input.recoveryCodeHashes.map((codeHash) => ({
+          userAccountId: input.userId,
+          codeHash,
+          createdAt: input.now,
+        })),
+      });
       await this.insertEmailDelivery(transaction, input.emailDelivery);
       return true;
     });
@@ -192,26 +177,17 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
       const factorId = factors[0]?.['factor_id'];
       if (factorId === undefined) return input.factorId === undefined;
       if (factorId !== input.factorId) return false;
-      await authQueryRows(
-        transaction,
-        'DELETE FROM user_mfa_factors WHERE user_account_id = $1',
-        [input.userId],
-      );
-      await authQueryRows(
-        transaction,
-        'DELETE FROM user_mfa_recovery_codes WHERE user_account_id = $1',
-        [input.userId],
-      );
-      await authQueryRows(
-        transaction,
-        `UPDATE refresh_tokens SET revoked_at = $2
-         WHERE user_account_id = $1 AND revoked_at IS NULL`,
-        [input.userId, input.now],
-      );
-      await authQueryRows(transaction, REVOKE_USER_WEB_SESSIONS_SQL, [
-        input.userId,
-        input.now,
-      ]);
+      await transaction.userMfaFactor.deleteMany({
+        where: { userAccountId: input.userId },
+      });
+      await transaction.userMfaRecoveryCode.deleteMany({
+        where: { userAccountId: input.userId },
+      });
+      await transaction.refreshToken.updateMany({
+        where: { userAccountId: input.userId, revokedAt: null },
+        data: { revokedAt: input.now },
+      });
+      await revokeUserWebSessions(transaction, input.userId, input.now);
       if (input.emailDelivery !== undefined) {
         await this.insertEmailDelivery(transaction, input.emailDelivery);
       }
@@ -223,35 +199,42 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     userId: string,
     status: 'pending' | 'enabled',
   ): Promise<AuthMfaFactorRecord | undefined> {
-    const rows = await authQueryRows(
-      this.client,
-      `SELECT factor.factor_id, factor.secret_key_id, factor.secret_ciphertext,
-              identity.canonical_email
-       FROM user_mfa_factors factor
-       JOIN user_accounts account ON account.id = factor.user_account_id
-       JOIN auth_identities identity
-         ON identity.user_account_id = factor.user_account_id
-        AND identity.provider = 'password'
-       WHERE factor.user_account_id = $1 AND factor.status = $2
-         AND account.status = 'active'`,
-      [userId, status],
-    );
-    const row = rows[0];
-    if (row === undefined) return undefined;
-    if (
-      typeof row.factor_id !== 'string' ||
-      typeof row.secret_key_id !== 'string' ||
-      typeof row.secret_ciphertext !== 'string' ||
-      typeof row.canonical_email !== 'string'
-    ) {
+    // An active account with a password identity, or no factor at all.
+    const factor = await this.client.userMfaFactor.findFirst({
+      where: {
+        userAccountId: userId,
+        status,
+        userAccount: {
+          status: 'active',
+          authIdentities: { some: { provider: 'password' } },
+        },
+      },
+      select: {
+        factorId: true,
+        secretKeyId: true,
+        secretCiphertext: true,
+        userAccount: {
+          select: {
+            authIdentities: {
+              where: { provider: 'password' },
+              select: { canonicalEmail: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    if (factor === null) return undefined;
+    const email = factor.userAccount.authIdentities[0]?.canonicalEmail;
+    if (email === undefined) {
       throw new Error('Auth MFA factor projection is invalid');
     }
     return {
-      factorId: row.factor_id,
+      factorId: factor.factorId,
       userId,
-      email: row.canonical_email,
-      keyId: row.secret_key_id,
-      ciphertext: row.secret_ciphertext,
+      email,
+      keyId: factor.secretKeyId,
+      ciphertext: factor.secretCiphertext,
     };
   }
 

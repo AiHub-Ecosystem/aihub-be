@@ -43,20 +43,42 @@ import {
 } from './auth-prisma';
 import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
 import {
-  INSERT_WEB_SESSION_SQL,
-  REVOKE_USER_WEB_SESSIONS_SQL,
-} from './postgres-web-session.repository';
+  insertWebSession,
+  revokeUserWebSessions,
+} from './web-session-statements';
 
 const INVALID: VerificationOutcome = { kind: 'invalid' };
 const VERIFIED: VerificationOutcome = { kind: 'verified' };
 
+/**
+ * A duplicate key from either path: the SQLSTATE a raw statement reports, or
+ * the code Prisma gives a model operation for the same violation.
+ */
 function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return false;
+  }
+  const { code } = error as { code?: unknown };
+  return code === '23505' || code === 'P2002';
+}
+
+function isAccountStatus(
+  status: unknown,
+): status is 'pending_verification' | 'active' | 'disabled' {
   return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === '23505'
+    status === 'pending_verification' ||
+    status === 'active' ||
+    status === 'disabled'
   );
+}
+
+/** The password-reset token and its account, as the two reads project them. */
+interface PasswordResetTokenRow {
+  readonly id: string;
+  readonly userAccountId: string;
+  readonly expiresAt: Date;
+  readonly consumedAt: Date | null;
+  readonly status: string;
 }
 
 type PasswordResetTokenInspection =
@@ -67,36 +89,69 @@ type PasswordResetTokenInspection =
     };
 
 function inspectPasswordResetToken(
-  row: Record<string, unknown> | undefined,
+  row: PasswordResetTokenRow | undefined,
   now: Date,
 ): PasswordResetTokenInspection {
   if (row === undefined) {
     return { kind: 'invalid', reason: 'missing' };
   }
   if (
-    typeof row.id !== 'string' ||
-    typeof row.user_account_id !== 'string' ||
-    !(row.expires_at instanceof Date) ||
-    Number.isNaN(row.expires_at.getTime()) ||
-    (row.consumed_at !== null && !(row.consumed_at instanceof Date)) ||
-    (row.consumed_at instanceof Date &&
-      Number.isNaN(row.consumed_at.getTime())) ||
-    (row.status !== 'pending_verification' &&
-      row.status !== 'active' &&
-      row.status !== 'disabled')
+    Number.isNaN(row.expiresAt.getTime()) ||
+    (row.consumedAt !== null && Number.isNaN(row.consumedAt.getTime())) ||
+    !isAccountStatus(row.status)
   ) {
     return { kind: 'invalid', reason: 'missing' };
   }
   if (row.status !== 'active') {
     return { kind: 'invalid', reason: 'inactive' };
   }
-  if (row.consumed_at !== null) {
+  if (row.consumedAt !== null) {
     return { kind: 'invalid', reason: 'consumed' };
   }
-  if (row.expires_at.getTime() <= now.getTime()) {
+  if (row.expiresAt.getTime() <= now.getTime()) {
     return { kind: 'invalid', reason: 'expired' };
   }
-  return { kind: 'valid', id: row.id, userId: row.user_account_id };
+  return { kind: 'valid', id: row.id, userId: row.userAccountId };
+}
+
+/**
+ * The reset token joined to its account, aliased to the model's field names so
+ * the locking read (SQL) and the plain read (generated client) map the same way.
+ */
+const LOCK_PASSWORD_RESET_SQL = `
+  SELECT token.id,
+         token.user_account_id AS "userAccountId",
+         token.expires_at AS "expiresAt",
+         token.consumed_at AS "consumedAt",
+         account.status
+  FROM password_reset_tokens token
+  JOIN user_accounts account ON account.id = token.user_account_id
+  WHERE token.token_hash = $1
+  FOR UPDATE
+`;
+
+/** The refresh token and its account's status, locked for rotation. */
+const LOCK_REFRESH_TOKEN_SQL = `
+  SELECT token.id,
+         token.family_id AS "familyId",
+         token.user_account_id AS "userAccountId",
+         token.expires_at AS "expiresAt",
+         token.used_at AS "usedAt",
+         token.revoked_at AS "revokedAt",
+         account.status
+  FROM refresh_tokens token
+  JOIN user_accounts account ON account.id = token.user_account_id
+  WHERE token.id = $1 AND token.token_hash = $2
+  FOR UPDATE
+`;
+
+interface RefreshTokenRow {
+  readonly id: string;
+  readonly familyId: string;
+  readonly userAccountId: string;
+  readonly expiresAt: Date;
+  readonly usedAt: Date | null;
+  readonly revokedAt: Date | null;
 }
 
 export class PostgresLocalAuthRepository
@@ -115,49 +170,36 @@ export class PostgresLocalAuthRepository
     try {
       await authTransaction(this.client, async (transaction) => {
         const userId = `usr_${ulid()}`;
-        await authQueryRows(
-          transaction,
-          `
-            INSERT INTO user_accounts (id, username, status, created_at, updated_at)
-            VALUES ($1, $2, 'pending_verification', $3, $3)
-          `,
-          [userId, input.username, input.now],
-        );
-        await authQueryRows(
-          transaction,
-          `
-            INSERT INTO auth_identities (
-              id, user_account_id, provider, canonical_email, password_hash,
-              created_at, updated_at
-            )
-            VALUES ($1, $2, 'password', $3, $4, $5, $5)
-          `,
-          [
-            `auth_${ulid()}`,
-            userId,
-            input.email,
-            input.passwordHash,
-            input.now,
-          ],
-        );
-        await authQueryRows(
-          transaction,
-          `
-            INSERT INTO email_verification_tokens (
-              id, user_account_id, token_hash, expires_at, created_at,
-              browser_binding_hash
-            )
-            VALUES ($1, $2, $3, $4, $5, $6)
-          `,
-          [
-            input.tokenId,
-            userId,
-            input.tokenHash,
-            input.tokenExpiresAt,
-            input.now,
-            input.browserBindingHash ?? null,
-          ],
-        );
+        await transaction.userAccount.create({
+          data: {
+            id: userId,
+            username: input.username,
+            status: 'pending_verification',
+            createdAt: input.now,
+            updatedAt: input.now,
+          },
+        });
+        await transaction.authIdentity.create({
+          data: {
+            id: `auth_${ulid()}`,
+            userAccountId: userId,
+            provider: 'password',
+            canonicalEmail: input.email,
+            passwordHash: input.passwordHash,
+            createdAt: input.now,
+            updatedAt: input.now,
+          },
+        });
+        await transaction.emailVerificationToken.create({
+          data: {
+            id: input.tokenId,
+            userAccountId: userId,
+            tokenHash: input.tokenHash,
+            expiresAt: input.tokenExpiresAt,
+            createdAt: input.now,
+            browserBindingHash: input.browserBindingHash ?? null,
+          },
+        });
         await this.insertEmailDelivery(transaction, input.emailDelivery);
       });
     } catch (error) {
@@ -194,33 +236,20 @@ export class PostgresLocalAuthRepository
           return undefined;
         }
 
-        await authQueryRows(
-          transaction,
-          `
-            UPDATE email_verification_tokens
-            SET consumed_at = $2, consumed_reason = 'superseded'
-            WHERE user_account_id = $1 AND consumed_at IS NULL
-          `,
-          [row.id, input.now],
-        );
-        await authQueryRows(
-          transaction,
-          `
-            INSERT INTO email_verification_tokens (
-              id, user_account_id, token_hash, expires_at, created_at,
-              browser_binding_hash
-            )
-            VALUES ($1, $2, $3, $4, $5, $6)
-          `,
-          [
-            input.tokenId,
-            row.id,
-            input.tokenHash,
-            input.tokenExpiresAt,
-            input.now,
-            input.browserBindingHash ?? null,
-          ],
-        );
+        await transaction.emailVerificationToken.updateMany({
+          where: { userAccountId: row.id, consumedAt: null },
+          data: { consumedAt: input.now, consumedReason: 'superseded' },
+        });
+        await transaction.emailVerificationToken.create({
+          data: {
+            id: input.tokenId,
+            userAccountId: row.id,
+            tokenHash: input.tokenHash,
+            expiresAt: input.tokenExpiresAt,
+            createdAt: input.now,
+            browserBindingHash: input.browserBindingHash ?? null,
+          },
+        });
         await this.insertEmailDelivery(transaction, input.emailDelivery);
         return { email: row.canonical_email };
       });
@@ -257,31 +286,19 @@ export class PostgresLocalAuthRepository
         return undefined;
       }
 
-      await authQueryRows(
-        transaction,
-        `
-          UPDATE password_reset_tokens
-          SET consumed_at = $2
-          WHERE user_account_id = $1 AND consumed_at IS NULL
-        `,
-        [row.id, input.now],
-      );
-      await authQueryRows(
-        transaction,
-        `
-          INSERT INTO password_reset_tokens (
-            id, user_account_id, token_hash, expires_at, created_at
-          )
-          VALUES ($1, $2, $3, $4, $5)
-        `,
-        [
-          input.tokenId,
-          row.id,
-          input.tokenHash,
-          input.tokenExpiresAt,
-          input.now,
-        ],
-      );
+      await transaction.passwordResetToken.updateMany({
+        where: { userAccountId: row.id, consumedAt: null },
+        data: { consumedAt: input.now },
+      });
+      await transaction.passwordResetToken.create({
+        data: {
+          id: input.tokenId,
+          userAccountId: row.id,
+          tokenHash: input.tokenHash,
+          expiresAt: input.tokenExpiresAt,
+          createdAt: input.now,
+        },
+      });
       await this.insertEmailDelivery(transaction, input.emailDelivery);
       return { email: row.canonical_email };
     });
@@ -346,6 +363,8 @@ export class PostgresLocalAuthRepository
         return INVALID;
       }
 
+      const tokenId = token.id as string;
+
       const signInIfBound = async (): Promise<VerificationOutcome> => {
         // Verification Sign-in (ADR-0054): only the bound browser, only once.
         // The conditional update makes two racing requests claim it once.
@@ -356,19 +375,15 @@ export class PostgresLocalAuthRepository
         ) {
           return VERIFIED;
         }
-        const claimed = await authQueryRows(
-          transaction,
-          `
-            UPDATE email_verification_tokens
-            SET signed_in_at = $2
-            WHERE id = $1
-              AND signed_in_at IS NULL
-              AND consumed_reason = 'verified'
-            RETURNING id
-          `,
-          [token.id, input.now],
-        );
-        if (claimed.length === 0) {
+        const claimed = await transaction.emailVerificationToken.updateMany({
+          where: {
+            id: tokenId,
+            signedInAt: null,
+            consumedReason: 'verified',
+          },
+          data: { signedInAt: input.now },
+        });
+        if (claimed.count === 0) {
           return VERIFIED;
         }
         // The claim, the session it won, and the verification above commit
@@ -403,31 +418,19 @@ export class PostgresLocalAuthRepository
         return INVALID;
       }
 
-      const consumed = await authQueryRows(
-        transaction,
-        `
-          UPDATE email_verification_tokens
-          SET consumed_at = $2, consumed_reason = 'verified'
-          WHERE id = $1 AND consumed_at IS NULL
-          RETURNING id
-        `,
-        [token.id, input.now],
-      );
-      if (consumed.length === 0) {
+      const consumed = await transaction.emailVerificationToken.updateMany({
+        where: { id: tokenId, consumedAt: null },
+        data: { consumedAt: input.now, consumedReason: 'verified' },
+      });
+      if (consumed.count === 0) {
         return INVALID;
       }
 
-      const activated = await authQueryRows(
-        transaction,
-        `
-          UPDATE user_accounts
-          SET status = 'active', updated_at = $2
-          WHERE id = $1 AND status = 'pending_verification'
-          RETURNING id
-        `,
-        [account.id, input.now],
-      );
-      return activated.length > 0 ? signInIfBound() : INVALID;
+      const activated = await transaction.userAccount.updateMany({
+        where: { id: accountId, status: 'pending_verification' },
+        data: { status: 'active', updatedAt: input.now },
+      });
+      return activated.count > 0 ? signInIfBound() : INVALID;
     });
   }
 
@@ -435,18 +438,28 @@ export class PostgresLocalAuthRepository
     readonly tokenHash: string;
     readonly now: Date;
   }): Promise<PasswordResetTokenCheckResult> {
-    const rows = await authQueryRows(
-      this.client,
-      `
-        SELECT token.id, token.user_account_id, token.expires_at,
-               token.consumed_at, account.status
-        FROM password_reset_tokens token
-        JOIN user_accounts account ON account.id = token.user_account_id
-        WHERE token.token_hash = $1
-      `,
-      [input.tokenHash],
+    const token = await this.client.passwordResetToken.findUnique({
+      where: { tokenHash: input.tokenHash },
+      select: {
+        id: true,
+        userAccountId: true,
+        expiresAt: true,
+        consumedAt: true,
+        userAccount: { select: { status: true } },
+      },
+    });
+    const inspection = inspectPasswordResetToken(
+      token === null
+        ? undefined
+        : {
+            id: token.id,
+            userAccountId: token.userAccountId,
+            expiresAt: token.expiresAt,
+            consumedAt: token.consumedAt,
+            status: token.userAccount.status,
+          },
+      input.now,
     );
-    const inspection = inspectPasswordResetToken(rows[0], input.now);
     return inspection.kind === 'valid' ? { kind: 'valid' } : inspection;
   }
 
@@ -456,16 +469,9 @@ export class PostgresLocalAuthRepository
     readonly now: Date;
   }): Promise<PasswordResetResult> {
     return authTransaction(this.client, async (transaction) => {
-      const rows = await authQueryRows(
+      const rows = await authQueryRows<PasswordResetTokenRow>(
         transaction,
-        `
-          SELECT token.id, token.user_account_id, token.expires_at,
-                 token.consumed_at, account.status
-          FROM password_reset_tokens token
-          JOIN user_accounts account ON account.id = token.user_account_id
-          WHERE token.token_hash = $1
-          FOR UPDATE
-        `,
+        LOCK_PASSWORD_RESET_SQL,
         [input.tokenHash],
       );
       const inspection = inspectPasswordResetToken(rows[0], input.now);
@@ -473,59 +479,34 @@ export class PostgresLocalAuthRepository
         return inspection;
       }
 
-      const identity = await authQueryRows(
-        transaction,
-        `
-          UPDATE auth_identities
-          SET password_hash = $2, updated_at = $3
-          WHERE user_account_id = $1 AND provider = 'password'
-          RETURNING id
-        `,
-        [inspection.userId, input.passwordHash, input.now],
-      );
-      if (identity.length === 0) {
+      const identity = await transaction.authIdentity.updateMany({
+        where: { userAccountId: inspection.userId, provider: 'password' },
+        data: { passwordHash: input.passwordHash, updatedAt: input.now },
+      });
+      if (identity.count === 0) {
         throw new Error('local password identity is missing');
       }
 
-      const consumed = await authQueryRows(
-        transaction,
-        `
-          UPDATE password_reset_tokens
-          SET consumed_at = $2
-          WHERE id = $1 AND consumed_at IS NULL
-          RETURNING id
-        `,
-        [inspection.id, input.now],
-      );
-      if (consumed.length === 0) {
+      const consumed = await transaction.passwordResetToken.updateMany({
+        where: { id: inspection.id, consumedAt: null },
+        data: { consumedAt: input.now },
+      });
+      if (consumed.count === 0) {
         throw new Error('password reset token was concurrently consumed');
       }
-      await authQueryRows(
-        transaction,
-        `
-          UPDATE password_reset_tokens
-          SET consumed_at = $2
-          WHERE user_account_id = $1 AND consumed_at IS NULL
-        `,
-        [inspection.userId, input.now],
-      );
-      await authQueryRows(
-        transaction,
-        `
-          UPDATE refresh_tokens
-          SET revoked_at = $2
-          WHERE user_account_id = $1 AND revoked_at IS NULL
-        `,
-        [inspection.userId, input.now],
-      );
+      await transaction.passwordResetToken.updateMany({
+        where: { userAccountId: inspection.userId, consumedAt: null },
+        data: { consumedAt: input.now },
+      });
+      await transaction.refreshToken.updateMany({
+        where: { userAccountId: inspection.userId, revokedAt: null },
+        data: { revokedAt: input.now },
+      });
       // The same durable step, one more statement: whoever knew the old
       // password loses every Customer Web session as well, and because both
       // revocations ride this transaction a failure anywhere rolls both back, so
       // an exchange racing it can never observe a half-revoked account.
-      await authQueryRows(transaction, REVOKE_USER_WEB_SESSIONS_SQL, [
-        inspection.userId,
-        input.now,
-      ]);
+      await revokeUserWebSessions(transaction, inspection.userId, input.now);
       return { kind: 'reset' };
     });
   }
@@ -533,104 +514,73 @@ export class PostgresLocalAuthRepository
   async findLoginIdentityByEmail(
     email: string,
   ): Promise<LoginIdentity | undefined> {
-    const rows = await authQueryRows(
-      this.client,
-      `
-        SELECT ua.id, ua.status, ai.canonical_email, ai.password_hash
-        FROM user_accounts ua
-        JOIN auth_identities ai ON ai.user_account_id = ua.id
-        WHERE ai.provider = 'password' AND ai.canonical_email = $1
-      `,
-      [email],
-    );
-    const row = rows[0];
-    if (row === undefined) {
+    const identity = await this.client.authIdentity.findFirst({
+      where: { provider: 'password', canonicalEmail: email },
+      select: {
+        canonicalEmail: true,
+        passwordHash: true,
+        userAccount: { select: { id: true, status: true } },
+      },
+    });
+    if (identity === null) {
       return undefined;
     }
-    if (
-      typeof row.id !== 'string' ||
-      typeof row.canonical_email !== 'string' ||
-      typeof row.password_hash !== 'string' ||
-      (row.status !== 'pending_verification' &&
-        row.status !== 'active' &&
-        row.status !== 'disabled')
-    ) {
+    if (!isAccountStatus(identity.userAccount.status)) {
       throw new Error('local auth identity projection is invalid');
     }
     return {
-      userId: row.id,
-      email: row.canonical_email,
-      passwordHash: row.password_hash,
-      status: row.status,
+      userId: identity.userAccount.id,
+      email: identity.canonicalEmail,
+      passwordHash: identity.passwordHash,
+      status: identity.userAccount.status,
     };
   }
 
   async findLoginIdentityByUserId(
     userId: string,
   ): Promise<LoginIdentity | undefined> {
-    const rows = await authQueryRows(
-      this.client,
-      `SELECT ua.status, ai.canonical_email, ai.password_hash
-       FROM user_accounts ua
-       JOIN auth_identities ai ON ai.user_account_id = ua.id
-       WHERE ua.id = $1 AND ai.provider = 'password'`,
-      [userId],
-    );
-    const row = rows[0];
-    if (row === undefined) return undefined;
-    if (
-      typeof row.canonical_email !== 'string' ||
-      typeof row.password_hash !== 'string' ||
-      (row.status !== 'pending_verification' &&
-        row.status !== 'active' &&
-        row.status !== 'disabled')
-    ) {
+    const identity = await this.client.authIdentity.findFirst({
+      where: { userAccountId: userId, provider: 'password' },
+      select: {
+        canonicalEmail: true,
+        passwordHash: true,
+        userAccount: { select: { status: true } },
+      },
+    });
+    if (identity === null) return undefined;
+    if (!isAccountStatus(identity.userAccount.status)) {
       throw new Error('local auth identity projection is invalid');
     }
     return {
       userId,
-      email: row.canonical_email,
-      passwordHash: row.password_hash,
-      status: row.status,
+      email: identity.canonicalEmail,
+      passwordHash: identity.passwordHash,
+      status: identity.userAccount.status,
     };
   }
 
   async findUserAccountStatus(
     userId: string,
   ): Promise<LocalAccountStatus | undefined> {
-    const rows = await authQueryRows(
-      this.client,
-      'SELECT status FROM user_accounts WHERE id = $1',
-      [userId],
-    );
-    const status = rows[0]?.status;
-    if (status === undefined) {
+    const account = await this.client.userAccount.findUnique({
+      where: { id: userId },
+      select: { status: true },
+    });
+    if (account === null) {
       return undefined;
     }
-    if (
-      status !== 'pending_verification' &&
-      status !== 'active' &&
-      status !== 'disabled'
-    ) {
+    if (!isAccountStatus(account.status)) {
       throw new Error('local account status projection is invalid');
     }
-    return status;
+    return account.status;
   }
 
   async findActiveUsername(userId: string): Promise<string | undefined> {
-    const rows = await authQueryRows(
-      this.client,
-      "SELECT username FROM user_accounts WHERE id = $1 AND status = 'active'",
-      [userId],
-    );
-    const username = rows[0]?.username;
-    if (username === undefined) {
-      return undefined;
-    }
-    if (typeof username !== 'string') {
-      throw new Error('active account username projection is invalid');
-    }
-    return username;
+    const account = await this.client.userAccount.findFirst({
+      where: { id: userId, status: 'active' },
+      select: { username: true },
+    });
+    return account === null ? undefined : account.username;
   }
 
   async createRefreshSession(
@@ -652,38 +602,19 @@ export class PostgresLocalAuthRepository
   async findRefreshTokenByHash(
     tokenHash: string,
   ): Promise<RefreshTokenRecord | undefined> {
-    const rows = await authQueryRows(
-      this.client,
-      `
-        SELECT id AS token_id, family_id, user_account_id,
-               expires_at, used_at, revoked_at
-        FROM refresh_tokens
-        WHERE token_hash = $1
-      `,
-      [tokenHash],
-    );
-    const row = rows[0];
-    if (row === undefined) {
-      return undefined;
-    }
-    return this.refreshTokenRecord(row);
+    const token = await this.client.refreshToken.findUnique({
+      where: { tokenHash },
+    });
+    return token === null ? undefined : this.refreshTokenRecord(token);
   }
 
   async rotateRefreshToken(
     input: RotateRefreshTokenInput,
   ): Promise<RefreshTokenRotationResult> {
     return authTransaction(this.client, async (transaction) => {
-      const rows = await authQueryRows(
+      const rows = await authQueryRows<RefreshTokenRow & { status: string }>(
         transaction,
-        `
-          SELECT token.id AS token_id, token.family_id,
-                 token.user_account_id, token.expires_at,
-                 token.used_at, token.revoked_at, account.status
-          FROM refresh_tokens token
-          JOIN user_accounts account ON account.id = token.user_account_id
-          WHERE token.id = $1 AND token.token_hash = $2
-          FOR UPDATE
-        `,
+        LOCK_REFRESH_TOKEN_SQL,
         [input.tokenId, input.tokenHash],
       );
       const row = rows[0];
@@ -710,15 +641,10 @@ export class PostgresLocalAuthRepository
         return { kind: 'invalid', reason: 'expired' };
       }
 
-      await authQueryRows(
-        transaction,
-        `
-          UPDATE refresh_tokens
-          SET used_at = $2
-          WHERE id = $1 AND used_at IS NULL AND revoked_at IS NULL
-        `,
-        [input.tokenId, input.now],
-      );
+      await transaction.refreshToken.updateMany({
+        where: { id: input.tokenId, usedAt: null, revokedAt: null },
+        data: { usedAt: input.now },
+      });
       await this.insertRefreshSession(transaction, {
         userId: record.userId,
         token: input.successor,
@@ -772,23 +698,16 @@ export class PostgresLocalAuthRepository
     client: AuthSqlClient,
     input: CreateRefreshSessionInput,
   ): Promise<void> {
-    await authQueryRows(
-      client,
-      `
-        INSERT INTO refresh_tokens (
-          id, family_id, user_account_id, token_hash, issued_at, expires_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6)
-      `,
-      [
-        input.token.id,
-        input.token.familyId,
-        input.userId,
-        input.token.hash,
-        input.issuedAt,
-        input.token.expiresAt,
-      ],
-    );
+    await client.refreshToken.create({
+      data: {
+        id: input.token.id,
+        familyId: input.token.familyId,
+        userAccountId: input.userId,
+        tokenHash: input.token.hash,
+        issuedAt: input.issuedAt,
+        expiresAt: input.token.expiresAt,
+      },
+    });
   }
 
   /**
@@ -805,35 +724,36 @@ export class PostgresLocalAuthRepository
       readonly issuedAt: Date;
     },
   ): Promise<void> {
-    await authQueryRows(transaction, INSERT_WEB_SESSION_SQL, [
-      session.sessionId,
+    await insertWebSession(transaction, {
+      id: session.sessionId,
       userId,
-      session.token.hash,
-      session.issuedAt,
-      session.token.expiresAt,
-    ]);
+      tokenHash: session.token.hash,
+      createdAt: session.issuedAt,
+      expiresAt: session.token.expiresAt,
+    });
   }
 
   private refreshTokenRecord(
-    row: Record<string, unknown>,
+    row: RefreshTokenRow,
   ): RefreshTokenRecord | undefined {
     if (
-      typeof row.token_id !== 'string' ||
-      typeof row.family_id !== 'string' ||
-      typeof row.user_account_id !== 'string' ||
-      !(row.expires_at instanceof Date) ||
-      (row.used_at !== null && !(row.used_at instanceof Date)) ||
-      (row.revoked_at !== null && !(row.revoked_at instanceof Date))
+      typeof row.id !== 'string' ||
+      typeof row.familyId !== 'string' ||
+      typeof row.userAccountId !== 'string' ||
+      !(row.expiresAt instanceof Date) ||
+      Number.isNaN(row.expiresAt.getTime()) ||
+      (row.usedAt !== null && !(row.usedAt instanceof Date)) ||
+      (row.revokedAt !== null && !(row.revokedAt instanceof Date))
     ) {
       return undefined;
     }
     return {
-      tokenId: row.token_id,
-      familyId: row.family_id,
-      userId: row.user_account_id,
-      expiresAt: row.expires_at,
-      usedAt: row.used_at === null ? undefined : row.used_at,
-      revokedAt: row.revoked_at === null ? undefined : row.revoked_at,
+      tokenId: row.id,
+      familyId: row.familyId,
+      userId: row.userAccountId,
+      expiresAt: row.expiresAt,
+      usedAt: row.usedAt === null ? undefined : row.usedAt,
+      revokedAt: row.revokedAt === null ? undefined : row.revokedAt,
     };
   }
 
@@ -842,15 +762,10 @@ export class PostgresLocalAuthRepository
     familyId: string,
     now: Date,
   ): Promise<void> {
-    await authQueryRows(
-      transaction,
-      `
-        UPDATE refresh_tokens
-        SET revoked_at = $2
-        WHERE family_id = $1 AND revoked_at IS NULL
-      `,
-      [familyId, now],
-    );
+    await transaction.refreshToken.updateMany({
+      where: { familyId, revokedAt: null },
+      data: { revokedAt: now },
+    });
   }
 
   async close(): Promise<void> {

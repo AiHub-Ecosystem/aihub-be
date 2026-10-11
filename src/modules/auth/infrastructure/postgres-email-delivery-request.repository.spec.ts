@@ -6,6 +6,7 @@ import type {
 } from '@/modules/auth/application/email-delivery-request.port';
 import {
   type QueryFake,
+  ScriptedPrisma,
   prismaFromQueryFake,
 } from '@/modules/persistence/testing/query-fake-client';
 import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
@@ -27,13 +28,13 @@ function queuedRow(
     id: ROW_ID,
     kind: 'verification_email',
     status: 'queued',
-    payload_ciphertext: 'sealed',
+    payloadCiphertext: 'sealed',
     attempts: 0,
-    last_attempt_at: null,
-    last_error_code: null,
-    cancel_reason: null,
-    created_at: NOW,
-    completed_at: null,
+    lastAttemptAt: null,
+    lastErrorCode: null,
+    cancelReason: null,
+    createdAt: NOW,
+    completedAt: null,
     ...overrides,
   };
 }
@@ -47,10 +48,8 @@ function claim(row: Record<string, unknown>) {
 
 describe('PostgresEmailDeliveryRequestRepository', () => {
   it('inserts the outbox row through the caller Prisma transaction', async () => {
-    const executeRaw = jest.fn(async () => 1);
-    const transaction = {
-      $executeRawUnsafe: executeRaw,
-    } as unknown as EmailDeliveryTransaction;
+    const script = new ScriptedPrisma();
+    const transaction = script.client() as unknown as EmailDeliveryTransaction;
     const input: InsertEmailDeliveryRequestInput = {
       id: ROW_ID,
       kind: 'verification_email',
@@ -63,13 +62,23 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
       input,
     );
 
-    expect(executeRaw).toHaveBeenCalledWith(
-      expect.any(String),
-      input.id,
-      input.kind,
-      input.payloadCiphertext,
-      input.createdAt,
-    );
+    expect(script.statements).toEqual([
+      {
+        name: 'emailDeliveryRequest.create',
+        args: [
+          {
+            data: {
+              id: input.id,
+              kind: input.kind,
+              status: 'queued',
+              payloadCiphertext: input.payloadCiphertext,
+              createdAt: input.createdAt,
+            },
+          },
+        ],
+        transaction: 0,
+      },
+    ]);
   });
 
   it('skips an unknown kind without failing valid rows in the same claim', async () => {
@@ -81,7 +90,7 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
       query: async () => [
         queuedRow({
           kind: 'carrier_pigeon_email',
-          payload_ciphertext: 'secret',
+          payloadCiphertext: 'secret',
         }),
         queuedRow({ id: knownId }),
       ],
@@ -129,10 +138,10 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
     const claimed = await claim(
       queuedRow({
         status: 'cancelled',
-        payload_ciphertext: null,
-        last_error_code: 'timeout',
-        cancel_reason: 'credential_revoked',
-        completed_at: NOW,
+        payloadCiphertext: null,
+        lastErrorCode: 'timeout',
+        cancelReason: 'credential_revoked',
+        completedAt: NOW,
       }),
     );
 
@@ -148,24 +157,21 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
     [
       'an error code outside the bounded set',
       {
-        last_error_code: 'provider said no',
+        lastErrorCode: 'provider said no',
         status: 'failed',
-        completed_at: NOW,
+        completedAt: NOW,
       },
     ],
     [
       'a cancellation reason outside the bounded set',
-      { cancel_reason: 'because', status: 'cancelled', completed_at: NOW },
+      { cancelReason: 'because', status: 'cancelled', completedAt: NOW },
     ],
     ['a missing identifier', { id: undefined }],
     ['a non-numeric attempt count', { attempts: 'many' }],
-    ['a missing creation instant', { created_at: undefined }],
-    ['a creation instant that is not a date', { created_at: 'yesterday' }],
-    [
-      'an attempt instant that is not a date',
-      { last_attempt_at: 'a while ago' },
-    ],
-    ['a ciphertext that is not text', { payload_ciphertext: 42 }],
+    ['a missing creation instant', { createdAt: undefined }],
+    ['a creation instant that is not a date', { createdAt: 'yesterday' }],
+    ['an attempt instant that is not a date', { lastAttemptAt: 'a while ago' }],
+    ['a ciphertext that is not text', { payloadCiphertext: 42 }],
   ])(
     'refuses %s rather than handing the application a cast',
     async (_l, over) => {

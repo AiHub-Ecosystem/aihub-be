@@ -25,13 +25,13 @@ export async function authorizeMfaSession(
   if (typeof factorId !== 'string' || proof === undefined) return false;
   if (proof.kind === 'totp') return proof.factorId === factorId;
 
-  const consumed = await authQueryRows(
-    transaction,
-    `UPDATE user_mfa_recovery_codes
-     SET consumed_at = $3
-     WHERE user_account_id = $1 AND code_hash = $2 AND consumed_at IS NULL
-     RETURNING code_hash`,
-    [userId, proof.codeHash, now],
-  );
-  return consumed.length > 0;
+  const consumed = await transaction.userMfaRecoveryCode.updateMany({
+    where: {
+      userAccountId: userId,
+      codeHash: proof.codeHash,
+      consumedAt: null,
+    },
+    data: { consumedAt: now },
+  });
+  return consumed.count > 0;
 }

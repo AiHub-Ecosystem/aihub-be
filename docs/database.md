@@ -63,13 +63,7 @@ Only infrastructure code may import it, under the `@prisma-client/*` alias.
 `pnpm arch-check` reports an import from anywhere else, because Prisma types
 never reach application or domain code.
 
-## Upgrading to Prisma 8
-
-Stay on Prisma 7.10.0 GA for now. Before upgrading to Prisma 8, rewrite the
-schema's `@db.*` attributes (including `@db.Timestamptz(6)`, `@db.Date`, and
-`type: Brin`) into type position, change `.take(n)` / `.skip(n)` to
-`.limit(n)` / `.offset(n)`, and change raw SQL from `db.sql.raw` to
-`db.raw.sql`. Prisma 8 release candidates also changed incompatibly between
-rc.9 and rc.14, so defer the upgrade until a GA release and review its final
-migration guidance. Partial and unique indexes becoming GA, and removing the
-`partialIndexes` preview flag, is not sufficient reason to adopt an RC.
+The client lives in `dist/`, so `nest-cli.json` sets `deleteOutDir: false`:
+Nest would otherwise empty `dist/` on `pnpm dev` and remove the client it was
+about to need. `pnpm build` clears `dist/` itself before it compiles and
+generates the client afterwards, so a stale build never survives it.

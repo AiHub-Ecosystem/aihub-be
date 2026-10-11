@@ -16,9 +16,7 @@ export type AuthTransactionClient = Prisma.TransactionClient;
  * observed at once so a statement the caller never awaits cannot become an
  * unhandled rejection; the transaction guard still sees its failure.
  */
-export function authQueryRows<
-  T extends Record<string, unknown> = Record<string, unknown>,
->(
+export function authQueryRows<T extends object = Record<string, unknown>>(
   client: AuthSqlClient,
   text: string,
   values: readonly unknown[],
@@ -35,31 +33,22 @@ export function authQueryRows<
   return translated;
 }
 
-export function authExecute(
-  client: AuthSqlClient,
-  text: string,
-  values: readonly unknown[],
-): Promise<void> {
-  const query = client
-    .$executeRawUnsafe(text, ...values)
-    .then(() => undefined)
-    .catch((error) => {
-      throw postgresError(error);
-    });
-  void query.catch(() => undefined);
-  return query;
-}
-
 export function authTransaction<T>(
   client: AuthRepositoryClient,
   callback: (transaction: AuthTransactionClient) => Promise<T>,
 ): Promise<T> {
-  return client.$transaction(
-    (transaction) =>
-      runGuardedTransaction(transaction, callback, {
-        expired: () => new Error('Auth transaction is no longer active'),
-        mapFailure: postgresError,
-      }),
-    CONTROL_PLANE_TRANSACTION_OPTIONS,
-  );
+  // A model operation that violates a constraint is reported by Prisma's code;
+  // callers branch on the SQLSTATE a raw statement would have thrown.
+  return client
+    .$transaction(
+      (transaction) =>
+        runGuardedTransaction(transaction, callback, {
+          expired: () => new Error('Auth transaction is no longer active'),
+          mapFailure: postgresError,
+        }),
+      CONTROL_PLANE_TRANSACTION_OPTIONS,
+    )
+    .catch((error) => {
+      throw postgresError(error);
+    });
 }

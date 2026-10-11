@@ -48,27 +48,6 @@ const LOCK_ORGANIZATION_SQL = `
   FOR UPDATE
 `;
 
-const ACTIVE_MEMBERSHIP_SQL = `
-  SELECT 1
-  FROM organization_members AS membership
-  INNER JOIN auth_identities AS identity
-    ON identity.user_account_id = membership.user_account_id
-  WHERE membership.organization_id = $1
-    AND membership.status = 'active'
-    AND identity.provider = 'password'
-    AND identity.canonical_email = $2
-  LIMIT 1
-`;
-
-const CLOSE_OPEN_INVITATIONS_SQL = `
-  UPDATE organization_invitations
-  SET consumed_at = $3
-  WHERE organization_id = $1
-    AND email = $2
-    AND consumed_at IS NULL
-  RETURNING id
-`;
-
 const LOCK_ORGANIZATION_FOR_REVOKE_SQL = `
   SELECT id, status
   FROM organizations
@@ -82,45 +61,6 @@ const LOCK_INVITATION_FOR_REVOKE_SQL = `
   WHERE id = $1
     AND organization_id = $2
   FOR UPDATE
-`;
-
-const REVOKE_OPEN_INVITATION_SQL = `
-  UPDATE organization_invitations
-  SET consumed_at = $3
-  WHERE id = $1
-    AND organization_id = $2
-    AND consumed_at IS NULL
-    AND expires_at > $3
-  RETURNING id
-`;
-
-const INSERT_INVITATION_SQL = `
-  INSERT INTO organization_invitations (
-    id, organization_id, email, role, invited_by, token_hash, expires_at, created_at
-  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-`;
-
-/**
- * The issuer is a left join on purpose: a broken identity projection must fail
- * the whole list rather than silently dropping an actionable invitation.
- * `consumed_at` is the durable close signal for consumed, superseded, and
- * revoked invitations; expiry is evaluated against the application clock.
- */
-const LIST_OPEN_INVITATIONS_SQL = `
-  SELECT
-    invitation.id,
-    invitation.email,
-    invitation.role,
-    inviter.username AS invited_by_username,
-    invitation.created_at,
-    invitation.expires_at
-  FROM organization_invitations AS invitation
-  LEFT JOIN user_accounts AS inviter
-    ON inviter.id = invitation.invited_by
-  WHERE invitation.organization_id = $1
-    AND invitation.consumed_at IS NULL
-    AND invitation.expires_at > $2
-  ORDER BY invitation.created_at DESC, invitation.id ASC
 `;
 
 /**
@@ -173,13 +113,6 @@ const UPSERT_MEMBERSHIP_SQL = `
   RETURNING role
 `;
 
-const CONSUME_INVITATION_SQL = `
-  UPDATE organization_invitations
-  SET consumed_at = $2
-  WHERE token_hash = $1
-    AND consumed_at IS NULL
-`;
-
 function organizationName(value: unknown): string | undefined {
   return isRecord(value) ? stringValue(value, 'name') : undefined;
 }
@@ -209,9 +142,9 @@ function mapOpenInvitation(
   const invitationId = stringValue(value, 'id');
   const email = stringValue(value, 'email');
   const role = membershipRoleValue(value, 'role');
-  const invitedByUsername = stringValue(value, 'invited_by_username');
-  const createdAt = dateValue(value, 'created_at');
-  const expiresAt = dateValue(value, 'expires_at');
+  const invitedByUsername = stringValue(value, 'invitedByUsername');
+  const createdAt = dateValue(value, 'createdAt');
+  const expiresAt = dateValue(value, 'expiresAt');
 
   if (
     invitationId === undefined ||
@@ -271,40 +204,54 @@ export class PostgresOrganizationInvitationRepository
           throw identityStoreError('Identity data is invalid');
         }
 
-        const activeMembership = await identityRows(
-          transaction,
-          ACTIVE_MEMBERSHIP_SQL,
-          [input.organizationId, input.email],
+        // An active member whose password identity carries this email.
+        const activeMembership = await transaction.organizationMembership.count(
+          {
+            where: {
+              organizationId: input.organizationId,
+              status: 'active',
+              userAccount: {
+                authIdentities: {
+                  some: { provider: 'password', canonicalEmail: input.email },
+                },
+              },
+            },
+          },
         );
-        if (activeMembership[0] !== undefined) {
+        if (activeMembership > 0) {
           return { kind: 'member_exists' };
         }
 
         // Resend supersedes the previous open token, which is also what keeps
         // the one-open-invitation index satisfiable. Closing a token here is
         // also what separates a resend from a first invitation in the trail.
-        const superseded = await identityRows(
-          transaction,
-          CLOSE_OPEN_INVITATIONS_SQL,
-          [input.organizationId, input.email, input.now],
-        );
-        await identityRows(transaction, INSERT_INVITATION_SQL, [
-          input.invitationId,
-          input.organizationId,
-          input.email,
-          input.role,
-          input.invitedBy,
-          input.tokenHash,
-          input.expiresAt,
-          input.now,
-        ]);
+        const superseded = await transaction.organizationInvitation.updateMany({
+          where: {
+            organizationId: input.organizationId,
+            email: input.email,
+            consumedAt: null,
+          },
+          data: { consumedAt: input.now },
+        });
+        await transaction.organizationInvitation.create({
+          data: {
+            id: input.invitationId,
+            organizationId: input.organizationId,
+            email: input.email,
+            role: input.role,
+            invitedBy: input.invitedBy,
+            tokenHash: input.tokenHash,
+            expiresAt: input.expiresAt,
+            createdAt: input.now,
+          },
+        });
 
         await recordOrganizationAuditEvent(
           transaction,
           auditStamp(input, input.invitedBy, input.now),
           {
             action:
-              superseded.length > 0 ? 'invitation.resent' : 'invitation.sent',
+              superseded.count > 0 ? 'invitation.resent' : 'invitation.sent',
             invitationId: input.invitationId,
             email: input.email,
             role: input.role,
@@ -370,12 +317,33 @@ export class PostgresOrganizationInvitationRepository
       );
     }
 
+    // The issuer is read through the relation, so a broken identity projection
+    // fails the whole list rather than silently dropping an actionable
+    // invitation. `consumedAt` is the durable close signal for consumed,
+    // superseded, and revoked invitations; expiry is evaluated against the
+    // application clock.
     let rows: readonly unknown[];
     try {
-      rows = await identityRows(this.client, LIST_OPEN_INVITATIONS_SQL, [
-        input.organizationId,
-        input.now,
-      ]);
+      const open = await this.client.organizationInvitation.findMany({
+        where: {
+          organizationId: input.organizationId,
+          consumedAt: null,
+          expiresAt: { gt: input.now },
+        },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          createdAt: true,
+          expiresAt: true,
+          invitedByUser: { select: { username: true } },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      });
+      rows = open.map(({ invitedByUser, ...invitation }) => ({
+        ...invitation,
+        invitedByUsername: invitedByUser.username,
+      }));
     } catch {
       throw identityStoreError('Identity store is unavailable');
     }
@@ -490,12 +458,16 @@ export class PostgresOrganizationInvitationRepository
           return { kind: 'closed' };
         }
 
-        const updated = await identityRows(
-          transaction,
-          REVOKE_OPEN_INVITATION_SQL,
-          [input.invitationId, input.organizationId, input.now],
-        );
-        if (updated.length === 0) {
+        const updated = await transaction.organizationInvitation.updateMany({
+          where: {
+            id: input.invitationId,
+            organizationId: input.organizationId,
+            consumedAt: null,
+            expiresAt: { gt: input.now },
+          },
+          data: { consumedAt: input.now },
+        });
+        if (updated.count === 0) {
           return { kind: 'closed' };
         }
 
@@ -597,10 +569,10 @@ export class PostgresOrganizationInvitationRepository
           throw identityStoreError('Identity data is invalid');
         }
 
-        await identityRows(transaction, CONSUME_INVITATION_SQL, [
-          input.tokenHash,
-          input.now,
-        ]);
+        await transaction.organizationInvitation.updateMany({
+          where: { tokenHash: input.tokenHash, consumedAt: null },
+          data: { consumedAt: input.now },
+        });
 
         // The granted role, not the invited one: an already-active membership
         // keeps the authority it has, and the trail must say what was granted.

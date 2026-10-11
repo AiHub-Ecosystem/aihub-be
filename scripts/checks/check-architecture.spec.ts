@@ -418,6 +418,11 @@ describe('common layer environment boundary', () => {
  * down, which is what turns "two modules happen to read the same table" into a
  * decision somebody made. Table names come from the migrations, so an English
  * word in a comment or a CTE name cannot pose as one.
+ *
+ * A module reaches a table two ways: a SQL statement that names it, and a
+ * Prisma model delegate (`transaction.userAccount.create(...)`). The second is
+ * resolved to its table through the `@@map` in `schema.prisma`, so moving a
+ * statement from SQL to the generated client does not move it out of this guard.
  */
 describe('cross-module table access', () => {
   function migrations(): string {
@@ -444,6 +449,24 @@ describe('cross-module table access', () => {
     return tables;
   }
 
+  /** `userAccount` -> `user_accounts`, read from the schema's `@@map`. */
+  function delegateTables(): Map<string, string> {
+    const schema = readFileSync(
+      join(__dirname, '..', '..', 'prisma', 'schema.prisma'),
+      'utf8',
+    );
+    const delegates = new Map<string, string>();
+    for (const [, name, body] of schema.matchAll(
+      /^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm,
+    )) {
+      const table = body?.match(/@@map\("([a-z_][a-z0-9_]*)"\)/)?.[1];
+      if (name !== undefined && table !== undefined) {
+        delegates.set(`${name.charAt(0).toLowerCase()}${name.slice(1)}`, table);
+      }
+    }
+    return delegates;
+  }
+
   function moduleInfrastructureFiles(directory: string): string[] {
     return readdirSync(directory, { recursive: true, withFileTypes: true })
       .filter(
@@ -458,7 +481,13 @@ describe('cross-module table access', () => {
 
   function sharedTableAccesses(): string[] {
     const tables = createdTables();
+    const delegates = delegateTables();
     const modulesByTable = new Map<string, Set<string>>();
+    const record = (table: string, module: string): void => {
+      const modules = modulesByTable.get(table) ?? new Set<string>();
+      modules.add(module);
+      modulesByTable.set(table, modules);
+    };
 
     for (const file of moduleInfrastructureFiles(
       join(__dirname, '..', '..', 'src', 'modules'),
@@ -474,9 +503,19 @@ describe('cross-module table access', () => {
         continue;
       }
 
-      for (const [, statement] of readFileSync(file, 'utf8').matchAll(
-        /`([^`]*)`/g,
+      const source = readFileSync(file, 'utf8');
+
+      for (const [, delegate] of source.matchAll(
+        /\.(\w+)\.(?:find\w+|create\w*|update\w*|upsert|delete\w*|count|aggregate|groupBy)\s*[<(]/g,
       )) {
+        const table =
+          delegate === undefined ? undefined : delegates.get(delegate);
+        if (table !== undefined) {
+          record(table, module);
+        }
+      }
+
+      for (const [, statement] of source.matchAll(/`([^`]*)`/g)) {
         if (statement === undefined) {
           continue;
         }
@@ -487,9 +526,7 @@ describe('cross-module table access', () => {
           if (table === undefined || !tables.has(table)) {
             continue;
           }
-          const modules = modulesByTable.get(table) ?? new Set<string>();
-          modules.add(module);
-          modulesByTable.set(table, modules);
+          record(table, module);
         }
       }
     }

@@ -18,7 +18,7 @@ import {
 } from '@/modules/auth/application/email-delivery-request.port';
 import { Logger } from '@nestjs/common';
 
-import { type AuthSqlClient, authExecute, authQueryRows } from './auth-prisma';
+import { type AuthSqlClient, authQueryRows } from './auth-prisma';
 import {
   dateValue,
   integerValue,
@@ -29,18 +29,6 @@ import {
   oneOf,
   stringValue,
 } from './auth-row';
-
-const SELECT_ROW = `
-  SELECT id, kind, status, payload_ciphertext, attempts, last_attempt_at,
-         last_error_code, cancel_reason, created_at, completed_at
-  FROM email_delivery_requests
-  WHERE id = $1
-`;
-
-const INSERT_SQL = `
-  INSERT INTO email_delivery_requests (id, kind, status, payload_ciphertext, created_at)
-  VALUES ($1, $2, 'queued', $3, $4)
-`;
 
 /**
  * One statement, so the claim is atomic without a surrounding transaction: the
@@ -78,66 +66,14 @@ const CLAIM_SQL = `
   SET lease_owner = $3, lease_expires_at = $1 + ($4 || ' milliseconds')::interval
   FROM claimable
   WHERE request.id = claimable.id
-  RETURNING request.id, request.kind, request.status, request.payload_ciphertext,
-            request.attempts, request.last_attempt_at, request.last_error_code,
-            request.cancel_reason, request.created_at, request.completed_at
-`;
-
-/**
- * One attempt, taken before the provider is called. `attempts < 3` is the
- * predicate that makes the cap hard rather than advisory: once the third
- * reservation has committed no further claim can match this row, whatever the
- * transition after the call went on to do.
- *
- * The lease is deliberately left held. This poller still owns the row while the
- * provider is in flight; a process that dies here releases it by lapsing.
- */
-const RESERVE_ATTEMPT_SQL = `
-  UPDATE email_delivery_requests
-  SET attempts = attempts + 1, last_attempt_at = $2
-  WHERE id = $1 AND status = 'queued' AND lease_owner = $3::text AND attempts < 3
-  RETURNING id
-`;
-
-/**
- * A failed attempt releases the lease, because the row stays queued and its
- * retry delay becomes the only thing that decides when it is claimable again.
- * Holding a lease until the lease expired would add the lease length to every
- * retry delay. The attempt itself was already counted by the reservation.
- */
-const RECORD_FAILED_ATTEMPT_SQL = `
-  UPDATE email_delivery_requests
-  SET last_attempt_at = $2, last_error_code = $4,
-      lease_owner = NULL, lease_expires_at = NULL
-  WHERE id = $1 AND status = 'queued' AND lease_owner = $3::text
-  RETURNING id
-`;
-
-const MARK_PROVIDER_ACCEPTED_SQL = `
-  UPDATE email_delivery_requests
-  SET status = 'provider_accepted', last_attempt_at = $2,
-      payload_ciphertext = NULL, completed_at = $2,
-      lease_owner = NULL, lease_expires_at = NULL
-  WHERE id = $1 AND status = 'queued' AND lease_owner = $3::text
-  RETURNING id
-`;
-
-const MARK_FAILED_SQL = `
-  UPDATE email_delivery_requests
-  SET status = 'failed', last_attempt_at = $2,
-      last_error_code = $3, payload_ciphertext = NULL, completed_at = $2,
-      lease_owner = NULL, lease_expires_at = NULL
-  WHERE id = $1 AND status = 'queued' AND lease_owner = $4::text
-  RETURNING id
-`;
-
-const MARK_CANCELLED_SQL = `
-  UPDATE email_delivery_requests
-  SET status = 'cancelled', cancel_reason = $2,
-      payload_ciphertext = NULL, completed_at = $3,
-      lease_owner = NULL, lease_expires_at = NULL
-  WHERE id = $1 AND status = 'queued' AND lease_owner = $4::text
-  RETURNING id
+  RETURNING request.id, request.kind, request.status,
+            request.payload_ciphertext AS "payloadCiphertext",
+            request.attempts,
+            request.last_attempt_at AS "lastAttemptAt",
+            request.last_error_code AS "lastErrorCode",
+            request.cancel_reason AS "cancelReason",
+            request.created_at AS "createdAt",
+            request.completed_at AS "completedAt"
 `;
 
 /**
@@ -168,23 +104,6 @@ const FAIL_EXHAUSTED_SQL = `
 `;
 
 /**
- * Releases a claim this instance cannot finish and records nothing else: no
- * attempt, no attempt time, no terminal state. That is what leaves a row sealed
- * with a key version only another instance holds deliverable, rather than
- * cancelled with its payload erased.
- *
- * The lease time is moved to the retry time rather than cleared. The claim
- * treats a lease in the future as held, so the row stays out of every batch
- * until then instead of coming straight back on the next pass.
- */
-const RELEASE_DEFERRED_SQL = `
-  UPDATE email_delivery_requests
-  SET lease_owner = NULL, lease_expires_at = $3
-  WHERE id = $1 AND status = 'queued' AND lease_owner = $2::text
-  RETURNING id
-`;
-
-/**
  * Queued requests older than every credential an Email Delivery Request can
  * carry. None of them can be sent any more, so they are cancelled as expired
  * and their payload erased without being opened, which is the only way a
@@ -200,8 +119,12 @@ const CANCEL_STALE_SQL = `
     AND kind = ANY($3::text[])
     AND created_at <= $2
     AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
-  RETURNING id, kind, status, payload_ciphertext, attempts, last_attempt_at,
-            last_error_code, cancel_reason, created_at, completed_at
+  RETURNING id, kind, status,
+            payload_ciphertext AS "payloadCiphertext", attempts,
+            last_attempt_at AS "lastAttemptAt",
+            last_error_code AS "lastErrorCode",
+            cancel_reason AS "cancelReason",
+            created_at AS "createdAt", completed_at AS "completedAt"
 `;
 
 /**
@@ -246,31 +169,12 @@ const CLAIM_UNREPORTED_FAILURES_SQL = `
     LIMIT $1
     FOR UPDATE SKIP LOCKED
   )
-  RETURNING id, kind, status, payload_ciphertext, attempts, last_attempt_at,
-            last_error_code, cancel_reason, created_at, completed_at
-`;
-
-/**
- * Written only after the signal was emitted, and it takes the lease with it, so
- * a reported row is never claimed again. It requires the row to still be
- * `failed`, which a terminal state can never leave.
- */
-const MARK_FAILURE_REPORTED_SQL = `
-  UPDATE email_delivery_requests
-  SET failure_reported_at = $2, failure_notify_lease_expires_at = NULL
-  WHERE id = $1 AND status = 'failed'
-  RETURNING id
-`;
-
-/**
- * Gives up a claim without emitting, so a callback that threw does not lock the
- * row out until the lease lapses.
- */
-const RELEASE_FAILURE_NOTIFICATION_SQL = `
-  UPDATE email_delivery_requests
-  SET failure_notify_lease_expires_at = NULL
-  WHERE id = $1 AND status = 'failed' AND failure_reported_at IS NULL
-  RETURNING id
+  RETURNING id, kind, status,
+            payload_ciphertext AS "payloadCiphertext", attempts,
+            last_attempt_at AS "lastAttemptAt",
+            last_error_code AS "lastErrorCode",
+            cancel_reason AS "cancelReason",
+            created_at AS "createdAt", completed_at AS "completedAt"
 `;
 
 function storeError(message: string): AppError {
@@ -357,21 +261,21 @@ function toRecord(value: unknown): EmailDeliveryRequestRecord {
   const id = stringValue(value, 'id');
   const kind = oneOf(value, 'kind', EMAIL_DELIVERY_KINDS);
   const status = oneOf(value, 'status', EMAIL_DELIVERY_REQUEST_STATUSES);
-  const payloadCiphertext = nullableStringValue(value, 'payload_ciphertext');
+  const payloadCiphertext = nullableStringValue(value, 'payloadCiphertext');
   const attempts = integerValue(value, 'attempts');
-  const lastAttemptAt = nullableDateValue(value, 'last_attempt_at');
+  const lastAttemptAt = nullableDateValue(value, 'lastAttemptAt');
   const lastErrorCode = nullableOneOf(
     value,
-    'last_error_code',
+    'lastErrorCode',
     EMAIL_DELIVERY_ERROR_CODES,
   );
   const cancelReason = nullableOneOf(
     value,
-    'cancel_reason',
+    'cancelReason',
     EMAIL_DELIVERY_CANCEL_REASONS,
   );
-  const createdAt = dateValue(value, 'created_at');
-  const completedAt = nullableDateValue(value, 'completed_at');
+  const createdAt = dateValue(value, 'createdAt');
+  const completedAt = nullableDateValue(value, 'completedAt');
 
   if (
     id === undefined ||
@@ -409,12 +313,16 @@ export class PostgresEmailDeliveryRequestRepository
     transaction: EmailDeliveryTransaction,
     input: InsertEmailDeliveryRequestInput,
   ): Promise<void> {
-    await authExecute(transaction as unknown as AuthSqlClient, INSERT_SQL, [
-      input.id,
-      input.kind,
-      input.payloadCiphertext,
-      input.createdAt,
-    ]);
+    const client = transaction as unknown as AuthSqlClient;
+    await client.emailDeliveryRequest.create({
+      data: {
+        id: input.id,
+        kind: input.kind,
+        status: 'queued',
+        payloadCiphertext: input.payloadCiphertext,
+        createdAt: input.createdAt,
+      },
+    });
   }
 
   async recordFailedAttempt(
@@ -426,34 +334,64 @@ export class PostgresEmailDeliveryRequestRepository
       owner: string;
     },
   ): Promise<EmailDeliveryRequestRecord> {
-    return this.apply(client, RECORD_FAILED_ATTEMPT_SQL, [
-      input.id,
-      input.attemptedAt,
-      input.owner,
-      input.errorCode,
-    ]);
+    // A failed attempt releases the lease, because the row stays queued and
+    // its retry delay becomes the only thing that decides when it is claimable
+    // again. Holding a lease until it expired would add the lease length to
+    // every retry delay. The attempt itself was already counted.
+    return this.apply(client, input.id, () =>
+      client.emailDeliveryRequest.updateMany({
+        where: { id: input.id, status: 'queued', leaseOwner: input.owner },
+        data: {
+          lastAttemptAt: input.attemptedAt,
+          lastErrorCode: input.errorCode,
+          leaseOwner: null,
+          leaseExpiresAt: null,
+        },
+      }),
+    );
   }
 
   async reserveAttempt(
     client: AuthSqlClient,
     input: { id: string; attemptedAt: Date; owner: string },
   ): Promise<EmailDeliveryRequestRecord> {
-    return this.apply(client, RESERVE_ATTEMPT_SQL, [
-      input.id,
-      input.attemptedAt,
-      input.owner,
-    ]);
+    // One attempt, taken before the provider is called. `attempts < 3` is what
+    // makes the cap hard rather than advisory: once the third reservation has
+    // committed no further claim can match this row. The lease is deliberately
+    // left held; a process that dies here releases it by lapsing.
+    return this.apply(client, input.id, () =>
+      client.emailDeliveryRequest.updateMany({
+        where: {
+          id: input.id,
+          status: 'queued',
+          leaseOwner: input.owner,
+          attempts: { lt: 3 },
+        },
+        data: {
+          attempts: { increment: 1 },
+          lastAttemptAt: input.attemptedAt,
+        },
+      }),
+    );
   }
 
   async markProviderAccepted(
     client: AuthSqlClient,
     input: { id: string; attemptedAt: Date; owner: string },
   ): Promise<EmailDeliveryRequestRecord> {
-    return this.apply(client, MARK_PROVIDER_ACCEPTED_SQL, [
-      input.id,
-      input.attemptedAt,
-      input.owner,
-    ]);
+    return this.apply(client, input.id, () =>
+      client.emailDeliveryRequest.updateMany({
+        where: { id: input.id, status: 'queued', leaseOwner: input.owner },
+        data: {
+          status: 'provider_accepted',
+          lastAttemptAt: input.attemptedAt,
+          payloadCiphertext: null,
+          completedAt: input.attemptedAt,
+          leaseOwner: null,
+          leaseExpiresAt: null,
+        },
+      }),
+    );
   }
 
   async markFailed(
@@ -465,12 +403,20 @@ export class PostgresEmailDeliveryRequestRepository
       owner: string;
     },
   ): Promise<EmailDeliveryRequestRecord> {
-    return this.apply(client, MARK_FAILED_SQL, [
-      input.id,
-      input.failedAt,
-      input.errorCode,
-      input.owner,
-    ]);
+    return this.apply(client, input.id, () =>
+      client.emailDeliveryRequest.updateMany({
+        where: { id: input.id, status: 'queued', leaseOwner: input.owner },
+        data: {
+          status: 'failed',
+          lastAttemptAt: input.failedAt,
+          lastErrorCode: input.errorCode,
+          payloadCiphertext: null,
+          completedAt: input.failedAt,
+          leaseOwner: null,
+          leaseExpiresAt: null,
+        },
+      }),
+    );
   }
 
   async failExhausted(
@@ -493,23 +439,36 @@ export class PostgresEmailDeliveryRequestRepository
       owner: string;
     },
   ): Promise<EmailDeliveryRequestRecord> {
-    return this.apply(client, MARK_CANCELLED_SQL, [
-      input.id,
-      input.reason,
-      input.cancelledAt,
-      input.owner,
-    ]);
+    return this.apply(client, input.id, () =>
+      client.emailDeliveryRequest.updateMany({
+        where: { id: input.id, status: 'queued', leaseOwner: input.owner },
+        data: {
+          status: 'cancelled',
+          cancelReason: input.reason,
+          payloadCiphertext: null,
+          completedAt: input.cancelledAt,
+          leaseOwner: null,
+          leaseExpiresAt: null,
+        },
+      }),
+    );
   }
 
   async releaseDeferred(
     client: AuthSqlClient,
     input: { id: string; owner: string; retryAt: Date },
   ): Promise<EmailDeliveryRequestRecord> {
-    return this.apply(client, RELEASE_DEFERRED_SQL, [
-      input.id,
-      input.owner,
-      input.retryAt,
-    ]);
+    // Releases a claim this instance cannot finish and records nothing else:
+    // no attempt, no attempt time, no terminal state. The lease time moves to
+    // the retry time rather than being cleared, because the claim treats a
+    // lease in the future as held, so the row stays out of every batch until
+    // then instead of coming straight back on the next pass.
+    return this.apply(client, input.id, () =>
+      client.emailDeliveryRequest.updateMany({
+        where: { id: input.id, status: 'queued', leaseOwner: input.owner },
+        data: { leaseOwner: null, leaseExpiresAt: input.retryAt },
+      }),
+    );
   }
 
   async cancelStale(
@@ -570,35 +529,51 @@ export class PostgresEmailDeliveryRequestRepository
     client: AuthSqlClient,
     input: { id: string; reportedAt: Date },
   ): Promise<EmailDeliveryRequestRecord> {
-    return this.apply(client, MARK_FAILURE_REPORTED_SQL, [
-      input.id,
-      input.reportedAt,
-    ]);
+    // Written only after the signal was emitted, and it takes the lease with
+    // it, so a reported row is never claimed again. It requires the row to
+    // still be `failed`, which a terminal state can never leave.
+    return this.apply(client, input.id, () =>
+      client.emailDeliveryRequest.updateMany({
+        where: { id: input.id, status: 'failed' },
+        data: {
+          failureReportedAt: input.reportedAt,
+          failureNotifyLeaseExpiresAt: null,
+        },
+      }),
+    );
   }
 
   async releaseFailureNotification(
     client: AuthSqlClient,
     input: { id: string },
   ): Promise<EmailDeliveryRequestRecord> {
-    return this.apply(client, RELEASE_FAILURE_NOTIFICATION_SQL, [input.id]);
+    // Gives up a claim without emitting, so a callback that threw does not
+    // lock the row out until the lease lapses.
+    return this.apply(client, input.id, () =>
+      client.emailDeliveryRequest.updateMany({
+        where: { id: input.id, status: 'failed', failureReportedAt: null },
+        data: { failureNotifyLeaseExpiresAt: null },
+      }),
+    );
   }
 
   private async apply(
     client: AuthSqlClient,
-    sql: string,
-    values: readonly unknown[],
+    id: string,
+    update: () => Promise<{ readonly count: number }>,
   ): Promise<EmailDeliveryRequestRecord> {
-    const updated = await authQueryRows(client, sql, values);
-    if (updated.length === 0) {
+    const updated = await update();
+    if (updated.count === 0) {
       throw new AppError({
         code: 'INTERNAL_ERROR',
         message: 'Email delivery request is not in a queued state',
         retryable: false,
       });
     }
-    const rows = await authQueryRows(client, SELECT_ROW, [values[0]]);
-    const row = rows[0];
-    if (row === undefined) {
+    const row = await client.emailDeliveryRequest.findUnique({
+      where: { id },
+    });
+    if (row === null) {
       throw storeError('Email delivery request is unavailable');
     }
     return toRecord(row);

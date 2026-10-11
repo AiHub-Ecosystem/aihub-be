@@ -119,3 +119,115 @@ export function interceptStatements(
 
   return wrap(prisma);
 }
+
+export interface ScriptedStatement {
+  /** The SQL text of a raw statement, or `model.action` of a delegate call. */
+  readonly name: string;
+  /** The raw values, or the single argument object of a delegate call. */
+  readonly args: readonly unknown[];
+  /** `0` outside any transaction, then one number per transaction opened. */
+  readonly transaction: number;
+}
+
+const DEFAULT_ANSWERS: Readonly<Record<string, unknown>> = {
+  updateMany: { count: 1 },
+  deleteMany: { count: 1 },
+  createMany: { count: 1 },
+  findFirst: null,
+  findUnique: null,
+  findMany: [],
+  count: 0,
+};
+
+/**
+ * A Prisma-shaped client that answers statements from a script and records each
+ * one with the transaction that issued it, so a spec can check what a unit of
+ * work wrote and that it rode one transaction, without a database.
+ *
+ * Statements are answered in the order they are issued: \`outside\` for those
+ * on the client itself, \`inside\` for those in the next transaction. An
+ * \`undefined\` entry, or running out of script, answers with the action's
+ * default (a count of one for a write, nothing for a read).
+ */
+export class ScriptedPrisma {
+  readonly statements: ScriptedStatement[] = [];
+  outside: unknown[] = [];
+  inside: unknown[] = [];
+  failure: unknown;
+  /** How many transactions this client was asked to open. */
+  opened = 0;
+
+  private answer(queue: unknown[], position: number, action: string): unknown {
+    const scripted = queue[position];
+    if (scripted !== undefined) {
+      return scripted;
+    }
+    if (action === '$queryRawUnsafe') return [];
+    if (action === '$executeRawUnsafe') return 1;
+    return action in DEFAULT_ANSWERS ? DEFAULT_ANSWERS[action] : {};
+  }
+
+  private surface(queue: () => unknown[], transaction: () => number) {
+    let position = 0;
+    const record = (name: string, args: readonly unknown[], action: string) => {
+      this.statements.push({ name, args, transaction: transaction() });
+      return this.answer(queue(), position++, action);
+    };
+
+    return new Proxy(
+      {},
+      {
+        get: (_target, property) => {
+          if (typeof property !== 'string') return undefined;
+          if (
+            property === '$queryRawUnsafe' ||
+            property === '$executeRawUnsafe'
+          ) {
+            return async (text: string, ...values: unknown[]) =>
+              record(text, values, property);
+          }
+          if (property.startsWith('$') || property === 'then') return undefined;
+          return new Proxy(
+            {},
+            {
+              get: (_delegate, action) =>
+                typeof action === 'string'
+                  ? async (argument: unknown) =>
+                      record(`${property}.${action}`, [argument], action)
+                  : undefined,
+            },
+          );
+        },
+      },
+    );
+  }
+
+  client(): PrismaClient {
+    const outside = this.surface(
+      () => this.outside,
+      () => 0,
+    ) as Record<string, unknown>;
+
+    return new Proxy(outside, {
+      get: (target, property) => {
+        if (property === '$transaction') {
+          return async (callback: (tx: unknown) => Promise<unknown>) => {
+            if (this.failure !== undefined) {
+              throw this.failure;
+            }
+            const transaction = ++this.opened;
+            const queue = this.inside;
+            this.inside = [];
+            return callback(
+              this.surface(
+                () => queue,
+                () => transaction,
+              ),
+            );
+          };
+        }
+        return Reflect.get(target, property);
+      },
+    }) as unknown as PrismaClient;
+  }
+}
