@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import type {
   SpeakingAudioUploadLookup,
   SpeakingAudioUploadOwner,
@@ -449,7 +450,10 @@ export class PostgresSpeakingAudioUploadRepository
     run: (client: Queryable) => Promise<T>,
   ): Promise<T> {
     try {
-      return await this.client.$transaction((client) => run(client));
+      return await this.client.$transaction(
+        (client) => run(client),
+        CONTROL_PLANE_TRANSACTION_OPTIONS,
+      );
     } catch (error) {
       if (error instanceof AppError) {
         throw error;

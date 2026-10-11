@@ -35,6 +35,7 @@ function run(command, args) {
 }
 
 const prisma = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+rmSync(GENERATED, { force: true, recursive: true });
 run(prisma, ['prisma', 'generate']);
 
 if (process.argv.includes('--runtime')) {

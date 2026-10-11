@@ -18,7 +18,10 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
+
+const require = createRequire(import.meta.url);
 
 const MIGRATIONS_DIR = 'database/migrations';
 const SCHEMA = 'prisma/schema.prisma';
