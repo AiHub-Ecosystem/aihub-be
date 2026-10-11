@@ -445,7 +445,7 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
 export class RedisAuthFailureCounter implements AuthFailureCounterPort {
   private readonly client: RedisIdentityClient | undefined;
   private readonly logger: Pick<Logger, 'warn' | 'log'>;
-  private redisIsDegraded = false;
+  private readonly degradedOperations = new Set<'read' | 'write'>();
 
   constructor(
     url: string,
@@ -466,10 +466,10 @@ export class RedisAuthFailureCounter implements AuthFailureCounterPort {
     try {
       const value = await this.client.get(`aihub:v1:authfail:${ip}`);
       const count = Number(value ?? '0');
-      this.reportRecovered();
+      this.reportRecovered('read');
       return Number.isInteger(count) && count >= 0 ? count : 0;
     } catch {
-      this.reportDegraded();
+      this.reportDegraded('read');
       return 0;
     }
   }
@@ -488,10 +488,10 @@ export class RedisAuthFailureCounter implements AuthFailureCounterPort {
         key,
         300,
       );
-      this.reportRecovered();
+      this.reportRecovered('write');
       return count;
     } catch {
-      this.reportDegraded();
+      this.reportDegraded('write');
       return 0;
     }
   }
@@ -500,23 +500,26 @@ export class RedisAuthFailureCounter implements AuthFailureCounterPort {
     await this.client?.quit().catch(() => undefined);
   }
 
-  private reportDegraded(): void {
-    if (this.redisIsDegraded) {
+  private reportDegraded(operation: 'read' | 'write'): void {
+    const wasDegraded = this.degradedOperations.size > 0;
+    this.degradedOperations.add(operation);
+    if (wasDegraded) {
       return;
     }
 
-    this.redisIsDegraded = true;
     this.logger.warn(
       'Redis API-key authentication failure counter unavailable; brute-force protection is failing open until it recovers',
     );
   }
 
-  private reportRecovered(): void {
-    if (!this.redisIsDegraded) {
+  private reportRecovered(operation: 'read' | 'write'): void {
+    if (
+      !this.degradedOperations.delete(operation) ||
+      this.degradedOperations.size > 0
+    ) {
       return;
     }
 
-    this.redisIsDegraded = false;
     this.logger.log('Redis API-key authentication failure counter recovered');
   }
 }

@@ -170,6 +170,25 @@ describe('RedisIdentityStore', () => {
     },
   );
 
+  it('keeps a failed counter write degraded across successful reads', async () => {
+    const redis = new FakeRedis();
+    redis.failTtlSetup = true;
+    const logger = new FakeLogger();
+    const counter = new RedisAuthFailureCounter('', redis, logger);
+
+    await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(0);
+    await expect(counter.get('203.0.113.10')).resolves.toBe(0);
+    await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(0);
+
+    expect(logger.warnings).toHaveLength(1);
+    expect(logger.logs).toHaveLength(0);
+
+    redis.failTtlSetup = false;
+    await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(1);
+    expect(logger.warnings).toHaveLength(1);
+    expect(logger.logs).toHaveLength(1);
+  });
+
   it('stores JWKS metadata for the stale-cache window and gates refreshes per organization', async () => {
     const redis = new FakeRedis();
     const store = new RedisIdentityStore('', redis);
