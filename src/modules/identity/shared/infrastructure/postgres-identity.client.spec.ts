@@ -20,8 +20,10 @@ function deferred<T>() {
 
 function identityClient(
   query: (...args: unknown[]) => Promise<readonly Record<string, unknown>[]>,
+  execute: (...args: unknown[]) => Promise<number> = async () => 0,
 ) {
   const queryRaw = jest.fn(query);
+  const executeRaw = jest.fn(execute);
   let outcome: 'committed' | 'rolled back' | undefined;
   const transaction = jest.fn(
     async (
@@ -31,6 +33,7 @@ function identityClient(
       try {
         const result = await callback({
           $queryRawUnsafe: queryRaw,
+          $executeRawUnsafe: executeRaw,
         } as unknown as Prisma.TransactionClient);
         outcome = 'committed';
         return result;
@@ -42,12 +45,14 @@ function identityClient(
   );
   const prisma = {
     $queryRawUnsafe: queryRaw,
+    $executeRawUnsafe: executeRaw,
     $transaction: transaction,
   } as unknown as PrismaClient;
 
   return {
     client: createIdentityTransactionRunner(() => prisma),
     queryRaw,
+    executeRaw,
     transaction,
     outcome: () => outcome,
   };
@@ -135,6 +140,24 @@ describe('Identity transaction lifetime on Prisma', () => {
       }),
     ).rejects.toBe(queryError);
     expect(outcome()).toBe('rolled back');
+  });
+
+  it('executes a no-result write on the caller transaction', async () => {
+    const { client, queryRaw, executeRaw, outcome } = identityClient(
+      async () => [],
+    );
+
+    await expect(
+      client.transaction((handle) =>
+        handle.query('INSERT INTO email_delivery_requests (id) VALUES ($1)', [
+          'edr_01J00000000000000000000000',
+        ]),
+      ),
+    ).resolves.toEqual([]);
+
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(outcome()).toBe('committed');
   });
 
   it('maps raw values back to the PostgreSQL client types', async () => {

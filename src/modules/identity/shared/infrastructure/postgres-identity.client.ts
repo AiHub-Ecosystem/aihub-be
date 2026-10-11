@@ -31,7 +31,10 @@ class PostgresIdentityTransactionExpiredError extends Error {
   }
 }
 
-type PrismaRawQueryClient = Pick<PrismaClient, '$queryRawUnsafe'>;
+type PrismaRawQueryClient = Pick<
+  PrismaClient,
+  '$queryRawUnsafe' | '$executeRawUnsafe'
+>;
 
 function normalizeRawValue(value: unknown): unknown {
   if (typeof value === 'bigint') {
@@ -63,6 +66,13 @@ function queryRows(
   text: string,
   values: readonly unknown[],
 ): Promise<readonly unknown[]> {
+  // shortcut: route only no-RETURNING DML to executeRaw; extend if a new statement form is added.
+  if (
+    /^\s*(?:INSERT|UPDATE|DELETE)\b/i.test(text) &&
+    !/\bRETURNING\b/i.test(text)
+  ) {
+    return client.$executeRawUnsafe(text, ...values).then(() => []);
+  }
   return client
     .$queryRawUnsafe<readonly Record<string, unknown>[]>(text, ...values)
     .then(normalizeRawRows);
