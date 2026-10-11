@@ -35,6 +35,7 @@ import type {
   IdempotencyWork,
 } from '@/modules/idempotency/application/idempotency-service.port';
 import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
+import { ApiKeyGuard } from '@/modules/identity/api-keys/presentation/api-key.guard';
 import type {
   UsageAggregate,
   UsageAggregateQuery,
@@ -487,6 +488,14 @@ describe('request completion log over the HTTP boundary', () => {
   });
 
   it('still writes one event for a body rejected before the application runs', async () => {
+    const totalCountBefore = await metricValue(
+      app,
+      'aihub_request_duration_seconds_count',
+    );
+    const admissionCountBefore = await metricValue(
+      app,
+      'aihub_admission_duration_seconds_count',
+    );
     const response = await app.inject({
       method: 'POST',
       url: GRADE_URL,
@@ -504,6 +513,19 @@ describe('request completion log over the HTTP boundary', () => {
         outcome: 'client_error',
         error_code: 'PAYLOAD_TOO_LARGE',
       }),
+    );
+    expect(
+      (await metricValue(app, 'aihub_request_duration_seconds_count')) -
+        totalCountBefore,
+    ).toBe(1);
+    expect(
+      (await metricValue(app, 'aihub_admission_duration_seconds_count')) -
+        admissionCountBefore,
+    ).toBe(1);
+
+    const metrics = (await app.inject({ method: 'GET', url: '/metrics' })).body;
+    expect(metrics).toContain(
+      'aihub_request_duration_seconds_count{operation="writing.task1.grade"}',
     );
   });
 
@@ -552,7 +574,23 @@ describe('request completion log over the HTTP boundary', () => {
     expect(await metricValue(app, 'aihub_requests_total')).toBe(before);
   });
 
-  it('omits the organization keys entirely for a request that never authenticated', async () => {
+  it('records a delayed API-key refusal without creating Metering evidence', async () => {
+    const delayMs = 75;
+    const totalBefore = await metricValue(
+      app,
+      'aihub_request_duration_seconds_sum',
+    );
+    const admissionBefore = await metricValue(
+      app,
+      'aihub_admission_duration_seconds_sum',
+    );
+    const original = ApiKeyGuard.prototype.canActivate;
+    const delayGuard = jest
+      .spyOn(ApiKeyGuard.prototype, 'canActivate')
+      .mockImplementation(async function (this: ApiKeyGuard, context) {
+        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+        return original.call(this, context);
+      });
     runtimeConfiguration.AIHUB_ALLOW_UNAUTHENTICATED_DEV = false;
 
     try {
@@ -565,13 +603,24 @@ describe('request completion log over the HTTP boundary', () => {
       expect(response.statusCode).toBe(401);
     } finally {
       runtimeConfiguration.AIHUB_ALLOW_UNAUTHENTICATED_DEV = true;
+      delayGuard.mockRestore();
     }
 
     const event = log.only();
+    expect(event['total_ms']).toBeGreaterThanOrEqual(delayMs - 10);
+    expect(event['admission_ms']).toBeGreaterThanOrEqual(delayMs - 10);
     expect(event['outcome']).toBe('client_error');
     expect(Object.keys(event)).not.toContain('org_id');
     expect(Object.keys(event)).not.toContain('operation');
     expect(Object.keys(event)).not.toContain('environment');
+    expect(
+      (await metricValue(app, 'aihub_request_duration_seconds_sum')) -
+        totalBefore,
+    ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
+    expect(
+      (await metricValue(app, 'aihub_admission_duration_seconds_sum')) -
+        admissionBefore,
+    ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
   });
 
   it('writes no event for a request the client abandoned before a response', async () => {
