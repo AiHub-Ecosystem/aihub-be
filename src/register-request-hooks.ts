@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 
 import { registerBodySizeGuard } from './common/http/body-size.hook';
 import { registerRequestLifecycle } from './common/http/request-lifecycle.hook';
+import { registerRequestTiming } from './common/http/request-timing.hook';
 import { registerRequestTracing } from './common/http/request-tracing.hook';
 import { registerSecurityHeaders } from './common/http/security-headers.hook';
 import { registerRequestCompletionLog } from './modules/metering/presentation/request-completion-log.hook';
@@ -20,6 +21,9 @@ export function registerRequestHooks(
   instance: FastifyInstance,
   tracer: Tracer | undefined,
 ): void {
+  // Capture ingress before tracing, body-size rejection, parsing, and Nest guards.
+  registerRequestTiming(instance);
+
   // Start the root span before other request hooks. Route templates keep paths
   // bounded and prevent raw request URLs or query values entering traces.
   if (tracer !== undefined) {

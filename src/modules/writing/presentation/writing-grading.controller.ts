@@ -7,6 +7,7 @@ import {
   type RequestLifecycleState,
   getRequestLifecycle,
 } from '@/common/http/request-lifecycle.hook';
+import { markRequestAdmission } from '@/common/http/request-timing.hook';
 import {
   type GradeResponse,
   GradeTask1RequestSchema,
@@ -104,6 +105,7 @@ export class WritingGradingController {
     const lifecycle = requestLifecycle(request);
 
     try {
+      markRequestAdmission(request.raw);
       return await this.orchestrator.execute({
         operation: TASK1_OPERATION,
         input,
@@ -132,6 +134,7 @@ export class WritingGradingController {
     const lifecycle = requestLifecycle(request);
 
     try {
+      markRequestAdmission(request.raw);
       return await this.orchestrator.execute({
         operation: TASK2_OPERATION,
         input,

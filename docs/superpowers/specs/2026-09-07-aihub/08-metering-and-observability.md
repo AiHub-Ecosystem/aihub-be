@@ -111,6 +111,7 @@ idempotency cleanup are separate follow-ups; the existing
   "http_status": 200,
   "outcome": "success",
   "total_ms": 840,
+  "admission_ms": 24,
   "downstream_ms": 810,
   "ai_processing_ms": 790,
   "total_tokens": 1130,
@@ -118,7 +119,11 @@ idempotency cleanup are separate follow-ups; the existing
 }
 ```
 
-Identical schema across all requests, including errors. Triage incidents via `request_id`; filter customer usage via `org_id`.
+`admission_ms` records time from ingress until dispatch starts or the request
+is refused before dispatch. `total_ms` starts when Fastify receives the request
+and covers body parsing, authentication, identity checks, rate limits, quota
+admission, and gateway work. Triage incidents via `request_id`; filter customer
+usage via `org_id`.
 
 Downstream failure logs append internal diagnostic payloads ([07 §J.4](07-reliability-and-errors.md#j4-internal-downstream-error-us08)) — isolated internally, never dispatched to clients.
 
@@ -145,11 +150,12 @@ Per D1 §6.1 and target architecture §18:
 
 Essay content represents PII belonging to our customer's end-users — logging it creates legal liability, not just technical bad practice. Enforced via a **redaction filter** in the logger alongside **automated test verification** ([10 §N.7](10-deployment-roadmap.md#n7-testing-strategy)).
 
-## L.2 Metrics Inventory — Exactly 8 Metrics
+## L.2 Metrics Inventory
 
 ```
 aihub_requests_total{operation,status,outcome}
 aihub_request_duration_seconds{operation}          histogram
+aihub_admission_duration_seconds{operation}       histogram
 aihub_downstream_duration_seconds{operation}       histogram
 aihub_tokens_total{operation}                       counter
 aihub_rejected_total{reason}                       rate_limit|quota|concurrency|auth
@@ -158,7 +164,10 @@ aihub_metering_incomplete_total{operation}
 aihub_redis_unavailable_total
 ```
 
-Answers every performance question raised in brief §13.12. `gateway_overhead` **requires no dedicated metric** — it is derived directly from the delta between the first two histograms.
+The operation label comes from the bounded operation catalog. `gateway_overhead`
+**requires no dedicated metric** — it is derived directly from total and
+downstream durations; `admission_ms` exposes the time before gateway
+orchestration separately.
 
 `aihub_tokens_total` carries an `operation` label only. An `org_id` label was
 specified here originally and is deliberately dropped: it is unbounded, so

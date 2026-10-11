@@ -9,6 +9,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { type Observable, mergeMap } from 'rxjs';
 
 import { isOperationId } from '@/catalog/operation-id';
+import { requestDurationMs } from '@/common/http/request-timing.hook';
 import {
   type SuccessEnvelope,
   buildSuccessEnvelope,
@@ -96,7 +97,10 @@ export class SuccessEnvelopeInterceptor implements NestInterceptor {
           });
         }
 
-        const totalMs = Math.max(0, Math.round(performance.now() - startedAt));
+        const totalMs = requestDurationMs(
+          request.raw,
+          performance.now() - startedAt,
+        );
         const requestId = isRequestId(request.id)
           ? request.id
           : String(request.id);

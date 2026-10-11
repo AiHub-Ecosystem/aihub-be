@@ -26,6 +26,7 @@ import { appConfig } from '@/config/runtime-configuration';
 import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
 import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
 import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
+import { QuotaGuard } from '@/modules/gateway/presentation/quota.guard';
 import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,
@@ -308,6 +309,7 @@ describe('request completion log over the HTTP boundary', () => {
       route: GRADE_URL,
       http_status: 200,
       total_ms: expect.any(Number),
+      admission_ms: expect.any(Number),
       outcome: 'success',
       org_id: 'local-development',
       operation: 'writing.task1.grade',
@@ -326,6 +328,98 @@ describe('request completion log over the HTTP boundary', () => {
     expect(response.statusCode).toBe(200);
     expect(usageRepository.records).toHaveLength(1);
     expect(log.only()['total_ms']).toBe(usageRepository.records[0]?.totalMs);
+  });
+
+  it('includes a slow real guard in response, log, and histograms', async () => {
+    const delayMs = 75;
+    const original = QuotaGuard.prototype.canActivate;
+    const totalBefore = await metricValue(
+      app,
+      'aihub_request_duration_seconds_sum',
+    );
+    const admissionBefore = await metricValue(
+      app,
+      'aihub_admission_duration_seconds_sum',
+    );
+    const delayGuard = jest
+      .spyOn(QuotaGuard.prototype, 'canActivate')
+      .mockImplementation(async function (this: QuotaGuard, context) {
+        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+        return original.call(this, context);
+      });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: GRADE_URL,
+        headers: { 'idempotency-key': 'completion-slow-guard' },
+        payload: VALID_BODY,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const totalMs = (
+        response.json() as { meta: { timing: { total_ms: number } } }
+      ).meta.timing.total_ms;
+      const event = log.only();
+      expect(totalMs).toBeGreaterThanOrEqual(delayMs - 10);
+      expect(event['total_ms']).toBe(totalMs);
+      expect(event['admission_ms']).toBeGreaterThanOrEqual(delayMs - 10);
+      expect(
+        (await metricValue(app, 'aihub_request_duration_seconds_sum')) -
+          totalBefore,
+      ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
+      expect(
+        (await metricValue(app, 'aihub_admission_duration_seconds_sum')) -
+          admissionBefore,
+      ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
+    } finally {
+      delayGuard.mockRestore();
+    }
+  });
+
+  it('records guard refusal time before dispatch in the log and histograms', async () => {
+    const delayMs = 75;
+    const totalBefore = await metricValue(
+      app,
+      'aihub_request_duration_seconds_sum',
+    );
+    const admissionBefore = await metricValue(
+      app,
+      'aihub_admission_duration_seconds_sum',
+    );
+    const refusalGuard = jest
+      .spyOn(QuotaGuard.prototype, 'canActivate')
+      .mockImplementation(async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+        throw new AppError({
+          code: 'QUOTA_EXCEEDED',
+          message: 'Monthly request quota exceeded',
+          retryable: true,
+        });
+      });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: GRADE_URL,
+        payload: VALID_BODY,
+      });
+
+      expect(response.statusCode).toBe(429);
+      const event = log.only();
+      expect(event['total_ms']).toBeGreaterThanOrEqual(delayMs - 10);
+      expect(event['admission_ms']).toBeGreaterThanOrEqual(delayMs - 10);
+      expect(
+        (await metricValue(app, 'aihub_request_duration_seconds_sum')) -
+          totalBefore,
+      ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
+      expect(
+        (await metricValue(app, 'aihub_admission_duration_seconds_sum')) -
+          admissionBefore,
+      ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
+    } finally {
+      refusalGuard.mockRestore();
+    }
   });
 
   it('writes one event with the public error code for a validation failure', async () => {

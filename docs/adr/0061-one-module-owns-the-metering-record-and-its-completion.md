@@ -1,6 +1,6 @@
 # ADR-0061: One module owns the Metering record and its completion
 
-- Status: Accepted
+- Status: Accepted; timing clauses amended by [ADR-0089](0089-ingress-based-request-timing.md)
 - Related issue: #181
 - Related: [ADR-0016](0016-metering-boundary-and-billing-evidence.md), [ADR-0057](0057-graded-request-order-is-a-declared-contract.md), [ADR-0058](0058-concurrency-permit-is-acquired-and-released-by-one-unit.md)
 
@@ -63,15 +63,9 @@ forbidding `src/common` from importing `src/modules` enforces that boundary
 from now on; without it the inward dependency could return unnoticed.
 
 Evidence is created lazily, so the request-start metering hook is no longer
-needed. A failed request's `total_ms` now comes from Fastify's own response
-window, which starts once the reply is being sent, so a recorded failure no
-longer includes body-parse time; that mattered most for large multipart
-uploads, and it is a narrowing of a recorded value rather than a guess at a
-new one. A successful request keeps measuring from its own interceptor, so
-the two windows stay deliberately different, as they are today; unifying them
-changes recorded durations and is a separate decision. Removing the hook also
-removes the only reader of the recorded receive time, which was never carried
-into a Metering record.
+needed. The timing behavior originally chosen here was later amended by
+ADR-0089: success and failure now share the Fastify ingress clock, while
+`admission_ms` records the pre-orchestration interval separately.
 
 The one-call-twice case is still covered by a behaviour test that calls the
 filter twice and asserts a single record, so the guarantee is proven at the

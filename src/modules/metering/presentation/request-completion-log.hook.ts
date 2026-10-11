@@ -3,6 +3,10 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { OperationId } from '@/catalog/operation-id';
 import type { ErrorCode } from '@/common/errors/error-code';
 import { isHealthProbe } from '@/common/http/request-path';
+import {
+  requestAdmissionMs,
+  requestDurationMs,
+} from '@/common/http/request-timing.hook';
 import { routeTemplate } from '@/common/http/request-tracing.hook';
 import {
   METRICS_ROUTE_PATH,
@@ -28,6 +32,7 @@ interface RequestCompletionEvent {
   readonly route: string;
   readonly http_status: number;
   readonly total_ms: number;
+  readonly admission_ms?: number;
   readonly outcome: MeteringOutcome;
   readonly error_code?: ErrorCode;
   readonly org_id?: string;
@@ -49,6 +54,7 @@ function completionEvent(
   const errorCode = request.aihubFailureCode;
   const traceId = request.aihubTraceId;
   const statusCode = reply.statusCode;
+  const admissionMs = requestAdmissionMs(request.raw);
 
   return {
     event: COMPLETION_EVENT,
@@ -56,12 +62,11 @@ function completionEvent(
     method: request.method,
     route: routeTemplate(request),
     http_status: statusCode,
-    // An authenticated request reports the number its Metering record was
-    // written with, so the line and the record cannot disagree about one
-    // request. A request that never authenticated has no record, and reports
-    // Fastify's own response window: from the request arriving to the response
-    // finishing, which excludes body-parse time.
-    total_ms: evidence?.totalMs ?? Math.max(0, Math.round(reply.elapsedTime)),
+    // Authenticated requests reuse the Metering value; requests without a
+    // record use the same ingress clock directly.
+    total_ms:
+      evidence?.totalMs ?? requestDurationMs(request.raw, reply.elapsedTime),
+    ...(admissionMs === undefined ? {} : { admission_ms: admissionMs }),
     outcome: requestOutcome(statusCode, errorCode),
     ...(errorCode === undefined ? {} : { error_code: errorCode }),
     ...(evidence === undefined
@@ -98,12 +103,15 @@ function recordRequestMetrics(
 
   const outcome = requestOutcome(reply.statusCode, request.aihubFailureCode);
   const tokens = tokensOf(evidence);
+  const admissionMs = requestAdmissionMs(request.raw);
 
   recordCompletedRequest({
     operation: evidence.operation,
     statusCode: reply.statusCode,
     outcome,
-    totalMs: evidence.totalMs ?? Math.max(0, Math.round(reply.elapsedTime)),
+    totalMs:
+      evidence.totalMs ?? requestDurationMs(request.raw, reply.elapsedTime),
+    ...(admissionMs === undefined ? {} : { admissionMs }),
     ...(evidence.downstreamMs === undefined
       ? {}
       : { downstreamMs: evidence.downstreamMs }),

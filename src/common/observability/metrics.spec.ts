@@ -124,6 +124,24 @@ describe('request lifecycle metrics', () => {
     expect(downstream).toBeLessThan(100);
   });
 
+  it('records admission duration under the bounded operation label', async () => {
+    recordCompletedRequest({
+      operation: GRADE,
+      statusCode: 200,
+      outcome: 'success',
+      admissionMs: 75,
+    });
+
+    expect(
+      Number(
+        await sample('aihub_admission_duration_seconds_sum', {
+          operation: GRADE,
+        }),
+      ),
+    ).toBeCloseTo(0.075);
+    expect(await getMetrics()).not.toContain('org_id');
+  });
+
   it('never emits a series carrying an organization identifier', async () => {
     recordCompletedRequest({
       operation: GRADE,

@@ -739,14 +739,14 @@ Every successful grading response has the same shape:
 `data` is the operation's own contract. Grading responses share these `meta`
 fields:
 
-| Field                        | Meaning                                                           |
-| ---------------------------- | ----------------------------------------------------------------- |
-| `request_id`                 | AIHUB's id for this request. **Quote it in any support request**  |
-| `correlation_id`             | Echoed from your `X-Correlation-Id` header, if you sent one       |
-| `service`, `operation`       | What ran                                                          |
-| `timing.downstream_ms`       | Elapsed time for the downstream HTTP call, including network time |
-| `timing.gateway_overhead_ms` | Time AIHUB spent outside that downstream call                     |
-| `timing.total_ms`            | Total time measured by the grading response                       |
+| Field                        | Meaning                                                                                                          |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `request_id`                 | AIHUB's id for this request. **Quote it in any support request**                                                 |
+| `correlation_id`             | Echoed from your `X-Correlation-Id` header, if you sent one                                                      |
+| `service`, `operation`       | What ran                                                                                                         |
+| `timing.downstream_ms`       | Elapsed time for the downstream HTTP call, including network time                                                |
+| `timing.gateway_overhead_ms` | Time AIHUB spent outside that downstream call                                                                    |
+| `timing.total_ms`            | From ingress through response, including parsing, authentication, identity, rate limits, quota, and gateway work |
 
 Send `X-Correlation-Id` with your own trace id to stitch your logs to ours.
 

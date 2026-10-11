@@ -59,11 +59,11 @@ Controllers merely declare operations and invoke the dispatcher. **No controller
 
 ```
 Customer BE ──X-API-Key, X-User-Identity, Idempotency-Key──► AIHUB
-                                          t0 ─┐
-   req_01J... ; env=production                │  steps 1-11: ~3-8ms
+                                          t0 ─┐ request received
+   req_01J... ; env=production                │  body parse + steps 1-11
    org_abc ; actor=student_123                │
    scope OK ; quota OK ; idem: not seen       │
-                                          t1 ─┤
+                                          t1 ─┤ gateway dispatch admitted
    ──Bearer <internal JWT, exp=t1+60s>──► ai-writing        │
        POST /grading-feedback-task1                         │ downstream_ms
    ◄── { ...fields, usage{}, metrics{} } ──                 │
@@ -72,8 +72,15 @@ Customer BE ──X-API-Key, X-User-Identity, Idempotency-Key──► AIHUB
                                           t3 ─┘
 ◄── 200 { data, meta{ request_id, usage, timing } }
 
-total_ms = t3-t0    downstream_ms = t2-t1    gateway_overhead_ms = total - downstream
+total_ms = t3-t0    admission_ms = t1-t0
+downstream_ms = t2-t1    gateway_overhead_ms = total - downstream
 ```
+
+The shared monotonic clock starts in Fastify's first `onRequest` hook, before
+body parsing and the Nest guard chain. `admission_ms` is captured after guards
+and body validation, immediately before the controller starts gateway
+orchestration; it is emitted in the completion log and an operation-labeled
+histogram, not in the customer response or durable usage record.
 
 Timing definitions conform strictly to D1 §14 and target architecture §17.1. We do not assume `total_ms = gateway_overhead_ms + ai_processing_ms`, because `downstream_ms` includes network transmission and overhead within the AI Service itself.
 
