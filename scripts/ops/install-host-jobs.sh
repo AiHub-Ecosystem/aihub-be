@@ -248,18 +248,18 @@ install -m 644 "$candidate_template" "$template_next"
 transaction_active=true
 mv -f -- "$wrapper_next" "$wrapper"
 mv -f -- "$template_next" "$template"
-crontab "$next"
-crontab -l >"$readback"
-if ! cmp -s "$next" "$readback"; then
-  printf 'installed crontab differs from the versioned AIHUB schedule\n' >&2
-  exit 1
-fi
 if "$wrapper" report; then
   :
 else
   code=$?
   printf 'installed scheduled-job smoke failed\n' >&2
   exit "$code"
+fi
+crontab "$next"
+crontab -l >"$readback"
+if ! cmp -s "$next" "$readback"; then
+  printf 'installed crontab differs from the versioned AIHUB schedule\n' >&2
+  exit 1
 fi
 transaction_active=false
 if [[ -d "$state_dir" ]]; then

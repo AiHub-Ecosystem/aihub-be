@@ -62,6 +62,11 @@ while (($#)); do
 done
 printf '%s\n' "$service" >>"$FAKE_DOCKER_CALLS"
 call_count="$(wc -l <"$FAKE_DOCKER_CALLS")"
+if [[ "${FAKE_EXPECT_SUSPENDED_CRON:-false}" == true ]] &&
+  grep -Eq '^(# BEGIN AIHUB MANAGED JOBS$|.*host-scheduled-job\.sh)' "$FAKE_CRONTAB_FILE"; then
+  printf 'managed AIHUB schedule was activated before wrapper smoke\n' >&2
+  exit 97
+fi
 if [[ "${FAKE_DOCKER_FAIL_SERVICE:-}" == "$service" ]] ||
   { [[ -n "${FAKE_DOCKER_FAIL_AFTER_CALLS:-}" ]] &&
     ((call_count > FAKE_DOCKER_FAIL_AFTER_CALLS)); }; then
@@ -164,7 +169,7 @@ assert_not_contains "$test_root/install-failed.out" 'restoring previous state'
 docker_call_count="$(wc -l <"$FAKE_DOCKER_CALLS")"
 fail_after_calls=$((docker_call_count + 2))
 set +e
-FAKE_DOCKER_FAIL_AFTER_CALLS="$fail_after_calls" APP_DIR="$app_dir" \
+FAKE_EXPECT_SUSPENDED_CRON=true FAKE_DOCKER_FAIL_AFTER_CALLS="$fail_after_calls" APP_DIR="$app_dir" \
   bash "$app_dir/scripts/ops/install-host-jobs.sh" \
   >"$test_root/install-smoke-failed.out" 2>&1
 install_status=$?
@@ -175,6 +180,7 @@ assert_contains "$app_dir/ops/host-jobs/aihub.crontab" 'old template must be res
 cmp -s "$test_root/crontab.before" "$FAKE_CRONTAB_FILE"
 assert_contains "$test_root/install-smoke-failed.out" 'installed scheduled-job smoke failed'
 assert_contains "$test_root/install-smoke-failed.out" 'scheduled host job activation failed; restoring the suspended state'
+assert_not_contains "$test_root/install-smoke-failed.out" 'managed AIHUB schedule was activated before wrapper smoke'
 
 set +e
 FAKE_CRONTAB_FAIL_ONCE=true FAKE_CRONTAB_FAIL_FILE="$test_root/crontab-fail-once" \
@@ -189,7 +195,7 @@ cmp -s "$test_root/crontab.before" "$FAKE_CRONTAB_FILE"
 assert_contains "$test_root/install-crontab-failed.out" 'scheduled host job activation failed; restoring the suspended state'
 assert_not_contains "$test_root/install-crontab-failed.out" 'scheduled host job rollback failed'
 
-APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh"
+FAKE_EXPECT_SUSPENDED_CRON=true APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh"
 assert_contains "$app_dir/scripts/ops/host-scheduled-job.sh" 'CONTAINER_CLI'
 assert_contains "$app_dir/ops/host-jobs/aihub.crontab" 'BEGIN AIHUB MANAGED JOBS'
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh"
