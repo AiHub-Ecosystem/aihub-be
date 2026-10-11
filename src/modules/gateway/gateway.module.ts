@@ -20,6 +20,11 @@ import {
   type DispatchAttemptRecordPort,
 } from '@/modules/metering/public/dispatch-attempts';
 import {
+  type PrismaClientHolder,
+  RUNTIME_PRISMA_CLIENT,
+} from '@/modules/persistence/application/persistence-client.port';
+import { PersistenceModule } from '@/modules/persistence/persistence.module';
+import {
   RUNTIME_CONNECTION_CONFIGURATION,
   type RuntimeConnectionConfigurationPort,
 } from '@/modules/secrets/application/runtime-connection-configuration.port';
@@ -52,6 +57,7 @@ import { ConfiguredTokenIssuer } from './infrastructure/configured-token-issuer'
 import { DownstreamHttpClient } from './infrastructure/downstream-http.client';
 import { HttpOperationDispatcher } from './infrastructure/http-operation-dispatcher';
 import { PostgresSandboxDispatchBudget } from './infrastructure/postgres-sandbox-dispatch-budget';
+import { createPrismaSandboxDispatchBudgetClient } from './infrastructure/prisma-sandbox-dispatch-budget.client';
 import { RedisConcurrencyLimiter } from './infrastructure/redis-concurrency-limiter';
 import {
   REDIS_GATEWAY_CLIENT,
@@ -70,6 +76,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     SecretsModule,
     IdempotencyModule,
     DispatchAttemptModule,
+    PersistenceModule,
   ],
   providers: [
     {
@@ -145,11 +152,11 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     },
     {
       provide: SANDBOX_DISPATCH_BUDGET,
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
-      useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
-      ): SandboxDispatchBudgetPort =>
-        new PostgresSandboxDispatchBudget(configuration.databaseUrl ?? ''),
+      inject: [RUNTIME_PRISMA_CLIENT],
+      useFactory: (runtime: PrismaClientHolder): SandboxDispatchBudgetPort =>
+        new PostgresSandboxDispatchBudget(
+          createPrismaSandboxDispatchBudgetClient(() => runtime.prisma),
+        ),
     },
     {
       provide: OPERATION_DISPATCHER,
