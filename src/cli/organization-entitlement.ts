@@ -67,7 +67,7 @@ export async function runGrantOrganizationEntitlementCommand(
   const repository =
     input.repository ??
     new PostgresOrganizationEntitlementRepository(
-      createOperatorIdentityClient(input.databaseUrl),
+      await createOperatorIdentityClient(input.databaseUrl),
     );
   const { result, context } = await runOperatorCommand(
     repository,

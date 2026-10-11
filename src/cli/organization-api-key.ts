@@ -51,14 +51,14 @@ export type RevokeOperatorApiKeyCliOutcome = RevokeOperatorApiKeyResult['kind'];
 
 const CACHE_CEILING = 'the key may still be accepted for up to 60 seconds';
 
-function openRepository(
+async function openRepository(
   databaseUrl: string,
   repository: OperatorApiKeyPort | undefined,
-): OperatorApiKeyPort {
+): Promise<OperatorApiKeyPort> {
   return (
     repository ??
     new PostgresOperatorApiKeyRepository(
-      createOperatorIdentityClient(databaseUrl),
+      await createOperatorIdentityClient(databaseUrl),
     )
   );
 }
@@ -73,7 +73,7 @@ export async function runCreateOperatorApiKeyCommand(
 ): Promise<CreateOperatorApiKeyCliOutcome> {
   const print = input.print ?? console.log;
   const emit = input.emit ?? console.error;
-  const repository = openRepository(input.databaseUrl, input.repository);
+  const repository = await openRepository(input.databaseUrl, input.repository);
   const { result } = await runOperatorCommand(
     repository,
     input.now,
@@ -113,7 +113,7 @@ export async function runRevokeOperatorApiKeyCommand(
   input: RevokeOperatorApiKeyCliInput,
 ): Promise<RevokeOperatorApiKeyCliOutcome> {
   const emit = input.emit ?? console.error;
-  const repository = openRepository(input.databaseUrl, input.repository);
+  const repository = await openRepository(input.databaseUrl, input.repository);
   const { result } = await runOperatorCommand(
     repository,
     input.now,

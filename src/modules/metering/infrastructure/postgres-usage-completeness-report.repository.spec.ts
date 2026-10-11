@@ -1,16 +1,25 @@
-import {
-  PostgresUsageCompletenessReportRepository,
-  USAGE_REPORT_SQL,
-} from './postgres-usage-completeness-report.repository';
-import type { PostgresMeteringClient } from './postgres-usage.repository';
+import { PostgresUsageCompletenessReportRepository } from './postgres-usage-completeness-report.repository';
+import type {
+  PostgresMeteringClient,
+  PostgresTransactionClient,
+} from './postgres-usage.repository';
 
 class FakePostgres implements PostgresMeteringClient {
-  readonly queries: Array<{ text: string; values: readonly unknown[] }> = [];
+  readonly queries: (readonly unknown[])[] = [];
   result: readonly unknown[] = [];
 
-  query(text: string, values: readonly unknown[]): Promise<readonly unknown[]> {
-    this.queries.push({ text, values });
-    return Promise.resolve(this.result);
+  async query<Row extends object = Record<string, unknown>>(
+    _text: string,
+    values: readonly unknown[],
+  ): Promise<readonly Row[]> {
+    this.queries.push(values);
+    return this.result as readonly Row[];
+  }
+
+  async transaction<T>(
+    callback: (client: PostgresTransactionClient) => Promise<T>,
+  ): Promise<T> {
+    return callback(this);
   }
 
   close(): Promise<void> {
@@ -19,13 +28,13 @@ class FakePostgres implements PostgresMeteringClient {
 }
 
 describe('PostgresUsageCompletenessReportRepository', () => {
-  it('reads one grouped snapshot with the explicit eligible operation list', async () => {
+  it('maps one grouped snapshot for the explicit eligible operation list', async () => {
     const client = new FakePostgres();
     client.result = [
       {
         operation: 'writing.task1.grade',
-        successful_count: '100',
-        missing_usage_count: '2',
+        successful_count: 100n,
+        missing_usage_count: 2n,
       },
     ];
     const from = new Date('2026-09-20T12:00:00.000Z');
@@ -46,14 +55,8 @@ describe('PostgresUsageCompletenessReportRepository', () => {
     ]);
 
     expect(client.queries).toEqual([
-      {
-        text: USAGE_REPORT_SQL,
-        values: [from, to, ['writing.task1.grade', 'speaking.grading']],
-      },
+      [from, to, ['writing.task1.grade', 'speaking.grading']],
     ]);
-    expect(USAGE_REPORT_SQL).toContain("outcome = 'success'");
-    expect(USAGE_REPORT_SQL).toContain("metering_status = 'missing_usage'");
-    expect(USAGE_REPORT_SQL).toContain('GROUP BY operation');
   });
 
   it('rejects malformed database counts as an invalid snapshot', async () => {

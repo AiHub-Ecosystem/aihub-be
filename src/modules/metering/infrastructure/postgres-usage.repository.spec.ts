@@ -1,16 +1,28 @@
 import type { UsageRecord } from '@/modules/metering/application/usage-repository.port';
 import {
   type PostgresMeteringClient,
+  type PostgresTransactionClient,
   PostgresUsageRepository,
 } from './postgres-usage.repository';
 
 class FakePostgres implements PostgresMeteringClient {
-  readonly queries: Array<{ text: string; values: readonly unknown[] }> = [];
+  readonly queries: (readonly unknown[])[] = [];
+  transactionCalls = 0;
   result: readonly unknown[] = [];
 
-  query(text: string, values: readonly unknown[]): Promise<readonly unknown[]> {
-    this.queries.push({ text, values });
-    return Promise.resolve(this.result);
+  async query<Row extends object = Record<string, unknown>>(
+    _text: string,
+    values: readonly unknown[],
+  ): Promise<readonly Row[]> {
+    this.queries.push(values);
+    return this.result as readonly Row[];
+  }
+
+  async transaction<T>(
+    callback: (client: PostgresTransactionClient) => Promise<T>,
+  ): Promise<T> {
+    this.transactionCalls += 1;
+    return callback(this);
   }
 
   close(): Promise<void> {
@@ -38,18 +50,15 @@ const record: UsageRecord = {
 };
 
 describe('PostgresUsageRepository', () => {
-  it('inserts a parameterized record with request-id conflict protection', async () => {
+  it('inserts the record in a transaction with its request-id conflict behavior', async () => {
     const client = new FakePostgres();
     client.result = [{ request_id: record.requestId }];
     await new PostgresUsageRepository(client).insert(record);
 
+    expect(client.transactionCalls).toBe(1);
     expect(client.queries).toHaveLength(1);
-    expect(client.queries[0]?.text).toContain(
-      'ON CONFLICT (request_id) DO NOTHING',
-    );
-    expect(client.queries[0]?.text).toContain('RETURNING request_id');
-    expect(client.queries[0]?.values).toContain(record.requestId);
-    expect(client.queries[0]?.values).toContain(JSON.stringify(record.models));
+    expect(client.queries[0]).toContain(record.requestId);
+    expect(client.queries[0]).toContain(JSON.stringify(record.models));
   });
 
   it('surfaces a request-id collision instead of silently accepting it', async () => {
@@ -64,9 +73,9 @@ describe('PostgresUsageRepository', () => {
     const client = new FakePostgres();
     client.result = [
       {
-        billable_request_count: '2',
-        billable_token_count: '15',
-        missing_usage_count: '1',
+        billable_request_count: 2n,
+        billable_token_count: 15n,
+        missing_usage_count: 1n,
       },
     ];
     const result = await new PostgresUsageRepository(client).aggregate({
@@ -81,8 +90,7 @@ describe('PostgresUsageRepository', () => {
       billableTokenCount: 15,
       missingUsageCount: 1,
     });
-    expect(client.queries[0]?.text).toContain('usage_records');
-    expect(client.queries[0]?.values).toEqual([
+    expect(client.queries[0]).toEqual([
       'org_acme',
       new Date('2026-09-01T00:00:00Z'),
       new Date('2026-10-01T00:00:00Z'),

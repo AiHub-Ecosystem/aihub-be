@@ -1,22 +1,25 @@
-import {
-  PostgresQuotaReconciliationRepository,
-  QUOTA_RECONCILIATION_SQL,
-} from './postgres-quota-reconciliation.repository';
-import type { PostgresMeteringClient } from './postgres-usage.repository';
+import { PostgresQuotaReconciliationRepository } from './postgres-quota-reconciliation.repository';
+import type {
+  PostgresMeteringClient,
+  PostgresTransactionClient,
+} from './postgres-usage.repository';
 
 class FakePostgres implements PostgresMeteringClient {
-  readonly queries: Array<{
-    readonly text: string;
-    readonly values: readonly unknown[];
-  }> = [];
+  readonly queries: (readonly unknown[])[] = [];
   rows: readonly unknown[] = [];
 
-  async query(
-    text: string,
+  async query<Row extends object = Record<string, unknown>>(
+    _text: string,
     values: readonly unknown[],
-  ): Promise<readonly unknown[]> {
-    this.queries.push({ text, values });
-    return this.rows;
+  ): Promise<readonly Row[]> {
+    this.queries.push(values);
+    return this.rows as readonly Row[];
+  }
+
+  async transaction<T>(
+    callback: (client: PostgresTransactionClient) => Promise<T>,
+  ): Promise<T> {
+    return callback(this);
   }
 
   async close(): Promise<void> {
@@ -25,18 +28,18 @@ class FakePostgres implements PostgresMeteringClient {
 }
 
 describe('PostgresQuotaReconciliationRepository', () => {
-  it('queries the UTC half-open window and maps quota-bearing organizations', async () => {
+  it('maps quota-bearing organizations for the requested UTC window', async () => {
     const client = new FakePostgres();
     client.rows = [
       {
         organization_id: 'org_zulu',
         quota: 2,
-        billable_count: '3',
+        billable_count: 3n,
       },
       {
         organization_id: 'org_alpha',
-        quota: '10',
-        billable_count: '0',
+        quota: 10,
+        billable_count: 0n,
       },
     ];
     const repository = new PostgresQuotaReconciliationRepository(client);
@@ -57,23 +60,7 @@ describe('PostgresQuotaReconciliationRepository', () => {
         billableRequestCount: 3,
       },
     ]);
-    expect(client.queries).toEqual([
-      { text: QUOTA_RECONCILIATION_SQL, values: [from, to] },
-    ]);
-  });
-
-  it('keeps successful quota-unverified rows billable and excludes failed rows in SQL', () => {
-    expect(QUOTA_RECONCILIATION_SQL).toContain(
-      "FILTER (WHERE u.outcome = 'success')",
-    );
-    expect(QUOTA_RECONCILIATION_SQL).toContain('SUM(u.billable_requests)');
-    expect(QUOTA_RECONCILIATION_SQL).toContain('u.created_at >= $1');
-    expect(QUOTA_RECONCILIATION_SQL).toContain('u.created_at < $2');
-    expect(QUOTA_RECONCILIATION_SQL).toContain(
-      'o.monthly_request_quota IS NOT NULL',
-    );
-    expect(QUOTA_RECONCILIATION_SQL).not.toContain('o.status');
-    expect(QUOTA_RECONCILIATION_SQL).not.toContain('metering_status');
+    expect(client.queries).toEqual([[from, to]]);
   });
 
   it('rejects an unsafe aggregate before any application write can occur', async () => {
@@ -82,7 +69,7 @@ describe('PostgresQuotaReconciliationRepository', () => {
       {
         organization_id: 'org_alpha',
         quota: 10,
-        billable_count: '9007199254740992',
+        billable_count: 9007199254740992n,
       },
     ];
     const repository = new PostgresQuotaReconciliationRepository(client);

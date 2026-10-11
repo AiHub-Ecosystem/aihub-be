@@ -29,7 +29,7 @@ export async function runAttachFirstOwnerCommand(
   const repository =
     input.repository ??
     new PostgresOrganizationFirstOwnerRepository(
-      createOperatorIdentityClient(input.databaseUrl),
+      await createOperatorIdentityClient(input.databaseUrl),
     );
   const execution = await runOperatorCommand(
     repository,

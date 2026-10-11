@@ -1,5 +1,5 @@
 import { parseUtcTimestamp } from '@/common/time/parse-utc-timestamp';
-import { createPostgresUsageCompletenessReportRepository } from '@/modules/metering/infrastructure/postgres-usage-completeness-report.repository';
+import { PostgresUsageCompletenessReportRepository } from '@/modules/metering/infrastructure/postgres-usage-completeness-report.repository';
 import {
   type UsageCompletenessReport,
   UsageCompletenessReportService,
@@ -13,6 +13,7 @@ import {
   UsagePruneError,
   calculateUsageRetentionCutoff,
 } from '@/modules/metering/public/usage-retention';
+import { createOperatorMeteringClient } from './operator-metering-client';
 
 export interface UsageReportCliInput {
   readonly databaseUrl: string;
@@ -149,7 +150,9 @@ export async function runUsageReportCommand(
   try {
     repository =
       input.repository ??
-      createPostgresUsageCompletenessReportRepository(input.databaseUrl);
+      new PostgresUsageCompletenessReportRepository(
+        await createOperatorMeteringClient(input.databaseUrl),
+      );
   } catch {
     const error = new UsageReportError(
       'USAGE_REPORT_DATABASE_FAILURE',

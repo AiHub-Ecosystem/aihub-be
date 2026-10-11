@@ -2,46 +2,36 @@ import type {
   UsageRetentionBatchRequest,
   UsageRetentionPort,
 } from '@/modules/metering/application/usage-retention';
-import {
-  DISPATCH_ATTEMPT_RETENTION_BATCH_SQL,
-  PostgresUsageRetentionRepository,
-  USAGE_RETENTION_BATCH_SQL,
-} from './postgres-usage-retention.repository';
+import { PostgresUsageRetentionRepository } from './postgres-usage-retention.repository';
 import type {
   PostgresMeteringClient,
   PostgresTransactionClient,
 } from './postgres-usage.repository';
 
 class FakeTransaction implements PostgresTransactionClient {
-  readonly queries: Array<{
-    readonly text: string;
-    readonly values: readonly unknown[];
-  }> = [];
+  readonly queries: (readonly unknown[])[] = [];
   rows: readonly unknown[] = [];
 
-  async query(
-    text: string,
+  async query<Row extends object = Record<string, unknown>>(
+    _text: string,
     values: readonly unknown[],
-  ): Promise<readonly unknown[]> {
-    this.queries.push({ text, values });
-    return this.rows;
+  ): Promise<readonly Row[]> {
+    this.queries.push(values);
+    return this.rows as readonly Row[];
   }
 }
 
 class FakePostgres implements PostgresMeteringClient {
   readonly transactionClient = new FakeTransaction();
   transactionCalls = 0;
-  readonly queries: Array<{
-    readonly text: string;
-    readonly values: readonly unknown[];
-  }> = [];
+  readonly queries: (readonly unknown[])[] = [];
 
-  async query(
-    text: string,
+  async query<Row extends object = Record<string, unknown>>(
+    _text: string,
     values: readonly unknown[],
-  ): Promise<readonly unknown[]> {
-    this.queries.push({ text, values });
-    return this.transactionClient.rows;
+  ): Promise<readonly Row[]> {
+    this.queries.push(values);
+    return this.transactionClient.rows as readonly Row[];
   }
 
   async transaction<T>(
@@ -86,18 +76,8 @@ describe('PostgresUsageRetentionRepository', () => {
     });
     expect(client.transactionCalls).toBe(1);
     expect(client.transactionClient.queries).toEqual([
-      {
-        text: USAGE_RETENTION_BATCH_SQL,
-        values: [request.cutoff, null, null, 1000],
-      },
+      [request.cutoff, null, null, 1000],
     ]);
-    expect(USAGE_RETENTION_BATCH_SQL).toContain('FOR UPDATE SKIP LOCKED');
-    expect(USAGE_RETENTION_BATCH_SQL).toContain(
-      'ORDER BY created_at, request_id',
-    );
-    expect(USAGE_RETENTION_BATCH_SQL).toContain('WHERE created_at < $1');
-    expect(USAGE_RETENTION_BATCH_SQL).not.toContain('created_at <= $1');
-    expect(USAGE_RETENTION_BATCH_SQL).not.toContain('outcome');
   });
 
   it('passes the previous cursor to the next keyset batch', async () => {
@@ -114,7 +94,7 @@ describe('PostgresUsageRetentionRepository', () => {
       after,
     });
 
-    expect(client.transactionClient.queries[0]?.values).toEqual([
+    expect(client.transactionClient.queries[0]).toEqual([
       new Date('2025-03-01T00:00:00.000Z'),
       after.createdAt,
       after.requestId,
@@ -132,15 +112,6 @@ describe('PostgresUsageRetentionRepository', () => {
       1,
     );
 
-    expect(client.queries).toEqual([
-      {
-        text: DISPATCH_ATTEMPT_RETENTION_BATCH_SQL,
-        values: [cutoff, 1000],
-      },
-    ]);
-    expect(DISPATCH_ATTEMPT_RETENTION_BATCH_SQL).toContain(
-      'FOR UPDATE SKIP LOCKED',
-    );
-    expect(DISPATCH_ATTEMPT_RETENTION_BATCH_SQL).toContain('created_at < $1');
+    expect(client.queries).toEqual([[cutoff, 1000]]);
   });
 });

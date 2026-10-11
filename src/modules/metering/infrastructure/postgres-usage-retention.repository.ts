@@ -5,11 +5,8 @@ import type {
   UsageRetentionPort,
 } from '@/modules/metering/application/usage-retention';
 import { compareUsageRetentionCursor } from '@/modules/metering/application/usage-retention';
-import {
-  type PostgresMeteringClient,
-  createPostgresMeteringClient,
-  isRecord,
-} from './postgres-usage.repository';
+import { isRecord } from './metering-row';
+import type { PostgresMeteringClient } from './prisma-metering.client';
 
 export const USAGE_RETENTION_BATCH_SQL = [
   '  WITH candidates AS (',
@@ -65,23 +62,31 @@ function cursorFromRow(value: unknown): UsageRetentionCursor {
   return { createdAt, requestId: value.request_id };
 }
 
+interface UsageRetentionRow {
+  readonly created_at: Date;
+  readonly request_id: string;
+}
+
+interface DispatchAttemptRetentionRow {
+  readonly attempt_id: string;
+}
+
 export class PostgresUsageRetentionRepository implements UsageRetentionPort {
   constructor(private readonly client: PostgresMeteringClient) {}
 
   async pruneBatch(
     request: UsageRetentionBatchRequest,
   ): Promise<UsageRetentionBatch> {
-    if (this.client.transaction === undefined) {
-      throw new Error('Postgres transactions are unavailable');
-    }
-
     return this.client.transaction(async (transaction) => {
-      const rows = await transaction.query(USAGE_RETENTION_BATCH_SQL, [
-        request.cutoff,
-        request.after?.createdAt ?? null,
-        request.after?.requestId ?? null,
-        request.batchSize,
-      ]);
+      const rows = await transaction.query<UsageRetentionRow>(
+        USAGE_RETENTION_BATCH_SQL,
+        [
+          request.cutoff,
+          request.after?.createdAt ?? null,
+          request.after?.requestId ?? null,
+          request.batchSize,
+        ],
+      );
       const cursors = rows.map(cursorFromRow).sort(compareUsageRetentionCursor);
       const nextCursor = cursors[cursors.length - 1];
       return nextCursor === undefined
@@ -94,22 +99,14 @@ export class PostgresUsageRetentionRepository implements UsageRetentionPort {
     cutoff: Date,
     batchSize: number,
   ): Promise<number> {
-    const rows = await this.client.query(DISPATCH_ATTEMPT_RETENTION_BATCH_SQL, [
-      cutoff,
-      batchSize,
-    ]);
+    const rows = await this.client.query<DispatchAttemptRetentionRow>(
+      DISPATCH_ATTEMPT_RETENTION_BATCH_SQL,
+      [cutoff, batchSize],
+    );
     return rows.length;
   }
 
   async close(): Promise<void> {
     await this.client.close();
   }
-}
-
-export function createPostgresUsageRetentionRepository(
-  databaseUrl: string,
-): PostgresUsageRetentionRepository {
-  return new PostgresUsageRetentionRepository(
-    createPostgresMeteringClient(databaseUrl),
-  );
 }

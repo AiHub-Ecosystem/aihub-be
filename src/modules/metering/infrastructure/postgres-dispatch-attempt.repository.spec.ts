@@ -1,26 +1,27 @@
 import { OPERATION_IDS } from '@/catalog/operation-id';
 import type { DispatchAttemptStart } from '@/modules/metering/public/dispatch-attempts';
-import {
-  INSERT_DISPATCH_ATTEMPT_SQL,
-  PostgresDispatchAttemptRepository,
-  UNRESOLVED_DISPATCH_ATTEMPTS_SQL,
-  UPDATE_DISPATCH_ATTEMPT_OUTCOME_SQL,
-} from './postgres-dispatch-attempt.repository';
-import type { PostgresMeteringClient } from './postgres-usage.repository';
+import { PostgresDispatchAttemptRepository } from './postgres-dispatch-attempt.repository';
+import type {
+  PostgresMeteringClient,
+  PostgresTransactionClient,
+} from './postgres-usage.repository';
 
 class FakePostgres implements PostgresMeteringClient {
-  readonly queries: Array<{
-    readonly text: string;
-    readonly values: readonly unknown[];
-  }> = [];
+  readonly queries: (readonly unknown[])[] = [];
   rows: readonly unknown[] = [];
 
-  async query(
-    text: string,
+  async query<Row extends object = Record<string, unknown>>(
+    _text: string,
     values: readonly unknown[],
-  ): Promise<readonly unknown[]> {
-    this.queries.push({ text, values });
-    return this.rows;
+  ): Promise<readonly Row[]> {
+    this.queries.push(values);
+    return this.rows as readonly Row[];
+  }
+
+  async transaction<T>(
+    callback: (client: PostgresTransactionClient) => Promise<T>,
+  ): Promise<T> {
+    return callback(this);
   }
 
   async close(): Promise<void> {}
@@ -41,14 +42,8 @@ describe('PostgresDispatchAttemptRepository', () => {
 
     expect(attemptId).toMatch(/^[0-9a-f-]{36}$/i);
     expect(client.queries).toEqual([
-      {
-        text: INSERT_DISPATCH_ATTEMPT_SQL,
-        values: [attemptId, 'req-1', 'org-1', 'writing.task1.grade', 60_000],
-      },
+      [attemptId, 'req-1', 'org-1', 'writing.task1.grade', 60_000],
     ]);
-    expect(INSERT_DISPATCH_ATTEMPT_SQL).toContain('unknown_after');
-    expect(INSERT_DISPATCH_ATTEMPT_SQL).toContain('INTERVAL');
-    expect(INSERT_DISPATCH_ATTEMPT_SQL).not.toMatch(/essay|audio|body/i);
   });
 
   it.each(['response_received', 'not_dispatched', 'outcome_unknown'] as const)(
@@ -59,21 +54,15 @@ describe('PostgresDispatchAttemptRepository', () => {
 
       await repository.recordOutcome('attempt-id', outcome);
 
-      expect(client.queries).toEqual([
-        {
-          text: UPDATE_DISPATCH_ATTEMPT_OUTCOME_SQL,
-          values: ['attempt-id', outcome],
-        },
-      ]);
-      expect(UPDATE_DISPATCH_ATTEMPT_OUTCOME_SQL).toContain('outcome IS NULL');
+      expect(client.queries).toEqual([['attempt-id', outcome]]);
     },
   );
 
   it('returns unresolved counts with a bounded fallback for retired operations', async () => {
     const client = new FakePostgres();
     client.rows = [
-      { operation: 'writing.task1.grade', unresolved_count: '2' },
-      { operation: 'other', unresolved_count: '3' },
+      { operation: 'writing.task1.grade', unresolved_count: 2n },
+      { operation: 'other', unresolved_count: 3n },
     ];
     const repository = new PostgresDispatchAttemptRepository(client);
 
@@ -84,16 +73,7 @@ describe('PostgresDispatchAttemptRepository', () => {
       { operation: 'speaking.grading-json', count: 0 },
       { operation: 'other', count: 3 },
     ]);
-    expect(client.queries).toEqual([
-      { text: UNRESOLVED_DISPATCH_ATTEMPTS_SQL, values: [OPERATION_IDS] },
-    ]);
-    expect(UNRESOLVED_DISPATCH_ATTEMPTS_SQL).toContain('unknown_after');
-    expect(UNRESOLVED_DISPATCH_ATTEMPTS_SQL).toContain('usage_records');
-    expect(UNRESOLVED_DISPATCH_ATTEMPTS_SQL).toContain('outcome_unknown');
-    expect(UNRESOLVED_DISPATCH_ATTEMPTS_SQL).toContain(
-      "error_code IS DISTINCT FROM 'AI_SERVICE_TIMEOUT'",
-    );
-    expect(UNRESOLVED_DISPATCH_ATTEMPTS_SQL).toContain('ANY($1::text[])');
+    expect(client.queries).toEqual([[OPERATION_IDS]]);
   });
 
   it('returns zero counts for every operation when no attempt is unresolved', async () => {

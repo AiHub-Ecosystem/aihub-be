@@ -2,13 +2,14 @@ import {
   type RedisQuotaReconciliationClient,
   RedisQuotaReconciliationCounter,
 } from '@/modules/gateway/infrastructure/redis-quota-reconciliation.counter';
-import { createPostgresQuotaReconciliationRepository } from '@/modules/metering/infrastructure/postgres-quota-reconciliation.repository';
+import { PostgresQuotaReconciliationRepository } from '@/modules/metering/infrastructure/postgres-quota-reconciliation.repository';
 import {
   type QuotaReconciliationEvent,
   QuotaReconciliationService,
   type QuotaReconciliationSummary,
 } from '@/modules/metering/public/quota-reconciliation';
 import Redis from 'ioredis';
+import { createOperatorMeteringClient } from './operator-metering-client';
 
 export { parseTargetMonth } from '@/modules/metering/public/quota-reconciliation';
 
@@ -98,8 +99,8 @@ export async function runQuotaReconciliationCommand(
     throw new Error('REDIS_URL is required');
   }
 
-  const repository = createPostgresQuotaReconciliationRepository(
-    input.databaseUrl,
+  const repository = new PostgresQuotaReconciliationRepository(
+    await createOperatorMeteringClient(input.databaseUrl),
   );
   let redisClient: RedisQuotaReconciliationClient;
   try {

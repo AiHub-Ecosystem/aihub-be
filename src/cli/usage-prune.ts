@@ -1,4 +1,4 @@
-import { createPostgresUsageRetentionRepository } from '@/modules/metering/infrastructure/postgres-usage-retention.repository';
+import { PostgresUsageRetentionRepository } from '@/modules/metering/infrastructure/postgres-usage-retention.repository';
 import {
   USAGE_PRUNE_BATCH_SIZE,
   UsagePruneError,
@@ -8,6 +8,7 @@ import {
   UsageRetentionService,
   type UsageRetentionSummary,
 } from '@/modules/metering/public/usage-retention';
+import { createOperatorMeteringClient } from './operator-metering-client';
 
 export interface UsagePruneCliInput {
   readonly databaseUrl: string;
@@ -100,7 +101,9 @@ export async function runUsagePruneCommand(
   try {
     repository =
       input.repository ??
-      createPostgresUsageRetentionRepository(input.databaseUrl);
+      new PostgresUsageRetentionRepository(
+        await createOperatorMeteringClient(input.databaseUrl),
+      );
   } catch {
     const error = new UsagePruneError(
       'DATABASE_FAILURE',

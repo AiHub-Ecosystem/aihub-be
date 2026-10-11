@@ -1,7 +1,11 @@
-import { createIdentityTransactionRunner } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
-import { createSharedPrismaClients } from '@/modules/persistence/infrastructure/prisma-client';
-
-export function createOperatorIdentityClient(databaseUrl: string) {
+export async function createOperatorIdentityClient(databaseUrl: string) {
+  const [{ createIdentityTransactionRunner }, { createSharedPrismaClients }] =
+    await Promise.all([
+      import(
+        '@/modules/identity/shared/infrastructure/postgres-identity.client'
+      ),
+      import('@/modules/persistence/infrastructure/prisma-client'),
+    ]);
   const clients = createSharedPrismaClients({
     databaseUrl: undefined,
     controlPlaneDatabaseUrl: databaseUrl,

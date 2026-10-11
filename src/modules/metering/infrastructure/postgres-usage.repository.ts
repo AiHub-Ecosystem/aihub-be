@@ -1,90 +1,17 @@
-import { createPostgresPool } from '@/common/postgres/postgres-pool';
-
 import type {
   UsageAggregate,
   UsageAggregateQuery,
   UsageRecord,
   UsageRepositoryPort,
 } from '@/modules/metering/application/usage-repository.port';
+import { isRecord } from './metering-row';
+import type { PostgresMeteringClient } from './prisma-metering.client';
 
-export interface PostgresTransactionClient {
-  query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
-}
-
-export interface PostgresMeteringClient {
-  query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
-  transaction?<T>(
-    callback: (client: PostgresTransactionClient) => Promise<T>,
-  ): Promise<T>;
-  close(): Promise<void>;
-}
-
-export function createPostgresMeteringClient(
-  databaseUrl: string,
-): PostgresMeteringClient {
-  if (databaseUrl.trim().length === 0) {
-    return {
-      query: async () => {
-        throw new Error('DATABASE_URL is missing');
-      },
-      close: async () => undefined,
-    };
-  }
-
-  const pool = createPostgresPool('metering', {
-    connectionString: databaseUrl,
-    max: 10,
-    connectionTimeoutMillis: 1_000,
-    idleTimeoutMillis: 30_000,
-  });
-
-  return {
-    async query(
-      text: string,
-      values: readonly unknown[],
-    ): Promise<readonly unknown[]> {
-      const result = await pool.query<Record<string, unknown>>(text, [
-        ...values,
-      ]);
-      return result.rows;
-    },
-    async transaction<T>(
-      callback: (client: PostgresTransactionClient) => Promise<T>,
-    ): Promise<T> {
-      const client = await pool.connect();
-      const transactionClient: PostgresTransactionClient = {
-        query: async (
-          text: string,
-          values: readonly unknown[],
-        ): Promise<readonly unknown[]> => {
-          const result = await client.query<Record<string, unknown>>(text, [
-            ...values,
-          ]);
-          return result.rows;
-        },
-      };
-
-      try {
-        await client.query('BEGIN');
-        const result = await callback(transactionClient);
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        try {
-          await client.query('ROLLBACK');
-        } catch {
-          // Preserve the original database failure.
-        }
-        throw error;
-      } finally {
-        client.release();
-      }
-    },
-    close: async () => {
-      await pool.end();
-    },
-  };
-}
+export { createPostgresMeteringClient } from './postgres-metering.fixture-client';
+export type {
+  PostgresMeteringClient,
+  PostgresTransactionClient,
+} from './prisma-metering.client';
 
 const INSERT_SQL = `
   INSERT INTO usage_records (
@@ -155,19 +82,17 @@ function recordValues(record: UsageRecord): readonly unknown[] {
 
 function aggregateNumber(value: unknown, field: string): number {
   const parsed =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string'
-        ? Number(value)
-        : Number.NaN;
+    typeof value === 'bigint'
+      ? Number(value)
+      : typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+          ? Number(value)
+          : Number.NaN;
   if (!Number.isSafeInteger(parsed) || parsed < 0) {
     throw new Error(`usage aggregate field ${field} is invalid`);
   }
   return parsed;
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function aggregateFromRow(row: unknown): UsageAggregate {
@@ -191,18 +116,33 @@ function aggregateFromRow(row: unknown): UsageAggregate {
   };
 }
 
+interface UsageInsertRow {
+  readonly request_id: string;
+}
+
+interface UsageAggregateRow {
+  readonly billable_request_count: bigint;
+  readonly billable_token_count: bigint;
+  readonly missing_usage_count: bigint;
+}
+
 export class PostgresUsageRepository implements UsageRepositoryPort {
   constructor(private readonly client: PostgresMeteringClient) {}
 
   async insert(record: UsageRecord): Promise<void> {
-    const rows = await this.client.query(INSERT_SQL, recordValues(record));
-    if (rows.length === 0) {
-      throw new Error('usage record was not inserted');
-    }
+    await this.client.transaction(async (transaction) => {
+      const rows = await transaction.query<UsageInsertRow>(
+        INSERT_SQL,
+        recordValues(record),
+      );
+      if (rows.length === 0) {
+        throw new Error('usage record was not inserted');
+      }
+    });
   }
 
   async aggregate(query: UsageAggregateQuery): Promise<UsageAggregate> {
-    const rows = await this.client.query(AGGREGATE_SQL, [
+    const rows = await this.client.query<UsageAggregateRow>(AGGREGATE_SQL, [
       query.organizationId,
       query.from,
       query.to,

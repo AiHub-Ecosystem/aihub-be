@@ -3,10 +3,7 @@ import type {
   QuotaReconciliationSnapshotPort,
   QuotaReconciliationTarget,
 } from '@/modules/metering/application/quota-reconciliation.port';
-import {
-  type PostgresMeteringClient,
-  createPostgresMeteringClient,
-} from './postgres-usage.repository';
+import type { PostgresMeteringClient } from './prisma-metering.client';
 
 export const QUOTA_RECONCILIATION_SQL = `
   SELECT
@@ -28,15 +25,23 @@ export const QUOTA_RECONCILIATION_SQL = `
 
 function safeNonNegativeInteger(value: unknown, field: string): number {
   const parsed =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string' && /^(?:0|[1-9]\d*)$/.test(value)
-        ? Number(value)
-        : Number.NaN;
+    typeof value === 'bigint'
+      ? Number(value)
+      : typeof value === 'number'
+        ? value
+        : typeof value === 'string' && /^(?:0|[1-9]\d*)$/.test(value)
+          ? Number(value)
+          : Number.NaN;
   if (!Number.isSafeInteger(parsed) || parsed < 0) {
     throw new Error(`quota reconciliation field ${field} is invalid`);
   }
   return parsed;
+}
+
+interface QuotaReconciliationRow {
+  readonly organization_id: string;
+  readonly quota: number | null;
+  readonly billable_count: bigint;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -87,22 +92,14 @@ export class PostgresQuotaReconciliationRepository
   async list(
     target: QuotaReconciliationTarget,
   ): Promise<readonly QuotaOrganizationSnapshot[]> {
-    const rows = await this.client.query(QUOTA_RECONCILIATION_SQL, [
-      target.from,
-      target.to,
-    ]);
+    const rows = await this.client.query<QuotaReconciliationRow>(
+      QUOTA_RECONCILIATION_SQL,
+      [target.from, target.to],
+    );
     return orderSnapshots(rows.map(snapshotFromRow));
   }
 
   async close(): Promise<void> {
     await this.client.close();
   }
-}
-
-export function createPostgresQuotaReconciliationRepository(
-  databaseUrl: string,
-): PostgresQuotaReconciliationRepository {
-  return new PostgresQuotaReconciliationRepository(
-    createPostgresMeteringClient(databaseUrl),
-  );
 }

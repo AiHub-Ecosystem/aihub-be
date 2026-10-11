@@ -4,11 +4,8 @@ import {
   type UsageReportSnapshotQuery,
   type UsageReportSnapshotRow,
 } from '@/modules/metering/application/usage-completeness-report';
-import {
-  type PostgresMeteringClient,
-  createPostgresMeteringClient,
-  isRecord,
-} from './postgres-usage.repository';
+import { isRecord } from './metering-row';
+import type { PostgresMeteringClient } from './prisma-metering.client';
 
 export const USAGE_REPORT_SQL = `
   SELECT
@@ -31,15 +28,23 @@ export const USAGE_REPORT_SQL = `
 
 function countFromRow(value: unknown): number {
   const parsed =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string' && /^(?:0|[1-9]\d*)$/.test(value)
-        ? Number(value)
-        : Number.NaN;
+    typeof value === 'bigint'
+      ? Number(value)
+      : typeof value === 'number'
+        ? value
+        : typeof value === 'string' && /^(?:0|[1-9]\d*)$/.test(value)
+          ? Number(value)
+          : Number.NaN;
   if (!Number.isSafeInteger(parsed) || parsed < 0) {
     throw new UsageReportSnapshotError();
   }
   return parsed;
+}
+
+interface UsageReportRow {
+  readonly operation: string;
+  readonly successful_count: bigint;
+  readonly missing_usage_count: bigint;
 }
 
 function snapshotFromRow(value: unknown): UsageReportSnapshotRow {
@@ -65,7 +70,7 @@ export class PostgresUsageCompletenessReportRepository
   async snapshot(
     query: UsageReportSnapshotQuery,
   ): Promise<readonly UsageReportSnapshotRow[]> {
-    const rows = await this.client.query(USAGE_REPORT_SQL, [
+    const rows = await this.client.query<UsageReportRow>(USAGE_REPORT_SQL, [
       query.from,
       query.to,
       [...query.operations],
@@ -78,12 +83,4 @@ export class PostgresUsageCompletenessReportRepository
   async close(): Promise<void> {
     await this.client.close();
   }
-}
-
-export function createPostgresUsageCompletenessReportRepository(
-  databaseUrl: string,
-): PostgresUsageCompletenessReportRepository {
-  return new PostgresUsageCompletenessReportRepository(
-    createPostgresMeteringClient(databaseUrl),
-  );
 }

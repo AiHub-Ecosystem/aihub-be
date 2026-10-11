@@ -140,7 +140,6 @@ export type PostgresPoolName =
   | 'sandbox-dispatch-budget'
   | 'avatar'
   | 'speaking-audio-upload'
-  | 'metering'
   | 'identity'
   | 'integration-test';
 

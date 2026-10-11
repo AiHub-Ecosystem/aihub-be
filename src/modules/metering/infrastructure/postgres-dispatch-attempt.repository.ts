@@ -9,11 +9,8 @@ import type {
   DispatchAttemptRecordPort,
   DispatchAttemptStart,
 } from '@/modules/metering/application/dispatch-attempt-record.port';
-import {
-  type PostgresMeteringClient,
-  createPostgresMeteringClient,
-  isRecord,
-} from './postgres-usage.repository';
+import { isRecord } from './metering-row';
+import type { PostgresMeteringClient } from './prisma-metering.client';
 
 export const INSERT_DISPATCH_ATTEMPT_SQL = `
   INSERT INTO dispatch_attempts (
@@ -58,11 +55,13 @@ function countFromRow(value: unknown): DispatchAttemptUnresolvedSample {
     throw new Error('dispatch attempt metric row is invalid');
   }
   const count =
-    typeof value.unresolved_count === 'number'
-      ? value.unresolved_count
-      : typeof value.unresolved_count === 'string'
-        ? Number(value.unresolved_count)
-        : Number.NaN;
+    typeof value.unresolved_count === 'bigint'
+      ? Number(value.unresolved_count)
+      : typeof value.unresolved_count === 'number'
+        ? value.unresolved_count
+        : typeof value.unresolved_count === 'string'
+          ? Number(value.unresolved_count)
+          : Number.NaN;
   if (
     (!isOperationId(value.operation) && value.operation !== 'other') ||
     !Number.isSafeInteger(count) ||
@@ -73,6 +72,11 @@ function countFromRow(value: unknown): DispatchAttemptUnresolvedSample {
   return { operation: value.operation, count };
 }
 
+interface DispatchAttemptUnresolvedRow {
+  readonly operation: string;
+  readonly unresolved_count: bigint;
+}
+
 export class PostgresDispatchAttemptRepository
   implements DispatchAttemptRecordPort, OnModuleDestroy
 {
@@ -80,13 +84,16 @@ export class PostgresDispatchAttemptRepository
 
   async beginAttempt(input: DispatchAttemptStart): Promise<string> {
     const attemptId = randomUUID();
-    await this.client.query(INSERT_DISPATCH_ATTEMPT_SQL, [
-      attemptId,
-      input.requestId,
-      input.organizationId,
-      input.operation,
-      input.operationTimeoutMs,
-    ]);
+    await this.client.query<Record<string, unknown>>(
+      INSERT_DISPATCH_ATTEMPT_SQL,
+      [
+        attemptId,
+        input.requestId,
+        input.organizationId,
+        input.operation,
+        input.operationTimeoutMs,
+      ],
+    );
     return attemptId;
   }
 
@@ -94,18 +101,19 @@ export class PostgresDispatchAttemptRepository
     attemptId: string,
     outcome: DispatchAttemptOutcome,
   ): Promise<void> {
-    await this.client.query(UPDATE_DISPATCH_ATTEMPT_OUTCOME_SQL, [
-      attemptId,
-      outcome,
-    ]);
+    await this.client.query<Record<string, unknown>>(
+      UPDATE_DISPATCH_ATTEMPT_OUTCOME_SQL,
+      [attemptId, outcome],
+    );
   }
 
   async getUnresolvedByOperation(): Promise<
     readonly DispatchAttemptUnresolvedSample[]
   > {
-    const rows = await this.client.query(UNRESOLVED_DISPATCH_ATTEMPTS_SQL, [
-      OPERATION_IDS,
-    ]);
+    const rows = await this.client.query<DispatchAttemptUnresolvedRow>(
+      UNRESOLVED_DISPATCH_ATTEMPTS_SQL,
+      [OPERATION_IDS],
+    );
     const counts = new Map(
       rows.map(countFromRow).map(({ operation, count }) => [operation, count]),
     );
@@ -128,12 +136,4 @@ export class PostgresDispatchAttemptRepository
   async onModuleDestroy(): Promise<void> {
     await this.close();
   }
-}
-
-export function createPostgresDispatchAttemptRepository(
-  databaseUrl: string,
-): PostgresDispatchAttemptRepository {
-  return new PostgresDispatchAttemptRepository(
-    createPostgresMeteringClient(databaseUrl),
-  );
 }
