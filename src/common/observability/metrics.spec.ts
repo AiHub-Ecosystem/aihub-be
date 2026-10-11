@@ -1,9 +1,9 @@
 import { METRICS_ROUTE_PATH, getMetrics } from './metrics';
 import {
   recordCompletedRequest,
-  recordDownstreamPoolQueued,
   recordEmailDeliveryFailed,
   setDispatchAttemptUnresolvedSource,
+  setDownstreamPoolQueuedSource,
   setEmailOutboxBacklogSource,
   setPostgresPoolStatsSource,
 } from './metrics';
@@ -303,15 +303,18 @@ describe('unresolved dispatch-attempt metrics', () => {
 
 describe('runtime resource metrics', () => {
   afterEach(() => {
+    setDownstreamPoolQueuedSource(undefined);
     setPostgresPoolStatsSource(undefined);
-    recordDownstreamPoolQueued('https://ai-writing.test', 0);
   });
 
   it('scrapes process memory, event-loop lag, Postgres pool counts, and downstream queue', async () => {
+    let queued = 3;
     setPostgresPoolStatsSource(() => [
       { pool: 'auth', total: 4, idle: 2, waiting: 1 },
     ]);
-    recordDownstreamPoolQueued('https://ai-writing.test', 3);
+    setDownstreamPoolQueuedSource(() => [
+      { origin: 'https://ai-writing.test', queued },
+    ]);
 
     const payload = await getMetrics();
 
@@ -340,5 +343,10 @@ describe('runtime resource metrics', () => {
     expect(Number.isFinite(lagSeconds)).toBe(true);
     expect(lagSeconds).toBeGreaterThanOrEqual(0);
     expect(payload).not.toMatch(/\{[^}]*\b(?:org|user|request)_id=/);
+
+    queued = 0;
+    expect(await getMetrics()).toContain(
+      'aihub_downstream_pool_queued{origin="https://ai-writing.test"} 0',
+    );
   });
 });

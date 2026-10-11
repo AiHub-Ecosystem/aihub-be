@@ -10,7 +10,7 @@ import { OPERATION_IDS } from '@/catalog/operation-id';
 import { buildOpenApiDocument } from '@/openapi/build-openapi-document';
 import {
   METRICS_ROUTE_PATH,
-  recordDownstreamPoolQueued,
+  setDownstreamPoolQueuedSource,
   setPostgresPoolStatsSource,
 } from './metrics';
 import { registerMetricsRoute } from './metrics.route';
@@ -58,7 +58,9 @@ describe('metrics scrape endpoint', () => {
     setPostgresPoolStatsSource(() => [
       { pool: 'auth', total: 4, idle: 2, waiting: 1 },
     ]);
-    recordDownstreamPoolQueued('https://ai-writing.test', 3);
+    setDownstreamPoolQueuedSource(() => [
+      { origin: 'https://ai-writing.test', queued: 3 },
+    ]);
 
     try {
       const payload = await (
@@ -88,8 +90,8 @@ describe('metrics scrape endpoint', () => {
         'aihub_downstream_pool_queued{origin="https://ai-writing.test"} 3',
       );
     } finally {
+      setDownstreamPoolQueuedSource(undefined);
       setPostgresPoolStatsSource(undefined);
-      recordDownstreamPoolQueued('https://ai-writing.test', 0);
     }
   });
 

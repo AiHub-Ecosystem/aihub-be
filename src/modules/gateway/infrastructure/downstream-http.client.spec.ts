@@ -99,7 +99,7 @@ describe('DownstreamHttpClient', () => {
     });
     const releaseResponses = (): void => {
       responsesReleased = true;
-      pendingResponses.forEach(sendResponse);
+      pendingResponses.splice(0).forEach(sendResponse);
     };
     await new Promise<void>((resolve) =>
       server.listen(0, '127.0.0.1', resolve),
@@ -123,6 +123,11 @@ describe('DownstreamHttpClient', () => {
       expect(await getMetrics()).toContain(
         `aihub_downstream_pool_queued{origin="${origin}"} 1`,
       );
+      releaseResponses();
+      await Promise.allSettled(requests);
+      expect(await getMetrics()).toContain(
+        `aihub_downstream_pool_queued{origin="${origin}"} 0`,
+      );
     } finally {
       releaseResponses();
       await Promise.allSettled(requests);
@@ -132,8 +137,6 @@ describe('DownstreamHttpClient', () => {
       );
     }
 
-    expect(await getMetrics()).toContain(
-      `aihub_downstream_pool_queued{origin="${origin}"} 0`,
-    );
+    expect(await getMetrics()).not.toContain(`origin="${origin}"`);
   });
 });

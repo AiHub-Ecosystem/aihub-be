@@ -3,7 +3,10 @@ import { File } from 'node:buffer';
 import { type Dispatcher, Pool, FormData as UndiciFormData } from 'undici';
 
 import { AppError } from '@/common/errors/app-error';
-import { recordDownstreamPoolQueued } from '@/common/observability/metrics';
+import {
+  type DownstreamPoolQueuedSample,
+  setDownstreamPoolQueuedSource,
+} from '@/common/observability/metrics';
 import type {
   DownstreamId,
   DownstreamMultipartBody,
@@ -28,6 +31,27 @@ type DownstreamHeaders = Readonly<
 >;
 
 const definitelyNotDispatched = new WeakSet<AppError>();
+const downstreamPools = new Map<string, Set<Pool>>();
+
+setDownstreamPoolQueuedSource(() => {
+  const samples: DownstreamPoolQueuedSample[] = [];
+  for (const [origin, pools] of downstreamPools) {
+    let queued = 0;
+    for (const pool of pools) {
+      if (pool.destroyed) {
+        pools.delete(pool);
+        continue;
+      }
+      queued += pool.stats.queued;
+    }
+    if (pools.size === 0) {
+      downstreamPools.delete(origin);
+    } else {
+      samples.push({ origin, queued });
+    }
+  }
+  return samples;
+});
 
 export function isDefinitelyNotDispatched(error: unknown): boolean {
   return error instanceof AppError && definitelyNotDispatched.has(error);
@@ -165,7 +189,6 @@ export class DownstreamHttpClient {
     }
 
     let response: Dispatcher.ResponseData;
-    let dispatcher: Dispatcher | undefined;
     try {
       const requestOptions: Dispatcher.RequestOptions = {
         origin: base.origin,
@@ -189,51 +212,36 @@ export class DownstreamHttpClient {
       if (body !== undefined) {
         requestOptions.body = body;
       }
-      dispatcher = this.getDispatcher(base);
-      const responsePromise = dispatcher.request(requestOptions);
-      if (dispatcher instanceof Pool) {
-        recordDownstreamPoolQueued(base.origin, dispatcher.stats.queued);
-      }
-      response = await responsePromise;
+      response = await this.getDispatcher(base).request(requestOptions);
     } catch (error) {
-      if (dispatcher instanceof Pool) {
-        recordDownstreamPoolQueued(base.origin, dispatcher.stats.queued);
-      }
       throw transportError(error, options.signal.aborted);
     }
+    options.onResponseReceived?.(response.statusCode);
 
+    let parsedBody: unknown;
     try {
-      options.onResponseReceived?.(response.statusCode);
-
-      let parsedBody: unknown;
-      try {
-        parsedBody = await response.body.json();
-      } catch (error) {
-        if (options.signal.aborted || isTransportFailure(error)) {
-          throw transportError(error, options.signal.aborted);
-        }
-        if (response.statusCode >= 400) {
-          parsedBody = undefined;
-        } else {
-          throw new AppError({
-            code: 'AI_SERVICE_CONTRACT_VIOLATION',
-            message: 'AI service returned an unexpected response shape',
-            retryable: false,
-            cause: error,
-          });
-        }
+      parsedBody = await response.body.json();
+    } catch (error) {
+      if (options.signal.aborted || isTransportFailure(error)) {
+        throw transportError(error, options.signal.aborted);
       }
-
-      return {
-        status: response.statusCode,
-        headers: normalizeHeaders(response.headers),
-        body: parsedBody,
-      };
-    } finally {
-      if (dispatcher instanceof Pool) {
-        recordDownstreamPoolQueued(base.origin, dispatcher.stats.queued);
+      if (response.statusCode >= 400) {
+        parsedBody = undefined;
+      } else {
+        throw new AppError({
+          code: 'AI_SERVICE_CONTRACT_VIOLATION',
+          message: 'AI service returned an unexpected response shape',
+          retryable: false,
+          cause: error,
+        });
       }
     }
+
+    return {
+      status: response.statusCode,
+      headers: normalizeHeaders(response.headers),
+      body: parsedBody,
+    };
   }
 
   async close(): Promise<void> {
@@ -243,7 +251,14 @@ export class DownstreamHttpClient {
     }
 
     await Promise.all(
-      [...this.dispatchers.values()].map((dispatcher) => dispatcher.close()),
+      [...this.dispatchers.entries()].map(async ([origin, dispatcher]) => {
+        await dispatcher.close();
+        if (dispatcher instanceof Pool) {
+          const pools = downstreamPools.get(origin);
+          pools?.delete(dispatcher);
+          if (pools?.size === 0) downstreamPools.delete(origin);
+        }
+      }),
     );
   }
 
@@ -281,7 +296,9 @@ export class DownstreamHttpClient {
       keepAliveMaxTimeout: 600_000,
     });
     this.dispatchers.set(base.origin, dispatcher);
-    recordDownstreamPoolQueued(base.origin, dispatcher.stats.queued);
+    const pools = downstreamPools.get(base.origin) ?? new Set<Pool>();
+    pools.add(dispatcher);
+    downstreamPools.set(base.origin, pools);
     return dispatcher;
   }
 

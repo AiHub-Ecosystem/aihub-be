@@ -197,19 +197,42 @@ export function setPostgresPoolStatsSource(
   }
 }
 
+export interface DownstreamPoolQueuedSample {
+  readonly origin: string;
+  readonly queued: number;
+}
+
+type DownstreamPoolQueuedSource = () => readonly DownstreamPoolQueuedSample[];
+
+let downstreamPoolQueuedSource: DownstreamPoolQueuedSource | undefined;
+
+function readDownstreamPoolQueued(gauge: Gauge<'origin'>): void {
+  gauge.reset();
+  try {
+    for (const sample of downstreamPoolQueuedSource?.() ?? []) {
+      gauge.set({ origin: sample.origin }, sample.queued);
+    }
+  } catch {
+    gauge.reset();
+  }
+}
+
 const downstreamPoolQueued = new Gauge({
   name: 'aihub_downstream_pool_queued',
   help: 'Requests queued in each configured downstream HTTP connection pool.',
   labelNames: ['origin'],
   registers: [registry],
+  collect() {
+    readDownstreamPoolQueued(this);
+  },
 });
 
-export function recordDownstreamPoolQueued(
-  origin: string,
-  queued: number,
+export function setDownstreamPoolQueuedSource(
+  source: DownstreamPoolQueuedSource | undefined,
 ): void {
-  if (Number.isFinite(queued) && queued >= 0) {
-    downstreamPoolQueued.set({ origin }, queued);
+  downstreamPoolQueuedSource = source;
+  if (source === undefined) {
+    downstreamPoolQueued.reset();
   }
 }
 
