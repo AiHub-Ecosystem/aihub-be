@@ -123,7 +123,12 @@ idempotency cleanup are separate follow-ups; the existing
 is refused before dispatch. A replay that returns without dispatch omits this
 field and its histogram sample. `total_ms` starts when Fastify receives the
 request and covers body and cookie parsing, authentication, identity checks,
-rate limits, quota admission, and gateway work. Triage incidents via
+rate limits, quota admission, and gateway work. For metered successes it is
+sampled when the result is ready, before usage-record finalization; the
+response timing, durable record, completion log, and request histogram reuse
+that value. For failures it is sampled when the refusal is handled, also before
+finalization. Both exclude usage-record persistence and response delivery, so
+they are not client-observed end-to-end latency. Triage incidents via
 `request_id`; filter customer usage via `org_id`.
 
 Downstream failure logs append internal diagnostic payloads ([07 §J.4](07-reliability-and-errors.md#j4-internal-downstream-error-us08)) — isolated internally, never dispatched to clients.

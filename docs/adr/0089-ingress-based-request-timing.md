@@ -24,6 +24,13 @@ bounded operation label. Do not persist `admission_ms` or add it to the public
 response envelope. An idempotency replay that returns without dispatch omits
 `admission_ms` because no dispatch admission occurred.
 
+For a request with Metering evidence, sample `total_ms` when the operation
+result or refusal is ready, before awaiting metering finalization. Reuse that
+sample in the successful response timing, durable usage record, completion log,
+and request histogram. It excludes usage-record persistence and response
+delivery, so it is not client-observed end-to-end latency. Requests without
+Metering evidence continue to sample their duration in the completion hook.
+
 ## Consequences
 
 Success and failure `total_ms` values now share the same ingress boundary and
