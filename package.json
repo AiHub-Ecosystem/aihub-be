@@ -30,7 +30,7 @@
     "test:tenant-isolation": "node scripts/generate/generate-prisma-client.mjs --runtime && jest --config jest.config.tenant-isolation.cjs --runInBand",
     "test:watch": "node scripts/generate/generate-prisma-client.mjs --runtime && jest --watch",
     "type-check": "node scripts/generate/generate-prisma-client.mjs && tsc --noEmit",
-    "type-check:tsgo": "tsgo --noEmit",
+    "type-check:tsgo": "node scripts/generate/generate-prisma-client.mjs && tsgo --noEmit",
     "format": "biome format --write .",
     "lint": "oxlint . && biome check .",
     "format:check": "prettier --check \"**/*.{md,yaml,yml}\"",

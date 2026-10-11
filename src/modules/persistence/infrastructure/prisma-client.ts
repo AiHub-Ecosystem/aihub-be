@@ -93,7 +93,11 @@ function deferPrismaClient(getPrisma: () => PrismaClient): PrismaClient {
       return property in getPrisma();
     },
     get(_target, property) {
-      if (isLifecycleProperty(property)) {
+      // `close` is probed by repositories that close a client they were handed
+      // (`this.client.close?.()`). A shared client has none, and probing an
+      // unconfigured one must not be the first use that fails, or shutting down
+      // a database-free application throws.
+      if (isLifecycleProperty(property) || property === 'close') {
         return undefined;
       }
       const prisma = getPrisma();

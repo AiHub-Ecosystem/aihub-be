@@ -95,6 +95,8 @@ describe('createSharedPrismaClients', () => {
 
     // Handing the client out must not throw: the module graph still builds.
     expect(clients.runtime.prisma).toBeDefined();
+    // Nor must the optional `close` probe a repository makes on shutdown.
+    expect(Reflect.get(clients.runtime.prisma, 'close')).toBeUndefined();
     expect(() => clients.runtime.prisma.$queryRawUnsafe('SELECT 1')).toThrow(
       'PostgreSQL is not configured',
     );
