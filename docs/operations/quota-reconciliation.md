@@ -11,18 +11,19 @@ reconciliation command.
 ## Schedule
 
 The CD-managed scheduled wrapper runs this command in the active Production and
-Sandbox services once per day at 02:00 UTC. To run it manually:
+Sandbox services once per day at 02:00 UTC. Run it manually through the same
+wrapper so it gets the 15-minute per-deployment deadline, same-job lock, and
+result logging:
 
 ```sh
-docker compose --env-file .env.production \
-  -f docker-compose.production.yml \
-  exec -T app node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs quota:reconcile
+./scripts/ops/host-scheduled-job.sh quota
 ```
 
-The production image has no `pnpm`, and `docker compose exec` skips the
-container entrypoint that loads the runtime secrets, so the command goes
-through `scripts/runtime/runtime-entrypoint.mjs`, which loads them and then hands the
-rest of the arguments to the CLI ([`deploy-vps.md`](deploy-vps.md)).
+The wrapper uses a nonblocking same-job lock and a host-wide lock shared by all
+scheduled job types. A second `quota` invocation logs
+`skipped reason=already_running`; if a different job is active, `quota` logs
+`deferred reason=host_job_active` and exits non-zero so the operator can rerun
+it. See [`deploy-vps.md`](deploy-vps.md) for the cross-job policy.
 
 The wrapper appends a summary or bounded failure stderr to
 `~/aihub-ops-job.log`; alert on a non-zero exit and on a missed successful
@@ -58,12 +59,11 @@ skipped because they do not create quota counters.
 ## Rerun and backfill
 
 The default target is the current UTC calendar month. An operator may rerun a
-retained month explicitly:
+retained month through the host wrapper, preserving the per-deployment deadline,
+same-job lock, and result log:
 
 ```sh
-docker compose --env-file .env.production \
-  -f docker-compose.production.yml \
-  exec -T app node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs quota:reconcile --month 2026-09
+./scripts/ops/host-scheduled-job.sh quota --month 2026-09
 ```
 
 `--month` must be strict `YYYY-MM`, cannot name a future month, and is limited
@@ -119,10 +119,12 @@ fails after earlier keys were written, the run stops, exits `1`, and reports
 the organization at which it stopped. Do not roll back the keys already
 written. Fix the dependency and rerun the same month; the rerun is the repair.
 
-Do not run overlapping cron owners. No distributed lock is used. A live
-request or a second run can race with an overwrite; the next reconciliation
-run repairs the heuristic, while `usage_records` remains authoritative during
-that consistency window.
+Do not run overlapping cron owners. The host wrapper serializes all scheduled
+job types on this VPS with a local host-wide lock; direct CLI runs or runs from
+another host are not covered by a distributed lock. A live request or a second
+run can race with an overwrite; the next reconciliation run repairs the
+heuristic, while `usage_records` remains authoritative during that consistency
+window.
 
 When an organization is reported over quota, inspect the durable records and
 the Redis outage/run logs. Do not automatically disable API keys, change the

@@ -8,23 +8,18 @@ Redis quota counters and idempotency records are outside this command.
 ## Schedule and scope
 
 The CD-managed scheduled wrapper runs this command at **02:30 UTC**, after the
-02:00 UTC quota reconciliation, in each enabled deployment. To run it manually
-for Production and Sandbox:
+02:00 UTC quota reconciliation, in each enabled deployment. Run it manually
+through the same wrapper to retain the 30-minute per-deployment deadline,
+same-job lock, and result logging:
 
 ```sh
-docker compose --env-file .env.production \
-  -f docker-compose.production.yml \
-  exec -T app node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs usage:prune
-
-docker compose --env-file .env.production \
-  -f docker-compose.production.yml \
-  --profile sandbox exec -T app-sandbox node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs usage:prune
+./scripts/ops/host-scheduled-job.sh prune
 ```
 
-The production image has no `pnpm`, and `docker compose exec` skips the
-container entrypoint that loads the runtime secrets, so the command goes
-through `scripts/runtime/runtime-entrypoint.mjs`, which loads them and then hands the
-rest of the arguments to the CLI ([`deploy-vps.md`](deploy-vps.md)).
+The wrapper holds a nonblocking `prune` lock and the shared host-wide lock
+across Production and Sandbox. A second `prune` invocation logs
+`skipped reason=already_running`; if another job is active, `prune` logs
+`deferred reason=host_job_active` and exits non-zero for an operator rerun.
 
 Each invocation loads its selected database URL from the Vault Agent connection
 snapshot. Production and Sandbox failures are independent; the wrapper continues
@@ -59,14 +54,16 @@ Before the first production run:
    WHERE created_at < :retention_cutoff;
    ```
 
-3. Run the command manually in each application container and retain its
-   JSONL output before enabling the nightly schedule.
+3. Run `./scripts/ops/host-scheduled-job.sh prune` and retain its per-deployment
+   log output before enabling the nightly schedule.
 
 The command has no dry-run, confirmation flag, or backup side effect. It
 deletes at most 1,000 rows per transaction using `(created_at, request_id)` as
 the keyset order and `FOR UPDATE SKIP LOCKED` for accidental concurrent runs.
-There is no distributed lock. A process termination rolls back only the open
-batch; previously committed batches remain deleted and a rerun is safe.
+The host wrapper serializes wrapper invocations on this VPS with a local lock;
+direct CLI runs or runs from another host can still overlap. A process
+termination rolls back only the open batch; previously committed batches
+remain deleted and a rerun is safe.
 
 ## Output and failure handling
 

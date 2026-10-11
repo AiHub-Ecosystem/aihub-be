@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, writeSync } from 'node:fs';
 import process from 'node:process';
 
 const runtimeConnectionModule = new URL(
@@ -7,6 +7,29 @@ const runtimeConnectionModule = new URL(
 );
 
 async function main() {
+  // Set only by the scheduled host wrapper; the API entrypoint has no deadline.
+  const args = process.argv.slice(2);
+  let timeoutSeconds;
+  if (args[0] === '--timeout-seconds') {
+    const rawTimeout = args[1];
+    if (!/^[1-9]\d*$/.test(rawTimeout)) {
+      throw new Error('--timeout-seconds must be a positive integer');
+    }
+    const seconds = Number(rawTimeout);
+    if (!Number.isSafeInteger(seconds) || seconds * 1000 > 2_147_483_647) {
+      throw new Error('--timeout-seconds is out of range');
+    }
+    timeoutSeconds = seconds;
+    args.splice(0, 2);
+  }
+  if (timeoutSeconds !== undefined) {
+    const timeout = setTimeout(() => {
+      writeSync(2, `scheduled command timed out after ${timeoutSeconds}s\n`);
+      process.exit(124);
+    }, timeoutSeconds * 1000);
+    timeout.unref();
+  }
+
   if (!existsSync(runtimeConnectionModule)) {
     throw new Error('runtime connection loader is unavailable');
   }
@@ -20,12 +43,12 @@ async function main() {
   }
   loadRuntimeConnectionEnvironment({ env: process.env });
 
-  const target = process.argv[2] ?? 'dist/main.js';
+  const target = args.shift() ?? 'dist/main.js';
   // The target sees its own arguments: `runtime-entrypoint.mjs scripts/cli/cli.mjs
   // avatar:sweep` must reach the CLI as `avatar:sweep`, not as the path of the
   // script being run. Nothing else forwards arguments, so this is how an
   // operator command gets the runtime secrets inside a deployed container.
-  process.argv.splice(2, 1);
+  process.argv.splice(2, process.argv.length - 2, ...args);
 
   const targetUrl = new URL(
     target.startsWith('dist/') || target.startsWith('scripts/')

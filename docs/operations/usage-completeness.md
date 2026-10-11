@@ -9,27 +9,25 @@ records, or changes quota state.
 
 The CD-managed scheduled wrapper runs once per hour at **05 minutes past the
 hour** for each enabled deployment database. The report covers the UTC hour that
-just ended. Production and Sandbox are independent runs. The wrapper supplies
-explicit timestamps; use explicit timestamps for a manual run too:
+just ended. Production and Sandbox are independent runs. Each gets a 3-minute
+deadline under the shared host-wide lock, which allows at most one scheduled
+job at a time. A concurrent report invocation is logged as
+`skipped reason=already_running`; a different active job defers the report,
+logs `deferred reason=host_job_active`, and exits non-zero. Run a previous-hour
+report manually through the wrapper:
 
 ```sh
-docker compose --env-file .env.production \
-  -f docker-compose.production.yml \
-  exec -T app node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs usage:report \
-  --from 2026-09-20T12:00:00.000Z \
-  --to 2026-09-20T13:00:00.000Z
-
-docker compose --env-file .env.production \
-  -f docker-compose.production.yml \
-  --profile sandbox exec -T app-sandbox node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs usage:report \
-  --from 2026-09-20T12:00:00.000Z \
-  --to 2026-09-20T13:00:00.000Z
+./scripts/ops/host-scheduled-job.sh report
 ```
 
-The production image has no `pnpm`, and `docker compose exec` skips the
-container entrypoint that loads the runtime secrets, so the command goes
-through `scripts/runtime/runtime-entrypoint.mjs`, which loads them and then hands the
-rest of the arguments to the CLI ([`deploy-vps.md`](deploy-vps.md)).
+For an explicit window, pass both timestamps to the wrapper so the run remains
+locked and logged in each deployment. Use the original scheduled hour when
+rerunning a deferred report:
+
+```sh
+./scripts/ops/host-scheduled-job.sh report \
+  --from 2026-09-20T12:00:00.000Z --to 2026-09-20T13:00:00.000Z
+```
 
 The window is half-open: `created_at >= from AND created_at < to`. Arguments
 must be ISO-8601 UTC timestamps with `Z`, `from < to`, `to <= now`, and `from`

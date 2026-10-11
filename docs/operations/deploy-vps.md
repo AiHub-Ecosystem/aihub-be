@@ -253,24 +253,13 @@ setting exists. **Run it with `--dry-run true` first** and check the summary
 before the CD-managed daily schedule runs it:
 
 ```sh
-docker compose --env-file .env.production \
-  -f docker-compose.production.yml \
-  exec -T app node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs avatar:sweep --dry-run true
-
-docker compose --env-file .env.production \
-  -f docker-compose.production.yml \
-  exec -T app node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs avatar:sweep
-
-docker compose --env-file .env.production \
-  -f docker-compose.production.yml \
-  --profile sandbox exec -T app-sandbox node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs avatar:sweep
+./scripts/ops/host-scheduled-job.sh avatar-sweep --dry-run true
 ```
 
-The production image has no `pnpm`, and `docker compose exec` skips the
-container entrypoint that loads the runtime secrets, so the command goes
-through `scripts/runtime/runtime-entrypoint.mjs`, which loads them and then hands the
-rest of the arguments to the CLI. Detach stdin (`</dev/null`) when running it
-from a script, or `exec` consumes the script's own input.
+The wrapper resolves both active services and uses
+`scripts/runtime/runtime-entrypoint.mjs` to load the runtime secrets before
+dispatching the command. It records each tier's dry-run summary in the Avatar
+log.
 
 CD installs the versioned host wrapper and its managed crontab entries after it
 has checked the active release. The daily `avatar-sweep` job runs the Avatar
@@ -278,7 +267,9 @@ sweep for each enabled deployment at 03:30 UTC. It resolves the active
 blue-green services for every run, logs one summary line per command and
 deployment, and exits non-zero if any command fails. The installation
 preserves unrelated crontab entries; do not edit the AIHUB managed block by
-hand.
+hand. After reviewing the dry-run summaries, run the actual sweep through
+`./scripts/ops/host-scheduled-job.sh avatar-sweep`; it enforces a 30-minute
+deadline per deployment and the nonblocking same-job lock.
 
 It prints one JSON line of counts (`scanned`, `unrecognised`, `orphaned`,
 `deleted`, `failed`, `dryRun`) and never an object key. It exits non-zero when
@@ -330,6 +321,37 @@ The schedule uses the VPS's UTC clock:
 - `ttl-audit` runs at 01:45 daily;
 - `avatar-sweep` runs `avatar:sweep` at 03:30 daily.
 
+Each CLI invocation has a hard deadline per enabled deployment. Production and
+Sandbox each get the full limit; a failure or timeout in Production is logged
+and does not prevent the Sandbox invocation.
+
+| Job            | Per-deployment limit |
+| -------------- | -------------------: |
+| `quota`        |           15 minutes |
+| `prune`        |           30 minutes |
+| `report`       |            3 minutes |
+| `ttl-audit`    |           15 minutes |
+| `avatar-sweep` |           30 minutes |
+
+The wrapper also caps deployment-status lookup at 30 seconds. The in-container
+CLI stops at its listed deadline; if Docker exec has not returned 15 seconds
+later, the wrapper terminates that client, with a further 5-second kill grace.
+It holds a nonblocking per-job `flock` and one host-wide job lock across both
+deployments. A second invocation of the same job logs
+`skipped reason=already_running` and exits without starting a command. A
+different job that finds the host lock held logs
+`deferred reason=host_job_active`, exits non-zero, and must be rerun manually;
+this policy permits at most one scheduled maintenance job across Production
+and Sandbox at a time. Rerun a missed report window with explicit `--from` and
+`--to` timestamps. Locks release automatically when the wrapper exits. The VPS
+needs `flock` (util-linux) and `timeout` (coreutils).
+
+This bounds concurrent maintenance jobs to one; it does not measure API grading
+headroom while a job runs. Record the representative grading-plus-maintenance
+latency, Postgres pool wait, CPU, and memory results before treating the
+capacity gate in #495 as complete. The repeatable grading benchmark is tracked
+in #327.
+
 For every run the wrapper reads the validated blue-green status and invokes the
 active service in each enabled deployment. It fails closed on missing,
 ambiguous, or unsupported routing; only a Sandbox deployment reported as
@@ -337,14 +359,21 @@ disabled is skipped. It detaches stdin, appends one success summary line per
 command and tier to the existing operator or Avatar sweep log, and writes at
 most the last 50 stderr lines for a failed command. Cron redirects wrapper
 output because the wrapper owns its log. A non-zero exit or a missing scheduled
-success must alert.
+success must alert. Start a scheduled job manually through the same wrapper to
+retain its timeout, locks, and per-deployment logging. `report` accepts an
+optional explicit window with `report --from <UTC-start> --to <UTC-end>`; without
+one, it reports the previous UTC hour. If the wrapper defers a scheduled
+report because another job is active, rerun the original hour with explicit
+timestamps.
 
 The `redis:ttl-audit` command scans `aihub:*` and exits non-zero if an expiring
 key has no TTL. It prints aggregate counts only, never Redis key names. The
 persistent `aihub:v1:jwks-generation:*` invalidation fences are counted
 separately because they must not expire and make a purged JWKS cache entry
-current again. `report` computes `--from` and `--to` as the start of the
-previous and current UTC hours, so `to` is never in the future.
+current again. To run the scheduled TTL audit manually, use
+`./scripts/ops/host-scheduled-job.sh ttl-audit`; it has a 15-minute limit and
+shares the same-job lock. `report` computes `--from` and `--to` as the start of
+the previous and current UTC hours, so `to` is never in the future.
 
 The wrappers currently use `docker compose exec` against the active serving
 services. Moving jobs into one-shot containers belongs to #433; time limits and
