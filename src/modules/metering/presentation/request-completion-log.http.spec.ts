@@ -613,6 +613,7 @@ describe('request completion log over the HTTP boundary', () => {
 
   it('records a delayed API-key refusal without creating Metering evidence', async () => {
     const delayMs = 75;
+    const slowLogWriteMs = 20;
     const totalBefore = await metricValue(
       app,
       'aihub_request_duration_seconds_sum',
@@ -628,6 +629,14 @@ describe('request completion log over the HTTP boundary', () => {
         await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
         return original.call(this, context);
       });
+    const originalWrite = log.write.bind(log);
+    const slowLogWrite = jest.spyOn(log, 'write').mockImplementation((line) => {
+      const startedAt = performance.now();
+      while (performance.now() - startedAt < slowLogWriteMs) {
+        // Simulate synchronous log serialization/backpressure before metrics.
+      }
+      originalWrite(line);
+    });
     runtimeConfiguration.AIHUB_ALLOW_UNAUTHENTICATED_DEV = false;
 
     try {
@@ -641,6 +650,7 @@ describe('request completion log over the HTTP boundary', () => {
     } finally {
       runtimeConfiguration.AIHUB_ALLOW_UNAUTHENTICATED_DEV = true;
       delayGuard.mockRestore();
+      slowLogWrite.mockRestore();
     }
 
     const event = log.only();
@@ -653,7 +663,7 @@ describe('request completion log over the HTTP boundary', () => {
     expect(
       (await metricValue(app, 'aihub_request_duration_seconds_sum')) -
         totalBefore,
-    ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
+    ).toBeCloseTo((event['total_ms'] as number) / 1000, 8);
     expect(
       (await metricValue(app, 'aihub_admission_duration_seconds_sum')) -
         admissionBefore,

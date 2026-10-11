@@ -98,6 +98,7 @@ function completionEvent(
 function recordRequestMetrics(
   request: FastifyRequest,
   reply: FastifyReply,
+  totalMs: number,
 ): void {
   const evidence = getMeteringEvidence(request);
   const operation =
@@ -115,8 +116,7 @@ function recordRequestMetrics(
     operation,
     statusCode: reply.statusCode,
     outcome,
-    totalMs:
-      evidence?.totalMs ?? requestDurationMs(request.raw, reply.elapsedTime),
+    totalMs,
     ...(admissionMs === undefined ? {} : { admissionMs }),
     ...(evidence?.downstreamMs === undefined
       ? {}
@@ -175,8 +175,9 @@ export function registerRequestCompletionLog(instance: FastifyInstance): void {
     }
 
     if (!isProbe) {
-      log.info(completionEvent(request, reply));
-      recordRequestMetrics(request, reply);
+      const event = completionEvent(request, reply);
+      log.info(event);
+      recordRequestMetrics(request, reply, event.total_ms);
     }
 
     done();
