@@ -15,6 +15,10 @@ import {
   createInternalErrorEnvelope,
 } from '@/common/errors/error-envelope';
 import { recordRequestFailure } from '@/common/http/request-failure.recorder';
+import {
+  markRequestAdmission,
+  requestDurationMs,
+} from '@/common/http/request-timing.hook';
 import { isRequestId } from '@/common/request-context/request-id';
 import { completeRequestMetering } from '@/modules/metering/application/metering-completion';
 import { getMeteringEvidence } from '@/modules/metering/application/metering-evidence';
@@ -68,6 +72,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = http.getResponse<FastifyReply>();
     const requestId = isRequestId(request.id) ? request.id : undefined;
 
+    // A refusal has no controller dispatch boundary; preserve an earlier mark.
+    markRequestAdmission(request.raw);
+
     const { status, envelope } = this.resolve(
       exception,
       requestId ?? 'unknown',
@@ -89,12 +96,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
           outcome: requestOutcome(status, envelope.error.code),
           httpStatus: status,
           errorCode: envelope.error.code,
-          // Fastify's own response window, which starts once the reply is being
-          // sent and so excludes body-parse time. The request-start metering
-          // hook that used to supply a wider number is gone, and the number
-          // now comes from the transport rather than from a store this filter
-          // would have had to read (ADR-0061).
-          totalMs: Math.max(0, Math.round(response.elapsedTime)),
+          totalMs: requestDurationMs(request.raw, response.elapsedTime),
         },
       );
     }

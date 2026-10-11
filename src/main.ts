@@ -46,15 +46,18 @@ export async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   const fastify = app.getHttpAdapter().getInstance();
+
+  // Ingress timing must precede plugins that do request work in onRequest,
+  // including cookie parsing. registerRequestHooks registers its timer first.
+  registerRequestHooks(fastify, requestTracer);
+
   await Reflect.apply(fastify.register, fastify, [fastifyCookie]);
 
-  registerSpeakingMultipartParser(app.getHttpAdapter().getInstance());
-
-  registerRequestHooks(app.getHttpAdapter().getInstance(), requestTracer);
+  registerSpeakingMultipartParser(fastify);
 
   // Registered after the hooks so the scrape itself is observed by the same
   // completion path, and skipped by it: a scrape is not a customer request.
-  registerMetricsRoute(app.getHttpAdapter().getInstance());
+  registerMetricsRoute(fastify);
 
   // No global prefix: the operation catalog carries the full public path
   // (`/v1/ielts/writing/task1/grade`) so it stays the single source of truth and

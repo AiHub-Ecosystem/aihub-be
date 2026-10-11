@@ -8,6 +8,7 @@ import {
   type RequestLifecycleState,
   getRequestLifecycle,
 } from '@/common/http/request-lifecycle.hook';
+import { markRequestAdmission } from '@/common/http/request-timing.hook';
 import {
   type SpeakingGradeJsonInput,
   SpeakingGradeJsonRequestSchema,
@@ -87,6 +88,7 @@ function requestMetadata(
     requestId: String(request.id),
     receivedAt: lifecycle.receivedAt,
     signal: lifecycle.signal,
+    onDispatchStart: () => markRequestAdmission(request.raw),
     organizationId: authenticated.organizationId,
     apiKeyId: authenticated.apiKeyId,
     environment: authenticated.environment,
@@ -119,9 +121,9 @@ export class SpeakingGradingController {
   ): Promise<DispatchResult<SpeakingGradeResponse>> {
     const lifecycle = requestLifecycle(request);
     try {
-      const metadata = requestMetadata(request, lifecycle);
       const source = createFastifySpeakingMultipartSource(request);
       const input = await this.multipartParser.parse(source, lifecycle.signal);
+      const metadata = requestMetadata(request, lifecycle);
 
       return await this.orchestrator.execute({
         operation: OPERATION,

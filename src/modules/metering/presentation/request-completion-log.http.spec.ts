@@ -26,6 +26,7 @@ import { appConfig } from '@/config/runtime-configuration';
 import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
 import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
 import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
+import { QuotaGuard } from '@/modules/gateway/presentation/quota.guard';
 import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,
@@ -34,6 +35,7 @@ import type {
   IdempotencyWork,
 } from '@/modules/idempotency/application/idempotency-service.port';
 import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
+import { ApiKeyGuard } from '@/modules/identity/api-keys/presentation/api-key.guard';
 import type {
   UsageAggregate,
   UsageAggregateQuery,
@@ -178,12 +180,19 @@ class ScriptedUsageRepository {
   }
 }
 
+let idempotencyDelayMs = 0;
+
 const idempotency = {
   async execute<T>(
     input: IdempotencyExecutionInput,
     work: IdempotencyWork<T>,
     _decodeReplay: IdempotencyReplayDecoder<T>,
   ): Promise<IdempotencyExecution<T>> {
+    if (idempotencyDelayMs > 0) {
+      await new Promise<void>((resolve) =>
+        setTimeout(resolve, idempotencyDelayMs),
+      );
+    }
     return {
       result: await work({
         signal: input.signal,
@@ -281,6 +290,7 @@ describe('request completion log over the HTTP boundary', () => {
   beforeEach(() => {
     dispatcher.succeed();
     usageRepository.succeed();
+    idempotencyDelayMs = 0;
     usageRepository.records.length = 0;
     log.reset();
     exporter.reset();
@@ -308,6 +318,7 @@ describe('request completion log over the HTTP boundary', () => {
       route: GRADE_URL,
       http_status: 200,
       total_ms: expect.any(Number),
+      admission_ms: expect.any(Number),
       outcome: 'success',
       org_id: 'local-development',
       operation: 'writing.task1.grade',
@@ -326,6 +337,127 @@ describe('request completion log over the HTTP boundary', () => {
     expect(response.statusCode).toBe(200);
     expect(usageRepository.records).toHaveLength(1);
     expect(log.only()['total_ms']).toBe(usageRepository.records[0]?.totalMs);
+  });
+
+  it('includes a slow real guard in response, log, and histograms', async () => {
+    const delayMs = 75;
+    const original = QuotaGuard.prototype.canActivate;
+    const totalBefore = await metricValue(
+      app,
+      'aihub_request_duration_seconds_sum',
+    );
+    const admissionBefore = await metricValue(
+      app,
+      'aihub_admission_duration_seconds_sum',
+    );
+    const delayGuard = jest
+      .spyOn(QuotaGuard.prototype, 'canActivate')
+      .mockImplementation(async function (this: QuotaGuard, context) {
+        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+        return original.call(this, context);
+      });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: GRADE_URL,
+        headers: { 'idempotency-key': 'completion-slow-guard' },
+        payload: VALID_BODY,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const totalMs = (
+        response.json() as { meta: { timing: { total_ms: number } } }
+      ).meta.timing.total_ms;
+      const event = log.only();
+      expect(totalMs).toBeGreaterThanOrEqual(delayMs - 10);
+      expect(event['total_ms']).toBe(totalMs);
+      expect(event['admission_ms']).toBeGreaterThanOrEqual(delayMs - 10);
+      expect(
+        (await metricValue(app, 'aihub_request_duration_seconds_sum')) -
+          totalBefore,
+      ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
+      expect(
+        (await metricValue(app, 'aihub_admission_duration_seconds_sum')) -
+          admissionBefore,
+      ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
+    } finally {
+      delayGuard.mockRestore();
+    }
+  });
+
+  it('starts admission timing after Writing idempotency work, at dispatch', async () => {
+    const delayMs = 75;
+    idempotencyDelayMs = delayMs;
+    const admissionBefore = await metricValue(
+      app,
+      'aihub_admission_duration_seconds_sum',
+    );
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: GRADE_URL,
+        headers: { 'idempotency-key': 'completion-slow-idempotency' },
+        payload: VALID_BODY,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const event = log.only();
+      expect(event['total_ms']).toBeGreaterThanOrEqual(delayMs - 10);
+      expect(event['admission_ms']).toBeGreaterThanOrEqual(delayMs - 10);
+      expect(
+        (await metricValue(app, 'aihub_admission_duration_seconds_sum')) -
+          admissionBefore,
+      ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
+    } finally {
+      idempotencyDelayMs = 0;
+    }
+  });
+
+  it('records guard refusal time before dispatch in the log and histograms', async () => {
+    const delayMs = 75;
+    const totalBefore = await metricValue(
+      app,
+      'aihub_request_duration_seconds_sum',
+    );
+    const admissionBefore = await metricValue(
+      app,
+      'aihub_admission_duration_seconds_sum',
+    );
+    const refusalGuard = jest
+      .spyOn(QuotaGuard.prototype, 'canActivate')
+      .mockImplementation(async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+        throw new AppError({
+          code: 'QUOTA_EXCEEDED',
+          message: 'Monthly request quota exceeded',
+          retryable: true,
+        });
+      });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: GRADE_URL,
+        payload: VALID_BODY,
+      });
+
+      expect(response.statusCode).toBe(429);
+      const event = log.only();
+      expect(event['total_ms']).toBeGreaterThanOrEqual(delayMs - 10);
+      expect(event['admission_ms']).toBeGreaterThanOrEqual(delayMs - 10);
+      expect(
+        (await metricValue(app, 'aihub_request_duration_seconds_sum')) -
+          totalBefore,
+      ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
+      expect(
+        (await metricValue(app, 'aihub_admission_duration_seconds_sum')) -
+          admissionBefore,
+      ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
+    } finally {
+      refusalGuard.mockRestore();
+    }
   });
 
   it('writes one event with the public error code for a validation failure', async () => {
@@ -393,6 +525,14 @@ describe('request completion log over the HTTP boundary', () => {
   });
 
   it('still writes one event for a body rejected before the application runs', async () => {
+    const totalCountBefore = await metricValue(
+      app,
+      'aihub_request_duration_seconds_count',
+    );
+    const admissionCountBefore = await metricValue(
+      app,
+      'aihub_admission_duration_seconds_count',
+    );
     const response = await app.inject({
       method: 'POST',
       url: GRADE_URL,
@@ -410,6 +550,19 @@ describe('request completion log over the HTTP boundary', () => {
         outcome: 'client_error',
         error_code: 'PAYLOAD_TOO_LARGE',
       }),
+    );
+    expect(
+      (await metricValue(app, 'aihub_request_duration_seconds_count')) -
+        totalCountBefore,
+    ).toBe(1);
+    expect(
+      (await metricValue(app, 'aihub_admission_duration_seconds_count')) -
+        admissionCountBefore,
+    ).toBe(1);
+
+    const metrics = (await app.inject({ method: 'GET', url: '/metrics' })).body;
+    expect(metrics).toContain(
+      'aihub_request_duration_seconds_count{operation="writing.task1.grade"}',
     );
   });
 
@@ -458,7 +611,32 @@ describe('request completion log over the HTTP boundary', () => {
     expect(await metricValue(app, 'aihub_requests_total')).toBe(before);
   });
 
-  it('omits the organization keys entirely for a request that never authenticated', async () => {
+  it('records a delayed API-key refusal without creating Metering evidence', async () => {
+    const delayMs = 75;
+    const slowLogWriteMs = 20;
+    const totalBefore = await metricValue(
+      app,
+      'aihub_request_duration_seconds_sum',
+    );
+    const admissionBefore = await metricValue(
+      app,
+      'aihub_admission_duration_seconds_sum',
+    );
+    const original = ApiKeyGuard.prototype.canActivate;
+    const delayGuard = jest
+      .spyOn(ApiKeyGuard.prototype, 'canActivate')
+      .mockImplementation(async function (this: ApiKeyGuard, context) {
+        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+        return original.call(this, context);
+      });
+    const originalWrite = log.write.bind(log);
+    const slowLogWrite = jest.spyOn(log, 'write').mockImplementation((line) => {
+      const startedAt = performance.now();
+      while (performance.now() - startedAt < slowLogWriteMs) {
+        // Simulate synchronous log serialization/backpressure before metrics.
+      }
+      originalWrite(line);
+    });
     runtimeConfiguration.AIHUB_ALLOW_UNAUTHENTICATED_DEV = false;
 
     try {
@@ -471,13 +649,25 @@ describe('request completion log over the HTTP boundary', () => {
       expect(response.statusCode).toBe(401);
     } finally {
       runtimeConfiguration.AIHUB_ALLOW_UNAUTHENTICATED_DEV = true;
+      delayGuard.mockRestore();
+      slowLogWrite.mockRestore();
     }
 
     const event = log.only();
+    expect(event['total_ms']).toBeGreaterThanOrEqual(delayMs - 10);
+    expect(event['admission_ms']).toBeGreaterThanOrEqual(delayMs - 10);
     expect(event['outcome']).toBe('client_error');
     expect(Object.keys(event)).not.toContain('org_id');
     expect(Object.keys(event)).not.toContain('operation');
     expect(Object.keys(event)).not.toContain('environment');
+    expect(
+      (await metricValue(app, 'aihub_request_duration_seconds_sum')) -
+        totalBefore,
+    ).toBeCloseTo((event['total_ms'] as number) / 1000, 8);
+    expect(
+      (await metricValue(app, 'aihub_admission_duration_seconds_sum')) -
+        admissionBefore,
+    ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
   });
 
   it('writes no event for a request the client abandoned before a response', async () => {

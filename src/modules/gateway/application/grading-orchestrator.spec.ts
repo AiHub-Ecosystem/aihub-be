@@ -142,8 +142,11 @@ describe('GradingOrchestratorPort', () => {
       settled: jest.fn(),
     };
     const common = { ...metadata(lifecycle.signal), backgroundLifecycle };
+    const task1DispatchStart = jest.fn();
+    const task2DispatchStart = jest.fn();
     const task1 = {
       ...common,
+      onDispatchStart: task1DispatchStart,
       operation: 'writing.task1.grade' as const,
       input: {
         question: 'Describe the chart.',
@@ -155,6 +158,7 @@ describe('GradingOrchestratorPort', () => {
     };
     const task2 = {
       ...common,
+      onDispatchStart: task2DispatchStart,
       operation: 'writing.task2.grade' as const,
       input: {
         question: 'Discuss the topic.',
@@ -236,6 +240,8 @@ describe('GradingOrchestratorPort', () => {
     });
     expect(task1Call?.abortedAtDispatch).toBe(false);
     expect(task2Call?.abortedAtDispatch).toBe(false);
+    expect(task1DispatchStart).toHaveBeenCalledTimes(1);
+    expect(task2DispatchStart).toHaveBeenCalledTimes(1);
     expect(replayTask1).toMatchObject({
       operation: 'writing.task1.grade',
       data: writingData,

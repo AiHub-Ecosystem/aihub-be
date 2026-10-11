@@ -7,6 +7,7 @@ import {
   type RequestLifecycleState,
   getRequestLifecycle,
 } from '@/common/http/request-lifecycle.hook';
+import { markRequestAdmission } from '@/common/http/request-timing.hook';
 import {
   type GradeResponse,
   GradeTask1RequestSchema,
@@ -60,6 +61,7 @@ function requestMetadata(
     requestId: String(request.id),
     receivedAt: lifecycle.receivedAt,
     signal: lifecycle.signal,
+    onDispatchStart: () => markRequestAdmission(request.raw),
     organizationId: authenticated.organizationId,
     apiKeyId: authenticated.apiKeyId,
     environment: authenticated.environment,

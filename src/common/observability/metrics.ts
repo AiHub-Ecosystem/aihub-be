@@ -38,6 +38,14 @@ const downstreamDuration = new Histogram({
   registers: [registry],
 });
 
+const admissionDuration = new Histogram({
+  name: 'aihub_admission_duration_seconds',
+  help: 'Time from request receipt to gateway dispatch admission, in seconds.',
+  labelNames: ['operation'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
+  registers: [registry],
+});
+
 const tokensTotal = new Counter({
   name: 'aihub_tokens_total',
   help: 'Aggregate tokens reported by the downstream AI service.',
@@ -266,6 +274,8 @@ export interface CompletedRequestMetrics {
   readonly totalMs?: number;
   /** Downstream wait in milliseconds, already timed by the dispatcher. */
   readonly downstreamMs?: number;
+  /** Time to pass guards and body validation, before gateway dispatch. */
+  readonly admissionMs?: number;
   readonly tokens?: number;
   readonly meteringStatus?: string;
 }
@@ -289,6 +299,11 @@ export function recordCompletedRequest(request: CompletedRequestMetrics): void {
   const downstreamSeconds = secondsOf(request.downstreamMs ?? Number.NaN);
   if (downstreamSeconds !== undefined) {
     downstreamDuration.observe({ operation }, downstreamSeconds);
+  }
+
+  const admissionSeconds = secondsOf(request.admissionMs ?? Number.NaN);
+  if (admissionSeconds !== undefined) {
+    admissionDuration.observe({ operation }, admissionSeconds);
   }
 
   if (

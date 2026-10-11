@@ -59,21 +59,36 @@ Controllers merely declare operations and invoke the dispatcher. **No controller
 
 ```
 Customer BE ──X-API-Key, X-User-Identity, Idempotency-Key──► AIHUB
-                                          t0 ─┐
-   req_01J... ; env=production                │  steps 1-11: ~3-8ms
+                                          t0 ─┐ request received
+   req_01J... ; env=production                │  body parse + steps 1-11
    org_abc ; actor=student_123                │
    scope OK ; quota OK ; idem: not seen       │
-                                          t1 ─┤
+                                          t1 ─┤ gateway dispatch admitted
    ──Bearer <internal JWT, exp=t1+60s>──► ai-writing        │
        POST /grading-feedback-task1                         │ downstream_ms
    ◄── { ...fields, usage{}, metrics{} } ──                 │
-                                          t2 ─┤
-   splitEnvelope -> parseResponse -> record usage_records
-                                          t3 ─┘
+                                          t2 ─┤ downstream response received
+   splitEnvelope -> parseResponse
+                                          t3 ─┤ total_ms sampled
+   await metering finalization -> write usage_records
+                                          t4 ─┘
 ◄── 200 { data, meta{ request_id, usage, timing } }
 
-total_ms = t3-t0    downstream_ms = t2-t1    gateway_overhead_ms = total - downstream
+total_ms = t3-t0    admission_ms = t1-t0
+downstream_ms = t2-t1    gateway_overhead_ms = total - downstream
 ```
+
+The shared monotonic clock starts in Fastify's first `onRequest` hook, before
+body parsing, cookie parsing, and the Nest guard chain. `admission_ms` is
+captured after idempotency resolution, at the dispatch boundary, or when a
+pre-dispatch refusal is handled. A replay that avoids dispatch has no
+`admission_ms`. For a metered success, `total_ms` is sampled when the result is
+ready, before usage-record finalization; the response timing, durable usage
+record, completion log, and operation-labeled histogram reuse that sample. For
+failures, it is sampled when the refusal is handled, before finalization. Both
+exclude usage-record persistence and response delivery, so they are not
+client-observed end-to-end latency. Requests without Metering evidence sample
+`total_ms` in the completion hook.
 
 Timing definitions conform strictly to D1 §14 and target architecture §17.1. We do not assume `total_ms = gateway_overhead_ms + ai_processing_ms`, because `downstream_ms` includes network transmission and overhead within the AI Service itself.
 

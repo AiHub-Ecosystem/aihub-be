@@ -739,14 +739,19 @@ Every successful grading response has the same shape:
 `data` is the operation's own contract. Grading responses share these `meta`
 fields:
 
-| Field                        | Meaning                                                           |
-| ---------------------------- | ----------------------------------------------------------------- |
-| `request_id`                 | AIHUB's id for this request. **Quote it in any support request**  |
-| `correlation_id`             | Echoed from your `X-Correlation-Id` header, if you sent one       |
-| `service`, `operation`       | What ran                                                          |
-| `timing.downstream_ms`       | Elapsed time for the downstream HTTP call, including network time |
-| `timing.gateway_overhead_ms` | Time AIHUB spent outside that downstream call                     |
-| `timing.total_ms`            | Total time measured by the grading response                       |
+| Field                        | Meaning                                                                                                                                                                 |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `request_id`                 | AIHUB's id for this request. **Quote it in any support request**                                                                                                        |
+| `correlation_id`             | Echoed from your `X-Correlation-Id` header, if you sent one                                                                                                             |
+| `service`, `operation`       | What ran                                                                                                                                                                |
+| `timing.downstream_ms`       | Elapsed time for the downstream HTTP call, including network time                                                                                                       |
+| `timing.gateway_overhead_ms` | AIHUB time outside downstream HTTP within `total_ms`; excludes usage-record persistence                                                                                 |
+| `timing.total_ms`            | From ingress until the grading result is ready; includes parsing, authentication, identity, rate limits, quota, and gateway work, but excludes usage-record persistence |
+
+These values describe gateway processing time, not client-observed end-to-end
+latency. `total_ms` is sampled before AIHUB writes the usage record; measure the
+HTTP response at your client if you need the full time until the response is
+received.
 
 Send `X-Correlation-Id` with your own trace id to stitch your logs to ours.
 

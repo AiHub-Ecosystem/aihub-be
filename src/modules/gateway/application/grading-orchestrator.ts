@@ -170,8 +170,9 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
 
     const dispatch = (
       work?: IdempotencyWorkContext,
-    ): Promise<DispatchResult<ResponseForCommand<C>>> =>
-      this.dispatcher.dispatch(
+    ): Promise<DispatchResult<ResponseForCommand<C>>> => {
+      command.onDispatchStart?.();
+      return this.dispatcher.dispatch(
         command.operation,
         // TS cannot correlate a generic command's `operation` with its own
         // `input`; the constraint on `BaseGradingCommand` already ties them,
@@ -181,6 +182,7 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
           ? context
           : { ...context, signal: work.signal, deadlineAt: work.deadlineAt },
       ) as Promise<DispatchResult<ResponseForCommand<C>>>;
+    };
 
     if (def.idempotency === 'none') {
       return dispatch();

@@ -1,8 +1,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import type { OperationId } from '@/catalog/operation-id';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { OPERATION_IDS, type OperationId } from '@/catalog/operation-id';
 import type { ErrorCode } from '@/common/errors/error-code';
 import { isHealthProbe } from '@/common/http/request-path';
+import {
+  requestAdmissionMs,
+  requestDurationMs,
+} from '@/common/http/request-timing.hook';
 import { routeTemplate } from '@/common/http/request-tracing.hook';
 import {
   METRICS_ROUTE_PATH,
@@ -16,6 +21,12 @@ import type { MeteringOutcome } from '@/modules/metering/application/metering-fi
 import { requestOutcome } from '@/modules/metering/application/request-outcome';
 
 const COMPLETION_EVENT = 'request_completed';
+const OPERATION_BY_ROUTE = new Map<string, OperationId>(
+  OPERATION_IDS.map((operationId) => {
+    const operation = OPERATION_CATALOG[operationId];
+    return [`${operation.method} ${operation.path}`, operationId] as const;
+  }),
+);
 
 /**
  * One response, as the log records it. A field with no value is left out
@@ -28,6 +39,7 @@ interface RequestCompletionEvent {
   readonly route: string;
   readonly http_status: number;
   readonly total_ms: number;
+  readonly admission_ms?: number;
   readonly outcome: MeteringOutcome;
   readonly error_code?: ErrorCode;
   readonly org_id?: string;
@@ -49,6 +61,7 @@ function completionEvent(
   const errorCode = request.aihubFailureCode;
   const traceId = request.aihubTraceId;
   const statusCode = reply.statusCode;
+  const admissionMs = requestAdmissionMs(request.raw);
 
   return {
     event: COMPLETION_EVENT,
@@ -56,12 +69,11 @@ function completionEvent(
     method: request.method,
     route: routeTemplate(request),
     http_status: statusCode,
-    // An authenticated request reports the number its Metering record was
-    // written with, so the line and the record cannot disagree about one
-    // request. A request that never authenticated has no record, and reports
-    // Fastify's own response window: from the request arriving to the response
-    // finishing, which excludes body-parse time.
-    total_ms: evidence?.totalMs ?? Math.max(0, Math.round(reply.elapsedTime)),
+    // Authenticated requests reuse the Metering value; requests without a
+    // record use the same ingress clock directly.
+    total_ms:
+      evidence?.totalMs ?? requestDurationMs(request.raw, reply.elapsedTime),
+    ...(admissionMs === undefined ? {} : { admission_ms: admissionMs }),
     outcome: requestOutcome(statusCode, errorCode),
     ...(errorCode === undefined ? {} : { error_code: errorCode }),
     ...(evidence === undefined
@@ -79,39 +91,41 @@ function completionEvent(
  * The same completion, as counters. Reads the same evidence as the log line,
  * so a metric and a log line can never disagree about one request.
  *
- * A request with no operation identifier never reached an operation: it was
- * rejected before authentication, or it matched no catalog route. There is no
- * bounded label value to attribute it to, and inventing one from the URL would
- * let a caller mint unbounded series by requesting arbitrary paths, so it is
- * counted nowhere rather than miscounted. Those requests are counted from the
- * protection seam in #200, which owns their denominator as well as their
- * reason — an error rate cannot be computed from successes alone.
+ * Authenticated requests use Metering evidence. A pre-auth refusal can still
+ * use a bounded label when its matched method and route exactly name a catalog
+ * operation. Never derive labels from the caller's raw URL.
  */
 function recordRequestMetrics(
   request: FastifyRequest,
   reply: FastifyReply,
+  totalMs: number,
 ): void {
   const evidence = getMeteringEvidence(request);
-  if (evidence === undefined) {
+  const operation =
+    evidence?.operation ??
+    OPERATION_BY_ROUTE.get(`${request.method} ${routeTemplate(request)}`);
+  if (operation === undefined) {
     return;
   }
 
   const outcome = requestOutcome(reply.statusCode, request.aihubFailureCode);
-  const tokens = tokensOf(evidence);
+  const tokens = evidence === undefined ? undefined : tokensOf(evidence);
+  const admissionMs = requestAdmissionMs(request.raw);
 
   recordCompletedRequest({
-    operation: evidence.operation,
+    operation,
     statusCode: reply.statusCode,
     outcome,
-    totalMs: evidence.totalMs ?? Math.max(0, Math.round(reply.elapsedTime)),
-    ...(evidence.downstreamMs === undefined
+    totalMs,
+    ...(admissionMs === undefined ? {} : { admissionMs }),
+    ...(evidence?.downstreamMs === undefined
       ? {}
       : { downstreamMs: evidence.downstreamMs }),
     ...(tokens === undefined ? {} : { tokens }),
     // Read from the evidence rather than recomputed: the finalizer stamps this
     // after applying every mutation, so it is the status the record was
     // actually written with. Absent when the record was never finalized.
-    ...(evidence.meteringStatus === undefined
+    ...(evidence?.meteringStatus === undefined
       ? {}
       : { meteringStatus: evidence.meteringStatus }),
   });
@@ -161,8 +175,9 @@ export function registerRequestCompletionLog(instance: FastifyInstance): void {
     }
 
     if (!isProbe) {
-      log.info(completionEvent(request, reply));
-      recordRequestMetrics(request, reply);
+      const event = completionEvent(request, reply);
+      log.info(event);
+      recordRequestMetrics(request, reply, event.total_ms);
     }
 
     done();
