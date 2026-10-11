@@ -1,0 +1,77 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  highestPassingRate,
+  jsonAfterPrefix,
+  metricValue,
+  overloadRate,
+  parseDockerStats,
+  taggedMetricValues,
+} from './capacity-benchmark-utils.mjs';
+
+await test('chooses the highest offered rate meeting the deadline without errors', () => {
+  const runs = [
+    {
+      offeredRateRps: 8,
+      routes: { writing_task1: { count: 80, p99Ms: 900, errorCount: 0 } },
+    },
+    {
+      offeredRateRps: 16,
+      routes: { writing_task1: { count: 160, p99Ms: 60_000, errorCount: 0 } },
+    },
+    {
+      offeredRateRps: 32,
+      routes: { writing_task1: { count: 320, p99Ms: 1200, errorCount: 1 } },
+    },
+  ];
+
+  assert.equal(highestPassingRate(runs, ['writing_task1'], 60_000), 16);
+});
+
+await test('places the controlled overload stage above the highest passing stage', () => {
+  assert.equal(overloadRate([4, 8, 16, 32], 16), 32);
+  assert.equal(overloadRate([4, 8, 16, 32], 32), 48);
+  assert.equal(overloadRate([4, 8, 16, 32], 0), 48);
+});
+
+await test('reads tagged k6 metrics and Docker resource samples', () => {
+  const metrics = {
+    resident: { values: { min: 10, max: 42 } },
+    'pool_waiting{pool:auth}': { values: { max: 2 } },
+    'pool_waiting{pool:runtime}': { values: { max: 1 } },
+  };
+
+  assert.equal(metricValue(metrics, 'resident'), 42);
+  assert.equal(
+    metricValue(
+      { route_count: { values: { count: 13 } } },
+      'route_count',
+      'count',
+    ),
+    13,
+  );
+  assert.deepEqual(taggedMetricValues(metrics, 'pool_waiting'), [
+    { labels: { pool: 'auth' }, values: { max: 2 } },
+    { labels: { pool: 'runtime' }, values: { max: 1 } },
+  ]);
+  assert.deepEqual(
+    parseDockerStats('{"CPUPerc":"150.25%","MemUsage":"384MiB / 768MiB"}'),
+    { cpuPercent: 150.25, memoryBytes: 402653184 },
+  );
+});
+
+await test('reads JSON from plain output and escaped k6 console logs', () => {
+  const output = [
+    'BENCHMARK_SUMMARY_JSON {"state":{"duration":3}}',
+    'time="2026-10-12T00:00:00Z" level=info msg="BENCHMARK_STUB_STATS {\\"requests\\":{},\\"errors\\":{}}" source=console',
+  ].join('\n');
+
+  assert.deepEqual(jsonAfterPrefix(output, 'BENCHMARK_SUMMARY_JSON '), {
+    state: { duration: 3 },
+  });
+  assert.deepEqual(jsonAfterPrefix(output, 'BENCHMARK_STUB_STATS '), {
+    requests: {},
+    errors: {},
+  });
+});

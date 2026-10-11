@@ -18,6 +18,8 @@
     "validate:openapi": "node scripts/checks/validate-openapi.mjs",
     "generate:postman": "tsx scripts/generate/generate-postman.ts && biome format --write aihub.postman_collection.json",
     "canary:ai-writing": "tsx scripts/ops/canary-ai-writing.ts",
+    "capacity:benchmark": "node scripts/ops/capacity-benchmark.mjs",
+    "test:capacity-benchmark": "node --test scripts/ops/capacity-benchmark.spec.mjs",
     "vault:provision": "node ops/vault/provision-runtime-secrets.mjs",
     "vault:smoke": "node scripts/ops/vault-smoke.mjs",
     "test": "jest",
@@ -36,7 +38,7 @@
     "knip": "node scripts/checks/knip.mjs",
     "verify:summary": "node scripts/checks/verify-summary.cjs",
     "provider:refresh": "node scripts/generate/refresh-provider-contract.mjs",
-    "verify": "pnpm knip && pnpm lint && pnpm format:check && pnpm type-check && pnpm test && pnpm build && pnpm check:imports:dist && pnpm check:migrations && pnpm arch-check && pnpm check:imports && pnpm validate:openapi",
+    "verify": "pnpm knip && pnpm lint && pnpm format:check && pnpm type-check && pnpm test && pnpm test:capacity-benchmark && pnpm build && pnpm check:imports:dist && pnpm check:migrations && pnpm arch-check && pnpm check:imports && pnpm validate:openapi",
     "prepare": "husky"
   },
   "dependencies": {
