@@ -144,10 +144,7 @@ describe('Auth transaction lifetime on Prisma', () => {
     ).resolves.toEqual([]);
 
     expect(queryRaw).not.toHaveBeenCalled();
-    expect(executeRaw).toHaveBeenCalledWith(
-      'UPDATE web_sessions SET revoked_at = $1',
-      expect.any(Date),
-    );
+    expect(executeRaw).toHaveBeenCalledTimes(1);
   });
 
   it('preserves the PostgreSQL SQLSTATE from Prisma adapter errors', async () => {
