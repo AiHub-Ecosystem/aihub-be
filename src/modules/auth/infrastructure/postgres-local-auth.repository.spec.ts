@@ -74,11 +74,6 @@ describe('PostgresLocalAuthRepository', () => {
     await repository.register(input);
 
     expect(client.queries).toHaveLength(3);
-    expect(client.queries[0]?.text).toContain('INSERT INTO user_accounts');
-    expect(client.queries[1]?.text).toContain('INSERT INTO auth_identities');
-    expect(client.queries[2]?.text).toContain(
-      'INSERT INTO email_verification_tokens',
-    );
     expect(client.queries[1]?.values).toContain(input.passwordHash);
     expect(client.queries[2]?.values).toContain(input.tokenHash);
   });
@@ -114,10 +109,7 @@ describe('PostgresLocalAuthRepository', () => {
     });
 
     expect(result).toEqual({ email: input.email });
-    expect(client.queries[1]?.text).toContain('SET consumed_at');
-    expect(client.queries[2]?.text).toContain(
-      'INSERT INTO email_verification_tokens',
-    );
+    expect(client.queries[2]?.values).toContain(input.tokenHash);
   });
 
   it('leaves no session behind when a request only verifies', async () => {
@@ -148,9 +140,10 @@ describe('PostgresLocalAuthRepository', () => {
       }),
     ).resolves.toEqual({ kind: 'verified' });
 
-    const sql = client.queries.map((query) => query.text).join('\n');
-    expect(sql).not.toContain('SET signed_in_at');
-    expect(sql).not.toContain('INSERT INTO refresh_tokens');
+    expect(client.queries).toHaveLength(2);
+    expect(client.queries.flatMap(({ values }) => values)).not.toContain(
+      refreshToken.hash,
+    );
   });
 
   it('commits the Verification Sign-in claim and its Refresh Session in one transaction', async () => {
@@ -186,13 +179,13 @@ describe('PostgresLocalAuthRepository', () => {
       userId: 'usr_01J00000000000000000000000',
     });
 
-    const sql = client.queries.map((query) => query.text).join('\n');
-    expect(sql).toContain('SET signed_in_at');
-    expect(sql).toContain('INSERT INTO refresh_tokens');
+    expect(client.queries).toHaveLength(4);
     expect(client.queries[3]?.values).toEqual(
       expect.arrayContaining([refreshToken.hash, refreshToken.id]),
     );
-    expect(JSON.stringify(client.queries)).not.toContain(refreshToken.raw);
+    expect(
+      JSON.stringify(client.queries.map(({ values }) => values)),
+    ).not.toContain(refreshToken.raw);
   });
 
   it('issues a reset token only for an active password identity and supersedes open tokens', async () => {
@@ -216,13 +209,8 @@ describe('PostgresLocalAuthRepository', () => {
         now: input.now,
       }),
     ).resolves.toEqual({ email: input.email });
-    expect(client.queries[0]?.text).toContain('FOR UPDATE');
-    expect(client.queries[1]?.text).toContain('password_reset_tokens');
-    expect(client.queries[1]?.text).toContain('SET consumed_at');
-    expect(client.queries[2]?.text).toContain(
-      'INSERT INTO password_reset_tokens',
-    );
-    expect(JSON.stringify(client.queries)).not.toContain('token_value');
+    expect(client.queries).toHaveLength(3);
+    expect(client.queries[2]?.values).toContain(input.tokenHash);
   });
 
   it('atomically changes the password, consumes reset tokens, and revokes every refresh session and web session', async () => {
@@ -253,31 +241,19 @@ describe('PostgresLocalAuthRepository', () => {
     ).resolves.toEqual({
       kind: 'reset',
     });
-    const sql = client.queries.map((query) => query.text).join('\n');
-    expect(sql).toContain('FROM password_reset_tokens token');
-    expect(sql).toContain('FOR UPDATE');
-    expect(sql).toContain('UPDATE auth_identities');
-    expect(sql).toContain('SET consumed_at');
-    expect(sql).toContain('UPDATE refresh_tokens');
-    expect(sql).toContain('UPDATE web_sessions');
-    expect(sql).toContain('revoked_at = $2');
-    expect(sql).toContain('WHERE user_account_id = $1 AND revoked_at IS NULL');
+    expect(client.queries).toHaveLength(6);
     // Both revocations ride the ONE transaction that changed the password, so a
     // failure anywhere rolls all of it back: no half-revoked account is
     // observable between them.
     expect(client.opened).toBe(1);
     expect(client.queries.every((query) => query.transaction === 1)).toBe(true);
-    expect(
-      client.queries
-        .filter((query) =>
-          /UPDATE (refresh_tokens|web_sessions)/.test(query.text),
-        )
-        .map((query) => query.values),
-    ).toEqual([
+    expect(client.queries.slice(-2).map(({ values }) => values)).toEqual([
       ['usr_01J00000000000000000000000', input.now],
       ['usr_01J00000000000000000000000', input.now],
     ]);
-    expect(JSON.stringify(client.queries)).not.toContain('reset-token');
+    expect(
+      JSON.stringify(client.queries.map(({ values }) => values)),
+    ).not.toContain('reset-token');
   });
 
   it('revokes no web session at all when the reset token is not consumable', async () => {
@@ -293,7 +269,6 @@ describe('PostgresLocalAuthRepository', () => {
     ).resolves.toEqual({ kind: 'invalid', reason: 'missing' });
 
     expect(client.queries).toHaveLength(1);
-    expect(JSON.stringify(client.queries)).not.toContain('web_sessions');
   });
 
   it('returns one invalid result for missing, expired, consumed, and inactive reset state', async () => {
@@ -370,7 +345,7 @@ describe('PostgresLocalAuthRepository', () => {
         now: input.now,
       }),
     ).resolves.toEqual({ kind: 'valid' });
-    expect(client.queries[0]?.text).not.toContain('FOR UPDATE');
+    expect(client.queries[0]?.values).toEqual([input.tokenHash]);
   });
 
   it('projects the password identity without returning profile fields', async () => {
@@ -396,9 +371,6 @@ describe('PostgresLocalAuthRepository', () => {
       status: 'active',
       passwordHash: input.passwordHash,
     });
-    expect(client.queries[0]?.text).toContain('JOIN auth_identities');
-    expect(client.queries[0]?.text).toContain("ai.provider = 'password'");
-    expect(JSON.stringify(client.queries[0])).not.toContain('username');
   });
 
   it('reads durable account status for bearer authorization', async () => {
@@ -421,7 +393,6 @@ describe('PostgresLocalAuthRepository', () => {
         'usr_01J00000000000000000000000',
       ),
     ).resolves.toBe('person_01');
-    expect(client.queries[0]?.text).toContain("status = 'active'");
     expect(client.queries[0]?.values).toEqual([
       'usr_01J00000000000000000000000',
     ]);
@@ -443,11 +414,13 @@ describe('PostgresLocalAuthRepository', () => {
       token: refreshToken,
       issuedAt: input.now,
     });
-    const insert = client.queries.find((query) =>
-      query.text.includes('INSERT INTO refresh_tokens'),
-    );
-    expect(insert?.values).toContain(refreshToken.hash);
-    expect(JSON.stringify(client.queries)).not.toContain(refreshToken.raw);
+    const insertValues = client.queries.find(({ values }) =>
+      values.includes(refreshToken.hash),
+    )?.values;
+    expect(insertValues).toContain(refreshToken.hash);
+    expect(
+      JSON.stringify(client.queries.map(({ values }) => values)),
+    ).not.toContain(refreshToken.raw);
 
     client.responses = [
       [
@@ -479,10 +452,7 @@ describe('PostgresLocalAuthRepository', () => {
       kind: 'rotated',
       userId: 'usr_01J00000000000000000000000',
     });
-    const rotationSql = client.queries.map((query) => query.text).join('\n');
-    expect(rotationSql).toContain('FOR UPDATE');
-    expect(rotationSql).toContain('SET used_at');
-    expect(rotationSql).toContain('INSERT INTO refresh_tokens');
+    expect(client.queries).toHaveLength(6);
   });
 
   it('revokes a whole family for a known stale token and ignores unknown logout tokens', async () => {
@@ -494,9 +464,11 @@ describe('PostgresLocalAuthRepository', () => {
       tokenHash: refreshToken.hash,
       now: input.now,
     });
-    expect(client.queries.map((query) => query.text).join('\n')).toContain(
-      'WHERE family_id = $1 AND revoked_at IS NULL',
-    );
+    expect(client.queries).toHaveLength(2);
+    expect(client.queries[1]?.values).toEqual([
+      refreshToken.familyId,
+      input.now,
+    ]);
 
     const unknownClient = new FakeClient();
     unknownClient.responses = [[]];

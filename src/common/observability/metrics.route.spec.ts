@@ -56,7 +56,7 @@ describe('metrics scrape endpoint', () => {
 
   it('emits request and runtime metric families on the scrape', async () => {
     setPostgresPoolStatsSource(() => [
-      { pool: 'auth', total: 4, idle: 2, waiting: 1 },
+      { pool: 'runtime', total: 4, idle: 2, waiting: 1 },
     ]);
     setDownstreamPoolQueuedSource(() => [
       { origin: 'https://ai-writing.test', queued: 3 },
@@ -85,7 +85,9 @@ describe('metrics scrape endpoint', () => {
       ]) {
         expect(payload).toContain(`# HELP ${name} `);
       }
-      expect(payload).toContain('aihub_postgres_pool_waiting{pool="auth"} 1');
+      expect(payload).toContain(
+        'aihub_postgres_pool_waiting{pool="runtime"} 1',
+      );
       expect(payload).toContain(
         'aihub_downstream_pool_queued{origin="https://ai-writing.test"} 3',
       );

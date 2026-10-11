@@ -310,7 +310,7 @@ describe('runtime resource metrics', () => {
   it('scrapes process memory, event-loop lag, Postgres pool counts, and downstream queue', async () => {
     let queued = 3;
     setPostgresPoolStatsSource(() => [
-      { pool: 'auth', total: 4, idle: 2, waiting: 1 },
+      { pool: 'runtime', total: 4, idle: 2, waiting: 1 },
     ]);
     setDownstreamPoolQueuedSource(() => [
       { origin: 'https://ai-writing.test', queued },
@@ -329,9 +329,9 @@ describe('runtime resource metrics', () => {
     ]) {
       expect(payload).toContain(`# HELP ${name} `);
     }
-    expect(payload).toContain('aihub_postgres_pool_total{pool="auth"} 4');
-    expect(payload).toContain('aihub_postgres_pool_idle{pool="auth"} 2');
-    expect(payload).toContain('aihub_postgres_pool_waiting{pool="auth"} 1');
+    expect(payload).toContain('aihub_postgres_pool_total{pool="runtime"} 4');
+    expect(payload).toContain('aihub_postgres_pool_idle{pool="runtime"} 2');
+    expect(payload).toContain('aihub_postgres_pool_waiting{pool="runtime"} 1');
     expect(payload).toContain(
       'aihub_downstream_pool_queued{origin="https://ai-writing.test"} 3',
     );

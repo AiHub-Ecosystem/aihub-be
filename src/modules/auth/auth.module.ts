@@ -17,6 +17,7 @@ import {
   type PrismaClientHolder,
   RUNTIME_PRISMA_CLIENT,
 } from '@/modules/persistence/application/persistence-client.port';
+import { PersistenceModule } from '@/modules/persistence/persistence.module';
 import {
   RUNTIME_CONNECTION_CONFIGURATION,
   type RuntimeConnectionConfigurationPort,
@@ -103,7 +104,7 @@ import { PostgresAuthMfaRepository } from './infrastructure/postgres-auth-mfa.re
 import {
   POSTGRES_AUTH_CLIENT,
   type PostgresAuthClient,
-  createPostgresAuthClient,
+  createAuthTransactionRunner,
 } from './infrastructure/postgres-auth.client';
 import { PostgresEmailCredentialRepository } from './infrastructure/postgres-email-credential.repository';
 import {
@@ -124,16 +125,17 @@ import {
 } from './public/postgres-readiness';
 
 @Module({
-  imports: [RuntimeConfigurationModule, SecretsModule],
+  imports: [RuntimeConfigurationModule, PersistenceModule, SecretsModule],
   controllers: [LocalAuthController, WebSessionController],
   providers: [
     {
       provide: POSTGRES_AUTH_CLIENT,
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
-      useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
-      ): PostgresAuthClient =>
-        createPostgresAuthClient(configuration.databaseUrl ?? ''),
+      inject: [RUNTIME_PRISMA_CLIENT],
+      useFactory: (runtime: PrismaClientHolder): PostgresAuthClient =>
+        createAuthTransactionRunner(
+          () => runtime.prisma,
+          (timeoutMs) => runtime.checkConnection(timeoutMs),
+        ),
     },
     {
       provide: AUTH_POSTGRES_READINESS,
@@ -181,8 +183,7 @@ import {
         AUTH_CLOCK,
       ],
     },
-    // One Postgres adapter backs all four aggregate ports, so the pool and its
-    // shutdown stay single.
+    // One Prisma adapter backs all Auth repositories through the shared runtime client.
     {
       provide: USER_ACCOUNT_REPOSITORY,
       useExisting: PostgresLocalAuthRepository,

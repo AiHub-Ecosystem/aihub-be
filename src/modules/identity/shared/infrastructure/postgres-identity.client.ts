@@ -5,6 +5,7 @@ import { type PoolConfig } from 'pg';
 
 import type { PostgresPoolName } from '@/common/observability/metrics';
 import { createPostgresPool } from '@/common/postgres/postgres-pool';
+import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import { Prisma, PrismaClient } from '@prisma-client/client';
 
 export interface PostgresIdentityClient {
@@ -29,11 +30,6 @@ class PostgresIdentityTransactionExpiredError extends Error {
     this.name = 'PostgresIdentityTransactionExpiredError';
   }
 }
-
-const IDENTITY_TRANSACTION_OPTIONS = {
-  maxWait: 1_000,
-  timeout: 5_000,
-} as const;
 
 type PrismaRawQueryClient = Pick<PrismaClient, '$queryRawUnsafe'>;
 
@@ -120,7 +116,7 @@ function identityClient(
         }
 
         return result;
-      }, IDENTITY_TRANSACTION_OPTIONS),
+      }, CONTROL_PLANE_TRANSACTION_OPTIONS),
     close,
   };
 }

@@ -135,7 +135,6 @@ export type PostgresConnectionRole =
 
 export type PostgresPoolName =
   | PostgresConnectionRole
-  | 'auth'
   | 'idempotency'
   | 'sandbox-dispatch-budget'
   | 'identity'
