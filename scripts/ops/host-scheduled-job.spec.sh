@@ -122,7 +122,20 @@ esac
 STUB
 chmod 755 "$bin_dir/crontab"
 
+cat >"$bin_dir/pgrep" <<'STUB'
+#!/usr/bin/env bash
+[[ "${1:-}" == -f && "${2:-}" == *host-scheduled-job.sh* ]]
+remaining="$(cat "$FAKE_PGREP_REMAINING_FILE")"
+if ((remaining > 0)); then
+  printf '%s\n' "$((remaining - 1))" >"$FAKE_PGREP_REMAINING_FILE"
+  exit 0
+fi
+exit 1
+STUB
+chmod 755 "$bin_dir/pgrep"
+
 export FAKE_CRONTAB_FILE="$test_root/crontab"
+export FAKE_PGREP_REMAINING_FILE="$test_root/pgrep-remaining"
 cat >"$FAKE_CRONTAB_FILE" <<'CRON'
 0 3 * * * /home/ngoc_anh/wispace-vault/snapshot.sh
 0 2 * * * /home/ngoc_anh/aihub-ops-job.sh quota
@@ -143,7 +156,7 @@ set -e
 assert_contains "$app_dir/scripts/ops/host-scheduled-job.sh" 'old wrapper must remain active'
 assert_contains "$app_dir/ops/host-jobs/aihub.crontab" 'old template must be restored'
 cmp -s "$test_root/crontab.before" "$FAKE_CRONTAB_FILE"
-assert_contains "$test_root/install-failed.out" 'candidate scheduled-job smoke failed; live schedule was not changed'
+assert_contains "$test_root/install-failed.out" 'candidate scheduled-job smoke failed before wrapper promotion'
 assert_not_contains "$test_root/install-failed.out" 'restoring previous state'
 
 docker_call_count="$(wc -l <"$FAKE_DOCKER_CALLS")"
@@ -159,7 +172,7 @@ assert_contains "$app_dir/scripts/ops/host-scheduled-job.sh" 'old wrapper must r
 assert_contains "$app_dir/ops/host-jobs/aihub.crontab" 'old template must be restored'
 cmp -s "$test_root/crontab.before" "$FAKE_CRONTAB_FILE"
 assert_contains "$test_root/install-smoke-failed.out" 'installed scheduled-job smoke failed'
-assert_contains "$test_root/install-smoke-failed.out" 'scheduled host job activation failed; restoring previous state'
+assert_contains "$test_root/install-smoke-failed.out" 'scheduled host job activation failed; restoring the suspended state'
 
 set +e
 FAKE_CRONTAB_FAIL_ONCE=true FAKE_CRONTAB_FAIL_FILE="$test_root/crontab-fail-once" \
@@ -171,7 +184,7 @@ set -e
 assert_contains "$app_dir/scripts/ops/host-scheduled-job.sh" 'old wrapper must remain active'
 assert_contains "$app_dir/ops/host-jobs/aihub.crontab" 'old template must be restored'
 cmp -s "$test_root/crontab.before" "$FAKE_CRONTAB_FILE"
-assert_contains "$test_root/install-crontab-failed.out" 'scheduled host job activation failed; restoring previous state'
+assert_contains "$test_root/install-crontab-failed.out" 'scheduled host job activation failed; restoring the suspended state'
 assert_not_contains "$test_root/install-crontab-failed.out" 'scheduled host job rollback failed'
 
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh"
@@ -185,4 +198,15 @@ assert_not_contains "$FAKE_CRONTAB_FILE" 'aihub-avatar-sweep.sh'
 [[ "$(grep -c '^# BEGIN AIHUB MANAGED JOBS$' "$FAKE_CRONTAB_FILE")" == 1 ]]
 [[ "$(grep -c 'host-scheduled-job.sh' "$FAKE_CRONTAB_FILE")" == 5 ]]
 
-printf 'host installer test passed: staged smoke, rollback, idempotent schedule\n'
+cp "$FAKE_CRONTAB_FILE" "$test_root/crontab.before-suspend"
+printf '1\n' >"$FAKE_PGREP_REMAINING_FILE"
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" suspend
+assert_contains "$FAKE_CRONTAB_FILE" '/home/ngoc_anh/wispace-vault/snapshot.sh'
+assert_not_contains "$FAKE_CRONTAB_FILE" 'host-scheduled-job.sh'
+cmp -s "$test_root/crontab.before-suspend" "$app_dir/.aihub-host-jobs-state/crontab"
+[[ "$(cat "$FAKE_PGREP_REMAINING_FILE")" == 0 ]]
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" restore
+cmp -s "$test_root/crontab.before-suspend" "$FAKE_CRONTAB_FILE"
+[[ ! -e "$app_dir/.aihub-host-jobs-state" ]]
+
+printf 'host installer test passed: smoke rollback, schedule suspend/drain/restore\n'

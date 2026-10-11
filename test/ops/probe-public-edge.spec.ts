@@ -38,6 +38,10 @@ describe('public edge health probe', () => {
 
     expect(workflow).toContain('./scripts/ops/blue-green-host.sh deploy');
     expect(workflow).toContain('$VPS_APP_DIR/.aihub-host-jobs-candidate/');
+    expect(workflow).toContain('./scripts/ops/install-host-jobs.sh suspend');
+    expect(
+      workflow.indexOf('      - name: Pause and drain AIHUB host jobs'),
+    ).toBeLessThan(workflow.indexOf('      - name: Deploy release'));
     expect(workflow.indexOf('      - name: Deploy release')).toBeLessThan(
       workflow.indexOf(
         '      - name: Install and smoke the scheduled host jobs',
@@ -46,14 +50,6 @@ describe('public edge health probe', () => {
     expect(deployHelper).toContain('probe_all');
     expect(deployHelper).toContain('deploy_tier production');
     expect(deployHelper).toContain('deploy_tier sandbox');
-    expect(deployHelper).toContain(
-      'Sandbox rollout failed after Production cut over; rolling Production back',
-    );
-    expect(deployHelper).toContain('rollback production');
-    expect(deployHelper).toContain('rollback_candidate_tier_if_active');
-    expect(deployHelper).toContain(
-      'one or more candidate tiers could not be rolled back after failed edge probes',
-    );
     expect(deployHelper).toContain('probe_container_dependencies');
   });
 

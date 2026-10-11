@@ -959,22 +959,7 @@ final_edge_window() {
   return 1
 }
 
-rollback_candidate_tier_if_active() {
-  local tier="$1" candidate_sha="$2" line active_sha
-  line="$(status_tier "$tier")" || return 1
-  active_sha="${line#* sha=}"
-  active_sha="${active_sha%% *}"
-  if [[ "$active_sha" != "$candidate_sha" ]]; then
-    [[ "$active_sha" =~ ^[a-f0-9]{40}$ ]] && return 0
-    printf 'cannot determine the active %s revision after failed edge probes\n' "$tier" >&2
-    return 1
-  fi
-  printf 'final edge window failed; rolling back candidate %s tier\n' "$tier" >&2
-  rollback "$tier"
-}
-
 deploy() {
-  local sandbox_status=0 rollback_status=0 candidate_sha="${AIHUB_IMAGE##*:}" tier
   [[ -n "$AIHUB_IMAGE" ]] || { printf 'AIHUB_IMAGE is required\n' >&2; return 1; }
   preflight
   capture_resources baseline
@@ -1010,26 +995,12 @@ deploy() {
   deploy_tier production
   if [[ "$sandbox_enabled" == true ]]; then
     if [[ "$sandbox_routed" == true ]]; then
-      deploy_tier sandbox || sandbox_status=$?
+      deploy_tier sandbox
     else
-      bootstrap_sandbox || sandbox_status=$?
-    fi
-    if [[ "$sandbox_status" -ne 0 ]]; then
-      printf 'Sandbox rollout failed after Production cut over; rolling Production back\n' >&2
-      rollback production || printf 'Production rollback after Sandbox failure was not confirmed\n' >&2
-      return 1
+      bootstrap_sandbox
     fi
   fi
-  if ! final_edge_window 10; then
-    for tier in production sandbox; do
-      [[ "$tier" != sandbox || "$sandbox_routed" == true ]] || continue
-      rollback_candidate_tier_if_active "$tier" "$candidate_sha" || rollback_status=1
-    done
-    if [[ "$rollback_status" -ne 0 ]]; then
-      printf 'one or more candidate tiers could not be rolled back after failed edge probes\n' >&2
-    fi
-    return 1
-  fi
+  final_edge_window 10
 }
 
 restore_active_after_rollback_failure() {

@@ -272,12 +272,13 @@ through `scripts/runtime/runtime-entrypoint.mjs`, which loads them and then hand
 rest of the arguments to the CLI. Detach stdin (`</dev/null`) when running it
 from a script, or `exec` consumes the script's own input.
 
-CD installs the versioned host wrapper and its managed crontab entries after a
-successful release. The daily `avatar-sweep` job runs the Avatar sweep for each
-enabled deployment at 03:30 UTC. It resolves the active blue-green
-services for every run, logs one summary line per command and deployment, and
-exits non-zero if any command fails. The installation preserves unrelated
-crontab entries; do not edit the AIHUB managed block by hand.
+CD installs the versioned host wrapper and its managed crontab entries after it
+has checked the active release. The daily `avatar-sweep` job runs the Avatar
+sweep for each enabled deployment at 03:30 UTC. It resolves the active
+blue-green services for every run, logs one summary line per command and
+deployment, and exits non-zero if any command fails. The installation
+preserves unrelated crontab entries; do not edit the AIHUB managed block by
+hand.
 
 It prints one JSON line of counts (`scanned`, `unrecognised`, `orphaned`,
 `deleted`, `failed`, `dryRun`) and never an object key. It exits non-zero when
@@ -288,16 +289,28 @@ non-zero exit and on a missed run for either container.
 ### Scheduled operator jobs
 
 The versioned schedule is [`ops/host-jobs/aihub.crontab`](../../ops/host-jobs/aihub.crontab).
-CD stages it and `scripts/ops/host-scheduled-job.sh` before deployment, then
-`scripts/ops/install-host-jobs.sh` promotes them only after the release succeeds.
+CD stages it and `scripts/ops/host-scheduled-job.sh`, then suspends the managed
+AIHUB crontab block and waits for already-running AIHUB host jobs to finish
+(maximum 15 minutes) before deployment. This prevents an old wrapper from
+running against a newly active image. Unrelated crontab entries continue to
+run. After deployment, CD checks the active tier revisions: if any tier runs
+the target revision, it smoke-tests the staged wrapper against every active
+tier, installs the wrapper and managed schedule, verifies the crontab, and
+smokes the installed wrapper. If a failed rollout left no target tier active
+and no pending recovery state, CD restores the saved crontab. This preserves
+ADR-0085's per-tier rollback behavior: Production can remain on the new release
+while Sandbox returns to its previous release.
+
 The installer replaces only the `AIHUB MANAGED JOBS` block, preserves unrelated
-entries, removes the old hand-installed AIHUB wrapper lines, verifies the
-installed crontab, and runs a read-only `usage:report` smoke against the staged
-wrapper before promotion and the installed wrapper after promotion. A failed
-staged smoke leaves live state untouched; a failed installed smoke, promotion,
-or crontab verification restores the previous wrapper, template, and crontab.
-A failed Sandbox rollout after Production cutover also triggers a Production
-rollback attempt before CD exits.
+entries, and removes old hand-installed AIHUB wrapper lines. Unknown active
+revisions or a failed smoke leave AIHUB jobs suspended. A pending recovery
+record is preserved and continues to block later deployments; CD can resume
+jobs only when the staged wrapper passes against every active tier. The saved
+crontab stays in `.aihub-host-jobs-state/`; after following the #289 recovery
+procedure, restore it with
+`APP_DIR=<deployment-dir> ./scripts/ops/install-host-jobs.sh restore`.
+Promotion or crontab verification failures restore the pre-promotion wrapper
+and template while keeping the schedule suspended.
 
 The schedule uses the VPS's UTC clock:
 
