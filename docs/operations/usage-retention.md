@@ -7,8 +7,9 @@ Redis quota counters and idempotency records are outside this command.
 
 ## Schedule and scope
 
-Run the command at **02:30 UTC**, after the 02:00 UTC quota reconciliation. Use
-one cron owner and invoke it once for each deployment database:
+The CD-managed scheduled wrapper runs this command at **02:30 UTC**, after the
+02:00 UTC quota reconciliation, in each enabled deployment. To run it manually
+for Production and Sandbox:
 
 ```sh
 docker compose --env-file .env.production \
@@ -26,8 +27,10 @@ through `scripts/runtime/runtime-entrypoint.mjs`, which loads them and then hand
 rest of the arguments to the CLI ([`deploy-vps.md`](deploy-vps.md)).
 
 Each invocation loads its selected database URL from the Vault Agent connection
-snapshot. Production and sandbox failures are independent; alert on a non-zero
-exit and on a missed run for either container.
+snapshot. Production and Sandbox failures are independent; the wrapper continues
+to Sandbox after a Production failure and records the result in
+`~/aihub-ops-job.log`. Alert on a non-zero exit and on a missed run for either
+container.
 
 ## Retention boundary
 

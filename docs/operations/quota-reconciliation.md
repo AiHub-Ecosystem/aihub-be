@@ -10,8 +10,8 @@ reconciliation command.
 
 ## Schedule
 
-Run the command once per day at 02:00 UTC from the AIHUB application
-container:
+The CD-managed scheduled wrapper runs this command in the active Production and
+Sandbox services once per day at 02:00 UTC. To run it manually:
 
 ```sh
 docker compose --env-file .env.production \
@@ -24,9 +24,10 @@ container entrypoint that loads the runtime secrets, so the command goes
 through `scripts/runtime/runtime-entrypoint.mjs`, which loads them and then hands the
 rest of the arguments to the CLI ([`deploy-vps.md`](deploy-vps.md)).
 
-The cron owner must alert on a non-zero exit and on a missed run. A missed run
-does not produce a failure line, so the monitor should use the absence of a
-recent successful run as its dead-man's-switch signal.
+The wrapper appends a summary or bounded failure stderr to
+`~/aihub-ops-job.log`; alert on a non-zero exit and on a missed successful
+run. A missed run does not produce a failure line, so use the absence of a
+recent successful run as the dead-man's-switch signal.
 
 ## What it reconciles
 

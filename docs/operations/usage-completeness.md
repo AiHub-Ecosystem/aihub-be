@@ -7,11 +7,10 @@ records, or changes quota state.
 
 ## Schedule and scope
 
-Run once per hour at **05 minutes past the hour**, separately for each
-deployment database. The report covers the UTC hour that just ended. Production
-and sandbox are independent runs and have independent missed-run alerts.
-
-The cron owner supplies explicit timestamps so the run is deterministic:
+The CD-managed scheduled wrapper runs once per hour at **05 minutes past the
+hour** for each enabled deployment database. The report covers the UTC hour that
+just ended. Production and Sandbox are independent runs. The wrapper supplies
+explicit timestamps; use explicit timestamps for a manual run too:
 
 ```sh
 docker compose --env-file .env.production \
@@ -116,7 +115,7 @@ The error codes are stable: `USAGE_REPORT_INVALID_WINDOW`,
 connection strings, credentials, request bodies, assertions, or downstream
 responses.
 
-The cron monitor must alert on:
+The host-job monitor must alert on:
 
 1. a summary with `status: "alert"`;
 2. a non-zero exit; and

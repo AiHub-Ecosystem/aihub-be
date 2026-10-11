@@ -37,6 +37,48 @@ describe('public edge health probe', () => {
     );
 
     expect(workflow).toContain('./scripts/ops/blue-green-host.sh deploy');
+    expect(workflow).toContain('$VPS_APP_DIR/.aihub-host-jobs-candidate/');
+    expect(workflow).toContain(
+      '"$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh" suspend',
+    );
+    expect(workflow).toContain(
+      'active AIHUB tiers run mixed revisions; host jobs remain suspended',
+    );
+    expect(workflow).toContain(
+      'if [[ "${active_shas[0]}" == "$target_sha" ]]; then',
+    );
+    expect(workflow).toContain('timeout-minutes: 45');
+    expect(
+      workflow.indexOf('      - name: Stage host job installer'),
+    ).toBeLessThan(
+      workflow.indexOf('      - name: Pause and drain AIHUB host jobs'),
+    );
+    expect(
+      workflow.indexOf('      - name: Pause and drain AIHUB host jobs'),
+    ).toBeLessThan(
+      workflow.indexOf('      - name: Sync deployment files to VPS'),
+    );
+    expect(workflow).toContain('.aihub-host-jobs-sync-candidate');
+    expect(workflow).toContain(
+      'Restore host files and schedule after sync failure',
+    );
+    expect(
+      workflow.indexOf('      - name: Sync deployment files to VPS'),
+    ).toBeLessThan(
+      workflow.indexOf(
+        '      - name: Restore host files and schedule after sync failure',
+      ),
+    );
+    expect(
+      workflow.indexOf(
+        '      - name: Restore host files and schedule after sync failure',
+      ),
+    ).toBeLessThan(workflow.indexOf('      - name: Deploy release'));
+    expect(workflow.indexOf('      - name: Deploy release')).toBeLessThan(
+      workflow.indexOf(
+        '      - name: Install and smoke the scheduled host jobs',
+      ),
+    );
     expect(deployHelper).toContain('probe_all');
     expect(deployHelper).toContain('deploy_tier production');
     expect(deployHelper).toContain('deploy_tier sandbox');

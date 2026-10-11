@@ -69,7 +69,7 @@ jobs:
     name: Blue-green deploy to VPS
     needs: resolve
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     environment:
       name: production
     concurrency:
@@ -155,8 +155,7 @@ jobs:
           main_sha="$(git rev-parse refs/remotes/origin/main)"
           printf '%s\n' "$state" | node scripts/ci/deploy-target-guard.cjs "$DEPLOY_SHA" "$main_sha"
 
-      - name: Sync deployment files to VPS
-        id: sync
+      - name: Stage host job installer
         shell: bash
         run: |
           set -euo pipefail
@@ -166,39 +165,16 @@ jobs:
           scp_opts=(-i "$HOME/.ssh/aihub-deploy" -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
-          set -eu
-          mkdir -p "$APP_DIR/scripts/ops" "$APP_DIR/ops/nginx" \
-            "$APP_DIR/ops/vault/agent" "$APP_DIR/ops/vault/templates"
+          set -euo pipefail
+          mkdir -p "$APP_DIR/.aihub-host-jobs-candidate"
           REMOTE
           scp "${scp_opts[@]}" \
-            docker-compose.production.yml \
-            "$target:$VPS_APP_DIR/"
-          scp "${scp_opts[@]}" \
-            scripts/ops/blue-green-host.sh \
-            "$target:$VPS_APP_DIR/scripts/ops/"
-          scp "${scp_opts[@]}" \
-            ops/nginx/aihub-api.conf \
-            ops/nginx/sandbox.conf \
-            "$target:$VPS_APP_DIR/ops/nginx/"
-          scp "${scp_opts[@]}" \
-            ops/vault/agent/aihub-runtime.hcl \
-            "$target:$VPS_APP_DIR/ops/vault/agent/"
-          scp "${scp_opts[@]}" \
-            ops/vault/templates/runtime-secrets.json.ctmpl \
-            ops/vault/templates/auth-mfa-secrets.json.ctmpl \
-            ops/vault/templates/connection-secrets.json.ctmpl \
-            "$target:$VPS_APP_DIR/ops/vault/templates/"
+            scripts/ops/install-host-jobs.sh \
+            "$target:$VPS_APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh"
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
-          set -eu
-          chmod 755 "$APP_DIR/scripts/ops/blue-green-host.sh"
-          test -s "$APP_DIR/docker-compose.production.yml"
-          test -s "$APP_DIR/scripts/ops/blue-green-host.sh"
-          test -s "$APP_DIR/ops/nginx/aihub-api.conf"
-          test -s "$APP_DIR/ops/nginx/sandbox.conf"
-          test -s "$APP_DIR/ops/vault/agent/aihub-runtime.hcl"
-          test -s "$APP_DIR/ops/vault/templates/runtime-secrets.json.ctmpl"
-          test -s "$APP_DIR/ops/vault/templates/auth-mfa-secrets.json.ctmpl"
-          test -s "$APP_DIR/ops/vault/templates/connection-secrets.json.ctmpl"
+          set -euo pipefail
+          chmod 755 "$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh"
+          test -s "$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh"
           REMOTE
 
       - name: Log in to GHCR on VPS
@@ -216,7 +192,135 @@ jobs:
           printf '%s' "$GHCR_PULL_TOKEN" | ssh "${ssh_opts[@]}" "$target" \
             "sudo -n docker login ghcr.io --username '$GHCR_USERNAME' --password-stdin"
 
+      - name: Pause and drain AIHUB host jobs
+        id: pause_host_jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          "$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh" suspend
+          REMOTE
+
+      - name: Sync deployment files to VPS
+        id: sync
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          scp_opts=(-i "$HOME/.ssh/aihub-deploy" -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -eu
+          test -d "$APP_DIR/.aihub-host-jobs-state"
+          sync_candidate="$APP_DIR/.aihub-host-jobs-sync-candidate"
+          sync_backup="$APP_DIR/.aihub-host-jobs-state/sync-backup"
+          mkdir -p "$sync_candidate" "$sync_backup"
+          rm -f -- "$sync_candidate/blue-green-host.sh" \
+            "$sync_candidate/docker-compose.production.yml" \
+            "$sync_backup/blue-green-host.sh" \
+            "$sync_backup/docker-compose.production.yml" \
+            "$sync_backup/ready"
+          cp -p -- "$APP_DIR/scripts/ops/blue-green-host.sh" "$sync_backup/blue-green-host.sh"
+          cp -p -- "$APP_DIR/docker-compose.production.yml" "$sync_backup/docker-compose.production.yml"
+          : >"$sync_backup/ready"
+          chmod 600 "$sync_backup/ready"
+          mkdir -p "$APP_DIR/scripts/ops" "$APP_DIR/ops/nginx" \
+            "$APP_DIR/ops/vault/agent" "$APP_DIR/ops/vault/templates" \
+            "$APP_DIR/ops/host-jobs" "$APP_DIR/.aihub-host-jobs-candidate"
+          REMOTE
+          scp "${scp_opts[@]}" \
+            docker-compose.production.yml \
+            "$target:$VPS_APP_DIR/.aihub-host-jobs-sync-candidate/"
+          scp "${scp_opts[@]}" \
+            scripts/ops/install-host-jobs.sh \
+            "$target:$VPS_APP_DIR/.aihub-host-jobs-sync-candidate/"
+          scp "${scp_opts[@]}" \
+            scripts/ops/blue-green-host.sh \
+            "$target:$VPS_APP_DIR/.aihub-host-jobs-sync-candidate/"
+          scp "${scp_opts[@]}" \
+            scripts/ops/host-scheduled-job.sh \
+            ops/host-jobs/aihub.crontab \
+            "$target:$VPS_APP_DIR/.aihub-host-jobs-candidate/"
+          scp "${scp_opts[@]}" \
+            ops/nginx/aihub-api.conf \
+            ops/nginx/sandbox.conf \
+            "$target:$VPS_APP_DIR/ops/nginx/"
+          scp "${scp_opts[@]}" \
+            ops/vault/agent/aihub-runtime.hcl \
+            "$target:$VPS_APP_DIR/ops/vault/agent/"
+          scp "${scp_opts[@]}" \
+            ops/vault/templates/runtime-secrets.json.ctmpl \
+            ops/vault/templates/auth-mfa-secrets.json.ctmpl \
+            ops/vault/templates/connection-secrets.json.ctmpl \
+            "$target:$VPS_APP_DIR/ops/vault/templates/"
+          ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -eu
+          chmod 755 "$APP_DIR/scripts/ops/blue-green-host.sh"
+          test -s "$APP_DIR/docker-compose.production.yml"
+          test -s "$APP_DIR/scripts/ops/blue-green-host.sh"
+          test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/install-host-jobs.sh"
+          test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/docker-compose.production.yml"
+          test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/blue-green-host.sh"
+          test -s "$APP_DIR/.aihub-host-jobs-candidate/host-scheduled-job.sh"
+          test -s "$APP_DIR/.aihub-host-jobs-candidate/aihub.crontab"
+          test -s "$APP_DIR/ops/nginx/aihub-api.conf"
+          test -s "$APP_DIR/ops/nginx/sandbox.conf"
+          test -s "$APP_DIR/ops/vault/agent/aihub-runtime.hcl"
+          test -s "$APP_DIR/ops/vault/templates/runtime-secrets.json.ctmpl"
+          test -s "$APP_DIR/ops/vault/templates/auth-mfa-secrets.json.ctmpl"
+          test -s "$APP_DIR/ops/vault/templates/connection-secrets.json.ctmpl"
+          compose_next="$(mktemp "$APP_DIR/.aihub-compose.XXXXXX")"
+          helper_next="$(mktemp "$APP_DIR/scripts/ops/.blue-green-host.XXXXXX")"
+          installer_next="$(mktemp "$APP_DIR/scripts/ops/.install-host-jobs.XXXXXX")"
+          install -m 644 "$APP_DIR/.aihub-host-jobs-sync-candidate/docker-compose.production.yml" "$compose_next"
+          install -m 755 "$APP_DIR/.aihub-host-jobs-sync-candidate/blue-green-host.sh" "$helper_next"
+          install -m 755 "$APP_DIR/.aihub-host-jobs-sync-candidate/install-host-jobs.sh" "$installer_next"
+          mv -f -- "$installer_next" "$APP_DIR/scripts/ops/install-host-jobs.sh"
+          mv -f -- "$compose_next" "$APP_DIR/docker-compose.production.yml"
+          mv -f -- "$helper_next" "$APP_DIR/scripts/ops/blue-green-host.sh"
+          test -s "$APP_DIR/scripts/ops/install-host-jobs.sh"
+          cmp -s "$APP_DIR/.aihub-host-jobs-sync-candidate/docker-compose.production.yml" \
+            "$APP_DIR/docker-compose.production.yml"
+          cmp -s "$APP_DIR/.aihub-host-jobs-sync-candidate/blue-green-host.sh" \
+            "$APP_DIR/scripts/ops/blue-green-host.sh"
+          REMOTE
+
+      - name: Restore host files and schedule after sync failure
+        if: ${{ always() && steps.pause_host_jobs.outcome == 'success' && steps.sync.outcome != 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          backup="$APP_DIR/.aihub-host-jobs-state/sync-backup"
+          if [[ -f "$backup/ready" ]]; then
+            compose_next="$(mktemp "$APP_DIR/.aihub-compose-restore.XXXXXX")"
+            helper_next="$(mktemp "$APP_DIR/scripts/ops/.blue-green-restore.XXXXXX")"
+            install -m 644 "$backup/docker-compose.production.yml" "$compose_next"
+            install -m 755 "$backup/blue-green-host.sh" "$helper_next"
+            mv -f -- "$compose_next" "$APP_DIR/docker-compose.production.yml"
+            mv -f -- "$helper_next" "$APP_DIR/scripts/ops/blue-green-host.sh"
+            cmp -s "$backup/docker-compose.production.yml" "$APP_DIR/docker-compose.production.yml"
+            cmp -s "$backup/blue-green-host.sh" "$APP_DIR/scripts/ops/blue-green-host.sh"
+          fi
+          rm -f -- "$APP_DIR/.aihub-host-jobs-sync-candidate/blue-green-host.sh" \
+            "$APP_DIR/.aihub-host-jobs-sync-candidate/docker-compose.production.yml" \
+            "$APP_DIR/.aihub-host-jobs-sync-candidate/install-host-jobs.sh"
+          rmdir "$APP_DIR/.aihub-host-jobs-sync-candidate" 2>/dev/null || true
+          "$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh" restore
+          REMOTE
+
       - name: Deploy release
+        id: deploy
         shell: bash
         run: |
           set -euo pipefail
@@ -230,6 +334,68 @@ jobs:
           cd "$APP_DIR"
           ./scripts/ops/blue-green-host.sh deploy
           REMOTE
+
+      - name: Install and smoke the scheduled host jobs
+        id: host_jobs
+        if: ${{ always() && steps.sync.outcome == 'success' && steps.ssh.outcome == 'success' && steps.pause_host_jobs.outcome != 'skipped' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          image_arg="$(printf '%q' "$AIHUB_IMAGE")"
+          deploy_outcome="$(printf '%q' "$DEPLOY_OUTCOME")"
+          ssh "${ssh_opts[@]}" "$target" \
+            "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg DEPLOY_OUTCOME=$deploy_outcome bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          state="$(./scripts/ops/blue-green-host.sh status)"
+          target_sha="${AIHUB_IMAGE##*:}"
+          if grep -Eq '^pending=' <<<"$state" || grep -Fxq 'sandbox enabled but not routed' <<<"$state"; then
+            printf 'deployment state is unresolved; AIHUB host jobs remain suspended\n' >&2
+            exit 1
+          fi
+          if ! grep -Eq '^production active_slot=' <<<"$state" || ! grep -Eq '^sandbox (active_slot=|disabled$)' <<<"$state"; then
+            printf 'could not resolve every AIHUB tier; host jobs remain suspended\n' >&2
+            exit 1
+          fi
+          active_shas=()
+          while IFS= read -r line; do
+            if [[ "$line" =~ ^(production|sandbox)[[:space:]]active_slot= ]]; then
+              if [[ "$line" =~ [[:space:]]sha=([^[:space:]]+) ]]; then
+                active_shas+=("${BASH_REMATCH[1]}")
+              else
+                printf 'an active AIHUB tier revision is missing; host jobs remain suspended\n' >&2
+                exit 1
+              fi
+            fi
+          done <<<"$state"
+          if (( ${#active_shas[@]} == 0 )); then
+            printf 'no active AIHUB tier revisions were reported; host jobs remain suspended\n' >&2
+            exit 1
+          fi
+          for sha in "${active_shas[@]}"; do
+            if [[ ! "$sha" =~ ^[a-f0-9]{40}$ ]]; then
+              printf 'an active AIHUB tier revision is unknown; host jobs remain suspended\n' >&2
+              exit 1
+            fi
+            if [[ "$sha" != "${active_shas[0]}" ]]; then
+              printf 'active AIHUB tiers run mixed revisions; host jobs remain suspended\n' >&2
+              exit 1
+            fi
+          done
+          if [[ "${active_shas[0]}" == "$target_sha" ]]; then
+            ./scripts/ops/install-host-jobs.sh install
+          elif [[ "$DEPLOY_OUTCOME" == success ]]; then
+            printf 'successful deployment does not expose the target revision; AIHUB host jobs remain suspended\n' >&2
+            exit 1
+          else
+            ./scripts/ops/install-host-jobs.sh restore
+          fi
+          REMOTE
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
 
       - name: Report active tier revisions
         if: ${{ always() && steps.ssh.outcome == 'success' && steps.sync.outcome == 'success' }}

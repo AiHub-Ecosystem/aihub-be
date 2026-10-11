@@ -227,7 +227,9 @@ docker compose --env-file .env.production \
 ```
 
 After reviewing the counts, run the same commands without `--dry-run true` and
-add them to the daily operator job alongside the Avatar sweep. Each invocation
+then add `speaking:audio-upload-sweep` to the versioned host wrapper and
+`ops/host-jobs/aihub.crontab`; CD installs both with the next release. It is not
+part of the current schedule until that review is complete. Each invocation
 uses that deployment's database and environment-specific bucket. It prints one
 JSON line containing only `scanned`, `eligible`, `deleted`, `failed`, and
 `dryRun`; it never prints an object key or End-User ID. Any failed delete makes
@@ -247,8 +249,8 @@ the two can never act on the same object. Both are constants in the code, not
 settings.
 
 Run it once a day for each deployment, like `usage:prune`, after its bucket
-setting exists. **Run it with `--dry-run true` first**, check the summary, and
-only then enable the cron entry:
+setting exists. **Run it with `--dry-run true` first** and check the summary
+before the CD-managed daily schedule runs it:
 
 ```sh
 docker compose --env-file .env.production \
@@ -270,11 +272,13 @@ through `scripts/runtime/runtime-entrypoint.mjs`, which loads them and then hand
 rest of the arguments to the CLI. Detach stdin (`</dev/null`) when running it
 from a script, or `exec` consumes the script's own input.
 
-The daily run is a user crontab entry on the host, `30 3 * * *` in the server's
-UTC clock, which calls a small script that runs the command above for production
-and then for Sandbox, with stdin detached, and appends one line per environment
-to a log. The script exits non-zero when either run failed; alert on that and on
-a missing line for either environment.
+CD installs the versioned host wrapper and its managed crontab entries after it
+has checked the active release. The daily `avatar-sweep` job runs the Avatar
+sweep for each enabled deployment at 03:30 UTC. It resolves the active
+blue-green services for every run, logs one summary line per command and
+deployment, and exits non-zero if any command fails. The installation
+preserves unrelated crontab entries; do not edit the AIHUB managed block by
+hand.
 
 It prints one JSON line of counts (`scanned`, `unrecognised`, `orphaned`,
 `deleted`, `failed`, `dryRun`) and never an object key. It exits non-zero when
@@ -284,78 +288,69 @@ non-zero exit and on a missed run for either container.
 
 ### Scheduled operator jobs
 
-The existing scheduled operator commands run from one host script,
-`~/aihub-ops-job.sh <quota|prune|report>`, built the same way as the Avatar
-sweep (production then Sandbox, stdin detached, one log line per environment in
-`~/aihub-ops-job.log`, non-zero exit when either failed). Crontab, in the
-server's UTC clock:
+The versioned schedule is [`ops/host-jobs/aihub.crontab`](../../ops/host-jobs/aihub.crontab).
+CD stages the installer at a temporary candidate path, suspends the managed
+AIHUB crontab block, and waits for already-running current and legacy AIHUB
+host jobs to finish (maximum 15 minutes) before syncing shared helpers or
+deploying. This prevents a running job from invoking a helper while CD replaces
+it, or an old wrapper from running against a newly active image. Unrelated
+crontab entries continue to run. After deployment, CD checks the active tier
+revisions and only proceeds when every active tier runs the target revision.
+It smoke-tests the staged wrapper against every active tier, installs the
+wrapper, smokes the installed wrapper, then enables and verifies the managed
+schedule.
+If a failed rollout leaves every tier on the same previous revision and no
+pending recovery state, CD restores the saved crontab. Mixed, unknown, or
+pending tier state keeps AIHUB jobs suspended for operator recovery. This
+preserves ADR-0085's per-tier rollback behavior: Production can remain on the
+new release while Sandbox returns to its previous release, with scheduled
+jobs held until the revisions are aligned again.
 
-```text
-0 2 * * *  aihub-ops-job.sh quota    # quota:reconcile
-30 2 * * * aihub-ops-job.sh prune    # usage:prune, after the reconcile
-5 * * * *  aihub-ops-job.sh report   # usage:report for the previous whole UTC hour
-```
+If deployment-file synchronization fails after the pause, CD restores the
+previous Compose file, host deployment helper, and saved crontab before it
+exits. If that recovery cannot be confirmed, the saved crontab remains in
+`.aihub-host-jobs-state/` for operator recovery.
 
-Add a daily `ttl-audit` run after the installed host wrapper supports it. It
-runs `redis:ttl-audit` once in each enabled deployment and scans `aihub:*`
-and exits non-zero if any key expected to expire has no TTL. It prints aggregate
-counts only, never Redis key names. The persistent
-`aihub:v1:jwks-generation:*` invalidation fences are counted separately because
-they must not expire and make a purged JWKS cache entry current again. Alert on
-a non-zero exit and on a missed line for either enabled deployment. The installed host
-wrapper is outside this repository; update it to accept `ttl-audit`. Resolve
-the active services from the blue-green helper's validated nginx routes before
-each run. Do not hard-code slot A: after cutover, the active services can be
-`app-slot-b` and `app-sandbox-slot-b`, while the old slots are stopped. In the
-wrapper, from the deployment directory:
+The installer replaces only the `AIHUB MANAGED JOBS` block, preserves unrelated
+entries, and removes old hand-installed AIHUB wrapper lines. Unknown active
+revisions or a failed smoke leave AIHUB jobs suspended. A pending recovery
+record is preserved and continues to block later deployments; CD can resume
+jobs only when the staged wrapper passes against every active tier. The saved
+crontab stays in `.aihub-host-jobs-state/`; after following the #289 recovery
+procedure, restore it with
+`APP_DIR=<deployment-dir> ./scripts/ops/install-host-jobs.sh restore`.
+Promotion or crontab verification failures restore the pre-promotion wrapper
+and template while keeping the schedule suspended.
 
-```bash
-status="$(APP_DIR="$PWD" ./scripts/ops/blue-green-host.sh status)" || exit 1
-compose=(sudo -n docker compose --env-file .env.production)
-[[ ! -f .aihub-deploy.env ]] || compose+=(--env-file .aihub-deploy.env)
-compose+=(--profile blue-green --profile sandbox -f docker-compose.production.yml)
+The schedule uses the VPS's UTC clock:
 
-for tier in production sandbox; do
-  if [[ "$tier" == sandbox ]] && grep -Fxq 'sandbox disabled' <<<"$status"; then
-    printf 'sandbox status=disabled skipped\n' >>"$log"
-    continue
-  fi
+- `quota` reconciles at 02:00;
+- `prune` runs at 02:30, after reconciliation;
+- `report` runs at 5 minutes past each hour for the preceding UTC hour;
+- `ttl-audit` runs at 01:45 daily;
+- `avatar-sweep` runs `avatar:sweep` at 03:30 daily.
 
-  line="$(awk -v tier="$tier" '
-    $1 == tier { count++; record=$0 }
-    END { if (count != 1) exit 1; print record }
-  ' <<<"$status")" || exit 1
-  slot="${line#*active_slot=}"; slot="${slot%% *}"
-  service="${line##* service=}"
-  case "$tier:$slot:$service" in
-    production:a:app|production:b:app-slot-b|sandbox:a:app-sandbox|sandbox:b:app-sandbox-slot-b) ;;
-    *) printf 'cannot resolve active %s service from deployment status\n' "$tier" >&2; exit 1 ;;
-  esac
+For every run the wrapper reads the validated blue-green status and invokes the
+active service in each enabled deployment. It fails closed on missing,
+ambiguous, or unsupported routing; only a Sandbox deployment reported as
+disabled is skipped. It detaches stdin, appends one success summary line per
+command and tier to the existing operator or Avatar sweep log, and writes at
+most the last 50 stderr lines for a failed command. Cron redirects wrapper
+output because the wrapper owns its log. A non-zero exit or a missing scheduled
+success must alert.
 
-  "${compose[@]}" exec -T "$service" node scripts/runtime/runtime-entrypoint.mjs \
-    scripts/cli/cli.mjs redis:ttl-audit
-done
-```
+The `redis:ttl-audit` command scans `aihub:*` and exits non-zero if an expiring
+key has no TTL. It prints aggregate counts only, never Redis key names. The
+persistent `aihub:v1:jwks-generation:*` invalidation fences are counted
+separately because they must not expire and make a purged JWKS cache entry
+current again. `report` computes `--from` and `--to` as the start of the
+previous and current UTC hours, so `to` is never in the future.
 
-The status command fails during a deployment; also fail closed if its output
-does not identify exactly one supported active slot for a tier. An enabled but
-unrouted Sandbox therefore fails instead of silently skipping the audit. Log
-the CLI's aggregate result for each active tier; the disabled Sandbox line is
-an explicit skip, not a successful audit.
-
-Then add this cron entry (server UTC):
-
-```text
-45 1 * * * aihub-ops-job.sh ttl-audit
-```
-
-`report` computes `--from` and `--to` as the start of the previous and of the
-current UTC hour, so `to` is never in the future. The script is not in the
-repository (it holds the host path and the `sudo` form); the operator runbooks
-own each command, its exit codes, and what to alert on. Before the first
-scheduled `prune` the database was backed up with `pg_dump -Fc` and the command
-was run by hand in each container (`deleted: 0`, nothing was 13 months old).
-
+The wrappers currently use `docker compose exec` against the active serving
+services. Moving jobs into one-shot containers belongs to #433; time limits and
+overlap locks belong to #495. Before the first scheduled `prune`, the database
+was backed up with `pg_dump -Fc` and the command was run by hand in each
+container (`deleted: 0`, nothing was 13 months old).
 The Compose file does not create a second Postgres service or volume. Verify the
 existing service before starting the gateway:
 
