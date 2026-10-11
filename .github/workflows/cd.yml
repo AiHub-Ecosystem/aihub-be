@@ -168,14 +168,20 @@ jobs:
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -eu
           mkdir -p "$APP_DIR/scripts/ops" "$APP_DIR/ops/nginx" \
-            "$APP_DIR/ops/vault/agent" "$APP_DIR/ops/vault/templates"
+            "$APP_DIR/ops/vault/agent" "$APP_DIR/ops/vault/templates" \
+            "$APP_DIR/ops/host-jobs"
           REMOTE
           scp "${scp_opts[@]}" \
             docker-compose.production.yml \
             "$target:$VPS_APP_DIR/"
           scp "${scp_opts[@]}" \
             scripts/ops/blue-green-host.sh \
+            scripts/ops/host-scheduled-job.sh \
+            scripts/ops/install-host-jobs.sh \
             "$target:$VPS_APP_DIR/scripts/ops/"
+          scp "${scp_opts[@]}" \
+            ops/host-jobs/aihub.crontab \
+            "$target:$VPS_APP_DIR/ops/host-jobs/"
           scp "${scp_opts[@]}" \
             ops/nginx/aihub-api.conf \
             ops/nginx/sandbox.conf \
@@ -191,8 +197,13 @@ jobs:
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -eu
           chmod 755 "$APP_DIR/scripts/ops/blue-green-host.sh"
+          chmod 755 "$APP_DIR/scripts/ops/host-scheduled-job.sh" \
+            "$APP_DIR/scripts/ops/install-host-jobs.sh"
           test -s "$APP_DIR/docker-compose.production.yml"
           test -s "$APP_DIR/scripts/ops/blue-green-host.sh"
+          test -s "$APP_DIR/scripts/ops/host-scheduled-job.sh"
+          test -s "$APP_DIR/scripts/ops/install-host-jobs.sh"
+          test -s "$APP_DIR/ops/host-jobs/aihub.crontab"
           test -s "$APP_DIR/ops/nginx/aihub-api.conf"
           test -s "$APP_DIR/ops/nginx/sandbox.conf"
           test -s "$APP_DIR/ops/vault/agent/aihub-runtime.hcl"
@@ -229,6 +240,21 @@ jobs:
           set -euo pipefail
           cd "$APP_DIR"
           ./scripts/ops/blue-green-host.sh deploy
+          REMOTE
+
+      - name: Install and smoke the scheduled host jobs
+        id: host_jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/install-host-jobs.sh
+          ./scripts/ops/host-scheduled-job.sh report
           REMOTE
 
       - name: Report active tier revisions
