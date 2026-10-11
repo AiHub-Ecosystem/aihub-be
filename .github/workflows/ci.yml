@@ -58,6 +58,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: pnpm generate:prisma-client
+
       - name: Check unused exports
         run: pnpm knip
 
@@ -292,6 +295,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm generate:prisma-client
 
       - name: Run the cross-tenant isolation lane
         run: pnpm test:tenant-isolation

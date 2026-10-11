@@ -329,6 +329,23 @@ model SandboxDispatchReservation {
   @@map("sandbox_dispatch_reservations")
 }
 
+/// Dispatch evidence retained for ambiguous downstream outcomes.
+///
+/// The `CHECK` constraints and partial index are owned by migration 0036.
+model DispatchAttempt {
+  attemptId      String    @id @map("attempt_id") @db.Uuid
+  requestId      String    @map("request_id")
+  organizationId String    @map("organization_id")
+  operation      String
+  createdAt      DateTime  @map("created_at") @db.Timestamptz(6)
+  unknownAfter   DateTime  @map("unknown_after") @db.Timestamptz(6)
+  outcome        String?
+
+  @@index([unknownAfter, operation], map: "dispatch_attempts_unresolved_idx", where: raw("(outcome IS NULL OR outcome = 'outcome_unknown'::text)"))
+  @@index([createdAt, attemptId], map: "dispatch_attempts_retention_idx")
+  @@map("dispatch_attempts")
+}
+
 /// An accepted Speaking audio upload.
 ///
 /// `CHECK` constraints are owned by migration 0025.
