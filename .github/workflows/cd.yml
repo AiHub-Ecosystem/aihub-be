@@ -155,12 +155,62 @@ jobs:
           main_sha="$(git rev-parse refs/remotes/origin/main)"
           printf '%s\n' "$state" | node scripts/ci/deploy-target-guard.cjs "$DEPLOY_SHA" "$main_sha"
 
+      - name: Stage host job installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_APP_DIR"
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          scp_opts=(-i "$HOME/.ssh/aihub-deploy" -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          mkdir -p "$APP_DIR/.aihub-host-jobs-candidate"
+          REMOTE
+          scp "${scp_opts[@]}" \
+            scripts/ops/install-host-jobs.sh \
+            "$target:$VPS_APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh"
+          ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          chmod 755 "$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh"
+          test -s "$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh"
+          REMOTE
+
+      - name: Log in to GHCR on VPS
+        id: ghcr_login
+        shell: bash
+        env:
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: |
+          set -eu
+          test -n "$GHCR_USERNAME"
+          test -n "$GHCR_PULL_TOKEN"
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          printf '%s' "$GHCR_PULL_TOKEN" | ssh "${ssh_opts[@]}" "$target" \
+            "sudo -n docker login ghcr.io --username '$GHCR_USERNAME' --password-stdin"
+
+      - name: Pause and drain AIHUB host jobs
+        id: pause_host_jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          "$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh" suspend
+          REMOTE
+
       - name: Sync deployment files to VPS
         id: sync
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$VPS_APP_DIR"
           target="$VPS_USER@$VPS_HOST"
           ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
           scp_opts=(-i "$HOME/.ssh/aihub-deploy" -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
@@ -209,35 +259,6 @@ jobs:
           test -s "$APP_DIR/ops/vault/templates/runtime-secrets.json.ctmpl"
           test -s "$APP_DIR/ops/vault/templates/auth-mfa-secrets.json.ctmpl"
           test -s "$APP_DIR/ops/vault/templates/connection-secrets.json.ctmpl"
-          REMOTE
-
-      - name: Log in to GHCR on VPS
-        id: ghcr_login
-        shell: bash
-        env:
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
-        run: |
-          set -eu
-          test -n "$GHCR_USERNAME"
-          test -n "$GHCR_PULL_TOKEN"
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
-          printf '%s' "$GHCR_PULL_TOKEN" | ssh "${ssh_opts[@]}" "$target" \
-            "sudo -n docker login ghcr.io --username '$GHCR_USERNAME' --password-stdin"
-
-      - name: Pause and drain AIHUB host jobs
-        id: pause_host_jobs
-        shell: bash
-        run: |
-          set -euo pipefail
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
-          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
-          ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
-          set -euo pipefail
-          cd "$APP_DIR"
-          ./scripts/ops/install-host-jobs.sh suspend
           REMOTE
 
       - name: Deploy release

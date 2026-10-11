@@ -289,11 +289,13 @@ non-zero exit and on a missed run for either container.
 ### Scheduled operator jobs
 
 The versioned schedule is [`ops/host-jobs/aihub.crontab`](../../ops/host-jobs/aihub.crontab).
-CD stages it and `scripts/ops/host-scheduled-job.sh`, then suspends the managed
-AIHUB crontab block and waits for already-running AIHUB host jobs to finish
-(maximum 15 minutes) before deployment. This prevents an old wrapper from
-running against a newly active image. Unrelated crontab entries continue to
-run. After deployment, CD checks the active tier revisions and only proceeds
+CD stages the installer at a temporary candidate path, suspends the managed
+AIHUB crontab block, and waits for already-running current and legacy AIHUB
+host jobs to finish (maximum 15 minutes) before syncing shared helpers or
+deploying. This prevents a running job from invoking a helper while CD replaces
+it, or an old wrapper from running against a newly active image. Unrelated
+crontab entries continue to run. After deployment, CD checks the active tier
+revisions and only proceeds
 when every active tier runs the target revision. It
 smoke-tests the staged wrapper against every active tier, installs the wrapper
 and managed schedule, verifies the crontab, and smokes the installed wrapper.

@@ -38,7 +38,9 @@ describe('public edge health probe', () => {
 
     expect(workflow).toContain('./scripts/ops/blue-green-host.sh deploy');
     expect(workflow).toContain('$VPS_APP_DIR/.aihub-host-jobs-candidate/');
-    expect(workflow).toContain('./scripts/ops/install-host-jobs.sh suspend');
+    expect(workflow).toContain(
+      '"$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh" suspend',
+    );
     expect(workflow).toContain(
       'active AIHUB tiers run mixed revisions; host jobs remain suspended',
     );
@@ -47,7 +49,17 @@ describe('public edge health probe', () => {
     );
     expect(workflow).toContain('timeout-minutes: 45');
     expect(
+      workflow.indexOf('      - name: Stage host job installer'),
+    ).toBeLessThan(
       workflow.indexOf('      - name: Pause and drain AIHUB host jobs'),
+    );
+    expect(
+      workflow.indexOf('      - name: Pause and drain AIHUB host jobs'),
+    ).toBeLessThan(
+      workflow.indexOf('      - name: Sync deployment files to VPS'),
+    );
+    expect(
+      workflow.indexOf('      - name: Sync deployment files to VPS'),
     ).toBeLessThan(workflow.indexOf('      - name: Deploy release'));
     expect(workflow.indexOf('      - name: Deploy release')).toBeLessThan(
       workflow.indexOf(
