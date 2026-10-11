@@ -180,12 +180,19 @@ class ScriptedUsageRepository {
   }
 }
 
+let idempotencyDelayMs = 0;
+
 const idempotency = {
   async execute<T>(
     input: IdempotencyExecutionInput,
     work: IdempotencyWork<T>,
     _decodeReplay: IdempotencyReplayDecoder<T>,
   ): Promise<IdempotencyExecution<T>> {
+    if (idempotencyDelayMs > 0) {
+      await new Promise<void>((resolve) =>
+        setTimeout(resolve, idempotencyDelayMs),
+      );
+    }
     return {
       result: await work({
         signal: input.signal,
@@ -283,6 +290,7 @@ describe('request completion log over the HTTP boundary', () => {
   beforeEach(() => {
     dispatcher.succeed();
     usageRepository.succeed();
+    idempotencyDelayMs = 0;
     usageRepository.records.length = 0;
     log.reset();
     exporter.reset();
@@ -375,6 +383,35 @@ describe('request completion log over the HTTP boundary', () => {
       ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
     } finally {
       delayGuard.mockRestore();
+    }
+  });
+
+  it('starts admission timing after Writing idempotency work, at dispatch', async () => {
+    const delayMs = 75;
+    idempotencyDelayMs = delayMs;
+    const admissionBefore = await metricValue(
+      app,
+      'aihub_admission_duration_seconds_sum',
+    );
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: GRADE_URL,
+        headers: { 'idempotency-key': 'completion-slow-idempotency' },
+        payload: VALID_BODY,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const event = log.only();
+      expect(event['total_ms']).toBeGreaterThanOrEqual(delayMs - 10);
+      expect(event['admission_ms']).toBeGreaterThanOrEqual(delayMs - 10);
+      expect(
+        (await metricValue(app, 'aihub_admission_duration_seconds_sum')) -
+          admissionBefore,
+      ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
+    } finally {
+      idempotencyDelayMs = 0;
     }
   });
 

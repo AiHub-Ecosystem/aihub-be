@@ -120,10 +120,11 @@ idempotency cleanup are separate follow-ups; the existing
 ```
 
 `admission_ms` records time from ingress until dispatch starts or the request
-is refused before dispatch. `total_ms` starts when Fastify receives the request
-and covers body parsing, authentication, identity checks, rate limits, quota
-admission, and gateway work. Triage incidents via `request_id`; filter customer
-usage via `org_id`.
+is refused before dispatch. A replay that returns without dispatch omits this
+field and its histogram sample. `total_ms` starts when Fastify receives the
+request and covers body and cookie parsing, authentication, identity checks,
+rate limits, quota admission, and gateway work. Triage incidents via
+`request_id`; filter customer usage via `org_id`.
 
 Downstream failure logs append internal diagnostic payloads ([07 §J.4](07-reliability-and-errors.md#j4-internal-downstream-error-us08)) — isolated internally, never dispatched to clients.
 
@@ -166,8 +167,8 @@ aihub_redis_unavailable_total
 
 The operation label comes from the bounded operation catalog. `gateway_overhead`
 **requires no dedicated metric** — it is derived directly from total and
-downstream durations; `admission_ms` exposes the time before gateway
-orchestration separately.
+downstream durations; `admission_ms` exposes the time before dispatch
+separately.
 
 `aihub_tokens_total` carries an `operation` label only. An `org_id` label was
 specified here originally and is deliberately dropped: it is unbounded, so

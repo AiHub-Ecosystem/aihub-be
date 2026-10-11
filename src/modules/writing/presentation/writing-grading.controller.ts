@@ -61,6 +61,7 @@ function requestMetadata(
     requestId: String(request.id),
     receivedAt: lifecycle.receivedAt,
     signal: lifecycle.signal,
+    onDispatchStart: () => markRequestAdmission(request.raw),
     organizationId: authenticated.organizationId,
     apiKeyId: authenticated.apiKeyId,
     environment: authenticated.environment,
@@ -105,7 +106,6 @@ export class WritingGradingController {
     const lifecycle = requestLifecycle(request);
 
     try {
-      markRequestAdmission(request.raw);
       return await this.orchestrator.execute({
         operation: TASK1_OPERATION,
         input,
@@ -134,7 +134,6 @@ export class WritingGradingController {
     const lifecycle = requestLifecycle(request);
 
     try {
-      markRequestAdmission(request.raw);
       return await this.orchestrator.execute({
         operation: TASK2_OPERATION,
         input,

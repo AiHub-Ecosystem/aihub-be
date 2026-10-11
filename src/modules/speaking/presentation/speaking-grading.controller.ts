@@ -88,6 +88,7 @@ function requestMetadata(
     requestId: String(request.id),
     receivedAt: lifecycle.receivedAt,
     signal: lifecycle.signal,
+    onDispatchStart: () => markRequestAdmission(request.raw),
     organizationId: authenticated.organizationId,
     apiKeyId: authenticated.apiKeyId,
     environment: authenticated.environment,
@@ -124,7 +125,6 @@ export class SpeakingGradingController {
       const input = await this.multipartParser.parse(source, lifecycle.signal);
       const metadata = requestMetadata(request, lifecycle);
 
-      markRequestAdmission(request.raw);
       return await this.orchestrator.execute({
         operation: OPERATION,
         input,
@@ -147,7 +147,6 @@ export class SpeakingGradingController {
       const input = parseJsonBody(body);
       const metadata = requestMetadata(request, lifecycle);
 
-      markRequestAdmission(request.raw);
       return await this.orchestrator.execute({
         operation: JSON_OPERATION,
         input,

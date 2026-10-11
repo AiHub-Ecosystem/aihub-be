@@ -21,7 +21,8 @@ until dispatch starts, or until a pre-dispatch refusal is handled, as
 `admission_ms` in the completion log and in
 `aihub_admission_duration_seconds{operation}`. The metric uses the catalog's
 bounded operation label. Do not persist `admission_ms` or add it to the public
-response envelope.
+response envelope. An idempotency replay that returns without dispatch omits
+`admission_ms` because no dispatch admission occurred.
 
 ## Consequences
 

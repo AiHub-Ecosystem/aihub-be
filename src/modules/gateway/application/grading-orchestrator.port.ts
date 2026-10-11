@@ -14,6 +14,8 @@ export interface GradingRequestMetadata {
   readonly requestId: string;
   readonly receivedAt: Date;
   readonly signal: AbortSignal;
+  /** Called only when work crosses the idempotency gate into dispatch. */
+  readonly onDispatchStart?: () => void;
   readonly organizationId: string;
   readonly apiKeyId: string;
   readonly environment: string;

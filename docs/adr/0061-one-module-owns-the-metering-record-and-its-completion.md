@@ -65,7 +65,7 @@ from now on; without it the inward dependency could return unnoticed.
 Evidence is created lazily, so the request-start metering hook is no longer
 needed. The timing behavior originally chosen here was later amended by
 ADR-0089: success and failure now share the Fastify ingress clock, while
-`admission_ms` records the pre-orchestration interval separately.
+`admission_ms` records the pre-dispatch interval separately.
 
 The one-call-twice case is still covered by a behaviour test that calls the
 filter twice and asserts a single record, so the guarantee is proven at the

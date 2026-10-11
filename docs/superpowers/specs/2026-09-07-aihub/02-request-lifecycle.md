@@ -77,10 +77,12 @@ downstream_ms = t2-t1    gateway_overhead_ms = total - downstream
 ```
 
 The shared monotonic clock starts in Fastify's first `onRequest` hook, before
-body parsing and the Nest guard chain. `admission_ms` is captured after guards
-and body validation, immediately before the controller starts gateway
-orchestration; it is emitted in the completion log and an operation-labeled
-histogram, not in the customer response or durable usage record.
+body parsing, cookie parsing, and the Nest guard chain. `admission_ms` is
+captured after idempotency resolution, at the dispatch boundary, or when a
+pre-dispatch refusal is handled. A replay that avoids dispatch has no
+`admission_ms`. The value is emitted in the completion log and an
+operation-labeled histogram, not in the customer response or durable usage
+record.
 
 Timing definitions conform strictly to D1 §14 and target architecture §17.1. We do not assume `total_ms = gateway_overhead_ms + ai_processing_ms`, because `downstream_ms` includes network transmission and overhead within the AI Service itself.
 
