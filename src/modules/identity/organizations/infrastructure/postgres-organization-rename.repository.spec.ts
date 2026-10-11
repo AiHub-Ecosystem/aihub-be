@@ -9,7 +9,10 @@ import { PostgresOrganizationRenameRepository } from './postgres-organization-re
 
 const USER_ID = 'usr_01J00000000000000000000001';
 const ORGANIZATION_ID = 'org_acme';
-const AUDIT_INSERT = 'INSERT INTO organization_audit_events';
+
+interface RecordedQuery {
+  readonly values: readonly unknown[];
+}
 
 /**
  * Answers the two locking reads in order and records every write, so the
@@ -17,9 +20,8 @@ const AUDIT_INSERT = 'INSERT INTO organization_audit_events';
  * and the trigger; this proves the decisions taken under them.
  */
 class ScriptedPostgres implements PostgresIdentityTransactionalClient {
-  readonly writes: Array<{ text: string; values: readonly unknown[] }> = [];
-  readonly deniedWrites: Array<{ text: string; values: readonly unknown[] }> =
-    [];
+  readonly writes: RecordedQuery[] = [];
+  readonly deniedWrites: RecordedQuery[] = [];
 
   constructor(
     private readonly organization: Record<string, unknown> | undefined,
@@ -27,24 +29,28 @@ class ScriptedPostgres implements PostgresIdentityTransactionalClient {
   ) {}
 
   async query(
-    text: string,
+    _text: string,
     values: readonly unknown[],
   ): Promise<readonly unknown[]> {
-    this.deniedWrites.push({ text, values });
+    this.deniedWrites.push({ values });
     return [];
   }
 
   transaction<T>(
     callback: (client: PostgresIdentityQueryClient) => Promise<T>,
   ): Promise<T> {
-    const reads = [this.organization, this.membership];
+    let read = 0;
     return callback({
-      query: async (text, values) => {
-        if (text.includes('FOR UPDATE')) {
-          const row = reads.shift();
-          return row === undefined ? [] : [row];
+      query: async (_text, values) => {
+        if (read === 0) {
+          read += 1;
+          return this.organization === undefined ? [] : [this.organization];
         }
-        this.writes.push({ text, values });
+        if (read === 1) {
+          read += 1;
+          return this.membership === undefined ? [] : [this.membership];
+        }
+        this.writes.push({ values });
         return [];
       },
     });
@@ -77,10 +83,10 @@ function scripted(
 }
 
 function auditValues(
-  writes: ReadonlyArray<{ text: string; values: readonly unknown[] }>,
+  writes: ReadonlyArray<RecordedQuery>,
 ): readonly unknown[][] {
   return writes
-    .filter((write) => write.text.includes(AUDIT_INSERT))
+    .filter((write) => write.values[3] === 'organization.renamed')
     .map((write) => [...write.values]);
 }
 

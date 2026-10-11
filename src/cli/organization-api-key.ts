@@ -4,8 +4,8 @@ import type {
   RevokeOperatorApiKeyResult,
 } from '@/modules/identity/api-keys/application/operator-api-key.port';
 import { PostgresOperatorApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-operator-api-key.repository';
-import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { runOperatorCommand } from './operator-command-context';
+import { createOperatorIdentityClient } from './operator-identity-client';
 import { purgeApiKeyCache } from './organization-status';
 
 /**
@@ -58,7 +58,7 @@ function openRepository(
   return (
     repository ??
     new PostgresOperatorApiKeyRepository(
-      createPostgresIdentityClient(databaseUrl),
+      createOperatorIdentityClient(databaseUrl),
     )
   );
 }

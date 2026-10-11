@@ -10,8 +10,8 @@ import type {
   SetOrganizationStatusResult,
 } from '@/modules/identity/organizations/application/organization-status.port';
 import { PostgresOrganizationStatusRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-status.repository';
-import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { runOperatorCommand } from './operator-command-context';
+import { createOperatorIdentityClient } from './operator-identity-client';
 
 export interface OrganizationStatusCliInput {
   readonly databaseUrl: string;
@@ -75,7 +75,7 @@ export async function runOrganizationStatusCommand(
   const repository =
     input.repository ??
     new PostgresOrganizationStatusRepository(
-      createPostgresIdentityClient(input.databaseUrl),
+      createOperatorIdentityClient(input.databaseUrl),
     );
   const execution = await runOperatorCommand(
     repository,
