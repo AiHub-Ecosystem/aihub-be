@@ -50,6 +50,10 @@ describe('public edge health probe', () => {
       'Sandbox rollout failed after Production cut over; rolling Production back',
     );
     expect(deployHelper).toContain('rollback production');
+    expect(deployHelper).toContain('rollback_candidate_tier_if_active');
+    expect(deployHelper).toContain(
+      'one or more candidate tiers could not be rolled back after failed edge probes',
+    );
     expect(deployHelper).toContain('probe_container_dependencies');
   });
 
