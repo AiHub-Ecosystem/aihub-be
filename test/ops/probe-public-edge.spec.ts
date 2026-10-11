@@ -39,6 +39,12 @@ describe('public edge health probe', () => {
     expect(workflow).toContain('./scripts/ops/blue-green-host.sh deploy');
     expect(workflow).toContain('$VPS_APP_DIR/.aihub-host-jobs-candidate/');
     expect(workflow).toContain('./scripts/ops/install-host-jobs.sh suspend');
+    expect(workflow).toContain(
+      'active AIHUB tiers run mixed revisions; host jobs remain suspended',
+    );
+    expect(workflow).toContain(
+      'if [[ "${active_shas[0]}" == "$target_sha" ]]; then',
+    );
     expect(
       workflow.indexOf('      - name: Pause and drain AIHUB host jobs'),
     ).toBeLessThan(workflow.indexOf('      - name: Deploy release'));

@@ -273,11 +273,41 @@ jobs:
           cd "$APP_DIR"
           state="$(./scripts/ops/blue-green-host.sh status)"
           target_sha="${AIHUB_IMAGE##*:}"
-          if grep -Eq "(^| )sha=$target_sha( |$)" <<<"$state"; then
-            ./scripts/ops/install-host-jobs.sh install
-          elif grep -Eq '^pending=' <<<"$state" || grep -Eq 'sha=(unknown|unavailable)' <<<"$state"; then
+          if grep -Eq '^pending=' <<<"$state" || grep -Fxq 'sandbox enabled but not routed' <<<"$state"; then
             printf 'deployment state is unresolved; AIHUB host jobs remain suspended\n' >&2
             exit 1
+          fi
+          if ! grep -Eq '^production active_slot=' <<<"$state" || ! grep -Eq '^sandbox (active_slot=|disabled$)' <<<"$state"; then
+            printf 'could not resolve every AIHUB tier; host jobs remain suspended\n' >&2
+            exit 1
+          fi
+          active_shas=()
+          while IFS= read -r line; do
+            if [[ "$line" =~ ^(production|sandbox)[[:space:]]active_slot= ]]; then
+              if [[ "$line" =~ [[:space:]]sha=([^[:space:]]+) ]]; then
+                active_shas+=("${BASH_REMATCH[1]}")
+              else
+                printf 'an active AIHUB tier revision is missing; host jobs remain suspended\n' >&2
+                exit 1
+              fi
+            fi
+          done <<<"$state"
+          if (( ${#active_shas[@]} == 0 )); then
+            printf 'no active AIHUB tier revisions were reported; host jobs remain suspended\n' >&2
+            exit 1
+          fi
+          for sha in "${active_shas[@]}"; do
+            if [[ ! "$sha" =~ ^[a-f0-9]{40}$ ]]; then
+              printf 'an active AIHUB tier revision is unknown; host jobs remain suspended\n' >&2
+              exit 1
+            fi
+            if [[ "$sha" != "${active_shas[0]}" ]]; then
+              printf 'active AIHUB tiers run mixed revisions; host jobs remain suspended\n' >&2
+              exit 1
+            fi
+          done
+          if [[ "${active_shas[0]}" == "$target_sha" ]]; then
+            ./scripts/ops/install-host-jobs.sh install
           elif [[ "$DEPLOY_OUTCOME" == success ]]; then
             printf 'successful deployment does not expose the target revision; AIHUB host jobs remain suspended\n' >&2
             exit 1
