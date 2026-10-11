@@ -1,5 +1,3 @@
-import { createPostgresPool } from '@/common/postgres/postgres-pool';
-
 import { AppError } from '@/common/errors/app-error';
 import type {
   AvatarRepositoryPort,
@@ -9,6 +7,10 @@ import {
   type Avatar,
   isAvatarContentType,
 } from '@/modules/avatar/domain/avatar';
+import type { AvatarQueryClient } from './prisma-avatar.client';
+
+export { createAvatarQueryClient } from './postgres-avatar.fixture-client';
+export type { AvatarQueryClient } from './prisma-avatar.client';
 
 const FIND_BY_USER_SQL = `
   SELECT id, user_account_id, object_key, content_type, byte_size, accepted_at
@@ -50,11 +52,21 @@ const DELETE_SQL = `
   RETURNING id
 `;
 
-export interface AvatarQueryClient {
-  query(
-    text: string,
-    values: readonly unknown[],
-  ): Promise<{ readonly rows: readonly Record<string, unknown>[] }>;
+interface AvatarRecordRow {
+  readonly id: unknown;
+  readonly user_account_id: unknown;
+  readonly object_key: unknown;
+  readonly content_type: unknown;
+  readonly byte_size: unknown;
+  readonly accepted_at: unknown;
+}
+
+interface AvatarObjectKeyRow {
+  readonly object_key: unknown;
+}
+
+interface AvatarIdRow {
+  readonly id: unknown;
 }
 
 function storeError(cause: unknown): AppError {
@@ -66,7 +78,7 @@ function storeError(cause: unknown): AppError {
   });
 }
 
-function mapRow(row: Record<string, unknown> | undefined): Avatar | undefined {
+function mapRow(row: AvatarRecordRow | undefined): Avatar | undefined {
   if (row === undefined) {
     return undefined;
   }
@@ -96,7 +108,9 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
   constructor(private readonly client: AvatarQueryClient) {}
 
   async findByUser(userId: string): Promise<Avatar | undefined> {
-    return mapRow((await this.run(FIND_BY_USER_SQL, [userId]))[0]);
+    return mapRow(
+      (await this.run<AvatarRecordRow>(FIND_BY_USER_SQL, [userId]))[0],
+    );
   }
 
   async recordedObjectKeys(
@@ -105,7 +119,9 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
     if (objectKeys.length === 0) {
       return new Set();
     }
-    const rows = await this.run(RECORDED_KEYS_SQL, [[...objectKeys]]);
+    const rows = await this.run<AvatarObjectKeyRow>(RECORDED_KEYS_SQL, [
+      [...objectKeys],
+    ]);
     return new Set(
       rows.flatMap((row) =>
         typeof row.object_key === 'string' ? [row.object_key] : [],
@@ -114,7 +130,7 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
   }
 
   async record(avatar: Avatar): Promise<RecordAvatarResult> {
-    const inserted = await this.run(INSERT_SQL, [
+    const inserted = await this.run<AvatarIdRow>(INSERT_SQL, [
       avatar.assetId,
       avatar.userId,
       avatar.objectKey,
@@ -134,7 +150,7 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
   }
 
   async replace(previousAssetId: string, avatar: Avatar): Promise<boolean> {
-    const updated = await this.run(REPLACE_SQL, [
+    const updated = await this.run<AvatarIdRow>(REPLACE_SQL, [
       avatar.userId,
       previousAssetId,
       avatar.assetId,
@@ -147,45 +163,19 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
   }
 
   async remove(userId: string, assetId: string): Promise<boolean> {
-    return (await this.run(DELETE_SQL, [userId, assetId])).length === 1;
+    return (
+      (await this.run<AvatarIdRow>(DELETE_SQL, [userId, assetId])).length === 1
+    );
   }
 
-  private async run(
+  private async run<Row extends object = Record<string, unknown>>(
     sql: string,
     values: readonly unknown[],
-  ): Promise<readonly Record<string, unknown>[]> {
+  ): Promise<readonly Row[]> {
     try {
-      return (await this.client.query(sql, values)).rows;
+      return await this.client.query<Row>(sql, values);
     } catch (error) {
       throw storeError(error);
     }
   }
-}
-
-/**
- * The module's own pool, closed with the application. An empty URL yields a
- * client that fails every query, as the other modules' clients do.
- */
-export function createAvatarQueryClient(
-  databaseUrl: string,
-): AvatarQueryClient & { close(): Promise<void> } {
-  if (databaseUrl.trim().length === 0) {
-    return {
-      query: async () => {
-        throw new Error('DATABASE_URL is missing');
-      },
-      close: async () => undefined,
-    };
-  }
-  const pool = createPostgresPool('avatar', {
-    connectionString: databaseUrl,
-    max: 5,
-    connectionTimeoutMillis: 1_000,
-    idleTimeoutMillis: 30_000,
-  });
-  return {
-    query: (text, values) =>
-      pool.query<Record<string, unknown>>(text, [...values]),
-    close: () => pool.end(),
-  };
 }

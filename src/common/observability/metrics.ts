@@ -138,8 +138,6 @@ export type PostgresPoolName =
   | 'auth'
   | 'idempotency'
   | 'sandbox-dispatch-budget'
-  | 'avatar'
-  | 'speaking-audio-upload'
   | 'identity'
   | 'integration-test';
 

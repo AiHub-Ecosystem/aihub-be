@@ -4,10 +4,6 @@ import {
 } from '@/modules/avatar/application/avatar-orphan-sweep';
 import type { AvatarRepositoryPort } from '@/modules/avatar/application/avatar-repository.port';
 import type { AvatarStoragePort } from '@/modules/avatar/application/avatar-storage.port';
-import {
-  PostgresAvatarRepository,
-  createAvatarQueryClient,
-} from '@/modules/avatar/infrastructure/postgres-avatar.repository';
 import { S3AvatarStorage } from '@/modules/avatar/infrastructure/s3-avatar.storage';
 import { createSeaweedFsS3Client } from '@/modules/secrets/infrastructure/seaweedfs-s3-client.factory';
 import { createCliRuntimeSecretProvider } from './runtime-secret-provider';
@@ -23,16 +19,16 @@ export interface AvatarSweepCliInput {
   readonly now?: () => Date;
 }
 
-function openRepository(
+async function openRepository(
   input: AvatarSweepCliInput,
-): AvatarRepositoryPort & { close(): Promise<void> } {
+): Promise<AvatarRepositoryPort & { close(): Promise<void> }> {
   if (input.repository !== undefined) {
     return input.repository;
   }
-  const client = createAvatarQueryClient(input.databaseUrl);
-  return Object.assign(new PostgresAvatarRepository(client), {
-    close: () => client.close(),
-  });
+  const { createOperatorAvatarClient } = await import(
+    './operator-avatar-client'
+  );
+  return createOperatorAvatarClient(input.databaseUrl);
 }
 
 /**
@@ -45,7 +41,7 @@ export async function runAvatarSweepCommand(
   input: AvatarSweepCliInput,
 ): Promise<AvatarSweepSummary> {
   const emit = input.emit ?? console.log;
-  const repository = openRepository(input);
+  const repository = await openRepository(input);
   let storage = input.storage;
   if (storage === undefined) {
     const secretProvider = createCliRuntimeSecretProvider();

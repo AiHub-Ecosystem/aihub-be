@@ -1,5 +1,5 @@
 import type { S3Client } from '@aws-sdk/client-s3';
-import { Inject, Module, type OnModuleDestroy } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
@@ -10,9 +10,10 @@ import { IdentityModule } from '@/modules/identity/identity.module';
 import { MeteringModule } from '@/modules/metering/metering.module';
 import { SuccessEnvelopeInterceptor } from '@/modules/metering/presentation/success-envelope.interceptor';
 import {
-  RUNTIME_CONNECTION_CONFIGURATION,
-  type RuntimeConnectionConfigurationPort,
-} from '@/modules/secrets/application/runtime-connection-configuration.port';
+  type PrismaClientHolder,
+  RUNTIME_PRISMA_CLIENT,
+} from '@/modules/persistence/application/persistence-client.port';
+import { PersistenceModule } from '@/modules/persistence/persistence.module';
 import { SEAWEEDFS_S3_CLIENT } from '@/modules/secrets/application/seaweedfs-s3-client.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
 import { SPEAKING_AUDIO_STORAGE } from './application/speaking-audio-storage.port';
@@ -28,20 +29,13 @@ import { SpeakingAudioUploadService } from './application/speaking-audio-upload.
 import { SpeakingAudioUploadSweep } from './application/speaking-audio-upload.sweep';
 import { SPEAKING_MULTIPART_PARSER } from './application/speaking-multipart-parser.port';
 import { FastifySpeakingMultipartParser } from './infrastructure/fastify-speaking-multipart.parser';
-import {
-  PostgresSpeakingAudioUploadRepository,
-  type SpeakingAudioQueryClient,
-  createSpeakingAudioQueryClient,
-} from './infrastructure/postgres-speaking-audio-upload.repository';
+import { PostgresSpeakingAudioUploadRepository } from './infrastructure/postgres-speaking-audio-upload.repository';
+import { createPrismaSpeakingAudioQueryClient } from './infrastructure/prisma-speaking-audio.client';
 import { S3SpeakingAudioAssetStorage } from './infrastructure/s3-speaking-audio-asset.storage';
 import { S3SpeakingAudioStorage } from './infrastructure/s3-speaking-audio.storage';
 import { SpeakingAudioUploadController } from './presentation/speaking-audio-upload.controller';
 import { SpeakingGradingController } from './presentation/speaking-grading.controller';
 import { SpeakingQuestionsController } from './presentation/speaking-questions.controller';
-
-const SPEAKING_AUDIO_DATABASE = Symbol('SPEAKING_AUDIO_DATABASE');
-
-type SpeakingAudioDatabase = SpeakingAudioQueryClient;
 
 // Grading for Speaking goes through the same shared
 // `GradingOrchestratorPort`/`GRADING_ORCHESTRATOR` declared and bound by the
@@ -55,6 +49,7 @@ type SpeakingAudioDatabase = SpeakingAudioQueryClient;
     GatewayModule,
     IdentityModule,
     MeteringModule,
+    PersistenceModule,
     SecretsModule,
   ],
   controllers: [
@@ -64,20 +59,14 @@ type SpeakingAudioDatabase = SpeakingAudioQueryClient;
   ],
   providers: [
     {
-      provide: SPEAKING_AUDIO_DATABASE,
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
-      useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
-      ): SpeakingAudioDatabase =>
-        createSpeakingAudioQueryClient(configuration.databaseUrl ?? ''),
-    },
-    {
       provide: SPEAKING_AUDIO_UPLOAD_REPOSITORY,
-      inject: [SPEAKING_AUDIO_DATABASE],
+      inject: [RUNTIME_PRISMA_CLIENT],
       useFactory: (
-        database: SpeakingAudioDatabase,
+        runtime: PrismaClientHolder,
       ): SpeakingAudioUploadRepositoryPort =>
-        new PostgresSpeakingAudioUploadRepository(database),
+        new PostgresSpeakingAudioUploadRepository(
+          createPrismaSpeakingAudioQueryClient(() => runtime.prisma),
+        ),
     },
     {
       provide: SPEAKING_AUDIO_ASSET_STORAGE,
@@ -149,13 +138,4 @@ type SpeakingAudioDatabase = SpeakingAudioQueryClient;
   ],
   exports: [SpeakingAudioUploadSweep],
 })
-export class SpeakingModule implements OnModuleDestroy {
-  constructor(
-    @Inject(SPEAKING_AUDIO_DATABASE)
-    private readonly database: SpeakingAudioDatabase,
-  ) {}
-
-  async onModuleDestroy(): Promise<void> {
-    await this.database.close();
-  }
-}
+export class SpeakingModule {}

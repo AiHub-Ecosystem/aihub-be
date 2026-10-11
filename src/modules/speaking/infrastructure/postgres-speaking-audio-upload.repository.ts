@@ -1,5 +1,3 @@
-import { createPostgresPool } from '@/common/postgres/postgres-pool';
-
 import { AppError } from '@/common/errors/app-error';
 import type {
   SpeakingAudioUploadLookup,
@@ -13,24 +11,16 @@ import type {
 } from '@/modules/speaking/domain/speaking-audio-asset';
 import { isSpeakingAudioContentType } from '@/modules/speaking/domain/speaking-audio-asset';
 
+import type {
+  SpeakingAudioQueryClient,
+  SpeakingAudioTransactionClient,
+} from './prisma-speaking-audio.client';
+
+export { createSpeakingAudioQueryClient } from './postgres-speaking-audio-upload.fixture-client';
+export type { SpeakingAudioQueryClient } from './prisma-speaking-audio.client';
+
 type Row = Record<string, unknown>;
-
-interface QueryResult {
-  readonly rows: readonly Row[];
-}
-
-interface Queryable {
-  query(text: string, values: readonly unknown[]): Promise<QueryResult>;
-}
-
-interface TransactionClient extends Queryable {
-  release(): void;
-}
-
-export interface SpeakingAudioQueryClient extends Queryable {
-  connect(): Promise<TransactionClient>;
-  close(): Promise<void>;
-}
+type Queryable = SpeakingAudioTransactionClient;
 
 function storeUnavailable(cause?: unknown): AppError {
   return new AppError({
@@ -133,13 +123,41 @@ const ASSET_COLUMNS = `
   byte_size, accepted_at, retention_expires_at
 `;
 
+type SpeakingAudioIntentRow = Row & {
+  readonly id: unknown;
+  readonly organization_id: unknown;
+  readonly end_user_id: unknown;
+  readonly environment: unknown;
+  readonly object_key: unknown;
+  readonly content_type: unknown;
+  readonly byte_size: unknown;
+  readonly status: unknown;
+  readonly created_at: unknown;
+  readonly expires_at: unknown;
+};
+
+type SpeakingAudioAssetRow = Row & {
+  readonly id: unknown;
+  readonly organization_id: unknown;
+  readonly end_user_id: unknown;
+  readonly environment: unknown;
+  readonly object_key: unknown;
+  readonly content_type: unknown;
+  readonly byte_size: unknown;
+  readonly accepted_at: unknown;
+  readonly retention_expires_at: unknown;
+};
+
+type IdRow = Row & { readonly id: unknown };
+
 export class PostgresSpeakingAudioUploadRepository
   implements SpeakingAudioUploadRepositoryPort
 {
   constructor(private readonly client: SpeakingAudioQueryClient) {}
 
   async createIntent(intent: SpeakingAudioUploadIntent): Promise<void> {
-    await this.run(
+    await this.execute(
+      this.client,
       `
         INSERT INTO speaking_audio_upload_intents
           (id, organization_id, end_user_id, environment, object_key,
@@ -165,7 +183,7 @@ export class PostgresSpeakingAudioUploadRepository
   ): Promise<SpeakingAudioUploadLookup> {
     const intent = mapIntent(
       (
-        await this.run(
+        await this.run<SpeakingAudioIntentRow>(
           `
             SELECT ${INTENT_COLUMNS}
             FROM speaking_audio_upload_intents
@@ -195,7 +213,7 @@ export class PostgresSpeakingAudioUploadRepository
   }): Promise<boolean> {
     return (
       (
-        await this.run(
+        await this.run<IdRow>(
           `
           SELECT id
           FROM speaking_audio_upload_intents
@@ -220,7 +238,7 @@ export class PostgresSpeakingAudioUploadRepository
   }): Promise<boolean> {
     return (
       (
-        await this.run(
+        await this.run<IdRow>(
           `
           UPDATE speaking_audio_upload_intents
           SET status = 'rejected'
@@ -242,7 +260,8 @@ export class PostgresSpeakingAudioUploadRepository
   }
 
   async removeRejectedIntent(owner: SpeakingAudioUploadOwner): Promise<void> {
-    await this.run(
+    await this.execute(
+      this.client,
       `
         DELETE FROM speaking_audio_upload_intents
         WHERE id = $1 AND organization_id = $2 AND end_user_id = $3
@@ -259,7 +278,7 @@ export class PostgresSpeakingAudioUploadRepository
   }): Promise<'created' | 'already_completed' | 'missing'> {
     return this.transaction(async (client) => {
       const intentRow = (
-        await this.query(
+        await this.query<SpeakingAudioIntentRow>(
           client,
           `
             SELECT ${INTENT_COLUMNS}
@@ -303,7 +322,7 @@ export class PostgresSpeakingAudioUploadRepository
         throw storeUnavailable(new Error('Speaking Audio intent changed'));
       }
 
-      await this.query(
+      await this.execute(
         client,
         `
           INSERT INTO speaking_audio_assets
@@ -323,7 +342,7 @@ export class PostgresSpeakingAudioUploadRepository
           input.asset.retentionExpiresAt,
         ],
       );
-      const removed = await this.query(
+      const removed = await this.query<IdRow>(
         client,
         `
           DELETE FROM speaking_audio_upload_intents
@@ -362,7 +381,7 @@ export class PostgresSpeakingAudioUploadRepository
             input.limit,
           ];
     const limitParameter = input.after === undefined ? '$2' : '$4';
-    const rows = await this.run(
+    const rows = await this.run<SpeakingAudioIntentRow>(
       `
         SELECT ${INTENT_COLUMNS}
         FROM speaking_audio_upload_intents
@@ -385,7 +404,7 @@ export class PostgresSpeakingAudioUploadRepository
     readonly expiredBefore: Date;
   }): Promise<boolean> {
     const { intent } = input;
-    const result = await this.run(
+    const result = await this.run<IdRow>(
       `
         DELETE FROM speaking_audio_upload_intents
         WHERE id = $1 AND organization_id = $2 AND end_user_id = $3
@@ -412,7 +431,7 @@ export class PostgresSpeakingAudioUploadRepository
   ): Promise<SpeakingAudioAsset | undefined> {
     return mapAsset(
       (
-        await this.query(
+        await this.query<SpeakingAudioAssetRow>(
           client,
           `
             SELECT ${ASSET_COLUMNS}
@@ -434,43 +453,30 @@ export class PostgresSpeakingAudioUploadRepository
   private async transaction<T>(
     run: (client: Queryable) => Promise<T>,
   ): Promise<T> {
-    let client: TransactionClient;
     try {
-      client = await this.client.connect();
+      return await this.client.transaction(run);
     } catch (error) {
-      throw storeUnavailable(error);
-    }
-
-    try {
-      await this.query(client, 'BEGIN', []);
-      const result = await run(client);
-      await this.query(client, 'COMMIT', []);
-      return result;
-    } catch (error) {
-      await this.query(client, 'ROLLBACK', []).catch(() => undefined);
       if (error instanceof AppError) {
         throw error;
       }
       throw storeUnavailable(error);
-    } finally {
-      client.release();
     }
   }
 
-  private async run(
+  private async run<Result extends object = Row>(
     sql: string,
     values: readonly unknown[],
-  ): Promise<readonly Row[]> {
+  ): Promise<readonly Result[]> {
     return this.query(this.client, sql, values);
   }
 
-  private async query(
+  private async query<Result extends object = Row>(
     client: Queryable,
     sql: string,
     values: readonly unknown[],
-  ): Promise<readonly Row[]> {
+  ): Promise<readonly Result[]> {
     try {
-      return (await client.query(sql, values)).rows;
+      return await client.query<Result>(sql, values);
     } catch (error) {
       if (error instanceof AppError) {
         throw error;
@@ -478,40 +484,19 @@ export class PostgresSpeakingAudioUploadRepository
       throw storeUnavailable(error);
     }
   }
-}
 
-export function createSpeakingAudioQueryClient(
-  databaseUrl: string,
-): SpeakingAudioQueryClient {
-  if (databaseUrl.trim().length === 0) {
-    return {
-      query: async () => {
-        throw new Error('DATABASE_URL is missing');
-      },
-      connect: async () => {
-        throw new Error('DATABASE_URL is missing');
-      },
-      close: async () => undefined,
-    };
+  private async execute(
+    client: Queryable,
+    sql: string,
+    values: readonly unknown[],
+  ): Promise<number> {
+    try {
+      return await client.execute(sql, values);
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      throw storeUnavailable(error);
+    }
   }
-
-  const pool = createPostgresPool('speaking-audio-upload', {
-    connectionString: databaseUrl,
-    max: 5,
-    connectionTimeoutMillis: 1_000,
-    idleTimeoutMillis: 30_000,
-  });
-  return {
-    query: (text, values) =>
-      pool.query<Row>(text, [...values]).then(({ rows }) => ({ rows })),
-    connect: async () => {
-      const client = await pool.connect();
-      return {
-        query: (text, values) =>
-          client.query<Row>(text, [...values]).then(({ rows }) => ({ rows })),
-        release: () => client.release(),
-      };
-    },
-    close: () => pool.end(),
-  };
 }
