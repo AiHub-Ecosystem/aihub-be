@@ -5,6 +5,7 @@ export interface PostgresIdempotencyClient {
   close(): Promise<void>;
 }
 
+// The unchanged tenant-isolation lane still constructs this direct pg adapter.
 export function createPostgresIdempotencyClient(
   databaseUrl: string,
 ): PostgresIdempotencyClient {

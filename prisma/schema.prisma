@@ -129,10 +129,10 @@ model EmailVerificationToken {
 
 /// One record per Organization, operation, actor scope, and idempotency key.
 ///
-/// `@@ignore`: the table has no single-column primary key, and its unique
-/// constraint includes a nullable column, so Prisma Client cannot address a
-/// row by identifier. The conflict target and the lock reads that decide replay
-/// versus reject are TypedSQL statements instead (ADR-0088, #39).
+/// `@@ignore`: the table has no addressable unique identifier. The conflict
+/// insert and the reads that decide replay versus reject use parameterized raw
+/// SQL through Prisma because the generated client cannot express them
+/// (ADR-0088, #39).
 ///
 /// `CHECK` constraints are owned by migrations 0004 (idempotency key,
 /// fingerprint, state) and the primary key added by 0013; the scope key unique

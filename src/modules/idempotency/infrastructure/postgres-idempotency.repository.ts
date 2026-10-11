@@ -8,6 +8,20 @@ import type {
 } from '@/modules/idempotency/application/idempotency-repository.port';
 import type { PostgresIdempotencyClient } from './postgres-idempotency.client';
 
+interface IdempotencyQueryRow extends Record<string, unknown> {
+  readonly request_id?: string;
+  readonly request_fingerprint?: string;
+  readonly state?: string;
+  readonly response_status?: number | null;
+  readonly response_body?: unknown;
+}
+
+interface PrismaIdempotencyClient {
+  $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
+}
+
+type IdempotencyClient = PrismaIdempotencyClient | PostgresIdempotencyClient;
+
 /**
  * The Organization predicate serves an Organization-scoped key and an Account
  * Idempotency Scope, whose Organization is null, in one statement. It is spelt
@@ -197,16 +211,28 @@ function reservationFromRow(row: unknown): IdempotencyReservation {
 export class PostgresIdempotencyRepository
   implements IdempotencyRepositoryPort
 {
-  constructor(private readonly client: PostgresIdempotencyClient) {}
+  constructor(private readonly client: IdempotencyClient) {}
+
+  private query(text: string, values: readonly unknown[]) {
+    if ('query' in this.client) {
+      return this.client.query(text, values);
+    }
+    return this.client.$queryRawUnsafe<readonly IdempotencyQueryRow[]>(
+      text,
+      ...values,
+    );
+  }
 
   async onModuleDestroy(): Promise<void> {
-    await this.client.close();
+    if ('close' in this.client) {
+      await this.client.close();
+    }
   }
 
   async reserve(
     input: ReserveIdempotencyInput,
   ): Promise<IdempotencyReservation> {
-    const inserted = await this.client.query(INSERT_SQL, [
+    const inserted = await this.query(INSERT_SQL, [
       input.organizationId,
       input.operation,
       input.actorScope ?? '',
@@ -220,7 +246,7 @@ export class PostgresIdempotencyRepository
       return { kind: 'claimed', requestId: requestIdFrom(insertedRow) };
     }
 
-    const claimed = await this.client.query(CLAIM_SQL, [
+    const claimed = await this.query(CLAIM_SQL, [
       input.organizationId,
       input.operation,
       input.actorScope ?? '',
@@ -234,7 +260,7 @@ export class PostgresIdempotencyRepository
       return { kind: 'claimed', requestId: requestIdFrom(claimedRow) };
     }
 
-    const existing = await this.client.query(SELECT_SQL, [
+    const existing = await this.query(SELECT_SQL, [
       input.organizationId,
       input.operation,
       input.actorScope ?? '',
@@ -259,7 +285,7 @@ export class PostgresIdempotencyRepository
   }
 
   async complete(input: CompleteIdempotencyInput): Promise<void> {
-    const rows = await this.client.query(COMPLETE_SQL, [
+    const rows = await this.query(COMPLETE_SQL, [
       input.organizationId,
       input.operation,
       input.actorScope ?? '',
@@ -272,7 +298,7 @@ export class PostgresIdempotencyRepository
   }
 
   async markFailed(input: IdempotencyAttemptInput): Promise<void> {
-    const rows = await this.client.query(FAILED_SQL, [
+    const rows = await this.query(FAILED_SQL, [
       input.organizationId,
       input.operation,
       input.actorScope ?? '',
@@ -283,7 +309,7 @@ export class PostgresIdempotencyRepository
   }
 
   async delete(input: IdempotencyAttemptInput): Promise<void> {
-    const rows = await this.client.query(DELETE_SQL, [
+    const rows = await this.query(DELETE_SQL, [
       input.organizationId,
       input.operation,
       input.actorScope ?? '',
@@ -294,7 +320,7 @@ export class PostgresIdempotencyRepository
   }
 
   async cleanupExpired(): Promise<number> {
-    const rows = await this.client.query(CLEANUP_SQL, []);
+    const rows = await this.query(CLEANUP_SQL, []);
     return rows.length;
   }
 }
