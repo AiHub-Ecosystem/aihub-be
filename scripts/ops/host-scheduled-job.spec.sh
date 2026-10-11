@@ -124,7 +124,8 @@ chmod 755 "$bin_dir/crontab"
 
 cat >"$bin_dir/pgrep" <<'STUB'
 #!/usr/bin/env bash
-[[ "${1:-}" == -f && "${2:-}" == *host-scheduled-job.sh* ]]
+[[ "${1:-}" == -f && "${2:-}" == *host-scheduled-job* ]]
+printf '%s\n' "$2" >"$FAKE_PGREP_PATTERN_FILE"
 remaining="$(cat "$FAKE_PGREP_REMAINING_FILE")"
 if ((remaining > 0)); then
   printf '%s\n' "$((remaining - 1))" >"$FAKE_PGREP_REMAINING_FILE"
@@ -136,6 +137,7 @@ chmod 755 "$bin_dir/pgrep"
 
 export FAKE_CRONTAB_FILE="$test_root/crontab"
 export FAKE_PGREP_REMAINING_FILE="$test_root/pgrep-remaining"
+export FAKE_PGREP_PATTERN_FILE="$test_root/pgrep-pattern"
 cat >"$FAKE_CRONTAB_FILE" <<'CRON'
 0 3 * * * /home/ngoc_anh/wispace-vault/snapshot.sh
 0 2 * * * /home/ngoc_anh/aihub-ops-job.sh quota
@@ -205,6 +207,8 @@ assert_contains "$FAKE_CRONTAB_FILE" '/home/ngoc_anh/wispace-vault/snapshot.sh'
 assert_not_contains "$FAKE_CRONTAB_FILE" 'host-scheduled-job.sh'
 cmp -s "$test_root/crontab.before-suspend" "$app_dir/.aihub-host-jobs-state/crontab"
 [[ "$(cat "$FAKE_PGREP_REMAINING_FILE")" == 0 ]]
+assert_contains "$FAKE_PGREP_PATTERN_FILE" '(^|/)aihub-ops-job\.sh'
+assert_contains "$FAKE_PGREP_PATTERN_FILE" '(^|/)aihub-avatar-sweep\.sh'
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" restore
 cmp -s "$test_root/crontab.before-suspend" "$FAKE_CRONTAB_FILE"
 [[ ! -e "$app_dir/.aihub-host-jobs-state" ]]

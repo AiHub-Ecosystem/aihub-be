@@ -69,7 +69,7 @@ jobs:
     name: Blue-green deploy to VPS
     needs: resolve
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     environment:
       name: production
     concurrency:

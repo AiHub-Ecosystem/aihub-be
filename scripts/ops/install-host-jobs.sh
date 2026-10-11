@@ -120,7 +120,7 @@ case "$command" in
       exit 1
     }
     app_dir_pattern="${APP_DIR//./\\.}"
-    job_pattern="$app_dir_pattern/scripts/ops/host-scheduled-job\\.sh|$app_dir_pattern/aihub-ops-job\\.sh|$app_dir_pattern/aihub-avatar-sweep\\.sh"
+    job_pattern="$app_dir_pattern/scripts/ops/host-scheduled-job\\.sh|(^|/)aihub-ops-job\\.sh([[:space:]]|$)|(^|/)aihub-avatar-sweep\\.sh([[:space:]]|$)"
     drain_deadline=$((SECONDS + 900))
     while pgrep -f "$job_pattern" >/dev/null; do
       if ((SECONDS >= drain_deadline)); then

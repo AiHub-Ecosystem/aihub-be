@@ -45,6 +45,7 @@ describe('public edge health probe', () => {
     expect(workflow).toContain(
       'if [[ "${active_shas[0]}" == "$target_sha" ]]; then',
     );
+    expect(workflow).toContain('timeout-minutes: 45');
     expect(
       workflow.indexOf('      - name: Pause and drain AIHUB host jobs'),
     ).toBeLessThan(workflow.indexOf('      - name: Deploy release'));
