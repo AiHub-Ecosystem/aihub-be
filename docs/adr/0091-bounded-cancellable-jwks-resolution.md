@@ -1,7 +1,8 @@
-# ADR-0084: Bound and cancel Organization JWKS resolution
+# ADR-0091: Bound and cancel Organization JWKS resolution
 
 - Status: Accepted
 - Date: 2026-10-09
+- Renumbered: from ADR-0084 on 2026-10-12, because three records were created that day under that number
 - Related issues: [#411](https://github.com/AiHub-Ecosystem/aihub-be/issues/411), [#402](https://github.com/AiHub-Ecosystem/aihub-be/issues/402)
 - Related ADR: [ADR-0080](0080-argon2id-profile-and-memory-budget.md)
 

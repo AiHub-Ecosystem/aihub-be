@@ -1,7 +1,8 @@
-# ADR-0088: Persist evidence for each AI Service dispatch attempt
+# ADR-0092: Persist evidence for each AI Service dispatch attempt
 
 - Status: Accepted
 - Date: 2026-10-10
+- Renumbered: from ADR-0088 on 2026-10-12, because ADR-0088 was already taken by the Prisma persistence decision
 - Related: [#477](https://github.com/AiHub-Ecosystem/aihub-be/issues/477), [#472](https://github.com/AiHub-Ecosystem/aihub-be/issues/472), [ADR-0016](0016-metering-boundary-and-billing-evidence.md), [ADR-0019](0019-quota-reconciliation-from-durable-usage.md), [ADR-0023](0023-thirteen-month-usage-retention.md), [ADR-0061](0061-one-module-owns-the-metering-record-and-its-completion.md)
 
 ## Context
