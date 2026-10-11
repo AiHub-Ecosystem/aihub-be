@@ -42,7 +42,7 @@
     "knip": "pnpm generate:prisma-client && node scripts/checks/knip.mjs",
     "verify:summary": "node scripts/checks/verify-summary.cjs",
     "provider:refresh": "node scripts/generate/refresh-provider-contract.mjs",
-    "verify": "pnpm knip && pnpm lint && pnpm format:check && pnpm type-check && pnpm test && pnpm test:capacity-benchmark && pnpm build && pnpm check:imports:dist && pnpm check:migrations && pnpm arch-check && pnpm check:imports && pnpm validate:openapi",
+    "verify": "pnpm knip && pnpm lint && pnpm format:check && pnpm type-check && pnpm arch-check && pnpm check:imports && pnpm check:migrations && pnpm validate:openapi && pnpm test && pnpm test:capacity-benchmark && pnpm build && pnpm check:imports:dist",
     "prepare": "husky"
   },
   "dependencies": {
