@@ -14,13 +14,27 @@ ADR-0071 chose Drizzle after comparing raw `pg`, Drizzle, and TypeORM. Prisma wa
 
 Prisma replaces Drizzle as the control-plane persistence standard. The decision is final; it is not gated on a spike. The first slice is a tracer that proves how each constraint below is met, and its benchmark is appended to this record. The one exit is the runtime fit: if `@prisma/adapter-pg` cannot run on the existing `pg` pool, so that #81 and #383 no longer apply, stop and reopen #395.
 
-**Endpoint.** Every `postgres-*` implementation uses Prisma: the generated client where it can express the query, and TypedSQL where it cannot (row locks and their order, `SKIP LOCKED`, `pg_advisory_xact_lock`, `FILTER (WHERE …)` aggregates). No separate raw `pg` query path remains, and `drizzle-orm` and `@nestjs/drizzle` are removed. A repository that stays outside Prisma needs its own recorded exception in this file.
+**Endpoint.** Every `postgres-*` implementation uses Prisma: the generated client where it can express the query, and `$queryRawUnsafe` with an explicit result row type where it cannot (row locks and their order, `SKIP LOCKED`, `pg_advisory_xact_lock`, `FILTER (WHERE …)` aggregates). The exact SQL is preserved and issued through the Prisma client or transaction. No separate raw `pg` query path remains, and `drizzle-orm` and `@nestjs/drizzle` are removed. A repository that stays outside Prisma needs its own recorded exception in this file.
 
-**Client and version.** Use the current Prisma major (7.x), whose client has no Rust query engine, through `@prisma/adapter-pg` on a `pg` pool. One `PrismaClient` exists per distinct connection URL in a process: runtime (`DATABASE_URL`), control-plane write, and control-plane read. URLs that are equal share one instance and one pool. CLI commands call the same factory with an explicit URL. Pool metrics are labelled by connection role instead of by module.
+**Client and version.** Stay on Prisma 7.10.0 GA, whose client has no Rust query engine, through `@prisma/adapter-pg` on a `pg` pool. One `PrismaClient` exists per distinct connection URL in a process: runtime (`DATABASE_URL`), control-plane write, and control-plane read. URLs that are equal share one instance and one pool. CLI commands call the same factory with an explicit URL. Pool metrics are labelled by connection role instead of by module.
+
+**TypedSQL.** TypedSQL is not adopted. On Prisma 7 it is a preview feature, and `prisma generate --sql` needs a live database to infer result types. That would add a database dependency to static, unit, and build jobs, including the database-free Docker build stage, changing the build and deploy contract. Repositories instead preserve their exact SQL through Prisma `$queryRawUnsafe` and declare explicit result row types, following the existing Identity and Auth row-mapping pattern.
+
+**Prisma 8.** Defer the upgrade until a GA release. The schema uses `@db.*`
+attributes (including `@db.Timestamptz(6)` and `@db.Date`) and `type: Brin`;
+Prisma 8 moves database types into type position. Calls using `.take(n)` and
+`.skip(n)` become `.limit(n)` and `.offset(n)`, and raw SQL changes from
+`db.sql.raw` to `db.raw.sql`. Release candidates changed incompatibly between
+rc.9 and rc.14. GA partial and unique indexes do not justify production use of
+an RC; see [the upgrade notes](../database.md#upgrading-to-prisma-8).
+
+`idempotency_records` remains `@@ignore` because it has no addressable unique
+identifier. Its conflict insert uses `$queryRawUnsafe` with an explicit result
+row type, retaining the existing conflict target and `DO NOTHING` behavior.
 
 **Transactions.** Prisma owns transactions. Each module's transaction runner moves to an interactive `$transaction`, Identity first. During the transition the existing `query(text, values)` seam is reimplemented on `tx.$queryRawUnsafe`, so repositories that have not moved share the same transaction as those that have, and the Email Delivery writer keeps the caller-owned handle that ADR-0083 defines. The ADR-0083 guard — expire the handle when the callback settles, drain in-flight calls, then commit or roll back — is preserved. The seam is removed as each module completes. Interactive transactions set `maxWait: 1_000` and `timeout: 5_000` explicitly in one place; #383 owns tightening them.
 
-**Schema and migrations.** `schema.prisma` is created by `prisma db pull` against a database built from all existing migrations, then renamed to match the current TypeScript names. Objects the schema cannot declare (partial unique indexes, triggers, `CHECK` constraints, BRIN) live only in SQL, each with a `///` comment in the schema naming its migration. Prisma generates new migration SQL (`prisma migrate diff … --script`) into `database/migrations/`, where it is reviewed and hand-edited as needed. The existing runner (`scripts/cli/migrate.mjs`, `schema_migrations`) keeps applying migrations, so Production and Sandbox need no baseline and the runtime image gains no Prisma CLI. `scripts/checks/check-migrations.mjs` keeps enforcing expand-only. CI adds a drift check: apply every migration to an empty database, then require an empty `migrate diff` against `schema.prisma`.
+**Schema and migrations.** `schema.prisma` is created by `prisma db pull` against a database built from all existing migrations, then renamed to match the current TypeScript names. Partial indexes use Prisma 7's `partialIndexes` preview feature and BRIN uses the native `Brin` type. Objects the schema cannot declare (triggers and `CHECK` constraints) live only in SQL, each with a `///` comment in the schema naming its migration. Prisma generates new migration SQL (`prisma migrate diff … --script`) into `database/migrations/`, where it is reviewed and hand-edited as needed. The existing runner (`scripts/cli/migrate.mjs`, `schema_migrations`) keeps applying migrations, so Production and Sandbox need no baseline and the runtime image gains no Prisma CLI. `scripts/checks/check-migrations.mjs` keeps enforcing expand-only. CI adds a drift check: apply every migration to an empty database, then require an empty `migrate diff` against `schema.prisma`.
 
 **Build and boundaries.** The generated client is written outside `src/`, ignored by Git, and generated before `type-check` and the SWC build. `prisma` is a development dependency used only in the build stage. Only `**/infrastructure/**` may import the generated client, and `pnpm arch-check` enforces it. Infrastructure maps rows to application port types; Prisma types never reach application or domain code.
 
@@ -63,7 +77,8 @@ reversed on the second pass. The harness confirms equal fixture outputs before
 timing and reports p50/p95 latency, completed rate, statement round trips, and
 failures. The aggregate uses the same parameterized SQL in all three modes so
 this measurement compares database-client overhead; production repositories
-follow the TypedSQL endpoint above.
+follow the Prisma raw-query endpoint above where the generated client cannot
+express the query.
 
 The table records the range across the two passes. Latencies are milliseconds;
 each completed-rate cell shows raw `pg` / Drizzle / Prisma operations per second.
@@ -81,6 +96,8 @@ selected organization relation is fetched separately by the client. One raw
 `pg` lookup-then-insert pass had a 115.25 ms p95 while the other pass was about
 5 ms; treat that isolated tail as local-run noise. These short, single-host
 measurements are descriptive, not a capacity estimate or a performance gate.
+Production repositories use the Prisma endpoint above, preserving unsupported
+queries as SQL with explicit result row types.
 
 ## Considered options
 
