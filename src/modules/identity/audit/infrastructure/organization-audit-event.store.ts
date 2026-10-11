@@ -1,5 +1,4 @@
 import { Logger } from '@nestjs/common';
-import { type SQL, sql } from 'drizzle-orm';
 import { monotonicFactory } from 'ulid';
 
 import {
@@ -66,24 +65,6 @@ function createOrganizationAuditEvent(
     { ...stamp, id: organizationAuditEventId(stamp.occurredAt) },
     draft,
   );
-}
-
-export function organizationAuditEventInsertSql(
-  stamp: Omit<OrganizationAuditStamp, 'id'>,
-  draft: OrganizationAuditDraft,
-): SQL {
-  const event = createOrganizationAuditEvent(stamp, draft);
-  return sql`
-    INSERT INTO organization_audit_events (
-      id, organization_id, actor_user_account_id, action, outcome,
-      target_type, target_id, target_label, detail, request_id, occurred_at
-    ) VALUES (
-      ${event.id}, ${event.organizationId}, ${event.actorUserAccountId},
-      ${event.action}, ${event.outcome}, ${event.targetType}, ${event.targetId},
-      ${event.targetLabel}, ${JSON.stringify(event.detail)}, ${event.requestId},
-      ${event.occurredAt}
-    )
-  `;
 }
 
 /**

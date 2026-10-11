@@ -1,13 +1,11 @@
 import { Buffer } from 'node:buffer';
 
 import { PrismaPg } from '@prisma/adapter-pg';
-import { type NodePgDatabase, drizzle } from 'drizzle-orm/node-postgres';
 import { type PoolConfig } from 'pg';
 
 import type { PostgresPoolName } from '@/common/observability/metrics';
 import { createPostgresPool } from '@/common/postgres/postgres-pool';
 import { Prisma, PrismaClient } from '@prisma-client/client';
-import { identityDrizzleSchema } from './drizzle-identity-schema';
 
 export interface PostgresIdentityClient {
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
@@ -128,12 +126,10 @@ function identityClient(
 }
 
 /**
- * Shared by standalone Identity clients and Nest's Drizzle integration so both
- * keep the same PostgreSQL pool limits and timeouts during the transition.
+ * Shared by standalone Identity clients so their pool limits and timeouts stay
+ * aligned with the control-plane pools.
  */
-export function identityDrizzleConnectionOptions(
-  databaseUrl: string,
-): PoolConfig {
+function identityPoolOptions(databaseUrl: string): PoolConfig {
   return {
     connectionString: databaseUrl,
     max: 10,
@@ -164,10 +160,7 @@ export function createPostgresIdentityClient(
     };
   }
 
-  const pool = createPostgresPool(
-    poolName,
-    identityDrizzleConnectionOptions(databaseUrl),
-  );
+  const pool = createPostgresPool(poolName, identityPoolOptions(databaseUrl));
   const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
   return identityClient(
@@ -193,48 +186,13 @@ export function createIdentityTransactionRunner(
   return identityClient(getPrisma, async () => undefined);
 }
 
-export type IdentityDatabase = NodePgDatabase<typeof identityDrizzleSchema>;
+/** Historical name retained for the unchanged database-lane fixtures. */
+export type IdentityDrizzleClient = PostgresIdentityClient &
+  PostgresIdentityTransactionalClient;
 
-export interface IdentityDatabaseClient {
-  readonly db: IdentityDatabase;
-}
-
-export interface IdentityDrizzleClient {
-  readonly db: IdentityDatabase;
-  close(): Promise<void>;
-}
-
-/**
- * Same shape and same first-use failure as the raw client above. The `db` getter
- * is where a use would reach a pool, so nothing assembles one.
- */
-function unconfiguredDrizzleClient(): IdentityDrizzleClient {
-  return {
-    get db(): never {
-      return missingDatabaseUrl();
-    },
-    close: async () => undefined,
-  };
-}
-
+/** Historical fixture factory; the returned client now runs through Prisma. */
 export function createIdentityDrizzleClient(
   databaseUrl: string,
-  poolName: 'identity-read' | 'identity-write' = 'identity-write',
 ): IdentityDrizzleClient {
-  if (databaseUrl.trim().length === 0) {
-    return unconfiguredDrizzleClient();
-  }
-
-  const pool = createPostgresPool(
-    poolName,
-    identityDrizzleConnectionOptions(databaseUrl),
-  );
-  const db = drizzle(pool, { schema: identityDrizzleSchema });
-
-  return {
-    db,
-    close: async () => {
-      await pool.end();
-    },
-  };
+  return createPostgresIdentityClient(databaseUrl, 'identity');
 }

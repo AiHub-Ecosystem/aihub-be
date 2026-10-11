@@ -6,17 +6,10 @@ import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 
 import { PrismaPg } from '@prisma/adapter-pg';
-import { and, eq, gte, lt, sql } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { integer, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 import { Pool } from 'pg';
 
 const require = createRequire(import.meta.url);
 const { PrismaClient } = require('../../dist/generated/prisma/client.js');
-const {
-  apiKeys,
-  organizations,
-} = require('../../dist/modules/identity/shared/infrastructure/drizzle-identity-schema.js');
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const ORGANIZATION_COUNT = 100;
@@ -29,29 +22,6 @@ const OPERATIONS_PER_PASS = (PASS_DURATION_MS / 1_000) * OPERATIONS_PER_SECOND;
 const LOOKUP_KEY_ID = `bench_key_${String(API_KEY_COUNT).padStart(6, '0')}`;
 const LOOKUP_HASH = Buffer.alloc(32);
 LOOKUP_HASH.writeBigUInt64BE(BigInt(API_KEY_COUNT), 24);
-
-const usageRecords = pgTable('usage_records', {
-  requestId: text('request_id'),
-  organizationId: text('organization_id'),
-  apiKeyId: text('api_key_id'),
-  actorId: text('actor_id'),
-  service: text('service'),
-  operation: text('operation'),
-  environment: text('environment'),
-  outcome: text('outcome'),
-  httpStatus: integer('http_status'),
-  errorCode: text('error_code'),
-  billableRequests: integer('billable_requests'),
-  inputTokens: integer('input_tokens'),
-  outputTokens: integer('output_tokens'),
-  totalTokens: integer('total_tokens'),
-  models: jsonb('models'),
-  meteringStatus: text('metering_status'),
-  totalMs: integer('total_ms'),
-  downstreamMs: integer('downstream_ms'),
-  aiProcessingMs: integer('ai_processing_ms'),
-  createdAt: timestamp('created_at', { withTimezone: true }),
-});
 
 const API_KEY_LOOKUP_SQL = `
   SELECT
@@ -347,14 +317,11 @@ async function seedDatabase(databaseUrl) {
 }
 
 function makeModes(databaseUrl) {
-  const sharedPool = new Pool({
+  const rawPool = new Pool({
     connectionString: databaseUrl,
     max: 10,
   });
-  const sharedMetrics = instrumentPool(sharedPool);
-  const drizzleClient = drizzle(sharedPool, {
-    schema: { apiKeys, organizations },
-  });
+  const rawMetrics = instrumentPool(rawPool);
 
   const prismaPool = new Pool({
     connectionString: databaseUrl,
@@ -364,85 +331,29 @@ function makeModes(databaseUrl) {
   const prismaClient = new PrismaClient({ adapter: new PrismaPg(prismaPool) });
 
   const raw = {
-    metrics: sharedMetrics,
+    metrics: rawMetrics,
     normalizeApiKey: rawApiKeyOutput,
     normalizeMeteringInsert: meteringInsertOutput,
     normalizeUsageAggregate: aggregateOutput,
     async apiKeyLookup() {
-      const result = await sharedPool.query(API_KEY_LOOKUP_SQL, [LOOKUP_HASH]);
+      const result = await rawPool.query(API_KEY_LOOKUP_SQL, [LOOKUP_HASH]);
       return result.rows[0] ?? null;
     },
     async meteringInsert(requestId) {
-      const result = await sharedPool.query(
+      const result = await rawPool.query(
         METERING_INSERT_SQL,
         usageRecordValues(usageRecord(requestId)),
       );
       return result.rows;
     },
     async usageAggregate(from, to) {
-      const result = await sharedPool.query(USAGE_AGGREGATE_SQL, [
+      const result = await rawPool.query(USAGE_AGGREGATE_SQL, [
         ORGANIZATION_ID,
         from,
         to,
         null,
       ]);
       return result.rows[0];
-    },
-  };
-
-  const drizzleMode = {
-    metrics: sharedMetrics,
-    normalizeApiKey: apiKeyOutput,
-    normalizeMeteringInsert: meteringInsertOutput,
-    normalizeUsageAggregate: aggregateOutput,
-    async apiKeyLookup() {
-      const rows = await drizzleClient
-        .select({
-          organizationId: apiKeys.organizationId,
-          apiKeyId: apiKeys.id,
-          organizationStatus: organizations.status,
-          status: apiKeys.status,
-          scopes: apiKeys.scopes,
-          entitlements: organizations.entitlements,
-          allowedEnvironments: apiKeys.allowedEnvironments,
-          expiresAt: apiKeys.expiresAt,
-          rateLimitRpm: organizations.rateLimitRpm,
-          maxConcurrent: organizations.maxConcurrent,
-          monthlyRequestQuota: organizations.monthlyRequestQuota,
-          hardStopOnQuota: organizations.hardStopOnQuota,
-        })
-        .from(apiKeys)
-        .innerJoin(organizations, eq(organizations.id, apiKeys.organizationId))
-        .where(eq(apiKeys.keyHash, LOOKUP_HASH))
-        .limit(1);
-      return rows[0] ?? null;
-    },
-    async meteringInsert(requestId) {
-      const record = usageRecord(requestId);
-      const rows = await drizzleClient
-        .insert(usageRecords)
-        .values(record)
-        .onConflictDoNothing({ target: usageRecords.requestId })
-        .returning({ requestId: usageRecords.requestId });
-      return rows;
-    },
-    async usageAggregate(from, to) {
-      const rows = await drizzleClient
-        .select({
-          billable_request_count: sql`COALESCE(SUM(${usageRecords.billableRequests}) FILTER (WHERE ${usageRecords.outcome} = 'success'), 0)::bigint`,
-          billable_token_count: sql`COALESCE(SUM(${usageRecords.totalTokens}) FILTER (WHERE ${usageRecords.outcome} = 'success' AND ${usageRecords.billableRequests} = 1), 0)::bigint`,
-          missing_usage_count: sql`COUNT(*) FILTER (WHERE ${usageRecords.outcome} = 'success' AND ${usageRecords.meteringStatus} = 'missing_usage')::bigint`,
-        })
-        .from(usageRecords)
-        .where(
-          and(
-            eq(usageRecords.organizationId, ORGANIZATION_ID),
-            gte(usageRecords.createdAt, from),
-            lt(usageRecords.createdAt, to),
-            sql`(${null}::text IS NULL OR ${usageRecords.operation} = ${null})`,
-          ),
-        );
-      return rows[0];
     },
   };
 
@@ -504,7 +415,6 @@ function makeModes(databaseUrl) {
 
   for (const [modeName, mode] of Object.entries({
     raw,
-    drizzle: drizzleMode,
     prisma,
   })) {
     mode.apiKeyLookup = mode.apiKeyLookup.bind(mode);
@@ -515,11 +425,10 @@ function makeModes(databaseUrl) {
 
   return {
     raw,
-    drizzle: drizzleMode,
     prisma,
     async close() {
       await prismaClient.$disconnect();
-      await Promise.all([sharedPool.end(), prismaPool.end()]);
+      await Promise.all([rawPool.end(), prismaPool.end()]);
     },
   };
 }
@@ -528,7 +437,7 @@ async function verifyOutputs(modes, from, to, cleanupPool) {
   const operationResults = new Map();
   const fixtureRequestId = 'bench_verify_523';
 
-  for (const modeName of ['raw', 'drizzle', 'prisma']) {
+  for (const modeName of ['raw', 'prisma']) {
     const mode = modes[modeName];
     const rawApiKey = await mode.apiKeyLookup();
     const outputs = {
@@ -660,7 +569,7 @@ function range(values) {
 }
 
 function renderResults(results, operations) {
-  const modes = ['raw', 'drizzle', 'prisma'];
+  const modes = ['raw', 'prisma'];
   const rows = operations.map((operation) => {
     const cell = (modeName) => {
       const passes = results.get(`${modeName}:${operation.name}`);
@@ -686,12 +595,12 @@ function renderResults(results, operations) {
         return range(passes.map((pass) => pass.failures));
       })
       .join(' / ');
-    return `| ${operation.label} | ${roundTrips} | ${cell('raw')} | ${cell('drizzle')} | ${cell('prisma')} | ${rates} | ${failures} |`;
+    return `| ${operation.label} | ${roundTrips} | ${cell('raw')} | ${cell('prisma')} | ${rates} | ${failures} |`;
   });
   process.stdout.write(
     [
-      '| Operation | Round trips (pg / Drizzle / Prisma) | Raw pg p50 / p95 ms | Drizzle p50 / p95 ms | Prisma p50 / p95 ms | Completed rate/s (pg / Drizzle / Prisma) | Failures (pg / Drizzle / Prisma) |',
-      '| --- | ---: | ---: | ---: | ---: | ---: | ---: |',
+      '| Operation | Round trips (pg / Prisma) | Raw pg p50 / p95 ms | Prisma p50 / p95 ms | Completed rate/s (pg / Prisma) | Failures (pg / Prisma) |',
+      '| --- | ---: | ---: | ---: | ---: | ---: |',
       ...rows,
     ].join('\n') + '\n',
   );
@@ -746,7 +655,7 @@ async function main() {
     const to = new Date(Date.now() + 10 * 60 * 1_000);
     await verifyOutputs(modes, from, to, cleanupPool);
     process.stdout.write(
-      'All three implementations returned equal fixture outputs before timing.\n',
+      'Both implementations returned equal fixture outputs before timing.\n',
     );
 
     const operations = [
@@ -757,8 +666,8 @@ async function main() {
     ];
     const results = new Map();
     const passOrders = [
-      ['raw', 'drizzle', 'prisma'],
-      ['prisma', 'drizzle', 'raw'],
+      ['raw', 'prisma'],
+      ['prisma', 'raw'],
     ];
     for (let passIndex = 0; passIndex < passOrders.length; passIndex += 1) {
       for (const modeName of passOrders[passIndex]) {

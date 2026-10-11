@@ -142,8 +142,6 @@ export type PostgresPoolName =
   | 'speaking-audio-upload'
   | 'metering'
   | 'identity'
-  | 'identity-read'
-  | 'identity-write'
   | 'integration-test';
 
 export interface PostgresPoolStatsSample {

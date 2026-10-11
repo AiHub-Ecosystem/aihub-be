@@ -1,7 +1,5 @@
 import { Module } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
-import { DrizzleModule, getDrizzleToken } from '@nestjs/drizzle';
-import { drizzle } from 'drizzle-orm/node-postgres';
 
 import type { IdMinter } from '@/common/ids/prefixed-id';
 import {
@@ -137,12 +135,7 @@ import { RENAME_ORGANIZATION } from './organizations/application/rename-organiza
 import { PostgresOrganizationCreationRepository } from './organizations/infrastructure/postgres-organization-creation.repository';
 import { PostgresOrganizationRenameRepository } from './organizations/infrastructure/postgres-organization-rename.repository';
 import { OrganizationController } from './organizations/presentation/organization.controller';
-import { identityDrizzleSchema } from './shared/infrastructure/drizzle-identity-schema';
-import {
-  type IdentityDatabase,
-  createIdentityDrizzleClient,
-  createIdentityTransactionRunner,
-} from './shared/infrastructure/postgres-identity.client';
+import { createIdentityTransactionRunner } from './shared/infrastructure/postgres-identity.client';
 import {
   RedisAuthFailureCounter,
   RedisIdentityStore,
@@ -177,35 +170,11 @@ import { JwksKeyProvider } from './user-assertions/infrastructure/jwks-key-provi
 import { readSandboxSigningMaterial } from './user-assertions/infrastructure/sandbox-assertion.config';
 import { SandboxAssertionController } from './user-assertions/presentation/sandbox-assertion.controller';
 
-function controlPlaneDatabaseUrl(
-  configuration: RuntimeConnectionConfigurationPort,
-): string {
-  return configuration.controlPlaneDatabaseUrl ?? '';
-}
-
-function controlPlaneReadDatabaseUrl(
-  configuration: RuntimeConnectionConfigurationPort,
-): string {
-  return configuration.controlPlaneReadDatabaseUrl ?? '';
-}
-
-const IDENTITY_READ_DATABASE = 'identity-read';
-const IDENTITY_WRITE_DATABASE = 'identity-write';
 const IDENTITY_TRANSACTION_CLIENT = Symbol('IDENTITY_TRANSACTION_CLIENT');
+const IDENTITY_READ_CLIENT = Symbol('IDENTITY_READ_CLIENT');
 type IdentityTransactionClient = ReturnType<
   typeof createIdentityTransactionRunner
 >;
-
-function drizzleDatabaseOptions(
-  databaseUrl: string,
-  poolName: 'identity-read' | 'identity-write',
-) {
-  if (databaseUrl.trim().length === 0) {
-    return { db: drizzle.mock({ schema: identityDrizzleSchema }) };
-  }
-
-  return { db: createIdentityDrizzleClient(databaseUrl, poolName).db };
-}
 
 @Module({
   // `RateLimitGuard` on the sandbox route consumes the gateway's rate limiter.
@@ -215,26 +184,6 @@ function drizzleDatabaseOptions(
     AuthModule,
     GatewayModule,
     IdempotencyModule,
-    DrizzleModule.forRootAsync({
-      name: IDENTITY_READ_DATABASE,
-      imports: [SecretsModule],
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
-      useFactory: (configuration: RuntimeConnectionConfigurationPort) =>
-        drizzleDatabaseOptions(
-          controlPlaneReadDatabaseUrl(configuration),
-          IDENTITY_READ_DATABASE,
-        ),
-    }),
-    DrizzleModule.forRootAsync({
-      name: IDENTITY_WRITE_DATABASE,
-      imports: [SecretsModule],
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
-      useFactory: (configuration: RuntimeConnectionConfigurationPort) =>
-        drizzleDatabaseOptions(
-          controlPlaneDatabaseUrl(configuration),
-          IDENTITY_WRITE_DATABASE,
-        ),
-    }),
   ],
   controllers: [
     SandboxAssertionController,
@@ -253,6 +202,12 @@ function drizzleDatabaseOptions(
         createIdentityTransactionRunner(() => controlPlane.prisma),
     },
     {
+      provide: IDENTITY_READ_CLIENT,
+      inject: [CONTROL_PLANE_READ_PRISMA_CLIENT],
+      useFactory: (controlPlaneRead: PrismaClientHolder) =>
+        createIdentityTransactionRunner(() => controlPlaneRead.prisma),
+    },
+    {
       provide: IDENTITY_POSTGRES_READINESS,
       inject: [CONTROL_PLANE_PRISMA_CLIENT, CONTROL_PLANE_READ_PRISMA_CLIENT],
       useFactory: (
@@ -267,24 +222,18 @@ function drizzleDatabaseOptions(
     },
     {
       provide: API_KEY_REPOSITORY,
-      useFactory: (db: IdentityDatabase) =>
-        new PostgresApiKeyRepository({ db }),
-      inject: [getDrizzleToken(IDENTITY_READ_DATABASE)],
+      inject: [IDENTITY_READ_CLIENT],
+      useFactory: (client: IdentityTransactionClient) =>
+        new PostgresApiKeyRepository(client),
     },
     {
       provide: ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
       useFactory: (
-        writeDb: IdentityDatabase,
-        readDb: IdentityDatabase,
+        client: IdentityTransactionClient,
+        readClient: IdentityTransactionClient,
       ): OrganizationIdentityConfigRepositoryPort =>
-        new PostgresOrganizationIdentityConfigRepository(
-          { db: writeDb },
-          { db: readDb },
-        ),
-      inject: [
-        getDrizzleToken(IDENTITY_WRITE_DATABASE),
-        getDrizzleToken(IDENTITY_READ_DATABASE),
-      ],
+        new PostgresOrganizationIdentityConfigRepository(client, readClient),
+      inject: [IDENTITY_TRANSACTION_CLIENT, IDENTITY_READ_CLIENT],
     },
     {
       provide: ORGANIZATION_MEMBERSHIP,
@@ -364,7 +313,7 @@ function drizzleDatabaseOptions(
     },
     {
       provide: ORGANIZATION_AUDIT_EVENT_READ,
-      inject: [IDENTITY_TRANSACTION_CLIENT],
+      inject: [IDENTITY_READ_CLIENT],
       useFactory: (
         client: IdentityTransactionClient,
       ): OrganizationAuditEventReadPort =>
