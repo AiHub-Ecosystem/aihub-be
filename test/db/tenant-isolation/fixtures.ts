@@ -143,6 +143,13 @@ export function createTenantIsolationRedisClients(): TenantIsolationRedisClients
         : raw.set(key, value, mode, seconds, condition),
     del: (...keys) => raw.del(...keys),
     incr: (key) => raw.incr(key),
+    eval: async (script, numberOfKeys, ...args) => {
+      const result = await raw.eval(script, numberOfKeys, ...args);
+      if (typeof result !== 'number') {
+        throw new Error('Redis eval result is invalid');
+      }
+      return result;
+    },
     expire: (key, seconds) => raw.expire(key, seconds),
     quit: () => raw.quit(),
   };

@@ -284,7 +284,7 @@ non-zero exit and on a missed run for either container.
 
 ### Scheduled operator jobs
 
-The other three scheduled operator commands run from one host script,
+The existing scheduled operator commands run from one host script,
 `~/aihub-ops-job.sh <quota|prune|report>`, built the same way as the Avatar
 sweep (production then Sandbox, stdin detached, one log line per environment in
 `~/aihub-ops-job.log`, non-zero exit when either failed). Crontab, in the
@@ -296,10 +296,35 @@ server's UTC clock:
 5 * * * *  aihub-ops-job.sh report   # usage:report for the previous whole UTC hour
 ```
 
+Add a daily `ttl-audit` run after the installed host wrapper supports it. It
+runs `redis:ttl-audit` once in each deployment and scans `aihub:*`
+and exits non-zero if any key expected to expire has no TTL. It prints aggregate
+counts only, never Redis key names. The persistent
+`aihub:v1:jwks-generation:*` invalidation fences are counted separately because
+they must not expire and make a purged JWKS cache entry current again. Alert on
+a non-zero exit and on a missed line for either deployment. The installed host
+wrapper is outside this repository; update it to accept `ttl-audit` and invoke:
+
+```sh
+docker compose --env-file .env.production -f docker-compose.production.yml \
+  exec -T app node scripts/runtime/runtime-entrypoint.mjs \
+  scripts/cli/cli.mjs redis:ttl-audit
+
+docker compose --env-file .env.production -f docker-compose.production.yml \
+  --profile sandbox exec -T app-sandbox \
+  node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs redis:ttl-audit
+```
+
+Then add this cron entry (server UTC):
+
+```text
+45 1 * * * aihub-ops-job.sh ttl-audit
+```
+
 `report` computes `--from` and `--to` as the start of the previous and of the
 current UTC hour, so `to` is never in the future. The script is not in the
-repository (it holds the host path and the `sudo` form); the three operator
-guides own the command, its exit codes, and what to alert on. Before the first
+repository (it holds the host path and the `sudo` form); the operator runbooks
+own each command, its exit codes, and what to alert on. Before the first
 scheduled `prune` the database was backed up with `pg_dump -Fc` and the command
 was run by hand in each container (`deleted: 0`, nothing was 13 months old).
 

@@ -103,6 +103,11 @@ const quotaReconciliationDescriptor = cliRunnerDescriptor(
   'runQuotaReconciliationCommand',
   'quota reconciliation command is unavailable',
 );
+const redisTtlAuditDescriptor = cliRunnerDescriptor(
+  'redis-ttl-audit',
+  'runRedisTtlAuditCommand',
+  'Redis TTL audit command is unavailable',
+);
 const createOperatorApiKeyDescriptor = cliRunnerDescriptor(
   'organization-api-key',
   'runCreateOperatorApiKeyCommand',
@@ -677,6 +682,19 @@ async function reconcileQuotaCommand(options) {
   });
 }
 
+async function auditRedisTtlCommand(options) {
+  if (options.size > 0) {
+    usageError();
+  }
+
+  const summary = await runCliCommand(redisTtlAuditDescriptor, {
+    redisUrl: process.env.REDIS_URL ?? '',
+  });
+  if (summary.missingTtl > 0) {
+    throw new Error('AIHUB Redis keys without TTL were detected');
+  }
+}
+
 // Suspension and restoration are operator acts with no Bearer route
 // (ADR-0044). `--actor` names the operator's own AIHUB User Account, which the
 // audit event records; an unknown Organization or actor is a usage error, so
@@ -827,6 +845,10 @@ async function main() {
   }
   if (command === 'quota:reconcile') {
     await reconcileQuotaCommand(options);
+    return;
+  }
+  if (command === 'redis:ttl-audit') {
+    await auditRedisTtlCommand(options);
     return;
   }
   if (command === 'org:attach-owner') {
