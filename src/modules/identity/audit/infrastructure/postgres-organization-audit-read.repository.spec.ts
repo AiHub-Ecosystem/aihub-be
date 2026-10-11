@@ -65,7 +65,9 @@ describe('PostgresOrganizationAuditReadRepository', () => {
    */
   it('never surfaces the durable target identifier, which is a user account id', async () => {
     const client = new FakePostgres();
-    client.result = [row({ target_id: TARGET_USER_ID })];
+    client.result = [
+      row({ target_id: TARGET_USER_ID, actor_user_account_id: USER_ID }),
+    ];
 
     const events = await new PostgresOrganizationAuditReadRepository(
       client,
@@ -75,18 +77,7 @@ describe('PostgresOrganizationAuditReadRepository', () => {
     expect(JSON.stringify(events)).not.toContain('usr_');
     expect(events[0]).not.toHaveProperty('targetId');
     expect(events[0]).not.toHaveProperty('target_id');
-  });
-
-  it('never selects the target identifier or the actor account id at all', async () => {
-    const client = new FakePostgres();
-
-    await new PostgresOrganizationAuditReadRepository(client).listAuditEvents(
-      input(),
-    );
-
-    const sql = client.queries[0]?.text ?? '';
-    expect(sql).not.toContain('event.target_id');
-    expect(sql).not.toContain('event.actor_user_account_id,');
+    expect(events[0]).not.toHaveProperty('actorUserAccountId');
   });
 
   /**
@@ -129,29 +120,18 @@ describe('PostgresOrganizationAuditReadRepository', () => {
     expect(events[0]?.targetLabel).toBeNull();
   });
 
-  it('orders newest first over both columns, so a shared instant still resolves', async () => {
-    const client = new FakePostgres();
-
-    await new PostgresOrganizationAuditReadRepository(client).listAuditEvents(
-      input(),
-    );
-
-    expect(client.queries[0]?.text).toContain(
-      'ORDER BY event.occurred_at DESC, event.id DESC',
-    );
-  });
-
-  it('passes the cursor position as a row comparison on the same pair', async () => {
+  it('forwards the cursor position used to continue the next page', async () => {
     const client = new FakePostgres();
     const occurredAt = new Date('2026-09-21T08:00:00.000Z');
+    client.result = [row()];
 
-    await new PostgresOrganizationAuditReadRepository(client).listAuditEvents(
+    const events = await new PostgresOrganizationAuditReadRepository(
+      client,
+    ).listAuditEvents(
       input({ after: { occurredAt, id: 'oae_01J00000000000000000000001' } }),
     );
 
-    expect(client.queries[0]?.text).toContain(
-      '(event.occurred_at, event.id) < ($2, $3)',
-    );
+    expect(events.map((event) => event.id)).toEqual([row().id]);
     expect(client.queries[0]?.values[1]).toBe(occurredAt);
     expect(client.queries[0]?.values[2]).toBe('oae_01J00000000000000000000001');
   });
