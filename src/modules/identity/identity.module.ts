@@ -141,7 +141,7 @@ import { identityDrizzleSchema } from './shared/infrastructure/drizzle-identity-
 import {
   type IdentityDatabase,
   createIdentityDrizzleClient,
-  createPostgresIdentityClient,
+  createIdentityTransactionRunner,
 } from './shared/infrastructure/postgres-identity.client';
 import {
   RedisAuthFailureCounter,
@@ -183,14 +183,6 @@ function controlPlaneDatabaseUrl(
   return configuration.controlPlaneDatabaseUrl ?? '';
 }
 
-// Each repository owns its client (they expose `close()` passthroughs), so
-// this names the construction rather than sharing one pool across them.
-function postgresIdentityClient(
-  configuration: RuntimeConnectionConfigurationPort,
-): ReturnType<typeof createPostgresIdentityClient> {
-  return createPostgresIdentityClient(controlPlaneDatabaseUrl(configuration));
-}
-
 function controlPlaneReadDatabaseUrl(
   configuration: RuntimeConnectionConfigurationPort,
 ): string {
@@ -199,6 +191,10 @@ function controlPlaneReadDatabaseUrl(
 
 const IDENTITY_READ_DATABASE = 'identity-read';
 const IDENTITY_WRITE_DATABASE = 'identity-write';
+const IDENTITY_TRANSACTION_CLIENT = Symbol('IDENTITY_TRANSACTION_CLIENT');
+type IdentityTransactionClient = ReturnType<
+  typeof createIdentityTransactionRunner
+>;
 
 function drizzleDatabaseOptions(
   databaseUrl: string,
@@ -251,6 +247,12 @@ function drizzleDatabaseOptions(
   ],
   providers: [
     {
+      provide: IDENTITY_TRANSACTION_CLIENT,
+      inject: [CONTROL_PLANE_PRISMA_CLIENT],
+      useFactory: (controlPlane: PrismaClientHolder) =>
+        createIdentityTransactionRunner(() => controlPlane.prisma),
+    },
+    {
       provide: IDENTITY_POSTGRES_READINESS,
       inject: [CONTROL_PLANE_PRISMA_CLIENT, CONTROL_PLANE_READ_PRISMA_CLIENT],
       useFactory: (
@@ -286,13 +288,11 @@ function drizzleDatabaseOptions(
     },
     {
       provide: ORGANIZATION_MEMBERSHIP,
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      inject: [IDENTITY_TRANSACTION_CLIENT],
       useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
+        client: IdentityTransactionClient,
       ): OrganizationMembershipPort =>
-        new PostgresOrganizationMembershipRepository(
-          postgresIdentityClient(configuration),
-        ),
+        new PostgresOrganizationMembershipRepository(client),
     },
     {
       provide: ORGANIZATION_MEMBERSHIP_LIST,
@@ -314,13 +314,11 @@ function drizzleDatabaseOptions(
     },
     {
       provide: ORGANIZATION_CREATION_RECORD,
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      inject: [IDENTITY_TRANSACTION_CLIENT],
       useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
+        client: IdentityTransactionClient,
       ): OrganizationCreationRecordPort =>
-        new PostgresOrganizationCreationRepository(
-          postgresIdentityClient(configuration),
-        ),
+        new PostgresOrganizationCreationRepository(client),
     },
     {
       provide: CREATE_ORGANIZATION,
@@ -338,13 +336,11 @@ function drizzleDatabaseOptions(
     },
     {
       provide: ORGANIZATION_RENAME_RECORD,
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      inject: [IDENTITY_TRANSACTION_CLIENT],
       useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
+        client: IdentityTransactionClient,
       ): OrganizationRenameRecordPort =>
-        new PostgresOrganizationRenameRepository(
-          postgresIdentityClient(configuration),
-        ),
+        new PostgresOrganizationRenameRepository(client),
     },
     {
       provide: RENAME_ORGANIZATION,
@@ -354,13 +350,9 @@ function drizzleDatabaseOptions(
     },
     {
       provide: ORGANIZATION_API_KEY,
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
-      useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
-      ): OrganizationApiKeyPort =>
-        new PostgresOrganizationApiKeyRepository(
-          postgresIdentityClient(configuration),
-        ),
+      inject: [IDENTITY_TRANSACTION_CLIENT],
+      useFactory: (client: IdentityTransactionClient): OrganizationApiKeyPort =>
+        new PostgresOrganizationApiKeyRepository(client),
     },
     {
       provide: CREATE_ORGANIZATION_API_KEY,
@@ -372,13 +364,11 @@ function drizzleDatabaseOptions(
     },
     {
       provide: ORGANIZATION_AUDIT_EVENT_READ,
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      inject: [IDENTITY_TRANSACTION_CLIENT],
       useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
+        client: IdentityTransactionClient,
       ): OrganizationAuditEventReadPort =>
-        new PostgresOrganizationAuditReadRepository(
-          postgresIdentityClient(configuration),
-        ),
+        new PostgresOrganizationAuditReadRepository(client),
     },
     {
       provide: READ_ORGANIZATION_AUDIT_EVENTS,
@@ -443,17 +433,17 @@ function drizzleDatabaseOptions(
     {
       provide: ORGANIZATION_INVITATION,
       useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
+        client: IdentityTransactionClient,
         payloadCipher: EmailPayloadCipherPort,
         emailRequests: EmailDeliveryRequestWriterPort,
       ): OrganizationInvitationPort =>
         new PostgresOrganizationInvitationRepository(
-          postgresIdentityClient(configuration),
+          client,
           payloadCipher,
           emailRequests,
         ),
       inject: [
-        RUNTIME_CONNECTION_CONFIGURATION,
+        IDENTITY_TRANSACTION_CLIENT,
         EMAIL_PAYLOAD_CIPHER,
         EMAIL_DELIVERY_REQUEST_WRITER,
       ],

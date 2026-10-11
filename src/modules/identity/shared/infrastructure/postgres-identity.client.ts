@@ -1,8 +1,12 @@
+import { Buffer } from 'node:buffer';
+
+import { PrismaPg } from '@prisma/adapter-pg';
 import { type NodePgDatabase, drizzle } from 'drizzle-orm/node-postgres';
 import { type PoolConfig } from 'pg';
 
 import type { PostgresPoolName } from '@/common/observability/metrics';
 import { createPostgresPool } from '@/common/postgres/postgres-pool';
+import { Prisma, PrismaClient } from '@prisma-client/client';
 import { identityDrizzleSchema } from './drizzle-identity-schema';
 
 export interface PostgresIdentityClient {
@@ -28,9 +32,104 @@ class PostgresIdentityTransactionExpiredError extends Error {
   }
 }
 
+const IDENTITY_TRANSACTION_OPTIONS = {
+  maxWait: 1_000,
+  timeout: 5_000,
+} as const;
+
+type PrismaRawQueryClient = Pick<PrismaClient, '$queryRawUnsafe'>;
+
+function normalizeRawValue(value: unknown): unknown {
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  if (Prisma.Decimal.isDecimal(value)) {
+    return value.toString();
+  }
+  if (value instanceof Uint8Array && !Buffer.isBuffer(value)) {
+    return Buffer.from(value);
+  }
+  return value;
+}
+
+function normalizeRawRows(
+  rows: readonly Record<string, unknown>[],
+): readonly unknown[] {
+  return rows.map((source) => {
+    const row: Record<string, unknown> = {};
+    for (const column of Object.keys(source)) {
+      row[column] = normalizeRawValue(source[column]);
+    }
+    return row;
+  });
+}
+
+function queryRows(
+  client: PrismaRawQueryClient,
+  text: string,
+  values: readonly unknown[],
+): Promise<readonly unknown[]> {
+  return client
+    .$queryRawUnsafe<readonly Record<string, unknown>[]>(text, ...values)
+    .then(normalizeRawRows);
+}
+
+function identityClient(
+  getPrisma: () => PrismaClient,
+  close: () => Promise<void>,
+): PostgresIdentityClient & PostgresIdentityTransactionalClient {
+  return {
+    query: (text, values) => queryRows(getPrisma(), text, values),
+    transaction: <T>(
+      callback: (client: PostgresIdentityQueryClient) => Promise<T>,
+    ) =>
+      getPrisma().$transaction(async (transaction) => {
+        let active = true;
+        const queries: Promise<readonly unknown[]>[] = [];
+        const transactionClient: PostgresIdentityQueryClient = {
+          query: (text, values) => {
+            if (!active) {
+              return Promise.reject(
+                new PostgresIdentityTransactionExpiredError(),
+              );
+            }
+            const query = queryRows(transaction, text, values);
+            queries.push(query);
+            void query.catch(() => undefined);
+            return query;
+          },
+        };
+
+        let result!: T;
+        let callbackError: { readonly value: unknown } | undefined;
+        try {
+          result = await callback(transactionClient);
+        } catch (error) {
+          callbackError = { value: error };
+        }
+        active = false;
+
+        const queryResults = await Promise.allSettled(queries);
+        if (callbackError !== undefined) {
+          throw callbackError.value;
+        }
+        const failedQuery = queryResults.find(
+          (query): query is PromiseRejectedResult =>
+            query.status === 'rejected',
+        );
+        if (failedQuery !== undefined) {
+          throw failedQuery.reason;
+        }
+
+        return result;
+      }, IDENTITY_TRANSACTION_OPTIONS),
+    close,
+  };
+}
+
 /**
- * Shared by raw Identity clients and Nest's Drizzle integration so both keep
- * the same PostgreSQL pool limits and timeouts.
+ * Shared by standalone Identity clients and Nest's Drizzle integration so both
+ * keep the same PostgreSQL pool limits and timeouts during the transition.
  */
 export function identityDrizzleConnectionOptions(
   databaseUrl: string,
@@ -69,84 +168,29 @@ export function createPostgresIdentityClient(
     poolName,
     identityDrizzleConnectionOptions(databaseUrl),
   );
+  const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
-  return {
-    async query(
-      text: string,
-      values: readonly unknown[],
-    ): Promise<readonly unknown[]> {
-      const result = await pool.query<Record<string, unknown>>(text, [
-        ...values,
-      ]);
-      return result.rows;
-    },
-    async transaction<T>(
-      callback: (client: PostgresIdentityQueryClient) => Promise<T>,
-    ): Promise<T> {
-      const client = await pool.connect();
+  return identityClient(
+    () => prisma,
+    async () => {
       try {
-        await client.query('BEGIN');
-
-        let active = true;
-        const queries: Promise<readonly unknown[]>[] = [];
-        const transactionClient: PostgresIdentityQueryClient = {
-          query: (text, values) => {
-            if (!active) {
-              return Promise.reject(
-                new PostgresIdentityTransactionExpiredError(),
-              );
-            }
-            const query = (async () => {
-              const response = await client.query<Record<string, unknown>>(
-                text,
-                [...values],
-              );
-              return response.rows;
-            })();
-            queries.push(query);
-            void query.catch(() => undefined);
-            return query;
-          },
-        };
-
-        let result!: T;
-        let callbackError: { readonly value: unknown } | undefined;
-        try {
-          result = await callback(transactionClient);
-        } catch (error) {
-          callbackError = { value: error };
-        }
-        active = false;
-
-        const queryResults = await Promise.allSettled(queries);
-        if (callbackError !== undefined) {
-          throw callbackError.value;
-        }
-        const failedQuery = queryResults.find(
-          (query): query is PromiseRejectedResult =>
-            query.status === 'rejected',
-        );
-        if (failedQuery !== undefined) {
-          throw failedQuery.reason;
-        }
-
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        try {
-          await client.query('ROLLBACK');
-        } catch {
-          // Preserve the original database failure.
-        }
-        throw error;
+        await prisma.$disconnect();
       } finally {
-        client.release();
+        await pool.end();
       }
     },
-    close: async () => {
-      await pool.end();
-    },
-  };
+  );
+}
+
+/**
+ * Adapts the shared control-plane client to the transitional Identity query
+ * seam. The callback defers reading the client so an unconfigured deployment
+ * can still assemble its Nest module graph and fail only on first use.
+ */
+export function createIdentityTransactionRunner(
+  getPrisma: () => PrismaClient,
+): PostgresIdentityClient & PostgresIdentityTransactionalClient {
+  return identityClient(getPrisma, async () => undefined);
 }
 
 export type IdentityDatabase = NodePgDatabase<typeof identityDrizzleSchema>;
