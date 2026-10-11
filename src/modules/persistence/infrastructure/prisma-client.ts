@@ -88,16 +88,22 @@ export function createPrismaClient(
  * graph, so a role without a URL hands out this and fails when it is used.
  */
 function deferPrismaClient(getPrisma: () => PrismaClient): PrismaClient {
+  // `close` is probed by repositories that close a client they were handed,
+  // as `this.client.close?.()` or `'close' in this.client`. A shared client
+  // has none, and probing an unconfigured one must not be the first use that
+  // fails, or shutting down a database-free application throws.
+  const isProbe = (property: PropertyKey): boolean =>
+    isLifecycleProperty(property) || property === 'close';
+
   return new Proxy({} as PrismaClient, {
     has(_target, property) {
+      if (isProbe(property)) {
+        return false;
+      }
       return property in getPrisma();
     },
     get(_target, property) {
-      // `close` is probed by repositories that close a client they were handed
-      // (`this.client.close?.()`). A shared client has none, and probing an
-      // unconfigured one must not be the first use that fails, or shutting down
-      // a database-free application throws.
-      if (isLifecycleProperty(property) || property === 'close') {
+      if (isProbe(property)) {
         return undefined;
       }
       const prisma = getPrisma();
