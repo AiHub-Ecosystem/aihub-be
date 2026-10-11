@@ -3,6 +3,7 @@ import { File } from 'node:buffer';
 import { type Dispatcher, Pool, FormData as UndiciFormData } from 'undici';
 
 import { AppError } from '@/common/errors/app-error';
+import { recordDownstreamPoolQueued } from '@/common/observability/metrics';
 import type {
   DownstreamId,
   DownstreamMultipartBody,
@@ -164,6 +165,7 @@ export class DownstreamHttpClient {
     }
 
     let response: Dispatcher.ResponseData;
+    let dispatcher: Dispatcher | undefined;
     try {
       const requestOptions: Dispatcher.RequestOptions = {
         origin: base.origin,
@@ -187,36 +189,51 @@ export class DownstreamHttpClient {
       if (body !== undefined) {
         requestOptions.body = body;
       }
-      response = await this.getDispatcher(base).request(requestOptions);
+      dispatcher = this.getDispatcher(base);
+      const responsePromise = dispatcher.request(requestOptions);
+      if (dispatcher instanceof Pool) {
+        recordDownstreamPoolQueued(base.origin, dispatcher.stats.queued);
+      }
+      response = await responsePromise;
     } catch (error) {
+      if (dispatcher instanceof Pool) {
+        recordDownstreamPoolQueued(base.origin, dispatcher.stats.queued);
+      }
       throw transportError(error, options.signal.aborted);
     }
-    options.onResponseReceived?.(response.statusCode);
 
-    let parsedBody: unknown;
     try {
-      parsedBody = await response.body.json();
-    } catch (error) {
-      if (options.signal.aborted || isTransportFailure(error)) {
-        throw transportError(error, options.signal.aborted);
+      options.onResponseReceived?.(response.statusCode);
+
+      let parsedBody: unknown;
+      try {
+        parsedBody = await response.body.json();
+      } catch (error) {
+        if (options.signal.aborted || isTransportFailure(error)) {
+          throw transportError(error, options.signal.aborted);
+        }
+        if (response.statusCode >= 400) {
+          parsedBody = undefined;
+        } else {
+          throw new AppError({
+            code: 'AI_SERVICE_CONTRACT_VIOLATION',
+            message: 'AI service returned an unexpected response shape',
+            retryable: false,
+            cause: error,
+          });
+        }
       }
-      if (response.statusCode >= 400) {
-        parsedBody = undefined;
-      } else {
-        throw new AppError({
-          code: 'AI_SERVICE_CONTRACT_VIOLATION',
-          message: 'AI service returned an unexpected response shape',
-          retryable: false,
-          cause: error,
-        });
+
+      return {
+        status: response.statusCode,
+        headers: normalizeHeaders(response.headers),
+        body: parsedBody,
+      };
+    } finally {
+      if (dispatcher instanceof Pool) {
+        recordDownstreamPoolQueued(base.origin, dispatcher.stats.queued);
       }
     }
-
-    return {
-      status: response.statusCode,
-      headers: normalizeHeaders(response.headers),
-      body: parsedBody,
-    };
   }
 
   async close(): Promise<void> {
@@ -264,6 +281,7 @@ export class DownstreamHttpClient {
       keepAliveMaxTimeout: 600_000,
     });
     this.dispatchers.set(base.origin, dispatcher);
+    recordDownstreamPoolQueued(base.origin, dispatcher.stats.queued);
     return dispatcher;
   }
 

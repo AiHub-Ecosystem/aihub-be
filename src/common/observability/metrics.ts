@@ -1,3 +1,5 @@
+import { monitorEventLoopDelay } from 'node:perf_hooks';
+
 import { Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 
 import type { OperationId } from '@/catalog/operation-id';
@@ -11,6 +13,38 @@ import type { OperationId } from '@/catalog/operation-id';
 export const METRICS_ROUTE_PATH = '/metrics';
 
 const registry = new Registry();
+
+const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
+eventLoopDelay.enable();
+
+new Gauge({
+  name: 'aihub_process_resident_memory_bytes',
+  help: 'Resident memory used by this Node.js process, in bytes.',
+  registers: [registry],
+  collect() {
+    this.set(process.memoryUsage().rss);
+  },
+});
+
+new Gauge({
+  name: 'aihub_process_heap_used_bytes',
+  help: 'V8 heap currently used by this Node.js process, in bytes.',
+  registers: [registry],
+  collect() {
+    this.set(process.memoryUsage().heapUsed);
+  },
+});
+
+new Gauge({
+  name: 'aihub_event_loop_lag_seconds',
+  help: '99th percentile event-loop delay since the previous metrics scrape, in seconds.',
+  registers: [registry],
+  collect() {
+    const lagSeconds = eventLoopDelay.percentile(99) / 1_000_000_000;
+    this.set(Number.isFinite(lagSeconds) ? lagSeconds : 0);
+    eventLoopDelay.reset();
+  },
+});
 
 const requestsTotal = new Counter({
   name: 'aihub_requests_total',
@@ -96,6 +130,88 @@ export type PostgresPoolName =
   | 'identity-read'
   | 'identity-write'
   | 'integration-test';
+
+export interface PostgresPoolStatsSample {
+  readonly pool: PostgresPoolName;
+  readonly total: number;
+  readonly idle: number;
+  readonly waiting: number;
+}
+
+type PostgresPoolStatsSource = () => readonly PostgresPoolStatsSample[];
+
+let postgresPoolStatsSource: PostgresPoolStatsSource | undefined;
+
+function readPostgresPoolStats(
+  gauge: Gauge<'pool'>,
+  value: 'total' | 'idle' | 'waiting',
+): void {
+  gauge.reset();
+  try {
+    for (const sample of postgresPoolStatsSource?.() ?? []) {
+      gauge.set({ pool: sample.pool }, sample[value]);
+    }
+  } catch {
+    gauge.reset();
+  }
+}
+
+const postgresPoolTotal = new Gauge({
+  name: 'aihub_postgres_pool_total',
+  help: 'Total PostgreSQL clients in each application pool.',
+  labelNames: ['pool'],
+  registers: [registry],
+  collect() {
+    readPostgresPoolStats(this, 'total');
+  },
+});
+
+const postgresPoolIdle = new Gauge({
+  name: 'aihub_postgres_pool_idle',
+  help: 'Idle PostgreSQL clients in each application pool.',
+  labelNames: ['pool'],
+  registers: [registry],
+  collect() {
+    readPostgresPoolStats(this, 'idle');
+  },
+});
+
+const postgresPoolWaiting = new Gauge({
+  name: 'aihub_postgres_pool_waiting',
+  help: 'Requests waiting for a PostgreSQL client in each application pool.',
+  labelNames: ['pool'],
+  registers: [registry],
+  collect() {
+    readPostgresPoolStats(this, 'waiting');
+  },
+});
+
+export function setPostgresPoolStatsSource(
+  source: PostgresPoolStatsSource | undefined,
+): void {
+  postgresPoolStatsSource = source;
+  if (source === undefined) {
+    postgresPoolTotal.reset();
+    postgresPoolIdle.reset();
+    postgresPoolWaiting.reset();
+  }
+}
+
+const downstreamPoolQueued = new Gauge({
+  name: 'aihub_downstream_pool_queued',
+  help: 'Requests queued in each configured downstream HTTP connection pool.',
+  labelNames: ['origin'],
+  registers: [registry],
+});
+
+export function recordDownstreamPoolQueued(
+  origin: string,
+  queued: number,
+): void {
+  if (Number.isFinite(queued) && queued >= 0) {
+    downstreamPoolQueued.set({ origin }, queued);
+  }
+}
 
 export function recordPostgresPoolError(
   pool: PostgresPoolName,

@@ -8,7 +8,11 @@ import { AppModule } from '@/app.module';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { OPERATION_IDS } from '@/catalog/operation-id';
 import { buildOpenApiDocument } from '@/openapi/build-openapi-document';
-import { METRICS_ROUTE_PATH } from './metrics';
+import {
+  METRICS_ROUTE_PATH,
+  recordDownstreamPoolQueued,
+  setPostgresPoolStatsSource,
+} from './metrics';
 import { registerMetricsRoute } from './metrics.route';
 
 describe('metrics scrape endpoint', () => {
@@ -50,21 +54,42 @@ describe('metrics scrape endpoint', () => {
     await expect(response.text()).resolves.toContain('# HELP');
   });
 
-  it('emits the five series issue #198 owns, under the spec L.2 names', async () => {
-    const payload = await (
-      await fetch(`${baseUrl}${METRICS_ROUTE_PATH}`)
-    ).text();
+  it('emits request and runtime metric families on the scrape', async () => {
+    setPostgresPoolStatsSource(() => [
+      { pool: 'auth', total: 4, idle: 2, waiting: 1 },
+    ]);
+    recordDownstreamPoolQueued('https://ai-writing.test', 3);
 
-    // Present as declared families; a counter with no observation yet emits
-    // only its HELP/TYPE header, which is what proves it is registered.
-    for (const name of [
-      'aihub_requests_total',
-      'aihub_request_duration_seconds',
-      'aihub_downstream_duration_seconds',
-      'aihub_tokens_total',
-      'aihub_metering_incomplete_total',
-    ]) {
-      expect(payload).toContain(`# HELP ${name} `);
+    try {
+      const payload = await (
+        await fetch(`${baseUrl}${METRICS_ROUTE_PATH}`)
+      ).text();
+
+      // Present as declared families; a counter with no observation yet emits
+      // only its HELP/TYPE header, which is what proves it is registered.
+      for (const name of [
+        'aihub_requests_total',
+        'aihub_request_duration_seconds',
+        'aihub_downstream_duration_seconds',
+        'aihub_tokens_total',
+        'aihub_metering_incomplete_total',
+        'aihub_process_resident_memory_bytes',
+        'aihub_process_heap_used_bytes',
+        'aihub_event_loop_lag_seconds',
+        'aihub_postgres_pool_total',
+        'aihub_postgres_pool_idle',
+        'aihub_postgres_pool_waiting',
+        'aihub_downstream_pool_queued',
+      ]) {
+        expect(payload).toContain(`# HELP ${name} `);
+      }
+      expect(payload).toContain('aihub_postgres_pool_waiting{pool="auth"} 1');
+      expect(payload).toContain(
+        'aihub_downstream_pool_queued{origin="https://ai-writing.test"} 3',
+      );
+    } finally {
+      setPostgresPoolStatsSource(undefined);
+      recordDownstreamPoolQueued('https://ai-writing.test', 0);
     }
   });
 

@@ -1,9 +1,11 @@
 import { METRICS_ROUTE_PATH, getMetrics } from './metrics';
 import {
   recordCompletedRequest,
+  recordDownstreamPoolQueued,
   recordEmailDeliveryFailed,
   setDispatchAttemptUnresolvedSource,
   setEmailOutboxBacklogSource,
+  setPostgresPoolStatsSource,
 } from './metrics';
 
 const GRADE = 'writing.task1.grade';
@@ -296,5 +298,47 @@ describe('unresolved dispatch-attempt metrics', () => {
     expect(await getMetrics()).not.toContain(
       'aihub_dispatch_attempts_unresolved{',
     );
+  });
+});
+
+describe('runtime resource metrics', () => {
+  afterEach(() => {
+    setPostgresPoolStatsSource(undefined);
+    recordDownstreamPoolQueued('https://ai-writing.test', 0);
+  });
+
+  it('scrapes process memory, event-loop lag, Postgres pool counts, and downstream queue', async () => {
+    setPostgresPoolStatsSource(() => [
+      { pool: 'auth', total: 4, idle: 2, waiting: 1 },
+    ]);
+    recordDownstreamPoolQueued('https://ai-writing.test', 3);
+
+    const payload = await getMetrics();
+
+    for (const name of [
+      'aihub_process_resident_memory_bytes',
+      'aihub_process_heap_used_bytes',
+      'aihub_event_loop_lag_seconds',
+      'aihub_postgres_pool_total',
+      'aihub_postgres_pool_idle',
+      'aihub_postgres_pool_waiting',
+      'aihub_downstream_pool_queued',
+    ]) {
+      expect(payload).toContain(`# HELP ${name} `);
+    }
+    expect(payload).toContain('aihub_postgres_pool_total{pool="auth"} 4');
+    expect(payload).toContain('aihub_postgres_pool_idle{pool="auth"} 2');
+    expect(payload).toContain('aihub_postgres_pool_waiting{pool="auth"} 1');
+    expect(payload).toContain(
+      'aihub_downstream_pool_queued{origin="https://ai-writing.test"} 3',
+    );
+    expect(payload).toMatch(/^aihub_process_resident_memory_bytes [\d.]+$/m);
+    expect(payload).toMatch(/^aihub_process_heap_used_bytes [\d.]+$/m);
+    const lagSeconds = Number(
+      payload.match(/^aihub_event_loop_lag_seconds (\S+)$/m)?.[1],
+    );
+    expect(Number.isFinite(lagSeconds)).toBe(true);
+    expect(lagSeconds).toBeGreaterThanOrEqual(0);
+    expect(payload).not.toMatch(/\{[^}]*\b(?:org|user|request)_id=/);
   });
 });

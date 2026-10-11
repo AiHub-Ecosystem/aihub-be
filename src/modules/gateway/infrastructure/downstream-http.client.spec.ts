@@ -1,6 +1,9 @@
+import { type ServerResponse, createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { MockAgent } from 'undici';
 
 import type { AppError } from '@/common/errors/app-error';
+import { getMetrics } from '@/common/observability/metrics';
 import { DownstreamHttpClient } from './downstream-http.client';
 
 describe('DownstreamHttpClient', () => {
@@ -74,5 +77,63 @@ describe('DownstreamHttpClient', () => {
       code: 'INTERNAL_ERROR',
       httpStatus: 500,
     } satisfies Partial<AppError>);
+  });
+
+  it('reports requests waiting beyond the configured downstream pool connections', async () => {
+    let requestsSeen = 0;
+    let resolveTenRequests!: () => void;
+    let responsesReleased = false;
+    const pendingResponses: ServerResponse[] = [];
+    const tenRequestsArrived = new Promise<void>((resolve) => {
+      resolveTenRequests = resolve;
+    });
+    const sendResponse = (response: ServerResponse): void => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end('{}');
+    };
+    const server = createServer((_request, response) => {
+      requestsSeen += 1;
+      if (requestsSeen === 10) resolveTenRequests();
+      if (responsesReleased) sendResponse(response);
+      else pendingResponses.push(response);
+    });
+    const releaseResponses = (): void => {
+      responsesReleased = true;
+      pendingResponses.forEach(sendResponse);
+    };
+    await new Promise<void>((resolve) =>
+      server.listen(0, '127.0.0.1', resolve),
+    );
+
+    const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const client = new DownstreamHttpClient(origin);
+    const requests = Array.from({ length: 11 }, () =>
+      client.request(
+        { method: 'POST', path: '/queued', body: {} },
+        {
+          requestId: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+          deadlineMs: 5000,
+          signal: AbortSignal.timeout(5000),
+        },
+      ),
+    );
+
+    try {
+      await tenRequestsArrived;
+      expect(await getMetrics()).toContain(
+        `aihub_downstream_pool_queued{origin="${origin}"} 1`,
+      );
+    } finally {
+      releaseResponses();
+      await Promise.allSettled(requests);
+      await client.close();
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+
+    expect(await getMetrics()).toContain(
+      `aihub_downstream_pool_queued{origin="${origin}"} 0`,
+    );
   });
 });

@@ -168,12 +168,25 @@ aihub_rejected_total{reason}                       rate_limit|quota|concurrency|
 aihub_breaker_state{operation}                     0 closed / 1 open / 2 half-open
 aihub_metering_incomplete_total{operation}
 aihub_redis_unavailable_total
+aihub_process_resident_memory_bytes
+aihub_process_heap_used_bytes
+aihub_event_loop_lag_seconds
+aihub_postgres_pool_total{pool}
+aihub_postgres_pool_idle{pool}
+aihub_postgres_pool_waiting{pool}
+aihub_downstream_pool_queued{origin}
 ```
 
 The operation label comes from the bounded operation catalog. `gateway_overhead`
 **requires no dedicated metric** — it is derived directly from total and
 downstream durations; `admission_ms` exposes the time before dispatch
 separately.
+
+The process gauges report RSS and used V8 heap in bytes. Event-loop lag is the
+99th percentile delay in seconds since the previous scrape. PostgreSQL pool
+labels use the fixed pool names in the application, and downstream origin
+labels come from configured HTTP pool origins. These runtime metrics carry no
+organization, user, or request identifiers.
 
 `aihub_tokens_total` carries an `operation` label only. An `org_id` label was
 specified here originally and is deliberately dropped: it is unbounded, so
