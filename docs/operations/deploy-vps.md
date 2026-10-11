@@ -295,16 +295,21 @@ host jobs to finish (maximum 15 minutes) before syncing shared helpers or
 deploying. This prevents a running job from invoking a helper while CD replaces
 it, or an old wrapper from running against a newly active image. Unrelated
 crontab entries continue to run. After deployment, CD checks the active tier
-revisions and only proceeds
-when every active tier runs the target revision. It
-smoke-tests the staged wrapper against every active tier, installs the wrapper
-and managed schedule, verifies the crontab, and smokes the installed wrapper.
+revisions and only proceeds when every active tier runs the target revision.
+It smoke-tests the staged wrapper against every active tier, installs the
+wrapper, smokes the installed wrapper, then enables and verifies the managed
+schedule.
 If a failed rollout leaves every tier on the same previous revision and no
 pending recovery state, CD restores the saved crontab. Mixed, unknown, or
 pending tier state keeps AIHUB jobs suspended for operator recovery. This
 preserves ADR-0085's per-tier rollback behavior: Production can remain on the
 new release while Sandbox returns to its previous release, with scheduled
 jobs held until the revisions are aligned again.
+
+If deployment-file synchronization fails after the pause, CD restores the
+previous Compose file, host deployment helper, and saved crontab before it
+exits. If that recovery cannot be confirmed, the saved crontab remains in
+`.aihub-host-jobs-state/` for operator recovery.
 
 The installer replaces only the `AIHUB MANAGED JOBS` block, preserves unrelated
 entries, and removes old hand-installed AIHUB wrapper lines. Unknown active

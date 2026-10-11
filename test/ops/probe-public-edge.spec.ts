@@ -58,8 +58,21 @@ describe('public edge health probe', () => {
     ).toBeLessThan(
       workflow.indexOf('      - name: Sync deployment files to VPS'),
     );
+    expect(workflow).toContain('.aihub-host-jobs-sync-candidate');
+    expect(workflow).toContain(
+      'Restore host files and schedule after sync failure',
+    );
     expect(
       workflow.indexOf('      - name: Sync deployment files to VPS'),
+    ).toBeLessThan(
+      workflow.indexOf(
+        '      - name: Restore host files and schedule after sync failure',
+      ),
+    );
+    expect(
+      workflow.indexOf(
+        '      - name: Restore host files and schedule after sync failure',
+      ),
     ).toBeLessThan(workflow.indexOf('      - name: Deploy release'));
     expect(workflow.indexOf('      - name: Deploy release')).toBeLessThan(
       workflow.indexOf(
