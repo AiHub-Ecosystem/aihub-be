@@ -13,7 +13,10 @@ import {
   type PrismaClientHolder,
   RUNTIME_PRISMA_CLIENT,
 } from '@/modules/persistence/application/persistence-client.port';
-import { PersistenceModule } from '@/modules/persistence/persistence.module';
+import {
+  PersistenceModule,
+  deferPrismaClient,
+} from '@/modules/persistence/persistence.module';
 import { SEAWEEDFS_S3_CLIENT } from '@/modules/secrets/application/seaweedfs-s3-client.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
 import { SPEAKING_AUDIO_STORAGE } from './application/speaking-audio-storage.port';
@@ -30,7 +33,6 @@ import { SpeakingAudioUploadSweep } from './application/speaking-audio-upload.sw
 import { SPEAKING_MULTIPART_PARSER } from './application/speaking-multipart-parser.port';
 import { FastifySpeakingMultipartParser } from './infrastructure/fastify-speaking-multipart.parser';
 import { PostgresSpeakingAudioUploadRepository } from './infrastructure/postgres-speaking-audio-upload.repository';
-import { createPrismaSpeakingAudioQueryClient } from './infrastructure/prisma-speaking-audio.client';
 import { S3SpeakingAudioAssetStorage } from './infrastructure/s3-speaking-audio-asset.storage';
 import { S3SpeakingAudioStorage } from './infrastructure/s3-speaking-audio.storage';
 import { SpeakingAudioUploadController } from './presentation/speaking-audio-upload.controller';
@@ -65,7 +67,7 @@ import { SpeakingQuestionsController } from './presentation/speaking-questions.c
         runtime: PrismaClientHolder,
       ): SpeakingAudioUploadRepositoryPort =>
         new PostgresSpeakingAudioUploadRepository(
-          createPrismaSpeakingAudioQueryClient(() => runtime.prisma),
+          deferPrismaClient(() => runtime.prisma),
         ),
     },
     {

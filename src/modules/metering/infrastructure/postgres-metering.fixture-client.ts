@@ -1,51 +1,14 @@
-import { PrismaPg } from '@prisma/adapter-pg';
+import { createPrismaClient } from '@/modules/persistence/persistence.module';
+import type { PrismaMeteringClient } from './prisma-metering.client';
 
-import { createPostgresPool } from '@/common/postgres/postgres-pool';
-import { PrismaClient } from '@prisma-client/client';
-import type { PostgresMeteringClient } from './prisma-metering.client';
-
-/** Compatibility factory used by unchanged database-lane fixtures. */
+/** Test-only factory used by unchanged database-lane fixtures. */
 export function createPostgresMeteringClient(
   databaseUrl: string,
-): PostgresMeteringClient {
+): PrismaMeteringClient {
   if (databaseUrl.trim().length === 0) {
-    const missingDatabaseUrl = (): never => {
-      throw new Error('DATABASE_URL is missing');
-    };
-    return {
-      query: async () => missingDatabaseUrl(),
-      transaction: async () => missingDatabaseUrl(),
-      close: async () => undefined,
-    };
+    throw new Error('DATABASE_URL is missing');
   }
 
-  const pool = createPostgresPool('integration-test', {
-    connectionString: databaseUrl,
-    max: 10,
-    connectionTimeoutMillis: 1_000,
-    idleTimeoutMillis: 30_000,
-  });
-  const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
-  return {
-    query: <Row extends object = Record<string, unknown>>(
-      text: string,
-      values: readonly unknown[],
-    ) => prisma.$queryRawUnsafe<readonly Row[]>(text, ...values),
-    transaction: (callback) =>
-      prisma.$transaction((transaction) =>
-        callback({
-          query: <Row extends object = Record<string, unknown>>(
-            text: string,
-            values: readonly unknown[],
-          ) => transaction.$queryRawUnsafe<readonly Row[]>(text, ...values),
-        }),
-      ),
-    close: async () => {
-      try {
-        await prisma.$disconnect();
-      } finally {
-        await pool.end();
-      }
-    },
-  };
+  const holder = createPrismaClient('integration-test', databaseUrl);
+  return Object.assign(holder.prisma, { close: holder.close });
 }

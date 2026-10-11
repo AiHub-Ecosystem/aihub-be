@@ -10,7 +10,10 @@ import {
   type PrismaClientHolder,
   RUNTIME_PRISMA_CLIENT,
 } from '@/modules/persistence/application/persistence-client.port';
-import { PersistenceModule } from '@/modules/persistence/persistence.module';
+import {
+  PersistenceModule,
+  deferPrismaClient,
+} from '@/modules/persistence/persistence.module';
 import { SEAWEEDFS_S3_CLIENT } from '@/modules/secrets/application/seaweedfs-s3-client.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
 import { AvatarOrphanSweep } from './application/avatar-orphan-sweep';
@@ -24,7 +27,6 @@ import {
 } from './application/avatar-storage.port';
 import { AvatarUploadService } from './application/avatar-upload.service';
 import { PostgresAvatarRepository } from './infrastructure/postgres-avatar.repository';
-import { createPrismaAvatarQueryClient } from './infrastructure/prisma-avatar.client';
 import { S3AvatarStorage } from './infrastructure/s3-avatar.storage';
 import { AvatarController } from './presentation/avatar.controller';
 
@@ -41,9 +43,7 @@ import { AvatarController } from './presentation/avatar.controller';
       provide: AVATAR_REPOSITORY,
       inject: [RUNTIME_PRISMA_CLIENT],
       useFactory: (runtime: PrismaClientHolder): AvatarRepositoryPort =>
-        new PostgresAvatarRepository(
-          createPrismaAvatarQueryClient(() => runtime.prisma),
-        ),
+        new PostgresAvatarRepository(deferPrismaClient(() => runtime.prisma)),
     },
     {
       provide: AVATAR_STORAGE,

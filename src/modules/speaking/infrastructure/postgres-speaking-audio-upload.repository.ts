@@ -10,17 +10,12 @@ import type {
   SpeakingAudioUploadIntent,
 } from '@/modules/speaking/domain/speaking-audio-asset';
 import { isSpeakingAudioContentType } from '@/modules/speaking/domain/speaking-audio-asset';
-
-import type {
-  SpeakingAudioQueryClient,
-  SpeakingAudioTransactionClient,
-} from './prisma-speaking-audio.client';
+import type { PrismaClient } from '@prisma-client/client';
 
 export { createSpeakingAudioQueryClient } from './postgres-speaking-audio-upload.fixture-client';
-export type { SpeakingAudioQueryClient } from './prisma-speaking-audio.client';
 
 type Row = Record<string, unknown>;
-type Queryable = SpeakingAudioTransactionClient;
+type Queryable = Pick<PrismaClient, '$queryRawUnsafe' | '$executeRawUnsafe'>;
 
 function storeUnavailable(cause?: unknown): AppError {
   return new AppError({
@@ -153,7 +148,7 @@ type IdRow = Row & { readonly id: unknown };
 export class PostgresSpeakingAudioUploadRepository
   implements SpeakingAudioUploadRepositoryPort
 {
-  constructor(private readonly client: SpeakingAudioQueryClient) {}
+  constructor(private readonly client: PrismaClient) {}
 
   async createIntent(intent: SpeakingAudioUploadIntent): Promise<void> {
     await this.execute(
@@ -454,7 +449,7 @@ export class PostgresSpeakingAudioUploadRepository
     run: (client: Queryable) => Promise<T>,
   ): Promise<T> {
     try {
-      return await this.client.transaction(run);
+      return await this.client.$transaction((client) => run(client));
     } catch (error) {
       if (error instanceof AppError) {
         throw error;
@@ -476,7 +471,7 @@ export class PostgresSpeakingAudioUploadRepository
     values: readonly unknown[],
   ): Promise<readonly Result[]> {
     try {
-      return await client.query<Result>(sql, values);
+      return await client.$queryRawUnsafe<readonly Result[]>(sql, ...values);
     } catch (error) {
       if (error instanceof AppError) {
         throw error;
@@ -491,7 +486,7 @@ export class PostgresSpeakingAudioUploadRepository
     values: readonly unknown[],
   ): Promise<number> {
     try {
-      return await client.execute(sql, values);
+      return await client.$executeRawUnsafe(sql, ...values);
     } catch (error) {
       if (error instanceof AppError) {
         throw error;

@@ -34,11 +34,13 @@ import type {
 import type { IssuedWebSessionToken } from '@/modules/auth/application/web-session-token.port';
 import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 import { authorizeMfaSession } from './auth-mfa-session.guard';
-import type {
-  PostgresAuthClient,
-  PostgresAuthQueryClient,
-  PostgresAuthTransactionClient,
-} from './postgres-auth.client';
+import {
+  type AuthRepositoryClient,
+  type AuthSqlClient,
+  type AuthTransactionClient,
+  authQueryRows,
+  authTransaction,
+} from './auth-prisma';
 import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
 import {
   INSERT_WEB_SESSION_SQL,
@@ -105,22 +107,24 @@ export class PostgresLocalAuthRepository
     RefreshSessionRepositoryPort
 {
   constructor(
-    private readonly client: PostgresAuthClient,
+    private readonly client: AuthRepositoryClient,
     private readonly emailDeliveryRequests: PostgresEmailDeliveryRequestRepository = new PostgresEmailDeliveryRequestRepository(),
   ) {}
 
   async register(input: RegisterLocalAccountInput): Promise<void> {
     try {
-      await this.client.transaction(async (transaction) => {
+      await authTransaction(this.client, async (transaction) => {
         const userId = `usr_${ulid()}`;
-        await transaction.query(
+        await authQueryRows(
+          transaction,
           `
             INSERT INTO user_accounts (id, username, status, created_at, updated_at)
             VALUES ($1, $2, 'pending_verification', $3, $3)
           `,
           [userId, input.username, input.now],
         );
-        await transaction.query(
+        await authQueryRows(
+          transaction,
           `
             INSERT INTO auth_identities (
               id, user_account_id, provider, canonical_email, password_hash,
@@ -136,7 +140,8 @@ export class PostgresLocalAuthRepository
             input.now,
           ],
         );
-        await transaction.query(
+        await authQueryRows(
+          transaction,
           `
             INSERT INTO email_verification_tokens (
               id, user_account_id, token_hash, expires_at, created_at,
@@ -167,8 +172,9 @@ export class PostgresLocalAuthRepository
     input: RotateVerificationTokenInput,
   ): Promise<ResendVerificationTarget | undefined> {
     try {
-      return await this.client.transaction(async (transaction) => {
-        const rows = await transaction.query(
+      return await authTransaction(this.client, async (transaction) => {
+        const rows = await authQueryRows(
+          transaction,
           `
             SELECT ua.id, ai.canonical_email, ua.status
             FROM user_accounts ua
@@ -188,7 +194,8 @@ export class PostgresLocalAuthRepository
           return undefined;
         }
 
-        await transaction.query(
+        await authQueryRows(
+          transaction,
           `
             UPDATE email_verification_tokens
             SET consumed_at = $2, consumed_reason = 'superseded'
@@ -196,7 +203,8 @@ export class PostgresLocalAuthRepository
           `,
           [row.id, input.now],
         );
-        await transaction.query(
+        await authQueryRows(
+          transaction,
           `
             INSERT INTO email_verification_tokens (
               id, user_account_id, token_hash, expires_at, created_at,
@@ -227,8 +235,9 @@ export class PostgresLocalAuthRepository
   async issuePasswordResetToken(
     input: IssuePasswordResetTokenInput,
   ): Promise<PasswordResetTarget | undefined> {
-    return this.client.transaction(async (transaction) => {
-      const rows = await transaction.query(
+    return authTransaction(this.client, async (transaction) => {
+      const rows = await authQueryRows(
+        transaction,
         `
           SELECT ua.id, ai.canonical_email, ua.status
           FROM user_accounts ua
@@ -248,7 +257,8 @@ export class PostgresLocalAuthRepository
         return undefined;
       }
 
-      await transaction.query(
+      await authQueryRows(
+        transaction,
         `
           UPDATE password_reset_tokens
           SET consumed_at = $2
@@ -256,7 +266,8 @@ export class PostgresLocalAuthRepository
         `,
         [row.id, input.now],
       );
-      await transaction.query(
+      await authQueryRows(
+        transaction,
         `
           INSERT INTO password_reset_tokens (
             id, user_account_id, token_hash, expires_at, created_at
@@ -279,8 +290,9 @@ export class PostgresLocalAuthRepository
   async consumeVerificationToken(
     input: ConsumeVerificationTokenInput,
   ): Promise<VerificationOutcome> {
-    return this.client.transaction(async (transaction) => {
-      const accounts = await transaction.query(
+    return authTransaction(this.client, async (transaction) => {
+      const accounts = await authQueryRows(
+        transaction,
         `
           SELECT account.id, account.status
           FROM user_accounts account
@@ -302,7 +314,8 @@ export class PostgresLocalAuthRepository
       }
       const accountId: string = account.id;
 
-      const tokens = await transaction.query(
+      const tokens = await authQueryRows(
+        transaction,
         `
           SELECT id, expires_at, consumed_at, consumed_reason,
                  browser_binding_hash, signed_in_at
@@ -343,7 +356,8 @@ export class PostgresLocalAuthRepository
         ) {
           return VERIFIED;
         }
-        const claimed = await transaction.query(
+        const claimed = await authQueryRows(
+          transaction,
           `
             UPDATE email_verification_tokens
             SET signed_in_at = $2
@@ -389,7 +403,8 @@ export class PostgresLocalAuthRepository
         return INVALID;
       }
 
-      const consumed = await transaction.query(
+      const consumed = await authQueryRows(
+        transaction,
         `
           UPDATE email_verification_tokens
           SET consumed_at = $2, consumed_reason = 'verified'
@@ -402,7 +417,8 @@ export class PostgresLocalAuthRepository
         return INVALID;
       }
 
-      const activated = await transaction.query(
+      const activated = await authQueryRows(
+        transaction,
         `
           UPDATE user_accounts
           SET status = 'active', updated_at = $2
@@ -419,7 +435,8 @@ export class PostgresLocalAuthRepository
     readonly tokenHash: string;
     readonly now: Date;
   }): Promise<PasswordResetTokenCheckResult> {
-    const rows = await this.client.query(
+    const rows = await authQueryRows(
+      this.client,
       `
         SELECT token.id, token.user_account_id, token.expires_at,
                token.consumed_at, account.status
@@ -438,8 +455,9 @@ export class PostgresLocalAuthRepository
     readonly passwordHash: string;
     readonly now: Date;
   }): Promise<PasswordResetResult> {
-    return this.client.transaction(async (transaction) => {
-      const rows = await transaction.query(
+    return authTransaction(this.client, async (transaction) => {
+      const rows = await authQueryRows(
+        transaction,
         `
           SELECT token.id, token.user_account_id, token.expires_at,
                  token.consumed_at, account.status
@@ -455,7 +473,8 @@ export class PostgresLocalAuthRepository
         return inspection;
       }
 
-      const identity = await transaction.query(
+      const identity = await authQueryRows(
+        transaction,
         `
           UPDATE auth_identities
           SET password_hash = $2, updated_at = $3
@@ -468,7 +487,8 @@ export class PostgresLocalAuthRepository
         throw new Error('local password identity is missing');
       }
 
-      const consumed = await transaction.query(
+      const consumed = await authQueryRows(
+        transaction,
         `
           UPDATE password_reset_tokens
           SET consumed_at = $2
@@ -480,7 +500,8 @@ export class PostgresLocalAuthRepository
       if (consumed.length === 0) {
         throw new Error('password reset token was concurrently consumed');
       }
-      await transaction.query(
+      await authQueryRows(
+        transaction,
         `
           UPDATE password_reset_tokens
           SET consumed_at = $2
@@ -488,7 +509,8 @@ export class PostgresLocalAuthRepository
         `,
         [inspection.userId, input.now],
       );
-      await transaction.query(
+      await authQueryRows(
+        transaction,
         `
           UPDATE refresh_tokens
           SET revoked_at = $2
@@ -500,7 +522,7 @@ export class PostgresLocalAuthRepository
       // password loses every Customer Web session as well, and because both
       // revocations ride this transaction a failure anywhere rolls both back, so
       // an exchange racing it can never observe a half-revoked account.
-      await transaction.query(REVOKE_USER_WEB_SESSIONS_SQL, [
+      await authQueryRows(transaction, REVOKE_USER_WEB_SESSIONS_SQL, [
         inspection.userId,
         input.now,
       ]);
@@ -511,7 +533,8 @@ export class PostgresLocalAuthRepository
   async findLoginIdentityByEmail(
     email: string,
   ): Promise<LoginIdentity | undefined> {
-    const rows = await this.client.query(
+    const rows = await authQueryRows(
+      this.client,
       `
         SELECT ua.id, ua.status, ai.canonical_email, ai.password_hash
         FROM user_accounts ua
@@ -545,7 +568,8 @@ export class PostgresLocalAuthRepository
   async findLoginIdentityByUserId(
     userId: string,
   ): Promise<LoginIdentity | undefined> {
-    const rows = await this.client.query(
+    const rows = await authQueryRows(
+      this.client,
       `SELECT ua.status, ai.canonical_email, ai.password_hash
        FROM user_accounts ua
        JOIN auth_identities ai ON ai.user_account_id = ua.id
@@ -574,7 +598,8 @@ export class PostgresLocalAuthRepository
   async findUserAccountStatus(
     userId: string,
   ): Promise<LocalAccountStatus | undefined> {
-    const rows = await this.client.query(
+    const rows = await authQueryRows(
+      this.client,
       'SELECT status FROM user_accounts WHERE id = $1',
       [userId],
     );
@@ -593,7 +618,8 @@ export class PostgresLocalAuthRepository
   }
 
   async findActiveUsername(userId: string): Promise<string | undefined> {
-    const rows = await this.client.query(
+    const rows = await authQueryRows(
+      this.client,
       "SELECT username FROM user_accounts WHERE id = $1 AND status = 'active'",
       [userId],
     );
@@ -610,7 +636,7 @@ export class PostgresLocalAuthRepository
   async createRefreshSession(
     input: CreateRefreshSessionInput,
   ): Promise<boolean> {
-    return this.client.transaction(async (transaction) => {
+    return authTransaction(this.client, async (transaction) => {
       const authorized = await authorizeMfaSession(
         transaction,
         input.userId,
@@ -626,7 +652,8 @@ export class PostgresLocalAuthRepository
   async findRefreshTokenByHash(
     tokenHash: string,
   ): Promise<RefreshTokenRecord | undefined> {
-    const rows = await this.client.query(
+    const rows = await authQueryRows(
+      this.client,
       `
         SELECT id AS token_id, family_id, user_account_id,
                expires_at, used_at, revoked_at
@@ -645,8 +672,9 @@ export class PostgresLocalAuthRepository
   async rotateRefreshToken(
     input: RotateRefreshTokenInput,
   ): Promise<RefreshTokenRotationResult> {
-    return this.client.transaction(async (transaction) => {
-      const rows = await transaction.query(
+    return authTransaction(this.client, async (transaction) => {
+      const rows = await authQueryRows(
+        transaction,
         `
           SELECT token.id AS token_id, token.family_id,
                  token.user_account_id, token.expires_at,
@@ -682,7 +710,8 @@ export class PostgresLocalAuthRepository
         return { kind: 'invalid', reason: 'expired' };
       }
 
-      await transaction.query(
+      await authQueryRows(
+        transaction,
         `
           UPDATE refresh_tokens
           SET used_at = $2
@@ -703,8 +732,9 @@ export class PostgresLocalAuthRepository
     readonly tokenHash: string;
     readonly now: Date;
   }): Promise<void> {
-    await this.client.transaction(async (transaction) => {
-      const rows = await transaction.query(
+    await authTransaction(this.client, async (transaction) => {
+      const rows = await authQueryRows(
+        transaction,
         `
           SELECT family_id
           FROM refresh_tokens
@@ -726,13 +756,12 @@ export class PostgresLocalAuthRepository
    * failure here rolls back the mutation it serves (ADR-0074).
    */
   private async insertEmailDelivery(
-    transaction: PostgresAuthQueryClient,
+    transaction: AuthTransactionClient,
     emailDelivery: InsertEmailDeliveryRequestInput | undefined,
   ): Promise<void> {
     if (emailDelivery !== undefined) {
       await this.emailDeliveryRequests.insert(
-        transaction as unknown as PostgresAuthTransactionClient &
-          EmailDeliveryTransaction,
+        transaction as unknown as EmailDeliveryTransaction,
         emailDelivery,
       );
     }
@@ -740,10 +769,11 @@ export class PostgresLocalAuthRepository
 
   /** Stores only the token hash, on the client or inside a transaction. */
   private async insertRefreshSession(
-    client: PostgresAuthQueryClient,
+    client: AuthSqlClient,
     input: CreateRefreshSessionInput,
   ): Promise<void> {
-    await client.query(
+    await authQueryRows(
+      client,
       `
         INSERT INTO refresh_tokens (
           id, family_id, user_account_id, token_hash, issued_at, expires_at
@@ -767,7 +797,7 @@ export class PostgresLocalAuthRepository
    * creation, which has no transaction of its own to join.
    */
   private async insertWebSession(
-    transaction: PostgresAuthQueryClient,
+    transaction: AuthTransactionClient,
     userId: string,
     session: {
       readonly sessionId: string;
@@ -775,7 +805,7 @@ export class PostgresLocalAuthRepository
       readonly issuedAt: Date;
     },
   ): Promise<void> {
-    await transaction.query(INSERT_WEB_SESSION_SQL, [
+    await authQueryRows(transaction, INSERT_WEB_SESSION_SQL, [
       session.sessionId,
       userId,
       session.token.hash,
@@ -808,11 +838,12 @@ export class PostgresLocalAuthRepository
   }
 
   private async revokeFamily(
-    transaction: PostgresAuthQueryClient,
+    transaction: AuthTransactionClient,
     familyId: string,
     now: Date,
   ): Promise<void> {
-    await transaction.query(
+    await authQueryRows(
+      transaction,
       `
         UPDATE refresh_tokens
         SET revoked_at = $2
@@ -823,7 +854,9 @@ export class PostgresLocalAuthRepository
   }
 
   async close(): Promise<void> {
-    await this.client.close();
+    if ('close' in this.client && typeof this.client.close === 'function') {
+      await this.client.close();
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

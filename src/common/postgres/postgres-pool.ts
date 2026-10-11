@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { Pool, type PoolClient, type PoolConfig } from 'pg';
+import { Pool, type PoolClient, type PoolConfig, type QueryConfig } from 'pg';
 
 import {
   type PostgresPoolName,
@@ -77,4 +77,25 @@ export function createPostgresPool(
   });
 
   return pool;
+}
+
+/** Settings shared Prisma pools use across control-plane connection roles. */
+export function postgresPoolOptions(databaseUrl: string): PoolConfig {
+  return {
+    connectionString: databaseUrl,
+    max: 10,
+    connectionTimeoutMillis: 1_000,
+    idleTimeoutMillis: 30_000,
+  };
+}
+
+export async function checkPostgresPoolConnection(
+  pool: Pool,
+  timeoutMs: number,
+): Promise<void> {
+  // pg reads query_timeout at runtime; @types/pg only declares it on PoolConfig.
+  await pool.query({
+    text: 'SELECT 1',
+    query_timeout: timeoutMs,
+  } as QueryConfig);
 }

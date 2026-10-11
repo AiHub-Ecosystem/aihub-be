@@ -3,7 +3,7 @@ import type {
   QuotaReconciliationSnapshotPort,
   QuotaReconciliationTarget,
 } from '@/modules/metering/application/quota-reconciliation.port';
-import type { PostgresMeteringClient } from './prisma-metering.client';
+import type { PrismaMeteringClient } from './prisma-metering.client';
 
 export const QUOTA_RECONCILIATION_SQL = `
   SELECT
@@ -87,19 +87,18 @@ function orderSnapshots(
 export class PostgresQuotaReconciliationRepository
   implements QuotaReconciliationSnapshotPort
 {
-  constructor(private readonly client: PostgresMeteringClient) {}
+  constructor(private readonly client: PrismaMeteringClient) {}
 
   async list(
     target: QuotaReconciliationTarget,
   ): Promise<readonly QuotaOrganizationSnapshot[]> {
-    const rows = await this.client.query<QuotaReconciliationRow>(
-      QUOTA_RECONCILIATION_SQL,
-      [target.from, target.to],
-    );
+    const rows = await this.client.$queryRawUnsafe<
+      readonly QuotaReconciliationRow[]
+    >(QUOTA_RECONCILIATION_SQL, target.from, target.to);
     return orderSnapshots(rows.map(snapshotFromRow));
   }
 
   async close(): Promise<void> {
-    await this.client.close();
+    await this.client.close?.();
   }
 }

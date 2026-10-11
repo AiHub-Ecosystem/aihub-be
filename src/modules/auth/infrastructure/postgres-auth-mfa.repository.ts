@@ -6,17 +6,18 @@ import type {
   EmailDeliveryTransaction,
   InsertEmailDeliveryRequestInput,
 } from '@/modules/auth/application/email-delivery-request.port';
-import type {
-  PostgresAuthClient,
-  PostgresAuthQueryClient,
-  PostgresAuthTransactionClient,
-} from './postgres-auth.client';
+import {
+  type AuthRepositoryClient,
+  type AuthTransactionClient,
+  authQueryRows,
+  authTransaction,
+} from './auth-prisma';
 import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
 import { REVOKE_USER_WEB_SESSIONS_SQL } from './postgres-web-session.repository';
 
 export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
   constructor(
-    private readonly client: PostgresAuthClient,
+    private readonly client: AuthRepositoryClient,
     private readonly emailRequests = new PostgresEmailDeliveryRequestRepository(),
   ) {}
 
@@ -40,14 +41,16 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     readonly ciphertext: string;
     readonly now: Date;
   }): Promise<boolean> {
-    return this.client.transaction(async (transaction) => {
-      const accounts = await transaction.query(
+    return authTransaction(this.client, async (transaction) => {
+      const accounts = await authQueryRows(
+        transaction,
         'SELECT status FROM user_accounts WHERE id = $1 FOR UPDATE',
         [input.userId],
       );
       if (accounts[0]?.['status'] !== 'active') return false;
 
-      const identities = await transaction.query(
+      const identities = await authQueryRows(
+        transaction,
         `SELECT password_hash FROM auth_identities
          WHERE user_account_id = $1 AND provider = 'password' FOR UPDATE`,
         [input.userId],
@@ -56,13 +59,15 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
         return false;
       }
 
-      const existing = await transaction.query(
+      const existing = await authQueryRows(
+        transaction,
         'SELECT status FROM user_mfa_factors WHERE user_account_id = $1 FOR UPDATE',
         [input.userId],
       );
       if (existing[0]?.['status'] === 'enabled') return false;
       if (existing.length > 0) {
-        await transaction.query(
+        await authQueryRows(
+          transaction,
           `UPDATE user_mfa_factors
            SET factor_id = $2, secret_key_id = $3, secret_ciphertext = $4,
                status = 'pending', updated_at = $5
@@ -76,7 +81,8 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
           ],
         );
       } else {
-        await transaction.query(
+        await authQueryRows(
+          transaction,
           `INSERT INTO user_mfa_factors (
              factor_id, user_account_id, secret_key_id, secret_ciphertext,
              status, created_at, updated_at
@@ -102,36 +108,42 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     readonly emailDelivery: InsertEmailDeliveryRequestInput;
     readonly now: Date;
   }): Promise<boolean> {
-    return this.client.transaction(async (transaction) => {
-      const accounts = await transaction.query(
+    return authTransaction(this.client, async (transaction) => {
+      const accounts = await authQueryRows(
+        transaction,
         `SELECT status FROM user_accounts WHERE id = $1 FOR UPDATE`,
         [input.userId],
       );
       if (accounts[0]?.['status'] !== 'active') return false;
-      const factors = await transaction.query(
+      const factors = await authQueryRows(
+        transaction,
         `SELECT factor_id FROM user_mfa_factors
          WHERE user_account_id = $1 AND status = 'pending' FOR UPDATE`,
         [input.userId],
       );
       if (factors[0]?.['factor_id'] !== input.factorId) return false;
-      const identities = await transaction.query(
+      const identities = await authQueryRows(
+        transaction,
         `SELECT canonical_email FROM auth_identities
          WHERE user_account_id = $1 AND provider = 'password'`,
         [input.userId],
       );
       if (identities[0]?.['canonical_email'] !== input.email) return false;
 
-      await transaction.query(
+      await authQueryRows(
+        transaction,
         `UPDATE user_mfa_factors SET status = 'enabled', updated_at = $2
          WHERE user_account_id = $1`,
         [input.userId, input.now],
       );
-      await transaction.query(
+      await authQueryRows(
+        transaction,
         'DELETE FROM user_mfa_recovery_codes WHERE user_account_id = $1',
         [input.userId],
       );
       for (const codeHash of input.recoveryCodeHashes) {
-        await transaction.query(
+        await authQueryRows(
+          transaction,
           `INSERT INTO user_mfa_recovery_codes (
              user_account_id, code_hash, created_at
            ) VALUES ($1, $2, $3)`,
@@ -151,13 +163,15 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     readonly emailDelivery: InsertEmailDeliveryRequestInput | undefined;
     readonly now: Date;
   }): Promise<boolean> {
-    return this.client.transaction(async (transaction) => {
-      const accounts = await transaction.query(
+    return authTransaction(this.client, async (transaction) => {
+      const accounts = await authQueryRows(
+        transaction,
         'SELECT status FROM user_accounts WHERE id = $1 FOR UPDATE',
         [input.userId],
       );
       if (accounts[0]?.['status'] !== 'active') return false;
-      const identities = await transaction.query(
+      const identities = await authQueryRows(
+        transaction,
         `SELECT canonical_email, password_hash FROM auth_identities
          WHERE user_account_id = $1 AND provider = 'password' FOR UPDATE`,
         [input.userId],
@@ -169,7 +183,8 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
       ) {
         return false;
       }
-      const factors = await transaction.query(
+      const factors = await authQueryRows(
+        transaction,
         `SELECT factor_id FROM user_mfa_factors
          WHERE user_account_id = $1 AND status = 'enabled' FOR UPDATE`,
         [input.userId],
@@ -177,20 +192,23 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
       const factorId = factors[0]?.['factor_id'];
       if (factorId === undefined) return input.factorId === undefined;
       if (factorId !== input.factorId) return false;
-      await transaction.query(
+      await authQueryRows(
+        transaction,
         'DELETE FROM user_mfa_factors WHERE user_account_id = $1',
         [input.userId],
       );
-      await transaction.query(
+      await authQueryRows(
+        transaction,
         'DELETE FROM user_mfa_recovery_codes WHERE user_account_id = $1',
         [input.userId],
       );
-      await transaction.query(
+      await authQueryRows(
+        transaction,
         `UPDATE refresh_tokens SET revoked_at = $2
          WHERE user_account_id = $1 AND revoked_at IS NULL`,
         [input.userId, input.now],
       );
-      await transaction.query(REVOKE_USER_WEB_SESSIONS_SQL, [
+      await authQueryRows(transaction, REVOKE_USER_WEB_SESSIONS_SQL, [
         input.userId,
         input.now,
       ]);
@@ -205,7 +223,8 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     userId: string,
     status: 'pending' | 'enabled',
   ): Promise<AuthMfaFactorRecord | undefined> {
-    const rows = await this.client.query(
+    const rows = await authQueryRows(
+      this.client,
       `SELECT factor.factor_id, factor.secret_key_id, factor.secret_ciphertext,
               identity.canonical_email
        FROM user_mfa_factors factor
@@ -237,12 +256,11 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
   }
 
   private async insertEmailDelivery(
-    transaction: PostgresAuthQueryClient,
+    transaction: AuthTransactionClient,
     input: InsertEmailDeliveryRequestInput,
   ): Promise<void> {
     await this.emailRequests.insert(
-      transaction as unknown as PostgresAuthTransactionClient &
-        EmailDeliveryTransaction,
+      transaction as unknown as EmailDeliveryTransaction,
       input,
     );
   }

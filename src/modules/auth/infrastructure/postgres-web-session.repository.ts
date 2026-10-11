@@ -7,7 +7,11 @@ import type {
   WebSessionRepositoryPort,
 } from '@/modules/auth/application/web-session-repository.port';
 import { authorizeMfaSession } from './auth-mfa-session.guard';
-import type { PostgresAuthClient } from './postgres-auth.client';
+import {
+  type AuthRepositoryClient,
+  authQueryRows,
+  authTransaction,
+} from './auth-prisma';
 
 export const INSERT_WEB_SESSION_SQL = `
         INSERT INTO web_sessions (
@@ -39,10 +43,10 @@ export const REVOKE_USER_WEB_SESSIONS_SQL = `
  * measure from without a separate column.
  */
 export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
-  constructor(private readonly client: PostgresAuthClient) {}
+  constructor(private readonly client: AuthRepositoryClient) {}
 
   async createWebSession(input: CreateWebSessionInput): Promise<boolean> {
-    return this.client.transaction(async (transaction) => {
+    return authTransaction(this.client, async (transaction) => {
       if (
         !(await authorizeMfaSession(
           transaction,
@@ -54,7 +58,8 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
         return false;
 
       // A fresh statement after the lock avoids retaining a pre-reset identity snapshot.
-      const identities = await transaction.query(
+      const identities = await authQueryRows(
+        transaction,
         `SELECT password_hash FROM auth_identities
          WHERE user_account_id = $1 AND provider = 'password'`,
         [input.userId],
@@ -62,7 +67,7 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
       if (identities[0]?.['password_hash'] !== input.expectedPasswordHash) {
         return false;
       }
-      await transaction.query(INSERT_WEB_SESSION_SQL, [
+      await authQueryRows(transaction, INSERT_WEB_SESSION_SQL, [
         input.sessionId,
         input.userId,
         input.token.hash,
@@ -76,7 +81,8 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
   async findExchangeableWebSession(
     input: FindExchangeableWebSessionInput,
   ): Promise<ExchangeableWebSession | undefined> {
-    const rows = await this.client.query(
+    const rows = await authQueryRows(
+      this.client,
       `
         SELECT user_account_id
         FROM web_sessions
@@ -110,7 +116,8 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
    * not an error.
    */
   async renewWebSession(input: RenewWebSessionInput): Promise<boolean> {
-    const rows = await this.client.query(
+    const rows = await authQueryRows(
+      this.client,
       `
         UPDATE web_sessions
         SET expires_at = $2, last_renewed_at = $3
@@ -139,7 +146,8 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
    * this is the presented session and nothing else.
    */
   async revokeWebSession(input: RevokeWebSessionInput): Promise<boolean> {
-    const rows = await this.client.query(
+    const rows = await authQueryRows(
+      this.client,
       `
         UPDATE web_sessions
         SET revoked_at = $2

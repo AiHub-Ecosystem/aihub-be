@@ -10,7 +10,7 @@ import type {
   DispatchAttemptStart,
 } from '@/modules/metering/application/dispatch-attempt-record.port';
 import { isRecord } from './metering-row';
-import type { PostgresMeteringClient } from './prisma-metering.client';
+import type { PrismaMeteringClient } from './prisma-metering.client';
 
 export const INSERT_DISPATCH_ATTEMPT_SQL = `
   INSERT INTO dispatch_attempts (
@@ -80,19 +80,17 @@ interface DispatchAttemptUnresolvedRow {
 export class PostgresDispatchAttemptRepository
   implements DispatchAttemptRecordPort, OnModuleDestroy
 {
-  constructor(private readonly client: PostgresMeteringClient) {}
+  constructor(private readonly client: PrismaMeteringClient) {}
 
   async beginAttempt(input: DispatchAttemptStart): Promise<string> {
     const attemptId = randomUUID();
-    await this.client.query<Record<string, unknown>>(
+    await this.client.$executeRawUnsafe(
       INSERT_DISPATCH_ATTEMPT_SQL,
-      [
-        attemptId,
-        input.requestId,
-        input.organizationId,
-        input.operation,
-        input.operationTimeoutMs,
-      ],
+      attemptId,
+      input.requestId,
+      input.organizationId,
+      input.operation,
+      input.operationTimeoutMs,
     );
     return attemptId;
   }
@@ -101,19 +99,19 @@ export class PostgresDispatchAttemptRepository
     attemptId: string,
     outcome: DispatchAttemptOutcome,
   ): Promise<void> {
-    await this.client.query<Record<string, unknown>>(
+    await this.client.$executeRawUnsafe(
       UPDATE_DISPATCH_ATTEMPT_OUTCOME_SQL,
-      [attemptId, outcome],
+      attemptId,
+      outcome,
     );
   }
 
   async getUnresolvedByOperation(): Promise<
     readonly DispatchAttemptUnresolvedSample[]
   > {
-    const rows = await this.client.query<DispatchAttemptUnresolvedRow>(
-      UNRESOLVED_DISPATCH_ATTEMPTS_SQL,
-      [OPERATION_IDS],
-    );
+    const rows = await this.client.$queryRawUnsafe<
+      readonly DispatchAttemptUnresolvedRow[]
+    >(UNRESOLVED_DISPATCH_ATTEMPTS_SQL, [...OPERATION_IDS]);
     const counts = new Map(
       rows.map(countFromRow).map(({ operation, count }) => [operation, count]),
     );
@@ -130,7 +128,7 @@ export class PostgresDispatchAttemptRepository
   }
 
   async close(): Promise<void> {
-    await this.client.close();
+    await this.client.close?.();
   }
 
   async onModuleDestroy(): Promise<void> {

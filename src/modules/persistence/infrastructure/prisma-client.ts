@@ -1,8 +1,14 @@
 import { PrismaPg } from '@prisma/adapter-pg';
-import { type PoolConfig, type QueryConfig } from 'pg';
 
-import type { PostgresConnectionRole } from '@/common/observability/metrics';
-import { createPostgresPool } from '@/common/postgres/postgres-pool';
+import type {
+  PostgresConnectionRole,
+  PostgresPoolName,
+} from '@/common/observability/metrics';
+import {
+  checkPostgresPoolConnection,
+  createPostgresPool,
+  postgresPoolOptions,
+} from '@/common/postgres/postgres-pool';
 import type {
   PrismaClientHolder,
   PrismaClientUrls,
@@ -24,25 +30,8 @@ import { PrismaClient } from '@prisma-client/client';
  * database the runtime secrets named.
  */
 
-/**
- * The settings every control-plane pool already used: a 1 s connection timeout
- * matched to the interactive transaction's `maxWait`, a 30 s idle timeout, and
- * the largest maximum any pool on this role had (10, for Auth, Idempotency,
- * Metering, and Identity). Taking the largest never lowers a ceiling a module
- * already relied on; the smaller pools that move onto this one were under the
- * limit rather than over it.
- */
-export function postgresPoolOptions(databaseUrl: string): PoolConfig {
-  return {
-    connectionString: databaseUrl,
-    max: 10,
-    connectionTimeoutMillis: 1_000,
-    idleTimeoutMillis: 30_000,
-  };
-}
-
 export function createPrismaClient(
-  role: PostgresConnectionRole,
+  role: PostgresPoolName,
   databaseUrl: string,
 ): PrismaClientHolder {
   const pool = createPostgresPool(role, postgresPoolOptions(databaseUrl));
@@ -51,19 +40,37 @@ export function createPrismaClient(
   return {
     prisma,
     pool,
-    checkConnection: async (timeoutMs) => {
-      // pg reads query_timeout per query at runtime; @types/pg only declares it
-      // on PoolConfig.
-      await pool.query({
-        text: 'SELECT 1',
-        query_timeout: timeoutMs,
-      } as QueryConfig);
-    },
+    checkConnection: (timeoutMs) =>
+      checkPostgresPoolConnection(pool, timeoutMs),
     close: async () => {
       await prisma.$disconnect();
       await pool.end();
     },
   };
+}
+
+/** Delay resolving the configured pool until the first database operation. */
+export function deferPrismaClient(getPrisma: () => PrismaClient): PrismaClient {
+  return new Proxy({} as PrismaClient, {
+    has(_target, property) {
+      return property in getPrisma();
+    },
+    get(target, property) {
+      if (
+        property === 'then' ||
+        property === 'onModuleInit' ||
+        property === 'onModuleDestroy' ||
+        property === 'onApplicationBootstrap' ||
+        property === 'onApplicationShutdown' ||
+        property === 'beforeApplicationShutdown'
+      ) {
+        return undefined;
+      }
+      const prisma = getPrisma();
+      const value = Reflect.get(prisma, property, prisma);
+      return typeof value === 'function' ? value.bind(prisma) : value;
+    },
+  });
 }
 
 /**

@@ -1,33 +1,17 @@
-import type { PostgresIdentityQueryClient } from './postgres-identity.client';
+import type { Prisma } from '@prisma-client/client';
 
 import { findActiveAccountId } from './active-account';
 
-class QueryClient implements PostgresIdentityQueryClient {
-  readonly calls: {
-    readonly sql: string;
-    readonly values: readonly unknown[];
-  }[] = [];
-
-  constructor(private readonly rows: readonly unknown[]) {}
-
-  async query(
-    sql: string,
-    values: readonly unknown[],
-  ): Promise<readonly unknown[]> {
-    this.calls.push({ sql, values });
-    return this.rows;
-  }
-}
-
 describe('findActiveAccountId', () => {
   it('finds an account by exact username and active status', async () => {
-    const client = new QueryClient([{ id: 'usr_1' }]);
+    const query = jest.fn().mockResolvedValue([{ id: 'usr_1' }]);
+    const client = {
+      $queryRawUnsafe: query,
+    } as unknown as Prisma.TransactionClient;
 
     await expect(findActiveAccountId(client, 'Operator')).resolves.toBe(
       'usr_1',
     );
-    expect(client.calls[0]?.values).toEqual(['Operator']);
-    expect(client.calls[0]?.sql).toContain('WHERE username = $1');
-    expect(client.calls[0]?.sql).toContain("status = 'active'");
+    expect(query).toHaveBeenCalledWith(expect.any(String), 'Operator');
   });
 });

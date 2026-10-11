@@ -1,9 +1,6 @@
 import { Buffer } from 'node:buffer';
 
-import { PrismaPg } from '@prisma/adapter-pg';
-import { type PoolConfig, type QueryConfig } from 'pg';
-
-import { createPostgresPool } from '@/common/postgres/postgres-pool';
+import { createPrismaClient } from '@/modules/persistence/persistence.module';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import { Prisma, PrismaClient } from '@prisma-client/client';
 
@@ -21,6 +18,7 @@ export interface PostgresAuthTransactionClient extends PostgresAuthQueryClient {
   ): Promise<number>;
 }
 
+/** Test-only query adapter retained for the unchanged database-lane fixtures. */
 export interface PostgresAuthClient extends PostgresAuthQueryClient {
   /** Available on the Prisma-backed fixture adapter for raw outbox inserts. */
   $executeRawUnsafe?(
@@ -33,8 +31,6 @@ export interface PostgresAuthClient extends PostgresAuthQueryClient {
   ): Promise<T>;
   close(): Promise<void>;
 }
-
-export const POSTGRES_AUTH_CLIENT = Symbol('POSTGRES_AUTH_CLIENT');
 
 type PrismaRawQueryClient = Pick<
   PrismaClient,
@@ -189,15 +185,7 @@ function authClient(
   };
 }
 
-export function createAuthTransactionRunner(
-  getPrisma: () => PrismaClient,
-  checkConnection: (timeoutMs: number) => Promise<void> = async () => undefined,
-  close: () => Promise<void> = async () => undefined,
-): PostgresAuthClient {
-  return authClient(getPrisma, checkConnection, close);
-}
-
-/** Compatibility factory used by unchanged database-lane fixtures. */
+/** Test-only factory for unchanged database-lane fixtures; production injects Prisma. */
 export function createPostgresAuthClient(
   databaseUrl: string,
 ): PostgresAuthClient {
@@ -214,30 +202,7 @@ export function createPostgresAuthClient(
     };
   }
 
-  const options: PoolConfig = {
-    connectionString: databaseUrl,
-    max: 10,
-    connectionTimeoutMillis: 1_000,
-    idleTimeoutMillis: 30_000,
-  };
-  const pool = createPostgresPool('integration-test', options);
-  const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
+  const holder = createPrismaClient('integration-test', databaseUrl);
 
-  return authClient(
-    () => prisma,
-    async (timeoutMs) => {
-      // pg reads query_timeout per query at runtime; @types/pg only declares it on PoolConfig.
-      await pool.query({
-        text: 'SELECT 1',
-        query_timeout: timeoutMs,
-      } as QueryConfig);
-    },
-    async () => {
-      try {
-        await prisma.$disconnect();
-      } finally {
-        await pool.end();
-      }
-    },
-  );
+  return authClient(() => holder.prisma, holder.checkConnection, holder.close);
 }

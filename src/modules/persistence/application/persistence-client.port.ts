@@ -1,5 +1,3 @@
-import type { Pool } from 'pg';
-
 import type { PrismaClient } from '@prisma-client/client';
 
 /**
@@ -19,6 +17,18 @@ export const CONTROL_PLANE_READ_PRISMA_CLIENT = Symbol(
   'CONTROL_PLANE_READ_PRISMA_CLIENT',
 );
 
+export interface PrismaPool {
+  readonly options: {
+    readonly max?: number | null | undefined;
+    readonly connectionTimeoutMillis?: number | null | undefined;
+    readonly idleTimeoutMillis?: number | null | undefined;
+  };
+  query(config: {
+    readonly text: string;
+    readonly query_timeout?: number;
+  }): Promise<unknown>;
+}
+
 export interface PrismaClientHolder {
   /**
    * The generated client. Reading it before a URL is configured throws, which
@@ -31,7 +41,7 @@ export interface PrismaClientHolder {
    * The pool behind it. Exposed so infrastructure can reach the same
    * connections the client uses.
    */
-  readonly pool: Pool;
+  readonly pool: PrismaPool;
 
   /**
    * The readiness statement. It keeps `pg`'s per-query `query_timeout`, which

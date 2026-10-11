@@ -9,7 +9,10 @@ import {
   type PrismaClientHolder,
   RUNTIME_PRISMA_CLIENT,
 } from '@/modules/persistence/application/persistence-client.port';
-import { PersistenceModule } from '@/modules/persistence/persistence.module';
+import {
+  PersistenceModule,
+  deferPrismaClient,
+} from '@/modules/persistence/persistence.module';
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
@@ -25,7 +28,6 @@ import {
 } from './application/usage-repository.port';
 import { NestMeteringFailureLogger } from './infrastructure/nest-metering-failure.logger';
 import { PostgresUsageRepository } from './infrastructure/postgres-usage.repository';
-import { createPrismaMeteringClient } from './infrastructure/prisma-metering.client';
 import { HttpExceptionFilter } from './presentation/http-exception.filter';
 import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.interceptor';
 
@@ -36,9 +38,7 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
       provide: USAGE_REPOSITORY,
       inject: [RUNTIME_PRISMA_CLIENT],
       useFactory: (runtime: PrismaClientHolder): UsageRepositoryPort =>
-        new PostgresUsageRepository(
-          createPrismaMeteringClient(() => runtime.prisma),
-        ),
+        new PostgresUsageRepository(deferPrismaClient(() => runtime.prisma)),
     },
     {
       provide: METERING_FAILURE_LOGGER,

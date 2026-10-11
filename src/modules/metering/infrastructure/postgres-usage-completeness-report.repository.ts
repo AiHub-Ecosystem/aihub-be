@@ -5,7 +5,7 @@ import {
   type UsageReportSnapshotRow,
 } from '@/modules/metering/application/usage-completeness-report';
 import { isRecord } from './metering-row';
-import type { PostgresMeteringClient } from './prisma-metering.client';
+import type { PrismaMeteringClient } from './prisma-metering.client';
 
 export const USAGE_REPORT_SQL = `
   SELECT
@@ -65,22 +65,23 @@ function snapshotFromRow(value: unknown): UsageReportSnapshotRow {
 export class PostgresUsageCompletenessReportRepository
   implements UsageReportRepositoryPort
 {
-  constructor(private readonly client: PostgresMeteringClient) {}
+  constructor(private readonly client: PrismaMeteringClient) {}
 
   async snapshot(
     query: UsageReportSnapshotQuery,
   ): Promise<readonly UsageReportSnapshotRow[]> {
-    const rows = await this.client.query<UsageReportRow>(USAGE_REPORT_SQL, [
+    const rows = await this.client.$queryRawUnsafe<readonly UsageReportRow[]>(
+      USAGE_REPORT_SQL,
       query.from,
       query.to,
       [...query.operations],
-    ]);
+    );
     return rows
       .map(snapshotFromRow)
       .sort((left, right) => left.operation.localeCompare(right.operation));
   }
 
   async close(): Promise<void> {
-    await this.client.close();
+    await this.client.close?.();
   }
 }

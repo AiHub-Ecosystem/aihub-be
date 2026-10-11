@@ -13,6 +13,11 @@ import {
 } from './application/persistence-client.port';
 import { createSharedPrismaClients } from './infrastructure/prisma-client';
 
+export {
+  createPrismaClient,
+  deferPrismaClient,
+} from './infrastructure/prisma-client';
+
 const PRISMA_CLIENTS = Symbol('PRISMA_CLIENTS');
 
 /**

@@ -1,42 +1,33 @@
-import { createPostgresPool } from '@/common/postgres/postgres-pool';
+import { createPrismaClient } from '@/modules/persistence/persistence.module';
 
+/** Test-only query client for the unchanged idempotency database spec. */
 export interface PostgresIdempotencyClient {
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
   close(): Promise<void>;
 }
 
-// The unchanged tenant-isolation lane still constructs this direct pg adapter.
+export interface PrismaIdempotencyClient {
+  $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
+  close(): Promise<void>;
+}
+
 export function createPostgresIdempotencyClient(
   databaseUrl: string,
-): PostgresIdempotencyClient {
+): PrismaIdempotencyClient {
   if (databaseUrl.trim().length === 0) {
     return {
-      query: async () => {
+      $queryRawUnsafe: async () => {
         throw new Error('DATABASE_URL is missing');
       },
       close: async () => undefined,
     };
   }
 
-  const pool = createPostgresPool('idempotency', {
-    connectionString: databaseUrl,
-    max: 10,
-    connectionTimeoutMillis: 1_000,
-    idleTimeoutMillis: 30_000,
-  });
+  const holder = createPrismaClient('idempotency', databaseUrl);
 
   return {
-    async query(
-      text: string,
-      values: readonly unknown[],
-    ): Promise<readonly unknown[]> {
-      const result = await pool.query<Record<string, unknown>>(text, [
-        ...values,
-      ]);
-      return result.rows;
-    },
-    close: async () => {
-      await pool.end();
-    },
+    $queryRawUnsafe: <T = unknown>(query: string, ...values: unknown[]) =>
+      holder.prisma.$queryRawUnsafe<T>(query, ...values),
+    close: holder.close,
   };
 }

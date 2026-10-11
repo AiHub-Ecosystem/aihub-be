@@ -1,43 +1,14 @@
-import { PrismaPg } from '@prisma/adapter-pg';
+import { createPrismaClient } from '@/modules/persistence/persistence.module';
+import type { PrismaClient } from '@prisma-client/client';
 
-import { createPostgresPool } from '@/common/postgres/postgres-pool';
-import { PrismaClient } from '@prisma-client/client';
-import {
-  type SandboxDispatchBudgetClient,
-  createPrismaSandboxDispatchBudgetClient,
-} from './prisma-sandbox-dispatch-budget.client';
-
-/** Compatibility factory for the unchanged database-lane specs. */
+/** Test-only Prisma client used by the unchanged database-lane specs. */
 export function createPostgresSandboxDispatchBudgetClient(
   databaseUrl: string,
-): SandboxDispatchBudgetClient {
+): PrismaClient & { close(): Promise<void> } {
   if (databaseUrl.trim().length === 0) {
-    const unavailable = (): never => {
-      throw new Error('Sandbox dispatch budget database is unavailable');
-    };
-    return {
-      query: async () => unavailable(),
-      execute: async () => unavailable(),
-      transaction: async () => unavailable(),
-      close: async () => undefined,
-    };
+    throw new Error('Sandbox dispatch budget database is unavailable');
   }
 
-  const pool = createPostgresPool('integration-test', {
-    connectionString: databaseUrl,
-    max: 4,
-    connectionTimeoutMillis: 1_000,
-    idleTimeoutMillis: 30_000,
-  });
-  const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
-  return createPrismaSandboxDispatchBudgetClient(
-    () => prisma,
-    async () => {
-      try {
-        await prisma.$disconnect();
-      } finally {
-        await pool.end();
-      }
-    },
-  );
+  const holder = createPrismaClient('integration-test', databaseUrl);
+  return Object.assign(holder.prisma, { close: holder.close });
 }

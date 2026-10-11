@@ -7,10 +7,9 @@ import {
   type Avatar,
   isAvatarContentType,
 } from '@/modules/avatar/domain/avatar';
-import type { AvatarQueryClient } from './prisma-avatar.client';
+import type { PrismaClient } from '@prisma-client/client';
 
 export { createAvatarQueryClient } from './postgres-avatar.fixture-client';
-export type { AvatarQueryClient } from './prisma-avatar.client';
 
 const FIND_BY_USER_SQL = `
   SELECT id, user_account_id, object_key, content_type, byte_size, accepted_at
@@ -105,7 +104,7 @@ function mapRow(row: AvatarRecordRow | undefined): Avatar | undefined {
 }
 
 export class PostgresAvatarRepository implements AvatarRepositoryPort {
-  constructor(private readonly client: AvatarQueryClient) {}
+  constructor(private readonly client: PrismaClient) {}
 
   async findByUser(userId: string): Promise<Avatar | undefined> {
     return mapRow(
@@ -173,7 +172,7 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
     values: readonly unknown[],
   ): Promise<readonly Row[]> {
     try {
-      return await this.client.query<Row>(sql, values);
+      return await this.client.$queryRawUnsafe<readonly Row[]>(sql, ...values);
     } catch (error) {
       throw storeError(error);
     }

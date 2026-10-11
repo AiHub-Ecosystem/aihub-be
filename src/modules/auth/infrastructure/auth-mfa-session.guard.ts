@@ -1,19 +1,21 @@
 import type { MfaSessionProof } from '@/modules/auth/application/auth-mfa-repository.port';
-import type { PostgresAuthQueryClient } from './postgres-auth.client';
+import { type AuthSqlClient, authQueryRows } from './auth-prisma';
 
 export async function authorizeMfaSession(
-  transaction: PostgresAuthQueryClient,
+  transaction: AuthSqlClient,
   userId: string,
   proof: MfaSessionProof | undefined,
   now: Date,
 ): Promise<boolean> {
-  const accounts = await transaction.query(
+  const accounts = await authQueryRows(
+    transaction,
     'SELECT status FROM user_accounts WHERE id = $1 FOR SHARE',
     [userId],
   );
   if (accounts[0]?.['status'] !== 'active') return false;
 
-  const factors = await transaction.query(
+  const factors = await authQueryRows(
+    transaction,
     `SELECT factor_id FROM user_mfa_factors
      WHERE user_account_id = $1 AND status = 'enabled' FOR SHARE`,
     [userId],
@@ -23,7 +25,8 @@ export async function authorizeMfaSession(
   if (typeof factorId !== 'string' || proof === undefined) return false;
   if (proof.kind === 'totp') return proof.factorId === factorId;
 
-  const consumed = await transaction.query(
+  const consumed = await authQueryRows(
+    transaction,
     `UPDATE user_mfa_recovery_codes
      SET consumed_at = $3
      WHERE user_account_id = $1 AND code_hash = $2 AND consumed_at IS NULL

@@ -5,8 +5,9 @@ import type {
   UsageRetentionPort,
 } from '@/modules/metering/application/usage-retention';
 import { compareUsageRetentionCursor } from '@/modules/metering/application/usage-retention';
+import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import { isRecord } from './metering-row';
-import type { PostgresMeteringClient } from './prisma-metering.client';
+import type { PrismaMeteringClient } from './prisma-metering.client';
 
 export const USAGE_RETENTION_BATCH_SQL = [
   '  WITH candidates AS (',
@@ -72,41 +73,40 @@ interface DispatchAttemptRetentionRow {
 }
 
 export class PostgresUsageRetentionRepository implements UsageRetentionPort {
-  constructor(private readonly client: PostgresMeteringClient) {}
+  constructor(private readonly client: PrismaMeteringClient) {}
 
   async pruneBatch(
     request: UsageRetentionBatchRequest,
   ): Promise<UsageRetentionBatch> {
-    return this.client.transaction(async (transaction) => {
-      const rows = await transaction.query<UsageRetentionRow>(
+    return this.client.$transaction(async (transaction) => {
+      const rows = await transaction.$queryRawUnsafe<
+        readonly UsageRetentionRow[]
+      >(
         USAGE_RETENTION_BATCH_SQL,
-        [
-          request.cutoff,
-          request.after?.createdAt ?? null,
-          request.after?.requestId ?? null,
-          request.batchSize,
-        ],
+        request.cutoff,
+        request.after?.createdAt ?? null,
+        request.after?.requestId ?? null,
+        request.batchSize,
       );
       const cursors = rows.map(cursorFromRow).sort(compareUsageRetentionCursor);
       const nextCursor = cursors[cursors.length - 1];
       return nextCursor === undefined
         ? { deleted: 0 }
         : { deleted: cursors.length, nextCursor };
-    });
+    }, CONTROL_PLANE_TRANSACTION_OPTIONS);
   }
 
   async pruneDispatchAttempts(
     cutoff: Date,
     batchSize: number,
   ): Promise<number> {
-    const rows = await this.client.query<DispatchAttemptRetentionRow>(
-      DISPATCH_ATTEMPT_RETENTION_BATCH_SQL,
-      [cutoff, batchSize],
-    );
+    const rows = await this.client.$queryRawUnsafe<
+      readonly DispatchAttemptRetentionRow[]
+    >(DISPATCH_ATTEMPT_RETENTION_BATCH_SQL, cutoff, batchSize);
     return rows.length;
   }
 
   async close(): Promise<void> {
-    await this.client.close();
+    await this.client.close?.();
   }
 }

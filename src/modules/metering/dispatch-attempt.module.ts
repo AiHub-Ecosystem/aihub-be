@@ -4,11 +4,13 @@ import {
   type PrismaClientHolder,
   RUNTIME_PRISMA_CLIENT,
 } from '@/modules/persistence/application/persistence-client.port';
-import { PersistenceModule } from '@/modules/persistence/persistence.module';
+import {
+  PersistenceModule,
+  deferPrismaClient,
+} from '@/modules/persistence/persistence.module';
 import { DISPATCH_ATTEMPT_RECORD } from './application/dispatch-attempt-record.port';
 import { DispatchAttemptMetricsRegistrar } from './infrastructure/dispatch-attempt-metrics.registrar';
 import { PostgresDispatchAttemptRepository } from './infrastructure/postgres-dispatch-attempt.repository';
-import { createPrismaMeteringClient } from './infrastructure/prisma-metering.client';
 
 @Module({
   imports: [PersistenceModule],
@@ -20,7 +22,7 @@ import { createPrismaMeteringClient } from './infrastructure/prisma-metering.cli
         runtime: PrismaClientHolder,
       ): PostgresDispatchAttemptRepository =>
         new PostgresDispatchAttemptRepository(
-          createPrismaMeteringClient(() => runtime.prisma),
+          deferPrismaClient(() => runtime.prisma),
         ),
     },
     {

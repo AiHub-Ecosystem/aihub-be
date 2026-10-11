@@ -1,5 +1,3 @@
-import { createPrismaMeteringClient } from '@/modules/metering/infrastructure/prisma-metering.client';
-
 export async function createOperatorMeteringClient(databaseUrl: string) {
   const { createSharedPrismaClients } = await import(
     '@/modules/persistence/infrastructure/prisma-client'
@@ -9,8 +7,7 @@ export async function createOperatorMeteringClient(databaseUrl: string) {
     controlPlaneDatabaseUrl: undefined,
     controlPlaneReadDatabaseUrl: undefined,
   });
-  return createPrismaMeteringClient(
-    () => clients.runtime.prisma,
-    () => clients.close(),
-  );
+  return Object.assign(clients.runtime.prisma, {
+    close: () => clients.close(),
+  });
 }

@@ -4,13 +4,13 @@ import type {
   EmailDeliveryKind,
 } from '@/modules/auth/application/email-delivery-request.port';
 
+import { type AuthSqlClient, authQueryRows } from './auth-prisma';
 import {
   authStoreError,
   dateValue,
   isRecord,
   nullableDateValue,
 } from './auth-row';
-import type { EmailDeliveryQueryClient } from './postgres-email-delivery-request.repository';
 
 /**
  * The three credential tables share one shape — a unique token hash, an expiry,
@@ -33,7 +33,7 @@ const CHECK_SQL: Readonly<Partial<Record<EmailDeliveryKind, string>>> = {
 export class PostgresEmailCredentialRepository
   implements EmailCredentialActionabilityPort
 {
-  constructor(private readonly client: EmailDeliveryQueryClient) {}
+  constructor(private readonly client: AuthSqlClient) {}
 
   /**
    * Only the hash is read back, so a dispatch decision cannot leak a raw token,
@@ -48,7 +48,7 @@ export class PostgresEmailCredentialRepository
   }): Promise<EmailCredentialState> {
     const sql = CHECK_SQL[input.kind];
     if (sql === undefined) return 'missing';
-    const rows = await this.client.query(sql, [input.tokenHash]);
+    const rows = await authQueryRows(this.client, sql, [input.tokenHash]);
     const row = rows[0];
     if (row === undefined) {
       return 'missing';

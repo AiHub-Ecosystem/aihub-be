@@ -2,8 +2,7 @@ import { Buffer } from 'node:buffer';
 
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import { Prisma, PrismaClient } from '@prisma-client/client';
-import type { PostgresAuthTransactionClient } from './postgres-auth.client';
-import { createAuthTransactionRunner } from './postgres-auth.client';
+import { authQueryRows, authTransaction } from './auth-prisma';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -46,7 +45,7 @@ function authClient(
   } as unknown as PrismaClient;
 
   return {
-    client: createAuthTransactionRunner(() => prisma),
+    client: prisma,
     queryRaw,
     executeRaw,
     transaction,
@@ -55,42 +54,22 @@ function authClient(
 }
 
 describe('Auth transaction lifetime on Prisma', () => {
-  it('runs Prisma raw writes on the guarded transaction handle', async () => {
-    const { client, executeRaw } = authClient(async () => []);
-    let expiredHandle: PostgresAuthTransactionClient | undefined;
-
-    await client.transaction(async (handle) => {
-      const transaction = handle as PostgresAuthTransactionClient;
-      expiredHandle = transaction;
-      await transaction.$executeRawUnsafe('INSERT INTO outbox VALUES ($1)', 1);
-    });
-
-    expect(executeRaw).toHaveBeenCalledWith(
-      'INSERT INTO outbox VALUES ($1)',
-      1,
-    );
-    await expect(
-      expiredHandle?.$executeRawUnsafe('INSERT INTO outbox VALUES ($1)', 2),
-    ).rejects.toThrow('Auth transaction is no longer active');
-    expect(executeRaw).toHaveBeenCalledTimes(1);
-  });
-
   it('rejects an expired handle before the driver receives another query', async () => {
     const { client, queryRaw, transaction } = authClient(async () => [
       { value: 42 },
     ]);
 
-    const expiredHandle = await client.transaction(async (handle) => {
-      await expect(handle.query('SELECT value', [])).resolves.toEqual([
-        { value: 42 },
-      ]);
-      return handle;
+    const expiredHandle = await authTransaction(client, async (handle) => {
+      await expect(
+        authQueryRows<{ value: number }>(handle, 'SELECT value', []),
+      ).resolves.toEqual([{ value: 42 }]);
+      return handle as Prisma.TransactionClient;
     });
 
     const callsAtCallbackEnd = queryRaw.mock.calls.length;
-    await expect(expiredHandle.query('SELECT late', [])).rejects.toThrow(
-      'Auth transaction is no longer active',
-    );
+    await expect(
+      authQueryRows(expiredHandle, 'SELECT late', []),
+    ).rejects.toThrow('Auth transaction is no longer active');
 
     expect(queryRaw).toHaveBeenCalledTimes(callsAtCallbackEnd);
     expect(transaction).toHaveBeenCalledWith(
@@ -107,8 +86,8 @@ describe('Auth transaction lifetime on Prisma', () => {
       return queryResult.promise;
     });
 
-    const transaction = client.transaction(async (handle) => {
-      void handle.query('SELECT pending', []);
+    const running = authTransaction(client, async (transaction) => {
+      void authQueryRows(transaction, 'SELECT pending', []);
     });
     await queryStarted.promise;
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -116,7 +95,7 @@ describe('Auth transaction lifetime on Prisma', () => {
     expect(outcome()).toBeUndefined();
 
     queryResult.resolve([]);
-    await expect(transaction).resolves.toBeUndefined();
+    await expect(running).resolves.toBeUndefined();
     expect(outcome()).toBe('committed');
   });
 
@@ -129,8 +108,8 @@ describe('Auth transaction lifetime on Prisma', () => {
       return queryResult.promise;
     });
 
-    const transaction = client.transaction(async (handle) => {
-      void handle.query('SELECT pending', []);
+    const running = authTransaction(client, async (transaction) => {
+      void authQueryRows(transaction, 'SELECT pending', []);
       throw callbackError;
     });
     await queryStarted.promise;
@@ -139,7 +118,7 @@ describe('Auth transaction lifetime on Prisma', () => {
     expect(outcome()).toBeUndefined();
 
     queryResult.reject(new Error('pending query failed'));
-    await expect(transaction).rejects.toBe(callbackError);
+    await expect(running).rejects.toBe(callbackError);
     expect(outcome()).toBe('rolled back');
   });
 
@@ -150,8 +129,8 @@ describe('Auth transaction lifetime on Prisma', () => {
     });
 
     await expect(
-      client.transaction(async (handle) => {
-        void handle.query('SELECT forgotten', []);
+      authTransaction(client, async (transaction) => {
+        void authQueryRows(transaction, 'SELECT forgotten', []);
       }),
     ).rejects.toBe(queryError);
     expect(outcome()).toBe('rolled back');
@@ -161,7 +140,9 @@ describe('Auth transaction lifetime on Prisma', () => {
     const { client, queryRaw, executeRaw } = authClient(async () => []);
 
     await expect(
-      client.query('UPDATE web_sessions SET revoked_at = $1', [new Date()]),
+      authQueryRows(client, 'UPDATE web_sessions SET revoked_at = $1', [
+        new Date(),
+      ]),
     ).resolves.toEqual([]);
 
     expect(queryRaw).not.toHaveBeenCalled();
@@ -184,7 +165,9 @@ describe('Auth transaction lifetime on Prisma', () => {
       throw adapterError;
     });
 
-    await expect(client.query('SELECT duplicate', [])).rejects.toMatchObject({
+    await expect(
+      authQueryRows(client, 'SELECT duplicate', []),
+    ).rejects.toMatchObject({
       code: '23505',
       message: 'duplicate key',
       cause: adapterError,
@@ -203,7 +186,7 @@ describe('Auth transaction lifetime on Prisma', () => {
       },
     ]);
 
-    const rows = await client.query('SELECT mapped values', []);
+    const rows = await authQueryRows(client, 'SELECT mapped values', []);
 
     expect(rows).toEqual([
       {

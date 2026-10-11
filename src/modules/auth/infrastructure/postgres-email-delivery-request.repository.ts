@@ -18,6 +18,7 @@ import {
 } from '@/modules/auth/application/email-delivery-request.port';
 import { Logger } from '@nestjs/common';
 
+import { type AuthSqlClient, authExecute, authQueryRows } from './auth-prisma';
 import {
   dateValue,
   integerValue,
@@ -29,20 +30,8 @@ import {
   stringValue,
 } from './auth-row';
 
-/** PostgreSQL query shape used inside the Email Delivery adapters. */
-export interface EmailDeliveryQueryClient {
-  query(
-    text: string,
-    values: readonly unknown[],
-  ): Promise<readonly Record<string, unknown>[]>;
-}
-
-interface EmailDeliveryPrismaTransaction {
-  $executeRawUnsafe(
-    query: string,
-    ...values: readonly unknown[]
-  ): Promise<number>;
-}
+/** Compatibility type for the unchanged database-lane fixtures. */
+export type EmailDeliveryQueryClient = AuthSqlClient;
 
 const SELECT_ROW = `
   SELECT id, kind, status, payload_ciphertext, attempts, last_attempt_at,
@@ -423,18 +412,16 @@ export class PostgresEmailDeliveryRequestRepository
     transaction: EmailDeliveryTransaction,
     input: InsertEmailDeliveryRequestInput,
   ): Promise<void> {
-    const client = transaction as unknown as EmailDeliveryPrismaTransaction;
-    await client.$executeRawUnsafe(
-      INSERT_SQL,
+    await authExecute(transaction as unknown as AuthSqlClient, INSERT_SQL, [
       input.id,
       input.kind,
       input.payloadCiphertext,
       input.createdAt,
-    );
+    ]);
   }
 
   async recordFailedAttempt(
-    client: EmailDeliveryQueryClient,
+    client: AuthSqlClient,
     input: {
       id: string;
       attemptedAt: Date;
@@ -451,7 +438,7 @@ export class PostgresEmailDeliveryRequestRepository
   }
 
   async reserveAttempt(
-    client: EmailDeliveryQueryClient,
+    client: AuthSqlClient,
     input: { id: string; attemptedAt: Date; owner: string },
   ): Promise<EmailDeliveryRequestRecord> {
     return this.apply(client, RESERVE_ATTEMPT_SQL, [
@@ -462,7 +449,7 @@ export class PostgresEmailDeliveryRequestRepository
   }
 
   async markProviderAccepted(
-    client: EmailDeliveryQueryClient,
+    client: AuthSqlClient,
     input: { id: string; attemptedAt: Date; owner: string },
   ): Promise<EmailDeliveryRequestRecord> {
     return this.apply(client, MARK_PROVIDER_ACCEPTED_SQL, [
@@ -473,7 +460,7 @@ export class PostgresEmailDeliveryRequestRepository
   }
 
   async markFailed(
-    client: EmailDeliveryQueryClient,
+    client: AuthSqlClient,
     input: {
       id: string;
       failedAt: Date;
@@ -490,10 +477,10 @@ export class PostgresEmailDeliveryRequestRepository
   }
 
   async failExhausted(
-    client: EmailDeliveryQueryClient,
+    client: AuthSqlClient,
     input: { at: Date },
   ): Promise<readonly EmailDeliveryRequestRecord[]> {
-    const rows = await client.query(FAIL_EXHAUSTED_SQL, [
+    const rows = await authQueryRows(client, FAIL_EXHAUSTED_SQL, [
       input.at,
       EMAIL_DELIVERY_KINDS,
     ]);
@@ -501,7 +488,7 @@ export class PostgresEmailDeliveryRequestRepository
   }
 
   async markCancelled(
-    client: EmailDeliveryQueryClient,
+    client: AuthSqlClient,
     input: {
       id: string;
       cancelledAt: Date;
@@ -518,7 +505,7 @@ export class PostgresEmailDeliveryRequestRepository
   }
 
   async releaseDeferred(
-    client: EmailDeliveryQueryClient,
+    client: AuthSqlClient,
     input: { id: string; owner: string; retryAt: Date },
   ): Promise<EmailDeliveryRequestRecord> {
     return this.apply(client, RELEASE_DEFERRED_SQL, [
@@ -529,10 +516,10 @@ export class PostgresEmailDeliveryRequestRepository
   }
 
   async cancelStale(
-    client: EmailDeliveryQueryClient,
+    client: AuthSqlClient,
     input: { at: Date; createdAtOrBefore: Date },
   ): Promise<readonly EmailDeliveryRequestRecord[]> {
-    const rows = await client.query(CANCEL_STALE_SQL, [
+    const rows = await authQueryRows(client, CANCEL_STALE_SQL, [
       input.at,
       input.createdAtOrBefore,
       EMAIL_DELIVERY_KINDS,
@@ -541,10 +528,10 @@ export class PostgresEmailDeliveryRequestRepository
   }
 
   async backlog(
-    client: EmailDeliveryQueryClient,
+    client: AuthSqlClient,
     input: { now: Date },
   ): Promise<readonly EmailDeliveryBacklogRow[]> {
-    const rows = await client.query(BACKLOG_SQL, [
+    const rows = await authQueryRows(client, BACKLOG_SQL, [
       input.now,
       EMAIL_DELIVERY_KINDS,
     ]);
@@ -556,10 +543,10 @@ export class PostgresEmailDeliveryRequestRepository
   }
 
   async claim(
-    client: EmailDeliveryQueryClient,
+    client: AuthSqlClient,
     input: ClaimEmailDeliveryRequestsInput,
   ): Promise<readonly EmailDeliveryRequestRecord[]> {
-    const rows = await client.query(CLAIM_SQL, [
+    const rows = await authQueryRows(client, CLAIM_SQL, [
       input.now,
       input.limit,
       input.owner,
@@ -570,10 +557,10 @@ export class PostgresEmailDeliveryRequestRepository
   }
 
   async claimUnreportedFailures(
-    client: EmailDeliveryQueryClient,
+    client: AuthSqlClient,
     input: { limit: number; now: Date; leaseMs: number },
   ): Promise<readonly EmailDeliveryRequestRecord[]> {
-    const rows = await client.query(CLAIM_UNREPORTED_FAILURES_SQL, [
+    const rows = await authQueryRows(client, CLAIM_UNREPORTED_FAILURES_SQL, [
       input.limit,
       input.now,
       new Date(input.now.getTime() + input.leaseMs),
@@ -583,7 +570,7 @@ export class PostgresEmailDeliveryRequestRepository
   }
 
   async markFailureReported(
-    client: EmailDeliveryQueryClient,
+    client: AuthSqlClient,
     input: { id: string; reportedAt: Date },
   ): Promise<EmailDeliveryRequestRecord> {
     return this.apply(client, MARK_FAILURE_REPORTED_SQL, [
@@ -593,18 +580,18 @@ export class PostgresEmailDeliveryRequestRepository
   }
 
   async releaseFailureNotification(
-    client: EmailDeliveryQueryClient,
+    client: AuthSqlClient,
     input: { id: string },
   ): Promise<EmailDeliveryRequestRecord> {
     return this.apply(client, RELEASE_FAILURE_NOTIFICATION_SQL, [input.id]);
   }
 
   private async apply(
-    client: EmailDeliveryQueryClient,
+    client: AuthSqlClient,
     sql: string,
     values: readonly unknown[],
   ): Promise<EmailDeliveryRequestRecord> {
-    const updated = await client.query(sql, values);
+    const updated = await authQueryRows(client, sql, values);
     if (updated.length === 0) {
       throw new AppError({
         code: 'INTERNAL_ERROR',
@@ -612,7 +599,7 @@ export class PostgresEmailDeliveryRequestRepository
         retryable: false,
       });
     }
-    const rows = await client.query(SELECT_ROW, [values[0]]);
+    const rows = await authQueryRows(client, SELECT_ROW, [values[0]]);
     const row = rows[0];
     if (row === undefined) {
       throw storeError('Email delivery request is unavailable');
@@ -629,7 +616,7 @@ export class PostgresEmailDeliveryRequestRepository
  */
 export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
   constructor(
-    private readonly client: EmailDeliveryQueryClient,
+    private readonly client: AuthSqlClient,
     private readonly requests: PostgresEmailDeliveryRequestRepository = new PostgresEmailDeliveryRequestRepository(),
   ) {}
 

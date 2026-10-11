@@ -214,6 +214,7 @@ export class PostgresIdempotencyRepository
   constructor(private readonly client: IdempotencyClient) {}
 
   private query(text: string, values: readonly unknown[]) {
+    // The unchanged idempotency database spec supplies this test-only pg client.
     if ('query' in this.client) {
       return this.client.query(text, values);
     }

@@ -1,24 +1,21 @@
 import { Buffer } from 'node:buffer';
 
-import { PrismaPg } from '@prisma/adapter-pg';
-import { type PoolConfig } from 'pg';
-
 import type { PostgresPoolName } from '@/common/observability/metrics';
-import { createPostgresPool } from '@/common/postgres/postgres-pool';
+import { createPrismaClient } from '@/modules/persistence/persistence.module';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import { Prisma, PrismaClient } from '@prisma-client/client';
 
-/** Compatibility shape used only by the unchanged database-lane fixtures. */
+/** Test-only query API for unchanged database-lane fixtures; production injects Prisma. */
 export interface PostgresIdentityClient {
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
 }
 
-/** Compatibility transaction handle used only by database-lane fixtures. */
+/** Test-only transaction handle for unchanged database-lane fixtures. */
 export interface PostgresIdentityQueryClient {
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
 }
 
-/** Compatibility runner used only by database-lane fixtures. */
+/** Test-only transaction runner for unchanged database-lane fixtures. */
 export interface PostgresIdentityTransactionalClient
   extends PostgresIdentityClient {
   transaction<T>(
@@ -68,8 +65,8 @@ function normalizeRawRows(
 }
 
 /**
- * Executes Identity SQL through Prisma. Legacy query clients are accepted only
- * for the existing database-lane fixtures; production injects Prisma directly.
+ * Executes Identity SQL through Prisma. The query-client branch serves only
+ * unchanged database-lane fixtures; production injects Prisma directly.
  */
 export async function identityRows(
   client: PrismaRawQueryClient | PostgresIdentityQueryClient,
@@ -239,21 +236,8 @@ export function createIdentityTransactionRunner(
 }
 
 /**
- * Shared by standalone Identity clients so their pool limits and timeouts stay
- * aligned with the control-plane pools.
- */
-function identityPoolOptions(databaseUrl: string): PoolConfig {
-  return {
-    connectionString: databaseUrl,
-    max: 10,
-    connectionTimeoutMillis: 1_000,
-    idleTimeoutMillis: 30_000,
-  };
-}
-
-/**
  * A deployment without a control-plane URL still has to assemble the module
- * graph, so both clients resolve without a pool and fail on first use.
+ * graph, so the test fixture resolves without a pool and fails on first use.
  */
 function missingDatabaseUrl(): never {
   throw new Error('DATABASE_URL is missing');
@@ -293,6 +277,7 @@ function testIdentityClient(
   });
 }
 
+/** Test-only factory for database-lane specs; no production module may use it. */
 export function createPostgresIdentityClient(
   databaseUrl: string,
   poolName: PostgresPoolName = 'identity',
@@ -304,16 +289,8 @@ export function createPostgresIdentityClient(
     return testIdentityClient(missingPrisma, async () => undefined);
   }
 
-  const pool = createPostgresPool(poolName, identityPoolOptions(databaseUrl));
-  const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
-
-  return testIdentityClient(prisma, async () => {
-    try {
-      await prisma.$disconnect();
-    } finally {
-      await pool.end();
-    }
-  });
+  const holder = createPrismaClient(poolName, databaseUrl);
+  return testIdentityClient(holder.prisma, holder.close);
 }
 
 /** Historical name retained for unchanged database-lane fixtures. */

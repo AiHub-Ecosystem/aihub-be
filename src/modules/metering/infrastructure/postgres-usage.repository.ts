@@ -4,14 +4,12 @@ import type {
   UsageRecord,
   UsageRepositoryPort,
 } from '@/modules/metering/application/usage-repository.port';
+import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import { isRecord } from './metering-row';
-import type { PostgresMeteringClient } from './prisma-metering.client';
+import type { PrismaMeteringClient } from './prisma-metering.client';
 
 export { createPostgresMeteringClient } from './postgres-metering.fixture-client';
-export type {
-  PostgresMeteringClient,
-  PostgresTransactionClient,
-} from './prisma-metering.client';
+export type { PrismaMeteringClient } from './prisma-metering.client';
 
 const INSERT_SQL = `
   INSERT INTO usage_records (
@@ -127,27 +125,30 @@ interface UsageAggregateRow {
 }
 
 export class PostgresUsageRepository implements UsageRepositoryPort {
-  constructor(private readonly client: PostgresMeteringClient) {}
+  constructor(private readonly client: PrismaMeteringClient) {}
 
   async insert(record: UsageRecord): Promise<void> {
-    await this.client.transaction(async (transaction) => {
-      const rows = await transaction.query<UsageInsertRow>(
+    await this.client.$transaction(async (transaction) => {
+      const rows = await transaction.$queryRawUnsafe<readonly UsageInsertRow[]>(
         INSERT_SQL,
-        recordValues(record),
+        ...recordValues(record),
       );
       if (rows.length === 0) {
         throw new Error('usage record was not inserted');
       }
-    });
+    }, CONTROL_PLANE_TRANSACTION_OPTIONS);
   }
 
   async aggregate(query: UsageAggregateQuery): Promise<UsageAggregate> {
-    const rows = await this.client.query<UsageAggregateRow>(AGGREGATE_SQL, [
+    const rows = await this.client.$queryRawUnsafe<
+      readonly UsageAggregateRow[]
+    >(
+      AGGREGATE_SQL,
       query.organizationId,
       query.from,
       query.to,
       query.operation ?? null,
-    ]);
+    );
     const row = rows[0];
     if (row === undefined) {
       throw new Error('usage aggregate query returned no row');
@@ -156,7 +157,7 @@ export class PostgresUsageRepository implements UsageRepositoryPort {
   }
 
   async close(): Promise<void> {
-    await this.client.close();
+    await this.client.close?.();
   }
 
   async onModuleDestroy(): Promise<void> {
