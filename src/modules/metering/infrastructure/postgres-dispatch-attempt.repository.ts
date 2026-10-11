@@ -12,7 +12,9 @@ import type {
 import { isRecord } from './metering-row';
 import type { PrismaMeteringClient } from './prisma-metering.client';
 
-export const INSERT_DISPATCH_ATTEMPT_SQL = `
+// The deadline is stamped with the database's own clock, so the evidence does
+// not depend on this process's clock or on how long the request waited to start.
+const INSERT_DISPATCH_ATTEMPT_SQL = `
   INSERT INTO dispatch_attempts (
     attempt_id,
     request_id,
@@ -26,13 +28,7 @@ export const INSERT_DISPATCH_ATTEMPT_SQL = `
   FROM (SELECT clock_timestamp() AS created_at) AS dispatch_clock
 `;
 
-export const UPDATE_DISPATCH_ATTEMPT_OUTCOME_SQL = `
-  UPDATE dispatch_attempts
-  SET outcome = $2
-  WHERE attempt_id = $1 AND outcome IS NULL
-`;
-
-export const UNRESOLVED_DISPATCH_ATTEMPTS_SQL = `
+const UNRESOLVED_DISPATCH_ATTEMPTS_SQL = `
   SELECT CASE
            WHEN attempt.operation = ANY($1::text[]) THEN attempt.operation
            ELSE 'other'
@@ -99,11 +95,11 @@ export class PostgresDispatchAttemptRepository
     attemptId: string,
     outcome: DispatchAttemptOutcome,
   ): Promise<void> {
-    await this.client.$executeRawUnsafe(
-      UPDATE_DISPATCH_ATTEMPT_OUTCOME_SQL,
-      attemptId,
-      outcome,
-    );
+    // Once: an outcome already recorded is never overwritten.
+    await this.client.dispatchAttempt.updateMany({
+      where: { attemptId, outcome: null },
+      data: { outcome },
+    });
   }
 
   async getUnresolvedByOperation(): Promise<

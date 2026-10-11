@@ -17,6 +17,7 @@ import {
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
 import {
   type IdentityRepositoryClient,
+  identityPrisma,
   identityRows,
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
@@ -34,44 +35,22 @@ const LOCK_ORGANIZATION_SQL = `
   FOR UPDATE
 `;
 
-const COUNT_ACTIVE_KEYS_SQL = `
-  SELECT COUNT(*)::int AS active_keys
-  FROM api_keys
-  WHERE organization_id = $1
-    AND status = 'active'
-`;
-
-const INSERT_API_KEY_SQL = `
-  INSERT INTO api_keys
-    (id, organization_id, key_hash, key_prefix, name, scopes,
-     allowed_environments, expires_at)
-  VALUES ($1, $2, decode($3, 'hex'), $4, $5, $6, $7, $8)
-  RETURNING created_at
-`;
-
 /**
- * The live-credential inventory. Revoked rows stay durable and unlisted, and
- * the organization predicate is the only thing standing between one tenant and
- * another's key inventory. Ordering is newest-first with the identifier as a
- * deterministic tie-break. Same-millisecond mint order is process-local and
- * does not imply commit order.
+ * The columns an inventory entry is built from. The list query selects exactly
+ * these, and the revoke path's locked row is aliased to the same names, so one
+ * mapper serves both.
  */
-const LIST_API_KEYS_SQL = `
-  SELECT
-    id,
-    name,
-    key_prefix,
-    scopes,
-    allowed_environments,
-    status,
-    expires_at,
-    last_used_at,
-    created_at
-  FROM api_keys
-  WHERE organization_id = $1
-    AND status = 'active'
-  ORDER BY created_at DESC, id DESC
-`;
+const INVENTORY_SELECT = {
+  id: true,
+  name: true,
+  keyPrefix: true,
+  scopes: true,
+  allowedEnvironments: true,
+  status: true,
+  expiresAt: true,
+  lastUsedAt: true,
+  createdAt: true,
+} as const;
 
 /**
  * Claims the key being retired. Without this lock two concurrent rotations
@@ -97,26 +76,6 @@ const LOCK_API_KEY_SQL = `
   FOR UPDATE
 `;
 
-const REVOKE_API_KEY_SQL = `
-  UPDATE api_keys
-  SET status = 'revoked', revoked_at = $2
-  WHERE id = $1
-`;
-
-/**
- * The replacement inherits every column that describes what the key may do.
- * Rotation is exempt from the active-key cap: it never changes how many active
- * keys an Organization holds, and an Organization at its cap must still be
- * able to replace a leaked credential.
- */
-const INSERT_REPLACEMENT_SQL = `
-  INSERT INTO api_keys
-    (id, organization_id, key_hash, key_prefix, name, scopes,
-     allowed_environments, expires_at)
-  VALUES ($1, $2, decode($3, 'hex'), $4, $5, $6, $7, $8)
-  RETURNING created_at
-`;
-
 /**
  * Claims the key so a withdrawal cannot read a row that rotation is in the
  * middle of replacing. Two concurrent withdrawals need no protection — they
@@ -127,29 +86,17 @@ const LOCK_API_KEY_FOR_REVOKE_SQL = `
     encode(key_hash, 'hex') AS key_hash_hex,
     id,
     name,
-    key_prefix,
+    key_prefix AS "keyPrefix",
     scopes,
-    allowed_environments,
+    allowed_environments AS "allowedEnvironments",
     status,
-    expires_at,
-    last_used_at,
-    created_at
+    expires_at AS "expiresAt",
+    last_used_at AS "lastUsedAt",
+    created_at AS "createdAt"
   FROM api_keys
   WHERE id = $1
     AND organization_id = $2
   FOR UPDATE
-`;
-
-/**
- * Only an active key is changed. A key already withdrawn keeps the moment it
- * was withdrawn at: the record should say when the credential actually stopped
- * working, not when somebody last asked for it again.
- */
-const REVOKE_ACTIVE_API_KEY_SQL = `
-  UPDATE api_keys
-  SET status = 'revoked', revoked_at = $2
-  WHERE id = $1
-    AND status = 'active'
 `;
 
 function identityStoreError(message: string): AppError {
@@ -168,21 +115,6 @@ function stringArrayValue(
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
     ? value
     : undefined;
-}
-
-function createdAtValue(value: unknown): Date | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-  const createdAt = value.created_at;
-  if (createdAt instanceof Date && !Number.isNaN(createdAt.getTime())) {
-    return new Date(createdAt.getTime());
-  }
-  if (typeof createdAt === 'string') {
-    const parsed = new Date(createdAt);
-    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
-  }
-  return undefined;
 }
 
 function stringValue(
@@ -218,12 +150,12 @@ function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
 
   const apiKeyId = stringValue(value, 'id');
   const name = stringValue(value, 'name');
-  const keyPrefix = stringValue(value, 'key_prefix');
+  const keyPrefix = stringValue(value, 'keyPrefix');
   const scopes = stringArrayValue(value, 'scopes');
-  const allowedEnvironments = stringArrayValue(value, 'allowed_environments');
-  const expiresAt = dateValue(value, 'expires_at');
-  const lastUsedAt = dateValue(value, 'last_used_at');
-  const createdAt = dateValue(value, 'created_at');
+  const allowedEnvironments = stringArrayValue(value, 'allowedEnvironments');
+  const expiresAt = dateValue(value, 'expiresAt');
+  const lastUsedAt = dateValue(value, 'lastUsedAt');
+  const createdAt = dateValue(value, 'createdAt');
 
   // Mapped from the row rather than hardcoded to the value the query happens
   // to select: the filter belongs in one place, and a mapper that contradicts
@@ -329,29 +261,28 @@ export class PostgresOrganizationApiKeyRepository
           return { kind: 'key_not_rotatable' as const };
         }
 
-        await identityRows(transaction, REVOKE_API_KEY_SQL, [
-          input.apiKeyId,
-          input.now,
-        ]);
+        await transaction.apiKey.updateMany({
+          where: { id: input.apiKeyId },
+          data: { status: 'revoked', revokedAt: input.now },
+        });
 
-        const insertedRows = await identityRows(
-          transaction,
-          INSERT_REPLACEMENT_SQL,
-          [
-            input.replacementId,
-            input.organizationId,
-            input.keyHash,
-            input.keyPrefix,
+        // The replacement inherits every column that describes what the key
+        // may do. Rotation is exempt from the active-key cap: it never changes
+        // how many active keys an Organization holds, and an Organization at
+        // its cap must still be able to replace a leaked credential.
+        const { createdAt } = await transaction.apiKey.create({
+          data: {
+            id: input.replacementId,
+            organizationId: input.organizationId,
+            keyHash: Buffer.from(input.keyHash, 'hex'),
+            keyPrefix: input.keyPrefix,
             name,
-            [...scopes],
-            [...allowedEnvironments],
+            scopes: [...scopes],
+            allowedEnvironments: [...allowedEnvironments],
             expiresAt,
-          ],
-        );
-        const createdAt = createdAtValue(insertedRows[0]);
-        if (createdAt === undefined) {
-          throw identityStoreError('Identity data is invalid');
-        }
+          },
+          select: { createdAt: true },
+        });
 
         await recordOrganizationAuditEvent(
           transaction,
@@ -426,10 +357,13 @@ export class PostgresOrganizationApiKeyRepository
           throw identityStoreError('Identity data is invalid');
         }
 
-        await identityRows(transaction, REVOKE_ACTIVE_API_KEY_SQL, [
-          input.apiKeyId,
-          input.now,
-        ]);
+        // Only an active key is changed. A key already withdrawn keeps the
+        // moment it was withdrawn at: the record should say when the credential
+        // actually stopped working, not when somebody last asked for it again.
+        await transaction.apiKey.updateMany({
+          where: { id: input.apiKeyId, status: 'active' },
+          data: { status: 'revoked', revokedAt: input.now },
+        });
 
         // Reported as withdrawn whether this request changed it or a previous
         // one did: revocation is state-idempotent.
@@ -475,11 +409,18 @@ export class PostgresOrganizationApiKeyRepository
       throw identityStoreError('Identity API key query is invalid');
     }
 
+    // The live-credential inventory. Revoked rows stay durable and unlisted,
+    // and the organization predicate is the only thing standing between one
+    // tenant and another's key inventory. Ordering is newest-first with the
+    // identifier as a deterministic tie-break. Same-millisecond mint order is
+    // process-local and does not imply commit order.
     let rows: readonly unknown[];
     try {
-      rows = await identityRows(this.client, LIST_API_KEYS_SQL, [
-        input.organizationId,
-      ]);
+      rows = await identityPrisma(this.client).apiKey.findMany({
+        where: { organizationId: input.organizationId, status: 'active' },
+        select: INVENTORY_SELECT,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
     } catch {
       throw identityStoreError('Identity store is unavailable');
     }
@@ -537,37 +478,26 @@ export class PostgresOrganizationApiKeyRepository
           return { kind: 'entitlements_missing' as const };
         }
 
-        const countRows = await identityRows(
-          transaction,
-          COUNT_ACTIVE_KEYS_SQL,
-          [input.organizationId],
-        );
-        const countRow = countRows[0];
-        if (!isRecord(countRow) || typeof countRow.active_keys !== 'number') {
-          throw identityStoreError('Identity data is invalid');
-        }
-        if (countRow.active_keys >= input.activeKeyLimit) {
+        const activeKeys = await transaction.apiKey.count({
+          where: { organizationId: input.organizationId, status: 'active' },
+        });
+        if (activeKeys >= input.activeKeyLimit) {
           return { kind: 'limit_reached' as const };
         }
 
-        const insertedRows = await identityRows(
-          transaction,
-          INSERT_API_KEY_SQL,
-          [
-            input.apiKeyId,
-            input.organizationId,
-            input.keyHash,
-            input.keyPrefix,
-            input.name,
-            [...input.scopes],
-            [...input.allowedEnvironments],
-            input.expiresAt,
-          ],
-        );
-        const createdAt = createdAtValue(insertedRows[0]);
-        if (createdAt === undefined) {
-          throw identityStoreError('Identity data is invalid');
-        }
+        const { createdAt } = await transaction.apiKey.create({
+          data: {
+            id: input.apiKeyId,
+            organizationId: input.organizationId,
+            keyHash: Buffer.from(input.keyHash, 'hex'),
+            keyPrefix: input.keyPrefix,
+            name: input.name,
+            scopes: [...input.scopes],
+            allowedEnvironments: [...input.allowedEnvironments],
+            expiresAt: input.expiresAt,
+          },
+          select: { createdAt: true },
+        });
 
         await recordOrganizationAuditEvent(
           transaction,

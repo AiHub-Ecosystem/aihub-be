@@ -11,12 +11,14 @@ import type {
   SpeakingAudioUploadIntent,
 } from '@/modules/speaking/domain/speaking-audio-asset';
 import { isSpeakingAudioContentType } from '@/modules/speaking/domain/speaking-audio-asset';
-import type { PrismaClient } from '@prisma-client/client';
+import type {
+  SpeakingAudioAsset as AssetModel,
+  SpeakingAudioUploadIntent as IntentModel,
+  Prisma,
+  PrismaClient,
+} from '@prisma-client/client';
 
 export { createSpeakingAudioQueryClient } from './postgres-speaking-audio-upload.fixture-client';
-
-type Row = Record<string, unknown>;
-type Queryable = Pick<PrismaClient, '$queryRawUnsafe' | '$executeRawUnsafe'>;
 
 function storeUnavailable(cause?: unknown): AppError {
   return new AppError({
@@ -27,33 +29,7 @@ function storeUnavailable(cause?: unknown): AppError {
   });
 }
 
-function requiredString(row: Row, key: string): string {
-  const value = row[key];
-  if (typeof value !== 'string') {
-    throw storeUnavailable(new Error('Speaking Audio row is invalid'));
-  }
-  return value;
-}
-
-function requiredDate(row: Row, key: string): Date {
-  const value = row[key];
-  const date = value instanceof Date ? value : new Date(String(value));
-  if (Number.isNaN(date.getTime())) {
-    throw storeUnavailable(new Error('Speaking Audio row is invalid'));
-  }
-  return date;
-}
-
-function requiredInteger(row: Row, key: string): number {
-  const value = row[key];
-  if (typeof value !== 'number' || !Number.isInteger(value)) {
-    throw storeUnavailable(new Error('Speaking Audio row is invalid'));
-  }
-  return value;
-}
-
-function requiredEnvironment(row: Row): SpeakingAudioEnvironment {
-  const value = row.environment;
+function requiredEnvironment(value: string): SpeakingAudioEnvironment {
   if (value !== 'production' && value !== 'sandbox') {
     throw storeUnavailable(new Error('Speaking Audio environment is invalid'));
   }
@@ -61,90 +37,81 @@ function requiredEnvironment(row: Row): SpeakingAudioEnvironment {
 }
 
 function mapIntent(
-  row: Row | undefined,
+  row: IntentModel | undefined,
 ): SpeakingAudioUploadIntent | undefined {
   if (row === undefined) {
     return undefined;
   }
-  const contentType = requiredString(row, 'content_type');
-  const status = requiredString(row, 'status');
   if (
-    !isSpeakingAudioContentType(contentType) ||
-    (status !== 'open' && status !== 'rejected')
+    !isSpeakingAudioContentType(row.contentType) ||
+    (row.status !== 'open' && row.status !== 'rejected')
   ) {
     throw storeUnavailable(new Error('Speaking Audio intent is invalid'));
   }
   return {
-    assetId: requiredString(row, 'id'),
-    organizationId: requiredString(row, 'organization_id'),
-    endUserId: requiredString(row, 'end_user_id'),
-    environment: requiredEnvironment(row),
-    objectKey: requiredString(row, 'object_key'),
-    contentType,
-    byteSize: requiredInteger(row, 'byte_size'),
-    createdAt: requiredDate(row, 'created_at'),
-    expiresAt: requiredDate(row, 'expires_at'),
-    status,
+    assetId: row.id,
+    organizationId: row.organizationId,
+    endUserId: row.endUserId,
+    environment: requiredEnvironment(row.environment),
+    objectKey: row.objectKey,
+    contentType: row.contentType,
+    byteSize: row.byteSize,
+    createdAt: row.createdAt,
+    expiresAt: row.expiresAt,
+    status: row.status,
   };
 }
 
-function mapAsset(row: Row | undefined): SpeakingAudioAsset | undefined {
+function mapAsset(row: AssetModel | undefined): SpeakingAudioAsset | undefined {
   if (row === undefined) {
     return undefined;
   }
-  const contentType = requiredString(row, 'content_type');
-  if (!isSpeakingAudioContentType(contentType)) {
+  if (!isSpeakingAudioContentType(row.contentType)) {
     throw storeUnavailable(new Error('Speaking Audio asset is invalid'));
   }
   return {
-    assetId: requiredString(row, 'id'),
-    organizationId: requiredString(row, 'organization_id'),
-    endUserId: requiredString(row, 'end_user_id'),
-    environment: requiredEnvironment(row),
-    objectKey: requiredString(row, 'object_key'),
-    contentType,
-    byteSize: requiredInteger(row, 'byte_size'),
-    acceptedAt: requiredDate(row, 'accepted_at'),
-    retentionExpiresAt: requiredDate(row, 'retention_expires_at'),
+    assetId: row.id,
+    organizationId: row.organizationId,
+    endUserId: row.endUserId,
+    environment: requiredEnvironment(row.environment),
+    objectKey: row.objectKey,
+    contentType: row.contentType,
+    byteSize: row.byteSize,
+    acceptedAt: row.acceptedAt,
+    retentionExpiresAt: row.retentionExpiresAt,
   };
 }
 
-const INTENT_COLUMNS = `
-  id, organization_id, end_user_id, environment, object_key, content_type,
-  byte_size, status, created_at, expires_at
+function ownerWhere(owner: SpeakingAudioUploadOwner) {
+  return {
+    id: owner.assetId,
+    organizationId: owner.organizationId,
+    endUserId: owner.endUserId,
+    environment: owner.environment,
+  };
+}
+
+/**
+ * The one row lock in this repository stays SQL: Prisma has no `FOR UPDATE`.
+ * Columns are aliased to the model's field names so the row maps like any other.
+ */
+const LOCK_INTENT_SQL = `
+  SELECT
+    id,
+    organization_id AS "organizationId",
+    end_user_id AS "endUserId",
+    environment,
+    object_key AS "objectKey",
+    content_type AS "contentType",
+    byte_size AS "byteSize",
+    status,
+    created_at AS "createdAt",
+    expires_at AS "expiresAt"
+  FROM speaking_audio_upload_intents
+  WHERE id = $1 AND organization_id = $2 AND end_user_id = $3
+    AND environment = $4
+  FOR UPDATE
 `;
-
-const ASSET_COLUMNS = `
-  id, organization_id, end_user_id, environment, object_key, content_type,
-  byte_size, accepted_at, retention_expires_at
-`;
-
-type SpeakingAudioIntentRow = Row & {
-  readonly id: unknown;
-  readonly organization_id: unknown;
-  readonly end_user_id: unknown;
-  readonly environment: unknown;
-  readonly object_key: unknown;
-  readonly content_type: unknown;
-  readonly byte_size: unknown;
-  readonly status: unknown;
-  readonly created_at: unknown;
-  readonly expires_at: unknown;
-};
-
-type SpeakingAudioAssetRow = Row & {
-  readonly id: unknown;
-  readonly organization_id: unknown;
-  readonly end_user_id: unknown;
-  readonly environment: unknown;
-  readonly object_key: unknown;
-  readonly content_type: unknown;
-  readonly byte_size: unknown;
-  readonly accepted_at: unknown;
-  readonly retention_expires_at: unknown;
-};
-
-type IdRow = Row & { readonly id: unknown };
 
 export class PostgresSpeakingAudioUploadRepository
   implements SpeakingAudioUploadRepositoryPort
@@ -152,25 +119,21 @@ export class PostgresSpeakingAudioUploadRepository
   constructor(private readonly client: PrismaClient) {}
 
   async createIntent(intent: SpeakingAudioUploadIntent): Promise<void> {
-    await this.execute(
-      this.client,
-      `
-        INSERT INTO speaking_audio_upload_intents
-          (id, organization_id, end_user_id, environment, object_key,
-           content_type, byte_size, status, created_at, expires_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8, $9)
-      `,
-      [
-        intent.assetId,
-        intent.organizationId,
-        intent.endUserId,
-        intent.environment,
-        intent.objectKey,
-        intent.contentType,
-        intent.byteSize,
-        intent.createdAt,
-        intent.expiresAt,
-      ],
+    await this.run(() =>
+      this.client.speakingAudioUploadIntent.create({
+        data: {
+          id: intent.assetId,
+          organizationId: intent.organizationId,
+          endUserId: intent.endUserId,
+          environment: intent.environment,
+          objectKey: intent.objectKey,
+          contentType: intent.contentType,
+          byteSize: intent.byteSize,
+          status: 'open',
+          createdAt: intent.createdAt,
+          expiresAt: intent.expiresAt,
+        },
+      }),
     );
   }
 
@@ -178,22 +141,11 @@ export class PostgresSpeakingAudioUploadRepository
     owner: SpeakingAudioUploadOwner,
   ): Promise<SpeakingAudioUploadLookup> {
     const intent = mapIntent(
-      (
-        await this.run<SpeakingAudioIntentRow>(
-          `
-            SELECT ${INTENT_COLUMNS}
-            FROM speaking_audio_upload_intents
-            WHERE id = $1 AND organization_id = $2 AND end_user_id = $3
-              AND environment = $4
-          `,
-          [
-            owner.assetId,
-            owner.organizationId,
-            owner.endUserId,
-            owner.environment,
-          ],
-        )
-      )[0],
+      (await this.run(() =>
+        this.client.speakingAudioUploadIntent.findFirst({
+          where: ownerWhere(owner),
+        }),
+      )) ?? undefined,
     );
     if (intent !== undefined) {
       return { kind: 'intent', intent };
@@ -207,63 +159,40 @@ export class PostgresSpeakingAudioUploadRepository
     readonly owner: SpeakingAudioUploadOwner;
     readonly now: Date;
   }): Promise<boolean> {
-    return (
-      (
-        await this.run<IdRow>(
-          `
-          SELECT id
-          FROM speaking_audio_upload_intents
-          WHERE id = $1 AND organization_id = $2 AND end_user_id = $3
-            AND environment = $4 AND status = 'open' AND expires_at > $5
-        `,
-          [
-            input.owner.assetId,
-            input.owner.organizationId,
-            input.owner.endUserId,
-            input.owner.environment,
-            input.now,
-          ],
-        )
-      ).length === 1
+    const matching = await this.run(() =>
+      this.client.speakingAudioUploadIntent.count({
+        where: {
+          ...ownerWhere(input.owner),
+          status: 'open',
+          expiresAt: { gt: input.now },
+        },
+      }),
     );
+    return matching === 1;
   }
 
   async rejectIntent(input: {
     readonly owner: SpeakingAudioUploadOwner;
     readonly now: Date;
   }): Promise<boolean> {
-    return (
-      (
-        await this.run<IdRow>(
-          `
-          UPDATE speaking_audio_upload_intents
-          SET status = 'rejected'
-          WHERE id = $1 AND organization_id = $2 AND end_user_id = $3
-            AND environment = $4 AND status = 'open'
-            AND expires_at > $5
-          RETURNING id
-        `,
-          [
-            input.owner.assetId,
-            input.owner.organizationId,
-            input.owner.endUserId,
-            input.owner.environment,
-            input.now,
-          ],
-        )
-      ).length === 1
+    const updated = await this.run(() =>
+      this.client.speakingAudioUploadIntent.updateMany({
+        where: {
+          ...ownerWhere(input.owner),
+          status: 'open',
+          expiresAt: { gt: input.now },
+        },
+        data: { status: 'rejected' },
+      }),
     );
+    return updated.count === 1;
   }
 
   async removeRejectedIntent(owner: SpeakingAudioUploadOwner): Promise<void> {
-    await this.execute(
-      this.client,
-      `
-        DELETE FROM speaking_audio_upload_intents
-        WHERE id = $1 AND organization_id = $2 AND end_user_id = $3
-          AND environment = $4 AND status = 'rejected'
-      `,
-      [owner.assetId, owner.organizationId, owner.endUserId, owner.environment],
+    await this.run(() =>
+      this.client.speakingAudioUploadIntent.deleteMany({
+        where: { ...ownerWhere(owner), status: 'rejected' },
+      }),
     );
   }
 
@@ -273,24 +202,13 @@ export class PostgresSpeakingAudioUploadRepository
     readonly asset: SpeakingAudioAsset;
   }): Promise<'created' | 'already_completed' | 'missing'> {
     return this.transaction(async (client) => {
-      const intentRow = (
-        await this.query<SpeakingAudioIntentRow>(
-          client,
-          `
-            SELECT ${INTENT_COLUMNS}
-            FROM speaking_audio_upload_intents
-            WHERE id = $1 AND organization_id = $2 AND end_user_id = $3
-              AND environment = $4
-            FOR UPDATE
-          `,
-          [
-            input.owner.assetId,
-            input.owner.organizationId,
-            input.owner.endUserId,
-            input.owner.environment,
-          ],
-        )
-      )[0];
+      const [intentRow] = await client.$queryRawUnsafe<readonly IntentModel[]>(
+        LOCK_INTENT_SQL,
+        input.owner.assetId,
+        input.owner.organizationId,
+        input.owner.endUserId,
+        input.owner.environment,
+      );
 
       if (intentRow === undefined) {
         return (await this.findAsset(client, input.owner)) === undefined
@@ -318,42 +236,23 @@ export class PostgresSpeakingAudioUploadRepository
         throw storeUnavailable(new Error('Speaking Audio intent changed'));
       }
 
-      await this.execute(
-        client,
-        `
-          INSERT INTO speaking_audio_assets
-            (id, organization_id, end_user_id, environment, object_key,
-             content_type, byte_size, accepted_at, retention_expires_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        `,
-        [
-          input.asset.assetId,
-          input.asset.organizationId,
-          input.asset.endUserId,
-          input.asset.environment,
-          input.asset.objectKey,
-          input.asset.contentType,
-          input.asset.byteSize,
-          input.asset.acceptedAt,
-          input.asset.retentionExpiresAt,
-        ],
-      );
-      const removed = await this.query<IdRow>(
-        client,
-        `
-          DELETE FROM speaking_audio_upload_intents
-          WHERE id = $1 AND organization_id = $2 AND end_user_id = $3
-            AND environment = $4 AND status = 'open'
-          RETURNING id
-        `,
-        [
-          input.owner.assetId,
-          input.owner.organizationId,
-          input.owner.endUserId,
-          input.owner.environment,
-        ],
-      );
-      if (removed.length !== 1) {
+      await client.speakingAudioAsset.create({
+        data: {
+          id: input.asset.assetId,
+          organizationId: input.asset.organizationId,
+          endUserId: input.asset.endUserId,
+          environment: input.asset.environment,
+          objectKey: input.asset.objectKey,
+          contentType: input.asset.contentType,
+          byteSize: input.asset.byteSize,
+          acceptedAt: input.asset.acceptedAt,
+          retentionExpiresAt: input.asset.retentionExpiresAt,
+        },
+      });
+      const removed = await client.speakingAudioUploadIntent.deleteMany({
+        where: { ...ownerWhere(input.owner), status: 'open' },
+      });
+      if (removed.count !== 1) {
         throw storeUnavailable(new Error('Speaking Audio intent changed'));
       }
       return 'created';
@@ -365,29 +264,36 @@ export class PostgresSpeakingAudioUploadRepository
     readonly limit: number;
     readonly after?: { readonly createdAt: Date; readonly assetId: string };
   }): Promise<readonly SpeakingAudioUploadIntent[]> {
-    const cursor =
-      input.after === undefined ? '' : 'AND (created_at, id) > ($2, $3)';
-    const values =
-      input.after === undefined
-        ? [input.expiredBefore, input.limit]
-        : [
-            input.expiredBefore,
-            input.after.createdAt,
-            input.after.assetId,
-            input.limit,
-          ];
-    const limitParameter = input.after === undefined ? '$2' : '$4';
-    const rows = await this.run<SpeakingAudioIntentRow>(
-      `
-        SELECT ${INTENT_COLUMNS}
-        FROM speaking_audio_upload_intents
-        WHERE (status = 'rejected'
-           OR (status = 'open' AND expires_at <= $1))
-          ${cursor}
-        ORDER BY created_at, id
-        LIMIT ${limitParameter}
-      `,
-      values,
+    const { after } = input;
+    const rows = await this.run(() =>
+      this.client.speakingAudioUploadIntent.findMany({
+        where: {
+          AND: [
+            {
+              OR: [
+                { status: 'rejected' },
+                { status: 'open', expiresAt: { lte: input.expiredBefore } },
+              ],
+            },
+            // `(created_at, id) > ($after.createdAt, $after.assetId)`
+            ...(after === undefined
+              ? []
+              : [
+                  {
+                    OR: [
+                      { createdAt: { gt: after.createdAt } },
+                      {
+                        createdAt: after.createdAt,
+                        id: { gt: after.assetId },
+                      },
+                    ],
+                  },
+                ]),
+          ],
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: input.limit,
+      }),
     );
     return rows.flatMap((row) => {
       const intent = mapIntent(row);
@@ -400,54 +306,38 @@ export class PostgresSpeakingAudioUploadRepository
     readonly expiredBefore: Date;
   }): Promise<boolean> {
     const { intent } = input;
-    const result = await this.run<IdRow>(
-      `
-        DELETE FROM speaking_audio_upload_intents
-        WHERE id = $1 AND organization_id = $2 AND end_user_id = $3
-          AND environment = $4 AND object_key = $5 AND status = $6
-          AND ($6 = 'rejected' OR expires_at <= $7)
-        RETURNING id
-      `,
-      [
-        intent.assetId,
-        intent.organizationId,
-        intent.endUserId,
-        intent.environment,
-        intent.objectKey,
-        intent.status,
-        input.expiredBefore,
-      ],
+    const removed = await this.run(() =>
+      this.client.speakingAudioUploadIntent.deleteMany({
+        where: {
+          id: intent.assetId,
+          organizationId: intent.organizationId,
+          endUserId: intent.endUserId,
+          environment: intent.environment,
+          objectKey: intent.objectKey,
+          status: intent.status,
+          // A rejected intent is removable at once; an open one only after expiry.
+          ...(intent.status === 'rejected'
+            ? {}
+            : { expiresAt: { lte: input.expiredBefore } }),
+        },
+      }),
     );
-    return result.length === 1;
+    return removed.count === 1;
   }
 
   private async findAsset(
-    client: Queryable,
+    client: Pick<Prisma.TransactionClient, 'speakingAudioAsset'>,
     owner: SpeakingAudioUploadOwner,
   ): Promise<SpeakingAudioAsset | undefined> {
     return mapAsset(
-      (
-        await this.query<SpeakingAudioAssetRow>(
-          client,
-          `
-            SELECT ${ASSET_COLUMNS}
-            FROM speaking_audio_assets
-            WHERE id = $1 AND organization_id = $2 AND end_user_id = $3
-              AND environment = $4
-          `,
-          [
-            owner.assetId,
-            owner.organizationId,
-            owner.endUserId,
-            owner.environment,
-          ],
-        )
-      )[0],
+      (await this.run(() =>
+        client.speakingAudioAsset.findFirst({ where: ownerWhere(owner) }),
+      )) ?? undefined,
     );
   }
 
   private async transaction<T>(
-    run: (client: Queryable) => Promise<T>,
+    run: (client: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {
     try {
       return await this.client.$transaction(
@@ -462,35 +352,9 @@ export class PostgresSpeakingAudioUploadRepository
     }
   }
 
-  private async run<Result extends object = Row>(
-    sql: string,
-    values: readonly unknown[],
-  ): Promise<readonly Result[]> {
-    return this.query(this.client, sql, values);
-  }
-
-  private async query<Result extends object = Row>(
-    client: Queryable,
-    sql: string,
-    values: readonly unknown[],
-  ): Promise<readonly Result[]> {
+  private async run<T>(operation: () => Promise<T>): Promise<T> {
     try {
-      return await client.$queryRawUnsafe<readonly Result[]>(sql, ...values);
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
-      throw storeUnavailable(error);
-    }
-  }
-
-  private async execute(
-    client: Queryable,
-    sql: string,
-    values: readonly unknown[],
-  ): Promise<number> {
-    try {
-      return await client.$executeRawUnsafe(sql, ...values);
+      return await operation();
     } catch (error) {
       if (error instanceof AppError) {
         throw error;

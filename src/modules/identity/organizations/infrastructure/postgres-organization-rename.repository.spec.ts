@@ -1,10 +1,7 @@
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { RenameOrganizationRecordInput } from '@/modules/identity/organizations/application/organization-rename-record.port';
 
-import type {
-  PostgresIdentityQueryClient,
-  PostgresIdentityTransactionalClient,
-} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import type { PrismaClient } from '@prisma-client/client';
 import { PostgresOrganizationRenameRepository } from './postgres-organization-rename.repository';
 
 const USER_ID = 'usr_01J00000000000000000000001';
@@ -14,47 +11,76 @@ interface RecordedQuery {
   readonly values: readonly unknown[];
 }
 
+interface ScriptedPostgres {
+  readonly writes: RecordedQuery[];
+  readonly deniedWrites: RecordedQuery[];
+  readonly renames: { readonly id: string; readonly name: string }[];
+}
+
 /**
  * Answers the two locking reads in order and records every write, so the
  * authority policy runs in the fast lane. The database lane proves the locks
  * and the trigger; this proves the decisions taken under them.
+ *
+ * A statement on the client itself is outside the transaction, which is where a
+ * refusal is recorded. Inside it, the reads are the two locks, a rename goes
+ * through the model delegate, and any other statement is an audit write.
  */
-class ScriptedPostgres implements PostgresIdentityTransactionalClient {
-  readonly writes: RecordedQuery[] = [];
-  readonly deniedWrites: RecordedQuery[] = [];
+function scriptedClient(
+  organization: Record<string, unknown> | undefined,
+  membership: Record<string, unknown> | undefined,
+): PrismaClient & ScriptedPostgres {
+  const recorder: ScriptedPostgres = {
+    writes: [],
+    deniedWrites: [],
+    renames: [],
+  };
 
-  constructor(
-    private readonly organization: Record<string, unknown> | undefined,
-    private readonly membership: Record<string, unknown> | undefined,
-  ) {}
+  const client = {
+    ...recorder,
+    $queryRawUnsafe: async (_text: string, ...values: unknown[]) => {
+      recorder.deniedWrites.push({ values });
+      return [];
+    },
+    $executeRawUnsafe: async (_text: string, ...values: unknown[]) => {
+      recorder.deniedWrites.push({ values });
+      return 1;
+    },
+    $transaction: async <T>(
+      callback: (transaction: unknown) => Promise<T>,
+    ): Promise<T> => {
+      let read = 0;
+      return callback({
+        $queryRawUnsafe: async (_text: string, ...values: unknown[]) => {
+          if (read === 0) {
+            read += 1;
+            return organization === undefined ? [] : [organization];
+          }
+          if (read === 1) {
+            read += 1;
+            return membership === undefined ? [] : [membership];
+          }
+          recorder.writes.push({ values });
+          return [];
+        },
+        $executeRawUnsafe: async (_text: string, ...values: unknown[]) => {
+          recorder.writes.push({ values });
+          return 1;
+        },
+        organization: {
+          update: async (args: {
+            where: { id: string };
+            data: { name: string };
+          }) => {
+            recorder.renames.push({ id: args.where.id, name: args.data.name });
+            return {};
+          },
+        },
+      });
+    },
+  };
 
-  async query(
-    _text: string,
-    values: readonly unknown[],
-  ): Promise<readonly unknown[]> {
-    this.deniedWrites.push({ values });
-    return [];
-  }
-
-  transaction<T>(
-    callback: (client: PostgresIdentityQueryClient) => Promise<T>,
-  ): Promise<T> {
-    let read = 0;
-    return callback({
-      query: async (_text, values) => {
-        if (read === 0) {
-          read += 1;
-          return this.organization === undefined ? [] : [this.organization];
-        }
-        if (read === 1) {
-          read += 1;
-          return this.membership === undefined ? [] : [this.membership];
-        }
-        this.writes.push({ values });
-        return [];
-      },
-    });
-  }
+  return client as unknown as PrismaClient & ScriptedPostgres;
 }
 
 function input(name = 'Acme Learning'): RenameOrganizationRecordInput {
@@ -75,8 +101,8 @@ function input(name = 'Acme Learning'): RenameOrganizationRecordInput {
 function scripted(
   membership: { role: string; status: string } | undefined,
   organizationStatus = 'active',
-): ScriptedPostgres {
-  return new ScriptedPostgres(
+): PrismaClient & ScriptedPostgres {
+  return scriptedClient(
     { id: ORGANIZATION_ID, name: 'Acme', status: organizationStatus },
     membership,
   );
@@ -102,6 +128,9 @@ describe('PostgresOrganizationRenameRepository', () => {
       name: 'Acme Learning',
     });
 
+    expect(db.renames).toEqual([
+      { id: ORGANIZATION_ID, name: 'Acme Learning' },
+    ]);
     const [event] = auditValues(db.writes);
     expect(event).toEqual(
       expect.arrayContaining([
@@ -179,7 +208,7 @@ describe('PostgresOrganizationRenameRepository', () => {
   );
 
   it('refuses an unknown Organization without recording anything', async () => {
-    const db = new ScriptedPostgres(undefined, undefined);
+    const db = scriptedClient(undefined, undefined);
 
     await expect(
       new PostgresOrganizationRenameRepository(db).renameOrganization(input()),

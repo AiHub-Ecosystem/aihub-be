@@ -91,3 +91,4 @@ export {
   postgresError,
   runGuardedTransaction,
 } from './infrastructure/prisma-raw';
+export { createFixturePrismaClient } from './infrastructure/prisma-client';

@@ -30,7 +30,27 @@ describe('createSharedPrismaClients', () => {
     await clients.close();
   });
 
-  it('carries the pool settings every control-plane pool already used', async () => {
+  it('keeps each role its own share of a pool the roles have in common', async () => {
+    const shared = createSharedPrismaClients({
+      databaseUrl: equal,
+      controlPlaneDatabaseUrl: equal,
+      controlPlaneReadDatabaseUrl: equal,
+    });
+    const split = createSharedPrismaClients({
+      databaseUrl: distinct,
+      controlPlaneDatabaseUrl: equal,
+      controlPlaneReadDatabaseUrl: equal,
+    });
+
+    expect(shared.runtime.pool.options.max).toBe(30);
+    expect(split.runtime.pool.options.max).toBe(10);
+    expect(split.controlPlane.pool.options.max).toBe(20);
+
+    await shared.close();
+    await split.close();
+  });
+
+  it('carries the connection and idle timeouts every control-plane pool already used', async () => {
     const clients = createSharedPrismaClients({
       databaseUrl: equal,
       controlPlaneDatabaseUrl: equal,
@@ -38,7 +58,6 @@ describe('createSharedPrismaClients', () => {
     });
 
     const pool = clients.runtime.pool;
-    expect(pool.options.max).toBe(10);
     expect(pool.options.connectionTimeoutMillis).toBe(1_000);
     expect(pool.options.idleTimeoutMillis).toBe(30_000);
 

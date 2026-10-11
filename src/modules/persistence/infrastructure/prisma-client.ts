@@ -34,8 +34,13 @@ import { isLifecycleProperty } from './prisma-raw';
 export function createPrismaClient(
   role: PostgresPoolName,
   databaseUrl: string,
+  /** How many connection roles this client serves, which sizes its pool. */
+  roles = 1,
 ): PrismaClientHolder {
-  const pool = createPostgresPool(role, postgresPoolOptions(databaseUrl));
+  const pool = createPostgresPool(
+    role,
+    postgresPoolOptions(databaseUrl, roles),
+  );
   const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
   return {
@@ -101,6 +106,14 @@ export function createSharedPrismaClients(
 ): SharedPrismaClients {
   const pools = new Map<string, PrismaClientHolder>();
 
+  const configured = [
+    urls.databaseUrl,
+    urls.controlPlaneDatabaseUrl,
+    urls.controlPlaneReadDatabaseUrl,
+  ].filter((url): url is string => url !== undefined && url.trim().length > 0);
+  const rolesPerUrl = (url: string): number =>
+    configured.filter((candidate) => candidate === url).length;
+
   const holderFor = (
     role: PostgresConnectionRole,
     databaseUrl: string | undefined,
@@ -114,7 +127,11 @@ export function createSharedPrismaClients(
       return existing;
     }
 
-    const created = createPrismaClient(role, databaseUrl);
+    const created = createPrismaClient(
+      role,
+      databaseUrl,
+      rolesPerUrl(databaseUrl),
+    );
     pools.set(databaseUrl, created);
     return created;
   };
@@ -136,4 +153,22 @@ export function createSharedPrismaClients(
       }
     },
   };
+}
+
+/**
+ * Test-only: a client with a pool of its own for the unchanged database-lane
+ * specs, which open their own connection rather than receive the shared one.
+ * No production module constructs it (ADR-0088, "Test-only compatibility
+ * exceptions").
+ */
+export function createFixturePrismaClient(
+  databaseUrl: string,
+  unavailableMessage = 'DATABASE_URL is missing',
+): PrismaClient & { close(): Promise<void> } {
+  if (databaseUrl.trim().length === 0) {
+    throw new Error(unavailableMessage);
+  }
+
+  const holder = createPrismaClient('integration-test', databaseUrl);
+  return Object.assign(holder.prisma, { close: holder.close });
 }

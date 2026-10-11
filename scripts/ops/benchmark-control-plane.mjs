@@ -413,9 +413,43 @@ function makeModes(databaseUrl) {
     },
   };
 
+  // The exact SQL of the raw mode, issued through Prisma's raw path on the same
+  // adapter pool: what the production repositories do where the generated
+  // client cannot express the statement or where one statement is the contract.
+  const prismaRaw = {
+    metrics: prismaMetrics,
+    normalizeApiKey: rawApiKeyOutput,
+    normalizeMeteringInsert: meteringInsertOutput,
+    normalizeUsageAggregate: aggregateOutput,
+    async apiKeyLookup() {
+      const rows = await prismaClient.$queryRawUnsafe(
+        API_KEY_LOOKUP_SQL,
+        LOOKUP_HASH,
+      );
+      return rows[0] ?? null;
+    },
+    async meteringInsert(requestId) {
+      return prismaClient.$queryRawUnsafe(
+        METERING_INSERT_SQL,
+        ...usageRecordValues(usageRecord(requestId)),
+      );
+    },
+    async usageAggregate(from, to) {
+      const rows = await prismaClient.$queryRawUnsafe(
+        USAGE_AGGREGATE_SQL,
+        ORGANIZATION_ID,
+        from,
+        to,
+        null,
+      );
+      return rows[0];
+    },
+  };
+
   for (const [modeName, mode] of Object.entries({
     raw,
     prisma,
+    prismaRaw,
   })) {
     mode.apiKeyLookup = mode.apiKeyLookup.bind(mode);
     mode.meteringInsert = mode.meteringInsert.bind(mode);
@@ -426,6 +460,7 @@ function makeModes(databaseUrl) {
   return {
     raw,
     prisma,
+    prismaRaw,
     async close() {
       await prismaClient.$disconnect();
       await Promise.all([rawPool.end(), prismaPool.end()]);
@@ -433,11 +468,18 @@ function makeModes(databaseUrl) {
   };
 }
 
+const MODE_NAMES = ['raw', 'prisma', 'prismaRaw'];
+const MODE_LABELS = {
+  raw: 'Raw pg',
+  prisma: 'Prisma client',
+  prismaRaw: 'Prisma raw SQL',
+};
+
 async function verifyOutputs(modes, from, to, cleanupPool) {
   const operationResults = new Map();
   const fixtureRequestId = 'bench_verify_523';
 
-  for (const modeName of ['raw', 'prisma']) {
+  for (const modeName of MODE_NAMES) {
     const mode = modes[modeName];
     const rawApiKey = await mode.apiKeyLookup();
     const outputs = {
@@ -569,38 +611,33 @@ function range(values) {
 }
 
 function renderResults(results, operations) {
-  const modes = ['raw', 'prisma'];
-  const rows = operations.map((operation) => {
-    const cell = (modeName) => {
-      const passes = results.get(`${modeName}:${operation.name}`);
-      const p50 = range(passes.map((pass) => pass.p50));
-      const p95 = range(passes.map((pass) => pass.p95));
-      return `${p50} / ${p95}`;
-    };
-    const rates = modes
-      .map((modeName) => {
-        const passes = results.get(`${modeName}:${operation.name}`);
-        return range(passes.map((pass) => pass.completedRate));
-      })
-      .join(' / ');
-    const roundTrips = modes
-      .map((modeName) => {
-        const passes = results.get(`${modeName}:${operation.name}`);
-        return range(passes.map((pass) => pass.roundTrips));
-      })
-      .join(' / ');
-    const failures = modes
-      .map((modeName) => {
-        const passes = results.get(`${modeName}:${operation.name}`);
-        return range(passes.map((pass) => pass.failures));
-      })
-      .join(' / ');
-    return `| ${operation.label} | ${roundTrips} | ${cell('raw')} | ${cell('prisma')} | ${rates} | ${failures} |`;
-  });
+  const column = (operation, field) =>
+    MODE_NAMES.map((modeName) =>
+      range(
+        results.get(`${modeName}:${operation.name}`).map((pass) => pass[field]),
+      ),
+    ).join(' / ');
+  const latency = (operation, modeName) => {
+    const passes = results.get(`${modeName}:${operation.name}`);
+    return `${range(passes.map((pass) => pass.p50))} / ${range(
+      passes.map((pass) => pass.p95),
+    )}`;
+  };
+  const rows = operations.map(
+    (operation) =>
+      `| ${operation.label} | ${column(operation, 'roundTrips')} | ${MODE_NAMES.map(
+        (modeName) => latency(operation, modeName),
+      ).join(
+        ' | ',
+      )} | ${column(operation, 'completedRate')} | ${column(operation, 'failures')} |`,
+  );
+  const labels = MODE_NAMES.map((modeName) => MODE_LABELS[modeName]);
   process.stdout.write(
     [
-      '| Operation | Round trips (pg / Prisma) | Raw pg p50 / p95 ms | Prisma p50 / p95 ms | Completed rate/s (pg / Prisma) | Failures (pg / Prisma) |',
-      '| --- | ---: | ---: | ---: | ---: | ---: |',
+      `| Operation | Round trips (${labels.join(' / ')}) | ${labels
+        .map((label) => `${label} p50 / p95 ms`)
+        .join(' | ')} | Completed rate/s | Failures |`,
+      `| --- | ---: | ${labels.map(() => '---: |').join(' ')} ---: | ---: |`,
       ...rows,
     ].join('\n') + '\n',
   );
@@ -655,7 +692,7 @@ async function main() {
     const to = new Date(Date.now() + 10 * 60 * 1_000);
     await verifyOutputs(modes, from, to, cleanupPool);
     process.stdout.write(
-      'Both implementations returned equal fixture outputs before timing.\n',
+      'Every implementation returned equal fixture outputs before timing.\n',
     );
 
     const operations = [
@@ -665,10 +702,8 @@ async function main() {
       { name: 'usageAggregate', label: 'Request/token aggregate', from, to },
     ];
     const results = new Map();
-    const passOrders = [
-      ['raw', 'prisma'],
-      ['prisma', 'raw'],
-    ];
+    // Forward, then reversed, so no mode always runs on a warmer database.
+    const passOrders = [MODE_NAMES, [...MODE_NAMES].reverse()];
     for (let passIndex = 0; passIndex < passOrders.length; passIndex += 1) {
       for (const modeName of passOrders[passIndex]) {
         const mode = modes[modeName];

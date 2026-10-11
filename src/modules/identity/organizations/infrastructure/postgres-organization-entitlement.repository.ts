@@ -14,6 +14,7 @@ import {
   isRecord,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
+import { organizationKeyHashes } from '@/modules/identity/shared/infrastructure/organization-key-hashes';
 import {
   type IdentityRepositoryClient,
   identityRows,
@@ -22,12 +23,6 @@ import {
 
 const LOCK_ORGANIZATION_SQL = `
   SELECT name, entitlements FROM organizations WHERE id = $1 FOR UPDATE
-`;
-const GRANT_ENTITLEMENT_SQL = `
-  UPDATE organizations SET entitlements = array_append(entitlements, $2) WHERE id = $1
-`;
-const ORGANIZATION_KEY_HASHES_SQL = `
-  SELECT encode(key_hash, 'hex') AS hash_hex FROM api_keys WHERE organization_id = $1
 `;
 
 export class PostgresOrganizationEntitlementRepository
@@ -66,24 +61,17 @@ export class PostgresOrganizationEntitlementRepository
           throw identityStoreError('Identity data is invalid');
         }
 
-        const keyRows = await identityRows(
+        const keyHashes = await organizationKeyHashes(
           transaction,
-          ORGANIZATION_KEY_HASHES_SQL,
-          [input.organizationId],
+          input.organizationId,
         );
-        const keyHashes = keyRows.map((row) => {
-          const hash = isRecord(row) ? stringValue(row, 'hash_hex') : undefined;
-          if (hash === undefined)
-            throw identityStoreError('Identity data is invalid');
-          return hash;
-        });
         if (entitlements.includes(input.entitlement))
           return { kind: 'unchanged' as const, keyHashes };
 
-        await identityRows(transaction, GRANT_ENTITLEMENT_SQL, [
-          input.organizationId,
-          input.entitlement,
-        ]);
+        await transaction.organization.update({
+          where: { id: input.organizationId },
+          data: { entitlements: { push: input.entitlement } },
+        });
         await recordOrganizationAuditEvent(
           transaction,
           auditStamp(

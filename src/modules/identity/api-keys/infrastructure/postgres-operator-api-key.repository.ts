@@ -33,13 +33,6 @@ const LOCK_ACTIVE_ORGANIZATION_SQL = `
   FOR UPDATE
 `;
 
-const INSERT_API_KEY_SQL = `
-  INSERT INTO api_keys
-    (id, organization_id, key_hash, key_prefix, name, scopes,
-     allowed_environments)
-  VALUES ($1, $2, decode($3, 'hex'), $4, $5, $6, $7)
-`;
-
 // Locked on the key alone: an operator revokes by key id, and does so for an
 // Organization in any status, including one that was suspended because a key
 // leaked.
@@ -53,15 +46,6 @@ const LOCK_API_KEY_SQL = `
   FROM api_keys
   WHERE id = $1
   FOR UPDATE
-`;
-
-// Only an active key changes, so a repeat keeps the moment the credential
-// actually stopped working.
-const REVOKE_ACTIVE_API_KEY_SQL = `
-  UPDATE api_keys
-  SET status = 'revoked', revoked_at = $2
-  WHERE id = $1
-    AND status = 'active'
 `;
 
 /**
@@ -79,6 +63,10 @@ export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
   async createApiKey(
     input: CreateOperatorApiKeyInput,
   ): Promise<CreateOperatorApiKeyResult> {
+    if (!/^[0-9a-f]{64}$/.test(input.keyHash)) {
+      throw identityStoreError('Identity API key input is invalid');
+    }
+
     try {
       return await identityTransaction(this.client, async (transaction) => {
         const actorId = await findActiveAccountId(
@@ -98,15 +86,17 @@ export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
           return { kind: 'organization_unavailable' as const };
         }
 
-        await identityRows(transaction, INSERT_API_KEY_SQL, [
-          input.apiKeyId,
-          input.organizationId,
-          input.keyHash,
-          input.keyPrefix,
-          input.name,
-          [...input.scopes],
-          [...input.allowedEnvironments],
-        ]);
+        await transaction.apiKey.create({
+          data: {
+            id: input.apiKeyId,
+            organizationId: input.organizationId,
+            keyHash: Buffer.from(input.keyHash, 'hex'),
+            keyPrefix: input.keyPrefix,
+            name: input.name,
+            scopes: [...input.scopes],
+            allowedEnvironments: [...input.allowedEnvironments],
+          },
+        });
         await recordOrganizationAuditEvent(
           transaction,
           auditStamp(
@@ -172,10 +162,12 @@ export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
           return { kind: 'unchanged' as const, keyHash };
         }
 
-        await identityRows(transaction, REVOKE_ACTIVE_API_KEY_SQL, [
-          input.apiKeyId,
-          input.occurredAt,
-        ]);
+        // Only an active key changes, so a repeat keeps the moment the
+        // credential actually stopped working.
+        await transaction.apiKey.updateMany({
+          where: { id: input.apiKeyId, status: 'active' },
+          data: { status: 'revoked', revokedAt: input.occurredAt },
+        });
         await recordOrganizationAuditEvent(
           transaction,
           auditStamp(

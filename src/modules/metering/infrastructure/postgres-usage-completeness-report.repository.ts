@@ -4,7 +4,7 @@ import {
   type UsageReportSnapshotQuery,
   type UsageReportSnapshotRow,
 } from '@/modules/metering/application/usage-completeness-report';
-import { isRecord } from './metering-row';
+import { isRecord, safeNonNegativeCount } from './metering-row';
 import type { PrismaMeteringClient } from './prisma-metering.client';
 
 export const USAGE_REPORT_SQL = `
@@ -27,15 +27,8 @@ export const USAGE_REPORT_SQL = `
 `;
 
 function countFromRow(value: unknown): number {
-  const parsed =
-    typeof value === 'bigint'
-      ? Number(value)
-      : typeof value === 'number'
-        ? value
-        : typeof value === 'string' && /^(?:0|[1-9]\d*)$/.test(value)
-          ? Number(value)
-          : Number.NaN;
-  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+  const parsed = safeNonNegativeCount(value);
+  if (parsed === undefined) {
     throw new UsageReportSnapshotError();
   }
   return parsed;

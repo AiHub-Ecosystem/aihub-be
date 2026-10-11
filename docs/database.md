@@ -8,7 +8,9 @@ than a surprise at runtime. See [ADR-0088](../docs/adr/0088-prisma-for-control-p
 
 Migrations remain what builds Production and Sandbox. There is no baseline step,
 the runner is unchanged, and the Prisma CLI never enters the runtime image or
-the migration container.
+the migration container. `@prisma/client` lists the CLI as an optional peer, so
+`.pnpmfile.cjs` drops that peer; `pnpm why prisma --prod` prints nothing, and a
+dependency bump that changes the answer shows up in `pnpm-lock.yaml`.
 
 ## Changing the schema
 

@@ -79,11 +79,23 @@ export function createPostgresPool(
   return pool;
 }
 
-/** Settings shared Prisma pools use across control-plane connection roles. */
-export function postgresPoolOptions(databaseUrl: string): PoolConfig {
+/** Connections each connection role has always had to itself. */
+const POOL_CONNECTIONS_PER_ROLE = 10;
+
+/**
+ * Settings shared Prisma pools use across control-plane connection roles.
+ *
+ * Roles that name one database share one pool, and the pool holds what those
+ * roles held apart: `roles` times the per-role size. Merging them must not turn
+ * three roles' worth of concurrency into one role's.
+ */
+export function postgresPoolOptions(
+  databaseUrl: string,
+  roles = 1,
+): PoolConfig {
   return {
     connectionString: databaseUrl,
-    max: 10,
+    max: POOL_CONNECTIONS_PER_ROLE * roles,
     connectionTimeoutMillis: 1_000,
     idleTimeoutMillis: 30_000,
   };

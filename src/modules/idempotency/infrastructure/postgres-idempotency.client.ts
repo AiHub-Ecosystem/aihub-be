@@ -23,7 +23,7 @@ export function createPostgresIdempotencyClient(
     };
   }
 
-  const holder = createPrismaClient('idempotency', databaseUrl);
+  const holder = createPrismaClient('integration-test', databaseUrl);
 
   return {
     $queryRawUnsafe: <T = unknown>(query: string, ...values: unknown[]) =>

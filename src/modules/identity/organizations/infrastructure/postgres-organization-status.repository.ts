@@ -16,6 +16,7 @@ import {
   organizationStatusValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
+import { organizationKeyHashes } from '@/modules/identity/shared/infrastructure/organization-key-hashes';
 import {
   type IdentityRepositoryClient,
   identityRows,
@@ -27,20 +28,6 @@ const LOCK_ORGANIZATION_SQL = `
   FROM organizations
   WHERE id = $1
   FOR UPDATE
-`;
-
-const SET_STATUS_SQL = `
-  UPDATE organizations
-  SET status = $2
-  WHERE id = $1
-`;
-
-// Every key, whatever its own status: a revoked key's cached record is gone
-// already, so purging it again costs one delete and removes a special case.
-const ORGANIZATION_KEY_HASHES_SQL = `
-  SELECT encode(key_hash, 'hex') AS hash_hex
-  FROM api_keys
-  WHERE organization_id = $1
 `;
 
 /**
@@ -97,28 +84,20 @@ export class PostgresOrganizationStatusRepository
         throw identityStoreError('Identity data is invalid');
       }
 
-      const hashRows = await identityRows(
+      const keyHashes = await organizationKeyHashes(
         transaction,
-        ORGANIZATION_KEY_HASHES_SQL,
-        [input.organizationId],
+        input.organizationId,
       );
-      const keyHashes = hashRows.map((row) => {
-        const hash = isRecord(row) ? stringValue(row, 'hash_hex') : undefined;
-        if (hash === undefined) {
-          throw identityStoreError('Identity data is invalid');
-        }
-        return hash;
-      });
 
       // A repeat of the applied status is a delivery, not an act.
       if (status === input.status) {
         return { kind: 'unchanged' as const, keyHashes };
       }
 
-      await identityRows(transaction, SET_STATUS_SQL, [
-        input.organizationId,
-        input.status,
-      ]);
+      await transaction.organization.update({
+        where: { id: input.organizationId },
+        data: { status: input.status },
+      });
       await recordOrganizationAuditEvent(
         transaction,
         auditStamp(

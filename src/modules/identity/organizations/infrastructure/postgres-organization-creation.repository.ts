@@ -37,24 +37,6 @@ const LOCK_ACCOUNT_SQL = `
   FOR UPDATE
 `;
 
-const COUNT_CREATIONS_SQL = `
-  SELECT count(*)::int AS creations
-  FROM organizations
-  WHERE created_by_user_account_id = $1
-`;
-
-const INSERT_ORGANIZATION_SQL = `
-  INSERT INTO organizations (
-    id, name, entitlements, rate_limit_rpm, max_concurrent,
-    monthly_request_quota, hard_stop_on_quota, created_by_user_account_id
-  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-`;
-
-const INSERT_OWNER_SQL = `
-  INSERT INTO organization_members (organization_id, user_account_id, role, status)
-  VALUES ($1, $2, 'owner', 'active')
-`;
-
 export class PostgresOrganizationCreationRepository
   implements OrganizationCreationRecordPort
 {
@@ -75,14 +57,10 @@ export class PostgresOrganizationCreationRepository
           return { kind: 'account_inactive' as const };
         }
 
-        const countRows = await identityRows(transaction, COUNT_CREATIONS_SQL, [
-          input.creatorUserId,
-        ]);
-        const countRow = countRows[0];
-        if (!isRecord(countRow) || typeof countRow.creations !== 'number') {
-          throw identityStoreError('Identity data is invalid');
-        }
-        if (countRow.creations >= input.creationLimit) {
+        const creations = await transaction.organization.count({
+          where: { createdByUserAccountId: input.creatorUserId },
+        });
+        if (creations >= input.creationLimit) {
           // No Organization exists to own an audit event, so the refusal is
           // left as a log line; the requested name stays out of it.
           logger.warn({
@@ -93,20 +71,26 @@ export class PostgresOrganizationCreationRepository
           return { kind: 'limit_reached' as const };
         }
 
-        await identityRows(transaction, INSERT_ORGANIZATION_SQL, [
-          organizationId,
-          input.name,
-          [...input.terms.entitlements],
-          input.terms.rateLimitRpm,
-          input.terms.maxConcurrent,
-          input.terms.monthlyRequestQuota,
-          input.terms.hardStopOnQuota,
-          input.creatorUserId,
-        ]);
-        await identityRows(transaction, INSERT_OWNER_SQL, [
-          organizationId,
-          input.creatorUserId,
-        ]);
+        await transaction.organization.create({
+          data: {
+            id: organizationId,
+            name: input.name,
+            entitlements: [...input.terms.entitlements],
+            rateLimitRpm: input.terms.rateLimitRpm,
+            maxConcurrent: input.terms.maxConcurrent,
+            monthlyRequestQuota: input.terms.monthlyRequestQuota,
+            hardStopOnQuota: input.terms.hardStopOnQuota,
+            createdByUserAccountId: input.creatorUserId,
+          },
+        });
+        await transaction.organizationMembership.create({
+          data: {
+            organizationId,
+            userAccountId: input.creatorUserId,
+            role: 'owner',
+            status: 'active',
+          },
+        });
         await recordOrganizationAuditEvent(
           transaction,
           auditStamp(

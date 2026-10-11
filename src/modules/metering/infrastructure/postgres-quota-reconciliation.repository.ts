@@ -3,6 +3,7 @@ import type {
   QuotaReconciliationSnapshotPort,
   QuotaReconciliationTarget,
 } from '@/modules/metering/application/quota-reconciliation.port';
+import { isRecord, safeNonNegativeCount } from './metering-row';
 import type { PrismaMeteringClient } from './prisma-metering.client';
 
 export const QUOTA_RECONCILIATION_SQL = `
@@ -24,15 +25,8 @@ export const QUOTA_RECONCILIATION_SQL = `
 `;
 
 function safeNonNegativeInteger(value: unknown, field: string): number {
-  const parsed =
-    typeof value === 'bigint'
-      ? Number(value)
-      : typeof value === 'number'
-        ? value
-        : typeof value === 'string' && /^(?:0|[1-9]\d*)$/.test(value)
-          ? Number(value)
-          : Number.NaN;
-  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+  const parsed = safeNonNegativeCount(value);
+  if (parsed === undefined) {
     throw new Error(`quota reconciliation field ${field} is invalid`);
   }
   return parsed;
@@ -42,10 +36,6 @@ interface QuotaReconciliationRow {
   readonly organization_id: string;
   readonly quota: number | null;
   readonly billable_count: bigint;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function snapshotFromRow(value: unknown): QuotaOrganizationSnapshot {

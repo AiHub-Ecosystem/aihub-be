@@ -12,6 +12,7 @@ import {
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {
   type IdentityRepositoryClient,
+  identityPrisma,
   identityRows,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
@@ -36,14 +37,6 @@ const API_KEY_LOOKUP_SQL = `
     ON organization.id = api_key.organization_id
   WHERE api_key.key_hash = $1
   LIMIT 1
-`;
-
-const TOUCH_API_KEY_LAST_USED_SQL = `
-  UPDATE api_keys
-  SET last_used_at = $2
-  WHERE id = $1
-    AND (last_used_at IS NULL OR last_used_at < $3)
-  RETURNING id
 `;
 
 function stringArrayValue(
@@ -219,11 +212,14 @@ export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
 
   async touchLastUsed(apiKeyId: string, usedAt: Date): Promise<void> {
     try {
-      await identityRows(this.client, TOUCH_API_KEY_LAST_USED_SQL, [
-        apiKeyId,
-        usedAt,
-        new Date(usedAt.getTime() - LAST_USED_THROTTLE_MS),
-      ]);
+      const throttleCutoff = new Date(usedAt.getTime() - LAST_USED_THROTTLE_MS);
+      await identityPrisma(this.client).apiKey.updateMany({
+        where: {
+          id: apiKeyId,
+          OR: [{ lastUsedAt: null }, { lastUsedAt: { lt: throttleCutoff } }],
+        },
+        data: { lastUsedAt: usedAt },
+      });
     } catch {
       throw identityStoreError('Identity store is unavailable');
     }

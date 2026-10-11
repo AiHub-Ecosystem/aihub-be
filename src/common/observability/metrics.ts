@@ -122,22 +122,19 @@ const postgresPoolErrorsTotal = new Counter({
 /**
  * What a pool is labelled as in `aihub_postgres_pool_errors_total`.
  *
- * A pool now belongs to a connection role rather than to the module that
- * happens to open it, because ADR-0088 collapses the per-module pools into one
- * pool per distinct database URL. The module names remain until each module's
- * repositories move onto the shared client; a dashboard keeps a stable series
- * for a pool that still exists rather than losing it mid-migration.
+ * A pool belongs to a connection role rather than to the module that happens to
+ * open it, because ADR-0088 collapses the per-module pools into one pool per
+ * distinct database URL. When several roles name one URL they share one pool,
+ * and that pool is labelled with the first role to claim it, so a Production
+ * tier whose three URLs are equal reports a single `runtime` series.
+ * `integration-test` labels the pools database-lane specs open for themselves.
  */
 export type PostgresConnectionRole =
   | 'runtime'
   | 'control-plane'
   | 'control-plane-read';
 
-export type PostgresPoolName =
-  | PostgresConnectionRole
-  | 'idempotency'
-  | 'identity'
-  | 'integration-test';
+export type PostgresPoolName = PostgresConnectionRole | 'integration-test';
 
 export interface PostgresPoolStatsSample {
   readonly pool: PostgresPoolName;

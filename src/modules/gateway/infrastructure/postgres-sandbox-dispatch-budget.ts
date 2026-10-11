@@ -41,20 +41,15 @@ export class PostgresSandboxDispatchBudget
         month,
       );
 
-      const counts = await transaction.$queryRawUnsafe<
-        readonly DispatchCountRow[]
-      >(
-        `SELECT
-           count(*) FILTER (WHERE organization_id = $1)::text AS organization_count,
-           count(*)::text AS environment_count
-         FROM sandbox_dispatch_reservations
-         WHERE status = 'reserved'
-           AND month_start = $2`,
-        input.organizationId,
-        monthStart,
-      );
-      const organizationCount = Number(counts[0]?.organization_count);
-      const environmentCount = Number(counts[0]?.environment_count);
+      // Both counts run under the month's advisory lock, so no reservation
+      // lands between them.
+      const reserved = { status: 'reserved', monthStart } as const;
+      const organizationCount =
+        await transaction.sandboxDispatchReservation.count({
+          where: { ...reserved, organizationId: input.organizationId },
+        });
+      const environmentCount =
+        await transaction.sandboxDispatchReservation.count({ where: reserved });
       if (
         (input.organizationLimit !== null &&
           organizationCount >= input.organizationLimit) ||
@@ -63,34 +58,26 @@ export class PostgresSandboxDispatchBudget
         return false;
       }
 
-      await transaction.$executeRawUnsafe(
-        `INSERT INTO sandbox_dispatch_reservations
-           (request_id, organization_id, month_start, created_at)
-         VALUES ($1, $2, $3, $4)`,
-        input.requestId,
-        input.organizationId,
-        monthStart,
-        now,
-      );
+      await transaction.sandboxDispatchReservation.create({
+        data: {
+          requestId: input.requestId,
+          organizationId: input.organizationId,
+          monthStart,
+          createdAt: now,
+        },
+      });
       return true;
     }, CONTROL_PLANE_TRANSACTION_OPTIONS);
   }
 
   async release(requestId: string): Promise<void> {
-    await this.client.$executeRawUnsafe(
-      `UPDATE sandbox_dispatch_reservations
-       SET status = 'released', released_at = now()
-       WHERE request_id = $1 AND status = 'reserved'`,
-      requestId,
-    );
+    await this.client.sandboxDispatchReservation.updateMany({
+      where: { requestId, status: 'reserved' },
+      data: { status: 'released', releasedAt: this.now() },
+    });
   }
 
   async onModuleDestroy(): Promise<void> {
     await this.client.close?.();
   }
-}
-
-interface DispatchCountRow {
-  readonly organization_count: string;
-  readonly environment_count: string;
 }

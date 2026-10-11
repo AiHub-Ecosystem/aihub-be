@@ -1,4 +1,3 @@
-import type { PostgresPoolName } from '@/common/observability/metrics';
 import {
   createPrismaClient,
   isLifecycleProperty,
@@ -106,6 +105,18 @@ function isPrismaClient(
   return typeof Reflect.get(client, '$transaction') === 'function';
 }
 
+/**
+ * The generated client behind a repository client, for a statement it can
+ * express. A repository that uses it is driven only through clients that carry
+ * one; a query-only fixture reaching it is a wiring mistake and fails loudly.
+ */
+export function identityPrisma(client: IdentityRepositoryClient): PrismaClient {
+  if (isPrismaClient(client)) {
+    return client;
+  }
+  throw new Error('The Identity store needs a generated Prisma client');
+}
+
 export function identityTransaction<T>(
   client: IdentityRepositoryClient,
   callback: (transaction: Prisma.TransactionClient) => Promise<T>,
@@ -202,7 +213,6 @@ function testIdentityClient(
 /** Test-only factory for database-lane specs; no production module may use it. */
 export function createPostgresIdentityClient(
   databaseUrl: string,
-  poolName: PostgresPoolName = 'identity',
 ): TestIdentityClient {
   if (databaseUrl.trim().length === 0) {
     const missingPrisma = new Proxy({} as PrismaClient, {
@@ -211,7 +221,7 @@ export function createPostgresIdentityClient(
     return testIdentityClient(missingPrisma, async () => undefined);
   }
 
-  const holder = createPrismaClient(poolName, databaseUrl);
+  const holder = createPrismaClient('integration-test', databaseUrl);
   return testIdentityClient(holder.prisma, holder.close);
 }
 
@@ -222,5 +232,5 @@ export type IdentityDrizzleClient = TestIdentityClient;
 export function createIdentityDrizzleClient(
   databaseUrl: string,
 ): IdentityDrizzleClient {
-  return createPostgresIdentityClient(databaseUrl, 'identity');
+  return createPostgresIdentityClient(databaseUrl);
 }

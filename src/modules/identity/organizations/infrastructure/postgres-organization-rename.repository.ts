@@ -42,12 +42,6 @@ const LOCK_CALLER_MEMBERSHIP_SQL = `
   FOR UPDATE
 `;
 
-const RENAME_ORGANIZATION_SQL = `
-  UPDATE organizations
-  SET name = $2
-  WHERE id = $1
-`;
-
 /**
  * Authority is decided here, under the locks, rather than before the
  * transaction: an owner demoted by a transfer that commits first must find
@@ -122,10 +116,10 @@ export class PostgresOrganizationRenameRepository
             };
           }
 
-          await identityRows(transaction, RENAME_ORGANIZATION_SQL, [
-            input.organizationId,
-            input.name,
-          ]);
+          await transaction.organization.update({
+            where: { id: input.organizationId },
+            data: { name: input.name },
+          });
           await recordOrganizationAuditEvent(transaction, stamp, {
             action: 'organization.renamed',
             organizationId: input.organizationId,

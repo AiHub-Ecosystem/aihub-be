@@ -27,11 +27,10 @@ import {
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {
   type IdentityRepositoryClient,
+  identityPrisma,
   identityRows,
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
-
-type IdentitySqlClient = Parameters<typeof identityRows>[0];
 
 type IdentityConfigRow = Record<string, unknown>;
 
@@ -49,6 +48,25 @@ const ACTIVE_CONFIG_COLUMNS_SQL = `
 const STORED_CONFIG_COLUMNS_SQL = `${ACTIVE_CONFIG_COLUMNS_SQL},
   updated_at AS "updatedAt"
 `;
+
+// The same columns, selected through the generated client. The upsert below
+// cannot be expressed there, so its `RETURNING` list stays SQL under the same
+// field names and one mapper reads both.
+const ACTIVE_CONFIG_SELECT = {
+  organizationId: true,
+  issuer: true,
+  jwksUrl: true,
+  publicKeysJwks: true,
+  allowedAlgorithms: true,
+  maxAssertionTtlSeconds: true,
+  status: true,
+  jwksCacheVersion: true,
+} as const;
+
+const STORED_CONFIG_SELECT = {
+  ...ACTIVE_CONFIG_SELECT,
+  updatedAt: true,
+} as const;
 
 const INSERT_OR_UPDATE_CONFIG_SQL = `
   INSERT INTO organization_identity_configs (
@@ -240,7 +258,7 @@ export class PostgresOrganizationIdentityConfigRepository
 {
   constructor(
     private readonly client: IdentityRepositoryClient,
-    private readonly readClient: IdentitySqlClient = client,
+    private readonly readClient: IdentityRepositoryClient = client,
   ) {}
 
   async findActiveByOrganizationId(
@@ -343,16 +361,11 @@ export class PostgresOrganizationIdentityConfigRepository
         const changed = written.length > 0;
         const row =
           written[0] ??
-          (
-            (await identityRows(
-              transaction,
-              `SELECT ${STORED_CONFIG_COLUMNS_SQL}
-               FROM organization_identity_configs
-               WHERE organization_id = $1
-               LIMIT 1`,
-              [input.organizationId],
-            )) as readonly IdentityConfigRow[]
-          )[0];
+          (await transaction.organizationIdentityConfig.findUnique({
+            where: { organizationId: input.organizationId },
+            select: STORED_CONFIG_SELECT,
+          })) ??
+          undefined;
         const config = storedIdentityConfigFromRow(row);
         if (config === undefined) {
           throw identityStoreError('Identity data is invalid');
@@ -396,15 +409,14 @@ export class PostgresOrganizationIdentityConfigRepository
     }
 
     try {
-      const [first] = (await identityRows(
+      const first = await identityPrisma(
         this.readClient,
-        `SELECT ${status === null ? STORED_CONFIG_COLUMNS_SQL : ACTIVE_CONFIG_COLUMNS_SQL}
-         FROM organization_identity_configs
-         WHERE organization_id = $1${status === null ? '' : ' AND status = $2'}
-         LIMIT 1`,
-        status === null ? [organizationId] : [organizationId, status],
-      )) as readonly IdentityConfigRow[];
-      return first;
+      ).organizationIdentityConfig.findFirst({
+        where:
+          status === null ? { organizationId } : { organizationId, status },
+        select: status === null ? STORED_CONFIG_SELECT : ACTIVE_CONFIG_SELECT,
+      });
+      return first ?? undefined;
     } catch {
       throw identityStoreError('Identity store is unavailable');
     }
