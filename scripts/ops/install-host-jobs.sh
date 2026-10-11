@@ -8,17 +8,26 @@ if [[ ! "$APP_DIR" =~ ^/[A-Za-z0-9_./\ -]+$ ]]; then
   exit 1
 fi
 
+candidate_dir="$APP_DIR/.aihub-host-jobs-candidate"
+candidate_wrapper="$candidate_dir/host-scheduled-job.sh"
+candidate_template="$candidate_dir/aihub.crontab"
 wrapper="$APP_DIR/scripts/ops/host-scheduled-job.sh"
 template="$APP_DIR/ops/host-jobs/aihub.crontab"
-[[ -s "$wrapper" && -s "$template" ]] || {
+[[ -s "$candidate_wrapper" && -s "$candidate_template" ]] || {
   printf 'scheduled-job wrapper or crontab template is missing\n' >&2
   exit 1
 }
-chmod 755 "$wrapper"
-bash -n "$wrapper"
+bash -n "$candidate_wrapper"
 
 tmp_dir="$(mktemp -d)"
-trap 'rm -rf -- "$tmp_dir"' EXIT
+wrapper_next="$(mktemp "$wrapper.XXXXXX")"
+template_next="$(mktemp "$template.XXXXXX")"
+trap 'rm -rf -- "$tmp_dir"; rm -f -- "$wrapper_next" "$template_next"' EXIT
+install -m 755 "$candidate_wrapper" "$wrapper_next"
+install -m 644 "$candidate_template" "$template_next"
+mv -f -- "$wrapper_next" "$wrapper"
+mv -f -- "$template_next" "$template"
+
 current="$tmp_dir/current"
 filtered="$tmp_dir/filtered"
 next="$tmp_dir/next"

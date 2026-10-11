@@ -24,10 +24,14 @@ assert_not_contains() {
 app_dir="$test_root/app"
 bin_dir="$test_root/bin"
 home_dir="$test_root/home"
-mkdir -p "$app_dir/scripts/ops" "$app_dir/ops/host-jobs" "$bin_dir" "$home_dir"
+mkdir -p "$app_dir/scripts/ops" "$app_dir/ops/host-jobs" \
+  "$app_dir/.aihub-host-jobs-candidate" "$bin_dir" "$home_dir"
+cp "$repository_root/scripts/ops/host-scheduled-job.sh" \
+  "$app_dir/.aihub-host-jobs-candidate/host-scheduled-job.sh"
 cp "$repository_root/scripts/ops/host-scheduled-job.sh" "$app_dir/scripts/ops/"
 cp "$repository_root/scripts/ops/install-host-jobs.sh" "$app_dir/scripts/ops/"
-cp "$repository_root/ops/host-jobs/aihub.crontab" "$app_dir/ops/host-jobs/"
+cp "$repository_root/ops/host-jobs/aihub.crontab" \
+  "$app_dir/.aihub-host-jobs-candidate/aihub.crontab"
 chmod 755 "$app_dir/scripts/ops/host-scheduled-job.sh" "$app_dir/scripts/ops/install-host-jobs.sh"
 
 cat >"$app_dir/scripts/ops/blue-green-host.sh" <<'STUB'
@@ -72,7 +76,9 @@ export AIHUB_HOST_JOB_LOG="$test_root/job.log"
 export FAKE_DOCKER_CALLS="$test_root/docker-calls.log"
 
 set +e
-FAKE_DOCKER_FAIL_SERVICE=app-slot-b bash "$app_dir/scripts/ops/host-scheduled-job.sh" quota >"$test_root/run.out" 2>&1
+FAKE_DOCKER_FAIL_SERVICE=app-slot-b bash \
+  "$app_dir/scripts/ops/host-scheduled-job.sh" quota \
+  >"$test_root/run.out" 2>&1
 run_status=$?
 set -e
 [[ "$run_status" == 1 ]]
@@ -86,6 +92,12 @@ assert_not_contains "$AIHUB_HOST_JOB_LOG" 'intermediate output'
 assert_contains "$AIHUB_HOST_JOB_LOG" 'quota sandbox service=app-sandbox exit=0 summary service=app-sandbox'
 
 printf 'host wrapper test passed: bounded failure stderr and continued Sandbox run\n'
+
+cat >"$app_dir/scripts/ops/host-scheduled-job.sh" <<'STUB'
+#!/usr/bin/env bash
+printf 'old wrapper must remain active until promotion\n'
+STUB
+chmod 755 "$app_dir/scripts/ops/host-scheduled-job.sh"
 
 cat >"$bin_dir/crontab" <<'STUB'
 #!/usr/bin/env bash
@@ -107,7 +119,9 @@ cat >"$FAKE_CRONTAB_FILE" <<'CRON'
 30 3 * * * /home/ngoc_anh/aihub-avatar-sweep.sh
 CRON
 
+assert_contains "$app_dir/scripts/ops/host-scheduled-job.sh" 'old wrapper must remain active'
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh"
+assert_contains "$app_dir/scripts/ops/host-scheduled-job.sh" 'CONTAINER_CLI'
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh"
 assert_contains "$FAKE_CRONTAB_FILE" '/home/ngoc_anh/wispace-vault/snapshot.sh'
 assert_contains "$FAKE_CRONTAB_FILE" "host-scheduled-job.sh' avatar-sweep"

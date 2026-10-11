@@ -6,6 +6,7 @@ readonly CONTAINER_RUNTIME_ENTRYPOINT='scripts/runtime/runtime-entrypoint.mjs'
 readonly CONTAINER_CLI='scripts/cli/cli.mjs'
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly APP_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd -P)"
+export APP_DIR
 if [[ ${1:-} == avatar-sweep ]]; then
   default_log="$HOME/aihub-avatar-sweep.log"
 else
@@ -58,7 +59,7 @@ log_stderr_tail() {
   fi
 }
 
-if deployment_status="$(APP_DIR="$APP_DIR" "$APP_DIR/scripts/ops/blue-green-host.sh" status 2>"$tmp_dir/status.err")"; then
+if deployment_status="$("$APP_DIR/scripts/ops/blue-green-host.sh" status 2>"$tmp_dir/status.err")"; then
   :
 else
   code=$?
