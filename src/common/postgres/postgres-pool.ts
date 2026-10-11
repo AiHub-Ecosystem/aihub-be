@@ -3,16 +3,46 @@ import { Pool, type PoolClient, type PoolConfig } from 'pg';
 
 import {
   type PostgresPoolName,
+  type PostgresPoolStatsSample,
   recordPostgresPoolError,
+  setPostgresPoolStatsSource,
 } from '@/common/observability/metrics';
 
 const logger = new Logger('PostgresPool');
+const pools = new Map<PostgresPoolName, Set<Pool>>();
+
+setPostgresPoolStatsSource(() => {
+  const samples: PostgresPoolStatsSample[] = [];
+  for (const [name, registeredPools] of pools) {
+    let total = 0;
+    let idle = 0;
+    let waiting = 0;
+    for (const pool of registeredPools) {
+      if (pool.ended) {
+        registeredPools.delete(pool);
+        continue;
+      }
+      total += pool.totalCount;
+      idle += pool.idleCount;
+      waiting += pool.waitingCount;
+    }
+    if (registeredPools.size === 0) {
+      pools.delete(name);
+    } else {
+      samples.push({ pool: name, total, idle, waiting });
+    }
+  }
+  return samples;
+});
 
 export function createPostgresPool(
   name: PostgresPoolName,
   config: PoolConfig,
 ): Pool {
   const pool = new Pool(config);
+  const registeredPools = pools.get(name) ?? new Set<Pool>();
+  registeredPools.add(pool);
+  pools.set(name, registeredPools);
   const seenErrors = new WeakSet<Error>();
 
   const reportError = (error: Error): void => {

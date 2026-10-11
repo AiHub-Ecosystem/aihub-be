@@ -3,6 +3,10 @@ import { File } from 'node:buffer';
 import { type Dispatcher, Pool, FormData as UndiciFormData } from 'undici';
 
 import { AppError } from '@/common/errors/app-error';
+import {
+  type DownstreamPoolQueuedSample,
+  setDownstreamPoolQueuedSource,
+} from '@/common/observability/metrics';
 import type {
   DownstreamId,
   DownstreamMultipartBody,
@@ -27,6 +31,27 @@ type DownstreamHeaders = Readonly<
 >;
 
 const definitelyNotDispatched = new WeakSet<AppError>();
+const downstreamPools = new Map<string, Set<Pool>>();
+
+setDownstreamPoolQueuedSource(() => {
+  const samples: DownstreamPoolQueuedSample[] = [];
+  for (const [origin, pools] of downstreamPools) {
+    let queued = 0;
+    for (const pool of pools) {
+      if (pool.destroyed) {
+        pools.delete(pool);
+        continue;
+      }
+      queued += pool.stats.queued;
+    }
+    if (pools.size === 0) {
+      downstreamPools.delete(origin);
+    } else {
+      samples.push({ origin, queued });
+    }
+  }
+  return samples;
+});
 
 export function isDefinitelyNotDispatched(error: unknown): boolean {
   return error instanceof AppError && definitelyNotDispatched.has(error);
@@ -226,7 +251,14 @@ export class DownstreamHttpClient {
     }
 
     await Promise.all(
-      [...this.dispatchers.values()].map((dispatcher) => dispatcher.close()),
+      [...this.dispatchers.entries()].map(async ([origin, dispatcher]) => {
+        await dispatcher.close();
+        if (dispatcher instanceof Pool) {
+          const pools = downstreamPools.get(origin);
+          pools?.delete(dispatcher);
+          if (pools?.size === 0) downstreamPools.delete(origin);
+        }
+      }),
     );
   }
 
@@ -264,6 +296,9 @@ export class DownstreamHttpClient {
       keepAliveMaxTimeout: 600_000,
     });
     this.dispatchers.set(base.origin, dispatcher);
+    const pools = downstreamPools.get(base.origin) ?? new Set<Pool>();
+    pools.add(dispatcher);
+    downstreamPools.set(base.origin, pools);
     return dispatcher;
   }
 
