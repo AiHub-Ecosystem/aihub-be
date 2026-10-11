@@ -7,12 +7,9 @@ import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import {
+  PersistenceModule,
   type PrismaClientHolder,
   RUNTIME_PRISMA_CLIENT,
-} from '@/modules/persistence/application/persistence-client.port';
-import {
-  PersistenceModule,
-  deferPrismaClient,
 } from '@/modules/persistence/persistence.module';
 import { SEAWEEDFS_S3_CLIENT } from '@/modules/secrets/application/seaweedfs-s3-client.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
@@ -43,7 +40,7 @@ import { AvatarController } from './presentation/avatar.controller';
       provide: AVATAR_REPOSITORY,
       inject: [RUNTIME_PRISMA_CLIENT],
       useFactory: (runtime: PrismaClientHolder): AvatarRepositoryPort =>
-        new PostgresAvatarRepository(deferPrismaClient(() => runtime.prisma)),
+        new PostgresAvatarRepository(runtime.prisma),
     },
     {
       provide: AVATAR_STORAGE,

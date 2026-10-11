@@ -1,23 +1,22 @@
-import { Buffer } from 'node:buffer';
-
 import type { PostgresPoolName } from '@/common/observability/metrics';
-import { createPrismaClient } from '@/modules/persistence/persistence.module';
+import {
+  createPrismaClient,
+  isLifecycleProperty,
+  isRowlessWrite,
+  normalizeRawRows,
+  runGuardedTransaction,
+} from '@/modules/persistence/persistence.module';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
-import { Prisma, PrismaClient } from '@prisma-client/client';
+import { type Prisma, PrismaClient } from '@prisma-client/client';
 
 /** Test-only query API for unchanged database-lane fixtures; production injects Prisma. */
-export interface PostgresIdentityClient {
-  query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
-}
-
-/** Test-only transaction handle for unchanged database-lane fixtures. */
 export interface PostgresIdentityQueryClient {
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
 }
 
 /** Test-only transaction runner for unchanged database-lane fixtures. */
 export interface PostgresIdentityTransactionalClient
-  extends PostgresIdentityClient {
+  extends PostgresIdentityQueryClient {
   transaction<T>(
     callback: (client: PostgresIdentityQueryClient) => Promise<T>,
   ): Promise<T>;
@@ -39,31 +38,6 @@ class PostgresIdentityTransactionExpiredError extends Error {
   }
 }
 
-function normalizeRawValue(value: unknown): unknown {
-  if (typeof value === 'bigint') {
-    return value.toString();
-  }
-  if (Prisma.Decimal.isDecimal(value)) {
-    return value.toString();
-  }
-  if (value instanceof Uint8Array && !Buffer.isBuffer(value)) {
-    return Buffer.from(value);
-  }
-  return value;
-}
-
-function normalizeRawRows(
-  rows: readonly Record<string, unknown>[],
-): readonly Record<string, unknown>[] {
-  return rows.map((source) => {
-    const row: Record<string, unknown> = {};
-    for (const column of Object.keys(source)) {
-      row[column] = normalizeRawValue(source[column]);
-    }
-    return row;
-  });
-}
-
 /**
  * Executes Identity SQL through Prisma. The query-client branch serves only
  * unchanged database-lane fixtures; production injects Prisma directly.
@@ -80,10 +54,7 @@ export async function identityRows(
     >[];
   }
 
-  if (
-    /^\s*(?:INSERT|UPDATE|DELETE)\b/i.test(text) &&
-    !/\bRETURNING\b/i.test(text)
-  ) {
+  if (isRowlessWrite(text)) {
     await client.$executeRawUnsafe(text, ...values);
     return [];
   }
@@ -95,69 +66,25 @@ export async function identityRows(
   return normalizeRawRows(rows);
 }
 
-function guardTransaction(
-  transaction: Prisma.TransactionClient,
-  callback: (transaction: Prisma.TransactionClient) => Promise<unknown>,
-): Promise<unknown> {
-  let active = true;
-  const queries: Promise<unknown>[] = [];
-  const guardedTransaction = new Proxy(transaction, {
-    get(target, property) {
-      const value = Reflect.get(target, property, target);
-      if (
-        (property === '$queryRawUnsafe' || property === '$executeRawUnsafe') &&
-        typeof value === 'function'
-      ) {
-        return (...args: unknown[]) => {
-          if (!active) {
-            return Promise.reject(
-              new PostgresIdentityTransactionExpiredError(),
-            );
-          }
-          const query = Promise.resolve(Reflect.apply(value, target, args));
-          queries.push(query);
-          void query.catch(() => undefined);
-          return query;
-        };
-      }
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
-
-  return (async () => {
-    let result: unknown;
-    let callbackError: { readonly value: unknown } | undefined;
-    try {
-      result = await callback(guardedTransaction);
-    } catch (error) {
-      callbackError = { value: error };
-    }
-    active = false;
-
-    const queryResults = await Promise.allSettled(queries);
-    if (callbackError !== undefined) {
-      throw callbackError.value;
-    }
-    const failedQuery = queryResults.find(
-      (query): query is PromiseRejectedResult => query.status === 'rejected',
-    );
-    if (failedQuery !== undefined) {
-      throw failedQuery.reason;
-    }
-    return result;
-  })();
-}
-
 function runPrismaTransaction<T>(
   prisma: PrismaClient,
   callback: (transaction: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
   return prisma.$transaction(
-    (transaction) => guardTransaction(transaction, callback) as Promise<T>,
+    (transaction) =>
+      runGuardedTransaction(transaction, callback, {
+        expired: () => new PostgresIdentityTransactionExpiredError(),
+      }),
     CONTROL_PLANE_TRANSACTION_OPTIONS,
   );
 }
 
+/**
+ * A handle for the fixtures' query-shaped transaction. It speaks raw SQL only,
+ * so a repository reached through it must use nothing else. The cast is the
+ * boundary: Prisma's methods return `PrismaPromise`, which a plain promise
+ * cannot be.
+ */
 function legacyTransactionAsPrisma(
   client: PostgresIdentityQueryClient,
 ): Prisma.TransactionClient {
@@ -171,16 +98,23 @@ function legacyTransactionAsPrisma(
   } as unknown as Prisma.TransactionClient;
 }
 
+// Read, not `in`: the runner and the fixtures are proxies that answer through
+// `get`, so the property is not on the proxy's own target.
+function isPrismaClient(
+  client: IdentityRepositoryClient,
+): client is PrismaClient {
+  return typeof Reflect.get(client, '$transaction') === 'function';
+}
+
 export function identityTransaction<T>(
   client: IdentityRepositoryClient,
   callback: (transaction: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
-  const prismaTransaction = Reflect.get(client, '$transaction');
-  if (typeof prismaTransaction === 'function') {
-    return runPrismaTransaction(client as PrismaClient, callback);
+  if (isPrismaClient(client)) {
+    return runPrismaTransaction(client, callback);
   }
-  return (client as PostgresIdentityTransactionalClient).transaction(
-    (transaction) => callback(legacyTransactionAsPrisma(transaction)),
+  return client.transaction((transaction) =>
+    callback(legacyTransactionAsPrisma(transaction)),
   );
 }
 
@@ -189,18 +123,11 @@ export function identityTransaction<T>(
  * The callback receives Prisma's transaction client directly.
  */
 export function createIdentityTransactionRunner(
-  getPrisma: () => PrismaClient,
+  prisma: PrismaClient,
 ): PrismaClient {
   return new Proxy({} as PrismaClient, {
     get(target, property) {
-      if (
-        property === 'then' ||
-        property === 'onModuleInit' ||
-        property === 'onModuleDestroy' ||
-        property === 'onApplicationBootstrap' ||
-        property === 'onApplicationShutdown' ||
-        property === 'beforeApplicationShutdown'
-      ) {
+      if (isLifecycleProperty(property)) {
         return undefined;
       }
       if (property === 'constructor') {
@@ -209,7 +136,6 @@ export function createIdentityTransactionRunner(
       if (Object.prototype.hasOwnProperty.call(target, property)) {
         return Reflect.get(target, property, target);
       }
-      const prisma = getPrisma();
       if (property === '$transaction') {
         return (callback: unknown, options?: unknown) => {
           if (typeof callback !== 'function') {
@@ -219,13 +145,9 @@ export function createIdentityTransactionRunner(
               [callback, options],
             );
           }
-          return prisma.$transaction(
-            (transaction) =>
-              guardTransaction(
-                transaction,
-                callback as (tx: Prisma.TransactionClient) => Promise<unknown>,
-              ),
-            CONTROL_PLANE_TRANSACTION_OPTIONS,
+          return runPrismaTransaction(
+            prisma,
+            callback as (tx: Prisma.TransactionClient) => Promise<unknown>,
           );
         };
       }
@@ -252,7 +174,7 @@ function testIdentityClient(
   prisma: PrismaClient,
   close: () => Promise<void>,
 ): TestIdentityClient {
-  const runtimeClient = createIdentityTransactionRunner(() => prisma);
+  const runtimeClient = createIdentityTransactionRunner(prisma);
   return new Proxy(runtimeClient as TestIdentityClient, {
     get(target, property, receiver) {
       if (property === 'query') {

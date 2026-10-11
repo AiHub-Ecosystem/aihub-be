@@ -1,7 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type {
-  PostgresIdentityClient,
+  PostgresIdentityQueryClient,
   PostgresIdentityTransactionalClient,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { PostgresOrganizationMembershipRepository } from './postgres-organization-membership.repository';
@@ -64,7 +64,7 @@ const mutationContext = createRequestContext({
   scopes: [],
 });
 
-class FakePostgres implements PostgresIdentityClient {
+class FakePostgres implements PostgresIdentityQueryClient {
   queries: Array<{ values: readonly unknown[] }> = [];
   result: readonly unknown[] = [membershipRow];
   shouldFail = false;

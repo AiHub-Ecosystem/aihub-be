@@ -6,12 +6,9 @@ import {
 } from '@/modules/gateway/application/quota-counter.port';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
 import {
+  PersistenceModule,
   type PrismaClientHolder,
   RUNTIME_PRISMA_CLIENT,
-} from '@/modules/persistence/application/persistence-client.port';
-import {
-  PersistenceModule,
-  deferPrismaClient,
 } from '@/modules/persistence/persistence.module';
 import {
   METERING_FINALIZER,
@@ -38,7 +35,7 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
       provide: USAGE_REPOSITORY,
       inject: [RUNTIME_PRISMA_CLIENT],
       useFactory: (runtime: PrismaClientHolder): UsageRepositoryPort =>
-        new PostgresUsageRepository(deferPrismaClient(() => runtime.prisma)),
+        new PostgresUsageRepository(runtime.prisma),
     },
     {
       provide: METERING_FAILURE_LOGGER,

@@ -679,6 +679,58 @@ describe('the generated Prisma client stays inside infrastructure', () => {
     }
   });
 
+  it('fails an application file of the persistence module itself', () => {
+    const fixtureRoot = mkdtempSync(
+      join(srcRoot, 'modules', 'persistence', '.tmp-prisma-boundary-'),
+    );
+    const offending = join(fixtureRoot, 'application', 'probe.port.ts');
+
+    try {
+      mkdirSync(join(fixtureRoot, 'application'), { recursive: true });
+      writeFileSync(
+        offending,
+        `import type { PrismaClient } from '@prisma-client/client';\n\nexport type Probe = PrismaClient;\n`,
+      );
+      writeFileSync(
+        join(fixtureRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+      );
+
+      const { status, output } = runArchCheck();
+
+      expect(status).not.toBe(0);
+      expect(output).toContain('only infrastructure may');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('fails a dynamic import of the generated client outside infrastructure', () => {
+    const fixtureRoot = mkdtempSync(
+      join(srcRoot, 'modules', 'identity', '.tmp-prisma-boundary-dynamic-'),
+    );
+    const offending = join(fixtureRoot, 'application', 'probe.use-case.ts');
+
+    try {
+      mkdirSync(join(fixtureRoot, 'application'), { recursive: true });
+      writeFileSync(
+        offending,
+        `export async function probe(): Promise<unknown> {\n  return import('@prisma-client/client');\n}\n`,
+      );
+      writeFileSync(
+        join(fixtureRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+      );
+
+      const { status, output } = runArchCheck();
+
+      expect(status).not.toBe(0);
+      expect(output).toContain('only infrastructure may');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it('accepts the same import inside infrastructure', () => {
     const fixtureRoot = mkdtempSync(
       join(srcRoot, 'modules', 'identity', '.tmp-prisma-boundary-ok-'),

@@ -9,12 +9,13 @@ import {
   createPostgresPool,
   postgresPoolOptions,
 } from '@/common/postgres/postgres-pool';
+import { PrismaClient } from '@prisma-client/client';
 import type {
   PrismaClientHolder,
   PrismaClientUrls,
   SharedPrismaClients,
-} from '@/modules/persistence/application/persistence-client.port';
-import { PrismaClient } from '@prisma-client/client';
+} from './persistence-client';
+import { isLifecycleProperty } from './prisma-raw';
 
 /**
  * The shared Prisma clients (ADR-0088, #81).
@@ -49,21 +50,18 @@ export function createPrismaClient(
   };
 }
 
-/** Delay resolving the configured pool until the first database operation. */
-export function deferPrismaClient(getPrisma: () => PrismaClient): PrismaClient {
+/**
+ * A client whose first use, not its construction, resolves the real one. A
+ * deployment without a control-plane URL still has to assemble the module
+ * graph, so a role without a URL hands out this and fails when it is used.
+ */
+function deferPrismaClient(getPrisma: () => PrismaClient): PrismaClient {
   return new Proxy({} as PrismaClient, {
     has(_target, property) {
       return property in getPrisma();
     },
-    get(target, property) {
-      if (
-        property === 'then' ||
-        property === 'onModuleInit' ||
-        property === 'onModuleDestroy' ||
-        property === 'onApplicationBootstrap' ||
-        property === 'onApplicationShutdown' ||
-        property === 'beforeApplicationShutdown'
-      ) {
+    get(_target, property) {
+      if (isLifecycleProperty(property)) {
         return undefined;
       }
       const prisma = getPrisma();
@@ -84,9 +82,7 @@ function unconfiguredPrismaClient(): PrismaClientHolder {
   };
 
   return {
-    get prisma(): never {
-      return unconfigured();
-    },
+    prisma: deferPrismaClient(unconfigured),
     get pool(): never {
       return unconfigured();
     },

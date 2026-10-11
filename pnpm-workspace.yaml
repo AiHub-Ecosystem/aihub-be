@@ -14,9 +14,6 @@ allowBuilds:
 # Remove one once every package named in its comment declares the patched
 # version itself.
 overrides:
-  # Prisma's optional CLI dependencies included in the production audit graph.
-  "deepmerge-ts": 8.0.0
-  "mysql2": 3.23.1
   # Forced by openapi-to-postmanv2, which pins 4.3.0 exactly.
   "js-yaml@>=4.0.0 <4.3.2": ^4.3.2
   # Forced by openapi-to-postmanv2, which pins 1.10.2 exactly.

@@ -14,12 +14,9 @@ import {
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import { EmailDeliveryPoller } from '@/modules/auth/application/email-delivery-poller';
 import {
+  PersistenceModule,
   type PrismaClientHolder,
   RUNTIME_PRISMA_CLIENT,
-} from '@/modules/persistence/application/persistence-client.port';
-import {
-  PersistenceModule,
-  deferPrismaClient,
 } from '@/modules/persistence/persistence.module';
 import {
   RUNTIME_CONNECTION_CONFIGURATION,
@@ -137,15 +134,13 @@ import {
       provide: PostgresLocalAuthRepository,
       inject: [RUNTIME_PRISMA_CLIENT],
       useFactory: (runtime: PrismaClientHolder): PostgresLocalAuthRepository =>
-        new PostgresLocalAuthRepository(
-          deferPrismaClient(() => runtime.prisma),
-        ),
+        new PostgresLocalAuthRepository(runtime.prisma),
     },
     {
       provide: AUTH_MFA_REPOSITORY,
       inject: [RUNTIME_PRISMA_CLIENT],
       useFactory: (runtime: PrismaClientHolder): PostgresAuthMfaRepository =>
-        new PostgresAuthMfaRepository(deferPrismaClient(() => runtime.prisma)),
+        new PostgresAuthMfaRepository(runtime.prisma),
     },
     {
       provide: AUTH_MFA_CIPHER,
@@ -198,9 +193,7 @@ import {
       provide: PostgresWebSessionRepository,
       inject: [RUNTIME_PRISMA_CLIENT],
       useFactory: (runtime: PrismaClientHolder): PostgresWebSessionRepository =>
-        new PostgresWebSessionRepository(
-          deferPrismaClient(() => runtime.prisma),
-        ),
+        new PostgresWebSessionRepository(runtime.prisma),
     },
     {
       provide: WEB_SESSION_REPOSITORY,
@@ -318,12 +311,8 @@ import {
         sender: EmailSenderPort,
       ): EmailDeliveryPoller =>
         new EmailDeliveryPoller(
-          new PostgresEmailDispatchStore(
-            deferPrismaClient(() => runtime.prisma),
-          ),
-          new PostgresEmailCredentialRepository(
-            deferPrismaClient(() => runtime.prisma),
-          ),
+          new PostgresEmailDispatchStore(runtime.prisma),
+          new PostgresEmailCredentialRepository(runtime.prisma),
           cipher,
           sender,
           (): Date => new Date(),
@@ -342,9 +331,7 @@ import {
         runtime: PrismaClientHolder,
         configuration: ConfigType<typeof appConfig>,
       ): EmailOutboxPollerScheduler => {
-        const store = new PostgresEmailDispatchStore(
-          deferPrismaClient(() => runtime.prisma),
-        );
+        const store = new PostgresEmailDispatchStore(runtime.prisma);
         return new EmailOutboxPollerScheduler(
           poller,
           EMAIL_OUTBOX_POLL_INTERVAL_MS,

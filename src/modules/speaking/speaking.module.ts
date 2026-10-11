@@ -10,12 +10,9 @@ import { IdentityModule } from '@/modules/identity/identity.module';
 import { MeteringModule } from '@/modules/metering/metering.module';
 import { SuccessEnvelopeInterceptor } from '@/modules/metering/presentation/success-envelope.interceptor';
 import {
+  PersistenceModule,
   type PrismaClientHolder,
   RUNTIME_PRISMA_CLIENT,
-} from '@/modules/persistence/application/persistence-client.port';
-import {
-  PersistenceModule,
-  deferPrismaClient,
 } from '@/modules/persistence/persistence.module';
 import { SEAWEEDFS_S3_CLIENT } from '@/modules/secrets/application/seaweedfs-s3-client.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
@@ -66,9 +63,7 @@ import { SpeakingQuestionsController } from './presentation/speaking-questions.c
       useFactory: (
         runtime: PrismaClientHolder,
       ): SpeakingAudioUploadRepositoryPort =>
-        new PostgresSpeakingAudioUploadRepository(
-          deferPrismaClient(() => runtime.prisma),
-        ),
+        new PostgresSpeakingAudioUploadRepository(runtime.prisma),
     },
     {
       provide: SPEAKING_AUDIO_ASSET_STORAGE,

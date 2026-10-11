@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 
 import {
+  PersistenceModule,
   type PrismaClientHolder,
   RUNTIME_PRISMA_CLIENT,
-} from '@/modules/persistence/application/persistence-client.port';
-import { PersistenceModule } from '@/modules/persistence/persistence.module';
+} from '@/modules/persistence/persistence.module';
 import {
   IDEMPOTENCY_REPOSITORY,
   type IdempotencyRepositoryPort,

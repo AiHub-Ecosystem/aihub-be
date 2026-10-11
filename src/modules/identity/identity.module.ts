@@ -26,7 +26,7 @@ import {
   CONTROL_PLANE_PRISMA_CLIENT,
   CONTROL_PLANE_READ_PRISMA_CLIENT,
   type PrismaClientHolder,
-} from '@/modules/persistence/application/persistence-client.port';
+} from '@/modules/persistence/persistence.module';
 import {
   RUNTIME_CONNECTION_CONFIGURATION,
   type RuntimeConnectionConfigurationPort,
@@ -199,13 +199,13 @@ type IdentityTransactionClient = ReturnType<
       provide: IDENTITY_TRANSACTION_CLIENT,
       inject: [CONTROL_PLANE_PRISMA_CLIENT],
       useFactory: (controlPlane: PrismaClientHolder) =>
-        createIdentityTransactionRunner(() => controlPlane.prisma),
+        createIdentityTransactionRunner(controlPlane.prisma),
     },
     {
       provide: IDENTITY_READ_CLIENT,
       inject: [CONTROL_PLANE_READ_PRISMA_CLIENT],
       useFactory: (controlPlaneRead: PrismaClientHolder) =>
-        createIdentityTransactionRunner(() => controlPlaneRead.prisma),
+        createIdentityTransactionRunner(controlPlaneRead.prisma),
     },
     {
       provide: IDENTITY_POSTGRES_READINESS,

@@ -100,14 +100,6 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
       `${relative(root, file)} constructs a PostgreSQL pool directly; use createPostgresPool so every pool observes connection errors`,
     );
   }
-  if (
-    /\bDrizzleModule\s*\.\s*forRootAsync\s*\(/.test(source) &&
-    /\bdrizzle\s*,\s*connection\s*:/.test(source)
-  ) {
-    fail(
-      `${relative(root, file)} lets Drizzle create an unmonitored PostgreSQL pool; pass a database built with createPostgresPool`,
-    );
-  }
 }
 
 // Prisma types never reach application or domain code: infrastructure maps
@@ -115,17 +107,17 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
 // only place a Prisma model belongs. Matching the specifier here rather than
 // in dependency-cruiser is deliberate - the generated client is written outside
 // `src/`, so dependency-cruiser never reads it as a module edge.
-const PRISMA_CLIENT_SPECIFIER = /from\s*['"]@prisma-client\//;
+//
+// `src/modules/persistence` is not exempt as a module: its `infrastructure`
+// folder builds the shared clients and may import the generated client, and
+// its `public` facade re-exports from there without naming the client itself.
+// Static imports, re-exports, dynamic `import()`, and `require()` all count,
+// and so does a spec outside infrastructure.
+const PRISMA_CLIENT_SPECIFIER =
+  /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)['"]@prisma-client\//;
 
 for (const file of collectTypeScriptFiles(srcDirectory)) {
-  // `infrastructure` is the layer that owns persistence. `src/modules/persistence`
-  // is that same seam named as a module: it builds the shared clients every other
-  // module receives, so it has to import the generated client to do it.
-  const isPersistenceCode =
-    file.split(sep).includes('infrastructure') ||
-    file.includes(`${sep}modules${sep}persistence${sep}`);
-
-  if (file.endsWith('.spec.ts') || isPersistenceCode) {
+  if (file.split(sep).includes('infrastructure')) {
     continue;
   }
 

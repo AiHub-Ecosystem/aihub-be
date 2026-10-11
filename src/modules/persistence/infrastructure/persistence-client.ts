@@ -31,9 +31,9 @@ export interface PrismaPool {
 
 export interface PrismaClientHolder {
   /**
-   * The generated client. Reading it before a URL is configured throws, which
-   * is where a deployment missing a control-plane URL fails: assembling the
-   * module graph must still work.
+   * The generated client. Using it before a URL is configured throws, which is
+   * where a deployment missing a control-plane URL fails: assembling the module
+   * graph must still work, so handing it out does not.
    */
   readonly prisma: PrismaClient;
 

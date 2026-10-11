@@ -1,11 +1,28 @@
-import { Buffer } from 'node:buffer';
-
+import {
+  isRowlessWrite,
+  normalizeRawRows,
+  postgresError,
+  runGuardedTransaction,
+} from '@/modules/persistence/persistence.module';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
-import { Prisma, PrismaClient } from '@prisma-client/client';
-import type {
-  PostgresAuthClient,
-  PostgresAuthQueryClient,
-} from './postgres-auth.client';
+import type { Prisma, PrismaClient } from '@prisma-client/client';
+
+/** Query-shaped handle the unchanged database-lane fixtures still pass. */
+export interface PostgresAuthQueryClient {
+  query(
+    text: string,
+    values: readonly unknown[],
+  ): Promise<readonly Record<string, unknown>[]>;
+}
+
+/** Test-only query adapter retained for the unchanged database-lane fixtures. */
+export interface PostgresAuthClient extends PostgresAuthQueryClient {
+  checkConnection(timeoutMs: number): Promise<void>;
+  transaction<T>(
+    callback: (client: PostgresAuthQueryClient) => Promise<T>,
+  ): Promise<T>;
+  close(): Promise<void>;
+}
 
 export type AuthRepositoryClient = PrismaClient | PostgresAuthClient;
 export type AuthSqlClient =
@@ -15,46 +32,6 @@ export type AuthSqlClient =
 export type AuthTransactionClient =
   | Prisma.TransactionClient
   | PostgresAuthQueryClient;
-
-function normalizeRawValue(value: unknown): unknown {
-  if (typeof value === 'bigint') return value.toString();
-  if (Prisma.Decimal.isDecimal(value)) return value.toString();
-  if (value instanceof Uint8Array && !Buffer.isBuffer(value)) {
-    return Buffer.from(value);
-  }
-  return value;
-}
-
-function normalizeRawRows<T extends Record<string, unknown>>(
-  rows: readonly T[],
-): readonly T[] {
-  return rows.map((source) => {
-    const row: Record<string, unknown> = {};
-    for (const column of Object.keys(source)) {
-      row[column] = normalizeRawValue(source[column]);
-    }
-    return row as T;
-  });
-}
-
-function postgresError(error: unknown): unknown {
-  if (typeof error !== 'object' || error === null) return error;
-  const driverError = Reflect.get(error, 'meta')?.driverAdapterError;
-  const cause =
-    typeof driverError === 'object' && driverError !== null
-      ? Reflect.get(driverError, 'cause')
-      : undefined;
-  const code =
-    typeof cause === 'object' && cause !== null
-      ? Reflect.get(cause, 'originalCode')
-      : undefined;
-  if (typeof code !== 'string') return error;
-  const message = Reflect.get(cause as object, 'originalMessage');
-  return Object.assign(
-    new Error(typeof message === 'string' ? message : String(error)),
-    { code, cause: error },
-  );
-}
 
 function isLegacyQueryClient(
   client: AuthSqlClient,
@@ -86,10 +63,7 @@ export function authQueryRows<
   if (isLegacyQueryClient(client)) {
     return client.query(text, values) as Promise<readonly T[]>;
   }
-  if (
-    /^\s*(?:INSERT|UPDATE|DELETE)\b/i.test(text) &&
-    !/\bRETURNING\b/i.test(text)
-  ) {
+  if (isRowlessWrite(text)) {
     if (!isPrismaExecuteClient(client)) {
       throw new Error('Auth SQL client does not expose Prisma raw SQL methods');
     }
@@ -136,54 +110,6 @@ export function authExecute(
   return query;
 }
 
-function guardTransaction(transaction: Prisma.TransactionClient) {
-  let active = true;
-  const inFlight: Promise<unknown>[] = [];
-  const guarded = new Proxy(transaction, {
-    get(target, property) {
-      const method = Reflect.get(target, property, target) as unknown;
-      if (
-        (property !== '$queryRawUnsafe' && property !== '$executeRawUnsafe') ||
-        typeof method !== 'function'
-      ) {
-        return method;
-      }
-      return (...args: unknown[]) => {
-        if (!active) {
-          return Promise.reject(
-            new Error('Auth transaction is no longer active'),
-          );
-        }
-        const query = Reflect.apply(method, target, args) as Promise<unknown>;
-        inFlight.push(query);
-        void query.catch(() => undefined);
-        return query;
-      };
-    },
-  }) as Prisma.TransactionClient;
-
-  return {
-    client: guarded,
-    async settle<T>(callback: () => Promise<T>): Promise<T> {
-      let result!: T;
-      let callbackError: { readonly value: unknown } | undefined;
-      try {
-        result = await callback();
-      } catch (error) {
-        callbackError = { value: error };
-      }
-      active = false;
-      const results = await Promise.allSettled(inFlight);
-      if (callbackError !== undefined) throw callbackError.value;
-      const failed = results.find(
-        (entry): entry is PromiseRejectedResult => entry.status === 'rejected',
-      );
-      if (failed !== undefined) throw postgresError(failed.reason);
-      return result;
-    },
-  };
-}
-
 export function authTransaction<T>(
   client: AuthRepositoryClient,
   callback: (transaction: AuthTransactionClient) => Promise<T>,
@@ -193,10 +119,14 @@ export function authTransaction<T>(
       callback as (transaction: PostgresAuthQueryClient) => Promise<T>,
     );
   }
-  return client.$transaction((transaction) => {
-    const guard = guardTransaction(transaction);
-    return guard.settle(() => callback(guard.client));
-  }, CONTROL_PLANE_TRANSACTION_OPTIONS);
+  return client.$transaction(
+    (transaction) =>
+      runGuardedTransaction(transaction, callback, {
+        expired: () => new Error('Auth transaction is no longer active'),
+        mapFailure: postgresError,
+      }),
+    CONTROL_PLANE_TRANSACTION_OPTIONS,
+  );
 }
 
 function isLegacyAuthClient(

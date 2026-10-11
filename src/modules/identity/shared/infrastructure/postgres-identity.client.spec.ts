@@ -53,7 +53,7 @@ function identityClient(
   } as unknown as PrismaClient;
 
   return {
-    client: createIdentityTransactionRunner(() => prisma),
+    client: createIdentityTransactionRunner(prisma),
     queryRaw,
     executeRaw,
     transaction,

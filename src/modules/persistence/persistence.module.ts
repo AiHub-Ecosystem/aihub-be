@@ -8,15 +8,11 @@ import {
   CONTROL_PLANE_PRISMA_CLIENT,
   CONTROL_PLANE_READ_PRISMA_CLIENT,
   type PrismaClientHolder,
+  type PrismaClientUrls,
   RUNTIME_PRISMA_CLIENT,
   type SharedPrismaClients,
-} from './application/persistence-client.port';
+} from './infrastructure/persistence-client';
 import { createSharedPrismaClients } from './infrastructure/prisma-client';
-
-export {
-  createPrismaClient,
-  deferPrismaClient,
-} from './infrastructure/prisma-client';
 
 const PRISMA_CLIENTS = Symbol('PRISMA_CLIENTS');
 
@@ -41,17 +37,8 @@ class SharedPrismaClientsLifecycle implements OnApplicationShutdown {
     {
       provide: PRISMA_CLIENTS,
       inject: [RUNTIME_CONNECTION_CONFIGURATION],
-      useFactory: (configuration: {
-        databaseUrl: string | undefined;
-        controlPlaneDatabaseUrl: string | undefined;
-        controlPlaneReadDatabaseUrl: string | undefined;
-      }): SharedPrismaClients =>
-        createSharedPrismaClients({
-          databaseUrl: configuration.databaseUrl,
-          controlPlaneDatabaseUrl: configuration.controlPlaneDatabaseUrl,
-          controlPlaneReadDatabaseUrl:
-            configuration.controlPlaneReadDatabaseUrl,
-        }),
+      useFactory: (configuration: PrismaClientUrls): SharedPrismaClients =>
+        createSharedPrismaClients(configuration),
     },
     {
       provide: RUNTIME_PRISMA_CLIENT,
@@ -85,3 +72,22 @@ class SharedPrismaClientsLifecycle implements OnApplicationShutdown {
   ],
 })
 export class PersistenceModule {}
+
+// The seam other modules compile against. A module file is the one place a
+// business module may reach into another module's internals, so the tokens, the
+// factory, and the raw-SQL helpers are re-exported here rather than imported
+// from `infrastructure/` by path.
+export {
+  CONTROL_PLANE_PRISMA_CLIENT,
+  CONTROL_PLANE_READ_PRISMA_CLIENT,
+  RUNTIME_PRISMA_CLIENT,
+} from './infrastructure/persistence-client';
+export type { PrismaClientHolder } from './infrastructure/persistence-client';
+export { createPrismaClient } from './infrastructure/prisma-client';
+export {
+  isLifecycleProperty,
+  isRowlessWrite,
+  normalizeRawRows,
+  postgresError,
+  runGuardedTransaction,
+} from './infrastructure/prisma-raw';

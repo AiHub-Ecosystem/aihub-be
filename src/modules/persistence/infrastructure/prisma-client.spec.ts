@@ -73,7 +73,9 @@ describe('createSharedPrismaClients', () => {
       controlPlaneReadDatabaseUrl: undefined,
     });
 
-    expect(() => clients.runtime.prisma).toThrow(
+    // Handing the client out must not throw: the module graph still builds.
+    expect(clients.runtime.prisma).toBeDefined();
+    expect(() => clients.runtime.prisma.$queryRawUnsafe('SELECT 1')).toThrow(
       'PostgreSQL is not configured',
     );
     await expect(clients.controlPlaneRead.checkConnection(750)).rejects.toThrow(
