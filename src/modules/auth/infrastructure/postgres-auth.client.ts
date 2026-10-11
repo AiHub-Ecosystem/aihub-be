@@ -14,7 +14,19 @@ export interface PostgresAuthQueryClient {
   ): Promise<readonly Record<string, unknown>[]>;
 }
 
+export interface PostgresAuthTransactionClient extends PostgresAuthQueryClient {
+  $executeRawUnsafe(
+    query: string,
+    ...values: readonly unknown[]
+  ): Promise<number>;
+}
+
 export interface PostgresAuthClient extends PostgresAuthQueryClient {
+  /** Available on the Prisma-backed fixture adapter for raw outbox inserts. */
+  $executeRawUnsafe?(
+    query: string,
+    ...values: readonly unknown[]
+  ): Promise<number>;
   checkConnection(timeoutMs: number): Promise<void>;
   transaction<T>(
     callback: (client: PostgresAuthQueryClient) => Promise<T>,
@@ -109,14 +121,20 @@ function authClient(
 ): PostgresAuthClient {
   return {
     query: (text, values) => queryRows(getPrisma(), text, values),
+    $executeRawUnsafe: (text, ...values) =>
+      getPrisma()
+        .$executeRawUnsafe(text, ...values)
+        .catch((error) => {
+          throw postgresError(error);
+        }),
     checkConnection,
     transaction: <T>(
       callback: (client: PostgresAuthQueryClient) => Promise<T>,
     ) =>
       getPrisma().$transaction(async (transaction) => {
         let active = true;
-        const queries: Promise<readonly Record<string, unknown>[]>[] = [];
-        const transactionClient: PostgresAuthQueryClient = {
+        const queries: Promise<unknown>[] = [];
+        const transactionClient: PostgresAuthTransactionClient = {
           query: (text, values) => {
             if (!active) {
               return Promise.reject(
@@ -124,6 +142,21 @@ function authClient(
               );
             }
             const query = queryRows(transaction, text, values);
+            queries.push(query);
+            void query.catch(() => undefined);
+            return query;
+          },
+          $executeRawUnsafe: (text, ...values) => {
+            if (!active) {
+              return Promise.reject(
+                new Error('Auth transaction is no longer active'),
+              );
+            }
+            const query = transaction
+              .$executeRawUnsafe(text, ...values)
+              .catch((error) => {
+                throw postgresError(error);
+              });
             queries.push(query);
             void query.catch(() => undefined);
             return query;
@@ -174,6 +207,7 @@ export function createPostgresAuthClient(
     };
     return {
       query: async () => missingDatabaseUrl(),
+      $executeRawUnsafe: async () => missingDatabaseUrl(),
       transaction: async () => missingDatabaseUrl(),
       checkConnection: async () => missingDatabaseUrl(),
       close: async () => undefined,

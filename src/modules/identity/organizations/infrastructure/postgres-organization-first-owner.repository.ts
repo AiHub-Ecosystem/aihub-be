@@ -16,7 +16,11 @@ import {
   membershipRoleValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
-import type { PostgresIdentityTransactionalClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  type IdentityRepositoryClient,
+  identityRows,
+  identityTransaction,
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 // The owner need not have verified their email yet: an unverified account
 // cannot sign in, so attaching it early harms nothing and saves a round trip
@@ -63,7 +67,7 @@ export class PostgresOrganizationFirstOwnerRepository
   implements OrganizationFirstOwnerPort
 {
   constructor(
-    private readonly client: PostgresIdentityTransactionalClient & {
+    private readonly client: IdentityRepositoryClient & {
       close(): Promise<void>;
     },
   ) {}
@@ -88,12 +92,12 @@ export class PostgresOrganizationFirstOwnerRepository
   private transact(
     input: AttachFirstOwnerInput,
   ): Promise<AttachFirstOwnerResult> {
-    return this.client.transaction(async (transaction) => {
+    return identityTransaction(this.client, async (transaction) => {
       const accountId = async (
         sql: string,
         username: string,
       ): Promise<string | undefined> => {
-        const rows = await transaction.query(sql, [username]);
+        const rows = await identityRows(transaction, sql, [username]);
         const row = rows[0];
         return isRecord(row) ? stringValue(row, 'id') : undefined;
       };
@@ -118,15 +122,19 @@ export class PostgresOrganizationFirstOwnerRepository
         return { kind: 'actor_is_owner' as const };
       }
 
-      const organizationRows = await transaction.query(LOCK_ORGANIZATION_SQL, [
-        input.organizationId,
-      ]);
+      const organizationRows = await identityRows(
+        transaction,
+        LOCK_ORGANIZATION_SQL,
+        [input.organizationId],
+      );
       if (!isRecord(organizationRows[0])) {
         return { kind: 'organization_not_found' as const };
       }
 
       const memberships = (
-        await transaction.query(ACTIVE_MEMBERSHIPS_SQL, [input.organizationId])
+        await identityRows(transaction, ACTIVE_MEMBERSHIPS_SQL, [
+          input.organizationId,
+        ])
       ).map((row) => {
         const userId = isRecord(row)
           ? stringValue(row, 'user_account_id')
@@ -152,7 +160,7 @@ export class PostgresOrganizationFirstOwnerRepository
         return { kind: 'organization_has_members' as const };
       }
 
-      await transaction.query(UPSERT_OWNER_SQL, [
+      await identityRows(transaction, UPSERT_OWNER_SQL, [
         input.organizationId,
         ownerId,
       ]);

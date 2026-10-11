@@ -14,7 +14,11 @@ import {
   isRecord,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
-import type { PostgresIdentityTransactionalClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  type IdentityRepositoryClient,
+  identityRows,
+  identityTransaction,
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 const LOCK_ORGANIZATION_SQL = `
   SELECT name, entitlements FROM organizations WHERE id = $1 FOR UPDATE
@@ -30,7 +34,7 @@ export class PostgresOrganizationEntitlementRepository
   implements OrganizationEntitlementPort
 {
   constructor(
-    private readonly client: PostgresIdentityTransactionalClient & {
+    private readonly client: IdentityRepositoryClient & {
       close(): Promise<void>;
     },
   ) {}
@@ -39,14 +43,14 @@ export class PostgresOrganizationEntitlementRepository
     input: GrantOrganizationEntitlementInput,
   ): Promise<GrantOrganizationEntitlementResult> {
     try {
-      return await this.client.transaction(async (transaction) => {
+      return await identityTransaction(this.client, async (transaction) => {
         const actorId = await findActiveAccountId(
           transaction,
           input.actorUsername,
         );
         if (actorId === undefined) return { kind: 'actor_invalid' as const };
 
-        const rows = await transaction.query(LOCK_ORGANIZATION_SQL, [
+        const rows = await identityRows(transaction, LOCK_ORGANIZATION_SQL, [
           input.organizationId,
         ]);
         const organization = rows[0];
@@ -62,9 +66,11 @@ export class PostgresOrganizationEntitlementRepository
           throw identityStoreError('Identity data is invalid');
         }
 
-        const keyRows = await transaction.query(ORGANIZATION_KEY_HASHES_SQL, [
-          input.organizationId,
-        ]);
+        const keyRows = await identityRows(
+          transaction,
+          ORGANIZATION_KEY_HASHES_SQL,
+          [input.organizationId],
+        );
         const keyHashes = keyRows.map((row) => {
           const hash = isRecord(row) ? stringValue(row, 'hash_hex') : undefined;
           if (hash === undefined)
@@ -74,7 +80,7 @@ export class PostgresOrganizationEntitlementRepository
         if (entitlements.includes(input.entitlement))
           return { kind: 'unchanged' as const, keyHashes };
 
-        await transaction.query(GRANT_ENTITLEMENT_SQL, [
+        await identityRows(transaction, GRANT_ENTITLEMENT_SQL, [
           input.organizationId,
           input.entitlement,
         ]);

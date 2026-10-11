@@ -37,6 +37,13 @@ export interface EmailDeliveryQueryClient {
   ): Promise<readonly Record<string, unknown>[]>;
 }
 
+interface EmailDeliveryPrismaTransaction {
+  $executeRawUnsafe(
+    query: string,
+    ...values: readonly unknown[]
+  ): Promise<number>;
+}
+
 const SELECT_ROW = `
   SELECT id, kind, status, payload_ciphertext, attempts, last_attempt_at,
          last_error_code, cancel_reason, created_at, completed_at
@@ -416,13 +423,14 @@ export class PostgresEmailDeliveryRequestRepository
     transaction: EmailDeliveryTransaction,
     input: InsertEmailDeliveryRequestInput,
   ): Promise<void> {
-    const client = transaction as unknown as EmailDeliveryQueryClient;
-    await client.query(INSERT_SQL, [
+    const client = transaction as unknown as EmailDeliveryPrismaTransaction;
+    await client.$executeRawUnsafe(
+      INSERT_SQL,
       input.id,
       input.kind,
       input.payloadCiphertext,
       input.createdAt,
-    ]);
+    );
   }
 
   async recordFailedAttempt(

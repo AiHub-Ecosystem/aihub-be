@@ -17,7 +17,11 @@ import {
   isRecord,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
-import type { PostgresIdentityTransactionalClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  type IdentityRepositoryClient,
+  identityRows,
+  identityTransaction,
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 // Creation keeps the operator CLI's own rule: the Organization must be active.
 // Entitlements and the active-key cap are the Bearer path's, not this one's.
@@ -67,7 +71,7 @@ const REVOKE_ACTIVE_API_KEY_SQL = `
  */
 export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
   constructor(
-    private readonly client: PostgresIdentityTransactionalClient & {
+    private readonly client: IdentityRepositoryClient & {
       close(): Promise<void>;
     },
   ) {}
@@ -76,7 +80,7 @@ export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
     input: CreateOperatorApiKeyInput,
   ): Promise<CreateOperatorApiKeyResult> {
     try {
-      return await this.client.transaction(async (transaction) => {
+      return await identityTransaction(this.client, async (transaction) => {
         const actorId = await findActiveAccountId(
           transaction,
           input.actorUsername,
@@ -85,7 +89,8 @@ export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
           return { kind: 'actor_invalid' as const };
         }
 
-        const organizationRows = await transaction.query(
+        const organizationRows = await identityRows(
+          transaction,
           LOCK_ACTIVE_ORGANIZATION_SQL,
           [input.organizationId],
         );
@@ -93,7 +98,7 @@ export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
           return { kind: 'organization_unavailable' as const };
         }
 
-        await transaction.query(INSERT_API_KEY_SQL, [
+        await identityRows(transaction, INSERT_API_KEY_SQL, [
           input.apiKeyId,
           input.organizationId,
           input.keyHash,
@@ -133,7 +138,7 @@ export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
     input: RevokeOperatorApiKeyInput,
   ): Promise<RevokeOperatorApiKeyResult> {
     try {
-      return await this.client.transaction(async (transaction) => {
+      return await identityTransaction(this.client, async (transaction) => {
         const actorId = await findActiveAccountId(
           transaction,
           input.actorUsername,
@@ -142,7 +147,7 @@ export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
           return { kind: 'actor_invalid' as const };
         }
 
-        const keyRows = await transaction.query(LOCK_API_KEY_SQL, [
+        const keyRows = await identityRows(transaction, LOCK_API_KEY_SQL, [
           input.apiKeyId,
         ]);
         const row = keyRows[0];
@@ -167,7 +172,7 @@ export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
           return { kind: 'unchanged' as const, keyHash };
         }
 
-        await transaction.query(REVOKE_ACTIVE_API_KEY_SQL, [
+        await identityRows(transaction, REVOKE_ACTIVE_API_KEY_SQL, [
           input.apiKeyId,
           input.occurredAt,
         ]);

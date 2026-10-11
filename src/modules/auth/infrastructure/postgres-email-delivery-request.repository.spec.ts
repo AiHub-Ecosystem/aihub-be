@@ -1,5 +1,9 @@
 import { Logger } from '@nestjs/common';
 
+import type {
+  EmailDeliveryTransaction,
+  InsertEmailDeliveryRequestInput,
+} from '@/modules/auth/application/email-delivery-request.port';
 import type { EmailDeliveryQueryClient } from './postgres-email-delivery-request.repository';
 import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
 
@@ -40,6 +44,32 @@ function claim(row: Record<string, unknown>) {
 }
 
 describe('PostgresEmailDeliveryRequestRepository', () => {
+  it('inserts the outbox row through the caller Prisma transaction', async () => {
+    const executeRaw = jest.fn(async () => 1);
+    const transaction = {
+      $executeRawUnsafe: executeRaw,
+    } as unknown as EmailDeliveryTransaction;
+    const input: InsertEmailDeliveryRequestInput = {
+      id: ROW_ID,
+      kind: 'verification_email',
+      payloadCiphertext: 'sealed',
+      createdAt: NOW,
+    };
+
+    await new PostgresEmailDeliveryRequestRepository().insert(
+      transaction,
+      input,
+    );
+
+    expect(executeRaw).toHaveBeenCalledWith(
+      expect.any(String),
+      input.id,
+      input.kind,
+      input.payloadCiphertext,
+      input.createdAt,
+    );
+  });
+
   it('skips an unknown kind without failing valid rows in the same claim', async () => {
     const warn = jest
       .spyOn(Logger.prototype, 'warn')

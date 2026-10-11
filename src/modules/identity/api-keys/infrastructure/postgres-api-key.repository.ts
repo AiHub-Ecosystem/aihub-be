@@ -10,7 +10,10 @@ import {
   isRecord,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
-import type { PostgresIdentityQueryClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  type IdentityRepositoryClient,
+  identityRows,
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 type ApiKeyLookupRow = Record<string, unknown>;
 
@@ -184,7 +187,7 @@ export function apiKeyRecordFromRow(value: unknown): ApiKeyRecord | undefined {
 }
 
 export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
-  constructor(private readonly client: PostgresIdentityQueryClient) {}
+  constructor(private readonly client: IdentityRepositoryClient) {}
 
   async findByHash(hashHex: string): Promise<ApiKeyRecord | null> {
     if (!/^[0-9a-f]{64}$/.test(hashHex)) {
@@ -206,7 +209,7 @@ export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
 
   private async lookup(hashHex: string) {
     try {
-      return (await this.client.query(API_KEY_LOOKUP_SQL, [
+      return (await identityRows(this.client, API_KEY_LOOKUP_SQL, [
         Buffer.from(hashHex, 'hex'),
       ])) as readonly ApiKeyLookupRow[];
     } catch {
@@ -216,7 +219,7 @@ export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
 
   async touchLastUsed(apiKeyId: string, usedAt: Date): Promise<void> {
     try {
-      await this.client.query(TOUCH_API_KEY_LAST_USED_SQL, [
+      await identityRows(this.client, TOUCH_API_KEY_LAST_USED_SQL, [
         apiKeyId,
         usedAt,
         new Date(usedAt.getTime() - LAST_USED_THROTTLE_MS),

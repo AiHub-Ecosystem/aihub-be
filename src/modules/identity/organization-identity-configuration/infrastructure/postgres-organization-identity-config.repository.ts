@@ -25,10 +25,13 @@ import {
   organizationStatusValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
-import type {
-  PostgresIdentityQueryClient,
-  PostgresIdentityTransactionalClient,
+import {
+  type IdentityRepositoryClient,
+  identityRows,
+  identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+
+type IdentitySqlClient = Parameters<typeof identityRows>[0];
 
 type IdentityConfigRow = Record<string, unknown>;
 
@@ -236,8 +239,8 @@ export class PostgresOrganizationIdentityConfigRepository
   implements OrganizationIdentityConfigRepositoryPort
 {
   constructor(
-    private readonly client: PostgresIdentityTransactionalClient,
-    private readonly readClient: PostgresIdentityQueryClient = client,
+    private readonly client: IdentityRepositoryClient,
+    private readonly readClient: IdentitySqlClient = client,
   ) {}
 
   async findActiveByOrganizationId(
@@ -278,9 +281,10 @@ export class PostgresOrganizationIdentityConfigRepository
     const stamp = auditStamp(input, input.userId, input.context.receivedAt);
 
     try {
-      return await this.client.transaction(async (transaction) => {
+      return await identityTransaction(this.client, async (transaction) => {
         const organization = (
-          (await transaction.query(
+          (await identityRows(
+            transaction,
             `SELECT status FROM organizations WHERE id = $1 FOR UPDATE`,
             [input.organizationId],
           )) as readonly IdentityConfigRow[]
@@ -300,7 +304,8 @@ export class PostgresOrganizationIdentityConfigRepository
         }
 
         const membership = (
-          (await transaction.query(
+          (await identityRows(
+            transaction,
             `SELECT role, status
              FROM organization_members
              WHERE organization_id = $1 AND user_account_id = $2
@@ -320,22 +325,27 @@ export class PostgresOrganizationIdentityConfigRepository
           return { kind: 'forbidden' as const };
         }
 
-        const written = (await transaction.query(INSERT_OR_UPDATE_CONFIG_SQL, [
-          input.organizationId,
-          input.issuer,
-          input.jwksUrl,
-          input.publicKeysJwks === null
-            ? null
-            : JSON.stringify(input.publicKeysJwks),
-          [...input.allowedAlgorithms],
-          input.maxAssertionTtlSeconds,
-        ])) as readonly IdentityConfigRow[];
+        const written = (await identityRows(
+          transaction,
+          INSERT_OR_UPDATE_CONFIG_SQL,
+          [
+            input.organizationId,
+            input.issuer,
+            input.jwksUrl,
+            input.publicKeysJwks === null
+              ? null
+              : JSON.stringify(input.publicKeysJwks),
+            [...input.allowedAlgorithms],
+            input.maxAssertionTtlSeconds,
+          ],
+        )) as readonly IdentityConfigRow[];
 
         const changed = written.length > 0;
         const row =
           written[0] ??
           (
-            (await transaction.query(
+            (await identityRows(
+              transaction,
               `SELECT ${STORED_CONFIG_COLUMNS_SQL}
                FROM organization_identity_configs
                WHERE organization_id = $1
@@ -386,7 +396,8 @@ export class PostgresOrganizationIdentityConfigRepository
     }
 
     try {
-      const [first] = (await this.readClient.query(
+      const [first] = (await identityRows(
+        this.readClient,
         `SELECT ${status === null ? STORED_CONFIG_COLUMNS_SQL : ACTIVE_CONFIG_COLUMNS_SQL}
          FROM organization_identity_configs
          WHERE organization_id = $1${status === null ? '' : ' AND status = $2'}

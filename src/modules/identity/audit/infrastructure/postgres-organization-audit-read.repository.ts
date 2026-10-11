@@ -18,7 +18,9 @@ import {
   isRecord,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
-import type { PostgresIdentityQueryClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import { identityRows } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+
+type IdentitySqlClient = Parameters<typeof identityRows>[0];
 
 const TARGET_TYPES = [
   'organization',
@@ -169,7 +171,7 @@ function mapAuditEvent(
 export class PostgresOrganizationAuditReadRepository
   implements OrganizationAuditEventReadPort
 {
-  constructor(private readonly client: PostgresIdentityQueryClient) {}
+  constructor(private readonly client: IdentitySqlClient) {}
 
   async listAuditEvents(
     input: ListOrganizationAuditEventsInput,
@@ -187,7 +189,7 @@ export class PostgresOrganizationAuditReadRepository
 
     let rows: readonly unknown[];
     try {
-      rows = await this.client.query(LIST_AUDIT_EVENTS_SQL, [
+      rows = await identityRows(this.client, LIST_AUDIT_EVENTS_SQL, [
         input.organizationId,
         after?.occurredAt ?? null,
         after?.id ?? null,

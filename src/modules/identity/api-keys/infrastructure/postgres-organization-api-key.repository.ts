@@ -15,7 +15,11 @@ import {
   auditStamp,
   recordOrganizationAuditEvent,
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
-import type { PostgresIdentityTransactionalClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  type IdentityRepositoryClient,
+  identityRows,
+  identityTransaction,
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 /**
  * Locking the Organization row is what makes the active-key limit hold: two
@@ -260,7 +264,7 @@ function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
 export class PostgresOrganizationApiKeyRepository
   implements OrganizationApiKeyPort
 {
-  constructor(private readonly client: PostgresIdentityTransactionalClient) {}
+  constructor(private readonly client: IdentityRepositoryClient) {}
 
   async rotateApiKey(
     input: RotateOrganizationApiKeyRecordInput,
@@ -276,10 +280,11 @@ export class PostgresOrganizationApiKeyRepository
     }
 
     try {
-      return await this.client.transaction(async (transaction) => {
+      return await identityTransaction(this.client, async (transaction) => {
         // Organization first, then key: creation takes the same order, so two
         // key mutations cannot deadlock against each other.
-        const organizationRows = await transaction.query(
+        const organizationRows = await identityRows(
+          transaction,
           LOCK_ORGANIZATION_SQL,
           [input.organizationId],
         );
@@ -288,7 +293,7 @@ export class PostgresOrganizationApiKeyRepository
           return { kind: 'organization_unavailable' as const };
         }
 
-        const keyRows = await transaction.query(LOCK_API_KEY_SQL, [
+        const keyRows = await identityRows(transaction, LOCK_API_KEY_SQL, [
           input.apiKeyId,
           input.organizationId,
         ]);
@@ -324,21 +329,25 @@ export class PostgresOrganizationApiKeyRepository
           return { kind: 'key_not_rotatable' as const };
         }
 
-        await transaction.query(REVOKE_API_KEY_SQL, [
+        await identityRows(transaction, REVOKE_API_KEY_SQL, [
           input.apiKeyId,
           input.now,
         ]);
 
-        const insertedRows = await transaction.query(INSERT_REPLACEMENT_SQL, [
-          input.replacementId,
-          input.organizationId,
-          input.keyHash,
-          input.keyPrefix,
-          name,
-          [...scopes],
-          [...allowedEnvironments],
-          expiresAt,
-        ]);
+        const insertedRows = await identityRows(
+          transaction,
+          INSERT_REPLACEMENT_SQL,
+          [
+            input.replacementId,
+            input.organizationId,
+            input.keyHash,
+            input.keyPrefix,
+            name,
+            [...scopes],
+            [...allowedEnvironments],
+            expiresAt,
+          ],
+        );
         const createdAt = createdAtValue(insertedRows[0]);
         if (createdAt === undefined) {
           throw identityStoreError('Identity data is invalid');
@@ -389,10 +398,11 @@ export class PostgresOrganizationApiKeyRepository
     }
 
     try {
-      return await this.client.transaction(async (transaction) => {
+      return await identityTransaction(this.client, async (transaction) => {
         // Organization first, then key: the order creation and rotation use,
         // so key mutations cannot deadlock against each other.
-        const organizationRows = await transaction.query(
+        const organizationRows = await identityRows(
+          transaction,
           LOCK_ORGANIZATION_SQL,
           [input.organizationId],
         );
@@ -401,10 +411,11 @@ export class PostgresOrganizationApiKeyRepository
           return { kind: 'organization_unavailable' as const };
         }
 
-        const keyRows = await transaction.query(LOCK_API_KEY_FOR_REVOKE_SQL, [
-          input.apiKeyId,
-          input.organizationId,
-        ]);
+        const keyRows = await identityRows(
+          transaction,
+          LOCK_API_KEY_FOR_REVOKE_SQL,
+          [input.apiKeyId, input.organizationId],
+        );
         const row = keyRows[0];
         if (!isRecord(row)) {
           return { kind: 'key_not_found' as const };
@@ -415,7 +426,7 @@ export class PostgresOrganizationApiKeyRepository
           throw identityStoreError('Identity data is invalid');
         }
 
-        await transaction.query(REVOKE_ACTIVE_API_KEY_SQL, [
+        await identityRows(transaction, REVOKE_ACTIVE_API_KEY_SQL, [
           input.apiKeyId,
           input.now,
         ]);
@@ -466,7 +477,9 @@ export class PostgresOrganizationApiKeyRepository
 
     let rows: readonly unknown[];
     try {
-      rows = await this.client.query(LIST_API_KEYS_SQL, [input.organizationId]);
+      rows = await identityRows(this.client, LIST_API_KEYS_SQL, [
+        input.organizationId,
+      ]);
     } catch {
       throw identityStoreError('Identity store is unavailable');
     }
@@ -498,8 +511,9 @@ export class PostgresOrganizationApiKeyRepository
     }
 
     try {
-      return await this.client.transaction(async (transaction) => {
-        const organizationRows = await transaction.query(
+      return await identityTransaction(this.client, async (transaction) => {
+        const organizationRows = await identityRows(
+          transaction,
           LOCK_ORGANIZATION_SQL,
           [input.organizationId],
         );
@@ -523,9 +537,11 @@ export class PostgresOrganizationApiKeyRepository
           return { kind: 'entitlements_missing' as const };
         }
 
-        const countRows = await transaction.query(COUNT_ACTIVE_KEYS_SQL, [
-          input.organizationId,
-        ]);
+        const countRows = await identityRows(
+          transaction,
+          COUNT_ACTIVE_KEYS_SQL,
+          [input.organizationId],
+        );
         const countRow = countRows[0];
         if (!isRecord(countRow) || typeof countRow.active_keys !== 'number') {
           throw identityStoreError('Identity data is invalid');
@@ -534,16 +550,20 @@ export class PostgresOrganizationApiKeyRepository
           return { kind: 'limit_reached' as const };
         }
 
-        const insertedRows = await transaction.query(INSERT_API_KEY_SQL, [
-          input.apiKeyId,
-          input.organizationId,
-          input.keyHash,
-          input.keyPrefix,
-          input.name,
-          [...input.scopes],
-          [...input.allowedEnvironments],
-          input.expiresAt,
-        ]);
+        const insertedRows = await identityRows(
+          transaction,
+          INSERT_API_KEY_SQL,
+          [
+            input.apiKeyId,
+            input.organizationId,
+            input.keyHash,
+            input.keyPrefix,
+            input.name,
+            [...input.scopes],
+            [...input.allowedEnvironments],
+            input.expiresAt,
+          ],
+        );
         const createdAt = createdAtValue(insertedRows[0]);
         if (createdAt === undefined) {
           throw identityStoreError('Identity data is invalid');

@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import { Prisma } from '@prisma-client/client';
 import { monotonicFactory } from 'ulid';
 
 import {
@@ -7,7 +8,12 @@ import {
   organizationAuditEvent,
 } from '@/modules/identity/domain/organization-audit-event';
 
-import type { PostgresIdentityQueryClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  type IdentityRepositoryClient,
+  identityRows,
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+
+type IdentitySqlClient = Parameters<typeof identityRows>[0];
 
 /**
  * The part of an event every mutation stamps the same way. `occurredAt` stays
@@ -75,13 +81,13 @@ function createOrganizationAuditEvent(
  * cannot account for.
  */
 export async function recordOrganizationAuditEvent(
-  client: PostgresIdentityQueryClient,
+  client: Prisma.TransactionClient | IdentitySqlClient,
   stamp: Omit<OrganizationAuditStamp, 'id'>,
   draft: OrganizationAuditDraft,
 ): Promise<void> {
   const event = createOrganizationAuditEvent(stamp, draft);
 
-  await client.query(INSERT_ORGANIZATION_AUDIT_EVENT_SQL, [
+  await identityRows(client, INSERT_ORGANIZATION_AUDIT_EVENT_SQL, [
     event.id,
     event.organizationId,
     event.actorUserAccountId,
@@ -107,7 +113,7 @@ export async function recordOrganizationAuditEvent(
  * outage, which is the worse failure of the two.
  */
 export async function recordOrganizationAuditDenial(
-  client: PostgresIdentityQueryClient,
+  client: IdentityRepositoryClient,
   stamp: Omit<OrganizationAuditStamp, 'id'>,
   draft: OrganizationAuditDraft,
 ): Promise<void> {

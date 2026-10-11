@@ -1,5 +1,5 @@
 import { isRecord, stringValue } from './identity-row';
-import type { PostgresIdentityQueryClient } from './postgres-identity.client';
+import { identityRows } from './postgres-identity.client';
 
 const ACTIVE_ACCOUNT_BY_USERNAME_SQL = `
   SELECT id
@@ -9,10 +9,10 @@ const ACTIVE_ACCOUNT_BY_USERNAME_SQL = `
 `;
 
 export async function findActiveAccountId(
-  transaction: PostgresIdentityQueryClient,
+  transaction: Parameters<typeof identityRows>[0],
   username: string,
 ): Promise<string | undefined> {
-  const rows = await transaction.query(ACTIVE_ACCOUNT_BY_USERNAME_SQL, [
+  const rows = await identityRows(transaction, ACTIVE_ACCOUNT_BY_USERNAME_SQL, [
     username,
   ]);
   const row = rows[0];

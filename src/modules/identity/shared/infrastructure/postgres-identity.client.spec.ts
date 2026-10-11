@@ -2,7 +2,10 @@ import { Buffer } from 'node:buffer';
 
 import { Prisma, PrismaClient } from '@prisma-client/client';
 
-import { createIdentityTransactionRunner } from './postgres-identity.client';
+import {
+  createIdentityTransactionRunner,
+  identityRows,
+} from './postgres-identity.client';
 
 afterEach(() => {
   jest.restoreAllMocks();
@@ -64,15 +67,17 @@ describe('Identity transaction lifetime on Prisma', () => {
       { value: 42 },
     ]);
 
-    const expiredHandle = await client.transaction(async (handle) => {
-      await expect(handle.query('SELECT value', [])).resolves.toEqual([
+    const expiredHandle = await client.$transaction(async (handle) => {
+      await expect(identityRows(handle, 'SELECT value')).resolves.toEqual([
         { value: 42 },
       ]);
       return handle;
     });
 
     const callsAtCallbackEnd = queryRaw.mock.calls.length;
-    await expect(expiredHandle.query('SELECT late', [])).rejects.toMatchObject({
+    await expect(
+      expiredHandle.$queryRawUnsafe('SELECT late'),
+    ).rejects.toMatchObject({
       name: 'PostgresIdentityTransactionExpiredError',
       message: 'Identity transaction is no longer active',
     });
@@ -92,8 +97,8 @@ describe('Identity transaction lifetime on Prisma', () => {
       return queryResult.promise;
     });
 
-    const transaction = client.transaction(async (handle) => {
-      void handle.query('SELECT pending', []);
+    const transaction = client.$transaction(async (handle) => {
+      void handle.$queryRawUnsafe('SELECT pending');
     });
     await queryStarted.promise;
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -114,8 +119,8 @@ describe('Identity transaction lifetime on Prisma', () => {
       return queryResult.promise;
     });
 
-    const transaction = client.transaction(async (handle) => {
-      void handle.query('SELECT pending', []);
+    const transaction = client.$transaction(async (handle) => {
+      void handle.$queryRawUnsafe('SELECT pending');
       throw callbackError;
     });
     await queryStarted.promise;
@@ -135,8 +140,8 @@ describe('Identity transaction lifetime on Prisma', () => {
     });
 
     await expect(
-      client.transaction(async (handle) => {
-        void handle.query('SELECT forgotten', []);
+      client.$transaction(async (handle) => {
+        void handle.$queryRawUnsafe('SELECT forgotten');
       }),
     ).rejects.toBe(queryError);
     expect(outcome()).toBe('rolled back');
@@ -148,10 +153,12 @@ describe('Identity transaction lifetime on Prisma', () => {
     );
 
     await expect(
-      client.transaction((handle) =>
-        handle.query('INSERT INTO email_delivery_requests (id) VALUES ($1)', [
-          'edr_01J00000000000000000000000',
-        ]),
+      client.$transaction((handle) =>
+        identityRows(
+          handle,
+          'INSERT INTO email_delivery_requests (id) VALUES ($1)',
+          ['edr_01J00000000000000000000000'],
+        ),
       ),
     ).resolves.toEqual([]);
 
@@ -172,7 +179,7 @@ describe('Identity transaction lifetime on Prisma', () => {
       },
     ]);
 
-    const rows = await client.query('SELECT mapped values', []);
+    const rows = await identityRows(client, 'SELECT mapped values');
 
     expect(rows).toEqual([
       {

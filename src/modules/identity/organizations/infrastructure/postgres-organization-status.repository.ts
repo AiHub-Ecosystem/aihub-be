@@ -16,7 +16,11 @@ import {
   organizationStatusValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
-import type { PostgresIdentityTransactionalClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  type IdentityRepositoryClient,
+  identityRows,
+  identityTransaction,
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 const LOCK_ORGANIZATION_SQL = `
   SELECT name, status
@@ -48,7 +52,7 @@ export class PostgresOrganizationStatusRepository
   implements OrganizationStatusPort
 {
   constructor(
-    private readonly client: PostgresIdentityTransactionalClient & {
+    private readonly client: IdentityRepositoryClient & {
       close(): Promise<void>;
     },
   ) {}
@@ -69,7 +73,7 @@ export class PostgresOrganizationStatusRepository
   private transact(
     input: SetOrganizationStatusInput,
   ): Promise<SetOrganizationStatusResult> {
-    return this.client.transaction(async (transaction) => {
+    return identityTransaction(this.client, async (transaction) => {
       const actorId = await findActiveAccountId(
         transaction,
         input.actorUsername,
@@ -78,9 +82,11 @@ export class PostgresOrganizationStatusRepository
         return { kind: 'actor_invalid' as const };
       }
 
-      const organizationRows = await transaction.query(LOCK_ORGANIZATION_SQL, [
-        input.organizationId,
-      ]);
+      const organizationRows = await identityRows(
+        transaction,
+        LOCK_ORGANIZATION_SQL,
+        [input.organizationId],
+      );
       const organization = organizationRows[0];
       if (!isRecord(organization)) {
         return { kind: 'organization_not_found' as const };
@@ -91,9 +97,11 @@ export class PostgresOrganizationStatusRepository
         throw identityStoreError('Identity data is invalid');
       }
 
-      const hashRows = await transaction.query(ORGANIZATION_KEY_HASHES_SQL, [
-        input.organizationId,
-      ]);
+      const hashRows = await identityRows(
+        transaction,
+        ORGANIZATION_KEY_HASHES_SQL,
+        [input.organizationId],
+      );
       const keyHashes = hashRows.map((row) => {
         const hash = isRecord(row) ? stringValue(row, 'hash_hex') : undefined;
         if (hash === undefined) {
@@ -107,7 +115,7 @@ export class PostgresOrganizationStatusRepository
         return { kind: 'unchanged' as const, keyHashes };
       }
 
-      await transaction.query(SET_STATUS_SQL, [
+      await identityRows(transaction, SET_STATUS_SQL, [
         input.organizationId,
         input.status,
       ]);

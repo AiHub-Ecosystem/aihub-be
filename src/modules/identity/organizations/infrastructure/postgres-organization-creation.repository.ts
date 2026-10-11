@@ -16,7 +16,11 @@ import {
   identityStoreError,
   isRecord,
 } from '@/modules/identity/shared/infrastructure/identity-row';
-import type { PostgresIdentityTransactionalClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  type IdentityRepositoryClient,
+  identityRows,
+  identityTransaction,
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 /**
  * The account row is the lock: every creation by one account serializes on it,
@@ -54,7 +58,7 @@ const INSERT_OWNER_SQL = `
 export class PostgresOrganizationCreationRepository
   implements OrganizationCreationRecordPort
 {
-  constructor(private readonly client: PostgresIdentityTransactionalClient) {}
+  constructor(private readonly client: IdentityRepositoryClient) {}
 
   async createOrganization(
     input: CreateOrganizationRecordInput,
@@ -62,8 +66,8 @@ export class PostgresOrganizationCreationRepository
     const organizationId = `org_${ulid()}`;
 
     try {
-      return await this.client.transaction(async (transaction) => {
-        const accountRows = await transaction.query(LOCK_ACCOUNT_SQL, [
+      return await identityTransaction(this.client, async (transaction) => {
+        const accountRows = await identityRows(transaction, LOCK_ACCOUNT_SQL, [
           input.creatorUserId,
         ]);
         const account = accountRows[0];
@@ -71,7 +75,7 @@ export class PostgresOrganizationCreationRepository
           return { kind: 'account_inactive' as const };
         }
 
-        const countRows = await transaction.query(COUNT_CREATIONS_SQL, [
+        const countRows = await identityRows(transaction, COUNT_CREATIONS_SQL, [
           input.creatorUserId,
         ]);
         const countRow = countRows[0];
@@ -89,7 +93,7 @@ export class PostgresOrganizationCreationRepository
           return { kind: 'limit_reached' as const };
         }
 
-        await transaction.query(INSERT_ORGANIZATION_SQL, [
+        await identityRows(transaction, INSERT_ORGANIZATION_SQL, [
           organizationId,
           input.name,
           [...input.terms.entitlements],
@@ -99,7 +103,7 @@ export class PostgresOrganizationCreationRepository
           input.terms.hardStopOnQuota,
           input.creatorUserId,
         ]);
-        await transaction.query(INSERT_OWNER_SQL, [
+        await identityRows(transaction, INSERT_OWNER_SQL, [
           organizationId,
           input.creatorUserId,
         ]);

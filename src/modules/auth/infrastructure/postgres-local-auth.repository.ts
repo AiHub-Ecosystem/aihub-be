@@ -37,6 +37,7 @@ import { authorizeMfaSession } from './auth-mfa-session.guard';
 import type {
   PostgresAuthClient,
   PostgresAuthQueryClient,
+  PostgresAuthTransactionClient,
 } from './postgres-auth.client';
 import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
 import {
@@ -730,7 +731,8 @@ export class PostgresLocalAuthRepository
   ): Promise<void> {
     if (emailDelivery !== undefined) {
       await this.emailDeliveryRequests.insert(
-        transaction as unknown as EmailDeliveryTransaction,
+        transaction as unknown as PostgresAuthTransactionClient &
+          EmailDeliveryTransaction,
         emailDelivery,
       );
     }

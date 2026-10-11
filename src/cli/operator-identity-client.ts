@@ -11,8 +11,8 @@ export async function createOperatorIdentityClient(databaseUrl: string) {
     controlPlaneDatabaseUrl: databaseUrl,
     controlPlaneReadDatabaseUrl: undefined,
   });
-  return {
-    ...createIdentityTransactionRunner(() => clients.controlPlane.prisma),
-    close: () => clients.close(),
-  };
+  return Object.assign(
+    createIdentityTransactionRunner(() => clients.controlPlane.prisma),
+    { close: () => clients.close() },
+  );
 }

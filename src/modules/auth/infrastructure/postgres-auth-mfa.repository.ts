@@ -9,6 +9,7 @@ import type {
 import type {
   PostgresAuthClient,
   PostgresAuthQueryClient,
+  PostgresAuthTransactionClient,
 } from './postgres-auth.client';
 import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
 import { REVOKE_USER_WEB_SESSIONS_SQL } from './postgres-web-session.repository';
@@ -240,7 +241,8 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     input: InsertEmailDeliveryRequestInput,
   ): Promise<void> {
     await this.emailRequests.insert(
-      transaction as PostgresAuthQueryClient & EmailDeliveryTransaction,
+      transaction as unknown as PostgresAuthTransactionClient &
+        EmailDeliveryTransaction,
       input,
     );
   }

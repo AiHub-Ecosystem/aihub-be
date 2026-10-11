@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer';
 
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import { Prisma, PrismaClient } from '@prisma-client/client';
+import type { PostgresAuthTransactionClient } from './postgres-auth.client';
 import { createAuthTransactionRunner } from './postgres-auth.client';
 
 function deferred<T>() {
@@ -54,6 +55,26 @@ function authClient(
 }
 
 describe('Auth transaction lifetime on Prisma', () => {
+  it('runs Prisma raw writes on the guarded transaction handle', async () => {
+    const { client, executeRaw } = authClient(async () => []);
+    let expiredHandle: PostgresAuthTransactionClient | undefined;
+
+    await client.transaction(async (handle) => {
+      const transaction = handle as PostgresAuthTransactionClient;
+      expiredHandle = transaction;
+      await transaction.$executeRawUnsafe('INSERT INTO outbox VALUES ($1)', 1);
+    });
+
+    expect(executeRaw).toHaveBeenCalledWith(
+      'INSERT INTO outbox VALUES ($1)',
+      1,
+    );
+    await expect(
+      expiredHandle?.$executeRawUnsafe('INSERT INTO outbox VALUES ($1)', 2),
+    ).rejects.toThrow('Auth transaction is no longer active');
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects an expired handle before the driver receives another query', async () => {
     const { client, queryRaw, transaction } = authClient(async () => [
       { value: 42 },
