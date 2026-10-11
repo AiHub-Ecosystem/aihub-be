@@ -284,7 +284,7 @@ non-zero exit and on a missed run for either container.
 
 ### Scheduled operator jobs
 
-The other three scheduled operator commands run from one host script,
+The existing scheduled operator commands run from one host script,
 `~/aihub-ops-job.sh <quota|prune|report>`, built the same way as the Avatar
 sweep (production then Sandbox, stdin detached, one log line per environment in
 `~/aihub-ops-job.log`, non-zero exit when either failed). Crontab, in the
@@ -296,10 +296,63 @@ server's UTC clock:
 5 * * * *  aihub-ops-job.sh report   # usage:report for the previous whole UTC hour
 ```
 
+Add a daily `ttl-audit` run after the installed host wrapper supports it. It
+runs `redis:ttl-audit` once in each enabled deployment and scans `aihub:*`
+and exits non-zero if any key expected to expire has no TTL. It prints aggregate
+counts only, never Redis key names. The persistent
+`aihub:v1:jwks-generation:*` invalidation fences are counted separately because
+they must not expire and make a purged JWKS cache entry current again. Alert on
+a non-zero exit and on a missed line for either enabled deployment. The installed host
+wrapper is outside this repository; update it to accept `ttl-audit`. Resolve
+the active services from the blue-green helper's validated nginx routes before
+each run. Do not hard-code slot A: after cutover, the active services can be
+`app-slot-b` and `app-sandbox-slot-b`, while the old slots are stopped. In the
+wrapper, from the deployment directory:
+
+```bash
+status="$(APP_DIR="$PWD" ./scripts/ops/blue-green-host.sh status)" || exit 1
+compose=(sudo -n docker compose --env-file .env.production)
+[[ ! -f .aihub-deploy.env ]] || compose+=(--env-file .aihub-deploy.env)
+compose+=(--profile blue-green --profile sandbox -f docker-compose.production.yml)
+
+for tier in production sandbox; do
+  if [[ "$tier" == sandbox ]] && grep -Fxq 'sandbox disabled' <<<"$status"; then
+    printf 'sandbox status=disabled skipped\n' >>"$log"
+    continue
+  fi
+
+  line="$(awk -v tier="$tier" '
+    $1 == tier { count++; record=$0 }
+    END { if (count != 1) exit 1; print record }
+  ' <<<"$status")" || exit 1
+  slot="${line#*active_slot=}"; slot="${slot%% *}"
+  service="${line##* service=}"
+  case "$tier:$slot:$service" in
+    production:a:app|production:b:app-slot-b|sandbox:a:app-sandbox|sandbox:b:app-sandbox-slot-b) ;;
+    *) printf 'cannot resolve active %s service from deployment status\n' "$tier" >&2; exit 1 ;;
+  esac
+
+  "${compose[@]}" exec -T "$service" node scripts/runtime/runtime-entrypoint.mjs \
+    scripts/cli/cli.mjs redis:ttl-audit
+done
+```
+
+The status command fails during a deployment; also fail closed if its output
+does not identify exactly one supported active slot for a tier. An enabled but
+unrouted Sandbox therefore fails instead of silently skipping the audit. Log
+the CLI's aggregate result for each active tier; the disabled Sandbox line is
+an explicit skip, not a successful audit.
+
+Then add this cron entry (server UTC):
+
+```text
+45 1 * * * aihub-ops-job.sh ttl-audit
+```
+
 `report` computes `--from` and `--to` as the start of the previous and of the
 current UTC hour, so `to` is never in the future. The script is not in the
-repository (it holds the host path and the `sudo` form); the three operator
-guides own the command, its exit codes, and what to alert on. Before the first
+repository (it holds the host path and the `sudo` form); the operator runbooks
+own each command, its exit codes, and what to alert on. Before the first
 scheduled `prune` the database was backed up with `pg_dump -Fc` and the command
 was run by hand in each container (`deleted: 0`, nothing was 13 months old).
 

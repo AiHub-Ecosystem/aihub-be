@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 
+import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
 import type {
   RateLimitDecision,
   RateLimitRequest,
@@ -10,10 +11,7 @@ import {
   createRedisGatewayClient,
 } from './redis-gateway.client';
 
-export type RedisRateLimitClient = Pick<
-  RedisGatewayClient,
-  'incr' | 'expire' | 'quit'
->;
+export type RedisRateLimitClient = Pick<RedisGatewayClient, 'eval' | 'quit'>;
 
 interface FallbackWindow {
   readonly windowStart: number;
@@ -45,7 +43,8 @@ export class RedisRateLimiter implements RateLimiterPort {
   }
 
   async consume(request: RateLimitRequest): Promise<RateLimitDecision> {
-    if (this.client === undefined) {
+    const client = this.client;
+    if (client === undefined) {
       return this.consumeFallback(request);
     }
 
@@ -53,10 +52,12 @@ export class RedisRateLimiter implements RateLimiterPort {
     const bucket = `aihub:v1:rl:${request.keyId}:${minute}`;
     let count: number;
     try {
-      count = await this.client.incr(bucket);
-      if (count === 1) {
-        await this.client.expire(bucket, 120).catch(() => undefined);
-      }
+      count = await incrementRedisCounterWithExpiry(
+        (script, numberOfKeys, ...args) =>
+          client.eval(script, numberOfKeys, ...args),
+        bucket,
+        120,
+      );
     } catch (error) {
       this.reportDegraded(error);
       return this.consumeFallback(request);

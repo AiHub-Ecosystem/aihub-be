@@ -1,5 +1,7 @@
+import { Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 
+import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
 import type {
   ApiKeyCachePort,
   ApiKeyRecord,
@@ -28,6 +30,11 @@ export interface RedisIdentityClient {
   ): Promise<unknown>;
   del(...keys: string[]): Promise<number>;
   incr(key: string): Promise<number>;
+  eval(
+    script: string,
+    numberOfKeys: number,
+    ...args: readonly (string | number)[]
+  ): Promise<number>;
   expire(key: string, seconds: number): Promise<number>;
   quit(): Promise<unknown>;
 }
@@ -57,6 +64,19 @@ class IoredisIdentityClient implements RedisIdentityClient {
 
   incr(key: string): Promise<number> {
     return this.client.incr(key);
+  }
+
+  eval(
+    script: string,
+    numberOfKeys: number,
+    ...args: readonly (string | number)[]
+  ): Promise<number> {
+    return this.client.eval(script, numberOfKeys, ...args).then((result) => {
+      if (typeof result !== 'number') {
+        throw new Error('Redis command result is invalid');
+      }
+      return result;
+    });
   }
 
   expire(key: string, seconds: number): Promise<number> {
@@ -424,9 +444,18 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
 
 export class RedisAuthFailureCounter implements AuthFailureCounterPort {
   private readonly client: RedisIdentityClient | undefined;
+  private readonly logger: Pick<Logger, 'warn' | 'log'>;
+  private readonly degradedOperations = new Set<'read' | 'write'>();
 
-  constructor(url: string, client?: RedisIdentityClient) {
+  constructor(
+    url: string,
+    client?: RedisIdentityClient,
+    logger: Pick<Logger, 'warn' | 'log'> = new Logger(
+      RedisAuthFailureCounter.name,
+    ),
+  ) {
     this.client = client ?? connect(url);
+    this.logger = logger;
   }
 
   async get(ip: string): Promise<number> {
@@ -437,30 +466,60 @@ export class RedisAuthFailureCounter implements AuthFailureCounterPort {
     try {
       const value = await this.client.get(`aihub:v1:authfail:${ip}`);
       const count = Number(value ?? '0');
+      this.reportRecovered('read');
       return Number.isInteger(count) && count >= 0 ? count : 0;
     } catch {
+      this.reportDegraded('read');
       return 0;
     }
   }
 
   async recordFailure(ip: string): Promise<number> {
-    if (this.client === undefined) {
+    const client = this.client;
+    if (client === undefined) {
       return 0;
     }
 
     try {
       const key = `aihub:v1:authfail:${ip}`;
-      const count = await this.client.incr(key);
-      if (count === 1) {
-        await this.client.expire(key, 300);
-      }
+      const count = await incrementRedisCounterWithExpiry(
+        (script, numberOfKeys, ...args) =>
+          client.eval(script, numberOfKeys, ...args),
+        key,
+        300,
+      );
+      this.reportRecovered('write');
       return count;
     } catch {
+      this.reportDegraded('write');
       return 0;
     }
   }
 
   async onModuleDestroy(): Promise<void> {
     await this.client?.quit().catch(() => undefined);
+  }
+
+  private reportDegraded(operation: 'read' | 'write'): void {
+    const wasDegraded = this.degradedOperations.size > 0;
+    this.degradedOperations.add(operation);
+    if (wasDegraded) {
+      return;
+    }
+
+    this.logger.warn(
+      'Redis API-key authentication failure counter unavailable; brute-force protection is failing open until it recovers',
+    );
+  }
+
+  private reportRecovered(operation: 'read' | 'write'): void {
+    if (
+      !this.degradedOperations.delete(operation) ||
+      this.degradedOperations.size > 0
+    ) {
+      return;
+    }
+
+    this.logger.log('Redis API-key authentication failure counter recovered');
   }
 }

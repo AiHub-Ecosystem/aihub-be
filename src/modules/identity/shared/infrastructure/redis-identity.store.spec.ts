@@ -1,9 +1,23 @@
+import { INCREMENT_WITH_EXPIRY_SCRIPT } from '@/common/redis/increment-with-expiry';
 import type { ApiKeyRecord } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import {
   RedisAuthFailureCounter,
   type RedisIdentityClient,
   RedisIdentityStore,
 } from './redis-identity.store';
+
+class FakeLogger {
+  readonly warnings: string[] = [];
+  readonly logs: string[] = [];
+
+  warn(message: string): void {
+    this.warnings.push(message);
+  }
+
+  log(message: string): void {
+    this.logs.push(message);
+  }
+}
 
 const record: ApiKeyRecord = {
   organizationId: 'org_acme',
@@ -23,6 +37,7 @@ const record: ApiKeyRecord = {
 class FakeRedis implements RedisIdentityClient {
   readonly values = new Map<string, string>();
   readonly expirations = new Map<string, number>();
+  failTtlSetup = false;
 
   get(key: string): Promise<string | null> {
     return Promise.resolve(this.values.get(key) ?? null);
@@ -54,6 +69,28 @@ class FakeRedis implements RedisIdentityClient {
   }
 
   incr(key: string): Promise<number> {
+    const next = Number(this.values.get(key) ?? '0') + 1;
+    this.values.set(key, String(next));
+    return Promise.resolve(next);
+  }
+
+  eval(
+    script: string,
+    numberOfKeys: number,
+    ...args: readonly (string | number)[]
+  ): Promise<number> {
+    if (script !== INCREMENT_WITH_EXPIRY_SCRIPT || numberOfKeys !== 1) {
+      return Promise.reject(new Error('unexpected Redis script'));
+    }
+    const key = String(args[0]);
+    const ttlSeconds = Number(args[1]);
+    if (!this.expirations.has(key)) {
+      if (this.failTtlSetup) {
+        return Promise.reject(new Error('Redis could not set the counter TTL'));
+      }
+      this.values.set(key, this.values.get(key) ?? '0');
+      this.expirations.set(key, ttlSeconds);
+    }
     const next = Number(this.values.get(key) ?? '0') + 1;
     this.values.set(key, String(next));
     return Promise.resolve(next);
@@ -100,6 +137,56 @@ describe('RedisIdentityStore', () => {
     await expect(store.recordFailure('203.0.113.10')).resolves.toBe(2);
     await expect(store.get('203.0.113.10')).resolves.toBe(2);
     expect(redis.expirations.get('aihub:v1:authfail:203.0.113.10')).toBe(300);
+  });
+
+  it.each(['new', 'legacy'])(
+    'does not increment a %s auth-failure counter when setting its TTL fails',
+    async (kind) => {
+      const redis = new FakeRedis();
+      const key = 'aihub:v1:authfail:203.0.113.10';
+      if (kind === 'legacy') {
+        redis.values.set(key, '4');
+      }
+      redis.failTtlSetup = true;
+      const logger = new FakeLogger();
+      const counter = new RedisAuthFailureCounter('', redis, logger);
+
+      await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(0);
+
+      expect(redis.values.get(key)).toBe(kind === 'legacy' ? '4' : undefined);
+      expect(redis.expirations.has(key)).toBe(false);
+      expect(logger.warnings).toHaveLength(1);
+      expect(logger.warnings[0]).not.toContain('203.0.113.10');
+
+      await counter.recordFailure('203.0.113.10');
+      expect(logger.warnings).toHaveLength(1);
+
+      redis.failTtlSetup = false;
+      await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(
+        kind === 'legacy' ? 5 : 1,
+      );
+      expect(redis.expirations.get(key)).toBe(300);
+      expect(logger.logs).toHaveLength(1);
+    },
+  );
+
+  it('keeps a failed counter write degraded across successful reads', async () => {
+    const redis = new FakeRedis();
+    redis.failTtlSetup = true;
+    const logger = new FakeLogger();
+    const counter = new RedisAuthFailureCounter('', redis, logger);
+
+    await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(0);
+    await expect(counter.get('203.0.113.10')).resolves.toBe(0);
+    await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(0);
+
+    expect(logger.warnings).toHaveLength(1);
+    expect(logger.logs).toHaveLength(0);
+
+    redis.failTtlSetup = false;
+    await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(1);
+    expect(logger.warnings).toHaveLength(1);
+    expect(logger.logs).toHaveLength(1);
   });
 
   it('stores JWKS metadata for the stale-cache window and gates refreshes per organization', async () => {
@@ -156,6 +243,7 @@ describe('RedisIdentityStore', () => {
       set: () => Promise.reject(new Error('redis down')),
       del: () => Promise.reject(new Error('redis down')),
       incr: () => Promise.reject(new Error('redis down')),
+      eval: () => Promise.reject(new Error('redis down')),
       expire: () => Promise.reject(new Error('redis down')),
       quit: () => Promise.resolve('OK'),
     };
