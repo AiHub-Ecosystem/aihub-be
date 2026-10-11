@@ -1,8 +1,11 @@
-import type {
-  PostgresIdentityQueryClient,
-  PostgresIdentityTransactionalClient,
+import {
+  type PostgresIdentityQueryClient,
+  createPostgresIdentityClient,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
-import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  type QueryFake,
+  prismaFromQueryFake,
+} from '@/modules/persistence/testing/query-fake-client';
 
 export interface QueryPause {
   readonly captured: Promise<void>;
@@ -42,9 +45,7 @@ async function backendPidOf(
  * connection instead would take the lock outside the transaction and prove
  * nothing.
  */
-export class PausingIdentityClient
-  implements PostgresIdentityQueryClient, PostgresIdentityTransactionalClient
-{
+export class PausingIdentityClient implements QueryFake {
   private pause: ArmedPause | undefined;
   private heldBackendPid: number | undefined;
 
@@ -150,6 +151,14 @@ export class PausingIdentityClient
     pause.captured();
     await pause.released;
     this.heldBackendPid = undefined;
+  }
+
+  /**
+   * The Prisma-shaped view a repository takes. Its statements still arrive here
+   * one at a time, so the pause sees each one's SQL text.
+   */
+  asPrisma() {
+    return prismaFromQueryFake(this);
   }
 
   close(): Promise<void> {

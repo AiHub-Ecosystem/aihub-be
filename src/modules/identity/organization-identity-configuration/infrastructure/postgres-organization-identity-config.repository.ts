@@ -27,7 +27,6 @@ import {
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {
   type IdentityRepositoryClient,
-  identityPrisma,
   identityRows,
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
@@ -409,9 +408,7 @@ export class PostgresOrganizationIdentityConfigRepository
     }
 
     try {
-      const first = await identityPrisma(
-        this.readClient,
-      ).organizationIdentityConfig.findFirst({
+      const first = await this.readClient.organizationIdentityConfig.findFirst({
         where:
           status === null ? { organizationId } : { organizationId, status },
         select: status === null ? STORED_CONFIG_SELECT : ACTIVE_CONFIG_SELECT,

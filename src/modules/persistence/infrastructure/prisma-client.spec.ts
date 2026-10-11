@@ -42,9 +42,10 @@ describe('createSharedPrismaClients', () => {
       controlPlaneReadDatabaseUrl: equal,
     });
 
-    expect(shared.runtime.pool.options.max).toBe(30);
-    expect(split.runtime.pool.options.max).toBe(10);
-    expect(split.controlPlane.pool.options.max).toBe(20);
+    // runtime 44 + control-plane 20 + control-plane-read 10
+    expect(shared.runtime.pool.options.max).toBe(74);
+    expect(split.runtime.pool.options.max).toBe(44);
+    expect(split.controlPlane.pool.options.max).toBe(30);
 
     await shared.close();
     await split.close();

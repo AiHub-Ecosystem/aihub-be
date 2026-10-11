@@ -88,7 +88,7 @@ beforeAll(async () => {
     createPostgresIdentityClient(testDatabaseUrl()),
   );
   const membership = new PostgresOrganizationMembershipRepository(
-    identityClient,
+    identityClient.asPrisma(),
   );
   const verifier: UserAccessTokenVerifierPort = {
     verify: async (token) => ({

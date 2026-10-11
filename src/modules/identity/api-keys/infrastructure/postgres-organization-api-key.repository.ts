@@ -17,7 +17,6 @@ import {
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
 import {
   type IdentityRepositoryClient,
-  identityPrisma,
   identityRows,
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
@@ -416,7 +415,7 @@ export class PostgresOrganizationApiKeyRepository
     // process-local and does not imply commit order.
     let rows: readonly unknown[];
     try {
-      rows = await identityPrisma(this.client).apiKey.findMany({
+      rows = await this.client.apiKey.findMany({
         where: { organizationId: input.organizationId, status: 'active' },
         select: INVENTORY_SELECT,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],

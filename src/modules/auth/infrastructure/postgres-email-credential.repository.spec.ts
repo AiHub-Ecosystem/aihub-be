@@ -1,11 +1,14 @@
+import {
+  type QueryFake,
+  prismaFromQueryFake,
+} from '@/modules/persistence/testing/query-fake-client';
 import { PostgresEmailCredentialRepository } from './postgres-email-credential.repository';
-import type { EmailDeliveryQueryClient } from './postgres-email-delivery-request.repository';
 
 const NOW = new Date('2026-10-05T12:00:00.000Z');
 const TOKEN_HASH = 'a'.repeat(64);
 
 function clientReturning(rows: readonly Record<string, unknown>[]) {
-  const client: EmailDeliveryQueryClient = {
+  const client: QueryFake = {
     query: async (): Promise<readonly Record<string, unknown>[]> => rows,
   };
   return client;
@@ -13,9 +16,11 @@ function clientReturning(rows: readonly Record<string, unknown>[]) {
 
 function check(
   rows: readonly Record<string, unknown>[],
-  client: EmailDeliveryQueryClient = clientReturning(rows),
+  client: QueryFake = clientReturning(rows),
 ): Promise<string> {
-  return new PostgresEmailCredentialRepository(client).check({
+  return new PostgresEmailCredentialRepository(
+    prismaFromQueryFake(client),
+  ).check({
     kind: 'verification_email',
     tokenHash: TOKEN_HASH,
     now: NOW,

@@ -6,7 +6,6 @@ import type {
   IdempotencyReservation,
   ReserveIdempotencyInput,
 } from '@/modules/idempotency/application/idempotency-repository.port';
-import type { PostgresIdempotencyClient } from './postgres-idempotency.client';
 
 interface IdempotencyQueryRow extends Record<string, unknown> {
   readonly request_id?: string;
@@ -16,11 +15,10 @@ interface IdempotencyQueryRow extends Record<string, unknown> {
   readonly response_body?: unknown;
 }
 
-interface PrismaIdempotencyClient {
+/** The only thing the repository needs from Prisma: parameterized raw SQL. */
+interface IdempotencyClient {
   $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
 }
-
-type IdempotencyClient = PrismaIdempotencyClient | PostgresIdempotencyClient;
 
 /**
  * The Organization predicate serves an Organization-scoped key and an Account
@@ -214,20 +212,10 @@ export class PostgresIdempotencyRepository
   constructor(private readonly client: IdempotencyClient) {}
 
   private query(text: string, values: readonly unknown[]) {
-    // The unchanged idempotency database spec supplies this test-only pg client.
-    if ('query' in this.client) {
-      return this.client.query(text, values);
-    }
     return this.client.$queryRawUnsafe<readonly IdempotencyQueryRow[]>(
       text,
       ...values,
     );
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    if ('close' in this.client) {
-      await this.client.close();
-    }
   }
 
   async reserve(

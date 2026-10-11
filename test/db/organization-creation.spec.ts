@@ -1,3 +1,4 @@
+import { interceptStatements } from '@/modules/persistence/testing/query-fake-client';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
@@ -11,7 +12,7 @@ import type {
 } from '@/modules/identity/organizations/application/organization-creation-record.port';
 import { PostgresOrganizationCreationRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-creation.repository';
 import {
-  type PostgresIdentityTransactionalClient,
+  type IdentityFixtureClient,
   createPostgresIdentityClient,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
@@ -30,7 +31,7 @@ const TERMS = {
 } as const;
 
 let pool: Pool;
-let client: PostgresIdentityTransactionalClient & { close(): Promise<void> };
+let client: IdentityFixtureClient;
 let repository: PostgresOrganizationCreationRepository;
 
 beforeAll(() => {
@@ -168,18 +169,16 @@ describe('Self-serve Organization creation against PostgreSQL', () => {
   });
 
   it('leaves no Organization or membership behind when the audit write fails', async () => {
-    const failingAudit = new PostgresOrganizationCreationRepository({
-      query: (text, values) => client.query(text, values),
-      transaction: (callback) =>
-        client.transaction((transaction) =>
-          callback({
-            query: (text, values) =>
-              text.includes('INSERT INTO organization_audit_events')
-                ? Promise.reject(new Error('audit store unavailable'))
-                : transaction.query(text, values),
-          }),
-        ),
-    });
+    const failingAudit = new PostgresOrganizationCreationRepository(
+      interceptStatements(client, (statement) => {
+        if (
+          statement.kind === 'raw' &&
+          statement.text.includes('INSERT INTO organization_audit_events')
+        ) {
+          throw new Error('audit store unavailable');
+        }
+      }),
+    );
 
     await expect(failingAudit.createOrganization(input())).rejects.toThrow(
       'Identity store is unavailable',

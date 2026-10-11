@@ -1,3 +1,4 @@
+import { prismaFromQueryFake } from '@/modules/persistence/testing/query-fake-client';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
@@ -230,12 +231,14 @@ describe('organization audit trail read against PostgreSQL', () => {
   const SECOND_ORGANIZATION_ID = 'org_other';
 
   function repository(): PostgresOrganizationAuditReadRepository {
-    return new PostgresOrganizationAuditReadRepository({
-      query: async (text: string, values: readonly unknown[]) => {
-        const result = await pool.query(text, [...values]);
-        return result.rows;
-      },
-    });
+    return new PostgresOrganizationAuditReadRepository(
+      prismaFromQueryFake({
+        query: async (text: string, values: readonly unknown[]) => {
+          const result = await pool.query(text, [...values]);
+          return result.rows;
+        },
+      }),
+    );
   }
 
   function listInput(

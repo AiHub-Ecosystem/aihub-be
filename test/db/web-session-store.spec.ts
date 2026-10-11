@@ -6,11 +6,11 @@ import { ulid } from 'ulid';
 import { Argon2PasswordHasher } from '@/modules/auth/infrastructure/argon2-password.hasher';
 import {
   type PostgresAuthClient,
-  type PostgresAuthQueryClient,
   createPostgresAuthClient,
 } from '@/modules/auth/infrastructure/postgres-auth.client';
 import { PostgresLocalAuthRepository } from '@/modules/auth/infrastructure/postgres-local-auth.repository';
 import { PostgresWebSessionRepository } from '@/modules/auth/infrastructure/postgres-web-session.repository';
+import { interceptStatements } from '@/modules/persistence/testing/query-fake-client';
 
 import {
   createTestPool,
@@ -417,38 +417,17 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
    * local-auth-email-outbox.spec.ts flips one store to make a write fail. The
    * rollback under test is the engine's.
    */
-  class FailingWebSessionRevocation implements PostgresAuthClient {
-    constructor(private readonly real: PostgresAuthClient) {}
-
-    async checkConnection(timeoutMs: number): Promise<void> {
-      await this.real.checkConnection(timeoutMs);
-    }
-
-    async query(
-      text: string,
-      values: readonly unknown[],
-    ): Promise<readonly Record<string, unknown>[]> {
-      return this.real.query(text, values);
-    }
-
-    async transaction<T>(
-      callback: (client: PostgresAuthQueryClient) => Promise<T>,
-    ): Promise<T> {
-      return this.real.transaction((transaction) =>
-        callback({
-          query: async (text, values) => {
-            if (text.includes('UPDATE web_sessions')) {
-              throw new Error('the web session revocation was not recorded');
-            }
-            return transaction.query(text, values);
-          },
-        }),
-      );
-    }
-
-    async close(): Promise<void> {
-      await this.real.close();
-    }
+  function failingWebSessionRevocation() {
+    return interceptStatements(client, (statement) => {
+      const revokesWebSessions =
+        statement.kind === 'raw'
+          ? statement.text.includes('UPDATE web_sessions')
+          : statement.model === 'webSession' &&
+            statement.action === 'updateMany';
+      if (revokesWebSessions) {
+        throw new Error('the web session revocation was not recorded');
+      }
+    });
   }
 
   /** An account with a Refresh Session and two Web Sessions to end. */
@@ -544,25 +523,30 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
     return {
       locked,
       release,
-      client: {
-        ...client,
-        transaction: <T>(
-          callback: (transaction: PostgresAuthQueryClient) => Promise<T>,
-        ) =>
-          client.transaction(async (transaction) => {
-            const result = await callback(transaction);
-            const rows = await transaction.query(
-              'SELECT pg_backend_pid() AS pid',
-              [],
-            );
-            const pid = rows[0]?.['pid'];
-            if (typeof pid !== 'number')
-              throw new Error('transaction reported no backend pid');
-            report(pid);
-            await released;
-            return result;
-          }),
-      },
+      // Holds the transaction open after its callback: the real client, with
+      // `$transaction` replaced, so whatever statements the repository issues
+      // inside it are the engine's and the lock outlives the callback.
+      client: new Proxy(client, {
+        get(target, property) {
+          if (property !== '$transaction') {
+            const value = Reflect.get(target, property, target);
+            return typeof value === 'function' ? value.bind(target) : value;
+          }
+          return (callback: (transaction: unknown) => Promise<unknown>) =>
+            target.$transaction(async (transaction) => {
+              const result = await callback(transaction);
+              const rows = await transaction.$queryRawUnsafe<{ pid: number }[]>(
+                'SELECT pg_backend_pid() AS pid',
+              );
+              const pid = rows[0]?.pid;
+              if (typeof pid !== 'number')
+                throw new Error('transaction reported no backend pid');
+              report(pid);
+              await released;
+              return result;
+            });
+        },
+      }) as PostgresAuthClient,
     };
   }
 
@@ -665,7 +649,7 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
 
   it('leaves nothing revoked when the transaction fails part-way', async () => {
     const { userId, resetHash } = await seedResetTarget();
-    const failing = new FailingWebSessionRevocation(client);
+    const failing = failingWebSessionRevocation();
 
     await expect(
       new PostgresLocalAuthRepository(failing).consumePasswordReset({

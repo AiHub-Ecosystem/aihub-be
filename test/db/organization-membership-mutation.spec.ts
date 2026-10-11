@@ -502,7 +502,7 @@ beforeAll(async () => {
   // deliberately not overridden, so the composition root builds the real
   // ManageOrganizationMembership on top of it.
   const membership = new PostgresOrganizationMembershipRepository(
-    identityClient,
+    identityClient.asPrisma(),
   );
   const verifier: UserAccessTokenVerifierPort = {
     verify: async (token) => ({

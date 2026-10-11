@@ -14,7 +14,7 @@ import { PostgresOrganizationMembershipRepository } from '@/modules/identity/mem
 import type { AttachFirstOwnerInput } from '@/modules/identity/organizations/application/organization-first-owner.port';
 import { PostgresOrganizationFirstOwnerRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-first-owner.repository';
 import {
-  type PostgresIdentityTransactionalClient,
+  type IdentityFixtureClient,
   createPostgresIdentityClient,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
@@ -26,7 +26,7 @@ import {
 } from './database';
 
 let pool: Pool;
-let client: PostgresIdentityTransactionalClient & { close(): Promise<void> };
+let client: IdentityFixtureClient;
 let repository: PostgresOrganizationFirstOwnerRepository;
 let cipher: EmailPayloadCipherPort;
 

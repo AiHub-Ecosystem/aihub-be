@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Pool, type PoolClient, type PoolConfig, type QueryConfig } from 'pg';
 
 import {
+  type PostgresConnectionRole,
   type PostgresPoolName,
   type PostgresPoolStatsSample,
   recordPostgresPoolError,
@@ -10,6 +11,7 @@ import {
 
 const logger = new Logger('PostgresPool');
 const pools = new Map<PostgresPoolName, Set<Pool>>();
+const rolesByPool = new WeakMap<Pool, readonly PostgresConnectionRole[]>();
 
 setPostgresPoolStatsSource(() => {
   const samples: PostgresPoolStatsSample[] = [];
@@ -17,6 +19,7 @@ setPostgresPoolStatsSource(() => {
     let total = 0;
     let idle = 0;
     let waiting = 0;
+    const roles = new Set<PostgresConnectionRole>();
     for (const pool of registeredPools) {
       if (pool.ended) {
         registeredPools.delete(pool);
@@ -25,11 +28,14 @@ setPostgresPoolStatsSource(() => {
       total += pool.totalCount;
       idle += pool.idleCount;
       waiting += pool.waitingCount;
+      for (const role of rolesByPool.get(pool) ?? []) {
+        roles.add(role);
+      }
     }
     if (registeredPools.size === 0) {
       pools.delete(name);
     } else {
-      samples.push({ pool: name, total, idle, waiting });
+      samples.push({ pool: name, roles: [...roles], total, idle, waiting });
     }
   }
   return samples;
@@ -38,8 +44,11 @@ setPostgresPoolStatsSource(() => {
 export function createPostgresPool(
   name: PostgresPoolName,
   config: PoolConfig,
+  /** The connection roles the pool serves, reported beside its counts. */
+  roles: readonly PostgresConnectionRole[] = [],
 ): Pool {
   const pool = new Pool(config);
+  rolesByPool.set(pool, roles);
   const registeredPools = pools.get(name) ?? new Set<Pool>();
   registeredPools.add(pool);
   pools.set(name, registeredPools);
@@ -79,23 +88,17 @@ export function createPostgresPool(
   return pool;
 }
 
-/** Connections each connection role has always had to itself. */
-const POOL_CONNECTIONS_PER_ROLE = 10;
-
 /**
  * Settings shared Prisma pools use across control-plane connection roles.
- *
- * Roles that name one database share one pool, and the pool holds what those
- * roles held apart: `roles` times the per-role size. Merging them must not turn
- * three roles' worth of concurrency into one role's.
+ * `max` is the connections the roles sharing the pool held apart.
  */
 export function postgresPoolOptions(
   databaseUrl: string,
-  roles = 1,
+  max: number,
 ): PoolConfig {
   return {
     connectionString: databaseUrl,
-    max: POOL_CONNECTIONS_PER_ROLE * roles,
+    max,
     connectionTimeoutMillis: 1_000,
     idleTimeoutMillis: 30_000,
   };

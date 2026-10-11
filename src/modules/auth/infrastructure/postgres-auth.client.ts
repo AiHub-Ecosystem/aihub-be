@@ -1,40 +1,79 @@
 import { createPrismaClient } from '@/modules/persistence/persistence.module';
-import type { PrismaClient } from '@prisma-client/client';
-import {
-  type PostgresAuthClient,
-  authQueryRows,
-  authTransaction,
-} from './auth-prisma';
+import type { Prisma, PrismaClient } from '@prisma-client/client';
+import { authQueryRows, authTransaction } from './auth-prisma';
 
-export type {
-  PostgresAuthClient,
-  PostgresAuthQueryClient,
-} from './auth-prisma';
+/** Query API a database-lane fixture adds to its Prisma client for assertions. */
+export interface PostgresAuthQueryClient {
+  query(
+    text: string,
+    values: readonly unknown[],
+  ): Promise<readonly Record<string, unknown>[]>;
+}
 
 /**
- * The query-shaped adapter over the shared Prisma path. Statements and
- * transactions go through the same helpers production repositories use, so a
- * fixture cannot pass on behavior the runtime does not have.
+ * A Prisma client with the helpers database-lane specs assert through. It is
+ * the same client a repository takes, so a fixture cannot pass on behavior the
+ * runtime does not have.
  */
-function authClient(
+export type PostgresAuthClient = PrismaClient &
+  PostgresAuthQueryClient & {
+    checkConnection(timeoutMs: number): Promise<void>;
+    /** The callback's handle is the guarded Prisma transaction, plus `query`. */
+    transaction<T>(
+      callback: (
+        client: Prisma.TransactionClient & PostgresAuthQueryClient,
+      ) => Promise<T>,
+    ): Promise<T>;
+    close(): Promise<void>;
+  };
+
+function withQuery(
+  transaction: Prisma.TransactionClient,
+): Prisma.TransactionClient & PostgresAuthQueryClient {
+  return new Proxy(transaction, {
+    get(target, property) {
+      if (property === 'query') {
+        return (text: string, values: readonly unknown[]) =>
+          authQueryRows(target, text, values);
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  }) as Prisma.TransactionClient & PostgresAuthQueryClient;
+}
+
+function fixtureClient(
   prisma: PrismaClient,
   checkConnection: (timeoutMs: number) => Promise<void>,
   close: () => Promise<void>,
 ): PostgresAuthClient {
-  return {
-    query: (text, values) => authQueryRows(prisma, text, values),
-    checkConnection,
-    transaction: (callback) =>
+  const helpers = {
+    query: (text: string, values: readonly unknown[]) =>
+      authQueryRows(prisma, text, values),
+    transaction: <T>(
+      callback: (
+        client: Prisma.TransactionClient & PostgresAuthQueryClient,
+      ) => Promise<T>,
+    ) =>
       authTransaction(prisma, (transaction) =>
-        callback({
-          query: (text, values) => authQueryRows(transaction, text, values),
-        }),
+        callback(withQuery(transaction)),
       ),
+    checkConnection,
     close,
   };
+
+  return new Proxy(prisma, {
+    get(target, property) {
+      if (property in helpers) {
+        return helpers[property as keyof typeof helpers];
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  }) as PostgresAuthClient;
 }
 
-/** Test-only factory for unchanged database-lane fixtures; production injects Prisma. */
+/** Test-only factory for database-lane fixtures; production injects Prisma. */
 export function createPostgresAuthClient(
   databaseUrl: string,
 ): PostgresAuthClient {
@@ -42,15 +81,14 @@ export function createPostgresAuthClient(
     const missingDatabaseUrl = (): never => {
       throw new Error('DATABASE_URL is missing');
     };
-    return {
-      query: async () => missingDatabaseUrl(),
-      transaction: async () => missingDatabaseUrl(),
-      checkConnection: async () => missingDatabaseUrl(),
-      close: async () => undefined,
-    };
+    return fixtureClient(
+      new Proxy({} as PrismaClient, { get: () => missingDatabaseUrl() }),
+      async () => missingDatabaseUrl(),
+      async () => undefined,
+    );
   }
 
   const holder = createPrismaClient('integration-test', databaseUrl);
 
-  return authClient(holder.prisma, holder.checkConnection, holder.close);
+  return fixtureClient(holder.prisma, holder.checkConnection, holder.close);
 }

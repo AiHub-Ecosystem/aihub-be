@@ -8,22 +8,24 @@ import {
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import { type Prisma, PrismaClient } from '@prisma-client/client';
 
-/** Test-only query API for unchanged database-lane fixtures; production injects Prisma. */
+/**
+ * What a repository takes: the shared Prisma client, or the runner that wraps
+ * it. Test fixtures are Prisma clients too, so a repository has one shape.
+ */
+export type IdentityRepositoryClient = PrismaClient;
+
+/** Query API a database-lane fixture adds to its Prisma client for assertions. */
 export interface PostgresIdentityQueryClient {
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
 }
 
-/** Test-only transaction runner for unchanged database-lane fixtures. */
+/** The fixture's transaction helper, over the same guarded Prisma transaction. */
 export interface PostgresIdentityTransactionalClient
   extends PostgresIdentityQueryClient {
   transaction<T>(
     callback: (client: PostgresIdentityQueryClient) => Promise<T>,
   ): Promise<T>;
 }
-
-export type IdentityRepositoryClient =
-  | PrismaClient
-  | PostgresIdentityTransactionalClient;
 
 type PrismaRawQueryClient = Pick<
   PrismaClient,
@@ -37,22 +39,12 @@ class PostgresIdentityTransactionExpiredError extends Error {
   }
 }
 
-/**
- * Executes Identity SQL through Prisma. The query-client branch serves only
- * unchanged database-lane fixtures; production injects Prisma directly.
- */
+/** Executes Identity SQL through Prisma, mapping rows back to `pg` types. */
 export async function identityRows(
-  client: PrismaRawQueryClient | PostgresIdentityQueryClient,
+  client: PrismaRawQueryClient,
   text: string,
   values: readonly unknown[] = [],
 ): Promise<readonly Record<string, unknown>[]> {
-  if ('query' in client) {
-    return (await client.query(text, values)) as readonly Record<
-      string,
-      unknown
-    >[];
-  }
-
   if (isRowlessWrite(text)) {
     await client.$executeRawUnsafe(text, ...values);
     return [];
@@ -78,55 +70,11 @@ function runPrismaTransaction<T>(
   );
 }
 
-/**
- * A handle for the fixtures' query-shaped transaction. It speaks raw SQL only,
- * so a repository reached through it must use nothing else. The cast is the
- * boundary: Prisma's methods return `PrismaPromise`, which a plain promise
- * cannot be.
- */
-function legacyTransactionAsPrisma(
-  client: PostgresIdentityQueryClient,
-): Prisma.TransactionClient {
-  return {
-    $queryRawUnsafe: async <T = unknown>(text: string, ...values: unknown[]) =>
-      (await client.query(text, values)) as T,
-    $executeRawUnsafe: async (text: string, ...values: unknown[]) => {
-      await client.query(text, values);
-      return 0;
-    },
-  } as unknown as Prisma.TransactionClient;
-}
-
-// Read, not `in`: the runner and the fixtures are proxies that answer through
-// `get`, so the property is not on the proxy's own target.
-function isPrismaClient(
-  client: IdentityRepositoryClient,
-): client is PrismaClient {
-  return typeof Reflect.get(client, '$transaction') === 'function';
-}
-
-/**
- * The generated client behind a repository client, for a statement it can
- * express. A repository that uses it is driven only through clients that carry
- * one; a query-only fixture reaching it is a wiring mistake and fails loudly.
- */
-export function identityPrisma(client: IdentityRepositoryClient): PrismaClient {
-  if (isPrismaClient(client)) {
-    return client;
-  }
-  throw new Error('The Identity store needs a generated Prisma client');
-}
-
 export function identityTransaction<T>(
   client: IdentityRepositoryClient,
   callback: (transaction: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
-  if (isPrismaClient(client)) {
-    return runPrismaTransaction(client, callback);
-  }
-  return client.transaction((transaction) =>
-    callback(legacyTransactionAsPrisma(transaction)),
-  );
+  return runPrismaTransaction(client, callback);
 }
 
 /**
@@ -176,7 +124,8 @@ function missingDatabaseUrl(): never {
   throw new Error('DATABASE_URL is missing');
 }
 
-type TestIdentityClient = PrismaClient &
+/** A Prisma client with the query helpers a database-lane spec asserts through. */
+export type IdentityFixtureClient = PrismaClient &
   PostgresIdentityTransactionalClient & {
     close(): Promise<void>;
   };
@@ -184,9 +133,9 @@ type TestIdentityClient = PrismaClient &
 function testIdentityClient(
   prisma: PrismaClient,
   close: () => Promise<void>,
-): TestIdentityClient {
+): IdentityFixtureClient {
   const runtimeClient = createIdentityTransactionRunner(prisma);
-  return new Proxy(runtimeClient as TestIdentityClient, {
+  return new Proxy(runtimeClient as IdentityFixtureClient, {
     get(target, property, receiver) {
       if (property === 'query') {
         return (text: string, values: readonly unknown[]) =>
@@ -213,7 +162,7 @@ function testIdentityClient(
 /** Test-only factory for database-lane specs; no production module may use it. */
 export function createPostgresIdentityClient(
   databaseUrl: string,
-): TestIdentityClient {
+): IdentityFixtureClient {
   if (databaseUrl.trim().length === 0) {
     const missingPrisma = new Proxy({} as PrismaClient, {
       get: () => missingDatabaseUrl(),
@@ -223,14 +172,4 @@ export function createPostgresIdentityClient(
 
   const holder = createPrismaClient('integration-test', databaseUrl);
   return testIdentityClient(holder.prisma, holder.close);
-}
-
-/** Historical name retained for unchanged database-lane fixtures. */
-export type IdentityDrizzleClient = TestIdentityClient;
-
-/** Historical fixture factory; runtime Identity providers inject Prisma directly. */
-export function createIdentityDrizzleClient(
-  databaseUrl: string,
-): IdentityDrizzleClient {
-  return createPostgresIdentityClient(databaseUrl);
 }

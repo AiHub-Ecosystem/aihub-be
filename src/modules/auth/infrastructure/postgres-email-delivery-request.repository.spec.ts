@@ -4,18 +4,20 @@ import type {
   EmailDeliveryTransaction,
   InsertEmailDeliveryRequestInput,
 } from '@/modules/auth/application/email-delivery-request.port';
-import type { EmailDeliveryQueryClient } from './postgres-email-delivery-request.repository';
+import {
+  type QueryFake,
+  prismaFromQueryFake,
+} from '@/modules/persistence/testing/query-fake-client';
 import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
 
 const NOW = new Date('2026-10-05T12:00:00.000Z');
 const ROW_ID = 'edr_01J00000000000000000000000';
 
-function clientReturning(
-  row: Record<string, unknown>,
-): EmailDeliveryQueryClient {
-  return {
+function clientReturning(row: Record<string, unknown>) {
+  const fake: QueryFake = {
     query: async (): Promise<readonly Record<string, unknown>[]> => [row],
   };
+  return prismaFromQueryFake(fake);
 }
 
 function queuedRow(
@@ -75,7 +77,7 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
       .spyOn(Logger.prototype, 'warn')
       .mockImplementation(() => undefined);
     const knownId = 'edr_01J00000000000000000000001';
-    const client: EmailDeliveryQueryClient = {
+    const client = prismaFromQueryFake({
       query: async () => [
         queuedRow({
           kind: 'carrier_pigeon_email',
@@ -83,7 +85,7 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
         }),
         queuedRow({ id: knownId }),
       ],
-    };
+    });
 
     try {
       const claimed = await new PostgresEmailDeliveryRequestRepository().claim(

@@ -1,7 +1,8 @@
-import type {
-  PostgresAuthClient,
-  PostgresAuthQueryClient,
-} from './postgres-auth.client';
+import {
+  type QueryFake,
+  type QueryHandle,
+  prismaFromQueryFake,
+} from '@/modules/persistence/testing/query-fake-client';
 import { PostgresLocalAuthRepository } from './postgres-local-auth.repository';
 
 /**
@@ -10,9 +11,7 @@ import { PostgresLocalAuthRepository } from './postgres-local-auth.repository';
  * is what makes "one durable step" checkable here — a mutation claimed to ride
  * one transaction is only in it while its statement carries the same number.
  */
-class FakeClient implements PostgresAuthClient {
-  async checkConnection(): Promise<void> {}
-
+class FakeClient implements QueryFake {
   readonly queries: Array<{
     text: string;
     values: readonly unknown[];
@@ -30,7 +29,7 @@ class FakeClient implements PostgresAuthClient {
   }
 
   async transaction<T>(
-    callback: (client: PostgresAuthQueryClient) => Promise<T>,
+    callback: (client: QueryHandle) => Promise<T>,
   ): Promise<T> {
     if (this.failure !== undefined) {
       throw this.failure;
@@ -44,8 +43,6 @@ class FakeClient implements PostgresAuthClient {
       },
     });
   }
-
-  async close(): Promise<void> {}
 }
 
 const input = {
@@ -69,7 +66,9 @@ const refreshToken = {
 describe('PostgresLocalAuthRepository', () => {
   it('persists account, local identity, and token in one transaction', async () => {
     const client = new FakeClient();
-    const repository = new PostgresLocalAuthRepository(client);
+    const repository = new PostgresLocalAuthRepository(
+      prismaFromQueryFake(client),
+    );
 
     await repository.register(input);
 
@@ -83,7 +82,9 @@ describe('PostgresLocalAuthRepository', () => {
     client.failure = { code: '23505', detail: 'private database detail' };
 
     await expect(
-      new PostgresLocalAuthRepository(client).register(input),
+      new PostgresLocalAuthRepository(prismaFromQueryFake(client)).register(
+        input,
+      ),
     ).rejects.toMatchObject({ name: 'AuthIdentityConflictError' });
   });
 
@@ -99,7 +100,7 @@ describe('PostgresLocalAuthRepository', () => {
       ],
     ];
     const result = await new PostgresLocalAuthRepository(
-      client,
+      prismaFromQueryFake(client),
     ).rotateVerificationToken({
       email: input.email,
       tokenId: input.tokenId,
@@ -129,7 +130,9 @@ describe('PostgresLocalAuthRepository', () => {
     ];
 
     await expect(
-      new PostgresLocalAuthRepository(client).consumeVerificationToken({
+      new PostgresLocalAuthRepository(
+        prismaFromQueryFake(client),
+      ).consumeVerificationToken({
         tokenHash: input.tokenHash,
         signInSession: {
           kind: 'refresh',
@@ -164,7 +167,9 @@ describe('PostgresLocalAuthRepository', () => {
     ];
 
     await expect(
-      new PostgresLocalAuthRepository(client).consumeVerificationToken({
+      new PostgresLocalAuthRepository(
+        prismaFromQueryFake(client),
+      ).consumeVerificationToken({
         tokenHash: input.tokenHash,
         browserBindingHash: 'binding-hash',
         signInSession: {
@@ -201,7 +206,9 @@ describe('PostgresLocalAuthRepository', () => {
     ];
 
     await expect(
-      new PostgresLocalAuthRepository(client).issuePasswordResetToken({
+      new PostgresLocalAuthRepository(
+        prismaFromQueryFake(client),
+      ).issuePasswordResetToken({
         email: input.email,
         tokenId: 'prt_01J00000000000000000000000',
         tokenHash: input.tokenHash,
@@ -233,7 +240,9 @@ describe('PostgresLocalAuthRepository', () => {
     ];
 
     await expect(
-      new PostgresLocalAuthRepository(client).consumePasswordReset({
+      new PostgresLocalAuthRepository(
+        prismaFromQueryFake(client),
+      ).consumePasswordReset({
         tokenHash: input.tokenHash,
         passwordHash: input.passwordHash,
         now: input.now,
@@ -261,7 +270,9 @@ describe('PostgresLocalAuthRepository', () => {
     client.responses = [[]];
 
     await expect(
-      new PostgresLocalAuthRepository(client).consumePasswordReset({
+      new PostgresLocalAuthRepository(
+        prismaFromQueryFake(client),
+      ).consumePasswordReset({
         tokenHash: input.tokenHash,
         passwordHash: input.passwordHash,
         now: input.now,
@@ -316,7 +327,9 @@ describe('PostgresLocalAuthRepository', () => {
       const client = new FakeClient();
       client.responses = [current.rows];
       await expect(
-        new PostgresLocalAuthRepository(client).consumePasswordReset({
+        new PostgresLocalAuthRepository(
+          prismaFromQueryFake(client),
+        ).consumePasswordReset({
           tokenHash: input.tokenHash,
           passwordHash: input.passwordHash,
           now: input.now,
@@ -340,7 +353,9 @@ describe('PostgresLocalAuthRepository', () => {
     ];
 
     await expect(
-      new PostgresLocalAuthRepository(client).checkPasswordResetToken({
+      new PostgresLocalAuthRepository(
+        prismaFromQueryFake(client),
+      ).checkPasswordResetToken({
         tokenHash: input.tokenHash,
         now: input.now,
       }),
@@ -362,9 +377,9 @@ describe('PostgresLocalAuthRepository', () => {
     ];
 
     await expect(
-      new PostgresLocalAuthRepository(client).findLoginIdentityByEmail(
-        input.email,
-      ),
+      new PostgresLocalAuthRepository(
+        prismaFromQueryFake(client),
+      ).findLoginIdentityByEmail(input.email),
     ).resolves.toEqual({
       userId: 'usr_01J00000000000000000000000',
       email: input.email,
@@ -378,9 +393,9 @@ describe('PostgresLocalAuthRepository', () => {
     client.queryResponses = [[{ status: 'disabled' }]];
 
     await expect(
-      new PostgresLocalAuthRepository(client).findUserAccountStatus(
-        'usr_01J00000000000000000000000',
-      ),
+      new PostgresLocalAuthRepository(
+        prismaFromQueryFake(client),
+      ).findUserAccountStatus('usr_01J00000000000000000000000'),
     ).resolves.toBe('disabled');
   });
 
@@ -389,9 +404,9 @@ describe('PostgresLocalAuthRepository', () => {
     client.queryResponses = [[{ username: 'person_01' }]];
 
     await expect(
-      new PostgresLocalAuthRepository(client).findActiveUsername(
-        'usr_01J00000000000000000000000',
-      ),
+      new PostgresLocalAuthRepository(
+        prismaFromQueryFake(client),
+      ).findActiveUsername('usr_01J00000000000000000000000'),
     ).resolves.toBe('person_01');
     expect(client.queries[0]?.values).toEqual([
       'usr_01J00000000000000000000000',
@@ -399,15 +414,17 @@ describe('PostgresLocalAuthRepository', () => {
 
     client.queryResponses = [[]];
     await expect(
-      new PostgresLocalAuthRepository(client).findActiveUsername(
-        'usr_01J00000000000000000000000',
-      ),
+      new PostgresLocalAuthRepository(
+        prismaFromQueryFake(client),
+      ).findActiveUsername('usr_01J00000000000000000000000'),
     ).resolves.toBeUndefined();
   });
 
   it('persists only the refresh hash and rotates under a row lock', async () => {
     const client = new FakeClient();
-    const repository = new PostgresLocalAuthRepository(client);
+    const repository = new PostgresLocalAuthRepository(
+      prismaFromQueryFake(client),
+    );
     client.responses = [[{ status: 'active' }], []];
     await repository.createRefreshSession({
       userId: 'usr_01J00000000000000000000000',
@@ -458,7 +475,9 @@ describe('PostgresLocalAuthRepository', () => {
   it('revokes a whole family for a known stale token and ignores unknown logout tokens', async () => {
     const client = new FakeClient();
     client.responses = [[{ family_id: refreshToken.familyId }]];
-    const repository = new PostgresLocalAuthRepository(client);
+    const repository = new PostgresLocalAuthRepository(
+      prismaFromQueryFake(client),
+    );
 
     await repository.revokeRefreshFamilyByTokenHash({
       tokenHash: refreshToken.hash,
@@ -474,7 +493,7 @@ describe('PostgresLocalAuthRepository', () => {
     unknownClient.responses = [[]];
     await expect(
       new PostgresLocalAuthRepository(
-        unknownClient,
+        prismaFromQueryFake(unknownClient),
       ).revokeRefreshFamilyByTokenHash({
         tokenHash: 'd'.repeat(64),
         now: input.now,
@@ -499,9 +518,9 @@ describe('PostgresLocalAuthRepository', () => {
     ];
 
     await expect(
-      new PostgresLocalAuthRepository(client).findRefreshTokenByHash(
-        refreshToken.hash,
-      ),
+      new PostgresLocalAuthRepository(
+        prismaFromQueryFake(client),
+      ).findRefreshTokenByHash(refreshToken.hash),
     ).resolves.toBeUndefined();
   });
 });

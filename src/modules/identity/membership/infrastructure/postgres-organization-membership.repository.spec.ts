@@ -4,6 +4,7 @@ import type {
   PostgresIdentityQueryClient,
   PostgresIdentityTransactionalClient,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import { prismaFromQueryFake } from '@/modules/persistence/testing/query-fake-client';
 import { PostgresOrganizationMembershipRepository } from './postgres-organization-membership.repository';
 
 const membershipRow = {
@@ -155,7 +156,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     const client = new FakePostgres();
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).resolveMembership({
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).resolveMembership({
         context,
         userId: membershipRow.user_account_id,
         organizationId: membershipRow.organization_id,
@@ -182,7 +185,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     client.result = [{ ...membershipRow, membership_status: 'disabled' }];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).resolveMembership({
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).resolveMembership({
         context,
         userId: membershipRow.user_account_id,
         organizationId: membershipRow.organization_id,
@@ -195,7 +200,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     client.result = [];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).resolveMembership({
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).resolveMembership({
         context,
         userId: membershipRow.user_account_id,
         organizationId: 'org_missing',
@@ -208,7 +215,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     client.result = rosterRows;
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).listRoster({
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).listRoster({
         context,
         userId: membershipRow.user_account_id,
       }),
@@ -245,7 +254,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     client.result = [{ ...rosterRows[0], identity_config_status: null }];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).listRoster({
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).listRoster({
         context,
         userId: membershipRow.user_account_id,
       }),
@@ -257,7 +268,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     client.result = [{ ...rosterRows[0], identity_config_status: 'pending' }];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).listRoster({
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).listRoster({
         context,
         userId: membershipRow.user_account_id,
       }),
@@ -269,7 +282,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     client.result = [];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).listRoster({
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).listRoster({
         context,
         userId: membershipRow.user_account_id,
       }),
@@ -281,7 +296,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
     client.shouldFail = true;
 
     const unavailable = await new PostgresOrganizationMembershipRepository(
-      client,
+      prismaFromQueryFake(client),
     )
       .listRoster({ context, userId: membershipRow.user_account_id })
       .catch((error: unknown) => error);
@@ -291,7 +306,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
 
     client.shouldFail = false;
     client.result = [{ ...membershipRow, role: 'superuser' }];
-    const malformed = await new PostgresOrganizationMembershipRepository(client)
+    const malformed = await new PostgresOrganizationMembershipRepository(
+      prismaFromQueryFake(client),
+    )
       .resolveMembership({
         context,
         userId: membershipRow.user_account_id,
@@ -305,7 +322,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
 
     client.result = [{ ...membershipRow, user_account_id: 'usr_other' }];
     const mismatched = await new PostgresOrganizationMembershipRepository(
-      client,
+      prismaFromQueryFake(client),
     )
       .resolveMembership({
         context,
@@ -327,7 +344,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     ];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).changeRole({
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).changeRole({
         ...mutationInput(),
         role: 'admin',
       }),
@@ -363,7 +382,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     ];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).changeRole({
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).changeRole({
         ...mutationInput(),
         role: 'member',
       }),
@@ -380,7 +401,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     ];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).changeRole({
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).changeRole({
         ...mutationInput('missing'),
         role: 'admin',
       }),
@@ -396,9 +419,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     client.transactionRows = [[organizationRow], [callerOwnerRow, disabled]];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).disable(
-        mutationInput(),
-      ),
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).disable(mutationInput()),
     ).resolves.toEqual({
       organizationId: 'org_acme',
       username: 'bob',
@@ -426,9 +449,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     ];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).transfer(
-        mutationInput(),
-      ),
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).transfer(mutationInput()),
     ).resolves.toEqual({
       organizationId: 'org_acme',
       username: 'bob',
@@ -470,7 +493,9 @@ describe('PostgresOrganizationMembershipRepository audit trail', () => {
     ];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).changeRole({
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).changeRole({
         ...mutationInput(),
         role: 'member',
       }),
@@ -510,7 +535,9 @@ describe('PostgresOrganizationMembershipRepository audit trail', () => {
     ];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).changeRole({
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).changeRole({
         ...mutationInput(),
         role: 'member',
       }),
@@ -527,9 +554,9 @@ describe('PostgresOrganizationMembershipRepository audit trail', () => {
     client.transactionRows = [[organizationRow], [targetMemberRow]];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).disable(
-        mutationInput(),
-      ),
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).disable(mutationInput()),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
 
     expect(auditWrites(client)).toHaveLength(0);
@@ -541,9 +568,9 @@ describe('PostgresOrganizationMembershipRepository audit trail', () => {
     client.transactionRows = [[organizationRow], [callerOwnerRow]];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).disable(
-        mutationInput('nobody'),
-      ),
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).disable(mutationInput('nobody')),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
 
     expect(auditWrites(client)).toHaveLength(0);
@@ -558,7 +585,9 @@ describe('PostgresOrganizationMembershipRepository audit trail', () => {
     ];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).changeRole({
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).changeRole({
         ...mutationInput(),
         role: 'admin',
       }),
@@ -577,9 +606,9 @@ describe('PostgresOrganizationMembershipRepository audit trail', () => {
     ];
 
     await expect(
-      new PostgresOrganizationMembershipRepository(client).disable(
-        mutationInput(),
-      ),
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).disable(mutationInput()),
     ).resolves.toMatchObject({ status: 'disabled' });
 
     expect(auditWrites(client)).toHaveLength(0);
@@ -599,7 +628,9 @@ describe('PostgresOrganizationMembershipRepository audit trail', () => {
 
     // An audit outage must not become an authorization outage.
     await expect(
-      new PostgresOrganizationMembershipRepository(client).changeRole({
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).changeRole({
         ...mutationInput(),
         role: 'member',
       }),

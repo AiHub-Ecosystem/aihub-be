@@ -8,12 +8,8 @@ import { generateOrganizationApiKey } from '@/modules/identity/api-keys/applicat
 import type { CreateOrganizationApiKeyRecordResult } from '@/modules/identity/api-keys/application/organization-api-key.port';
 import { PostgresApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
 import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-organization-api-key.repository';
-import type {
-  IdentityDrizzleClient,
-  PostgresIdentityTransactionalClient,
-} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import {
-  createIdentityDrizzleClient,
+  type IdentityFixtureClient,
   createPostgresIdentityClient,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
@@ -28,8 +24,8 @@ const ORGANIZATION_ID = 'org_acme';
 const OTHER_ORGANIZATION_ID = 'org_other';
 
 let pool: Pool;
-let client: PostgresIdentityTransactionalClient & { close(): Promise<void> };
-let apiKeys: IdentityDrizzleClient;
+let client: IdentityFixtureClient;
+let apiKeys: IdentityFixtureClient;
 let repository: PostgresOrganizationApiKeyRepository;
 
 beforeAll(() => {
@@ -37,7 +33,7 @@ beforeAll(() => {
   const databaseUrl =
     (pool.options as { connectionString?: string }).connectionString ?? '';
   client = createPostgresIdentityClient(databaseUrl);
-  apiKeys = createIdentityDrizzleClient(databaseUrl);
+  apiKeys = createPostgresIdentityClient(databaseUrl);
   repository = new PostgresOrganizationApiKeyRepository(client);
 });
 
@@ -494,7 +490,7 @@ describe('API-key lookup and last-used tracking against PostgreSQL', () => {
   });
 
   it('reports an unreachable store without naming the driver failure', async () => {
-    const unreachable = createIdentityDrizzleClient(
+    const unreachable = createPostgresIdentityClient(
       `${testDatabaseUrl().replace(/\/[^/]*$/, '')}/aihub_absent_database`,
     );
     const store = new PostgresApiKeyRepository(unreachable);

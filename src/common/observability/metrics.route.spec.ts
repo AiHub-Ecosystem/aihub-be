@@ -56,7 +56,7 @@ describe('metrics scrape endpoint', () => {
 
   it('emits request and runtime metric families on the scrape', async () => {
     setPostgresPoolStatsSource(() => [
-      { pool: 'runtime', total: 4, idle: 2, waiting: 1 },
+      { pool: 'runtime', roles: ['runtime'], total: 4, idle: 2, waiting: 1 },
     ]);
     setDownstreamPoolQueuedSource(() => [
       { origin: 'https://ai-writing.test', queued: 3 },

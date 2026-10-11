@@ -12,7 +12,6 @@ import {
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {
   type IdentityRepositoryClient,
-  identityPrisma,
   identityRows,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
@@ -213,7 +212,7 @@ export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
   async touchLastUsed(apiKeyId: string, usedAt: Date): Promise<void> {
     try {
       const throttleCutoff = new Date(usedAt.getTime() - LAST_USED_THROTTLE_MS);
-      await identityPrisma(this.client).apiKey.updateMany({
+      await this.client.apiKey.updateMany({
         where: {
           id: apiKeyId,
           OR: [{ lastUsedAt: null }, { lastUsedAt: { lt: throttleCutoff } }],

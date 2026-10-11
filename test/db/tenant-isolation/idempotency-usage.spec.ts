@@ -30,6 +30,7 @@ let pool: Pool;
 let redisClients: TenantIsolationRedisClients;
 let fixture: TenantIsolationFixture;
 let idempotency: PostgresIdempotencyRepository;
+let idempotencyClient: ReturnType<typeof createPostgresIdempotencyClient>;
 let usage: PostgresUsageRepository;
 
 function idempotencyInput(organizationId: string, requestId: string) {
@@ -78,9 +79,8 @@ async function usageRecord(
 beforeAll(async () => {
   pool = createTestPool();
   redisClients = createTenantIsolationRedisClients();
-  idempotency = new PostgresIdempotencyRepository(
-    createPostgresIdempotencyClient(testDatabaseUrl()),
-  );
+  idempotencyClient = createPostgresIdempotencyClient(testDatabaseUrl());
+  idempotency = new PostgresIdempotencyRepository(idempotencyClient);
   usage = new PostgresUsageRepository(
     createPostgresMeteringClient(testDatabaseUrl()),
   );
@@ -106,7 +106,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  await idempotency?.onModuleDestroy();
+  await idempotencyClient?.close();
   await usage?.close();
   await pool?.end();
   await redisClients?.raw.quit();

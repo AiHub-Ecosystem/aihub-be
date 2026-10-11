@@ -31,15 +31,42 @@ import { isLifecycleProperty } from './prisma-raw';
  * database the runtime secrets named.
  */
 
+/**
+ * What each role replaces. On the way in, every module opened a pool of its own;
+ * a role now holds the sum of the pools of the modules it serves, so merging
+ * roles into one pool keeps the concurrency they had apart:
+ *
+ * - `runtime`: Auth 10, Idempotency 10, Metering 10, Avatar 5, Speaking audio 5,
+ *   Sandbox budget 4.
+ * - `control-plane`: the Identity write pool (10) and the one transaction
+ *   runner that replaces the Identity repositories' own clients (10).
+ * - `control-plane-read`: the Identity read pool (10).
+ *
+ * #383 owns tuning; `aihub_postgres_pool_waiting` is the signal.
+ */
+const POOL_CONNECTIONS: Readonly<Record<PostgresPoolName, number>> = {
+  runtime: 44,
+  'control-plane': 20,
+  'control-plane-read': 10,
+  'integration-test': 10,
+};
+
 export function createPrismaClient(
   role: PostgresPoolName,
   databaseUrl: string,
-  /** How many connection roles this client serves, which sizes its pool. */
-  roles = 1,
+  /** Every role the pool serves, when several share it. */
+  roles: readonly PostgresConnectionRole[] = role === 'integration-test'
+    ? []
+    : [role],
 ): PrismaClientHolder {
+  const connections =
+    roles.length === 0
+      ? POOL_CONNECTIONS[role]
+      : roles.reduce((sum, served) => sum + POOL_CONNECTIONS[served], 0);
   const pool = createPostgresPool(
     role,
-    postgresPoolOptions(databaseUrl, roles),
+    postgresPoolOptions(databaseUrl, connections),
+    roles,
   );
   const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
@@ -106,13 +133,16 @@ export function createSharedPrismaClients(
 ): SharedPrismaClients {
   const pools = new Map<string, PrismaClientHolder>();
 
-  const configured = [
-    urls.databaseUrl,
-    urls.controlPlaneDatabaseUrl,
-    urls.controlPlaneReadDatabaseUrl,
-  ].filter((url): url is string => url !== undefined && url.trim().length > 0);
-  const rolesPerUrl = (url: string): number =>
-    configured.filter((candidate) => candidate === url).length;
+  const roleUrls: readonly (readonly [
+    PostgresConnectionRole,
+    string | undefined,
+  ])[] = [
+    ['runtime', urls.databaseUrl],
+    ['control-plane', urls.controlPlaneDatabaseUrl],
+    ['control-plane-read', urls.controlPlaneReadDatabaseUrl],
+  ];
+  const rolesFor = (url: string): readonly PostgresConnectionRole[] =>
+    roleUrls.flatMap(([role, candidate]) => (candidate === url ? [role] : []));
 
   const holderFor = (
     role: PostgresConnectionRole,
@@ -130,7 +160,7 @@ export function createSharedPrismaClients(
     const created = createPrismaClient(
       role,
       databaseUrl,
-      rolesPerUrl(databaseUrl),
+      rolesFor(databaseUrl),
     );
     pools.set(databaseUrl, created);
     return created;

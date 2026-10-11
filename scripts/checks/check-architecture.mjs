@@ -116,8 +116,12 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
 const PRISMA_CLIENT_SPECIFIER =
   /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)['"]@prisma-client\//;
 
+// A `testing/` folder holds test doubles, which production code cannot import
+// (`no-test-helpers-in-production-code`), so naming the client's type there
+// does not carry Prisma into a layer.
 for (const file of collectTypeScriptFiles(srcDirectory)) {
-  if (file.split(sep).includes('infrastructure')) {
+  const segments = file.split(sep);
+  if (segments.includes('infrastructure') || segments.includes('testing')) {
     continue;
   }
 

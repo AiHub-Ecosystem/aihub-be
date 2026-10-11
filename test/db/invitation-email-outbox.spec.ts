@@ -31,10 +31,14 @@ import {
 } from '@/modules/identity/invitations/application/organization-invitation.port';
 import { PostgresOrganizationInvitationRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository';
 import {
+  type IdentityFixtureClient,
   type PostgresIdentityQueryClient,
-  type PostgresIdentityTransactionalClient,
   createPostgresIdentityClient,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  type QueryFake,
+  prismaFromQueryFake,
+} from '@/modules/persistence/testing/query-fake-client';
 
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import {
@@ -52,14 +56,15 @@ const BEARER = 'Bearer valid.token.value';
  * The real client, with one lever: failing the outbox insert is how the suite
  * checks that the invitation and its audit event are rolled back with it.
  */
-class SwitchableIdentityClient implements PostgresIdentityTransactionalClient {
+class SwitchableIdentityClient implements QueryFake {
   failOutboxInserts = false;
 
-  constructor(
-    private readonly inner: PostgresIdentityTransactionalClient & {
-      close(): Promise<void>;
-    },
-  ) {}
+  constructor(private readonly inner: IdentityFixtureClient) {}
+
+  /** The Prisma-shaped view a repository takes; statements still route here. */
+  asPrisma() {
+    return prismaFromQueryFake(this);
+  }
 
   query(text: string, values: readonly unknown[]): Promise<readonly unknown[]> {
     return this.inner.query(text, values);
@@ -146,7 +151,7 @@ beforeAll(async () => {
 
   const invitations: OrganizationInvitationPort =
     new PostgresOrganizationInvitationRepository(
-      identityClient,
+      identityClient.asPrisma(),
       cipher,
       new PostgresEmailDeliveryRequestRepository(),
     );

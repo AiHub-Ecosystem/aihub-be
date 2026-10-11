@@ -8,14 +8,14 @@ import type {
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { PostgresOperatorApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-operator-api-key.repository';
 import {
-  type PostgresIdentityTransactionalClient,
+  type IdentityFixtureClient,
   createPostgresIdentityClient,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 import { createTestPool, resetIdentityTables } from './database';
 
 let pool: Pool;
-let client: PostgresIdentityTransactionalClient & { close(): Promise<void> };
+let client: IdentityFixtureClient;
 let repository: PostgresOperatorApiKeyRepository;
 
 beforeAll(() => {

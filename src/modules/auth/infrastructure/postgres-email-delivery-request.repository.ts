@@ -30,9 +30,6 @@ import {
   stringValue,
 } from './auth-row';
 
-/** Compatibility type for the unchanged database-lane fixtures. */
-export type EmailDeliveryQueryClient = AuthSqlClient;
-
 const SELECT_ROW = `
   SELECT id, kind, status, payload_ciphertext, attempts, last_attempt_at,
          last_error_code, cancel_reason, created_at, completed_at

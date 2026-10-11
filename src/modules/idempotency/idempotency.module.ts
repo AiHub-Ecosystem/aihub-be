@@ -20,10 +20,7 @@ import { PostgresIdempotencyRepository } from './infrastructure/postgres-idempot
       provide: IDEMPOTENCY_REPOSITORY,
       inject: [RUNTIME_PRISMA_CLIENT],
       useFactory: (runtime: PrismaClientHolder): IdempotencyRepositoryPort =>
-        new PostgresIdempotencyRepository({
-          $queryRawUnsafe: <T = unknown>(query: string, ...values: unknown[]) =>
-            runtime.prisma.$queryRawUnsafe<T>(query, ...values),
-        }),
+        new PostgresIdempotencyRepository(runtime.prisma),
     },
     {
       provide: IDEMPOTENCY_SERVICE,
