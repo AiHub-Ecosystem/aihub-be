@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -uo pipefail
+umask 077
 
-# shortcut: jobs have no timeout or overlap lock until #495 is implemented.
 readonly CONTAINER_RUNTIME_ENTRYPOINT='scripts/runtime/runtime-entrypoint.mjs'
 readonly CONTAINER_CLI='scripts/cli/cli.mjs'
+readonly STATUS_TIMEOUT_SECONDS=30
+readonly DOCKER_EXEC_GRACE_SECONDS=15
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly APP_DIR="${APP_DIR:-$(cd -- "$SCRIPT_DIR/../.." && pwd -P)}"
 export APP_DIR
@@ -14,18 +16,33 @@ else
 fi
 readonly JOB=${1:-}
 readonly LOG_FILE=${AIHUB_HOST_JOB_LOG:-$default_log}
+from=
+to=
+quota_month=
+avatar_dry_run=false
+report_window_provided=false
+quota_month_provided=false
 
-if (( $# != 1 )); then
-  printf 'usage: %s quota|prune|report|ttl-audit|avatar-sweep\n' "$0" >&2
+if (( $# == 3 )) && [[ "$JOB" == quota && "${2:-}" == --month ]]; then
+  quota_month=$3
+  quota_month_provided=true
+elif (( $# == 3 )) && [[ "$JOB" == avatar-sweep && "${2:-}" == --dry-run && "${3:-}" == true ]]; then
+  avatar_dry_run=true
+elif (( $# == 5 )) && [[ "$JOB" == report && "${2:-}" == --from && "${4:-}" == --to ]]; then
+  from=$3
+  to=$5
+  report_window_provided=true
+elif (( $# != 1 )); then
+  printf 'usage: %s quota [--month YYYY-MM]|prune|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]\n' "$0" >&2
   exit 2
 fi
 case "$JOB" in
-  quota) commands=(quota:reconcile) ;;
-  prune) commands=(usage:prune) ;;
-  report) commands=(usage:report) ;;
-  ttl-audit) commands=(redis:ttl-audit) ;;
-  avatar-sweep) commands=(avatar:sweep) ;;
-  *) printf 'usage: %s quota|prune|report|ttl-audit|avatar-sweep\n' "$0" >&2; exit 2 ;;
+  quota) commands=(quota:reconcile); timeout_seconds=900 ;;
+  prune) commands=(usage:prune); timeout_seconds=1800 ;;
+  report) commands=(usage:report); timeout_seconds=180 ;;
+  ttl-audit) commands=(redis:ttl-audit); timeout_seconds=900 ;;
+  avatar-sweep) commands=(avatar:sweep); timeout_seconds=1800 ;;
+  *) printf 'usage: %s quota [--month YYYY-MM]|prune|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]\n' "$0" >&2; exit 2 ;;
 esac
 
 if ! cd "$APP_DIR"; then
@@ -44,6 +61,51 @@ log_line() {
   }
 }
 
+if ! command -v flock >/dev/null 2>&1; then
+  log_line "$(date -u +%FT%TZ) $JOB failed reason=flock_unavailable"
+  exit 1
+fi
+if ! command -v timeout >/dev/null 2>&1; then
+  log_line "$(date -u +%FT%TZ) $JOB failed reason=timeout_unavailable"
+  exit 1
+fi
+
+lock_dir="$HOME/.aihub-host-job-locks"
+if ! mkdir -p -- "$lock_dir" || ! chmod 700 "$lock_dir"; then
+  log_line "$(date -u +%FT%TZ) $JOB failed reason=lock_directory_unavailable"
+  exit 1
+fi
+if ! exec 9>"$lock_dir/$JOB.lock"; then
+  log_line "$(date -u +%FT%TZ) $JOB failed reason=lock_file_unavailable"
+  exit 1
+fi
+if flock -n 9; then
+  :
+else
+  lock_status=$?
+  if [[ "$lock_status" == 1 ]]; then
+    log_line "$(date -u +%FT%TZ) $JOB skipped reason=already_running"
+    exit 0
+  fi
+  log_line "$(date -u +%FT%TZ) $JOB failed reason=job_lock_error exit=$lock_status"
+  exit 1
+fi
+if ! exec 8>"$lock_dir/host-jobs.lock"; then
+  log_line "$(date -u +%FT%TZ) $JOB failed reason=host_lock_unavailable"
+  exit 1
+fi
+if flock -n 8; then
+  :
+else
+  lock_status=$?
+  if [[ "$lock_status" == 1 ]]; then
+    log_line "$(date -u +%FT%TZ) $JOB deferred reason=host_job_active"
+  else
+    log_line "$(date -u +%FT%TZ) $JOB failed reason=host_lock_error exit=$lock_status"
+  fi
+  exit 1
+fi
+
 tmp_dir="$(mktemp -d)" || exit 1
 trap 'rm -rf -- "$tmp_dir"' EXIT
 
@@ -59,10 +121,15 @@ log_stderr_tail() {
   fi
 }
 
-if deployment_status="$("$APP_DIR/scripts/ops/blue-green-host.sh" status 2>"$tmp_dir/status.err")"; then
+if deployment_status="$(timeout --signal=TERM --kill-after=5s "${STATUS_TIMEOUT_SECONDS}s" \
+  "$APP_DIR/scripts/ops/blue-green-host.sh" status 2>"$tmp_dir/status.err")"; then
   :
 else
   code=$?
+  if [[ "$code" == 124 || "$code" == 137 ]]; then
+    printf 'deployment status lookup exceeded its %ss deadline\n' \
+      "$STATUS_TIMEOUT_SECONDS" >"$tmp_dir/status.err"
+  fi
   log_stderr_tail "$(date -u +%FT%TZ)" deployment unresolved "$code" "$tmp_dir/status.err"
   exit 1
 fi
@@ -96,9 +163,7 @@ active_service() {
   esac
 }
 
-from=
-to=
-if [[ "$JOB" == report ]]; then
+if [[ "$JOB" == report && "$report_window_provided" == false ]]; then
   from="$(date -u -d '1 hour ago' +%Y-%m-%dT%H:00:00.000Z)" || exit 1
   to="$(date -u +%Y-%m-%dT%H:00:00.000Z)" || exit 1
 fi
@@ -122,18 +187,32 @@ for tier in production sandbox; do
 
   for command in "${commands[@]}"; do
     args=("$command")
+    if [[ "$command" == quota:reconcile && "$quota_month_provided" == true ]]; then
+      args+=(--month "$quota_month")
+    fi
     if [[ "$command" == usage:report ]]; then
       args+=(--from "$from" --to "$to")
     fi
+    if [[ "$command" == avatar:sweep && "$avatar_dry_run" == true ]]; then
+      args+=(--dry-run true)
+    fi
     stdout_file="$tmp_dir/stdout"
     stderr_file="$tmp_dir/stderr"
-    if "${compose[@]}" exec -T "$service" node "$CONTAINER_RUNTIME_ENTRYPOINT" "$CONTAINER_CLI" "${args[@]}" </dev/null >"$stdout_file" 2>"$stderr_file"; then
+    if timeout --signal=TERM --kill-after=5s "$((timeout_seconds + DOCKER_EXEC_GRACE_SECONDS))s" \
+      "${compose[@]}" exec -T "$service" node "$CONTAINER_RUNTIME_ENTRYPOINT" \
+      --timeout-seconds "$timeout_seconds" "$CONTAINER_CLI" "${args[@]}" \
+      </dev/null >"$stdout_file" 2>"$stderr_file"; then
       summary="$(tail -n 1 "$stdout_file" | tr -d '\r')"
       [[ -n "$summary" ]] || summary='no output'
       log_line "$(date -u +%FT%TZ) $JOB $tier service=$service exit=0 $summary"
     else
       code=$?
       status=1
+      if [[ "$code" == 124 || "$code" == 137 ]] &&
+        ! grep -Fq 'scheduled command timed out after' "$stderr_file"; then
+        printf 'scheduled command exceeded its %ss deadline or Docker exec grace\n' \
+          "$timeout_seconds" >>"$stderr_file"
+      fi
       log_stderr_tail "$(date -u +%FT%TZ)" "$tier" "$service" "$code" "$stderr_file"
     fi
   done

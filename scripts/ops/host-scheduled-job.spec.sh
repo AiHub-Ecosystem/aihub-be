@@ -2,6 +2,8 @@
 set -Eeuo pipefail
 
 repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+real_flock="$(command -v flock || true)"
+real_timeout="$(command -v timeout || true)"
 test_root="$(mktemp -d)"
 trap 'rm -rf -- "$test_root"' EXIT
 
@@ -48,24 +50,71 @@ exec "$@"
 STUB
 chmod 755 "$bin_dir/sudo"
 
+cat >"$bin_dir/flock" <<'STUB'
+#!/usr/bin/env bash
+[[ "${1:-}" == -n && ( "${2:-}" == 9 || "${2:-}" == 8 ) ]] || exit 99
+[[ "${FAKE_FLOCK_BUSY:-false}" == true ]] && exit 1
+[[ "${1:-}" == -n && "${2:-}" == 8 && "${FAKE_HOST_FLOCK_BUSY:-false}" == true ]] && exit 1
+if [[ -n "${REAL_FLOCK:-}" ]]; then
+  exec "$REAL_FLOCK" "$@"
+fi
+exit 0
+STUB
+chmod 755 "$bin_dir/flock"
+
+cat >"$bin_dir/timeout" <<'STUB'
+#!/usr/bin/env bash
+args=("$@")
+for ((index = 0; index < ${#args[@]}; index += 1)); do
+  if [[ "${args[index]}" =~ ^([0-9]+)s$ &&
+    "${FAKE_CLAMP_TIMEOUTS:-false}" == true &&
+    "${BASH_REMATCH[1]}" -gt 30 ]]; then
+    args[index]=0.5s
+    break
+  fi
+done
+exec "$REAL_TIMEOUT" "${args[@]}"
+STUB
+chmod 755 "$bin_dir/timeout"
+
 cat >"$bin_dir/docker" <<'STUB'
 #!/usr/bin/env bash
-service=
+service= timeout_seconds=
 while (($#)); do
   if [[ "$1" == exec ]]; then
     shift
-    [[ "${1:-}" == -T ]] && shift
+    while (($#)); do
+      case "$1" in
+        -T) shift ;;
+        *) break ;;
+      esac
+    done
     service=${1:-unknown}
+    shift
     break
   fi
   shift
 done
-printf '%s\n' "$service" >>"$FAKE_DOCKER_CALLS"
+command_args=("$@")
+for ((index = 0; index < ${#command_args[@]}; index += 1)); do
+  if [[ "${command_args[index]}" == --timeout-seconds ]]; then
+    timeout_seconds=${command_args[index + 1]:-}
+    break
+  fi
+done
+printf '%s timeout=%s %s\n' "$service" "$timeout_seconds" "${command_args[*]}" >>"$FAKE_DOCKER_CALLS"
 call_count="$(wc -l <"$FAKE_DOCKER_CALLS")"
 if [[ "${FAKE_EXPECT_SUSPENDED_CRON:-false}" == true ]] &&
   grep -Eq '^(# BEGIN AIHUB MANAGED JOBS$|.*host-scheduled-job\.sh)' "$FAKE_CRONTAB_FILE"; then
   printf 'managed AIHUB schedule was activated before wrapper smoke\n' >&2
   exit 97
+fi
+if [[ "${FAKE_DOCKER_BLOCK_SERVICE:-}" == "$service" ]]; then
+  : >"$FAKE_DOCKER_BLOCK_STARTED"
+  while [[ ! -e "$FAKE_DOCKER_BLOCK_RELEASE" ]]; do sleep 0.05; done
+fi
+if [[ "${FAKE_DOCKER_HANG_SERVICE:-}" == "$service" ]]; then
+  exec sleep 30
 fi
 if [[ "${FAKE_DOCKER_FAIL_SERVICE:-}" == "$service" ]] ||
   { [[ -n "${FAKE_DOCKER_FAIL_AFTER_CALLS:-}" ]] &&
@@ -82,6 +131,8 @@ export PATH="$bin_dir:$PATH"
 export HOME="$home_dir"
 export AIHUB_HOST_JOB_LOG="$test_root/job.log"
 export FAKE_DOCKER_CALLS="$test_root/docker-calls.log"
+export REAL_FLOCK="$real_flock"
+export REAL_TIMEOUT="$real_timeout"
 
 set +e
 FAKE_DOCKER_FAIL_SERVICE=app-slot-b bash \
@@ -99,7 +150,104 @@ assert_not_contains "$AIHUB_HOST_JOB_LOG" 'partial stdout must not be the failur
 assert_not_contains "$AIHUB_HOST_JOB_LOG" 'intermediate output'
 assert_contains "$AIHUB_HOST_JOB_LOG" 'quota sandbox service=app-sandbox exit=0 summary service=app-sandbox'
 
-printf 'host wrapper test passed: bounded failure stderr and continued Sandbox run\n'
+: >"$FAKE_DOCKER_CALLS"
+: >"$AIHUB_HOST_JOB_LOG"
+set +e
+FAKE_CLAMP_TIMEOUTS=true FAKE_DOCKER_HANG_SERVICE=app-slot-b bash \
+  "$app_dir/scripts/ops/host-scheduled-job.sh" quota \
+  >"$test_root/timeout.out" 2>&1
+run_status=$?
+set -e
+[[ "$run_status" == 1 ]]
+assert_contains "$FAKE_DOCKER_CALLS" 'app-slot-b timeout=900'
+assert_contains "$FAKE_DOCKER_CALLS" 'app-sandbox timeout=900'
+assert_contains "$AIHUB_HOST_JOB_LOG" 'quota production service=app-slot-b exit=124'
+assert_contains "$AIHUB_HOST_JOB_LOG" \
+  'scheduled command exceeded its 900s deadline or Docker exec grace'
+assert_contains "$AIHUB_HOST_JOB_LOG" 'quota sandbox service=app-sandbox exit=0 summary service=app-sandbox'
+
+: >"$FAKE_DOCKER_CALLS"
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" report \
+  --from 2026-09-20T12:00:00.000Z --to 2026-09-20T13:00:00.000Z \
+  >"$test_root/report.out" 2>&1
+assert_contains "$FAKE_DOCKER_CALLS" \
+  'usage:report --from 2026-09-20T12:00:00.000Z --to 2026-09-20T13:00:00.000Z'
+
+: >"$FAKE_DOCKER_CALLS"
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" quota \
+  --month 2026-09 >"$test_root/quota-month.out" 2>&1
+assert_contains "$FAKE_DOCKER_CALLS" 'quota:reconcile --month 2026-09'
+
+: >"$FAKE_DOCKER_CALLS"
+: >"$AIHUB_HOST_JOB_LOG"
+set +e
+FAKE_FLOCK_BUSY=true bash "$app_dir/scripts/ops/host-scheduled-job.sh" quota \
+  >"$test_root/overlap.out" 2>&1
+run_status=$?
+set -e
+[[ "$run_status" == 0 ]]
+[[ ! -s "$FAKE_DOCKER_CALLS" ]]
+assert_contains "$AIHUB_HOST_JOB_LOG" 'quota skipped reason=already_running'
+[[ -e "$home_dir/.aihub-host-job-locks/quota.lock" ]]
+
+set +e
+FAKE_HOST_FLOCK_BUSY=true bash "$app_dir/scripts/ops/host-scheduled-job.sh" prune \
+  >"$test_root/cross-job-overlap.out" 2>&1
+run_status=$?
+set -e
+[[ "$run_status" == 1 ]]
+[[ ! -s "$FAKE_DOCKER_CALLS" ]]
+assert_contains "$AIHUB_HOST_JOB_LOG" 'prune deferred reason=host_job_active'
+
+if [[ -n "$REAL_FLOCK" ]]; then
+  : >"$FAKE_DOCKER_CALLS"
+  : >"$AIHUB_HOST_JOB_LOG"
+  block_started="$test_root/block-started"
+  block_release="$test_root/block-release"
+  FAKE_DOCKER_BLOCK_SERVICE=app-slot-b \
+    FAKE_DOCKER_BLOCK_STARTED="$block_started" \
+    FAKE_DOCKER_BLOCK_RELEASE="$block_release" \
+    APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" quota \
+    >"$test_root/first-overlap.out" 2>&1 &
+  first_pid=$!
+  for ((attempt = 0; attempt < 100; attempt += 1)); do
+    [[ -e "$block_started" ]] && break
+    sleep 0.05
+  done
+  [[ -e "$block_started" ]]
+  calls_before_second="$(wc -l <"$FAKE_DOCKER_CALLS")"
+  APP_DIR="$app_dir" timeout --signal=TERM --kill-after=1s 2s \
+    bash "$app_dir/scripts/ops/host-scheduled-job.sh" quota \
+    >"$test_root/second-overlap.out" 2>&1
+  [[ "$(wc -l <"$FAKE_DOCKER_CALLS")" == "$calls_before_second" ]]
+  assert_contains "$AIHUB_HOST_JOB_LOG" 'quota skipped reason=already_running'
+
+  set +e
+  APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" prune \
+    >"$test_root/second-cross-job.out" 2>&1
+  run_status=$?
+  set -e
+  [[ "$run_status" == 1 ]]
+  [[ "$(wc -l <"$FAKE_DOCKER_CALLS")" == "$calls_before_second" ]]
+  assert_contains "$AIHUB_HOST_JOB_LOG" 'prune deferred reason=host_job_active'
+  : >"$block_release"
+  wait "$first_pid"
+fi
+
+for job_and_timeout in 'quota 900' 'prune 1800' 'report 180' 'ttl-audit 900' 'avatar-sweep 1800'; do
+  read -r job expected_timeout <<<"$job_and_timeout"
+  : >"$FAKE_DOCKER_CALLS"
+  APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" "$job" \
+    >"$test_root/$job.out" 2>&1
+  assert_contains "$FAKE_DOCKER_CALLS" "app-slot-b timeout=$expected_timeout"
+  assert_contains "$FAKE_DOCKER_CALLS" "app-sandbox timeout=$expected_timeout"
+done
+: >"$FAKE_DOCKER_CALLS"
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" avatar-sweep \
+  --dry-run true >"$test_root/avatar-dry-run.out" 2>&1
+assert_contains "$FAKE_DOCKER_CALLS" 'avatar:sweep --dry-run true'
+
+printf 'host wrapper test passed: timeouts, same-job overlap skip, bounded stderr, and continued Sandbox run\n'
 
 cat >"$app_dir/scripts/ops/host-scheduled-job.sh" <<'STUB'
 #!/usr/bin/env bash

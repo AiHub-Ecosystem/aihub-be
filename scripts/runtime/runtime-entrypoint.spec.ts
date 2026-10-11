@@ -1,5 +1,12 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -24,6 +31,47 @@ describe('runtime entrypoint failure reporting', () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('runtime configuration failed:');
+  });
+
+  it('kills a scheduled command when its injected deadline expires', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'aihub-entrypoint-timeout-'));
+    try {
+      const entrypointDirectory = join(directory, 'scripts', 'runtime');
+      const loaderDirectory = join(
+        directory,
+        'dist',
+        'modules',
+        'secrets',
+        'infrastructure',
+      );
+      mkdirSync(entrypointDirectory, { recursive: true });
+      mkdirSync(loaderDirectory, { recursive: true });
+      writeFileSync(join(directory, 'package.json'), '{"type":"module"}');
+
+      const entrypoint = join(entrypointDirectory, 'runtime-entrypoint.mjs');
+      const loader = join(loaderDirectory, 'runtime-connection.environment.js');
+      const target = join(directory, 'hang.mjs');
+      copyFileSync(ENTRYPOINT, entrypoint);
+      writeFileSync(
+        loader,
+        'export function loadRuntimeConnectionEnvironment() {}',
+      );
+      writeFileSync(target, 'setInterval(() => {}, 60_000);');
+
+      const result = spawnSync(
+        process.execPath,
+        [entrypoint, '--timeout-seconds', '1', pathToFileURL(target).href],
+        {
+          encoding: 'utf8',
+          timeout: 3000,
+        },
+      );
+
+      expect(result.status).toBe(124);
+      expect(result.stderr).toContain('scheduled command timed out after 1s');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
 
