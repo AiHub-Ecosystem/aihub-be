@@ -4,10 +4,12 @@ import { resolve } from 'node:path';
 const { probeHost, startPublicHealthMonitor, validateHostname } =
   require('../../scripts/ops/probe-public-edge.cjs') as {
     probeHost(
+      this: void,
       hostname: string,
       fetchImpl?: typeof fetch,
     ): Promise<{ hostname: string; ok: boolean; result: string }>;
     startPublicHealthMonitor(
+      this: void,
       hosts: { tier: string; hostname: string }[],
       options?: {
         fetchImpl?: typeof fetch;
@@ -22,7 +24,7 @@ const { probeHost, startPublicHealthMonitor, validateHostname } =
         samples: number;
       }>;
     };
-    validateHostname(hostname: string, label: string): string;
+    validateHostname(this: void, hostname: string, label: string): string;
   };
 
 describe('public edge health probe', () => {

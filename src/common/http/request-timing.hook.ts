@@ -18,7 +18,7 @@ function isObject(value: unknown): value is object {
 }
 
 export function registerRequestTiming(instance: TimingHookableInstance): void {
-  Reflect.apply(instance.addHook, instance, [
+  Reflect.apply(instance.addHook.bind(instance), instance, [
     'onRequest',
     (request: TimedRequest, _reply: unknown, done: () => void): void => {
       if (isObject(request.raw)) {

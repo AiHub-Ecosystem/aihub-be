@@ -69,14 +69,17 @@ function fakeDispatchAttempts() {
     readonly attemptId: string;
     readonly outcome: DispatchAttemptOutcome;
   }> = [];
+  const recordOutcome = jest.fn(
+    async (attemptId: string, outcome: DispatchAttemptOutcome) => {
+      outcomes.push({ attemptId, outcome });
+    },
+  );
   const recorder: DispatchAttemptRecordPort = {
     beginAttempt: jest.fn(async (input) => {
       starts.push(input);
       return 'attempt-test';
     }),
-    recordOutcome: jest.fn(async (attemptId, outcome) => {
-      outcomes.push({ attemptId, outcome });
-    }),
+    recordOutcome,
   };
   return { recorder, starts, outcomes };
 }
@@ -290,9 +293,10 @@ describe('HttpOperationDispatcher', () => {
 
   it('keeps a downstream success when recording its known outcome fails', async () => {
     const attempts = fakeDispatchAttempts();
-    attempts.recorder.recordOutcome = jest
+    const recordOutcome = jest
       .fn()
       .mockRejectedValue(new Error('database unavailable'));
+    attempts.recorder.recordOutcome = recordOutcome;
     mockAgent
       .get('https://ai-writing.test')
       .intercept({ method: 'POST', path: '/task-one' })
@@ -320,10 +324,10 @@ describe('HttpOperationDispatcher', () => {
     await expect(
       dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
     ).resolves.toMatchObject({ data: { overall_band: 7 } });
-    expect(attempts.recorder.recordOutcome).toHaveBeenCalledWith(
+    expect(recordOutcome.mock.calls).toContainEqual([
       'attempt-test',
       'response_received',
-    );
+    ]);
   });
 
   it('releases a reservation when local downstream configuration proves the request was not sent', async () => {

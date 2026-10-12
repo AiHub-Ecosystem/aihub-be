@@ -211,7 +211,7 @@ describe('Organization invitation acceptance HTTP flow', () => {
     const response = await accept({ token: RAW_TOKEN }, headers);
 
     expect(response.statusCode).toBe(401);
-    expect(invitations.acceptInvitation).not.toHaveBeenCalled();
+    expect(invitations.acceptInvitation.mock.calls).toHaveLength(0);
   });
 
   it.each([
@@ -224,7 +224,7 @@ describe('Organization invitation acceptance HTTP flow', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('INVALID_REQUEST');
-    expect(invitations.acceptInvitation).not.toHaveBeenCalled();
+    expect(invitations.acceptInvitation.mock.calls).toHaveLength(0);
   });
 
   it('keeps the raw token out of the response body and captured logs', async () => {
@@ -258,7 +258,7 @@ describe('Organization invitation acceptance HTTP flow', () => {
     const response = await accept();
 
     expect(response.statusCode).toBe(200);
-    expect(tokenIssuer.issue).not.toHaveBeenCalled();
+    expect(tokenIssuer.issue.mock.calls).toHaveLength(0);
     expect(response.headers['set-cookie']).toBeUndefined();
     expect(response.body).not.toContain('access_token');
   });
@@ -320,6 +320,6 @@ describe('Organization invitation acceptance HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(invitations.acceptInvitation).not.toHaveBeenCalled();
+    expect(invitations.acceptInvitation.mock.calls).toHaveLength(0);
   });
 });

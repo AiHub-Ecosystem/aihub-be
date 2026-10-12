@@ -341,7 +341,15 @@ describe('request completion log over the HTTP boundary', () => {
 
   it('includes a slow real guard in response, log, and histograms', async () => {
     const delayMs = 75;
-    const original = QuotaGuard.prototype.canActivate;
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      QuotaGuard.prototype,
+      'canActivate',
+    );
+    if (originalDescriptor === undefined) {
+      throw new Error('Quota guard method is missing');
+    }
+    const original =
+      originalDescriptor.value as typeof QuotaGuard.prototype.canActivate;
     const totalBefore = await metricValue(
       app,
       'aihub_request_duration_seconds_sum',
@@ -622,7 +630,15 @@ describe('request completion log over the HTTP boundary', () => {
       app,
       'aihub_admission_duration_seconds_sum',
     );
-    const original = ApiKeyGuard.prototype.canActivate;
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      ApiKeyGuard.prototype,
+      'canActivate',
+    );
+    if (originalDescriptor === undefined) {
+      throw new Error('API-key guard method is missing');
+    }
+    const original =
+      originalDescriptor.value as typeof ApiKeyGuard.prototype.canActivate;
     const delayGuard = jest
       .spyOn(ApiKeyGuard.prototype, 'canActivate')
       .mockImplementation(async function (this: ApiKeyGuard, context) {

@@ -197,12 +197,12 @@ describe('Organization membership HTTP flow', () => {
     });
     expect(response.payload).not.toContain(USER_ID);
     expect(response.payload).not.toContain('@');
-    expect(membership.listRoster).toHaveBeenCalledWith(
+    expect(membership.listRoster.mock.calls).toContainEqual([
       expect.objectContaining({
         userId: USER_ID,
         context: expect.objectContaining({ userId: USER_ID }),
       }),
-    );
+    ]);
   });
 
   it('allows an admin to read the same redacted roster shape', async () => {
@@ -259,7 +259,7 @@ describe('Organization membership HTTP flow', () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.headers['www-authenticate']).toBe('Bearer');
-    expect(membership.listRoster).not.toHaveBeenCalled();
+    expect(membership.listRoster.mock.calls).toHaveLength(0);
   });
 
   it('rejects a malformed Bearer token before reading memberships', async () => {
@@ -269,7 +269,7 @@ describe('Organization membership HTTP flow', () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.headers['www-authenticate']).toBe('Bearer');
-    expect(membership.listRoster).not.toHaveBeenCalled();
+    expect(membership.listRoster.mock.calls).toHaveLength(0);
   });
 
   it('rejects alternate query token sources even with a valid Bearer token', async () => {
@@ -280,7 +280,7 @@ describe('Organization membership HTTP flow', () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.headers['www-authenticate']).toBe('Bearer');
-    expect(membership.listRoster).not.toHaveBeenCalled();
+    expect(membership.listRoster.mock.calls).toHaveLength(0);
   });
 
   it('ignores client-supplied tenant and user selectors', async () => {
@@ -290,9 +290,9 @@ describe('Organization membership HTTP flow', () => {
     );
 
     expect(response.statusCode).toBe(200);
-    expect(membership.listRoster).toHaveBeenCalledWith(
+    expect(membership.listRoster.mock.calls).toContainEqual([
       expect.objectContaining({ userId: USER_ID }),
-    );
+    ]);
   });
 
   it('fails closed when the membership store is unavailable', async () => {
@@ -322,7 +322,7 @@ describe('Organization membership HTTP flow', () => {
     expect(response.json()).toMatchObject({
       error: { code: 'AUTH_USER_ACCESS_TOKEN_INVALID' },
     });
-    expect(membership.listRoster).not.toHaveBeenCalled();
+    expect(membership.listRoster.mock.calls).toHaveLength(0);
   });
 
   it('rejects a disabled User Account before membership mutation', async () => {
@@ -334,7 +334,7 @@ describe('Organization membership HTTP flow', () => {
     expect(response.json()).toMatchObject({
       error: { code: 'AUTH_USER_ACCESS_TOKEN_INVALID' },
     });
-    expect(mutation.disable).not.toHaveBeenCalled();
+    expect(mutation.disable.mock.calls).toHaveLength(0);
   });
 
   it('changes a member role through the Bearer management boundary', async () => {
@@ -352,7 +352,7 @@ describe('Organization membership HTTP flow', () => {
       },
       meta: { request_id: 'req_01J00000000000000000000000' },
     });
-    expect(mutation.changeRole).toHaveBeenCalledWith(
+    expect(mutation.changeRole.mock.calls).toContainEqual([
       expect.objectContaining({
         userId: USER_ID,
         organizationId: ORGANIZATION_ID,
@@ -360,7 +360,7 @@ describe('Organization membership HTTP flow', () => {
         role: 'admin',
         context: expect.objectContaining({ organizationId: ORGANIZATION_ID }),
       }),
-    );
+    ]);
   });
 
   it('disables a member through DELETE and returns the durable state', async () => {
@@ -373,13 +373,13 @@ describe('Organization membership HTTP flow', () => {
       role: 'member',
       status: 'disabled',
     });
-    expect(mutation.disable).toHaveBeenCalledWith(
+    expect(mutation.disable.mock.calls).toContainEqual([
       expect.objectContaining({
         userId: USER_ID,
         organizationId: ORGANIZATION_ID,
         username: 'bob',
       }),
-    );
+    ]);
   });
 
   it('transfers ownership through the dedicated command without a request body', async () => {
@@ -392,13 +392,13 @@ describe('Organization membership HTTP flow', () => {
       role: 'owner',
       status: 'active',
     });
-    expect(mutation.transfer).toHaveBeenCalledWith(
+    expect(mutation.transfer.mock.calls).toContainEqual([
       expect.objectContaining({
         userId: USER_ID,
         organizationId: ORGANIZATION_ID,
         username: 'bob',
       }),
-    );
+    ]);
   });
 
   it.each([
@@ -410,7 +410,7 @@ describe('Organization membership HTTP flow', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('INVALID_REQUEST');
-    expect(mutation.changeRole).not.toHaveBeenCalled();
+    expect(mutation.changeRole.mock.calls).toHaveLength(0);
   });
 
   it('rejects a transfer request body before calling the mutation port', async () => {
@@ -420,7 +420,7 @@ describe('Organization membership HTTP flow', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('INVALID_REQUEST');
-    expect(mutation.transfer).not.toHaveBeenCalled();
+    expect(mutation.transfer.mock.calls).toHaveLength(0);
   });
 
   it('requires Bearer authentication before reaching membership mutations', async () => {
@@ -432,6 +432,6 @@ describe('Organization membership HTTP flow', () => {
     );
 
     expect(response.statusCode).toBe(401);
-    expect(mutation.disable).not.toHaveBeenCalled();
+    expect(mutation.disable.mock.calls).toHaveLength(0);
   });
 });

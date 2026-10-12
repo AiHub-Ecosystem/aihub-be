@@ -291,7 +291,7 @@ describe('Organization identity configuration HTTP flow', () => {
           ? 'IDENTITY_JWKS_INVALID'
           : 'INVALID_REQUEST',
       );
-      expect(configs.saveForOwner).not.toHaveBeenCalled();
+      expect(configs.saveForOwner.mock.calls).toHaveLength(0);
       expect(purgeJwks).not.toHaveBeenCalled();
       expect(JSON.stringify(response.json())).not.toContain('private-material');
     },
@@ -325,7 +325,7 @@ describe('Organization identity configuration HTTP flow', () => {
         message: 'JWKS source is unavailable',
         retryable,
       });
-      expect(configs.saveForOwner).not.toHaveBeenCalled();
+      expect(configs.saveForOwner.mock.calls).toHaveLength(0);
     },
   );
 
@@ -342,7 +342,7 @@ describe('Organization identity configuration HTTP flow', () => {
       code: 'IDENTITY_JWKS_INVALID',
       retryable: false,
     });
-    expect(configs.saveForOwner).not.toHaveBeenCalled();
+    expect(configs.saveForOwner.mock.calls).toHaveLength(0);
   });
 
   it('classifies a non-HTTPS source as unsafe before fetching', async () => {
@@ -378,7 +378,7 @@ describe('Organization identity configuration HTTP flow', () => {
       code: 'IDENTITY_JWKS_INVALID',
       retryable: false,
     });
-    expect(configs.saveForOwner).not.toHaveBeenCalled();
+    expect(configs.saveForOwner.mock.calls).toHaveLength(0);
   });
 
   it.each([
@@ -403,7 +403,7 @@ describe('Organization identity configuration HTTP flow', () => {
     });
     expect(response.payload).not.toContain('10.0.0.8');
     expect(response.payload).not.toContain('id.acme.edu');
-    expect(configs.saveForOwner).not.toHaveBeenCalled();
+    expect(configs.saveForOwner.mock.calls).toHaveLength(0);
   });
 
   it.each<[string, () => void]>([
@@ -431,7 +431,7 @@ describe('Organization identity configuration HTTP flow', () => {
         message: 'Organization identity configuration access is forbidden',
       });
       expect(validateRemote).not.toHaveBeenCalled();
-      expect(configs.saveForOwner).not.toHaveBeenCalled();
+      expect(configs.saveForOwner.mock.calls).toHaveLength(0);
       expect(purgeJwks).not.toHaveBeenCalled();
     },
   );
@@ -451,7 +451,7 @@ describe('Organization identity configuration HTTP flow', () => {
     );
 
     expect(response.statusCode).toBe(401);
-    expect(configs.saveForOwner).not.toHaveBeenCalled();
+    expect(configs.saveForOwner.mock.calls).toHaveLength(0);
   });
 
   it('maps an issuer already used by another Organization to a safe conflict', async () => {
@@ -497,7 +497,7 @@ describe('Organization identity configuration HTTP flow', () => {
     expect(JSON.stringify(failed.json())).not.toContain('Redis host');
     expect(retried.statusCode).toBe(200);
     expect(purgeJwks).toHaveBeenCalledTimes(2);
-    expect(configs.saveForOwner).toHaveBeenCalledTimes(2);
+    expect(configs.saveForOwner.mock.calls).toHaveLength(2);
     expect(auditWrites).toBe(1);
   });
 
@@ -628,7 +628,7 @@ describe('Organization identity configuration HTTP flow', () => {
           },
         },
       });
-      expect(configs.findByOrganizationId).not.toHaveBeenCalled();
+      expect(configs.findByOrganizationId.mock.calls).toHaveLength(0);
     },
   );
 
@@ -639,7 +639,7 @@ describe('Organization identity configuration HTTP flow', () => {
     const response = await read(headers);
 
     expect(response.statusCode).toBe(401);
-    expect(configs.findByOrganizationId).not.toHaveBeenCalled();
+    expect(configs.findByOrganizationId.mock.calls).toHaveLength(0);
   });
 
   it('scopes membership and configuration reads to the path Organization', async () => {
@@ -649,10 +649,12 @@ describe('Organization identity configuration HTTP flow', () => {
     );
 
     expect(response.statusCode).toBe(200);
-    expect(membership.resolveMembership).toHaveBeenCalledWith(
+    expect(membership.resolveMembership.mock.calls).toContainEqual([
       expect.objectContaining({ organizationId: 'org_other', userId: USER_ID }),
-    );
-    expect(configs.findByOrganizationId).toHaveBeenCalledWith('org_other');
+    ]);
+    expect(configs.findByOrganizationId.mock.calls).toContainEqual([
+      'org_other',
+    ]);
   });
 
   it('returns public JWK fields without private key members', async () => {

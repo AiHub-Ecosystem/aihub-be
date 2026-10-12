@@ -296,8 +296,8 @@ describe('Organization invitation HTTP flow', () => {
       },
     });
     expect(response.body).not.toContain('invitee@example.com');
-    expect(invitations.createInvitation).not.toHaveBeenCalled();
-    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+    expect(invitations.createInvitation.mock.calls).toHaveLength(0);
+    expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(0);
   });
 
   it('passes a canonical management scope and normalized payload to idempotency', async () => {
@@ -309,7 +309,7 @@ describe('Organization invitation HTTP flow', () => {
       },
     );
 
-    expect(idempotency.execute).toHaveBeenCalledWith(
+    expect(idempotency.execute.mock.calls).toContainEqual([
       expect.objectContaining({
         organizationId: ORGANIZATION_ID,
         operation: 'organizations.invitations.create',
@@ -321,7 +321,7 @@ describe('Organization invitation HTTP flow', () => {
       }),
       expect.any(Function),
       expect.any(Function),
-    );
+    ]);
   });
 
   it('replays invitation data without invoking the invitation mutation twice', async () => {
@@ -357,8 +357,8 @@ describe('Organization invitation HTTP flow', () => {
       },
       meta: { request_id: REQUEST_ID },
     });
-    expect(invitations.createInvitation).not.toHaveBeenCalled();
-    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+    expect(invitations.createInvitation.mock.calls).toHaveLength(0);
+    expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(0);
   });
 
   it('replays a record completed before the outbox, which stored no delivery status', async () => {
@@ -400,8 +400,8 @@ describe('Organization invitation HTTP flow', () => {
       },
       meta: { request_id: REQUEST_ID },
     });
-    expect(invitations.createInvitation).not.toHaveBeenCalled();
-    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+    expect(invitations.createInvitation.mock.calls).toHaveLength(0);
+    expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(0);
   });
 
   it('still refuses a stored record that carries a status it cannot report', async () => {
@@ -429,7 +429,7 @@ describe('Organization invitation HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(500);
-    expect(invitations.createInvitation).not.toHaveBeenCalled();
+    expect(invitations.createInvitation.mock.calls).toHaveLength(0);
   });
 
   it('rechecks current authorization before replay', async () => {
@@ -441,7 +441,7 @@ describe('Organization invitation HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(idempotency.execute).not.toHaveBeenCalled();
+    expect(idempotency.execute.mock.calls).toHaveLength(0);
   });
 
   it('persists only the token hash and hands the raw token to the outbox request', async () => {
@@ -460,7 +460,7 @@ describe('Organization invitation HTTP flow', () => {
     expect(persisted.emailDelivery.id).toMatch(/^edr_[0-9A-HJKMNP-TV-Z]{26}$/);
     expect(persisted.emailDelivery.createdAt).toBe(persisted.now);
     // The provider is not called in the request path.
-    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+    expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(0);
   });
 
   it('reports the request as queued on a fresh invitation', async () => {
@@ -546,12 +546,14 @@ describe('Organization invitation HTTP flow', () => {
     });
     expect(response.payload).not.toContain(USER_ID);
     expect(response.payload).not.toContain('token');
-    expect(invitations.listOpenInvitations).toHaveBeenCalledWith({
-      context: expect.objectContaining({ organizationId: ORGANIZATION_ID }),
-      userId: USER_ID,
-      organizationId: ORGANIZATION_ID,
-      now: expect.any(Date),
-    });
+    expect(invitations.listOpenInvitations.mock.calls).toContainEqual([
+      {
+        context: expect.objectContaining({ organizationId: ORGANIZATION_ID }),
+        userId: USER_ID,
+        organizationId: ORGANIZATION_ID,
+        now: expect.any(Date),
+      },
+    ]);
   });
 
   it('lists the same invitation metadata for an admin', async () => {
@@ -591,14 +593,16 @@ describe('Organization invitation HTTP flow', () => {
 
     expect(response.statusCode).toBe(204);
     expect(response.payload).toBe('');
-    expect(invitations.revokeInvitation).toHaveBeenCalledWith({
-      context: expect.objectContaining({ organizationId: ORGANIZATION_ID }),
-      actorUserId: USER_ID,
-      actorRole: 'owner',
-      organizationId: ORGANIZATION_ID,
-      invitationId: INVITATION_ID,
-      now: expect.any(Date),
-    });
+    expect(invitations.revokeInvitation.mock.calls).toContainEqual([
+      {
+        context: expect.objectContaining({ organizationId: ORGANIZATION_ID }),
+        actorUserId: USER_ID,
+        actorRole: 'owner',
+        organizationId: ORGANIZATION_ID,
+        invitationId: INVITATION_ID,
+        now: expect.any(Date),
+      },
+    ]);
   });
 
   it('keeps revocation available to an admin', async () => {
@@ -629,7 +633,7 @@ describe('Organization invitation HTTP flow', () => {
         code: 'FORBIDDEN',
         message: 'Organization invitation revocation is forbidden',
       });
-      expect(invitations.revokeInvitation).not.toHaveBeenCalled();
+      expect(invitations.revokeInvitation.mock.calls).toHaveLength(0);
     },
   );
 
@@ -647,7 +651,7 @@ describe('Organization invitation HTTP flow', () => {
 
     expect(response.statusCode).toBe(403);
     expect(response.json().error.code).toBe('FORBIDDEN');
-    expect(invitations.revokeInvitation).toHaveBeenCalledTimes(1);
+    expect(invitations.revokeInvitation.mock.calls).toHaveLength(1);
   });
 
   it('rejects missing or invalid Bearer credentials before revocation', async () => {
@@ -656,7 +660,7 @@ describe('Organization invitation HTTP flow', () => {
 
     expect(missing.statusCode).toBe(401);
     expect(invalid.statusCode).toBe(401);
-    expect(invitations.revokeInvitation).not.toHaveBeenCalled();
+    expect(invitations.revokeInvitation.mock.calls).toHaveLength(0);
   });
 
   it('maps an unknown invitation to not found', async () => {
@@ -687,7 +691,7 @@ describe('Organization invitation HTTP flow', () => {
       code: 'FORBIDDEN',
       message: 'Organization invitation access is forbidden',
     });
-    expect(invitations.listOpenInvitations).not.toHaveBeenCalled();
+    expect(invitations.listOpenInvitations.mock.calls).toHaveLength(0);
   });
 
   it('rejects missing or invalid Bearer credentials before reading invitations', async () => {
@@ -696,7 +700,7 @@ describe('Organization invitation HTTP flow', () => {
 
     expect(missing.statusCode).toBe(401);
     expect(invalid.statusCode).toBe(401);
-    expect(invitations.listOpenInvitations).not.toHaveBeenCalled();
+    expect(invitations.listOpenInvitations.mock.calls).toHaveLength(0);
   });
 
   it('fails safely when the invitation projection cannot be read', async () => {
@@ -723,8 +727,10 @@ describe('Organization invitation HTTP flow', () => {
         code: 'FORBIDDEN',
         message: 'Organization admins can only invite members',
       });
-      expect(invitations.createInvitation).not.toHaveBeenCalled();
-      expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+      expect(invitations.createInvitation.mock.calls).toHaveLength(0);
+      expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(
+        0,
+      );
     },
   );
 
@@ -753,8 +759,8 @@ describe('Organization invitation HTTP flow', () => {
         },
       },
     });
-    expect(invitations.createInvitation).not.toHaveBeenCalled();
-    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+    expect(invitations.createInvitation.mock.calls).toHaveLength(0);
+    expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(0);
   });
 
   it('rejects a missing Bearer credential', async () => {
@@ -764,7 +770,7 @@ describe('Organization invitation HTTP flow', () => {
     );
 
     expect(response.statusCode).toBe(401);
-    expect(invitations.createInvitation).not.toHaveBeenCalled();
+    expect(invitations.createInvitation.mock.calls).toHaveLength(0);
   });
 
   it('rejects an invalid Bearer credential', async () => {
@@ -774,7 +780,7 @@ describe('Organization invitation HTTP flow', () => {
     );
 
     expect(response.statusCode).toBe(401);
-    expect(invitations.createInvitation).not.toHaveBeenCalled();
+    expect(invitations.createInvitation.mock.calls).toHaveLength(0);
   });
 
   it('reports a conflict when the email already holds an active membership', async () => {
@@ -784,7 +790,7 @@ describe('Organization invitation HTTP flow', () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json().error.code).toBe('ORGANIZATION_MEMBER_EXISTS');
-    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+    expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(0);
   });
 
   it('keeps the conflict outcome unreachable without invite authority', async () => {
@@ -817,8 +823,10 @@ describe('Organization invitation HTTP flow', () => {
 
       expect(response.statusCode).toBe(400);
       expect(response.json().error.code).toBe('INVALID_REQUEST');
-      expect(invitations.createInvitation).not.toHaveBeenCalled();
-      expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+      expect(invitations.createInvitation.mock.calls).toHaveLength(0);
+      expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(
+        0,
+      );
     },
   );
 
@@ -828,7 +836,7 @@ describe('Organization invitation HTTP flow', () => {
     const response = await invite({ email: 'not-an-email', role: 'member' });
 
     expect(response.statusCode).toBe(400);
-    expect(invitations.createInvitation).not.toHaveBeenCalled();
+    expect(invitations.createInvitation.mock.calls).toHaveLength(0);
   });
 
   it('surfaces a commit failure without leaking the credential', async () => {
@@ -841,7 +849,7 @@ describe('Organization invitation HTTP flow', () => {
     expect(response.statusCode).toBe(500);
     expect(response.json().error.code).toBe('INTERNAL_ERROR');
     expect(response.payload).not.toContain('outbox store unavailable');
-    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+    expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(0);
   });
 
   it('supersedes the open token when the caller retries', async () => {
@@ -901,7 +909,7 @@ describe('Organization invitation HTTP flow', () => {
 
     expect(response.statusCode).toBe(403);
     expect(response.json().error.code).toBe('FORBIDDEN');
-    expect(invitations.createInvitation).not.toHaveBeenCalled();
+    expect(invitations.createInvitation.mock.calls).toHaveLength(0);
   });
 
   it('leaves User Access JWT issuance untouched', async () => {
@@ -910,7 +918,7 @@ describe('Organization invitation HTTP flow', () => {
     expect(response.statusCode).toBe(201);
     // Inviting authorizes against durable membership; it never mints, rotates,
     // or re-scopes the caller's own credential.
-    expect(tokenIssuer.issue).not.toHaveBeenCalled();
+    expect(tokenIssuer.issue.mock.calls).toHaveLength(0);
     expect(response.headers['set-cookie']).toBeUndefined();
     expect(response.body).not.toContain('access_token');
     expect(verifiedTokens).toEqual(['valid.token.value']);

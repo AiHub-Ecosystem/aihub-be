@@ -90,5 +90,9 @@ export function createPostgresAuthClient(
 
   const holder = createPrismaClient('integration-test', databaseUrl);
 
-  return fixtureClient(holder.prisma, holder.checkConnection, holder.close);
+  return fixtureClient(
+    holder.prisma,
+    (timeoutMs) => holder.checkConnection(timeoutMs),
+    () => holder.close(),
+  );
 }

@@ -210,5 +210,5 @@ export function createFixturePrismaClient(
   }
 
   const holder = createPrismaClient('integration-test', databaseUrl);
-  return Object.assign(holder.prisma, { close: holder.close });
+  return Object.assign(holder.prisma, { close: () => holder.close() });
 }

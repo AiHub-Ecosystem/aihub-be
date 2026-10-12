@@ -221,15 +221,15 @@ describe('Organization API key revocation HTTP flow', () => {
   it('purges the identity cache entry of the withdrawn key', async () => {
     await revoke();
 
-    expect(cache.delete).toHaveBeenCalledWith(KEY_HASH);
+    expect(cache.delete.mock.calls).toContainEqual([KEY_HASH]);
   });
 
   it('purges again on a repeated withdrawal, so a retry closes a window a failed purge left open', async () => {
     await revoke();
     await revoke();
 
-    expect(cache.delete).toHaveBeenCalledTimes(2);
-    expect(cache.delete).toHaveBeenLastCalledWith(KEY_HASH);
+    expect(cache.delete.mock.calls).toHaveLength(2);
+    expect(cache.delete.mock.calls.at(-1)).toEqual([KEY_HASH]);
   });
 
   it('succeeds on a repeated withdrawal rather than reporting a conflict', async () => {
@@ -328,14 +328,14 @@ describe('Organization API key revocation HTTP flow', () => {
     });
     expect(apiKeys.revokeApiKey.mock.calls.length > 0).toBe(storeReached);
     // No refusal purges a cache entry: nothing was withdrawn.
-    expect(cache.delete).not.toHaveBeenCalled();
+    expect(cache.delete.mock.calls).toHaveLength(0);
   });
 
   it('rejects an unauthenticated request', async () => {
     const response = await revoke({});
 
     expect(response.statusCode).toBe(401);
-    expect(apiKeys.revokeApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.revokeApiKey.mock.calls).toHaveLength(0);
   });
 
   it('reports an unknown key as not found', async () => {
@@ -345,6 +345,6 @@ describe('Organization API key revocation HTTP flow', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json().error.code).toBe('NOT_FOUND');
-    expect(cache.delete).not.toHaveBeenCalled();
+    expect(cache.delete.mock.calls).toHaveLength(0);
   });
 });

@@ -57,10 +57,7 @@
     "typescript/no-unsafe-call": "off",
     "typescript/no-unsafe-return": "off",
     "typescript/no-unsafe-argument": "off",
-    // `unbound-method` 112 findings: `this` scoping on method refs (Fastify hooks, `Array.sort` callbacks).
-    // Not a floating-promise defect; disabled with reason. Fix is `this: void` annotation or arrow
-    // function — re-enable after codemod in dedicated cleanup.
-    "typescript/unbound-method": "off",
+    "typescript/unbound-method": "error",
     // `no-base-to-string` 4, `restrict-template-expressions` 3, `no-misused-spread` 1, `require-array-sort-compare` 1
     // — not gateway promise defects; disabled with reason, keep `correctness` syntax-only set clean.
     "typescript/no-base-to-string": "off",

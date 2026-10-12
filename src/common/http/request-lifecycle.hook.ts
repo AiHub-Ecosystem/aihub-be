@@ -151,7 +151,7 @@ export function getRequestLifecycle(
 export function registerRequestLifecycle(
   instance: LifecycleHookableInstance,
 ): void {
-  Reflect.apply(instance.addHook, instance, [
+  Reflect.apply(instance.addHook.bind(instance), instance, [
     'onRequest',
     (request: LifecycleRequest, _reply: unknown, done: () => void): void => {
       const timeoutMs = OPERATION_TIMEOUT_BY_PATH.get(pathnameOf(request.url));
@@ -172,7 +172,7 @@ export function registerRequestLifecycle(
     },
   ]);
 
-  Reflect.apply(instance.addHook, instance, [
+  Reflect.apply(instance.addHook.bind(instance), instance, [
     'preParsing',
     (
       request: LifecycleRequest,
@@ -200,7 +200,7 @@ export function registerRequestLifecycle(
     },
   ]);
 
-  Reflect.apply(instance.addHook, instance, [
+  Reflect.apply(instance.addHook.bind(instance), instance, [
     'onResponse',
     // Three parameters, not one: Fastify runs this hook chain itself and only
     // advances to the next `onResponse` hook when the previous one takes the

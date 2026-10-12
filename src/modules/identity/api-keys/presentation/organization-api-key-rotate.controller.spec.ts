@@ -223,7 +223,7 @@ describe('Organization API key rotation HTTP flow', () => {
   it('purges the identity cache entry of the retired key', async () => {
     await rotate();
 
-    expect(cache.delete).toHaveBeenCalledWith(RETIRED_HASH);
+    expect(cache.delete.mock.calls).toContainEqual([RETIRED_HASH]);
   });
 
   it('still returns the replacement when the cache purge fails', async () => {
@@ -321,14 +321,14 @@ describe('Organization API key rotation HTTP flow', () => {
     });
     expect(apiKeys.rotateApiKey.mock.calls.length > 0).toBe(storeReached);
     // No refusal purges a cache entry: nothing was withdrawn.
-    expect(cache.delete).not.toHaveBeenCalled();
+    expect(cache.delete.mock.calls).toHaveLength(0);
   });
 
   it('rejects an unauthenticated request', async () => {
     const response = await rotate({});
 
     expect(response.statusCode).toBe(401);
-    expect(apiKeys.rotateApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.rotateApiKey.mock.calls).toHaveLength(0);
   });
 
   it('reports an unknown key as not found', async () => {
@@ -338,7 +338,7 @@ describe('Organization API key rotation HTTP flow', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json().error.code).toBe('NOT_FOUND');
-    expect(cache.delete).not.toHaveBeenCalled();
+    expect(cache.delete.mock.calls).toHaveLength(0);
   });
 
   it('reports a revoked or expired key as forbidden', async () => {
@@ -348,7 +348,7 @@ describe('Organization API key rotation HTTP flow', () => {
 
     expect(response.statusCode).toBe(403);
     expect(response.json().error.code).toBe('FORBIDDEN');
-    expect(cache.delete).not.toHaveBeenCalled();
+    expect(cache.delete.mock.calls).toHaveLength(0);
   });
 
   it('issues a distinct replacement on every rotation', async () => {

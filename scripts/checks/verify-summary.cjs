@@ -13,7 +13,7 @@
 const { spawn } = require('node:child_process');
 const { mkdirSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
-const { join } = require('node:path');
+const path = require('node:path');
 
 const ESCAPE = String.fromCharCode(27);
 const ANSI = new RegExp(`${ESCAPE}\\[[0-9;]*m`, 'g');
@@ -136,13 +136,13 @@ function logFileName(now) {
 }
 
 function run() {
-  const directory = join(tmpdir(), 'aihub-verify');
+  const directory = path.join(tmpdir(), 'aihub-verify');
   mkdirSync(directory, { recursive: true });
-  const logPath = join(directory, logFileName(new Date()));
+  const logPath = path.join(directory, logFileName(new Date()));
 
   const windows = process.platform === 'win32';
   const child = spawn(windows ? 'pnpm.cmd' : 'pnpm', ['verify'], {
-    cwd: join(__dirname, '..', '..'),
+    cwd: path.join(__dirname, '..', '..'),
     shell: windows,
     stdio: ['ignore', 'pipe', 'pipe'],
   });

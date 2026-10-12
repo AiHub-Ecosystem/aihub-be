@@ -3,22 +3,34 @@ import { resolve } from 'node:path';
 
 const { activeSlot, renderNginxConfig, renderNginxPair, slotForPort } =
   require('../../scripts/ops/blue-green-state.cjs') as {
-    activeSlot(config: string, tier: 'production' | 'sandbox'): 'a' | 'b';
+    activeSlot(
+      this: void,
+      config: string,
+      tier: 'production' | 'sandbox',
+    ): 'a' | 'b';
     renderNginxConfig(
+      this: void,
       template: string,
       tier: 'production' | 'sandbox',
       slot: 'a' | 'b',
     ): string;
-    renderNginxPair(input: {
-      apiTemplate: string;
-      sandboxTemplate: string;
-      currentApi: string;
-      currentSandbox: string;
-      tier: 'production' | 'sandbox';
-      nextSlot: 'a' | 'b';
-      sandboxEnabled: boolean;
-    }): { api: string; sandbox: string | undefined };
-    slotForPort(tier: 'production' | 'sandbox', port: number): 'a' | 'b';
+    renderNginxPair(
+      this: void,
+      input: {
+        apiTemplate: string;
+        sandboxTemplate: string;
+        currentApi: string;
+        currentSandbox: string;
+        tier: 'production' | 'sandbox';
+        nextSlot: 'a' | 'b';
+        sandboxEnabled: boolean;
+      },
+    ): { api: string; sandbox: string | undefined };
+    slotForPort(
+      this: void,
+      tier: 'production' | 'sandbox',
+      port: number,
+    ): 'a' | 'b';
   };
 
 const root = resolve(__dirname, '../..');

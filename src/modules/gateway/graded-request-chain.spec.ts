@@ -113,7 +113,15 @@ describe('graded request chain', () => {
     // handler and releases after (ADR-0058). Recording its acquire here, in the
     // same sequence as the guards, keeps the quota-before-concurrency guarantee
     // observable across the guard/interceptor boundary.
-    const permitOriginal = ConcurrencyPermitInterceptor.prototype.intercept;
+    const permitDescriptor = Object.getOwnPropertyDescriptor(
+      ConcurrencyPermitInterceptor.prototype,
+      'intercept',
+    );
+    if (permitDescriptor === undefined) {
+      throw new Error('Concurrency permit interceptor method is missing');
+    }
+    const permitOriginal =
+      permitDescriptor.value as typeof ConcurrencyPermitInterceptor.prototype.intercept;
     jest
       .spyOn(ConcurrencyPermitInterceptor.prototype, 'intercept')
       .mockImplementation(async function (this: unknown, context, next) {

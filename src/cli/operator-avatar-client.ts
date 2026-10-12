@@ -6,6 +6,6 @@ export async function createOperatorAvatarClient(databaseUrl: string) {
     ]);
   const holder = createPrismaClient('runtime', databaseUrl);
   return Object.assign(new PostgresAvatarRepository(holder.prisma), {
-    close: holder.close,
+    close: () => holder.close(),
   });
 }

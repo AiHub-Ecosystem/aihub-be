@@ -233,7 +233,7 @@ export function registerSpeakingMultipartParser(
   // the parser can stream a full-size audio file plus its multipart framing
   // without widening JSON routes. Per-file enforcement stays at the 25 MiB
   // provider cap above.
-  Reflect.apply(instance.addHook, instance, [
+  Reflect.apply(instance.addHook.bind(instance), instance, [
     'onRoute',
     (route: {
       url?: string;
@@ -251,7 +251,7 @@ export function registerSpeakingMultipartParser(
       }
     },
   ]);
-  Reflect.apply(instance.register, instance, [
+  Reflect.apply(instance.register.bind(instance), instance, [
     multipart,
     {
       limits: MULTIPART_LIMITS,

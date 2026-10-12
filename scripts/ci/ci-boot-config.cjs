@@ -21,7 +21,7 @@
 
 const { generateKeyPairSync, randomBytes } = require('node:crypto');
 const { mkdirSync, writeFileSync } = require('node:fs');
-const { join } = require('node:path');
+const path = require('node:path');
 
 const SECRETS_MOUNT = '/run/secrets/aihub';
 const FAKE = 'ci-boot-fake';
@@ -105,19 +105,19 @@ const BOOT_ENVIRONMENT = {
 function writeBootConfig(directory) {
   mkdirSync(directory, { recursive: true });
   writeFileSync(
-    join(directory, 'runtime-secrets.json'),
+    path.join(directory, 'runtime-secrets.json'),
     JSON.stringify(runtimeSecrets()),
   );
   writeFileSync(
-    join(directory, 'connection-secrets.json'),
+    path.join(directory, 'connection-secrets.json'),
     JSON.stringify(connectionSecrets()),
   );
   writeFileSync(
-    join(directory, 'auth-mfa-secrets.json'),
+    path.join(directory, 'auth-mfa-secrets.json'),
     JSON.stringify(authMfaSecrets()),
   );
   writeFileSync(
-    join(directory, 'boot.env'),
+    path.join(directory, 'boot.env'),
     Object.entries(BOOT_ENVIRONMENT)
       .map(([name, value]) => `${name}=${value}`)
       .join('\n')

@@ -5,19 +5,26 @@ import { resolve } from 'node:path';
 const { probeDependencyUrl, probeReadiness, probeRuntimeDependencies } =
   require('../../scripts/ops/probe-runtime-dependencies.cjs') as {
     probeDependencyUrl(
+      this: void,
       value: string,
       timeoutMs?: number,
     ): Promise<{ ok: boolean; result: string }>;
-    probeReadiness(fetchImpl?: typeof fetch): Promise<{
+    probeReadiness(
+      this: void,
+      fetchImpl?: typeof fetch,
+    ): Promise<{
       name: string;
       ok: boolean;
       result: string;
     }>;
-    probeRuntimeDependencies(options?: {
-      env?: Record<string, string | undefined>;
-      fetchImpl?: typeof fetch;
-      connect?: (value: string) => Promise<{ ok: boolean; result: string }>;
-    }): Promise<{ name: string; ok: boolean; result: string }[]>;
+    probeRuntimeDependencies(
+      this: void,
+      options?: {
+        env?: Record<string, string | undefined>;
+        fetchImpl?: typeof fetch;
+        connect?: (value: string) => Promise<{ ok: boolean; result: string }>;
+      },
+    ): Promise<{ name: string; ok: boolean; result: string }[]>;
   };
 
 describe('runtime dependency probe', () => {

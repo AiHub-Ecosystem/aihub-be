@@ -9,6 +9,6 @@ export async function createOperatorSpeakingAudioClient(databaseUrl: string) {
   const holder = createPrismaClient('runtime', databaseUrl);
   return Object.assign(
     new PostgresSpeakingAudioUploadRepository(holder.prisma),
-    { close: holder.close },
+    { close: () => holder.close() },
   );
 }

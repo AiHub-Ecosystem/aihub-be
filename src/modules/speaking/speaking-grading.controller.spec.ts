@@ -825,7 +825,7 @@ describe('Speaking grading HTTP flow', () => {
     const parser = app.get<SpeakingMultipartParserPort>(
       SPEAKING_MULTIPART_PARSER,
     );
-    const originalParse = parser.parse;
+    const originalParse = parser.parse.bind(parser);
     const timeout = jest
       .spyOn(AbortSignal, 'timeout')
       .mockReturnValue(AbortSignal.abort());
@@ -855,7 +855,7 @@ describe('Speaking grading HTTP flow', () => {
     const parser = app.get<SpeakingMultipartParserPort>(
       SPEAKING_MULTIPART_PARSER,
     );
-    const originalParse = parser.parse;
+    const originalParse = parser.parse.bind(parser);
     parser.parse = async (source, signal) => {
       const pending = waitForAbort(signal);
       queueMicrotask(() => source.abort());

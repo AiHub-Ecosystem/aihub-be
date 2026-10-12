@@ -7,13 +7,13 @@ process.env.KNIP_DISABLE_RAW_TRANSFER = '1';
 
 const { spawnSync } = await import('node:child_process');
 const { existsSync } = await import('node:fs');
-const { dirname, join } = await import('node:path');
+const path = await import('node:path');
 const { fileURLToPath } = await import('node:url');
 
-const knipPackageRoot = dirname(
-  dirname(fileURLToPath(import.meta.resolve('knip'))),
+const knipPackageRoot = path.dirname(
+  path.dirname(fileURLToPath(import.meta.resolve('knip'))),
 );
-const bin = join(knipPackageRoot, 'bin', 'knip.js');
+const bin = path.join(knipPackageRoot, 'bin', 'knip.js');
 if (!existsSync(bin)) {
   console.error(`knip launcher: expected binary is missing: ${bin}`);
   process.exit(1);

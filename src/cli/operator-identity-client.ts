@@ -8,6 +8,6 @@ export async function createOperatorIdentityClient(databaseUrl: string) {
     ]);
   const holder = createPrismaClient('control-plane', databaseUrl);
   return Object.assign(createIdentityTransactionRunner(holder.prisma), {
-    close: holder.close,
+    close: () => holder.close(),
   });
 }

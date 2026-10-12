@@ -286,14 +286,14 @@ describe('Organization API key creation HTTP flow', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('INVALID_REQUEST');
-    expect(apiKeys.createApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.createApiKey.mock.calls).toHaveLength(0);
   });
 
   it('rejects an empty scope list', async () => {
     const response = await create({ name: 'Prod backend', scopes: [] });
 
     expect(response.statusCode).toBe(400);
-    expect(apiKeys.createApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.createApiKey.mock.calls).toHaveLength(0);
   });
 
   it('forwards the entitlements the requested scopes require', async () => {
@@ -360,7 +360,7 @@ describe('Organization API key creation HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(apiKeys.createApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.createApiKey.mock.calls).toHaveLength(0);
   });
 
   it.each([
@@ -385,7 +385,7 @@ describe('Organization API key creation HTTP flow', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('INVALID_REQUEST');
-    expect(apiKeys.createApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.createApiKey.mock.calls).toHaveLength(0);
   });
 
   it('rejects an empty environment list', async () => {
@@ -396,7 +396,7 @@ describe('Organization API key creation HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(apiKeys.createApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.createApiKey.mock.calls).toHaveLength(0);
   });
 
   it('stores no expiry when none is requested', async () => {
@@ -427,7 +427,7 @@ describe('Organization API key creation HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(apiKeys.createApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.createApiKey.mock.calls).toHaveLength(0);
   });
 
   it('rejects an expiry beyond the maximum key lifetime', async () => {
@@ -440,7 +440,7 @@ describe('Organization API key creation HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(apiKeys.createApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.createApiKey.mock.calls).toHaveLength(0);
   });
 
   it('rejects an unknown request property', async () => {
@@ -451,7 +451,7 @@ describe('Organization API key creation HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(apiKeys.createApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.createApiKey.mock.calls).toHaveLength(0);
   });
 
   it('rejects an unauthenticated request', async () => {
@@ -461,7 +461,7 @@ describe('Organization API key creation HTTP flow', () => {
     );
 
     expect(response.statusCode).toBe(401);
-    expect(apiKeys.createApiKey).not.toHaveBeenCalled();
+    expect(apiKeys.createApiKey.mock.calls).toHaveLength(0);
   });
 
   it('issues a distinct credential on every creation', async () => {

@@ -10,19 +10,20 @@ function fakePrisma(rows: readonly unknown[] = []) {
   const transaction = {
     $queryRawUnsafe: query,
   } as unknown as Prisma.TransactionClient;
+  const runTransaction = jest.fn(
+    async (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
+      callback(transaction),
+  );
   const client = {
     $queryRawUnsafe: query,
-    $transaction: jest.fn(
-      async (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
-        callback(transaction),
-    ),
+    $transaction: runTransaction,
   } as unknown as PrismaClient;
-  return { client, query, transaction };
+  return { client, query, runTransaction, transaction };
 }
 
 describe('PostgresUsageRetentionRepository', () => {
   it('uses a strict cutoff and skip-locked keyset batch in a transaction', async () => {
-    const { client, query } = fakePrisma([
+    const { client, query, runTransaction } = fakePrisma([
       {
         created_at: new Date('2025-02-01T00:00:00.000Z'),
         request_id: 'req_a',
@@ -47,7 +48,7 @@ describe('PostgresUsageRetentionRepository', () => {
         requestId: 'req_b',
       },
     });
-    expect(client.$transaction).toHaveBeenCalledTimes(1);
+    expect(runTransaction.mock.calls).toHaveLength(1);
     expect(query).toHaveBeenCalledWith(
       expect.any(String),
       request.cutoff,

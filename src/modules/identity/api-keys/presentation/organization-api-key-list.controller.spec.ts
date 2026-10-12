@@ -256,7 +256,7 @@ describe('Organization API key listing HTTP flow', () => {
           },
         },
       });
-      expect(apiKeys.listApiKeys).not.toHaveBeenCalled();
+      expect(apiKeys.listApiKeys.mock.calls).toHaveLength(0);
     },
   );
 
@@ -264,7 +264,7 @@ describe('Organization API key listing HTTP flow', () => {
     const response = await list({});
 
     expect(response.statusCode).toBe(401);
-    expect(apiKeys.listApiKeys).not.toHaveBeenCalled();
+    expect(apiKeys.listApiKeys.mock.calls).toHaveLength(0);
   });
 
   it('reports an organization with no keys as an empty list', async () => {

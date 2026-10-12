@@ -99,7 +99,9 @@ export function createIdentityTransactionRunner(
         return (callback: unknown, options?: unknown) => {
           if (typeof callback !== 'function') {
             return Reflect.apply(
-              prisma.$transaction as (...args: unknown[]) => unknown,
+              Reflect.get(prisma, '$transaction', prisma) as (
+                ...args: unknown[]
+              ) => unknown,
               prisma,
               [callback, options],
             );
@@ -171,5 +173,5 @@ export function createPostgresIdentityClient(
   }
 
   const holder = createPrismaClient('integration-test', databaseUrl);
-  return testIdentityClient(holder.prisma, holder.close);
+  return testIdentityClient(holder.prisma, () => holder.close());
 }

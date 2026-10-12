@@ -290,21 +290,21 @@ describe('Organization audit trail HTTP flow', () => {
       callerRole = 'member';
 
       await refusalBody();
-      expect(auditEvents.listAuditEvents).not.toHaveBeenCalled();
+      expect(auditEvents.listAuditEvents.mock.calls).toHaveLength(0);
     });
 
     it('refuses a disabled membership', async () => {
       callerStatus = 'disabled';
 
       await refusalBody();
-      expect(auditEvents.listAuditEvents).not.toHaveBeenCalled();
+      expect(auditEvents.listAuditEvents.mock.calls).toHaveLength(0);
     });
 
     it('refuses a caller with no membership in the named organization', async () => {
       callerMembershipExists = false;
 
       await refusalBody();
-      expect(auditEvents.listAuditEvents).not.toHaveBeenCalled();
+      expect(auditEvents.listAuditEvents.mock.calls).toHaveLength(0);
     });
 
     /**
@@ -388,7 +388,7 @@ describe('Organization audit trail HTTP flow', () => {
       const response = await read(`${AUDIT_URL}?action=api_key.exploded`);
 
       expect(response.statusCode).toBe(400);
-      expect(auditEvents.listAuditEvents).not.toHaveBeenCalled();
+      expect(auditEvents.listAuditEvents.mock.calls).toHaveLength(0);
     });
 
     it('refuses an outcome it does not name', async () => {
@@ -552,7 +552,7 @@ describe('Organization audit trail HTTP flow', () => {
       expect((await read(`${AUDIT_URL}?limit=201`)).statusCode).toBe(400);
       expect((await read(`${AUDIT_URL}?limit=-1`)).statusCode).toBe(400);
       expect((await read(`${AUDIT_URL}?limit=ten`)).statusCode).toBe(400);
-      expect(auditEvents.listAuditEvents).not.toHaveBeenCalled();
+      expect(auditEvents.listAuditEvents.mock.calls).toHaveLength(0);
     });
   });
 });

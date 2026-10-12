@@ -68,7 +68,7 @@ describe('ManageOrganizationMembership', () => {
     await expect(
       manager.changeRole({ ...input(), role: 'admin' }),
     ).resolves.toMatchObject({ role: 'admin' });
-    expect(membership.changeRole).toHaveBeenCalled();
+    expect(membership.changeRole.mock.calls).not.toHaveLength(0);
   });
 
   it('delegates transfer authority to the transaction-aware membership port', async () => {
@@ -78,7 +78,7 @@ describe('ManageOrganizationMembership', () => {
     await expect(manager.transfer(input())).resolves.toMatchObject({
       role: 'owner',
     });
-    expect(membership.transfer).toHaveBeenCalled();
+    expect(membership.transfer.mock.calls).not.toHaveLength(0);
   });
 
   it('forbids every mutation against a suspended organization', async () => {
@@ -88,7 +88,7 @@ describe('ManageOrganizationMembership', () => {
     await expect(manager.disable(input())).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
-    expect(membership.disable).not.toHaveBeenCalled();
+    expect(membership.disable.mock.calls).toHaveLength(0);
   });
 
   it('lets an authorized owner change a role and preserves the result', async () => {
@@ -103,9 +103,9 @@ describe('ManageOrganizationMembership', () => {
       role: 'member',
       status: 'active',
     });
-    expect(membership.changeRole).toHaveBeenCalledWith(
+    expect(membership.changeRole.mock.calls).toContainEqual([
       expect.objectContaining({ role: 'member' }),
-    );
+    ]);
   });
 
   it('preserves durable lookup failures instead of authorizing', async () => {
@@ -119,6 +119,6 @@ describe('ManageOrganizationMembership', () => {
     const manager = new ManageOrganizationMembership(membership);
 
     await expect(manager.disable(input())).rejects.toBe(failure);
-    expect(membership.disable).not.toHaveBeenCalled();
+    expect(membership.disable.mock.calls).toHaveLength(0);
   });
 });

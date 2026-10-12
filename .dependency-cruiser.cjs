@@ -1,8 +1,8 @@
 const { readdirSync, readFileSync } = require('node:fs');
-const { join, relative } = require('node:path');
+const path = require('node:path');
 const process = require('node:process');
 
-const modulesDirectory = join(__dirname, 'src', 'modules');
+const modulesDirectory = path.join(__dirname, 'src', 'modules');
 
 /**
  * Reading file contents is deliberate: a guard or decorator is a Nest object
@@ -118,12 +118,13 @@ function nestDecoratorPaths() {
         entry.name.endsWith('.ts') &&
         !entry.name.endsWith('.spec.ts') &&
         /export function \w+\([^)]*\):\s*(Class|Method)Decorator\b/.test(
-          readFileSync(join(entry.parentPath, entry.name), 'utf8'),
+          readFileSync(path.join(entry.parentPath, entry.name), 'utf8'),
         ),
     )
     .map(
       (entry) =>
-        `^${relative(process.cwd(), join(entry.parentPath, entry.name))
+        `^${path
+          .relative(process.cwd(), path.join(entry.parentPath, entry.name))
           .split(/[\\/]/)
           .join('/')
           .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
@@ -146,7 +147,8 @@ function publicModuleApiPaths() {
     )
     .map(
       (entry) =>
-        `^${relative(process.cwd(), join(entry.parentPath, entry.name))
+        `^${path
+          .relative(process.cwd(), path.join(entry.parentPath, entry.name))
           .split(/[\\/]/)
           .join('/')
           .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
@@ -173,7 +175,7 @@ function nestExportPaths() {
     let source;
     try {
       source = readFileSync(
-        join(modulesDirectory, name, `${name}.module.ts`),
+        path.join(modulesDirectory, name, `${name}.module.ts`),
         'utf8',
       );
     } catch {
@@ -222,7 +224,7 @@ function nestExportPaths() {
   const paths = [];
 
   for (const [module, symbols] of exported) {
-    for (const entry of readdirSync(join(modulesDirectory, module), {
+    for (const entry of readdirSync(path.join(modulesDirectory, module), {
       recursive: true,
       withFileTypes: true,
     })) {
@@ -234,7 +236,7 @@ function nestExportPaths() {
         continue;
       }
 
-      const file = join(entry.parentPath, entry.name);
+      const file = path.join(entry.parentPath, entry.name);
       const declaresExported = [...symbols].some((symbol) =>
         new RegExp(
           `^(?:export\\s+(?:abstract\\s+)?(?:class|const|function|interface|type|enum)\\s+${symbol}\\b|export\\s*\\{[^}]*\\b${symbol}\\b)`,
@@ -244,7 +246,8 @@ function nestExportPaths() {
 
       if (declaresExported) {
         paths.push(
-          `^${relative(process.cwd(), file)
+          `^${path
+            .relative(process.cwd(), file)
             .split(/[\\/]/)
             .join('/')
             .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
@@ -270,13 +273,14 @@ function sharedPrimitivePaths() {
         entry.isFile() &&
         entry.name.endsWith('.ts') &&
         !entry.name.endsWith('.spec.ts') &&
-        isSharedPrimitive(join(entry.parentPath, entry.name)),
+        isSharedPrimitive(path.join(entry.parentPath, entry.name)),
     )
     .map(
       (entry) =>
         // depcruise matches these against paths relative to the cruise root,
         // so an absolute path from readdirSync would never match.
-        `^${relative(process.cwd(), join(entry.parentPath, entry.name))
+        `^${path
+          .relative(process.cwd(), path.join(entry.parentPath, entry.name))
           .split(/[\\/]/)
           .join('/')
           .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,

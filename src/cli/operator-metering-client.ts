@@ -3,5 +3,5 @@ export async function createOperatorMeteringClient(databaseUrl: string) {
     '@/modules/persistence/infrastructure/prisma-client'
   );
   const holder = createPrismaClient('runtime', databaseUrl);
-  return Object.assign(holder.prisma, { close: holder.close });
+  return Object.assign(holder.prisma, { close: () => holder.close() });
 }
