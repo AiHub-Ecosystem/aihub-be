@@ -11,5 +11,6 @@ paths:
 - Downstream adapters are pure mappers. They receive a path from the operation catalog and must not choose a client-controlled host or call the network.
 - Keep explicit domain-to-persistence and persistence-to-domain mappers; unsafe casts are not a mapper.
 - Redact API keys, assertions, internal tokens, essays, and raw downstream bodies before logging or attaching error details.
+- Write adapters as humble objects: map, delegate, and hold no decisions. A repository or client that branches on data, formats a value, or applies a policy is holding logic that belongs in application code, where a test reaches it without a live connection.
 - Do not import another module's infrastructure. Share behavior through an application port.
 - Redis is never the durable source of truth for identity, usage, quota, or idempotency.
