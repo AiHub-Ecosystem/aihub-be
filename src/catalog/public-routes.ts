@@ -71,6 +71,10 @@ import {
   MintSandboxAssertionResponseSchema,
 } from '@/contracts/sandbox/assertion';
 import {
+  SandboxDemoKeyValidationRequestSchema,
+  SandboxDemoKeyValidationResponseSchema,
+} from '@/contracts/sandbox/demo-key-validation';
+import {
   CreateSpeakingAudioUploadRequestSchema,
   SpeakingAudioAssetResponseSchema,
   SpeakingAudioUploadUrlResponseSchema,
@@ -605,6 +609,18 @@ export const PUBLIC_ROUTES = {
     requestSchema: MintSandboxAssertionRequestSchema,
     responseSchema: MintSandboxAssertionResponseSchema,
     errorStatuses: 'all-except-idempotency-conflict',
+  },
+  'sandbox.demo-key.validate': {
+    method: 'POST',
+    path: '/v1/sandbox/demo/api-keys/validate',
+    callerAuth: 'api-key',
+    organizationResolution: 'caller',
+    successStatus: 200,
+    publishedIdentityScope: 'organization',
+    idempotency: 'none',
+    requestSchema: SandboxDemoKeyValidationRequestSchema,
+    responseSchema: SandboxDemoKeyValidationResponseSchema,
+    errorStatuses: [400, 401, 403, 429, 500, 503],
   },
   'me.avatar.uploads.create': {
     method: 'POST',

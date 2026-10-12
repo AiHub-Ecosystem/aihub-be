@@ -65,6 +65,7 @@ import { ApiKeyUserIdentityGuard } from './api-keys/presentation/api-key-user-id
 import { ApiKeyGuard } from './api-keys/presentation/api-key.guard';
 import { OrganizationApiKeyController } from './api-keys/presentation/organization-api-key.controller';
 import { SandboxApiKeyGuard } from './api-keys/presentation/sandbox-api-key.guard';
+import { SandboxDemoKeyValidationGuard } from './api-keys/presentation/sandbox-demo-key-validation.guard';
 import {
   ORGANIZATION_AUDIT_EVENT_READ,
   type OrganizationAuditEventReadPort,
@@ -169,6 +170,7 @@ import { JoseUserAssertionCrypto } from './user-assertions/infrastructure/jose-u
 import { JwksKeyProvider } from './user-assertions/infrastructure/jwks-key-provider';
 import { readSandboxSigningMaterial } from './user-assertions/infrastructure/sandbox-assertion.config';
 import { SandboxAssertionController } from './user-assertions/presentation/sandbox-assertion.controller';
+import { SandboxDemoKeyValidationController } from './user-assertions/presentation/sandbox-demo-key-validation.controller';
 
 const IDENTITY_TRANSACTION_CLIENT = Symbol('IDENTITY_TRANSACTION_CLIENT');
 const IDENTITY_READ_CLIENT = Symbol('IDENTITY_READ_CLIENT');
@@ -187,6 +189,7 @@ type IdentityTransactionClient = ReturnType<
   ],
   controllers: [
     SandboxAssertionController,
+    SandboxDemoKeyValidationController,
     OrganizationController,
     OrganizationMembershipController,
     OrganizationInvitationController,
@@ -538,6 +541,7 @@ type IdentityTransactionClient = ReturnType<
     ApiKeyGuard,
     ApiKeyUserIdentityGuard,
     SandboxApiKeyGuard,
+    SandboxDemoKeyValidationGuard,
     UserIdentityGuard,
   ],
   exports: [

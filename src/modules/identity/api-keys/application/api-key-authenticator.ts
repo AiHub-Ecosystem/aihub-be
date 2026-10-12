@@ -124,6 +124,16 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     if (!record.allowedEnvironments.includes(credentials.environment)) {
       throw environmentNotAllowed();
     }
+    if (
+      credentials.requiredAllowedEnvironments !== undefined &&
+      (record.allowedEnvironments.length !==
+        credentials.requiredAllowedEnvironments.length ||
+        credentials.requiredAllowedEnvironments.some(
+          (environment) => !record.allowedEnvironments.includes(environment),
+        ))
+    ) {
+      throw environmentNotAllowed();
+    }
 
     void this.repository
       .touchLastUsed(record.apiKeyId, now)

@@ -105,6 +105,7 @@ export class ApiKeyGuard implements CanActivate {
       request,
       this.authenticator,
       configuration,
+      environment === 'sandbox' ? ['sandbox'] : undefined,
     );
     const authorized =
       environment === 'sandbox'

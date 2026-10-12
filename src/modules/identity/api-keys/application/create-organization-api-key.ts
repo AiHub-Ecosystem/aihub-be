@@ -17,6 +17,7 @@ const CUSTOMER_ENVIRONMENTS: readonly string[] = [
   'sandbox',
 ];
 const DEFAULT_ENVIRONMENTS: readonly string[] = ['production'];
+const SANDBOX_SCOPES = new Set(['writing.grade', 'speaking.grade']);
 const MAX_KEY_LIFETIME_MS = 365 * 24 * 60 * 60 * 1000;
 
 /**
@@ -104,8 +105,8 @@ function validateSandboxKey(
 
   if (
     environments.length !== 1 ||
-    scopes.length !== 1 ||
-    scopes[0] !== 'writing.grade'
+    scopes.length === 0 ||
+    scopes.some((scope) => !SANDBOX_SCOPES.has(scope))
   ) {
     throw invalidRequest();
   }

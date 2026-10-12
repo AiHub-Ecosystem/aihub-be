@@ -2,6 +2,8 @@ export interface ApiKeyCredential {
   readonly value: string;
   readonly environment: string;
   readonly clientIp: string;
+  /** Requires the stored environment binding to match this set exactly. */
+  readonly requiredAllowedEnvironments?: readonly string[];
 }
 
 export interface AuthenticatedApiKey {

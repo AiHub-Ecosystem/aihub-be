@@ -31,6 +31,7 @@ export async function authenticateApiKey(
   request: AuthenticatedRequest,
   authenticator: ApiKeyAuthenticatorPort,
   configuration: RequestEnvironmentConfig,
+  requiredAllowedEnvironments?: readonly string[],
 ): Promise<AuthenticatedApiKey> {
   const environment = resolveAihubEnvironment(request, configuration);
   const header = request.headers['x-api-key'];
@@ -38,6 +39,9 @@ export async function authenticateApiKey(
     value: typeof header === 'string' ? header : '',
     environment,
     clientIp: request.ip.length === 0 ? 'unknown' : request.ip,
+    ...(requiredAllowedEnvironments === undefined
+      ? {}
+      : { requiredAllowedEnvironments }),
   });
 
   request.aihubAuth = authenticated;
