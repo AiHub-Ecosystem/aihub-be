@@ -9,7 +9,6 @@ import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from '@/modules/auth/application/auth-rate-limiter.port';
-import { type EmailPayloadCipherPort } from '@/modules/auth/application/email-delivery-request.port';
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
@@ -20,60 +19,21 @@ import {
   type UserAccessTokenVerifierPort,
 } from '@/modules/auth/application/user-access-token.port';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
-import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
+  type CreateOrganizationInvitationInput,
+  type CreateOrganizationInvitationResult,
   ORGANIZATION_INVITATION,
-  type OrganizationInvitationPort,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
-import { PostgresOrganizationInvitationRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository';
 import {
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
 } from '@/modules/identity/membership/application/organization-membership.port';
-import type { PostgresIdentityTransactionalClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
 const REQUEST_ID = 'req_01J00000000000000000000000';
 const INVITE_URL = `/v1/organizations/${ORGANIZATION_ID}/invitations`;
-
-class FakeIdentityDatabase implements PostgresIdentityTransactionalClient {
-  transactionCalls = 0;
-  invitationRows = 0;
-  auditEvents = 0;
-  emailDeliveryRequests = 0;
-
-  async query(
-    _text: string,
-    _values: readonly unknown[],
-  ): Promise<readonly Record<string, unknown>[]> {
-    return [];
-  }
-
-  async transaction<T>(
-    callback: Parameters<PostgresIdentityTransactionalClient['transaction']>[0],
-  ): Promise<T> {
-    this.transactionCalls += 1;
-    return callback({
-      query: async (text: string, _values: readonly unknown[]) => {
-        if (text.includes('FROM organizations')) {
-          return [{ id: ORGANIZATION_ID, name: 'Acme' }];
-        }
-        if (text.includes('INSERT INTO organization_invitations')) {
-          this.invitationRows += 1;
-        }
-        if (text.includes('INSERT INTO organization_audit_events')) {
-          this.auditEvents += 1;
-        }
-        if (text.includes('INSERT INTO email_delivery_requests')) {
-          this.emailDeliveryRequests += 1;
-        }
-        return [];
-      },
-    }) as Promise<T>;
-  }
-}
 
 class RateLimiterFake implements AuthRateLimiterPort {
   allowed = true;
@@ -87,28 +47,26 @@ class RateLimiterFake implements AuthRateLimiterPort {
   }
 }
 
-/** The AEAD has its own tests; this suite is about what is committed with what. */
-class StubCipher implements EmailPayloadCipherPort {
-  encrypt(plaintext: string): string {
-    return `sealed.${plaintext}`;
-  }
-
-  decrypt(): string {
-    throw new Error('the repository never reads a payload back');
-  }
-}
-
-describe('organization invitation HTTP/application/repository integration', () => {
+describe('organization invitation HTTP/application integration', () => {
   let app: NestFastifyApplication;
-  let database: FakeIdentityDatabase;
   let rateLimiter: RateLimiterFake;
+  let createInvitation: jest.Mock<
+    Promise<CreateOrganizationInvitationResult>,
+    [CreateOrganizationInvitationInput]
+  >;
   let emailSender: jest.Mocked<
     Pick<EmailSenderPort, 'sendOrganizationInviteEmail'>
   >;
 
   beforeAll(async () => {
-    database = new FakeIdentityDatabase();
     rateLimiter = new RateLimiterFake();
+    createInvitation = jest.fn(
+      async (
+        _input: CreateOrganizationInvitationInput,
+      ): Promise<CreateOrganizationInvitationResult> => ({
+        kind: 'created',
+      }),
+    );
     emailSender = {
       sendOrganizationInviteEmail: jest.fn(
         async (_input: OrganizationInviteEmailInput) => undefined,
@@ -135,19 +93,12 @@ describe('organization invitation HTTP/application/repository integration', () =
         return { userId: USER_ID, jti: 'jti_01' };
       },
     };
-    const userAccounts = userAccountStatus();
-    const invitations: OrganizationInvitationPort =
-      new PostgresOrganizationInvitationRepository(
-        database,
-        new StubCipher(),
-        new PostgresEmailDeliveryRequestRepository(),
-      );
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideProvider(ORGANIZATION_INVITATION)
-      .useValue(invitations)
+      .useValue({ createInvitation })
       .overrideProvider(AUTH_RATE_LIMITER)
       .useValue(rateLimiter)
       .overrideProvider(EMAIL_SENDER)
@@ -155,7 +106,7 @@ describe('organization invitation HTTP/application/repository integration', () =
       .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
       .useValue(verifier)
       .overrideProvider(USER_ACCOUNT_REPOSITORY)
-      .useValue(userAccounts)
+      .useValue(userAccountStatus())
       .overrideProvider(ORGANIZATION_MEMBERSHIP)
       .useValue(membership)
       .compile();
@@ -172,11 +123,8 @@ describe('organization invitation HTTP/application/repository integration', () =
   });
 
   beforeEach(() => {
-    database.transactionCalls = 0;
-    database.invitationRows = 0;
-    database.auditEvents = 0;
-    database.emailDeliveryRequests = 0;
     rateLimiter.allowed = true;
+    createInvitation.mockClear();
     emailSender.sendOrganizationInviteEmail.mockClear();
   });
 
@@ -189,22 +137,19 @@ describe('organization invitation HTTP/application/repository integration', () =
     });
   }
 
-  it('persists the invitation, its audit event, and its request in one transaction', async () => {
+  it('queues a valid invitation through the application port', async () => {
     const response = await invite();
 
     expect(response.statusCode).toBe(201);
     expect(response.json()).toMatchObject({
       data: { email_delivery_status: 'queued' },
     });
-    expect(database.transactionCalls).toBe(1);
-    expect(database.invitationRows).toBe(1);
-    expect(database.auditEvents).toBe(1);
-    expect(database.emailDeliveryRequests).toBe(1);
+    expect(createInvitation).toHaveBeenCalledTimes(1);
     // The provider is not called in the request path; a worker claims the row.
     expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
   });
 
-  it('rejects a rate-limited invitation before any durable side effect', async () => {
+  it('rejects a rate-limited invitation before the application port is called', async () => {
     rateLimiter.allowed = false;
 
     const response = await invite();
@@ -216,10 +161,7 @@ describe('organization invitation HTTP/application/repository integration', () =
         retry_after_ms: 12_345,
       },
     });
-    expect(database.transactionCalls).toBe(0);
-    expect(database.invitationRows).toBe(0);
-    expect(database.auditEvents).toBe(0);
-    expect(database.emailDeliveryRequests).toBe(0);
+    expect(createInvitation).not.toHaveBeenCalled();
     expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
   });
 });

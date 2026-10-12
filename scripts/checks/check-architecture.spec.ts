@@ -418,6 +418,11 @@ describe('common layer environment boundary', () => {
  * down, which is what turns "two modules happen to read the same table" into a
  * decision somebody made. Table names come from the migrations, so an English
  * word in a comment or a CTE name cannot pose as one.
+ *
+ * A module reaches a table two ways: a SQL statement that names it, and a
+ * Prisma model delegate (`transaction.userAccount.create(...)`). The second is
+ * resolved to its table through the `@@map` in `schema.prisma`, so moving a
+ * statement from SQL to the generated client does not move it out of this guard.
  */
 describe('cross-module table access', () => {
   function migrations(): string {
@@ -444,6 +449,24 @@ describe('cross-module table access', () => {
     return tables;
   }
 
+  /** `userAccount` -> `user_accounts`, read from the schema's `@@map`. */
+  function delegateTables(): Map<string, string> {
+    const schema = readFileSync(
+      join(__dirname, '..', '..', 'prisma', 'schema.prisma'),
+      'utf8',
+    );
+    const delegates = new Map<string, string>();
+    for (const [, name, body] of schema.matchAll(
+      /^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm,
+    )) {
+      const table = body?.match(/@@map\("([a-z_][a-z0-9_]*)"\)/)?.[1];
+      if (name !== undefined && table !== undefined) {
+        delegates.set(`${name.charAt(0).toLowerCase()}${name.slice(1)}`, table);
+      }
+    }
+    return delegates;
+  }
+
   function moduleInfrastructureFiles(directory: string): string[] {
     return readdirSync(directory, { recursive: true, withFileTypes: true })
       .filter(
@@ -458,7 +481,13 @@ describe('cross-module table access', () => {
 
   function sharedTableAccesses(): string[] {
     const tables = createdTables();
+    const delegates = delegateTables();
     const modulesByTable = new Map<string, Set<string>>();
+    const record = (table: string, module: string): void => {
+      const modules = modulesByTable.get(table) ?? new Set<string>();
+      modules.add(module);
+      modulesByTable.set(table, modules);
+    };
 
     for (const file of moduleInfrastructureFiles(
       join(__dirname, '..', '..', 'src', 'modules'),
@@ -474,9 +503,19 @@ describe('cross-module table access', () => {
         continue;
       }
 
-      for (const [, statement] of readFileSync(file, 'utf8').matchAll(
-        /`([^`]*)`/g,
+      const source = readFileSync(file, 'utf8');
+
+      for (const [, delegate] of source.matchAll(
+        /\.(\w+)\.(?:find\w+|create\w*|update\w*|upsert|delete\w*|count|aggregate|groupBy)\s*[<(]/g,
       )) {
+        const table =
+          delegate === undefined ? undefined : delegates.get(delegate);
+        if (table !== undefined) {
+          record(table, module);
+        }
+      }
+
+      for (const [, statement] of source.matchAll(/`([^`]*)`/g)) {
         if (statement === undefined) {
           continue;
         }
@@ -487,9 +526,7 @@ describe('cross-module table access', () => {
           if (table === undefined || !tables.has(table)) {
             continue;
           }
-          const modules = modulesByTable.get(table) ?? new Set<string>();
-          modules.add(module);
-          modulesByTable.set(table, modules);
+          record(table, module);
         }
       }
     }
@@ -627,6 +664,131 @@ describe('request bodies reach their contract through parseRequestBody', () => {
       expect(`${result.stdout}\n${result.stderr}`).toContain(
         'route a request body through parseRequestBody',
       );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('the generated Prisma client stays inside infrastructure', () => {
+  const srcRoot = join(__dirname, '..', '..', 'src');
+
+  function runArchCheck(): { status: number | null; output: string } {
+    const result = spawnSync(
+      process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+      ['arch-check'],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        shell: process.platform === 'win32',
+      },
+    );
+
+    return {
+      status: result.status,
+      output: `${result.stdout}\n${result.stderr}`,
+    };
+  }
+
+  it('fails an application file that imports the generated client', () => {
+    const fixtureRoot = mkdtempSync(
+      join(srcRoot, 'modules', 'identity', '.tmp-prisma-boundary-'),
+    );
+    const offending = join(fixtureRoot, 'application', 'probe.use-case.ts');
+
+    try {
+      mkdirSync(join(fixtureRoot, 'application'), { recursive: true });
+      writeFileSync(
+        offending,
+        `import { PrismaClient } from '@prisma-client/client';\n\nexport type Probe = PrismaClient;\n`,
+      );
+      writeFileSync(
+        join(fixtureRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+      );
+
+      const { status, output } = runArchCheck();
+
+      expect(status).not.toBe(0);
+      expect(output).toContain('only infrastructure may');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('fails an application file of the persistence module itself', () => {
+    const fixtureRoot = mkdtempSync(
+      join(srcRoot, 'modules', 'persistence', '.tmp-prisma-boundary-'),
+    );
+    const offending = join(fixtureRoot, 'application', 'probe.port.ts');
+
+    try {
+      mkdirSync(join(fixtureRoot, 'application'), { recursive: true });
+      writeFileSync(
+        offending,
+        `import type { PrismaClient } from '@prisma-client/client';\n\nexport type Probe = PrismaClient;\n`,
+      );
+      writeFileSync(
+        join(fixtureRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+      );
+
+      const { status, output } = runArchCheck();
+
+      expect(status).not.toBe(0);
+      expect(output).toContain('only infrastructure may');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('fails a dynamic import of the generated client outside infrastructure', () => {
+    const fixtureRoot = mkdtempSync(
+      join(srcRoot, 'modules', 'identity', '.tmp-prisma-boundary-dynamic-'),
+    );
+    const offending = join(fixtureRoot, 'application', 'probe.use-case.ts');
+
+    try {
+      mkdirSync(join(fixtureRoot, 'application'), { recursive: true });
+      writeFileSync(
+        offending,
+        `export async function probe(): Promise<unknown> {\n  return import('@prisma-client/client');\n}\n`,
+      );
+      writeFileSync(
+        join(fixtureRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+      );
+
+      const { status, output } = runArchCheck();
+
+      expect(status).not.toBe(0);
+      expect(output).toContain('only infrastructure may');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts the same import inside infrastructure', () => {
+    const fixtureRoot = mkdtempSync(
+      join(srcRoot, 'modules', 'identity', '.tmp-prisma-boundary-ok-'),
+    );
+    const allowed = join(fixtureRoot, 'infrastructure', 'probe.repository.ts');
+
+    try {
+      mkdirSync(join(fixtureRoot, 'infrastructure'), { recursive: true });
+      writeFileSync(
+        allowed,
+        `import { PrismaClient } from '@prisma-client/client';\n\nexport type Probe = PrismaClient;\n`,
+      );
+      writeFileSync(
+        join(fixtureRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+      );
+
+      const { status, output } = runArchCheck();
+
+      expect(output).not.toContain('only infrastructure may');
+      expect(status).toBe(0);
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });
     }

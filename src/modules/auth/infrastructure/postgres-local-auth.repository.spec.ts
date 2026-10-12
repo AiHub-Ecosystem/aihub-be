@@ -1,52 +1,14 @@
-import type {
-  PostgresAuthClient,
-  PostgresAuthQueryClient,
-} from './postgres-auth.client';
+import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
 import { PostgresLocalAuthRepository } from './postgres-local-auth.repository';
 
 /**
- * Records every statement with the transaction that issued it: `0` for a
- * statement on the client itself, then one number per `transaction(...)`. That
- * is what makes "one durable step" checkable here — a mutation claimed to ride
- * one transaction is only in it while its statement carries the same number.
+ * `ScriptedPrisma` records every statement with the transaction that issued it:
+ * `0` for a statement on the client itself, then one number per transaction.
+ * That is what makes "one durable step" checkable here — a mutation claimed to
+ * ride one transaction is only in it while its statement carries the same
+ * number. The database lane proves the locks and the engine's rollback; this
+ * proves which statements make up each step.
  */
-class FakeClient implements PostgresAuthClient {
-  async checkConnection(): Promise<void> {}
-
-  readonly queries: Array<{
-    text: string;
-    values: readonly unknown[];
-    transaction: number;
-  }> = [];
-  responses: readonly Record<string, unknown>[][] = [];
-  queryResponses: Record<string, unknown>[][] = [];
-  failure: unknown;
-  /** How many transactions this client was asked to open. */
-  opened = 0;
-
-  async query(text: string, values: readonly unknown[]) {
-    this.queries.push({ text, values, transaction: 0 });
-    return this.queryResponses.shift() ?? [];
-  }
-
-  async transaction<T>(
-    callback: (client: PostgresAuthQueryClient) => Promise<T>,
-  ): Promise<T> {
-    if (this.failure !== undefined) {
-      throw this.failure;
-    }
-    let index = 0;
-    const transaction = ++this.opened;
-    return callback({
-      query: async (text, values) => {
-        this.queries.push({ text, values, transaction });
-        return this.responses[index++] ?? [];
-      },
-    });
-  }
-
-  async close(): Promise<void> {}
-}
 
 const input = {
   email: 'person@example.com',
@@ -66,46 +28,94 @@ const refreshToken = {
   expiresAt: new Date('2026-10-19T00:00:00.000Z'),
 };
 
+const USER_ID = 'usr_01J00000000000000000000000';
+
+function repositoryOver(script: ScriptedPrisma): PostgresLocalAuthRepository {
+  return new PostgresLocalAuthRepository(script.client());
+}
+
+function allArgs(script: ScriptedPrisma): string {
+  return JSON.stringify(script.statements.map(({ args }) => args));
+}
+
+/** What the verification token's locking read returns. */
+function openToken(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'evt_01J00000000000000000000000',
+    expires_at: input.tokenExpiresAt,
+    consumed_at: input.now,
+    consumed_reason: 'verified',
+    browser_binding_hash: 'binding-hash',
+    signed_in_at: null,
+    ...overrides,
+  };
+}
+
+/** What the reset token's locking read returns, aliased to model field names. */
+function resetToken(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'prt_01J00000000000000000000000',
+    userAccountId: USER_ID,
+    expiresAt: new Date('2026-09-20T01:00:00.000Z'),
+    consumedAt: null,
+    status: 'active',
+    ...overrides,
+  };
+}
+
 describe('PostgresLocalAuthRepository', () => {
   it('persists account, local identity, and token in one transaction', async () => {
-    const client = new FakeClient();
-    const repository = new PostgresLocalAuthRepository(client);
+    const script = new ScriptedPrisma();
 
-    await repository.register(input);
+    await repositoryOver(script).register(input);
 
-    expect(client.queries).toHaveLength(3);
-    expect(client.queries[0]?.text).toContain('INSERT INTO user_accounts');
-    expect(client.queries[1]?.text).toContain('INSERT INTO auth_identities');
-    expect(client.queries[2]?.text).toContain(
-      'INSERT INTO email_verification_tokens',
+    expect(script.statements.map(({ name }) => name)).toEqual([
+      'userAccount.create',
+      'authIdentity.create',
+      'emailVerificationToken.create',
+    ]);
+    expect(script.opened).toBe(1);
+    expect(
+      script.statements.every(({ transaction }) => transaction === 1),
+    ).toBe(true);
+    expect(JSON.stringify(script.statements[1]?.args)).toContain(
+      input.passwordHash,
     );
-    expect(client.queries[1]?.values).toContain(input.passwordHash);
-    expect(client.queries[2]?.values).toContain(input.tokenHash);
+    expect(JSON.stringify(script.statements[2]?.args)).toContain(
+      input.tokenHash,
+    );
   });
 
-  it('maps unique races to a generic identity conflict', async () => {
-    const client = new FakeClient();
-    client.failure = { code: '23505', detail: 'private database detail' };
+  it.each([
+    ['a raw SQLSTATE', { code: '23505', detail: 'private database detail' }],
+    ['a Prisma unique violation', { code: 'P2002', meta: { target: ['x'] } }],
+  ])(
+    'maps unique races (%s) to a generic identity conflict',
+    async (_, failure) => {
+      const script = new ScriptedPrisma();
+      script.failure = failure;
 
-    await expect(
-      new PostgresLocalAuthRepository(client).register(input),
-    ).rejects.toMatchObject({ name: 'AuthIdentityConflictError' });
-  });
+      await expect(
+        repositoryOver(script).register(input),
+      ).rejects.toMatchObject({
+        name: 'AuthIdentityConflictError',
+      });
+    },
+  );
 
   it('invalidates open tokens before inserting a resend token for pending accounts', async () => {
-    const client = new FakeClient();
-    client.responses = [
+    const script = new ScriptedPrisma();
+    script.inside = [
       [
         {
-          id: 'usr_01J00000000000000000000000',
+          id: USER_ID,
           canonical_email: input.email,
           status: 'pending_verification',
         },
       ],
     ];
-    const result = await new PostgresLocalAuthRepository(
-      client,
-    ).rotateVerificationToken({
+
+    const result = await repositoryOver(script).rotateVerificationToken({
       email: input.email,
       tokenId: input.tokenId,
       tokenHash: input.tokenHash,
@@ -114,30 +124,21 @@ describe('PostgresLocalAuthRepository', () => {
     });
 
     expect(result).toEqual({ email: input.email });
-    expect(client.queries[1]?.text).toContain('SET consumed_at');
-    expect(client.queries[2]?.text).toContain(
-      'INSERT INTO email_verification_tokens',
+    expect(script.statements.map(({ name }) => name).slice(1)).toEqual([
+      'emailVerificationToken.updateMany',
+      'emailVerificationToken.create',
+    ]);
+    expect(JSON.stringify(script.statements[2]?.args)).toContain(
+      input.tokenHash,
     );
   });
 
   it('leaves no session behind when a request only verifies', async () => {
-    const client = new FakeClient();
-    client.responses = [
-      [{ id: 'usr_01J00000000000000000000000', status: 'active' }],
-      [
-        {
-          id: 'evt_01J00000000000000000000000',
-          expires_at: input.tokenExpiresAt,
-          consumed_at: input.now,
-          consumed_reason: 'verified',
-          browser_binding_hash: 'binding-hash',
-          signed_in_at: null,
-        },
-      ],
-    ];
+    const script = new ScriptedPrisma();
+    script.inside = [[{ id: USER_ID, status: 'active' }], [openToken()]];
 
     await expect(
-      new PostgresLocalAuthRepository(client).consumeVerificationToken({
+      repositoryOver(script).consumeVerificationToken({
         tokenHash: input.tokenHash,
         signInSession: {
           kind: 'refresh',
@@ -148,30 +149,16 @@ describe('PostgresLocalAuthRepository', () => {
       }),
     ).resolves.toEqual({ kind: 'verified' });
 
-    const sql = client.queries.map((query) => query.text).join('\n');
-    expect(sql).not.toContain('SET signed_in_at');
-    expect(sql).not.toContain('INSERT INTO refresh_tokens');
+    expect(script.statements).toHaveLength(2);
+    expect(allArgs(script)).not.toContain(refreshToken.hash);
   });
 
   it('commits the Verification Sign-in claim and its Refresh Session in one transaction', async () => {
-    const client = new FakeClient();
-    client.responses = [
-      [{ id: 'usr_01J00000000000000000000000', status: 'active' }],
-      [
-        {
-          id: 'evt_01J00000000000000000000000',
-          expires_at: input.tokenExpiresAt,
-          consumed_at: input.now,
-          consumed_reason: 'verified',
-          browser_binding_hash: 'binding-hash',
-          signed_in_at: null,
-        },
-      ],
-      [{ id: 'evt_01J00000000000000000000000' }],
-    ];
+    const script = new ScriptedPrisma();
+    script.inside = [[{ id: USER_ID, status: 'active' }], [openToken()]];
 
     await expect(
-      new PostgresLocalAuthRepository(client).consumeVerificationToken({
+      repositoryOver(script).consumeVerificationToken({
         tokenHash: input.tokenHash,
         browserBindingHash: 'binding-hash',
         signInSession: {
@@ -181,34 +168,56 @@ describe('PostgresLocalAuthRepository', () => {
         },
         now: input.now,
       }),
-    ).resolves.toEqual({
-      kind: 'signed_in',
-      userId: 'usr_01J00000000000000000000000',
-    });
+    ).resolves.toEqual({ kind: 'signed_in', userId: USER_ID });
 
-    const sql = client.queries.map((query) => query.text).join('\n');
-    expect(sql).toContain('SET signed_in_at');
-    expect(sql).toContain('INSERT INTO refresh_tokens');
-    expect(client.queries[3]?.values).toEqual(
-      expect.arrayContaining([refreshToken.hash, refreshToken.id]),
+    expect(script.statements.map(({ name }) => name).slice(2)).toEqual([
+      'emailVerificationToken.updateMany',
+      'refreshToken.create',
+    ]);
+    expect(script.opened).toBe(1);
+    expect(
+      script.statements.every(({ transaction }) => transaction === 1),
+    ).toBe(true);
+    expect(JSON.stringify(script.statements[3]?.args)).toContain(
+      refreshToken.hash,
     );
-    expect(JSON.stringify(client.queries)).not.toContain(refreshToken.raw);
+    expect(allArgs(script)).not.toContain(refreshToken.raw);
   });
 
-  it('issues a reset token only for an active password identity and supersedes open tokens', async () => {
-    const client = new FakeClient();
-    client.responses = [
-      [
-        {
-          id: 'usr_01J00000000000000000000000',
-          canonical_email: input.email,
-          status: 'active',
-        },
-      ],
+  it('stops without a session when another request already claimed the sign-in', async () => {
+    const script = new ScriptedPrisma();
+    script.inside = [
+      [{ id: USER_ID, status: 'active' }],
+      [openToken()],
+      { count: 0 },
     ];
 
     await expect(
-      new PostgresLocalAuthRepository(client).issuePasswordResetToken({
+      repositoryOver(script).consumeVerificationToken({
+        tokenHash: input.tokenHash,
+        browserBindingHash: 'binding-hash',
+        signInSession: {
+          kind: 'refresh',
+          token: refreshToken,
+          issuedAt: input.now,
+        },
+        now: input.now,
+      }),
+    ).resolves.toEqual({ kind: 'verified' });
+
+    expect(script.statements.map(({ name }) => name)).not.toContain(
+      'refreshToken.create',
+    );
+  });
+
+  it('issues a reset token only for an active password identity and supersedes open tokens', async () => {
+    const script = new ScriptedPrisma();
+    script.inside = [
+      [{ id: USER_ID, canonical_email: input.email, status: 'active' }],
+    ];
+
+    await expect(
+      repositoryOver(script).issuePasswordResetToken({
         email: input.email,
         tokenId: 'prt_01J00000000000000000000000',
         tokenHash: input.tokenHash,
@@ -216,132 +225,108 @@ describe('PostgresLocalAuthRepository', () => {
         now: input.now,
       }),
     ).resolves.toEqual({ email: input.email });
-    expect(client.queries[0]?.text).toContain('FOR UPDATE');
-    expect(client.queries[1]?.text).toContain('password_reset_tokens');
-    expect(client.queries[1]?.text).toContain('SET consumed_at');
-    expect(client.queries[2]?.text).toContain(
-      'INSERT INTO password_reset_tokens',
+
+    expect(script.statements.map(({ name }) => name).slice(1)).toEqual([
+      'passwordResetToken.updateMany',
+      'passwordResetToken.create',
+    ]);
+    expect(JSON.stringify(script.statements[2]?.args)).toContain(
+      input.tokenHash,
     );
-    expect(JSON.stringify(client.queries)).not.toContain('token_value');
   });
 
   it('atomically changes the password, consumes reset tokens, and revokes every refresh session and web session', async () => {
-    const client = new FakeClient();
-    client.responses = [
-      [
-        {
-          id: 'prt_01J00000000000000000000000',
-          user_account_id: 'usr_01J00000000000000000000000',
-          expires_at: new Date('2026-09-20T01:00:00.000Z'),
-          consumed_at: null,
-          status: 'active',
-        },
-      ],
-      [{ id: 'auth_01J00000000000000000000000' }],
-      [{ id: 'prt_01J00000000000000000000000' }],
-      [],
-      [],
-      [],
-    ];
+    const script = new ScriptedPrisma();
+    script.inside = [[resetToken()]];
 
     await expect(
-      new PostgresLocalAuthRepository(client).consumePasswordReset({
+      repositoryOver(script).consumePasswordReset({
         tokenHash: input.tokenHash,
         passwordHash: input.passwordHash,
         now: input.now,
       }),
-    ).resolves.toEqual({
-      kind: 'reset',
-    });
-    const sql = client.queries.map((query) => query.text).join('\n');
-    expect(sql).toContain('FROM password_reset_tokens token');
-    expect(sql).toContain('FOR UPDATE');
-    expect(sql).toContain('UPDATE auth_identities');
-    expect(sql).toContain('SET consumed_at');
-    expect(sql).toContain('UPDATE refresh_tokens');
-    expect(sql).toContain('UPDATE web_sessions');
-    expect(sql).toContain('revoked_at = $2');
-    expect(sql).toContain('WHERE user_account_id = $1 AND revoked_at IS NULL');
+    ).resolves.toEqual({ kind: 'reset' });
+
+    expect(script.statements.slice(1).map(({ name }) => name)).toEqual([
+      'authIdentity.updateMany',
+      'passwordResetToken.updateMany',
+      'passwordResetToken.updateMany',
+      'refreshToken.updateMany',
+      'webSession.updateMany',
+    ]);
     // Both revocations ride the ONE transaction that changed the password, so a
     // failure anywhere rolls all of it back: no half-revoked account is
     // observable between them.
-    expect(client.opened).toBe(1);
-    expect(client.queries.every((query) => query.transaction === 1)).toBe(true);
+    expect(script.opened).toBe(1);
     expect(
-      client.queries
-        .filter((query) =>
-          /UPDATE (refresh_tokens|web_sessions)/.test(query.text),
-        )
-        .map((query) => query.values),
-    ).toEqual([
-      ['usr_01J00000000000000000000000', input.now],
-      ['usr_01J00000000000000000000000', input.now],
+      script.statements.every(({ transaction }) => transaction === 1),
+    ).toBe(true);
+    expect(script.statements.slice(-2).map(({ args }) => args[0])).toEqual([
+      {
+        where: { userAccountId: USER_ID, revokedAt: null },
+        data: { revokedAt: input.now },
+      },
+      {
+        where: { userAccountId: USER_ID, revokedAt: null },
+        data: { revokedAt: input.now },
+      },
     ]);
-    expect(JSON.stringify(client.queries)).not.toContain('reset-token');
+    expect(allArgs(script)).not.toContain('reset-token');
   });
 
   it('revokes no web session at all when the reset token is not consumable', async () => {
-    const client = new FakeClient();
-    client.responses = [[]];
+    const script = new ScriptedPrisma();
+    script.inside = [[]];
 
     await expect(
-      new PostgresLocalAuthRepository(client).consumePasswordReset({
+      repositoryOver(script).consumePasswordReset({
         tokenHash: input.tokenHash,
         passwordHash: input.passwordHash,
         now: input.now,
       }),
     ).resolves.toEqual({ kind: 'invalid', reason: 'missing' });
 
-    expect(client.queries).toHaveLength(1);
-    expect(JSON.stringify(client.queries)).not.toContain('web_sessions');
+    expect(script.statements).toHaveLength(1);
+  });
+
+  it('rolls back rather than continue when the reset token was consumed concurrently', async () => {
+    const script = new ScriptedPrisma();
+    script.inside = [[resetToken()], { count: 1 }, { count: 0 }];
+
+    await expect(
+      repositoryOver(script).consumePasswordReset({
+        tokenHash: input.tokenHash,
+        passwordHash: input.passwordHash,
+        now: input.now,
+      }),
+    ).rejects.toThrow('password reset token was concurrently consumed');
+    expect(script.statements.map(({ name }) => name)).not.toContain(
+      'webSession.updateMany',
+    );
   });
 
   it('returns one invalid result for missing, expired, consumed, and inactive reset state', async () => {
     const cases = [
       { rows: [], reason: 'missing' as const },
       {
-        rows: [
-          {
-            id: 'prt_01J00000000000000000000000',
-            user_account_id: 'usr_01J00000000000000000000000',
-            expires_at: new Date('2026-09-19T00:00:00.000Z'),
-            consumed_at: null,
-            status: 'active',
-          },
-        ],
+        rows: [resetToken({ expiresAt: new Date('2026-09-19T00:00:00.000Z') })],
         reason: 'expired' as const,
       },
       {
-        rows: [
-          {
-            id: 'prt_01J00000000000000000000000',
-            user_account_id: 'usr_01J00000000000000000000000',
-            expires_at: new Date('2026-09-20T01:00:00.000Z'),
-            consumed_at: input.now,
-            status: 'active',
-          },
-        ],
+        rows: [resetToken({ consumedAt: input.now })],
         reason: 'consumed' as const,
       },
       {
-        rows: [
-          {
-            id: 'prt_01J00000000000000000000000',
-            user_account_id: 'usr_01J00000000000000000000000',
-            expires_at: new Date('2026-09-20T01:00:00.000Z'),
-            consumed_at: null,
-            status: 'disabled',
-          },
-        ],
+        rows: [resetToken({ status: 'disabled' })],
         reason: 'inactive' as const,
       },
     ];
 
     for (const current of cases) {
-      const client = new FakeClient();
-      client.responses = [current.rows];
+      const script = new ScriptedPrisma();
+      script.inside = [current.rows];
       await expect(
-        new PostgresLocalAuthRepository(client).consumePasswordReset({
+        repositoryOver(script).consumePasswordReset({
           tokenHash: input.tokenHash,
           passwordHash: input.passwordHash,
           now: input.now,
@@ -351,113 +336,101 @@ describe('PostgresLocalAuthRepository', () => {
   });
 
   it('checks reset-token state without performing password work', async () => {
-    const client = new FakeClient();
-    client.queryResponses = [
-      [
-        {
-          id: 'prt_01J00000000000000000000000',
-          user_account_id: 'usr_01J00000000000000000000000',
-          expires_at: new Date('2026-09-20T01:00:00.000Z'),
-          consumed_at: null,
-          status: 'active',
-        },
-      ],
+    const script = new ScriptedPrisma();
+    script.outside = [
+      {
+        id: 'prt_01J00000000000000000000000',
+        userAccountId: USER_ID,
+        expiresAt: new Date('2026-09-20T01:00:00.000Z'),
+        consumedAt: null,
+        userAccount: { status: 'active' },
+      },
     ];
 
     await expect(
-      new PostgresLocalAuthRepository(client).checkPasswordResetToken({
+      repositoryOver(script).checkPasswordResetToken({
         tokenHash: input.tokenHash,
         now: input.now,
       }),
     ).resolves.toEqual({ kind: 'valid' });
-    expect(client.queries[0]?.text).not.toContain('FOR UPDATE');
+    expect(script.statements).toHaveLength(1);
+    expect(script.statements[0]).toMatchObject({
+      name: 'passwordResetToken.findUnique',
+      args: [{ where: { tokenHash: input.tokenHash } }],
+    });
   });
 
   it('projects the password identity without returning profile fields', async () => {
-    const client = new FakeClient();
-    client.queryResponses = [
-      [
-        {
-          id: 'usr_01J00000000000000000000000',
-          status: 'active',
-          canonical_email: input.email,
-          password_hash: input.passwordHash,
-        },
-      ],
+    const script = new ScriptedPrisma();
+    script.outside = [
+      {
+        canonicalEmail: input.email,
+        passwordHash: input.passwordHash,
+        userAccount: { id: USER_ID, status: 'active' },
+      },
     ];
 
     await expect(
-      new PostgresLocalAuthRepository(client).findLoginIdentityByEmail(
-        input.email,
-      ),
+      repositoryOver(script).findLoginIdentityByEmail(input.email),
     ).resolves.toEqual({
-      userId: 'usr_01J00000000000000000000000',
+      userId: USER_ID,
       email: input.email,
       status: 'active',
       passwordHash: input.passwordHash,
     });
-    expect(client.queries[0]?.text).toContain('JOIN auth_identities');
-    expect(client.queries[0]?.text).toContain("ai.provider = 'password'");
-    expect(JSON.stringify(client.queries[0])).not.toContain('username');
   });
 
   it('reads durable account status for bearer authorization', async () => {
-    const client = new FakeClient();
-    client.queryResponses = [[{ status: 'disabled' }]];
+    const script = new ScriptedPrisma();
+    script.outside = [{ status: 'disabled' }];
 
     await expect(
-      new PostgresLocalAuthRepository(client).findUserAccountStatus(
-        'usr_01J00000000000000000000000',
-      ),
+      repositoryOver(script).findUserAccountStatus(USER_ID),
     ).resolves.toBe('disabled');
   });
 
   it('reads the username only for the active bearer account', async () => {
-    const client = new FakeClient();
-    client.queryResponses = [[{ username: 'person_01' }]];
+    const script = new ScriptedPrisma();
+    script.outside = [{ username: 'person_01' }];
 
     await expect(
-      new PostgresLocalAuthRepository(client).findActiveUsername(
-        'usr_01J00000000000000000000000',
-      ),
+      repositoryOver(script).findActiveUsername(USER_ID),
     ).resolves.toBe('person_01');
-    expect(client.queries[0]?.text).toContain("status = 'active'");
-    expect(client.queries[0]?.values).toEqual([
-      'usr_01J00000000000000000000000',
+    expect(script.statements[0]?.args).toEqual([
+      { where: { id: USER_ID, status: 'active' }, select: { username: true } },
     ]);
 
-    client.queryResponses = [[]];
+    const none = new ScriptedPrisma();
     await expect(
-      new PostgresLocalAuthRepository(client).findActiveUsername(
-        'usr_01J00000000000000000000000',
-      ),
+      repositoryOver(none).findActiveUsername(USER_ID),
     ).resolves.toBeUndefined();
   });
 
   it('persists only the refresh hash and rotates under a row lock', async () => {
-    const client = new FakeClient();
-    const repository = new PostgresLocalAuthRepository(client);
-    client.responses = [[{ status: 'active' }], []];
+    const script = new ScriptedPrisma();
+    const repository = repositoryOver(script);
+
+    script.inside = [[{ status: 'active' }], []];
     await repository.createRefreshSession({
-      userId: 'usr_01J00000000000000000000000',
+      userId: USER_ID,
       token: refreshToken,
       issuedAt: input.now,
     });
-    const insert = client.queries.find((query) =>
-      query.text.includes('INSERT INTO refresh_tokens'),
+    const created = script.statements.find(
+      ({ name }) => name === 'refreshToken.create',
     );
-    expect(insert?.values).toContain(refreshToken.hash);
-    expect(JSON.stringify(client.queries)).not.toContain(refreshToken.raw);
+    expect(JSON.stringify(created?.args)).toContain(refreshToken.hash);
+    expect(allArgs(script)).not.toContain(refreshToken.raw);
 
-    client.responses = [
+    script.inside = [
       [
         {
-          token_id: refreshToken.id,
-          family_id: refreshToken.familyId,
-          user_account_id: 'usr_01J00000000000000000000000',
-          expires_at: refreshToken.expiresAt,
-          used_at: null,
-          revoked_at: null,
+          id: refreshToken.id,
+          familyId: refreshToken.familyId,
+          userAccountId: USER_ID,
+          expiresAt: refreshToken.expiresAt,
+          usedAt: null,
+          revokedAt: null,
           status: 'active',
         },
       ],
@@ -475,61 +448,59 @@ describe('PostgresLocalAuthRepository', () => {
         },
         now: input.now,
       }),
-    ).resolves.toEqual({
-      kind: 'rotated',
-      userId: 'usr_01J00000000000000000000000',
-    });
-    const rotationSql = client.queries.map((query) => query.text).join('\n');
-    expect(rotationSql).toContain('FOR UPDATE');
-    expect(rotationSql).toContain('SET used_at');
-    expect(rotationSql).toContain('INSERT INTO refresh_tokens');
+    ).resolves.toEqual({ kind: 'rotated', userId: USER_ID });
+    expect(script.statements.slice(-3).map(({ name }) => name)).toEqual([
+      expect.stringContaining('FOR UPDATE'),
+      'refreshToken.updateMany',
+      'refreshToken.create',
+    ]);
   });
 
   it('revokes a whole family for a known stale token and ignores unknown logout tokens', async () => {
-    const client = new FakeClient();
-    client.responses = [[{ family_id: refreshToken.familyId }]];
-    const repository = new PostgresLocalAuthRepository(client);
+    const script = new ScriptedPrisma();
+    script.inside = [[{ family_id: refreshToken.familyId }]];
 
-    await repository.revokeRefreshFamilyByTokenHash({
+    await repositoryOver(script).revokeRefreshFamilyByTokenHash({
       tokenHash: refreshToken.hash,
       now: input.now,
     });
-    expect(client.queries.map((query) => query.text).join('\n')).toContain(
-      'WHERE family_id = $1 AND revoked_at IS NULL',
-    );
+    expect(script.statements).toHaveLength(2);
+    expect(script.statements[1]).toMatchObject({
+      name: 'refreshToken.updateMany',
+      args: [
+        {
+          where: { familyId: refreshToken.familyId, revokedAt: null },
+          data: { revokedAt: input.now },
+        },
+      ],
+    });
 
-    const unknownClient = new FakeClient();
-    unknownClient.responses = [[]];
+    const unknown = new ScriptedPrisma();
+    unknown.inside = [[]];
     await expect(
-      new PostgresLocalAuthRepository(
-        unknownClient,
-      ).revokeRefreshFamilyByTokenHash({
+      repositoryOver(unknown).revokeRefreshFamilyByTokenHash({
         tokenHash: 'd'.repeat(64),
         now: input.now,
       }),
     ).resolves.toBeUndefined();
-    expect(unknownClient.queries).toHaveLength(1);
+    expect(unknown.statements).toHaveLength(1);
   });
 
   it('maps malformed refresh projections to a safe invalid result', async () => {
-    const client = new FakeClient();
-    client.queryResponses = [
-      [
-        {
-          token_id: refreshToken.id,
-          family_id: refreshToken.familyId,
-          user_account_id: 'usr_01J00000000000000000000000',
-          expires_at: 'not-a-date',
-          used_at: null,
-          revoked_at: null,
-        },
-      ],
+    const script = new ScriptedPrisma();
+    script.outside = [
+      {
+        id: refreshToken.id,
+        familyId: refreshToken.familyId,
+        userAccountId: USER_ID,
+        expiresAt: 'not-a-date',
+        usedAt: null,
+        revokedAt: null,
+      },
     ];
 
     await expect(
-      new PostgresLocalAuthRepository(client).findRefreshTokenByHash(
-        refreshToken.hash,
-      ),
+      repositoryOver(script).findRefreshTokenByHash(refreshToken.hash),
     ).resolves.toBeUndefined();
   });
 });

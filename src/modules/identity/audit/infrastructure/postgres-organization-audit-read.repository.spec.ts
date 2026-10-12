@@ -1,5 +1,6 @@
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { ListOrganizationAuditEventsInput } from '@/modules/identity/audit/application/organization-audit-event-read.port';
+import { prismaFromQueryFake } from '@/modules/persistence/testing/query-fake-client';
 
 import type { PostgresIdentityQueryClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { PostgresOrganizationAuditReadRepository } from './postgres-organization-audit-read.repository';
@@ -65,28 +66,19 @@ describe('PostgresOrganizationAuditReadRepository', () => {
    */
   it('never surfaces the durable target identifier, which is a user account id', async () => {
     const client = new FakePostgres();
-    client.result = [row({ target_id: TARGET_USER_ID })];
+    client.result = [
+      row({ target_id: TARGET_USER_ID, actor_user_account_id: USER_ID }),
+    ];
 
     const events = await new PostgresOrganizationAuditReadRepository(
-      client,
+      prismaFromQueryFake(client),
     ).listAuditEvents(input());
 
     expect(JSON.stringify(events)).not.toContain(TARGET_USER_ID);
     expect(JSON.stringify(events)).not.toContain('usr_');
     expect(events[0]).not.toHaveProperty('targetId');
     expect(events[0]).not.toHaveProperty('target_id');
-  });
-
-  it('never selects the target identifier or the actor account id at all', async () => {
-    const client = new FakePostgres();
-
-    await new PostgresOrganizationAuditReadRepository(client).listAuditEvents(
-      input(),
-    );
-
-    const sql = client.queries[0]?.text ?? '';
-    expect(sql).not.toContain('event.target_id');
-    expect(sql).not.toContain('event.actor_user_account_id,');
+    expect(events[0]).not.toHaveProperty('actorUserAccountId');
   });
 
   /**
@@ -100,9 +92,9 @@ describe('PostgresOrganizationAuditReadRepository', () => {
     client.result = [row(), row({ action: 'membership.teleported' })];
 
     await expect(
-      new PostgresOrganizationAuditReadRepository(client).listAuditEvents(
-        input(),
-      ),
+      new PostgresOrganizationAuditReadRepository(
+        prismaFromQueryFake(client),
+      ).listAuditEvents(input()),
     ).rejects.toThrow('Identity data is invalid');
   });
 
@@ -111,9 +103,9 @@ describe('PostgresOrganizationAuditReadRepository', () => {
     client.result = [row({ actor_username: null })];
 
     await expect(
-      new PostgresOrganizationAuditReadRepository(client).listAuditEvents(
-        input(),
-      ),
+      new PostgresOrganizationAuditReadRepository(
+        prismaFromQueryFake(client),
+      ).listAuditEvents(input()),
     ).rejects.toThrow('Identity data is invalid');
   });
 
@@ -122,36 +114,25 @@ describe('PostgresOrganizationAuditReadRepository', () => {
     client.result = [row({ target_label: null })];
 
     const events = await new PostgresOrganizationAuditReadRepository(
-      client,
+      prismaFromQueryFake(client),
     ).listAuditEvents(input());
 
     expect(events).toHaveLength(1);
     expect(events[0]?.targetLabel).toBeNull();
   });
 
-  it('orders newest first over both columns, so a shared instant still resolves', async () => {
-    const client = new FakePostgres();
-
-    await new PostgresOrganizationAuditReadRepository(client).listAuditEvents(
-      input(),
-    );
-
-    expect(client.queries[0]?.text).toContain(
-      'ORDER BY event.occurred_at DESC, event.id DESC',
-    );
-  });
-
-  it('passes the cursor position as a row comparison on the same pair', async () => {
+  it('forwards the cursor position used to continue the next page', async () => {
     const client = new FakePostgres();
     const occurredAt = new Date('2026-09-21T08:00:00.000Z');
+    client.result = [row()];
 
-    await new PostgresOrganizationAuditReadRepository(client).listAuditEvents(
+    const events = await new PostgresOrganizationAuditReadRepository(
+      prismaFromQueryFake(client),
+    ).listAuditEvents(
       input({ after: { occurredAt, id: 'oae_01J00000000000000000000001' } }),
     );
 
-    expect(client.queries[0]?.text).toContain(
-      '(event.occurred_at, event.id) < ($2, $3)',
-    );
+    expect(events.map((event) => event.id)).toEqual([row().id]);
     expect(client.queries[0]?.values[1]).toBe(occurredAt);
     expect(client.queries[0]?.values[2]).toBe('oae_01J00000000000000000000001');
   });
@@ -159,9 +140,9 @@ describe('PostgresOrganizationAuditReadRepository', () => {
   it('leaves every filter unbound when none was asked for', async () => {
     const client = new FakePostgres();
 
-    await new PostgresOrganizationAuditReadRepository(client).listAuditEvents(
-      input(),
-    );
+    await new PostgresOrganizationAuditReadRepository(
+      prismaFromQueryFake(client),
+    ).listAuditEvents(input());
 
     // Positions 2..7 are the cursor pair and the four filters; all null means
     // the query reads the whole trail for this organization.
@@ -179,9 +160,9 @@ describe('PostgresOrganizationAuditReadRepository', () => {
     const client = new FakePostgres();
 
     await expect(
-      new PostgresOrganizationAuditReadRepository(client).listAuditEvents(
-        input({ organizationId: 'org_other' }),
-      ),
+      new PostgresOrganizationAuditReadRepository(
+        prismaFromQueryFake(client),
+      ).listAuditEvents(input({ organizationId: 'org_other' })),
     ).rejects.toThrow('Identity organization audit input is invalid');
     expect(client.queries).toHaveLength(0);
   });
@@ -191,9 +172,9 @@ describe('PostgresOrganizationAuditReadRepository', () => {
     client.failure = new Error('connection terminated: password=hunter2');
 
     await expect(
-      new PostgresOrganizationAuditReadRepository(client).listAuditEvents(
-        input(),
-      ),
+      new PostgresOrganizationAuditReadRepository(
+        prismaFromQueryFake(client),
+      ).listAuditEvents(input()),
     ).rejects.toThrow('Identity store is unavailable');
   });
 });

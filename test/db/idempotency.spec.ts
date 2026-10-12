@@ -5,8 +5,8 @@ import type {
   CompleteIdempotencyInput,
   ReserveIdempotencyInput,
 } from '@/modules/idempotency/application/idempotency-repository.port';
-import type { PostgresIdempotencyClient } from '@/modules/idempotency/infrastructure/postgres-idempotency.client';
 import { PostgresIdempotencyRepository } from '@/modules/idempotency/infrastructure/postgres-idempotency.repository';
+import { prismaFromQueryFake } from '@/modules/persistence/testing/query-fake-client';
 
 import { createTestPool } from './database';
 
@@ -18,16 +18,19 @@ const FINGERPRINT = 'a'.repeat(64);
 let pool: Pool;
 let repository: PostgresIdempotencyRepository;
 
-function client(): PostgresIdempotencyClient {
-  return {
+/**
+ * The repository over the spec's own `pg` pool, so the statements it issues
+ * are the ones the engine sees and no Prisma path is between them.
+ */
+function client() {
+  return prismaFromQueryFake({
     async query(text, values) {
       const result = await pool.query<Record<string, unknown>>(text, [
         ...values,
       ]);
       return result.rows;
     },
-    close: async () => undefined,
-  };
+  });
 }
 
 function reserveInput(

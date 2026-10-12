@@ -119,20 +119,27 @@ const postgresPoolErrorsTotal = new Counter({
   registers: [registry],
 });
 
-export type PostgresPoolName =
-  | 'auth'
-  | 'idempotency'
-  | 'sandbox-dispatch-budget'
-  | 'avatar'
-  | 'speaking-audio-upload'
-  | 'metering'
-  | 'identity'
-  | 'identity-read'
-  | 'identity-write'
-  | 'integration-test';
+/**
+ * What a pool is labelled as in `aihub_postgres_pool_errors_total`.
+ *
+ * A pool belongs to a connection role rather than to the module that happens to
+ * open it, because ADR-0088 collapses the per-module pools into one pool per
+ * distinct database URL. When several roles name one URL they share one pool,
+ * which carries the first role's name; `aihub_postgres_pool_role` lists every
+ * role the pool serves. `integration-test` labels the pools database-lane specs
+ * open for themselves.
+ */
+export type PostgresConnectionRole =
+  | 'runtime'
+  | 'control-plane'
+  | 'control-plane-read';
+
+export type PostgresPoolName = PostgresConnectionRole | 'integration-test';
 
 export interface PostgresPoolStatsSample {
   readonly pool: PostgresPoolName;
+  /** The connection roles this pool serves; several share one pool. */
+  readonly roles: readonly PostgresConnectionRole[];
   readonly total: number;
   readonly idle: number;
   readonly waiting: number;
@@ -186,6 +193,29 @@ const postgresPoolWaiting = new Gauge({
   },
 });
 
+// One series per pool and role it serves, always 1. The counts above belong to
+// the pool, so a pool shared by three roles reports once; this is how a
+// dashboard reads "the runtime pool is also the control-plane pool" without the
+// counts being summed three times.
+const postgresPoolRole = new Gauge({
+  name: 'aihub_postgres_pool_role',
+  help: 'Connection roles served by each application pool.',
+  labelNames: ['pool', 'role'],
+  registers: [registry],
+  collect() {
+    this.reset();
+    try {
+      for (const sample of postgresPoolStatsSource?.() ?? []) {
+        for (const role of sample.roles) {
+          this.set({ pool: sample.pool, role }, 1);
+        }
+      }
+    } catch {
+      this.reset();
+    }
+  },
+});
+
 export function setPostgresPoolStatsSource(
   source: PostgresPoolStatsSource | undefined,
 ): void {
@@ -194,6 +224,7 @@ export function setPostgresPoolStatsSource(
     postgresPoolTotal.reset();
     postgresPoolIdle.reset();
     postgresPoolWaiting.reset();
+    postgresPoolRole.reset();
   }
 }
 

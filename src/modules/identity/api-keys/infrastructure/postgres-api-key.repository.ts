@@ -1,5 +1,3 @@
-import { and, eq, isNull, lt, or } from 'drizzle-orm';
-
 import type {
   ApiKeyRecord,
   ApiKeyRepositoryPort,
@@ -8,15 +6,37 @@ import type {
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 
 import {
-  apiKeys,
-  organizations,
-} from '@/modules/identity/shared/infrastructure/drizzle-identity-schema';
-import {
   identityStoreError,
   isRecord,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
-import type { IdentityDatabaseClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  type IdentityRepositoryClient,
+  identityRows,
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+
+type ApiKeyLookupRow = Record<string, unknown>;
+
+const API_KEY_LOOKUP_SQL = `
+  SELECT
+    api_key.organization_id AS "organizationId",
+    api_key.id AS "apiKeyId",
+    organization.status AS "organizationStatus",
+    api_key.status AS status,
+    api_key.scopes AS scopes,
+    organization.entitlements AS entitlements,
+    api_key.allowed_environments AS "allowedEnvironments",
+    api_key.expires_at AS "expiresAt",
+    organization.rate_limit_rpm AS "rateLimitRpm",
+    organization.max_concurrent AS "maxConcurrent",
+    organization.monthly_request_quota AS "monthlyRequestQuota",
+    organization.hard_stop_on_quota AS "hardStopOnQuota"
+  FROM api_keys AS api_key
+  INNER JOIN organizations AS organization
+    ON organization.id = api_key.organization_id
+  WHERE api_key.key_hash = $1
+  LIMIT 1
+`;
 
 function stringArrayValue(
   record: Record<string, unknown>,
@@ -159,7 +179,7 @@ export function apiKeyRecordFromRow(value: unknown): ApiKeyRecord | undefined {
 }
 
 export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
-  constructor(private readonly client: IdentityDatabaseClient) {}
+  constructor(private readonly client: IdentityRepositoryClient) {}
 
   async findByHash(hashHex: string): Promise<ApiKeyRecord | null> {
     if (!/^[0-9a-f]{64}$/.test(hashHex)) {
@@ -181,25 +201,9 @@ export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
 
   private async lookup(hashHex: string) {
     try {
-      return await this.client.db
-        .select({
-          organizationId: apiKeys.organizationId,
-          apiKeyId: apiKeys.id,
-          organizationStatus: organizations.status,
-          status: apiKeys.status,
-          scopes: apiKeys.scopes,
-          entitlements: organizations.entitlements,
-          allowedEnvironments: apiKeys.allowedEnvironments,
-          expiresAt: apiKeys.expiresAt,
-          rateLimitRpm: organizations.rateLimitRpm,
-          maxConcurrent: organizations.maxConcurrent,
-          monthlyRequestQuota: organizations.monthlyRequestQuota,
-          hardStopOnQuota: organizations.hardStopOnQuota,
-        })
-        .from(apiKeys)
-        .innerJoin(organizations, eq(organizations.id, apiKeys.organizationId))
-        .where(eq(apiKeys.keyHash, Buffer.from(hashHex, 'hex')))
-        .limit(1);
+      return (await identityRows(this.client, API_KEY_LOOKUP_SQL, [
+        Buffer.from(hashHex, 'hex'),
+      ])) as readonly ApiKeyLookupRow[];
     } catch {
       throw identityStoreError('Identity store is unavailable');
     }
@@ -207,21 +211,14 @@ export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
 
   async touchLastUsed(apiKeyId: string, usedAt: Date): Promise<void> {
     try {
-      await this.client.db
-        .update(apiKeys)
-        .set({ lastUsedAt: usedAt })
-        .where(
-          and(
-            eq(apiKeys.id, apiKeyId),
-            or(
-              isNull(apiKeys.lastUsedAt),
-              lt(
-                apiKeys.lastUsedAt,
-                new Date(usedAt.getTime() - LAST_USED_THROTTLE_MS),
-              ),
-            ),
-          ),
-        );
+      const throttleCutoff = new Date(usedAt.getTime() - LAST_USED_THROTTLE_MS);
+      await this.client.apiKey.updateMany({
+        where: {
+          id: apiKeyId,
+          OR: [{ lastUsedAt: null }, { lastUsedAt: { lt: throttleCutoff } }],
+        },
+        data: { lastUsedAt: usedAt },
+      });
     } catch {
       throw identityStoreError('Identity store is unavailable');
     }

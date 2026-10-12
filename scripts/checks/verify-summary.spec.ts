@@ -108,6 +108,27 @@ describe('summarize', () => {
     );
     expect(text).toContain('full log: /tmp/v.log');
   });
+
+  it('says a run died for memory, so the cause is not hunted in the code', () => {
+    const log = [
+      '$ jest',
+      'FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory',
+      '[ELIFECYCLE] Command failed with exit code 134.',
+    ].join('\n');
+
+    const text = summarize(log, 134, '/tmp/v.log');
+
+    expect(text).toContain('out of memory, not a code failure');
+  });
+
+  it('does not blame memory for an ordinary failure', () => {
+    const log = [
+      '$ oxlint .',
+      '[ELIFECYCLE] Command failed with exit code 1.',
+    ].join('\n');
+
+    expect(summarize(log, 1, '/tmp/v.log')).not.toContain('out of memory');
+  });
 });
 
 describe('logFileName', () => {

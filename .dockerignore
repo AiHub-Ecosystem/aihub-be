@@ -19,6 +19,9 @@ scripts/cli/*
 !scripts/cli/cli-options.cjs
 !scripts/cli/load-cli-runner.cjs
 !scripts/cli/migrate.mjs
+!scripts/generate/
+scripts/generate/*
+!scripts/generate/generate-prisma-client.mjs
 !scripts/runtime/
 scripts/runtime/*
 !scripts/runtime/runtime-entrypoint.mjs

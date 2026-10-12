@@ -1,3 +1,4 @@
+import { interceptStatements } from '@/modules/persistence/testing/query-fake-client';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
@@ -6,7 +7,7 @@ import { PostgresOrganizationMembershipRepository } from '@/modules/identity/mem
 import type { RenameOrganizationRecordInput } from '@/modules/identity/organizations/application/organization-rename-record.port';
 import { PostgresOrganizationRenameRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-rename.repository';
 import {
-  type PostgresIdentityTransactionalClient,
+  type IdentityFixtureClient,
   createPostgresIdentityClient,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
@@ -17,7 +18,7 @@ import {
 } from './database';
 
 let pool: Pool;
-let client: PostgresIdentityTransactionalClient & { close(): Promise<void> };
+let client: IdentityFixtureClient;
 let repository: PostgresOrganizationRenameRepository;
 
 beforeAll(() => {
@@ -248,18 +249,16 @@ describe('Organization rename against PostgreSQL', () => {
   });
 
   it('leaves the name unchanged when the audit write fails', async () => {
-    const failingAudit = new PostgresOrganizationRenameRepository({
-      query: (text, values) => client.query(text, values),
-      transaction: (callback) =>
-        client.transaction((transaction) =>
-          callback({
-            query: (text, values) =>
-              text.includes('INSERT INTO organization_audit_events')
-                ? Promise.reject(new Error('audit store unavailable'))
-                : transaction.query(text, values),
-          }),
-        ),
-    });
+    const failingAudit = new PostgresOrganizationRenameRepository(
+      interceptStatements(client, (statement) => {
+        if (
+          statement.kind === 'raw' &&
+          statement.text.includes('INSERT INTO organization_audit_events')
+        ) {
+          throw new Error('audit store unavailable');
+        }
+      }),
+    );
 
     await expect(failingAudit.renameOrganization(input())).rejects.toThrow(
       'Identity store is unavailable',

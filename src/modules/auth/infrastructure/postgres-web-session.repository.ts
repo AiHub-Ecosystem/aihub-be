@@ -7,42 +7,15 @@ import type {
   WebSessionRepositoryPort,
 } from '@/modules/auth/application/web-session-repository.port';
 import { authorizeMfaSession } from './auth-mfa-session.guard';
-import type { PostgresAuthClient } from './postgres-auth.client';
+import { type AuthRepositoryClient, authTransaction } from './auth-prisma';
+import { insertWebSession } from './web-session-statements';
 
-export const INSERT_WEB_SESSION_SQL = `
-        INSERT INTO web_sessions (
-          id, user_account_id, token_hash,
-          created_at, expires_at, last_renewed_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $4)
-      `;
-
-/**
- * Revokes every open Web Session of one account, with the same guard the
- * per-session revocation uses, so a row that is already revoked keeps its first
- * revocation instant.
- *
- * Exported because the password reset that ends an account's Refresh Sessions
- * ends its Web Sessions in the same transaction: it cannot call through this
- * adapter, because it has the transaction's query client rather than the pool,
- * and it must run the identical statement so the two cannot drift.
- */
-export const REVOKE_USER_WEB_SESSIONS_SQL = `
-        UPDATE web_sessions
-        SET revoked_at = $2
-        WHERE user_account_id = $1 AND revoked_at IS NULL
-      `;
-
-/**
- * Stores only the token hash. `last_renewed_at` starts equal to `created_at`:
- * creation is the first renewal, so the exchange throttle has a baseline to
- * measure from without a separate column.
- */
+/** Stores only the token hash; see `insertWebSession` for the renewal baseline. */
 export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
-  constructor(private readonly client: PostgresAuthClient) {}
+  constructor(private readonly client: AuthRepositoryClient) {}
 
   async createWebSession(input: CreateWebSessionInput): Promise<boolean> {
-    return this.client.transaction(async (transaction) => {
+    return authTransaction(this.client, async (transaction) => {
       if (
         !(await authorizeMfaSession(
           transaction,
@@ -54,21 +27,20 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
         return false;
 
       // A fresh statement after the lock avoids retaining a pre-reset identity snapshot.
-      const identities = await transaction.query(
-        `SELECT password_hash FROM auth_identities
-         WHERE user_account_id = $1 AND provider = 'password'`,
-        [input.userId],
-      );
-      if (identities[0]?.['password_hash'] !== input.expectedPasswordHash) {
+      const identity = await transaction.authIdentity.findFirst({
+        where: { userAccountId: input.userId, provider: 'password' },
+        select: { passwordHash: true },
+      });
+      if (identity?.passwordHash !== input.expectedPasswordHash) {
         return false;
       }
-      await transaction.query(INSERT_WEB_SESSION_SQL, [
-        input.sessionId,
-        input.userId,
-        input.token.hash,
-        input.now,
-        input.token.expiresAt,
-      ]);
+      await insertWebSession(transaction, {
+        id: input.sessionId,
+        userId: input.userId,
+        tokenHash: input.token.hash,
+        createdAt: input.now,
+        expiresAt: input.token.expiresAt,
+      });
       return true;
     });
   }
@@ -76,21 +48,15 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
   async findExchangeableWebSession(
     input: FindExchangeableWebSessionInput,
   ): Promise<ExchangeableWebSession | undefined> {
-    const rows = await this.client.query(
-      `
-        SELECT user_account_id
-        FROM web_sessions
-        WHERE token_hash = $1
-          AND revoked_at IS NULL
-          AND expires_at > $2
-      `,
-      [input.tokenHash, input.now],
-    );
-    const userId = rows[0]?.['user_account_id'];
-    if (typeof userId !== 'string') {
-      return undefined;
-    }
-    return { userId };
+    const session = await this.client.webSession.findFirst({
+      where: {
+        tokenHash: input.tokenHash,
+        revokedAt: null,
+        expiresAt: { gt: input.now },
+      },
+      select: { userAccountId: true },
+    });
+    return session === null ? undefined : { userId: session.userAccountId };
   }
 
   /**
@@ -105,30 +71,21 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
    * the caller derived, never the row's own value plus an increment, so two
    * concurrent exchanges can only ever settle on the later of the two.
    *
-   * `RETURNING id` is how the caller learns whether a row was written; a
-   * throttled or refused renewal returns no row, which is a normal outcome and
+   * The updated count is how the caller learns whether a row was written; a
+   * throttled or refused renewal updates none, which is a normal outcome and
    * not an error.
    */
   async renewWebSession(input: RenewWebSessionInput): Promise<boolean> {
-    const rows = await this.client.query(
-      `
-        UPDATE web_sessions
-        SET expires_at = $2, last_renewed_at = $3
-        WHERE token_hash = $1
-          AND revoked_at IS NULL
-          AND expires_at > $3
-          AND expires_at < $2
-          AND last_renewed_at <= $4
-        RETURNING id
-      `,
-      [
-        input.tokenHash,
-        input.expiresAt,
-        input.renewedAt,
-        input.renewedAtBefore,
-      ],
-    );
-    return rows.length > 0;
+    const renewed = await this.client.webSession.updateMany({
+      where: {
+        tokenHash: input.tokenHash,
+        revokedAt: null,
+        expiresAt: { gt: input.renewedAt, lt: input.expiresAt },
+        lastRenewedAt: { lte: input.renewedAtBefore },
+      },
+      data: { expiresAt: input.expiresAt, lastRenewedAt: input.renewedAt },
+    });
+    return renewed.count > 0;
   }
 
   /**
@@ -139,15 +96,10 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
    * this is the presented session and nothing else.
    */
   async revokeWebSession(input: RevokeWebSessionInput): Promise<boolean> {
-    const rows = await this.client.query(
-      `
-        UPDATE web_sessions
-        SET revoked_at = $2
-        WHERE token_hash = $1 AND revoked_at IS NULL
-        RETURNING id
-      `,
-      [input.tokenHash, input.revokedAt],
-    );
-    return rows.length > 0;
+    const revoked = await this.client.webSession.updateMany({
+      where: { tokenHash: input.tokenHash, revokedAt: null },
+      data: { revokedAt: input.revokedAt },
+    });
+    return revoked.count > 0;
   }
 }

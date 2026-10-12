@@ -167,6 +167,9 @@ Both containers should show a healthy state. Apply the control-plane schema:
 pnpm migrate
 ```
 
+Changing the schema itself — editing `prisma/schema.prisma` and generating the
+SQL for the next migration — is in the [database guide](database.md).
+
 If migration fails, check that `.env` exists and that PostgreSQL is ready:
 
 ```bash

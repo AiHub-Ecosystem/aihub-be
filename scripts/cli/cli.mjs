@@ -30,6 +30,14 @@ async function loadApiKeyGenerator() {
 const IDENTITY_CONFIG_ALGORITHMS = new Set(['RS256', 'ES256']);
 const DEFAULT_ASSERTION_TTL_SECONDS = 300;
 const MAX_ASSERTION_TTL_SECONDS = 3600;
+const prismaClientFactoryModule = new URL(
+  '../../dist/modules/persistence/infrastructure/prisma-client.js',
+  import.meta.url,
+);
+const idempotencyRepositoryModule = new URL(
+  '../../dist/modules/idempotency/infrastructure/postgres-idempotency.repository.js',
+  import.meta.url,
+);
 const PRIVATE_JWK_MEMBERS = new Set([
   'd',
   'p',
@@ -651,16 +659,42 @@ async function setIdentity(options) {
 }
 
 async function cleanupIdempotency() {
-  const pool = await databasePool();
-  try {
-    const result = await pool.query(
-      `DELETE FROM idempotency_records
-       WHERE expires_at <= now()
-       RETURNING request_id`,
+  const databaseUrl = process.env.DATABASE_URL ?? '';
+  if (databaseUrl.trim().length === 0) {
+    throw new Error('DATABASE_URL is required');
+  }
+  if (
+    !existsSync(prismaClientFactoryModule) ||
+    !existsSync(idempotencyRepositoryModule)
+  ) {
+    throw new Error(
+      'Idempotency cleanup is unavailable. Run "pnpm build" before "idempotency:cleanup".',
     );
-    console.log(`Deleted ${result.rowCount} expired idempotency records`);
+  }
+
+  const [factoryModule, repositoryModule] = await Promise.all([
+    import(prismaClientFactoryModule),
+    import(idempotencyRepositoryModule),
+  ]);
+  const createPrismaClient =
+    factoryModule.createPrismaClient ??
+    factoryModule.default?.createPrismaClient;
+  const PostgresIdempotencyRepository =
+    repositoryModule.PostgresIdempotencyRepository ??
+    repositoryModule.default?.PostgresIdempotencyRepository;
+  if (
+    typeof createPrismaClient !== 'function' ||
+    typeof PostgresIdempotencyRepository !== 'function'
+  ) {
+    throw new Error('Idempotency cleanup is unavailable.');
+  }
+  const client = createPrismaClient('runtime', databaseUrl);
+  try {
+    const repository = new PostgresIdempotencyRepository(client.prisma);
+    const deleted = await repository.cleanupExpired();
+    console.log(`Deleted ${deleted} expired idempotency records`);
   } finally {
-    await pool.end();
+    await client.close();
   }
 }
 

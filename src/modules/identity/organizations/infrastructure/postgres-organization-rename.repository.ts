@@ -19,7 +19,11 @@ import {
   organizationStatusValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
-import type { PostgresIdentityTransactionalClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  type IdentityRepositoryClient,
+  identityRows,
+  identityTransaction,
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 // Organization first, then membership: the order every membership mutation
 // takes, so a rename and a concurrent owner transfer queue rather than deadlock.
@@ -38,12 +42,6 @@ const LOCK_CALLER_MEMBERSHIP_SQL = `
   FOR UPDATE
 `;
 
-const RENAME_ORGANIZATION_SQL = `
-  UPDATE organizations
-  SET name = $2
-  WHERE id = $1
-`;
-
 /**
  * Authority is decided here, under the locks, rather than before the
  * transaction: an owner demoted by a transfer that commits first must find
@@ -52,7 +50,7 @@ const RENAME_ORGANIZATION_SQL = `
 export class PostgresOrganizationRenameRepository
   implements OrganizationRenameRecordPort
 {
-  constructor(private readonly client: PostgresIdentityTransactionalClient) {}
+  constructor(private readonly client: IdentityRepositoryClient) {}
 
   async renameOrganization(
     input: RenameOrganizationRecordInput,
@@ -61,76 +59,81 @@ export class PostgresOrganizationRenameRepository
     let refused: OrganizationAuditDraft | undefined;
 
     try {
-      const result = await this.client.transaction(async (transaction) => {
-        const organizationRows = await transaction.query(
-          LOCK_ORGANIZATION_SQL,
-          [input.organizationId],
-        );
-        const organization = organizationRows[0];
-        if (!isRecord(organization)) {
-          return { kind: 'forbidden' as const };
-        }
-        const currentName = stringValue(organization, 'name');
-        const status = organizationStatusValue(organization, 'status');
-        if (currentName === undefined || status === undefined) {
-          throw identityStoreError('Identity data is invalid');
-        }
+      const result = await identityTransaction(
+        this.client,
+        async (transaction) => {
+          const organizationRows = await identityRows(
+            transaction,
+            LOCK_ORGANIZATION_SQL,
+            [input.organizationId],
+          );
+          const organization = organizationRows[0];
+          if (!isRecord(organization)) {
+            return { kind: 'forbidden' as const };
+          }
+          const currentName = stringValue(organization, 'name');
+          const status = organizationStatusValue(organization, 'status');
+          if (currentName === undefined || status === undefined) {
+            throw identityStoreError('Identity data is invalid');
+          }
 
-        const membershipRows = await transaction.query(
-          LOCK_CALLER_MEMBERSHIP_SQL,
-          [input.organizationId, input.userId],
-        );
-        const membership = membershipRows[0];
-        if (!isRecord(membership)) {
-          return { kind: 'forbidden' as const };
-        }
-        const role = membershipRoleValue(membership, 'role');
-        const membershipStatus = membershipStatusValue(membership, 'status');
-        if (role === undefined || membershipStatus === undefined) {
-          throw identityStoreError('Identity data is invalid');
-        }
+          const membershipRows = await identityRows(
+            transaction,
+            LOCK_CALLER_MEMBERSHIP_SQL,
+            [input.organizationId, input.userId],
+          );
+          const membership = membershipRows[0];
+          if (!isRecord(membership)) {
+            return { kind: 'forbidden' as const };
+          }
+          const role = membershipRoleValue(membership, 'role');
+          const membershipStatus = membershipStatusValue(membership, 'status');
+          if (role === undefined || membershipStatus === undefined) {
+            throw identityStoreError('Identity data is invalid');
+          }
 
-        // Neither refusal is recorded: a disabled caller no longer belongs,
-        // and suspension closes the surface for every role alike.
-        if (membershipStatus !== 'active' || status === 'suspended') {
-          return { kind: 'forbidden' as const };
-        }
-        if (role !== 'owner') {
-          refused = {
+          // Neither refusal is recorded: a disabled caller no longer belongs,
+          // and suspension closes the surface for every role alike.
+          if (membershipStatus !== 'active' || status === 'suspended') {
+            return { kind: 'forbidden' as const };
+          }
+          if (role !== 'owner') {
+            refused = {
+              action: 'organization.renamed',
+              organizationId: input.organizationId,
+              name: currentName,
+              denial: 'insufficient_authority',
+            };
+            return { kind: 'forbidden' as const };
+          }
+
+          // A repeat of the current name is a delivery, not an act.
+          if (currentName === input.name) {
+            return {
+              kind: 'unchanged' as const,
+              organizationId: input.organizationId,
+              name: currentName,
+            };
+          }
+
+          await transaction.organization.update({
+            where: { id: input.organizationId },
+            data: { name: input.name },
+          });
+          await recordOrganizationAuditEvent(transaction, stamp, {
             action: 'organization.renamed',
             organizationId: input.organizationId,
-            name: currentName,
-            denial: 'insufficient_authority',
-          };
-          return { kind: 'forbidden' as const };
-        }
+            name: input.name,
+            previousName: currentName,
+          });
 
-        // A repeat of the current name is a delivery, not an act.
-        if (currentName === input.name) {
           return {
-            kind: 'unchanged' as const,
+            kind: 'renamed' as const,
             organizationId: input.organizationId,
-            name: currentName,
+            name: input.name,
           };
-        }
-
-        await transaction.query(RENAME_ORGANIZATION_SQL, [
-          input.organizationId,
-          input.name,
-        ]);
-        await recordOrganizationAuditEvent(transaction, stamp, {
-          action: 'organization.renamed',
-          organizationId: input.organizationId,
-          name: input.name,
-          previousName: currentName,
-        });
-
-        return {
-          kind: 'renamed' as const,
-          organizationId: input.organizationId,
-          name: input.name,
-        };
-      });
+        },
+      );
 
       if (refused !== undefined) {
         await recordOrganizationAuditDenial(this.client, stamp, refused);

@@ -8,9 +8,9 @@ import type {
   OrganizationEntitlementPort,
 } from '@/modules/identity/organizations/application/organization-entitlement.port';
 import { PostgresOrganizationEntitlementRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-entitlement.repository';
-import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import Redis from 'ioredis';
 import { runOperatorCommand } from './operator-command-context';
+import { createOperatorIdentityClient } from './operator-identity-client';
 
 export interface GrantOrganizationEntitlementCliInput {
   readonly databaseUrl: string;
@@ -67,7 +67,7 @@ export async function runGrantOrganizationEntitlementCommand(
   const repository =
     input.repository ??
     new PostgresOrganizationEntitlementRepository(
-      createPostgresIdentityClient(input.databaseUrl),
+      await createOperatorIdentityClient(input.databaseUrl),
     );
   const { result, context } = await runOperatorCommand(
     repository,

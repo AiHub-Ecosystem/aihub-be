@@ -1,7 +1,8 @@
-import { type QueryConfig } from 'pg';
+import { createPrismaClient } from '@/modules/persistence/persistence.module';
+import type { Prisma, PrismaClient } from '@prisma-client/client';
+import { authQueryRows, authTransaction } from './auth-prisma';
 
-import { createPostgresPool } from '@/common/postgres/postgres-pool';
-
+/** Query API a database-lane fixture adds to its Prisma client for assertions. */
 export interface PostgresAuthQueryClient {
   query(
     text: string,
@@ -9,84 +10,85 @@ export interface PostgresAuthQueryClient {
   ): Promise<readonly Record<string, unknown>[]>;
 }
 
-export interface PostgresAuthClient extends PostgresAuthQueryClient {
-  checkConnection(timeoutMs: number): Promise<void>;
-  transaction<T>(
-    callback: (client: PostgresAuthQueryClient) => Promise<T>,
-  ): Promise<T>;
-  close(): Promise<void>;
+/**
+ * A Prisma client with the helpers database-lane specs assert through. It is
+ * the same client a repository takes, so a fixture cannot pass on behavior the
+ * runtime does not have.
+ */
+export type PostgresAuthClient = PrismaClient &
+  PostgresAuthQueryClient & {
+    checkConnection(timeoutMs: number): Promise<void>;
+    /** The callback's handle is the guarded Prisma transaction, plus `query`. */
+    transaction<T>(
+      callback: (
+        client: Prisma.TransactionClient & PostgresAuthQueryClient,
+      ) => Promise<T>,
+    ): Promise<T>;
+    close(): Promise<void>;
+  };
+
+function withQuery(
+  transaction: Prisma.TransactionClient,
+): Prisma.TransactionClient & PostgresAuthQueryClient {
+  return new Proxy(transaction, {
+    get(target, property) {
+      if (property === 'query') {
+        return (text: string, values: readonly unknown[]) =>
+          authQueryRows(target, text, values);
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  }) as Prisma.TransactionClient & PostgresAuthQueryClient;
 }
 
-export const POSTGRES_AUTH_CLIENT = Symbol('POSTGRES_AUTH_CLIENT');
+function fixtureClient(
+  prisma: PrismaClient,
+  checkConnection: (timeoutMs: number) => Promise<void>,
+  close: () => Promise<void>,
+): PostgresAuthClient {
+  const helpers = {
+    query: (text: string, values: readonly unknown[]) =>
+      authQueryRows(prisma, text, values),
+    transaction: <T>(
+      callback: (
+        client: Prisma.TransactionClient & PostgresAuthQueryClient,
+      ) => Promise<T>,
+    ) =>
+      authTransaction(prisma, (transaction) =>
+        callback(withQuery(transaction)),
+      ),
+    checkConnection,
+    close,
+  };
 
+  return new Proxy(prisma, {
+    get(target, property) {
+      if (property in helpers) {
+        return helpers[property as keyof typeof helpers];
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  }) as PostgresAuthClient;
+}
+
+/** Test-only factory for database-lane fixtures; production injects Prisma. */
 export function createPostgresAuthClient(
   databaseUrl: string,
 ): PostgresAuthClient {
   if (databaseUrl.trim().length === 0) {
-    return {
-      query: async () => {
-        throw new Error('DATABASE_URL is missing');
-      },
-      transaction: async () => {
-        throw new Error('DATABASE_URL is missing');
-      },
-      checkConnection: async () => {
-        throw new Error('DATABASE_URL is missing');
-      },
-      close: async () => undefined,
+    const missingDatabaseUrl = (): never => {
+      throw new Error('DATABASE_URL is missing');
     };
+    return fixtureClient(
+      new Proxy({} as PrismaClient, { get: () => missingDatabaseUrl() }),
+      async () => missingDatabaseUrl(),
+      async () => undefined,
+    );
   }
 
-  const pool = createPostgresPool('auth', {
-    connectionString: databaseUrl,
-    max: 10,
-    connectionTimeoutMillis: 1_000,
-    idleTimeoutMillis: 30_000,
-  });
+  const holder = createPrismaClient('integration-test', databaseUrl);
 
-  return {
-    async checkConnection(timeoutMs) {
-      // pg reads query_timeout per query at runtime; @types/pg only declares it on PoolConfig.
-      await pool.query({
-        text: 'SELECT 1',
-        query_timeout: timeoutMs,
-      } as QueryConfig);
-    },
-    async query(text, values) {
-      const result = await pool.query<Record<string, unknown>>(text, [
-        ...values,
-      ]);
-      return result.rows;
-    },
-    async transaction<T>(
-      callback: (client: PostgresAuthQueryClient) => Promise<T>,
-    ) {
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        const result = await callback({
-          query: async (text: string, values: readonly unknown[]) => {
-            const response = await client.query<Record<string, unknown>>(text, [
-              ...values,
-            ]);
-            return response.rows;
-          },
-        });
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        try {
-          await client.query('ROLLBACK');
-        } catch {
-          // Preserve the original database failure.
-        }
-        throw error;
-      } finally {
-        client.release();
-      }
-    },
-    close: async () => {
-      await pool.end();
-    },
-  };
+  return fixtureClient(holder.prisma, holder.checkConnection, holder.close);
 }

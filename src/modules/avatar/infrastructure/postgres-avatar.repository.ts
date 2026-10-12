@@ -1,5 +1,3 @@
-import { createPostgresPool } from '@/common/postgres/postgres-pool';
-
 import { AppError } from '@/common/errors/app-error';
 import type {
   AvatarRepositoryPort,
@@ -9,21 +7,14 @@ import {
   type Avatar,
   isAvatarContentType,
 } from '@/modules/avatar/domain/avatar';
+import type { PrismaClient, UserAvatar } from '@prisma-client/client';
 
-const FIND_BY_USER_SQL = `
-  SELECT id, user_account_id, object_key, content_type, byte_size, accepted_at
-  FROM user_avatars
-  WHERE user_account_id = $1
-`;
-
-const RECORDED_KEYS_SQL = `
-  SELECT object_key
-  FROM user_avatars
-  WHERE object_key = ANY($1::text[])
-`;
+export { createAvatarQueryClient } from './postgres-avatar.fixture-client';
 
 // The unique constraint on the account is what keeps one Avatar per account,
-// including under two concurrent completions.
+// including under two concurrent completions. The conflict target has to stay
+// `(user_account_id)`: a collision on the asset id or the object key is a bug
+// to surface, and `createMany({ skipDuplicates })` would swallow it.
 const INSERT_SQL = `
   INSERT INTO user_avatars
     (id, user_account_id, object_key, content_type, byte_size, accepted_at)
@@ -32,29 +23,8 @@ const INSERT_SQL = `
   RETURNING id
 `;
 
-// Conditional on the asset the caller read: a concurrent change makes these
-// match nothing, and the caller learns it lost rather than overwriting.
-const REPLACE_SQL = `
-  UPDATE user_avatars
-  SET id = $3, object_key = $4, content_type = $5, byte_size = $6,
-      accepted_at = $7
-  WHERE user_account_id = $1
-    AND id = $2
-  RETURNING id
-`;
-
-const DELETE_SQL = `
-  DELETE FROM user_avatars
-  WHERE user_account_id = $1
-    AND id = $2
-  RETURNING id
-`;
-
-export interface AvatarQueryClient {
-  query(
-    text: string,
-    values: readonly unknown[],
-  ): Promise<{ readonly rows: readonly Record<string, unknown>[] }>;
+interface AvatarIdRow {
+  readonly id: unknown;
 }
 
 function storeError(cause: unknown): AppError {
@@ -66,37 +36,32 @@ function storeError(cause: unknown): AppError {
   });
 }
 
-function mapRow(row: Record<string, unknown> | undefined): Avatar | undefined {
-  if (row === undefined) {
+function mapRow(row: UserAvatar | null): Avatar | undefined {
+  if (row === null) {
     return undefined;
   }
-  const {
-    id,
-    user_account_id: userId,
-    object_key: objectKey,
-    content_type: contentType,
-    byte_size: byteSize,
-    accepted_at: acceptedAt,
-  } = row;
-  if (
-    typeof id !== 'string' ||
-    typeof userId !== 'string' ||
-    typeof objectKey !== 'string' ||
-    typeof contentType !== 'string' ||
-    !isAvatarContentType(contentType) ||
-    typeof byteSize !== 'number' ||
-    !(acceptedAt instanceof Date)
-  ) {
+  if (!isAvatarContentType(row.contentType)) {
     throw storeError(new Error('Avatar row is invalid'));
   }
-  return { assetId: id, userId, objectKey, contentType, byteSize, acceptedAt };
+  return {
+    assetId: row.id,
+    userId: row.userAccountId,
+    objectKey: row.objectKey,
+    contentType: row.contentType,
+    byteSize: row.byteSize,
+    acceptedAt: row.acceptedAt,
+  };
 }
 
 export class PostgresAvatarRepository implements AvatarRepositoryPort {
-  constructor(private readonly client: AvatarQueryClient) {}
+  constructor(private readonly client: PrismaClient) {}
 
   async findByUser(userId: string): Promise<Avatar | undefined> {
-    return mapRow((await this.run(FIND_BY_USER_SQL, [userId]))[0]);
+    return mapRow(
+      await this.run(() =>
+        this.client.userAvatar.findUnique({ where: { userAccountId: userId } }),
+      ),
+    );
   }
 
   async recordedObjectKeys(
@@ -105,23 +70,27 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
     if (objectKeys.length === 0) {
       return new Set();
     }
-    const rows = await this.run(RECORDED_KEYS_SQL, [[...objectKeys]]);
-    return new Set(
-      rows.flatMap((row) =>
-        typeof row.object_key === 'string' ? [row.object_key] : [],
-      ),
+    const rows = await this.run(() =>
+      this.client.userAvatar.findMany({
+        where: { objectKey: { in: [...objectKeys] } },
+        select: { objectKey: true },
+      }),
     );
+    return new Set(rows.map((row) => row.objectKey));
   }
 
   async record(avatar: Avatar): Promise<RecordAvatarResult> {
-    const inserted = await this.run(INSERT_SQL, [
-      avatar.assetId,
-      avatar.userId,
-      avatar.objectKey,
-      avatar.contentType,
-      avatar.byteSize,
-      avatar.acceptedAt,
-    ]);
+    const inserted = await this.run(() =>
+      this.client.$queryRawUnsafe<readonly AvatarIdRow[]>(
+        INSERT_SQL,
+        avatar.assetId,
+        avatar.userId,
+        avatar.objectKey,
+        avatar.contentType,
+        avatar.byteSize,
+        avatar.acceptedAt,
+      ),
+    );
     if (inserted.length === 1) {
       return { kind: 'recorded', avatar };
     }
@@ -133,59 +102,38 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
     return { kind: 'exists' };
   }
 
+  // Conditional on the asset the caller read: a concurrent change makes the
+  // update match nothing, and the caller learns it lost rather than overwriting.
   async replace(previousAssetId: string, avatar: Avatar): Promise<boolean> {
-    const updated = await this.run(REPLACE_SQL, [
-      avatar.userId,
-      previousAssetId,
-      avatar.assetId,
-      avatar.objectKey,
-      avatar.contentType,
-      avatar.byteSize,
-      avatar.acceptedAt,
-    ]);
-    return updated.length === 1;
+    const updated = await this.run(() =>
+      this.client.userAvatar.updateMany({
+        where: { userAccountId: avatar.userId, id: previousAssetId },
+        data: {
+          id: avatar.assetId,
+          objectKey: avatar.objectKey,
+          contentType: avatar.contentType,
+          byteSize: avatar.byteSize,
+          acceptedAt: avatar.acceptedAt,
+        },
+      }),
+    );
+    return updated.count === 1;
   }
 
   async remove(userId: string, assetId: string): Promise<boolean> {
-    return (await this.run(DELETE_SQL, [userId, assetId])).length === 1;
+    const deleted = await this.run(() =>
+      this.client.userAvatar.deleteMany({
+        where: { userAccountId: userId, id: assetId },
+      }),
+    );
+    return deleted.count === 1;
   }
 
-  private async run(
-    sql: string,
-    values: readonly unknown[],
-  ): Promise<readonly Record<string, unknown>[]> {
+  private async run<T>(operation: () => Promise<T>): Promise<T> {
     try {
-      return (await this.client.query(sql, values)).rows;
+      return await operation();
     } catch (error) {
       throw storeError(error);
     }
   }
-}
-
-/**
- * The module's own pool, closed with the application. An empty URL yields a
- * client that fails every query, as the other modules' clients do.
- */
-export function createAvatarQueryClient(
-  databaseUrl: string,
-): AvatarQueryClient & { close(): Promise<void> } {
-  if (databaseUrl.trim().length === 0) {
-    return {
-      query: async () => {
-        throw new Error('DATABASE_URL is missing');
-      },
-      close: async () => undefined,
-    };
-  }
-  const pool = createPostgresPool('avatar', {
-    connectionString: databaseUrl,
-    max: 5,
-    connectionTimeoutMillis: 1_000,
-    idleTimeoutMillis: 30_000,
-  });
-  return {
-    query: (text, values) =>
-      pool.query<Record<string, unknown>>(text, [...values]),
-    close: () => pool.end(),
-  };
 }

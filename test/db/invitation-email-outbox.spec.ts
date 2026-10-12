@@ -31,10 +31,11 @@ import {
 } from '@/modules/identity/invitations/application/organization-invitation.port';
 import { PostgresOrganizationInvitationRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository';
 import {
-  type PostgresIdentityQueryClient,
-  type PostgresIdentityTransactionalClient,
+  type IdentityFixtureClient,
   createPostgresIdentityClient,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import { interceptStatements } from '@/modules/persistence/testing/query-fake-client';
+import type { PrismaClient } from '@prisma-client/client';
 
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import {
@@ -50,41 +51,34 @@ const BEARER = 'Bearer valid.token.value';
 
 /**
  * The real client, with one lever: failing the outbox insert is how the suite
- * checks that the invitation and its audit event are rolled back with it.
+ * checks that the invitation and its audit event are rolled back with it. The
+ * insert is a model-delegate call, so the hook sits in front of every statement.
  */
-class SwitchableIdentityClient implements PostgresIdentityTransactionalClient {
+class SwitchableIdentityClient {
   failOutboxInserts = false;
 
-  constructor(
-    private readonly inner: PostgresIdentityTransactionalClient & {
-      close(): Promise<void>;
-    },
-  ) {}
+  private readonly intercepted: PrismaClient;
 
-  query(text: string, values: readonly unknown[]): Promise<readonly unknown[]> {
-    return this.inner.query(text, values);
+  constructor(private readonly inner: IdentityFixtureClient) {
+    this.intercepted = interceptStatements(inner, (statement) => {
+      const insertsOutboxRow =
+        statement.kind === 'raw'
+          ? statement.text.includes('INSERT INTO email_delivery_requests')
+          : statement.model === 'emailDeliveryRequest' &&
+            statement.action === 'create';
+      if (this.failOutboxInserts && insertsOutboxRow) {
+        throw new Error('email delivery request store is unavailable');
+      }
+    });
+  }
+
+  /** The Prisma client a repository takes. */
+  asPrisma(): PrismaClient {
+    return this.intercepted;
   }
 
   close(): Promise<void> {
     return this.inner.close();
-  }
-
-  transaction<T>(
-    callback: (client: PostgresIdentityQueryClient) => Promise<T>,
-  ): Promise<T> {
-    return this.inner.transaction<T>((client) =>
-      callback({
-        query: async (text, values) => {
-          if (
-            this.failOutboxInserts &&
-            text.includes('INSERT INTO email_delivery_requests')
-          ) {
-            throw new Error('email delivery request store is unavailable');
-          }
-          return client.query(text, values);
-        },
-      }),
-    );
   }
 }
 
@@ -146,7 +140,7 @@ beforeAll(async () => {
 
   const invitations: OrganizationInvitationPort =
     new PostgresOrganizationInvitationRepository(
-      identityClient,
+      identityClient.asPrisma(),
       cipher,
       new PostgresEmailDeliveryRequestRepository(),
     );

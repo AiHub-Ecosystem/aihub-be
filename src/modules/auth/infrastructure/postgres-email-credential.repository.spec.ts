@@ -1,74 +1,93 @@
+import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
 import { PostgresEmailCredentialRepository } from './postgres-email-credential.repository';
-import type { EmailDeliveryQueryClient } from './postgres-email-delivery-request.repository';
 
 const NOW = new Date('2026-10-05T12:00:00.000Z');
 const TOKEN_HASH = 'a'.repeat(64);
 
-function clientReturning(rows: readonly Record<string, unknown>[]) {
-  const client: EmailDeliveryQueryClient = {
-    query: async (): Promise<readonly Record<string, unknown>[]> => rows,
-  };
-  return client;
-}
-
+/** The row the credential table answers with, or none for an absent one. */
 function check(
-  rows: readonly Record<string, unknown>[],
-  client: EmailDeliveryQueryClient = clientReturning(rows),
-): Promise<string> {
-  return new PostgresEmailCredentialRepository(client).check({
-    kind: 'verification_email',
+  row: Record<string, unknown> | null,
+  kind:
+    | 'verification_email'
+    | 'password_reset_email'
+    | 'organization_invite_email' = 'verification_email',
+) {
+  const script = new ScriptedPrisma();
+  script.outside = [row];
+  const result = new PostgresEmailCredentialRepository(script.client()).check({
+    kind,
     tokenHash: TOKEN_HASH,
     now: NOW,
   });
+  return { result, script };
 }
 
 describe('PostgresEmailCredentialRepository', () => {
   it('reads an open, unexpired credential as actionable', async () => {
     await expect(
-      check([
-        {
-          expires_at: new Date(NOW.getTime() + 60_000),
-          consumed_at: null,
-        },
-      ]),
+      check({ expiresAt: new Date(NOW.getTime() + 60_000), consumedAt: null })
+        .result,
     ).resolves.toBe('actionable');
   });
 
   it('reads a closed credential as closed whatever consumed it', async () => {
     await expect(
-      check([
-        {
-          expires_at: new Date(NOW.getTime() + 60_000),
-          consumed_at: new Date(NOW.getTime() - 1),
-        },
-      ]),
+      check({
+        expiresAt: new Date(NOW.getTime() + 60_000),
+        consumedAt: new Date(NOW.getTime() - 1),
+      }).result,
     ).resolves.toBe('closed');
   });
 
   it('reads a credential that expired at this instant as expired', async () => {
-    await expect(check([{ expires_at: NOW, consumed_at: null }])).resolves.toBe(
-      'expired',
-    );
+    await expect(
+      check({ expiresAt: NOW, consumedAt: null }).result,
+    ).resolves.toBe('expired');
   });
 
   it('reads an absent credential as missing', async () => {
-    await expect(check([])).resolves.toBe('missing');
+    await expect(check(null).result).resolves.toBe('missing');
   });
 
   it.each([
+    ['verification_email', 'emailVerificationToken.findUnique'],
+    ['password_reset_email', 'passwordResetToken.findUnique'],
+    ['organization_invite_email', 'organizationInvitation.findUnique'],
+  ] as const)(
+    'reads a %s from its own table by token hash',
+    async (kind, name) => {
+      const { result, script } = check(null, kind);
+      await result;
+
+      expect(script.statements).toEqual([
+        {
+          name,
+          args: [
+            {
+              where: { tokenHash: TOKEN_HASH },
+              select: { expiresAt: true, consumedAt: true },
+            },
+          ],
+          transaction: 0,
+        },
+      ]);
+    },
+  );
+
+  it.each([
     ['no expiry column', {}],
-    ['a null expiry column', { expires_at: null, consumed_at: null }],
-    ['an expiry that is not a date', { expires_at: 'tomorrow' }],
-    ['an invalid expiry', { expires_at: new Date('never') }],
-    ['a consumed column that is not a date', { consumed_at: 'earlier' }],
+    ['a null expiry column', { expiresAt: null, consumedAt: null }],
+    ['an expiry that is not a date', { expiresAt: 'tomorrow' }],
+    ['an invalid expiry', { expiresAt: new Date('never') }],
+    ['a consumed column that is not a date', { consumedAt: 'earlier' }],
     [
       'a consumed column that is an invalid date',
-      { consumed_at: new Date(NaN) },
+      { expiresAt: NOW, consumedAt: new Date(NaN) },
     ],
   ])(
     'refuses a row with %s rather than deciding on a cast',
-    async (_l, row) => {
-      await expect(check([row])).rejects.toMatchObject({
+    async (_label, row) => {
+      await expect(check(row).result).rejects.toMatchObject({
         code: 'INTERNAL_ERROR',
       });
     },

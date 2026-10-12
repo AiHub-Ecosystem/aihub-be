@@ -235,6 +235,13 @@ jobs:
       - name: Run the database-backed lane
         run: pnpm test:db
 
+      # `schema.prisma` and the migration history describe the same schema. This
+      # builds one from the migrations in a scratch database and fails when
+      # Prisma would change anything to reach the schema, so the two cannot
+      # drift apart silently.
+      - name: Check the Prisma schema against the migration history
+        run: pnpm check:prisma-drift
+
   tenant-isolation:
     name: Tenant isolation
     runs-on: ubuntu-latest

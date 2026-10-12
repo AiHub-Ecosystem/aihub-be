@@ -38,6 +38,15 @@ describe('identityConfigFromRow', () => {
     ).toBe('9007199254740993');
   });
 
+  it('keeps a normalized raw bigint version exact', () => {
+    expect(
+      identityConfigFromRow({
+        ...row,
+        jwksCacheVersion: '9007199254740993',
+      })?.jwksCacheVersion,
+    ).toBe('9007199254740993');
+  });
+
   it('keeps an inline key set and a disabled status', () => {
     expect(
       identityConfigFromRow({

@@ -6,10 +6,10 @@ import {
 } from '@/modules/gateway/application/quota-counter.port';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
 import {
-  RUNTIME_CONNECTION_CONFIGURATION,
-  type RuntimeConnectionConfigurationPort,
-} from '@/modules/secrets/application/runtime-connection-configuration.port';
-import { SecretsModule } from '@/modules/secrets/secrets.module';
+  PersistenceModule,
+  type PrismaClientHolder,
+  RUNTIME_PRISMA_CLIENT,
+} from '@/modules/persistence/persistence.module';
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
@@ -24,25 +24,18 @@ import {
   type UsageRepositoryPort,
 } from './application/usage-repository.port';
 import { NestMeteringFailureLogger } from './infrastructure/nest-metering-failure.logger';
-import {
-  PostgresUsageRepository,
-  createPostgresMeteringClient,
-} from './infrastructure/postgres-usage.repository';
+import { PostgresUsageRepository } from './infrastructure/postgres-usage.repository';
 import { HttpExceptionFilter } from './presentation/http-exception.filter';
 import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.interceptor';
 
 @Module({
-  imports: [SecretsModule, GatewayModule],
+  imports: [PersistenceModule, GatewayModule],
   providers: [
     {
       provide: USAGE_REPOSITORY,
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
-      useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
-      ): UsageRepositoryPort =>
-        new PostgresUsageRepository(
-          createPostgresMeteringClient(configuration.databaseUrl ?? ''),
-        ),
+      inject: [RUNTIME_PRISMA_CLIENT],
+      useFactory: (runtime: PrismaClientHolder): UsageRepositoryPort =>
+        new PostgresUsageRepository(runtime.prisma),
     },
     {
       provide: METERING_FAILURE_LOGGER,

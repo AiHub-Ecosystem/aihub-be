@@ -20,6 +20,11 @@ import {
   type DispatchAttemptRecordPort,
 } from '@/modules/metering/public/dispatch-attempts';
 import {
+  PersistenceModule,
+  type PrismaClientHolder,
+  RUNTIME_PRISMA_CLIENT,
+} from '@/modules/persistence/persistence.module';
+import {
   RUNTIME_CONNECTION_CONFIGURATION,
   type RuntimeConnectionConfigurationPort,
 } from '@/modules/secrets/application/runtime-connection-configuration.port';
@@ -70,6 +75,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     SecretsModule,
     IdempotencyModule,
     DispatchAttemptModule,
+    PersistenceModule,
   ],
   providers: [
     {
@@ -145,11 +151,9 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     },
     {
       provide: SANDBOX_DISPATCH_BUDGET,
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
-      useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
-      ): SandboxDispatchBudgetPort =>
-        new PostgresSandboxDispatchBudget(configuration.databaseUrl ?? ''),
+      inject: [RUNTIME_PRISMA_CLIENT],
+      useFactory: (runtime: PrismaClientHolder): SandboxDispatchBudgetPort =>
+        new PostgresSandboxDispatchBudget(runtime.prisma),
     },
     {
       provide: OPERATION_DISPATCHER,

@@ -4,10 +4,6 @@ import type {
   SpeakingAudioUploadRepositoryPort,
 } from '@/modules/speaking/application/speaking-audio-upload.port';
 import { SpeakingAudioUploadSweep } from '@/modules/speaking/application/speaking-audio-upload.sweep';
-import {
-  PostgresSpeakingAudioUploadRepository,
-  createSpeakingAudioQueryClient,
-} from '@/modules/speaking/infrastructure/postgres-speaking-audio-upload.repository';
 import { S3SpeakingAudioAssetStorage } from '@/modules/speaking/infrastructure/s3-speaking-audio-asset.storage';
 import { createCliRuntimeSecretProvider } from './runtime-secret-provider';
 
@@ -29,23 +25,23 @@ export interface SpeakingAudioUploadSweepCliInput {
   readonly now?: () => Date;
 }
 
-function openRepository(
+async function openRepository(
   input: SpeakingAudioUploadSweepCliInput,
-): ClosableUploadRepository {
+): Promise<ClosableUploadRepository> {
   if (input.repository !== undefined) {
     return input.repository;
   }
-  const client = createSpeakingAudioQueryClient(input.databaseUrl);
-  return Object.assign(new PostgresSpeakingAudioUploadRepository(client), {
-    close: () => client.close(),
-  });
+  const { createOperatorSpeakingAudioClient } = await import(
+    './operator-speaking-audio-client'
+  );
+  return createOperatorSpeakingAudioClient(input.databaseUrl);
 }
 
 /** Prints only counts; object keys and End-User IDs never enter operator output. */
 export async function runSpeakingAudioUploadSweepCommand(
   input: SpeakingAudioUploadSweepCliInput,
 ) {
-  const repository = openRepository(input);
+  const repository = await openRepository(input);
   let storage = input.storage;
   if (storage === undefined) {
     const secretProvider = createCliRuntimeSecretProvider();

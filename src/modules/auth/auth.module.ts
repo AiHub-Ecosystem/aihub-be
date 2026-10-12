@@ -14,6 +14,11 @@ import {
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import { EmailDeliveryPoller } from '@/modules/auth/application/email-delivery-poller';
 import {
+  PersistenceModule,
+  type PrismaClientHolder,
+  RUNTIME_PRISMA_CLIENT,
+} from '@/modules/persistence/persistence.module';
+import {
   RUNTIME_CONNECTION_CONFIGURATION,
   type RuntimeConnectionConfigurationPort,
 } from '@/modules/secrets/application/runtime-connection-configuration.port';
@@ -96,11 +101,6 @@ import {
   USER_ACCESS_TOKEN_CRYPTO,
 } from './infrastructure/jose-user-access-token.service';
 import { PostgresAuthMfaRepository } from './infrastructure/postgres-auth-mfa.repository';
-import {
-  POSTGRES_AUTH_CLIENT,
-  type PostgresAuthClient,
-  createPostgresAuthClient,
-} from './infrastructure/postgres-auth.client';
 import { PostgresEmailCredentialRepository } from './infrastructure/postgres-email-credential.repository';
 import {
   PostgresEmailDeliveryRequestRepository,
@@ -120,35 +120,27 @@ import {
 } from './public/postgres-readiness';
 
 @Module({
-  imports: [RuntimeConfigurationModule, SecretsModule],
+  imports: [RuntimeConfigurationModule, PersistenceModule, SecretsModule],
   controllers: [LocalAuthController, WebSessionController],
   providers: [
     {
-      provide: POSTGRES_AUTH_CLIENT,
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
-      useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
-      ): PostgresAuthClient =>
-        createPostgresAuthClient(configuration.databaseUrl ?? ''),
-    },
-    {
       provide: AUTH_POSTGRES_READINESS,
-      inject: [POSTGRES_AUTH_CLIENT],
-      useFactory: (client: PostgresAuthClient): AuthPostgresReadiness => ({
-        check: (timeoutMs) => client.checkConnection(timeoutMs),
+      inject: [RUNTIME_PRISMA_CLIENT],
+      useFactory: (runtime: PrismaClientHolder): AuthPostgresReadiness => ({
+        check: (timeoutMs) => runtime.checkConnection(timeoutMs),
       }),
     },
     {
       provide: PostgresLocalAuthRepository,
-      inject: [POSTGRES_AUTH_CLIENT],
-      useFactory: (client: PostgresAuthClient): PostgresLocalAuthRepository =>
-        new PostgresLocalAuthRepository(client),
+      inject: [RUNTIME_PRISMA_CLIENT],
+      useFactory: (runtime: PrismaClientHolder): PostgresLocalAuthRepository =>
+        new PostgresLocalAuthRepository(runtime.prisma),
     },
     {
       provide: AUTH_MFA_REPOSITORY,
-      inject: [POSTGRES_AUTH_CLIENT],
-      useFactory: (client: PostgresAuthClient): PostgresAuthMfaRepository =>
-        new PostgresAuthMfaRepository(client),
+      inject: [RUNTIME_PRISMA_CLIENT],
+      useFactory: (runtime: PrismaClientHolder): PostgresAuthMfaRepository =>
+        new PostgresAuthMfaRepository(runtime.prisma),
     },
     {
       provide: AUTH_MFA_CIPHER,
@@ -177,8 +169,7 @@ import {
         AUTH_CLOCK,
       ],
     },
-    // One Postgres adapter backs all four aggregate ports, so the pool and its
-    // shutdown stay single.
+    // One Prisma adapter backs all Auth repositories through the shared runtime client.
     {
       provide: USER_ACCOUNT_REPOSITORY,
       useExisting: PostgresLocalAuthRepository,
@@ -200,9 +191,9 @@ import {
       // they get their own adapter over the same pool: the pool and its shutdown
       // stay single without this module's data living in one giant class.
       provide: PostgresWebSessionRepository,
-      inject: [POSTGRES_AUTH_CLIENT],
-      useFactory: (client: PostgresAuthClient): PostgresWebSessionRepository =>
-        new PostgresWebSessionRepository(client),
+      inject: [RUNTIME_PRISMA_CLIENT],
+      useFactory: (runtime: PrismaClientHolder): PostgresWebSessionRepository =>
+        new PostgresWebSessionRepository(runtime.prisma),
     },
     {
       provide: WEB_SESSION_REPOSITORY,
@@ -315,13 +306,13 @@ import {
     {
       provide: EmailDeliveryPoller,
       useFactory: (
-        client: PostgresAuthClient,
+        runtime: PrismaClientHolder,
         cipher: EmailPayloadCipherPort,
         sender: EmailSenderPort,
       ): EmailDeliveryPoller =>
         new EmailDeliveryPoller(
-          new PostgresEmailDispatchStore(client),
-          new PostgresEmailCredentialRepository(client),
+          new PostgresEmailDispatchStore(runtime.prisma),
+          new PostgresEmailCredentialRepository(runtime.prisma),
           cipher,
           sender,
           (): Date => new Date(),
@@ -331,16 +322,16 @@ import {
             onTerminalFailure: reportTerminalEmailDeliveryFailure,
           },
         ),
-      inject: [POSTGRES_AUTH_CLIENT, EMAIL_PAYLOAD_CIPHER, EMAIL_SENDER],
+      inject: [RUNTIME_PRISMA_CLIENT, EMAIL_PAYLOAD_CIPHER, EMAIL_SENDER],
     },
     {
       provide: EmailOutboxPollerScheduler,
       useFactory: (
         poller: EmailDeliveryPoller,
-        client: PostgresAuthClient,
+        runtime: PrismaClientHolder,
         configuration: ConfigType<typeof appConfig>,
       ): EmailOutboxPollerScheduler => {
-        const store = new PostgresEmailDispatchStore(client);
+        const store = new PostgresEmailDispatchStore(runtime.prisma);
         return new EmailOutboxPollerScheduler(
           poller,
           EMAIL_OUTBOX_POLL_INTERVAL_MS,
@@ -348,7 +339,7 @@ import {
           configuration.NODE_ENV !== 'test',
         );
       },
-      inject: [EmailDeliveryPoller, POSTGRES_AUTH_CLIENT, appConfig.KEY],
+      inject: [EmailDeliveryPoller, RUNTIME_PRISMA_CLIENT, appConfig.KEY],
     },
     {
       provide: AUTH_RATE_LIMITER,

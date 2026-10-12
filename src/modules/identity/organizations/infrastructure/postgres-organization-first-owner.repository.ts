@@ -14,19 +14,12 @@ import {
   identityStoreError,
   isRecord,
   membershipRoleValue,
-  stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
-import type { PostgresIdentityTransactionalClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
-
-// The owner need not have verified their email yet: an unverified account
-// cannot sign in, so attaching it early harms nothing and saves a round trip
-// in the handoff. Only a disabled account is refused (ADR-0045).
-const ATTACHABLE_ACCOUNT_BY_USERNAME_SQL = `
-  SELECT id
-  FROM user_accounts
-  WHERE username = $1
-    AND status IN ('active', 'pending_verification')
-`;
+import {
+  type IdentityRepositoryClient,
+  identityRows,
+  identityTransaction,
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 // The Organization lock serializes attachments: a second one waits here and
 // then finds the first one's owner among the active memberships.
@@ -37,24 +30,6 @@ const LOCK_ORGANIZATION_SQL = `
   FOR UPDATE
 `;
 
-const ACTIVE_MEMBERSHIPS_SQL = `
-  SELECT user_account_id, role
-  FROM organization_members
-  WHERE organization_id = $1
-    AND status = 'active'
-`;
-
-// An upsert rather than an insert: a disabled membership of the named account
-// can only exist through hand edits, and reactivating it still ends with
-// exactly one active owner.
-const UPSERT_OWNER_SQL = `
-  INSERT INTO organization_members
-    (organization_id, user_account_id, role, status)
-  VALUES ($1, $2, 'owner', 'active')
-  ON CONFLICT (organization_id, user_account_id)
-  DO UPDATE SET role = 'owner', status = 'active'
-`;
-
 /**
  * First Owner Attachment (ADR-0045): the operator's bootstrap for an
  * operator-provisioned Organization that has no active member.
@@ -63,7 +38,7 @@ export class PostgresOrganizationFirstOwnerRepository
   implements OrganizationFirstOwnerPort
 {
   constructor(
-    private readonly client: PostgresIdentityTransactionalClient & {
+    private readonly client: IdentityRepositoryClient & {
       close(): Promise<void>;
     },
   ) {}
@@ -88,16 +63,7 @@ export class PostgresOrganizationFirstOwnerRepository
   private transact(
     input: AttachFirstOwnerInput,
   ): Promise<AttachFirstOwnerResult> {
-    return this.client.transaction(async (transaction) => {
-      const accountId = async (
-        sql: string,
-        username: string,
-      ): Promise<string | undefined> => {
-        const rows = await transaction.query(sql, [username]);
-        const row = rows[0];
-        return isRecord(row) ? stringValue(row, 'id') : undefined;
-      };
-
+    return identityTransaction(this.client, async (transaction) => {
       const actorId = await findActiveAccountId(
         transaction,
         input.actorUsername,
@@ -105,39 +71,47 @@ export class PostgresOrganizationFirstOwnerRepository
       if (actorId === undefined) {
         return { kind: 'actor_invalid' as const };
       }
-      const ownerId = await accountId(
-        ATTACHABLE_ACCOUNT_BY_USERNAME_SQL,
-        input.ownerUsername,
-      );
-      if (ownerId === undefined) {
+      // The owner need not have verified their email yet: an unverified
+      // account cannot sign in, so attaching it early harms nothing and saves a
+      // round trip in the handoff. Only a disabled account is refused
+      // (ADR-0045).
+      const owner = await transaction.userAccount.findFirst({
+        where: {
+          username: input.ownerUsername,
+          status: { in: ['active', 'pending_verification'] },
+        },
+        select: { id: true },
+      });
+      if (owner === null) {
         return { kind: 'owner_invalid' as const };
       }
+      const ownerId = owner.id;
       // An operator joining a customer's Organization is the crossing this
       // command exists to make deliberate; another operator must do it.
       if (ownerId === actorId) {
         return { kind: 'actor_is_owner' as const };
       }
 
-      const organizationRows = await transaction.query(LOCK_ORGANIZATION_SQL, [
-        input.organizationId,
-      ]);
+      const organizationRows = await identityRows(
+        transaction,
+        LOCK_ORGANIZATION_SQL,
+        [input.organizationId],
+      );
       if (!isRecord(organizationRows[0])) {
         return { kind: 'organization_not_found' as const };
       }
 
       const memberships = (
-        await transaction.query(ACTIVE_MEMBERSHIPS_SQL, [input.organizationId])
+        await transaction.organizationMembership.findMany({
+          where: { organizationId: input.organizationId, status: 'active' },
+          select: { userAccountId: true, role: true },
+        })
       ).map((row) => {
-        const userId = isRecord(row)
-          ? stringValue(row, 'user_account_id')
-          : undefined;
-        const role = isRecord(row)
-          ? membershipRoleValue(row, 'role')
-          : undefined;
-        if (userId === undefined || role === undefined) {
+        const role = membershipRoleValue(row, 'role');
+        if (role === undefined) {
           throw identityStoreError('Identity data is invalid');
         }
-        return { userId, role };
+        return { userId: row.userAccountId, role };
       });
 
       const [only] = memberships;
@@ -152,10 +126,24 @@ export class PostgresOrganizationFirstOwnerRepository
         return { kind: 'organization_has_members' as const };
       }
 
-      await transaction.query(UPSERT_OWNER_SQL, [
-        input.organizationId,
-        ownerId,
-      ]);
+      // An upsert rather than an insert: a disabled membership of the named
+      // account can only exist through hand edits, and reactivating it still
+      // ends with exactly one active owner.
+      await transaction.organizationMembership.upsert({
+        where: {
+          organizationId_userAccountId: {
+            organizationId: input.organizationId,
+            userAccountId: ownerId,
+          },
+        },
+        create: {
+          organizationId: input.organizationId,
+          userAccountId: ownerId,
+          role: 'owner',
+          status: 'active',
+        },
+        update: { role: 'owner', status: 'active' },
+      });
       await recordOrganizationAuditEvent(
         transaction,
         auditStamp(

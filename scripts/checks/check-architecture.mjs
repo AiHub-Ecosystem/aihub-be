@@ -100,12 +100,34 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
       `${relative(root, file)} constructs a PostgreSQL pool directly; use createPostgresPool so every pool observes connection errors`,
     );
   }
-  if (
-    /\bDrizzleModule\s*\.\s*forRootAsync\s*\(/.test(source) &&
-    /\bdrizzle\s*,\s*connection\s*:/.test(source)
-  ) {
+}
+
+// Prisma types never reach application or domain code: infrastructure maps
+// rows to the port types those layers already speak, and a repository is the
+// only place a Prisma model belongs. Matching the specifier here rather than
+// in dependency-cruiser is deliberate - the generated client is written outside
+// `src/`, so dependency-cruiser never reads it as a module edge.
+//
+// `src/modules/persistence` is not exempt as a module: its `infrastructure`
+// folder builds the shared clients and may import the generated client, and
+// its `public` facade re-exports from there without naming the client itself.
+// Static imports, re-exports, dynamic `import()`, and `require()` all count,
+// and so does a spec outside infrastructure.
+const PRISMA_CLIENT_SPECIFIER =
+  /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)['"]@prisma-client\//;
+
+// A `testing/` folder holds test doubles, which production code cannot import
+// (`no-test-helpers-in-production-code`), so naming the client's type there
+// does not carry Prisma into a layer.
+for (const file of collectTypeScriptFiles(srcDirectory)) {
+  const segments = file.split(sep);
+  if (segments.includes('infrastructure') || segments.includes('testing')) {
+    continue;
+  }
+
+  if (PRISMA_CLIENT_SPECIFIER.test(readFileSync(file, 'utf8'))) {
     fail(
-      `${relative(root, file)} lets Drizzle create an unmonitored PostgreSQL pool; pass a database built with createPostgresPool`,
+      `${relative(root, file)} imports the generated Prisma client; only infrastructure may, because Prisma types stay inside the persistence layer (ADR-0088)`,
     );
   }
 }

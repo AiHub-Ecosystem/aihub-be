@@ -1,117 +1,16 @@
-import { createPostgresPool } from '@/common/postgres/postgres-pool';
-
 import type {
   UsageAggregate,
   UsageAggregateQuery,
   UsageRecord,
   UsageRepositoryPort,
 } from '@/modules/metering/application/usage-repository.port';
+import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
+import { Prisma } from '@prisma-client/client';
+import { isRecord, safeNonNegativeCount } from './metering-row';
+import type { PrismaMeteringClient } from './prisma-metering.client';
 
-export interface PostgresTransactionClient {
-  query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
-}
-
-export interface PostgresMeteringClient {
-  query(text: string, values: readonly unknown[]): Promise<readonly unknown[]>;
-  transaction?<T>(
-    callback: (client: PostgresTransactionClient) => Promise<T>,
-  ): Promise<T>;
-  close(): Promise<void>;
-}
-
-export function createPostgresMeteringClient(
-  databaseUrl: string,
-): PostgresMeteringClient {
-  if (databaseUrl.trim().length === 0) {
-    return {
-      query: async () => {
-        throw new Error('DATABASE_URL is missing');
-      },
-      close: async () => undefined,
-    };
-  }
-
-  const pool = createPostgresPool('metering', {
-    connectionString: databaseUrl,
-    max: 10,
-    connectionTimeoutMillis: 1_000,
-    idleTimeoutMillis: 30_000,
-  });
-
-  return {
-    async query(
-      text: string,
-      values: readonly unknown[],
-    ): Promise<readonly unknown[]> {
-      const result = await pool.query<Record<string, unknown>>(text, [
-        ...values,
-      ]);
-      return result.rows;
-    },
-    async transaction<T>(
-      callback: (client: PostgresTransactionClient) => Promise<T>,
-    ): Promise<T> {
-      const client = await pool.connect();
-      const transactionClient: PostgresTransactionClient = {
-        query: async (
-          text: string,
-          values: readonly unknown[],
-        ): Promise<readonly unknown[]> => {
-          const result = await client.query<Record<string, unknown>>(text, [
-            ...values,
-          ]);
-          return result.rows;
-        },
-      };
-
-      try {
-        await client.query('BEGIN');
-        const result = await callback(transactionClient);
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        try {
-          await client.query('ROLLBACK');
-        } catch {
-          // Preserve the original database failure.
-        }
-        throw error;
-      } finally {
-        client.release();
-      }
-    },
-    close: async () => {
-      await pool.end();
-    },
-  };
-}
-
-const INSERT_SQL = `
-  INSERT INTO usage_records (
-    request_id,
-    organization_id,
-    api_key_id,
-    actor_id,
-    service,
-    operation,
-    environment,
-    outcome,
-    http_status,
-    error_code,
-    billable_requests,
-    input_tokens,
-    output_tokens,
-    total_tokens,
-    models,
-    metering_status,
-    total_ms,
-    downstream_ms,
-    ai_processing_ms
-  )
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-  ON CONFLICT (request_id) DO NOTHING
-  RETURNING request_id
-`;
+export { createPostgresMeteringClient } from './postgres-metering.fixture-client';
+export type { PrismaMeteringClient } from './prisma-metering.client';
 
 const AGGREGATE_SQL = `
   SELECT
@@ -125,49 +24,12 @@ const AGGREGATE_SQL = `
     AND ($4::text IS NULL OR operation = $4)
 `;
 
-function jsonModels(models: UsageRecord['models']): string | null {
-  return models === undefined ? null : JSON.stringify(models);
-}
-
-function recordValues(record: UsageRecord): readonly unknown[] {
-  return [
-    record.requestId,
-    record.organizationId,
-    record.apiKeyId,
-    record.actorId ?? null,
-    record.service,
-    record.operation,
-    record.environment,
-    record.outcome,
-    record.httpStatus,
-    record.errorCode ?? null,
-    record.billableRequests,
-    record.usage?.inputTokens ?? null,
-    record.usage?.outputTokens ?? null,
-    record.usage?.totalTokens ?? null,
-    jsonModels(record.models),
-    record.meteringStatus,
-    record.totalMs,
-    record.downstreamMs ?? null,
-    record.aiProcessingMs ?? null,
-  ];
-}
-
 function aggregateNumber(value: unknown, field: string): number {
-  const parsed =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string'
-        ? Number(value)
-        : Number.NaN;
-  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+  const parsed = safeNonNegativeCount(value);
+  if (parsed === undefined) {
     throw new Error(`usage aggregate field ${field} is invalid`);
   }
   return parsed;
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function aggregateFromRow(row: unknown): UsageAggregate {
@@ -191,23 +53,58 @@ function aggregateFromRow(row: unknown): UsageAggregate {
   };
 }
 
+interface UsageAggregateRow {
+  readonly billable_request_count: bigint;
+  readonly billable_token_count: bigint;
+  readonly missing_usage_count: bigint;
+}
+
 export class PostgresUsageRepository implements UsageRepositoryPort {
-  constructor(private readonly client: PostgresMeteringClient) {}
+  constructor(private readonly client: PrismaMeteringClient) {}
 
   async insert(record: UsageRecord): Promise<void> {
-    const rows = await this.client.query(INSERT_SQL, recordValues(record));
-    if (rows.length === 0) {
-      throw new Error('usage record was not inserted');
-    }
+    // A request id that is already recorded is a collision to surface, not to
+    // accept: the unique key makes this throw rather than overwrite.
+    await this.client.$transaction(async (transaction) => {
+      await transaction.usageRecord.create({
+        data: {
+          requestId: record.requestId,
+          organizationId: record.organizationId,
+          apiKeyId: record.apiKeyId,
+          actorId: record.actorId ?? null,
+          service: record.service,
+          operation: record.operation,
+          environment: record.environment,
+          outcome: record.outcome,
+          httpStatus: record.httpStatus,
+          errorCode: record.errorCode ?? null,
+          billableRequests: record.billableRequests,
+          inputTokens: record.usage?.inputTokens ?? null,
+          outputTokens: record.usage?.outputTokens ?? null,
+          totalTokens: record.usage?.totalTokens ?? null,
+          models:
+            record.models === undefined
+              ? Prisma.DbNull
+              : record.models.map(({ provider, name }) => ({ provider, name })),
+          meteringStatus: record.meteringStatus,
+          totalMs: record.totalMs,
+          downstreamMs: record.downstreamMs ?? null,
+          aiProcessingMs: record.aiProcessingMs ?? null,
+        },
+      });
+    }, CONTROL_PLANE_TRANSACTION_OPTIONS);
   }
 
   async aggregate(query: UsageAggregateQuery): Promise<UsageAggregate> {
-    const rows = await this.client.query(AGGREGATE_SQL, [
+    const rows = await this.client.$queryRawUnsafe<
+      readonly UsageAggregateRow[]
+    >(
+      AGGREGATE_SQL,
       query.organizationId,
       query.from,
       query.to,
       query.operation ?? null,
-    ]);
+    );
     const row = rows[0];
     if (row === undefined) {
       throw new Error('usage aggregate query returned no row');
@@ -216,7 +113,7 @@ export class PostgresUsageRepository implements UsageRepositoryPort {
   }
 
   async close(): Promise<void> {
-    await this.client.close();
+    await this.client.close?.();
   }
 
   async onModuleDestroy(): Promise<void> {

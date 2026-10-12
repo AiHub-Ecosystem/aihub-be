@@ -5,17 +5,17 @@ import { AppError } from '@/common/errors/app-error';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { SaveOrganizationIdentityConfigInput } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/organization-identity-configuration/infrastructure/postgres-organization-identity-config.repository';
-import { createIdentityDrizzleClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 import { createTestPool, resetIdentityTables } from './database';
 
 let pool: Pool;
-let client: ReturnType<typeof createIdentityDrizzleClient>;
+let client: ReturnType<typeof createPostgresIdentityClient>;
 let repository: PostgresOrganizationIdentityConfigRepository;
 
 beforeAll(() => {
   pool = createTestPool();
-  client = createIdentityDrizzleClient(
+  client = createPostgresIdentityClient(
     (pool.options as { connectionString?: string }).connectionString ?? '',
   );
   repository = new PostgresOrganizationIdentityConfigRepository(client);
@@ -158,7 +158,7 @@ describe('Organization identity configuration against PostgreSQL', () => {
   });
 
   it('reports an unreachable store without naming the driver failure', async () => {
-    const unreachable = createIdentityDrizzleClient(
+    const unreachable = createPostgresIdentityClient(
       `${(pool.options as { connectionString?: string }).connectionString?.replace(/\/[^/]*$/, '')}/aihub_absent_database`,
     );
 

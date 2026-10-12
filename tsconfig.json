@@ -5,7 +5,8 @@
     "moduleResolution": "bundler",
     "lib": ["ES2022"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@prisma-client/*": ["./dist/generated/prisma/*"]
     },
     "rootDir": ".",
     "outDir": "dist",

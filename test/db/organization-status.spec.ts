@@ -6,18 +6,16 @@ import { PostgresApiKeyRepository } from '@/modules/identity/api-keys/infrastruc
 import type { SetOrganizationStatusInput } from '@/modules/identity/organizations/application/organization-status.port';
 import { PostgresOrganizationStatusRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-status.repository';
 import {
-  type IdentityDrizzleClient,
-  type PostgresIdentityTransactionalClient,
-  createIdentityDrizzleClient,
+  type IdentityFixtureClient,
   createPostgresIdentityClient,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 import { createTestPool, resetIdentityTables } from './database';
 
 let pool: Pool;
-let client: PostgresIdentityTransactionalClient & { close(): Promise<void> };
+let client: IdentityFixtureClient;
 let repository: PostgresOrganizationStatusRepository;
-let apiKeyStore: IdentityDrizzleClient;
+let apiKeyStore: IdentityFixtureClient;
 let apiKeys: PostgresApiKeyRepository;
 
 beforeAll(() => {
@@ -25,7 +23,7 @@ beforeAll(() => {
   const url =
     (pool.options as { connectionString?: string }).connectionString ?? '';
   client = createPostgresIdentityClient(url);
-  apiKeyStore = createIdentityDrizzleClient(url);
+  apiKeyStore = createPostgresIdentityClient(url);
   repository = new PostgresOrganizationStatusRepository(client);
   apiKeys = new PostgresApiKeyRepository(apiKeyStore);
 });

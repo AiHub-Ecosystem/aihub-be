@@ -1,3 +1,4 @@
+import { AppError } from '@/common/errors/app-error';
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -11,155 +12,201 @@ import {
 } from '@/modules/auth/application/user-access-token.port';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
-import type { OrganizationMembershipMutationAction } from '@/modules/identity/membership/application/organization-membership.mutation-policy';
+import {
+  ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL,
+  ORGANIZATION_MEMBERSHIP_TARGET_REFUSAL,
+  type OrganizationMembershipMutationAction,
+  authorizeOrganizationMembershipMutation,
+  hasOrganizationMembershipRouteAuthority,
+} from '@/modules/identity/membership/application/organization-membership.mutation-policy';
 import {
   ORGANIZATION_MEMBERSHIP,
+  type OrganizationMembershipMutationInput,
+  type OrganizationMembershipMutationResult,
   type OrganizationMembershipPort,
+  type OrganizationMembershipRecord,
+  type OrganizationMembershipResolution,
   type OrganizationMembershipRole,
+  type OrganizationMembershipStatus,
 } from '@/modules/identity/membership/application/organization-membership.port';
-import { PostgresOrganizationMembershipRepository } from '@/modules/identity/membership/infrastructure/postgres-organization-membership.repository';
-import type {
-  PostgresIdentityClient,
-  PostgresIdentityTransactionalClient,
-} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
 const MUTATION_URL = `/v1/organizations/${ORGANIZATION_ID}/members/bob`;
-
-const callerOwnerRow = {
-  organization_id: ORGANIZATION_ID,
-  user_account_id: USER_ID,
-  username: 'alice',
-  role: 'owner',
-  membership_status: 'active',
-};
-
-const targetMemberRow = {
-  organization_id: ORGANIZATION_ID,
-  user_account_id: 'usr_bob',
-  username: 'bob',
-  role: 'member',
-  membership_status: 'active',
-};
-
-const targetAdminResultRow = {
-  organization_id: ORGANIZATION_ID,
-  user_account_id: 'usr_bob',
-  username: 'bob',
-  role: 'admin',
-  membership_status: 'active',
-};
-
 const REQUEST_ID = 'req_01J00000000000000000000000';
 
 type Role = OrganizationMembershipRole;
+type Status = OrganizationMembershipStatus;
 
-function membershipRow(
+interface LockedMember extends OrganizationMembershipRecord {
+  readonly username: string;
+}
+
+function member(
   userId: string,
   username: string,
   role: Role,
-  status: 'active' | 'disabled' = 'active',
-) {
+  status: Status = 'active',
+): LockedMember {
   return {
-    organization_id: ORGANIZATION_ID,
-    user_account_id: userId,
+    organizationId: ORGANIZATION_ID,
+    userId,
     username,
+    organizationStatus: 'active',
     role,
-    membership_status: status,
+    status,
   };
 }
 
-function resolvedCaller(
+function activeResolution(
   role: Role,
-  status: 'active' | 'disabled' = 'active',
+  status: Status = 'active',
   organizationStatus: 'active' | 'suspended' = 'active',
-) {
-  return {
-    organization_id: ORGANIZATION_ID,
-    user_account_id: USER_ID,
-    organization_status: organizationStatus,
+): OrganizationMembershipResolution {
+  const membership = {
+    organizationId: ORGANIZATION_ID,
+    userId: USER_ID,
+    organizationStatus,
     role,
-    membership_status: status,
+    status,
   };
+  return status === 'active'
+    ? { kind: 'active', membership }
+    : { kind: 'disabled', membership };
 }
 
-class FakePostgres
-  implements PostgresIdentityClient, PostgresIdentityTransactionalClient
-{
-  readonly queries: Array<{
-    readonly text: string;
-    readonly values: readonly unknown[];
-  }> = [];
+function forbidden(message: string): AppError {
+  return new AppError({ code: 'FORBIDDEN', message, retryable: false });
+}
 
-  readonly transactionQueries: Array<{
-    readonly text: string;
-    readonly values: readonly unknown[];
-  }> = [];
+function notFound(): AppError {
+  return new AppError({
+    code: 'NOT_FOUND',
+    message: 'Resource not found',
+    retryable: false,
+  });
+}
 
-  // What membership resolution sees before any transaction opens.
-  result: readonly unknown[] = [resolvedCaller('owner')];
-
-  // Rows each successive query inside the transaction returns: the locked
-  // Organization, the locked caller and target memberships, then the write.
-  transactionRows: readonly (readonly unknown[])[] = [
-    [{ id: ORGANIZATION_ID, status: 'active' }],
-    [callerOwnerRow, targetMemberRow],
-    [targetAdminResultRow],
-  ];
+/** Models only the application-port outcomes needed by this HTTP suite. */
+class MembershipPortFake implements OrganizationMembershipPort {
+  resolution: OrganizationMembershipResolution = activeResolution('owner');
+  organizationStatus: 'active' | 'suspended' = 'active';
+  caller: LockedMember = member(USER_ID, 'alice', 'owner');
+  targets = new Map<string, LockedMember>([
+    ['bob', member('usr_bob', 'bob', 'member')],
+  ]);
 
   reset(): void {
-    this.queries.length = 0;
-    this.transactionQueries.length = 0;
-    this.result = [resolvedCaller('owner')];
-    this.transactionRows = [
-      [{ id: ORGANIZATION_ID, status: 'active' }],
-      [callerOwnerRow, targetMemberRow],
-      [targetAdminResultRow],
-    ];
+    this.resolution = activeResolution('owner');
+    this.organizationStatus = 'active';
+    this.caller = member(USER_ID, 'alice', 'owner');
+    this.targets = new Map([['bob', member('usr_bob', 'bob', 'member')]]);
   }
 
-  query(text: string, values: readonly unknown[]): Promise<readonly unknown[]> {
-    this.queries.push({ text, values });
-    return Promise.resolve(
-      text.includes('INSERT INTO organization_audit_events') ? [] : this.result,
-    );
+  async resolveMembership(): Promise<OrganizationMembershipResolution> {
+    return this.resolution;
   }
 
-  transaction<T>(
-    callback: Parameters<PostgresIdentityTransactionalClient['transaction']>[0],
-  ): Promise<T> {
-    let index = 0;
-    return callback({
-      query: async (text, values) => {
-        this.transactionQueries.push({ text, values });
-        return this.transactionRows[index++] ?? [];
-      },
-    }) as Promise<T>;
+  async listRoster(): Promise<[]> {
+    return [];
   }
 
-  close(): Promise<void> {
-    return Promise.resolve();
+  changeRole(
+    input: OrganizationMembershipMutationInput & {
+      readonly role: 'admin' | 'member';
+    },
+  ): Promise<OrganizationMembershipMutationResult> {
+    return this.mutate('change_role', input, input.role);
   }
 
-  // A denial is written after the transaction rolls back, outside it.
-  deniedAuditWrites(): readonly unknown[][] {
-    return this.queries
-      .filter((query) =>
-        query.text.includes('INSERT INTO organization_audit_events'),
-      )
-      .map((query) => [...query.values]);
+  disable(
+    input: OrganizationMembershipMutationInput,
+  ): Promise<OrganizationMembershipMutationResult> {
+    return this.mutate('disable', input);
+  }
+
+  transfer(
+    input: OrganizationMembershipMutationInput,
+  ): Promise<OrganizationMembershipMutationResult> {
+    return this.mutate('transfer', input);
+  }
+
+  private async mutate(
+    action: OrganizationMembershipMutationAction,
+    input: OrganizationMembershipMutationInput,
+    requestedRole?: 'admin' | 'member',
+  ): Promise<OrganizationMembershipMutationResult> {
+    const denial = ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL[action];
+    if (
+      this.organizationStatus !== 'active' ||
+      this.caller.status !== 'active'
+    ) {
+      throw forbidden(denial);
+    }
+
+    const target =
+      input.username === this.caller.username
+        ? this.caller
+        : this.targets.get(input.username);
+    if (
+      !hasOrganizationMembershipRouteAuthority({
+        action,
+        callerRole: this.caller.role,
+        targetIsCaller: target?.userId === this.caller.userId,
+      })
+    ) {
+      throw forbidden(denial);
+    }
+    if (target === undefined) {
+      throw notFound();
+    }
+
+    const decision = authorizeOrganizationMembershipMutation({
+      action,
+      callerUserId: this.caller.userId,
+      callerRole: this.caller.role,
+      targetUserId: target.userId,
+      targetRole: target.role,
+      targetStatus: target.status,
+    });
+    if (decision.kind === 'forbidden') {
+      throw forbidden(ORGANIZATION_MEMBERSHIP_TARGET_REFUSAL[action]);
+    }
+    if (decision.kind === 'target_unavailable') {
+      throw notFound();
+    }
+
+    const role =
+      action === 'change_role'
+        ? requestedRole!
+        : action === 'transfer'
+          ? 'owner'
+          : target.role;
+    const status = action === 'disable' ? 'disabled' : target.status;
+    if (action === 'transfer') {
+      this.caller = { ...this.caller, role: 'admin' };
+    }
+    const updated = { ...target, role, status };
+    if (input.username === this.caller.username && action !== 'transfer') {
+      this.caller = updated;
+    } else {
+      this.targets.set(input.username, updated);
+    }
+    return {
+      organizationId: ORGANIZATION_ID,
+      username: updated.username,
+      role: updated.role,
+      status: updated.status,
+    };
   }
 }
 
-describe('Organization membership HTTP/application/repository integration', () => {
+describe('Organization membership HTTP/application integration', () => {
   let app: NestFastifyApplication;
-  let client: FakePostgres;
+  let membership: MembershipPortFake;
 
   beforeAll(async () => {
-    client = new FakePostgres();
-    const membership: OrganizationMembershipPort =
-      new PostgresOrganizationMembershipRepository(client);
+    membership = new MembershipPortFake();
     const verifier: UserAccessTokenVerifierPort = {
       verify: async (token: string) => {
         if (token !== 'valid.token.value') {
@@ -168,7 +215,6 @@ describe('Organization membership HTTP/application/repository integration', () =
         return { userId: USER_ID, jti: 'jti_01' };
       },
     };
-    const userAccounts = userAccountStatus();
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -178,7 +224,7 @@ describe('Organization membership HTTP/application/repository integration', () =
       .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
       .useValue(verifier)
       .overrideProvider(USER_ACCOUNT_REPOSITORY)
-      .useValue(userAccounts)
+      .useValue(userAccountStatus())
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -192,11 +238,9 @@ describe('Organization membership HTTP/application/repository integration', () =
     await app.close();
   });
 
-  beforeEach(() => {
-    client.reset();
-  });
+  beforeEach(() => membership.reset());
 
-  it('wires a Bearer role mutation through the application and repository ports', async () => {
+  it('returns the membership mutation through the application port', async () => {
     const response = await app.inject({
       method: 'PATCH',
       url: MUTATION_URL,
@@ -214,17 +258,6 @@ describe('Organization membership HTTP/application/repository integration', () =
       },
       meta: { request_id: REQUEST_ID },
     });
-    expect(client.transactionQueries[0]?.text).toContain('FROM organizations');
-    expect(client.transactionQueries[0]?.text).toContain('FOR UPDATE');
-    expect(client.transactionQueries[1]?.text).toContain(
-      'FOR UPDATE OF membership',
-    );
-    expect(client.transactionQueries.at(-2)?.text).toContain(
-      'UPDATE organization_members',
-    );
-    expect(client.transactionQueries.at(-1)?.text).toContain(
-      'INSERT INTO organization_audit_events',
-    );
   });
 
   type Route = OrganizationMembershipMutationAction;
@@ -260,15 +293,11 @@ describe('Organization membership HTTP/application/repository integration', () =
     };
   }
 
-  const activeOrganization = [{ id: ORGANIZATION_ID, status: 'active' }];
-
-  // The role on each route that holds no authority over another membership.
   const unauthorizedRole: Record<Route, Role> = {
     change_role: 'member',
     disable: 'member',
     transfer: 'admin',
   };
-
   const routeDenial: Record<Route, string> = {
     change_role: 'Organization membership role change is forbidden',
     disable: 'Organization membership disable is forbidden',
@@ -279,110 +308,97 @@ describe('Organization membership HTTP/application/repository integration', () =
     'every caller outside the %s route authority',
     (route) => {
       const role = unauthorizedRole[route];
-      const caller = membershipRow(USER_ID, 'alice', role);
-
-      // Refused before the target is looked up, so the same whether the
-      // named username exists or not.
+      const caller = member(USER_ID, 'alice', role);
       const beforeTarget: ReadonlyArray<[string, () => void]> = [
         [
           'no membership in the organization',
           () => {
-            client.result = [];
+            membership.resolution = { kind: 'missing' };
           },
         ],
         [
           'a disabled membership',
           () => {
-            client.result = [resolvedCaller('owner', 'disabled')];
+            membership.resolution = activeResolution('owner', 'disabled');
           },
         ],
         [
           'an owner of a suspended organization',
           () => {
-            client.result = [resolvedCaller('owner', 'active', 'suspended')];
+            membership.resolution = activeResolution(
+              'owner',
+              'active',
+              'suspended',
+            );
           },
         ],
         [
           'an owner whose organization is suspended inside the transaction',
           () => {
-            client.transactionRows = [
-              [{ id: ORGANIZATION_ID, status: 'suspended' }],
-            ];
+            membership.organizationStatus = 'suspended';
           },
         ],
       ];
 
-      // One literal per route: each case equals it, so no two refusals can
-      // differ by status, code, or message. A real member refused on a real
-      // target leaves a recorded denial exactly when the target-level policy
-      // refused it before route authority existed.
-      it.each<[string, () => void, string, number]>([
-        ...beforeTarget.flatMap(
-          ([label, arrange]): Array<[string, () => void, string, number]> => [
-            [`${label}, naming a real membership`, arrange, 'bob', 0],
-            [`${label}, naming an unknown username`, arrange, 'nobody', 0],
+      it.each<[string, () => void, string]>([
+        ...beforeTarget.flatMap(([label, arrange]) => [
+          [`${label}, naming a real membership`, arrange, 'bob'] as [
+            string,
+            () => void,
+            string,
           ],
-        ),
+          [`${label}, naming an unknown username`, arrange, 'nobody'] as [
+            string,
+            () => void,
+            string,
+          ],
+        ]),
         [
-          'an owner whose membership is disabled inside the transaction',
+          "an owner's membership is disabled inside the transaction",
           () => {
-            client.transactionRows = [
-              activeOrganization,
-              [membershipRow(USER_ID, 'alice', 'owner', 'disabled')],
-            ];
+            membership.resolution = activeResolution('owner');
+            membership.caller = member(USER_ID, 'alice', 'owner', 'disabled');
           },
           'bob',
-          0,
         ],
         [
           `a ${role} naming a real membership`,
           () => {
-            client.result = [resolvedCaller(role)];
-            client.transactionRows = [
-              activeOrganization,
-              [caller, targetMemberRow],
-            ];
+            membership.resolution = activeResolution(role);
+            membership.caller = caller;
           },
           'bob',
-          1,
         ],
         [
           `a ${role} naming a disabled membership`,
           () => {
-            client.result = [resolvedCaller(role)];
-            client.transactionRows = [
-              activeOrganization,
-              [caller, membershipRow('usr_bob', 'bob', 'member', 'disabled')],
-            ];
+            membership.resolution = activeResolution(role);
+            membership.caller = caller;
+            membership.targets.set(
+              'bob',
+              member('usr_bob', 'bob', 'member', 'disabled'),
+            );
           },
           'bob',
-          // Only disable ever refused a disabled target on authority; the
-          // other routes answered not-found and recorded nothing.
-          route === 'disable' ? 1 : 0,
         ],
         [
           `a ${role} naming a username that does not exist`,
           () => {
-            client.result = [resolvedCaller(role)];
-            client.transactionRows = [activeOrganization, [caller]];
+            membership.resolution = activeResolution(role);
+            membership.caller = caller;
+            membership.targets.clear();
           },
           'nobody',
-          0,
         ],
-      ])(
-        'gives %s the same denial',
-        async (_label, arrange, username, recorded) => {
-          arrange();
+      ])('gives %s the same denial', async (_label, arrange, username) => {
+        arrange();
 
-          const response = await mutate(route, username);
+        const response = await mutate(route, username);
 
-          expect({
-            status: response.statusCode,
-            body: response.json(),
-          }).toEqual(refusal(routeDenial[route]));
-          expect(client.deniedAuditWrites()).toHaveLength(recorded);
-        },
-      );
+        expect({ status: response.statusCode, body: response.json() }).toEqual(
+          refusal(routeDenial[route]),
+        );
+      });
     },
   );
 
@@ -394,35 +410,32 @@ describe('Organization membership HTTP/application/repository integration', () =
   ])(
     'tells an admin who tries %s on a %s that admins only manage members',
     async (route, targetRole) => {
-      client.result = [resolvedCaller('admin')];
-      client.transactionRows = [
-        activeOrganization,
-        [
-          membershipRow(USER_ID, 'alice', 'admin'),
-          membershipRow('usr_bob', 'bob', targetRole),
-        ],
-      ];
+      membership.resolution = activeResolution('admin');
+      membership.caller = member(USER_ID, 'alice', 'admin');
+      membership.targets.set('bob', member('usr_bob', 'bob', targetRole));
 
       const response = await mutate(route);
 
       expect({ status: response.statusCode, body: response.json() }).toEqual(
         refusal('Organization admins can only manage members'),
       );
-      expect(client.deniedAuditWrites()).toHaveLength(1);
     },
   );
 
-  it.each<[string, string, readonly unknown[]]>([
+  it.each<[string, string, LockedMember[]]>([
     [
       'another owner',
       'bob',
-      [callerOwnerRow, membershipRow('usr_bob', 'bob', 'owner')],
+      [member(USER_ID, 'alice', 'owner'), member('usr_bob', 'bob', 'owner')],
     ],
-    ['themselves', 'alice', [callerOwnerRow]],
+    ['themselves', 'alice', [member(USER_ID, 'alice', 'owner')]],
   ])(
     'tells an owner transferring to %s that ownership goes to a non-owner member',
     async (_label, username, locked) => {
-      client.transactionRows = [activeOrganization, locked];
+      membership.caller = locked[0]!;
+      membership.targets.clear();
+      if (locked[1] !== undefined)
+        membership.targets.set(locked[1].username, locked[1]);
 
       const response = await mutate('transfer', username);
 
@@ -441,26 +454,19 @@ describe('Organization membership HTTP/application/repository integration', () =
   ])(
     'still reports an unknown target on %s to an authorized %s as not found',
     async (route, role) => {
-      client.result = [resolvedCaller(role)];
-      client.transactionRows = [
-        activeOrganization,
-        [membershipRow(USER_ID, 'alice', role)],
-      ];
+      membership.resolution = activeResolution(role);
+      membership.caller = member(USER_ID, 'alice', role);
+      membership.targets.clear();
 
       const response = await mutate(route, 'nobody');
 
       expect(response.statusCode).toBe(404);
-      expect(client.deniedAuditWrites()).toHaveLength(0);
     },
   );
 
   it('still lets a member disable their own membership', async () => {
-    client.result = [resolvedCaller('member')];
-    client.transactionRows = [
-      activeOrganization,
-      [membershipRow(USER_ID, 'alice', 'member')],
-      [membershipRow(USER_ID, 'alice', 'member', 'disabled')],
-    ];
+    membership.resolution = activeResolution('member');
+    membership.caller = member(USER_ID, 'alice', 'member');
 
     const response = await mutate('disable', 'alice');
 

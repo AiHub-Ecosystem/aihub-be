@@ -14,8 +14,10 @@ import type {
 } from '@/modules/identity/invitations/application/organization-invitation.port';
 import { PostgresOrganizationInvitationRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository';
 import type { OrganizationMembershipRole } from '@/modules/identity/membership/application/organization-membership.port';
-import type { PostgresIdentityTransactionalClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
-import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  type IdentityFixtureClient,
+  createPostgresIdentityClient,
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import {
@@ -36,7 +38,7 @@ type AccountStatus = 'pending_verification' | 'active' | 'disabled';
 type MembershipStatus = 'active' | 'disabled';
 
 let pool: Pool;
-let client: PostgresIdentityTransactionalClient & { close(): Promise<void> };
+let client: IdentityFixtureClient;
 let repository: PostgresOrganizationInvitationRepository;
 let cipher: EmailPayloadCipherPort;
 

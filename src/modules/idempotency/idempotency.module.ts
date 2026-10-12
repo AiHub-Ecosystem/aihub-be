@@ -1,31 +1,26 @@
 import { Module } from '@nestjs/common';
 
 import {
-  RUNTIME_CONNECTION_CONFIGURATION,
-  type RuntimeConnectionConfigurationPort,
-} from '@/modules/secrets/application/runtime-connection-configuration.port';
-import { SecretsModule } from '@/modules/secrets/secrets.module';
+  PersistenceModule,
+  type PrismaClientHolder,
+  RUNTIME_PRISMA_CLIENT,
+} from '@/modules/persistence/persistence.module';
 import {
   IDEMPOTENCY_REPOSITORY,
   type IdempotencyRepositoryPort,
 } from './application/idempotency-repository.port';
 import { IdempotencyService } from './application/idempotency-service';
 import { IDEMPOTENCY_SERVICE } from './application/idempotency-service.port';
-import { createPostgresIdempotencyClient } from './infrastructure/postgres-idempotency.client';
 import { PostgresIdempotencyRepository } from './infrastructure/postgres-idempotency.repository';
 
 @Module({
-  imports: [SecretsModule],
+  imports: [PersistenceModule],
   providers: [
     {
       provide: IDEMPOTENCY_REPOSITORY,
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
-      useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
-      ): IdempotencyRepositoryPort =>
-        new PostgresIdempotencyRepository(
-          createPostgresIdempotencyClient(configuration.databaseUrl ?? ''),
-        ),
+      inject: [RUNTIME_PRISMA_CLIENT],
+      useFactory: (runtime: PrismaClientHolder): IdempotencyRepositoryPort =>
+        new PostgresIdempotencyRepository(runtime.prisma),
     },
     {
       provide: IDEMPOTENCY_SERVICE,

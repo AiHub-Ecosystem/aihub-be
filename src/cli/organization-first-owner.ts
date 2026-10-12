@@ -3,8 +3,8 @@ import type {
   OrganizationFirstOwnerPort,
 } from '@/modules/identity/organizations/application/organization-first-owner.port';
 import { PostgresOrganizationFirstOwnerRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-first-owner.repository';
-import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { runOperatorCommand } from './operator-command-context';
+import { createOperatorIdentityClient } from './operator-identity-client';
 
 export interface AttachFirstOwnerCliInput {
   readonly databaseUrl: string;
@@ -29,7 +29,7 @@ export async function runAttachFirstOwnerCommand(
   const repository =
     input.repository ??
     new PostgresOrganizationFirstOwnerRepository(
-      createPostgresIdentityClient(input.databaseUrl),
+      await createOperatorIdentityClient(input.databaseUrl),
     );
   const execution = await runOperatorCommand(
     repository,

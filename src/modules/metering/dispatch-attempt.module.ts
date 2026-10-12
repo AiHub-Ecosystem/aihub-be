@@ -1,29 +1,24 @@
 import { Module } from '@nestjs/common';
 
 import {
-  RUNTIME_CONNECTION_CONFIGURATION,
-  type RuntimeConnectionConfigurationPort,
-} from '@/modules/secrets/application/runtime-connection-configuration.port';
-import { SecretsModule } from '@/modules/secrets/secrets.module';
+  PersistenceModule,
+  type PrismaClientHolder,
+  RUNTIME_PRISMA_CLIENT,
+} from '@/modules/persistence/persistence.module';
 import { DISPATCH_ATTEMPT_RECORD } from './application/dispatch-attempt-record.port';
 import { DispatchAttemptMetricsRegistrar } from './infrastructure/dispatch-attempt-metrics.registrar';
-import {
-  PostgresDispatchAttemptRepository,
-  createPostgresDispatchAttemptRepository,
-} from './infrastructure/postgres-dispatch-attempt.repository';
+import { PostgresDispatchAttemptRepository } from './infrastructure/postgres-dispatch-attempt.repository';
 
 @Module({
-  imports: [SecretsModule],
+  imports: [PersistenceModule],
   providers: [
     {
       provide: PostgresDispatchAttemptRepository,
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      inject: [RUNTIME_PRISMA_CLIENT],
       useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
+        runtime: PrismaClientHolder,
       ): PostgresDispatchAttemptRepository =>
-        createPostgresDispatchAttemptRepository(
-          configuration.databaseUrl ?? '',
-        ),
+        new PostgresDispatchAttemptRepository(runtime.prisma),
     },
     {
       provide: DISPATCH_ATTEMPT_RECORD,

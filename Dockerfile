@@ -9,7 +9,7 @@ ENV COREPACK_HOME=/tmp/corepack
 RUN corepack enable \
   && corepack install --global pnpm@11.20.0
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmfile.cjs ./
 RUN HUSKY=0 pnpm install --frozen-lockfile
 
 FROM dependencies AS build

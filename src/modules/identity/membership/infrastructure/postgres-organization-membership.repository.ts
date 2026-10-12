@@ -46,11 +46,13 @@ import {
   organizationStatusValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
-import type {
-  PostgresIdentityClient,
-  PostgresIdentityQueryClient,
-  PostgresIdentityTransactionalClient,
+import {
+  type IdentityRepositoryClient,
+  identityRows,
+  identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+
+type IdentitySqlClient = Parameters<typeof identityRows>[0];
 
 const RESOLVE_MEMBERSHIP_SQL = `
   SELECT
@@ -410,14 +412,15 @@ function validateMutationInput(
 }
 
 async function lockMutationContext(
-  transaction: PostgresIdentityQueryClient,
+  transaction: IdentitySqlClient,
   input: OrganizationMembershipMutationInput,
   routeDenial: string,
 ): Promise<{
   readonly caller: MutationMembershipRow;
   readonly target: MutationMembershipRow | undefined;
 }> {
-  const organizationRows = await transaction.query(
+  const organizationRows = await identityRows(
+    transaction,
     LOCK_ORGANIZATION_FOR_MUTATION_SQL,
     [input.organizationId],
   );
@@ -438,7 +441,8 @@ async function lockMutationContext(
     throw forbidden(routeDenial);
   }
 
-  const membershipRows = await transaction.query(
+  const membershipRows = await identityRows(
+    transaction,
     LOCK_MEMBERSHIPS_FOR_MUTATION_SQL,
     [input.organizationId, input.userId, input.username],
   );
@@ -516,10 +520,10 @@ function requireAuthorizedMutationTarget(
 }
 
 async function isLastActiveOwner(
-  transaction: PostgresIdentityQueryClient,
+  transaction: IdentitySqlClient,
   organizationId: string,
 ): Promise<boolean> {
-  const ownerRows = await transaction.query(COUNT_ACTIVE_OWNERS_SQL, [
+  const ownerRows = await identityRows(transaction, COUNT_ACTIVE_OWNERS_SQL, [
     organizationId,
   ]);
   const count = ownerCount(ownerRows[0]);
@@ -544,7 +548,7 @@ function mapUpdatedMembership(value: unknown): {
 }
 
 async function rethrowMutationFailure(
-  client: PostgresIdentityClient,
+  client: IdentityRepositoryClient,
   stamp: ReturnType<typeof auditStamp>,
   refused: OrganizationAuditDraft | undefined,
   error: unknown,
@@ -560,7 +564,7 @@ async function rethrowMutationFailure(
 }
 
 function prepareMembershipMutation(
-  client: PostgresIdentityClient,
+  client: IdentityRepositoryClient,
   input: OrganizationMembershipMutationInput,
 ): {
   readonly stamp: ReturnType<typeof auditStamp>;
@@ -752,10 +756,7 @@ function mapOrganizationMembershipListRows(
 export class PostgresOrganizationMembershipRepository
   implements OrganizationMembershipPort, OrganizationMembershipListPort
 {
-  constructor(
-    private readonly client: PostgresIdentityClient &
-      PostgresIdentityTransactionalClient,
-  ) {}
+  constructor(private readonly client: IdentityRepositoryClient) {}
 
   async resolveMembership(
     input: ResolveMembershipInput,
@@ -774,7 +775,7 @@ export class PostgresOrganizationMembershipRepository
 
     let rows: readonly unknown[];
     try {
-      rows = await this.client.query(RESOLVE_MEMBERSHIP_SQL, [
+      rows = await identityRows(this.client, RESOLVE_MEMBERSHIP_SQL, [
         input.userId,
         input.organizationId,
       ]);
@@ -813,7 +814,7 @@ export class PostgresOrganizationMembershipRepository
 
     let rows: readonly unknown[];
     try {
-      rows = await this.client.query(LIST_ROSTER_SQL, [input.userId]);
+      rows = await identityRows(this.client, LIST_ROSTER_SQL, [input.userId]);
     } catch {
       throw identityStoreError('Identity store is unavailable');
     }
@@ -838,7 +839,7 @@ export class PostgresOrganizationMembershipRepository
 
     let rows: readonly unknown[];
     try {
-      rows = await this.client.query(LIST_ORGANIZATION_MEMBERS_SQL, [
+      rows = await identityRows(this.client, LIST_ORGANIZATION_MEMBERS_SQL, [
         input.organizationId,
         input.userId,
         admittedRoles(MEMBERSHIP_LIST_ADMISSION.admittedRoles),
@@ -856,7 +857,7 @@ export class PostgresOrganizationMembershipRepository
   ): Promise<OrganizationMembershipMutationResult> {
     const mutation = prepareMembershipMutation(this.client, input);
     try {
-      return await this.client.transaction(async (transaction) => {
+      return await identityTransaction(this.client, async (transaction) => {
         const { caller, target } = await lockMutationContext(
           transaction,
           input,
@@ -891,7 +892,7 @@ export class PostgresOrganizationMembershipRepository
           throw ownerRequired();
         }
 
-        const rows = await transaction.query(CHANGE_ROLE_SQL, [
+        const rows = await identityRows(transaction, CHANGE_ROLE_SQL, [
           input.organizationId,
           authorizedTarget.userId,
           input.role,
@@ -914,7 +915,7 @@ export class PostgresOrganizationMembershipRepository
   ): Promise<OrganizationMembershipMutationResult> {
     const mutation = prepareMembershipMutation(this.client, input);
     try {
-      return await this.client.transaction(async (transaction) => {
+      return await identityTransaction(this.client, async (transaction) => {
         const { caller, target } = await lockMutationContext(
           transaction,
           input,
@@ -945,7 +946,7 @@ export class PostgresOrganizationMembershipRepository
           throw ownerRequired();
         }
 
-        const rows = await transaction.query(DISABLE_MEMBERSHIP_SQL, [
+        const rows = await identityRows(transaction, DISABLE_MEMBERSHIP_SQL, [
           input.organizationId,
           authorizedTarget.userId,
         ]);
@@ -970,7 +971,7 @@ export class PostgresOrganizationMembershipRepository
   ): Promise<OrganizationMembershipMutationResult> {
     const mutation = prepareMembershipMutation(this.client, input);
     try {
-      return await this.client.transaction(async (transaction) => {
+      return await identityTransaction(this.client, async (transaction) => {
         const { caller, target } = await lockMutationContext(
           transaction,
           input,
@@ -993,7 +994,8 @@ export class PostgresOrganizationMembershipRepository
           decision,
         );
 
-        const promotedRows = await transaction.query(
+        const promotedRows = await identityRows(
+          transaction,
           PROMOTE_TRANSFER_TARGET_SQL,
           [input.organizationId, authorizedTarget.userId],
         );
@@ -1002,7 +1004,8 @@ export class PostgresOrganizationMembershipRepository
           throw identityStoreError('Identity data is invalid');
         }
 
-        const demotedRows = await transaction.query(
+        const demotedRows = await identityRows(
+          transaction,
           DEMOTE_TRANSFER_CALLER_SQL,
           [input.organizationId, caller.userId],
         );
@@ -1028,6 +1031,8 @@ export class PostgresOrganizationMembershipRepository
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.client.close();
+    if ('close' in this.client && typeof this.client.close === 'function') {
+      await this.client.close();
+    }
   }
 }

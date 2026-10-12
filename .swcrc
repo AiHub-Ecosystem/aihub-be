@@ -3,7 +3,8 @@
   "jsc": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@prisma-client/*": ["dist/generated/prisma/*"]
     },
     "parser": {
       "syntax": "typescript",

@@ -1,5 +1,3 @@
-import { and, eq, sql } from 'drizzle-orm';
-
 import { AppError } from '@/common/errors/app-error';
 import {
   IDENTITY_CONFIG_ALGORITHMS,
@@ -17,9 +15,8 @@ import type {
 
 import {
   auditStamp,
-  organizationAuditEventInsertSql,
+  recordOrganizationAuditEvent,
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
-import { organizationIdentityConfigs } from '@/modules/identity/shared/infrastructure/drizzle-identity-schema';
 import {
   identityStoreError,
   isRecord,
@@ -28,28 +25,75 @@ import {
   organizationStatusValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
-import type { IdentityDatabaseClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  type IdentityRepositoryClient,
+  identityRows,
+  identityTransaction,
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
-/**
- * Columns are named rather than defaulted. The read replica holds a column-level
- * grant, so a `select *` would ask it for `created_at` as well, which it does
- * not have.
- */
-const ACTIVE_CONFIG_COLUMNS = {
-  organizationId: organizationIdentityConfigs.organizationId,
-  issuer: organizationIdentityConfigs.issuer,
-  jwksUrl: organizationIdentityConfigs.jwksUrl,
-  publicKeysJwks: organizationIdentityConfigs.publicKeysJwks,
-  allowedAlgorithms: organizationIdentityConfigs.allowedAlgorithms,
-  maxAssertionTtlSeconds: organizationIdentityConfigs.maxAssertionTtlSeconds,
-  status: organizationIdentityConfigs.status,
-  jwksCacheVersion: organizationIdentityConfigs.jwksCacheVersion,
-};
+type IdentityConfigRow = Record<string, unknown>;
 
-const STORED_CONFIG_COLUMNS = {
-  ...ACTIVE_CONFIG_COLUMNS,
-  updatedAt: organizationIdentityConfigs.updatedAt,
-};
+const ACTIVE_CONFIG_COLUMNS_SQL = `
+  organization_id AS "organizationId",
+  issuer,
+  jwks_url AS "jwksUrl",
+  public_keys_jwks AS "publicKeysJwks",
+  allowed_algorithms AS "allowedAlgorithms",
+  max_assertion_ttl_seconds AS "maxAssertionTtlSeconds",
+  status,
+  jwks_cache_version AS "jwksCacheVersion"
+`;
+
+const STORED_CONFIG_COLUMNS_SQL = `${ACTIVE_CONFIG_COLUMNS_SQL},
+  updated_at AS "updatedAt"
+`;
+
+// The same columns, selected through the generated client. The upsert below
+// cannot be expressed there, so its `RETURNING` list stays SQL under the same
+// field names and one mapper reads both.
+const ACTIVE_CONFIG_SELECT = {
+  organizationId: true,
+  issuer: true,
+  jwksUrl: true,
+  publicKeysJwks: true,
+  allowedAlgorithms: true,
+  maxAssertionTtlSeconds: true,
+  status: true,
+  jwksCacheVersion: true,
+} as const;
+
+const STORED_CONFIG_SELECT = {
+  ...ACTIVE_CONFIG_SELECT,
+  updatedAt: true,
+} as const;
+
+const INSERT_OR_UPDATE_CONFIG_SQL = `
+  INSERT INTO organization_identity_configs (
+    organization_id, issuer, jwks_url, public_keys_jwks,
+    allowed_algorithms, max_assertion_ttl_seconds, status
+  ) VALUES ($1, $2, $3, $4::jsonb, $5::text[], $6, 'active')
+  ON CONFLICT (organization_id) DO UPDATE SET
+    issuer = EXCLUDED.issuer,
+    jwks_url = EXCLUDED.jwks_url,
+    public_keys_jwks = EXCLUDED.public_keys_jwks,
+    allowed_algorithms = EXCLUDED.allowed_algorithms,
+    max_assertion_ttl_seconds = EXCLUDED.max_assertion_ttl_seconds,
+    jwks_cache_version = organization_identity_configs.jwks_cache_version + 1
+  WHERE (
+    organization_identity_configs.issuer,
+    organization_identity_configs.jwks_url,
+    organization_identity_configs.public_keys_jwks,
+    organization_identity_configs.allowed_algorithms,
+    organization_identity_configs.max_assertion_ttl_seconds
+  ) IS DISTINCT FROM (
+    EXCLUDED.issuer,
+    EXCLUDED.jwks_url,
+    EXCLUDED.public_keys_jwks,
+    EXCLUDED.allowed_algorithms,
+    EXCLUDED.max_assertion_ttl_seconds
+  )
+  RETURNING ${STORED_CONFIG_COLUMNS_SQL}
+`;
 
 function nullableStringValue(
   record: Record<string, unknown>,
@@ -68,7 +112,12 @@ function nullableStringValue(
  * looking at, and no value is rounded on the way.
  */
 function jwksCacheVersionValue(value: unknown): string | undefined {
-  return typeof value === 'bigint' && value > 0n ? value.toString() : undefined;
+  if (typeof value === 'bigint' && value > 0n) {
+    return value.toString();
+  }
+  return typeof value === 'string' && /^[1-9]\d*$/.test(value)
+    ? value
+    : undefined;
 }
 
 function algorithmArrayValue(
@@ -207,8 +256,8 @@ export class PostgresOrganizationIdentityConfigRepository
   implements OrganizationIdentityConfigRepositoryPort
 {
   constructor(
-    private readonly client: IdentityDatabaseClient,
-    private readonly readClient: IdentityDatabaseClient = client,
+    private readonly client: IdentityRepositoryClient,
+    private readonly readClient: IdentityRepositoryClient = client,
   ) {}
 
   async findActiveByOrganizationId(
@@ -249,15 +298,14 @@ export class PostgresOrganizationIdentityConfigRepository
     const stamp = auditStamp(input, input.userId, input.context.receivedAt);
 
     try {
-      return await this.client.db.transaction(async (transaction) => {
+      return await identityTransaction(this.client, async (transaction) => {
         const organization = (
-          await transaction.execute<Record<string, unknown>>(sql`
-            SELECT status
-            FROM organizations
-            WHERE id = ${input.organizationId}
-            FOR UPDATE
-          `)
-        ).rows[0];
+          (await identityRows(
+            transaction,
+            `SELECT status FROM organizations WHERE id = $1 FOR UPDATE`,
+            [input.organizationId],
+          )) as readonly IdentityConfigRow[]
+        )[0];
         if (!isRecord(organization)) {
           return { kind: 'forbidden' as const };
         }
@@ -273,14 +321,15 @@ export class PostgresOrganizationIdentityConfigRepository
         }
 
         const membership = (
-          await transaction.execute<Record<string, unknown>>(sql`
-            SELECT role, status
-            FROM organization_members
-            WHERE organization_id = ${input.organizationId}
-              AND user_account_id = ${input.userId}
-            FOR UPDATE
-          `)
-        ).rows[0];
+          (await identityRows(
+            transaction,
+            `SELECT role, status
+             FROM organization_members
+             WHERE organization_id = $1 AND user_account_id = $2
+             FOR UPDATE`,
+            [input.organizationId, input.userId],
+          )) as readonly IdentityConfigRow[]
+        )[0];
         if (!isRecord(membership)) {
           return { kind: 'forbidden' as const };
         }
@@ -293,66 +342,41 @@ export class PostgresOrganizationIdentityConfigRepository
           return { kind: 'forbidden' as const };
         }
 
-        const written = await transaction
-          .insert(organizationIdentityConfigs)
-          .values({
-            organizationId: input.organizationId,
-            issuer: input.issuer,
-            jwksUrl: input.jwksUrl,
-            publicKeysJwks: input.publicKeysJwks,
-            allowedAlgorithms: [...input.allowedAlgorithms],
-            maxAssertionTtlSeconds: input.maxAssertionTtlSeconds,
-            status: 'active',
-          })
-          .onConflictDoUpdate({
-            target: organizationIdentityConfigs.organizationId,
-            set: {
-              issuer: input.issuer,
-              jwksUrl: input.jwksUrl,
-              publicKeysJwks: input.publicKeysJwks,
-              allowedAlgorithms: [...input.allowedAlgorithms],
-              maxAssertionTtlSeconds: input.maxAssertionTtlSeconds,
-              jwksCacheVersion: sql`${organizationIdentityConfigs.jwksCacheVersion} + 1`,
-            },
-            /**
-             * The conflict update is what makes a repeated identical save a
-             * no-op: with nothing different to write, the statement updates no
-             * row, returns none, and the caller reads the stored row back
-             * without bumping the JWKS cache version or writing an audit event.
-             */
-            setWhere: sql`(${organizationIdentityConfigs.issuer}, ${organizationIdentityConfigs.jwksUrl}, ${organizationIdentityConfigs.publicKeysJwks}, ${organizationIdentityConfigs.allowedAlgorithms}, ${organizationIdentityConfigs.maxAssertionTtlSeconds}) is distinct from (excluded.issuer, excluded.jwks_url, excluded.public_keys_jwks, excluded.allowed_algorithms, excluded.max_assertion_ttl_seconds)`,
-          })
-          .returning(STORED_CONFIG_COLUMNS);
+        const written = (await identityRows(
+          transaction,
+          INSERT_OR_UPDATE_CONFIG_SQL,
+          [
+            input.organizationId,
+            input.issuer,
+            input.jwksUrl,
+            input.publicKeysJwks === null
+              ? null
+              : JSON.stringify(input.publicKeysJwks),
+            [...input.allowedAlgorithms],
+            input.maxAssertionTtlSeconds,
+          ],
+        )) as readonly IdentityConfigRow[];
 
         const changed = written.length > 0;
         const row =
           written[0] ??
-          (
-            await transaction
-              .select(STORED_CONFIG_COLUMNS)
-              .from(organizationIdentityConfigs)
-              .where(
-                eq(
-                  organizationIdentityConfigs.organizationId,
-                  input.organizationId,
-                ),
-              )
-              .limit(1)
-          )[0];
+          (await transaction.organizationIdentityConfig.findUnique({
+            where: { organizationId: input.organizationId },
+            select: STORED_CONFIG_SELECT,
+          })) ??
+          undefined;
         const config = storedIdentityConfigFromRow(row);
         if (config === undefined) {
           throw identityStoreError('Identity data is invalid');
         }
 
         if (changed) {
-          await transaction.execute(
-            organizationAuditEventInsertSql(stamp, {
-              action: 'organization.identity_config_set',
-              organizationId: input.organizationId,
-              issuer: input.issuer,
-              sourceKind: input.sourceKind,
-            }),
-          );
+          await recordOrganizationAuditEvent(transaction, stamp, {
+            action: 'organization.identity_config_set',
+            organizationId: input.organizationId,
+            issuer: input.issuer,
+            sourceKind: input.sourceKind,
+          });
         }
 
         return {
@@ -384,19 +408,12 @@ export class PostgresOrganizationIdentityConfigRepository
     }
 
     try {
-      const [first] = await this.readClient.db
-        .select(status === null ? STORED_CONFIG_COLUMNS : ACTIVE_CONFIG_COLUMNS)
-        .from(organizationIdentityConfigs)
-        .where(
-          and(
-            eq(organizationIdentityConfigs.organizationId, organizationId),
-            status === null
-              ? undefined
-              : eq(organizationIdentityConfigs.status, status),
-          ),
-        )
-        .limit(1);
-      return first;
+      const first = await this.readClient.organizationIdentityConfig.findFirst({
+        where:
+          status === null ? { organizationId } : { organizationId, status },
+        select: status === null ? STORED_CONFIG_SELECT : ACTIVE_CONFIG_SELECT,
+      });
+      return first ?? undefined;
     } catch {
       throw identityStoreError('Identity store is unavailable');
     }
@@ -404,15 +421,47 @@ export class PostgresOrganizationIdentityConfigRepository
 }
 
 /**
- * Drizzle carries a driver failure in `cause`, so the PostgreSQL code and
- * constraint this maps on are one level down from the error the transaction
- * rejects with. Only those two fields are read; the statement and its
- * parameters that Drizzle also puts on the wrapper never leave this check.
+ * Prisma wraps PostgreSQL uniqueness failures with the SQLSTATE and detail in
+ * its metadata. Only those fields are inspected; query text and values stay
+ * inside the error boundary.
  */
 function isIssuerConflict(error: unknown): boolean {
   if (!isRecord(error)) {
     return false;
   }
-  const failure = isRecord(error.cause) ? error.cause : error;
-  return failure.code === '23505' && failure.constraint === 'oic_issuer_uq';
+  const pending = [error];
+  const seen = new Set<Record<string, unknown>>();
+  while (pending.length > 0) {
+    const failure = pending.pop();
+    if (!isRecord(failure) || seen.has(failure)) {
+      continue;
+    }
+    seen.add(failure);
+
+    const constraint = failure.constraint;
+    const constraintName =
+      typeof constraint === 'string'
+        ? constraint
+        : isRecord(constraint) && typeof constraint.index === 'string'
+          ? constraint.index
+          : undefined;
+    if (
+      (failure.code === '23505' &&
+        (constraintName === 'oic_issuer_uq' ||
+          (typeof failure.message === 'string' &&
+            failure.message.includes('oic_issuer_uq')))) ||
+      (failure.kind === 'UniqueConstraintViolation' &&
+        constraintName === 'oic_issuer_uq')
+    ) {
+      return true;
+    }
+
+    for (const key of ['cause', 'meta', 'driverAdapterError']) {
+      const nested = failure[key];
+      if (isRecord(nested)) {
+        pending.push(nested);
+      }
+    }
+  }
+  return false;
 }

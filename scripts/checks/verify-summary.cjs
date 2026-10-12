@@ -21,6 +21,10 @@ const MAX_STEP_LINES = 25;
 const MAX_JEST_FILES = 10;
 const MAX_JEST_TESTS = 8;
 const MAX_TAIL_LINES = 6;
+// Node's V8 abort (exit 134 on POSIX, 3221226505 on Windows) and the message it
+// prints before it.
+const OUT_OF_MEMORY =
+  /heap out of memory|Allocation failed|exit code (?:134|3221226505)\b/i;
 
 function lastMatch(lines, pattern) {
   for (let index = lines.length - 1; index >= 0; index -= 1) {
@@ -111,6 +115,12 @@ function summarize(rawLog, exitCode, logPath) {
           : step.output.slice(0, MAX_STEP_LINES)),
       );
     }
+  }
+
+  if (exitCode !== 0 && OUT_OF_MEMORY.test(rawLog)) {
+    out.push(
+      'out of memory, not a code failure: free RAM (stop Docker/WSL, end stale jest processes) and run again',
+    );
   }
 
   out.push(`full log: ${logPath}`);

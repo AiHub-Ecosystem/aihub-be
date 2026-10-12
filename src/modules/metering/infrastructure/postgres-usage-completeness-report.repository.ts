@@ -4,11 +4,8 @@ import {
   type UsageReportSnapshotQuery,
   type UsageReportSnapshotRow,
 } from '@/modules/metering/application/usage-completeness-report';
-import {
-  type PostgresMeteringClient,
-  createPostgresMeteringClient,
-  isRecord,
-} from './postgres-usage.repository';
+import { isRecord, safeNonNegativeCount } from './metering-row';
+import type { PrismaMeteringClient } from './prisma-metering.client';
 
 export const USAGE_REPORT_SQL = `
   SELECT
@@ -30,16 +27,17 @@ export const USAGE_REPORT_SQL = `
 `;
 
 function countFromRow(value: unknown): number {
-  const parsed =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string' && /^(?:0|[1-9]\d*)$/.test(value)
-        ? Number(value)
-        : Number.NaN;
-  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+  const parsed = safeNonNegativeCount(value);
+  if (parsed === undefined) {
     throw new UsageReportSnapshotError();
   }
   return parsed;
+}
+
+interface UsageReportRow {
+  readonly operation: string;
+  readonly successful_count: bigint;
+  readonly missing_usage_count: bigint;
 }
 
 function snapshotFromRow(value: unknown): UsageReportSnapshotRow {
@@ -60,30 +58,23 @@ function snapshotFromRow(value: unknown): UsageReportSnapshotRow {
 export class PostgresUsageCompletenessReportRepository
   implements UsageReportRepositoryPort
 {
-  constructor(private readonly client: PostgresMeteringClient) {}
+  constructor(private readonly client: PrismaMeteringClient) {}
 
   async snapshot(
     query: UsageReportSnapshotQuery,
   ): Promise<readonly UsageReportSnapshotRow[]> {
-    const rows = await this.client.query(USAGE_REPORT_SQL, [
+    const rows = await this.client.$queryRawUnsafe<readonly UsageReportRow[]>(
+      USAGE_REPORT_SQL,
       query.from,
       query.to,
       [...query.operations],
-    ]);
+    );
     return rows
       .map(snapshotFromRow)
       .sort((left, right) => left.operation.localeCompare(right.operation));
   }
 
   async close(): Promise<void> {
-    await this.client.close();
+    await this.client.close?.();
   }
-}
-
-export function createPostgresUsageCompletenessReportRepository(
-  databaseUrl: string,
-): PostgresUsageCompletenessReportRepository {
-  return new PostgresUsageCompletenessReportRepository(
-    createPostgresMeteringClient(databaseUrl),
-  );
 }

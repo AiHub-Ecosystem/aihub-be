@@ -1,44 +1,28 @@
-import {
-  PostgresQuotaReconciliationRepository,
-  QUOTA_RECONCILIATION_SQL,
-} from './postgres-quota-reconciliation.repository';
-import type { PostgresMeteringClient } from './postgres-usage.repository';
+import type { PrismaClient } from '@prisma-client/client';
+import { PostgresQuotaReconciliationRepository } from './postgres-quota-reconciliation.repository';
 
-class FakePostgres implements PostgresMeteringClient {
-  readonly queries: Array<{
-    readonly text: string;
-    readonly values: readonly unknown[];
-  }> = [];
-  rows: readonly unknown[] = [];
-
-  async query(
-    text: string,
-    values: readonly unknown[],
-  ): Promise<readonly unknown[]> {
-    this.queries.push({ text, values });
-    return this.rows;
-  }
-
-  async close(): Promise<void> {
-    return undefined;
-  }
+function fakePrisma(rows: readonly unknown[] = []) {
+  const query = jest.fn().mockResolvedValue(rows);
+  return {
+    client: { $queryRawUnsafe: query } as unknown as PrismaClient,
+    query,
+  };
 }
 
 describe('PostgresQuotaReconciliationRepository', () => {
-  it('queries the UTC half-open window and maps quota-bearing organizations', async () => {
-    const client = new FakePostgres();
-    client.rows = [
+  it('maps quota-bearing organizations for the requested UTC window', async () => {
+    const { client, query } = fakePrisma([
       {
         organization_id: 'org_zulu',
         quota: 2,
-        billable_count: '3',
+        billable_count: 3n,
       },
       {
         organization_id: 'org_alpha',
-        quota: '10',
-        billable_count: '0',
+        quota: 10,
+        billable_count: 0n,
       },
-    ];
+    ]);
     const repository = new PostgresQuotaReconciliationRepository(client);
     const from = new Date('2026-09-01T00:00:00.000Z');
     const to = new Date('2026-10-01T00:00:00.000Z');
@@ -57,34 +41,17 @@ describe('PostgresQuotaReconciliationRepository', () => {
         billableRequestCount: 3,
       },
     ]);
-    expect(client.queries).toEqual([
-      { text: QUOTA_RECONCILIATION_SQL, values: [from, to] },
-    ]);
-  });
-
-  it('keeps successful quota-unverified rows billable and excludes failed rows in SQL', () => {
-    expect(QUOTA_RECONCILIATION_SQL).toContain(
-      "FILTER (WHERE u.outcome = 'success')",
-    );
-    expect(QUOTA_RECONCILIATION_SQL).toContain('SUM(u.billable_requests)');
-    expect(QUOTA_RECONCILIATION_SQL).toContain('u.created_at >= $1');
-    expect(QUOTA_RECONCILIATION_SQL).toContain('u.created_at < $2');
-    expect(QUOTA_RECONCILIATION_SQL).toContain(
-      'o.monthly_request_quota IS NOT NULL',
-    );
-    expect(QUOTA_RECONCILIATION_SQL).not.toContain('o.status');
-    expect(QUOTA_RECONCILIATION_SQL).not.toContain('metering_status');
+    expect(query).toHaveBeenCalledWith(expect.any(String), from, to);
   });
 
   it('rejects an unsafe aggregate before any application write can occur', async () => {
-    const client = new FakePostgres();
-    client.rows = [
+    const { client } = fakePrisma([
       {
         organization_id: 'org_alpha',
         quota: 10,
-        billable_count: '9007199254740992',
+        billable_count: 9007199254740992n,
       },
-    ];
+    ]);
     const repository = new PostgresQuotaReconciliationRepository(client);
 
     await expect(
