@@ -38,6 +38,10 @@ password login, refresh, and Web Session exchange alone, then mixes those auth
 routes with grading at exact offered shares of 75% grading and 25% auth. Within
 that auth share, login is 50%, refresh 25%, and Web Session exchange 25%.
 Each rate stage holds for 15 seconds at 4, 8, 16, and 32 requests per second.
+The auth-and-grading schedule interleaves these shares in four-request cycles;
+custom stage rate × hold duration must be divisible by four. k6 allows each
+load iteration up to 65 seconds after the arrival window to finish, matching
+the longest 60-second operation deadline plus a five-second margin.
 After those measurements, the runner selects one mixed grading overload stage above the
 highest stage where all four grading p99 values met their operation deadlines.
 It then holds the mixed profile for 30 seconds at the selected passing rate to

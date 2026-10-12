@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
+  authAndGradingWorkload,
   hasCompleteLoadDelivery,
+  hasExactAuthGradingMix,
   highestPassingRate,
   jsonAfterPrefix,
   metricValue,
@@ -85,6 +87,34 @@ await test('maps the Task 1 provider fixture to the public API request shape', (
     essay: fixture.essay,
     image_url: fixture.url,
   });
+});
+
+await test('interleaves exact auth and grading shares in four-request cycles', () => {
+  const authRoutes = new Set(['login', 'refresh', 'web_session_exchange']);
+  const counts = authAndGradingWorkload.reduce(
+    (result, route) => ({ ...result, [route]: (result[route] ?? 0) + 1 }),
+    {},
+  );
+
+  assert.deepEqual(counts, {
+    writing_task1: 3,
+    writing_task2: 3,
+    speaking_multipart: 3,
+    login: 2,
+    speaking_json: 3,
+    refresh: 1,
+    web_session_exchange: 1,
+  });
+  for (let index = 0; index < authAndGradingWorkload.length; index += 4) {
+    assert.equal(
+      authAndGradingWorkload
+        .slice(index, index + 4)
+        .filter((route) => authRoutes.has(route)).length,
+      1,
+    );
+  }
+  assert.equal(hasExactAuthGradingMix(4, '15s'), true);
+  assert.equal(hasExactAuthGradingMix(3, '15s'), false);
 });
 
 await test('reads tagged k6 metrics and Docker resource samples', () => {

@@ -1,7 +1,10 @@
 import exec from 'k6/execution';
 import http from 'k6/http';
 import { Counter, Gauge, Trend } from 'k6/metrics';
-import { task1PayloadFromFixture } from './capacity-benchmark-utils.mjs';
+import {
+  authAndGradingWorkload,
+  task1PayloadFromFixture,
+} from './capacity-benchmark-utils.mjs';
 
 const allRoutes = [
   'writing_task1',
@@ -81,7 +84,7 @@ export const options = {
       duration,
       preAllocatedVUs: Math.min(maxVUs, Math.max(16, rate * 3)),
       maxVUs,
-      gracefulStop: '5s',
+      gracefulStop: '65s',
       exec: 'load',
     },
     metrics: {
@@ -105,25 +108,6 @@ const grading = [
   'speaking_multipart',
   'speaking_json',
 ];
-const mixedWorkload = [
-  'writing_task1',
-  'writing_task1',
-  'writing_task1',
-  'writing_task2',
-  'writing_task2',
-  'writing_task2',
-  'speaking_multipart',
-  'speaking_multipart',
-  'speaking_multipart',
-  'speaking_json',
-  'speaking_json',
-  'speaking_json',
-  'login',
-  'login',
-  'refresh',
-  'web_session_exchange',
-];
-
 export function setup() {
   const reset = http.post(`${stubUrl}/__stats/reset`, null, {
     timeout: '5s',
@@ -148,7 +132,9 @@ export function load(data) {
     selected = grading[exec.scenario.iterationInTest % grading.length];
   } else if (workload === 'auth_and_grading') {
     selected =
-      mixedWorkload[exec.scenario.iterationInTest % mixedWorkload.length];
+      authAndGradingWorkload[
+        exec.scenario.iterationInTest % authAndGradingWorkload.length
+      ];
   }
 
   if (selected === 'login') return requestLogin(user);

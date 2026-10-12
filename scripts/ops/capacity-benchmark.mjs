@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   hasCompleteLoadDelivery,
+  hasExactAuthGradingMix,
   highestPassingRate,
   jsonAfterPrefix,
   metricValue,
@@ -60,6 +61,12 @@ if (
   stubErrorRate > 1
 ) {
   throw new Error('invalid capacity benchmark settings');
+}
+
+if (stageRates.some((rate) => !hasExactAuthGradingMix(rate, duration))) {
+  throw new Error(
+    'each auth/grading stage must offer a multiple of four requests; adjust stage rates or hold duration',
+  );
 }
 
 const benchmarkRevision = gitRevision();
