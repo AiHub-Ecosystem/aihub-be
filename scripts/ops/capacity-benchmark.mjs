@@ -8,7 +8,6 @@ import { fileURLToPath } from 'node:url';
 
 import {
   hasCompleteLoadDelivery,
-  hasExactAuthGradingMix,
   highestPassingRate,
   jsonAfterPrefix,
   metricValue,
@@ -61,12 +60,6 @@ if (
   stubErrorRate > 1
 ) {
   throw new Error('invalid capacity benchmark settings');
-}
-
-if (stageRates.some((rate) => !hasExactAuthGradingMix(rate, duration))) {
-  throw new Error(
-    'each auth/grading stage must offer a multiple of four requests; adjust stage rates or hold duration',
-  );
 }
 
 const benchmarkRevision = gitRevision();
@@ -287,15 +280,6 @@ try {
           writingTask2: 0.25,
           speakingMultipart: 0.25,
           speakingJson: 0.25,
-        },
-        authAndGradingWeights: {
-          writingTask1: 0.1875,
-          writingTask2: 0.1875,
-          speakingMultipart: 0.1875,
-          speakingJson: 0.1875,
-          passwordLogin: 0.125,
-          refresh: 0.0625,
-          webSessionExchange: 0.0625,
         },
         syntheticOrganizations: 4,
         maxConcurrentPerOrganization: 20,
@@ -561,6 +545,10 @@ async function runK6({
     (sum, route) => sum + route.count,
     0,
   );
+  for (const route of Object.values(routeResults)) {
+    route.responseShare =
+      requestCount === 0 ? null : route.count / requestCount;
+  }
   const appSamples = samplesInWindow(
     statsWatcher?.samples ?? [],
     startMs,

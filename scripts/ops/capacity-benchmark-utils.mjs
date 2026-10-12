@@ -48,16 +48,6 @@ export const authAndGradingWorkload = [
   'login',
 ];
 
-export function hasExactAuthGradingMix(rate, holdDuration) {
-  const seconds = Number.parseInt(holdDuration, 10);
-  const totalIterations = rate * seconds;
-  return (
-    /^\d+s$/.test(holdDuration) &&
-    Number.isSafeInteger(totalIterations) &&
-    totalIterations % 4 === 0
-  );
-}
-
 export function hasCompleteLoadDelivery(run) {
   const duration = /^(\d+)s$/.exec(run.holdDuration);
   const durationSeconds = Number(duration?.[1]);

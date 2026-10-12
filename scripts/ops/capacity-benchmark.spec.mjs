@@ -5,7 +5,6 @@ import test from 'node:test';
 import {
   authAndGradingWorkload,
   hasCompleteLoadDelivery,
-  hasExactAuthGradingMix,
   highestPassingRate,
   jsonAfterPrefix,
   metricValue,
@@ -89,7 +88,7 @@ await test('maps the Task 1 provider fixture to the public API request shape', (
   });
 });
 
-await test('interleaves exact auth and grading shares in four-request cycles', () => {
+await test('interleaves auth and grading routes across four-request blocks', () => {
   const authRoutes = new Set(['login', 'refresh', 'web_session_exchange']);
   const counts = authAndGradingWorkload.reduce(
     (result, route) => ({ ...result, [route]: (result[route] ?? 0) + 1 }),
@@ -113,8 +112,6 @@ await test('interleaves exact auth and grading shares in four-request cycles', (
       1,
     );
   }
-  assert.equal(hasExactAuthGradingMix(4, '15s'), true);
-  assert.equal(hasExactAuthGradingMix(3, '15s'), false);
 });
 
 await test('reads tagged k6 metrics and Docker resource samples', () => {

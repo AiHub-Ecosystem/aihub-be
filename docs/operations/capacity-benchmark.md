@@ -35,13 +35,15 @@ Speaking mix split evenly across the four routes. Before each refresh-containing
 stage, the harness restores synthetic refresh-token state so rotation from a
 prior stage cannot turn later requests into reuse failures. It then measures
 password login, refresh, and Web Session exchange alone, then mixes those auth
-routes with grading at exact offered shares of 75% grading and 25% auth. Within
-that auth share, login is 50%, refresh 25%, and Web Session exchange 25%.
+routes with grading in an interleaved 75:25 target schedule. The report records
+each route's share of returned API responses for every stage, including a stage
+that ends partway through the 16-request cycle. Within each full cycle, login
+is 50% of auth requests, refresh 25%, and Web Session exchange 25%.
 Each rate stage holds for 15 seconds at 4, 8, 16, and 32 requests per second.
-The auth-and-grading schedule interleaves these shares in four-request cycles;
-custom stage rate × hold duration must be divisible by four. k6 allows each
-load iteration up to 65 seconds after the arrival window to finish, matching
-the longest 60-second operation deadline plus a five-second margin.
+The auth-and-grading schedule places one auth request in every four-request
+block. k6 allows each load iteration up to 65 seconds after the arrival window
+to finish, matching the longest 60-second operation deadline plus a five-second
+margin.
 After those measurements, the runner selects one mixed grading overload stage above the
 highest stage where all four grading p99 values met their operation deadlines.
 It then holds the mixed profile for 30 seconds at the selected passing rate to
@@ -54,7 +56,7 @@ stub error rate, and maximum VUs use `BENCHMARK_REDIS_RTT_MS`,
 
 During each stage, k6 scrapes `/metrics` once per second. The report includes
 offered and completed rates (completed rate uses the configured hold interval),
-route p50/p95/p99, and per-route error counts,
+route p50/p95/p99, response shares, and per-route error counts,
 injected stub failures, process RSS and heap, event-loop lag, Postgres pool
 waiting clients, downstream queue counts, and the corrected grading
 `total_ms`, `admission_ms`, and `downstream_ms`. It also records Docker CPU and
