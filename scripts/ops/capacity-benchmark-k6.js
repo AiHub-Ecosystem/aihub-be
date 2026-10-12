@@ -1,6 +1,7 @@
 import exec from 'k6/execution';
 import http from 'k6/http';
 import { Counter, Gauge, Trend } from 'k6/metrics';
+import { task1PayloadFromFixture } from './capacity-benchmark-utils.mjs';
 
 const allRoutes = [
   'writing_task1',
@@ -39,7 +40,9 @@ const eventLoopLag = new Gauge('benchmark_event_loop_lag_seconds');
 const postgresWaiting = new Gauge('benchmark_postgres_waiting');
 const downstreamQueued = new Gauge('benchmark_downstream_queued');
 
-const task1 = JSON.parse(open('/fixtures/ai-writing/grade-task1.request.json'));
+const task1 = task1PayloadFromFixture(
+  JSON.parse(open('/fixtures/ai-writing/grade-task1.request.json')),
+);
 const task2 = JSON.parse(open('/fixtures/ai-writing/grade-task2.request.json'));
 const credentials = JSON.parse(open('/data/credentials.json'));
 const host = 'api.benchmark.test';

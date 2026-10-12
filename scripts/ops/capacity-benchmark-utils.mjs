@@ -20,6 +20,15 @@ export function highestPassingRate(runs, routeNames, deadlineMs) {
     .reduce((highest, run) => Math.max(highest, run.offeredRateRps), 0);
 }
 
+export function task1PayloadFromFixture(fixture) {
+  return {
+    question: fixture.question,
+    chart_type: fixture.topic,
+    essay: fixture.essay,
+    image_url: fixture.url,
+  };
+}
+
 export function hasCompleteLoadDelivery(run) {
   const duration = /^(\d+)s$/.exec(run.holdDuration);
   const durationSeconds = Number(duration?.[1]);

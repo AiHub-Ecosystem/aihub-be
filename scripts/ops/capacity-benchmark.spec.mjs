@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -9,6 +10,7 @@ import {
   overloadRate,
   parseDockerStats,
   taggedMetricValues,
+  task1PayloadFromFixture,
 } from './capacity-benchmark-utils.mjs';
 
 await test('chooses the highest offered rate meeting the deadline without errors', () => {
@@ -64,6 +66,25 @@ await test('places the controlled overload stage above the highest passing stage
   assert.equal(overloadRate([4, 8, 16, 32], 16), 32);
   assert.equal(overloadRate([4, 8, 16, 32], 32), 48);
   assert.equal(overloadRate([4, 8, 16, 32], 0), 48);
+});
+
+await test('maps the Task 1 provider fixture to the public API request shape', () => {
+  const fixture = JSON.parse(
+    readFileSync(
+      new URL(
+        '../../test/fixtures/ai-writing/grade-task1.request.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  );
+
+  assert.deepEqual(task1PayloadFromFixture(fixture), {
+    question: fixture.question,
+    chart_type: fixture.topic,
+    essay: fixture.essay,
+    image_url: fixture.url,
+  });
 });
 
 await test('reads tagged k6 metrics and Docker resource samples', () => {
