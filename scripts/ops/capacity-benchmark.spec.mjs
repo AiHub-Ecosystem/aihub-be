@@ -9,6 +9,7 @@ import {
   jsonAfterPrefix,
   metricValue,
   overloadRate,
+  parseDockerImageIdentity,
   parseDockerStats,
   taggedMetricValues,
   task1PayloadFromFixture,
@@ -141,6 +142,17 @@ await test('reads tagged k6 metrics and Docker resource samples', () => {
   assert.deepEqual(
     parseDockerStats('{"CPUPerc":"150.25%","MemUsage":"384MiB / 768MiB"}'),
     { cpuPercent: 150.25, memoryBytes: 402653184 },
+  );
+  assert.deepEqual(
+    parseDockerImageIdentity(
+      'postgres:16-alpine',
+      'sha256:abc ["postgres@sha256:def"]',
+    ),
+    {
+      reference: 'postgres:16-alpine',
+      imageId: 'sha256:abc',
+      repositoryDigests: ['postgres@sha256:def'],
+    },
   );
 });
 

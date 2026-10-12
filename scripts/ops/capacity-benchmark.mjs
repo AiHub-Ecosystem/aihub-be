@@ -12,6 +12,7 @@ import {
   jsonAfterPrefix,
   metricValue,
   overloadRate,
+  parseDockerImageIdentity,
   parseDockerStats,
 } from './capacity-benchmark-utils.mjs';
 
@@ -265,6 +266,7 @@ try {
   statsWatcher.stop();
   hostWatcher.stop();
 
+  const containerImages = await dockerImageIdentities();
   const report = {
     benchmark: {
       startedAt: startedAt.toISOString(),
@@ -299,6 +301,7 @@ try {
           'test/fixtures/ai-speaking/grading.response.json',
         ],
       },
+      containerImages,
       generator: {
         runner: 'grafana/k6:0.54.0',
         placement:
@@ -538,6 +541,27 @@ async function dockerRestartCount(containerId) {
     throw new Error('could not read AIHUB container restart count');
   }
   return count;
+}
+
+async function dockerImageIdentities() {
+  const { stdout } = await dockerCompose(['config', '--images']);
+  const references = stdout.trim().split(/\r?\n/);
+  return Promise.all(
+    references.map(async (reference) => {
+      const result = await runProcess(
+        'docker',
+        [
+          'image',
+          'inspect',
+          '--format',
+          '{{.Id}} {{json .RepoDigests}}',
+          reference,
+        ],
+        { env: benchmarkEnvironment },
+      );
+      return parseDockerImageIdentity(reference, result.stdout.trim());
+    }),
+  );
 }
 
 async function runK6({

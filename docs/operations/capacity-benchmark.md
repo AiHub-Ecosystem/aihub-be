@@ -8,7 +8,8 @@ pnpm capacity:benchmark
 
 The runner requires a clean Git checkout so the Docker image matches the commit
 recorded in the report. It snapshots the k6 harness and its utility module into
-the run artifact so every stage uses the same source.
+the run artifact so every stage uses the same source. The report records the
+resolved image ID and repository digest for every Compose image.
 
 It starts a uniquely named Docker Compose project with a disposable Postgres
 volume, Redis, the AIHUB container, a controlled AI Service stub, and a pinned

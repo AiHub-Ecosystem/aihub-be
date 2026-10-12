@@ -118,6 +118,20 @@ export function parseDockerStats(line) {
   };
 }
 
+export function parseDockerImageIdentity(reference, output) {
+  const separator = output.indexOf(' ');
+  if (separator < 1) throw new Error('invalid Docker image inspect output');
+  const repositoryDigests = JSON.parse(output.slice(separator + 1));
+  if (!Array.isArray(repositoryDigests)) {
+    throw new Error('invalid Docker image repository digests');
+  }
+  return {
+    reference,
+    imageId: output.slice(0, separator),
+    repositoryDigests,
+  };
+}
+
 function parseBytes(value) {
   const match = value.match(/^([\d.]+)\s*(B|KiB|MiB|GiB|KB|MB|GB)$/i);
   if (match === null) return null;
