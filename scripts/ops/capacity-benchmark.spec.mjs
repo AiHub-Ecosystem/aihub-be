@@ -4,7 +4,9 @@ import test from 'node:test';
 
 import {
   authAndGradingWorkload,
+  contentionJobsFitLoadWindow,
   hasCompleteLoadDelivery,
+  hasOneUserPerLoadVu,
   highestPassingRate,
   jsonAfterPrefix,
   metricValue,
@@ -72,6 +74,29 @@ await test('places the controlled overload stage above the highest passing stage
   assert.equal(overloadRate([4, 8, 16, 32], 16), 32);
   assert.equal(overloadRate([4, 8, 16, 32], 32), 48);
   assert.equal(overloadRate([4, 8, 16, 32], 0), 48);
+});
+
+await test('keeps one refresh credential for every possible load VU', () => {
+  assert.equal(hasOneUserPerLoadVu(512, 512), true);
+  assert.equal(hasOneUserPerLoadVu(513, 512), false);
+  assert.equal(hasOneUserPerLoadVu(0, 512), false);
+});
+
+await test('requires both scheduled jobs to finish within the active load window', () => {
+  assert.equal(
+    contentionJobsFitLoadWindow(
+      [{ durationMs: 20_000 }, { durationMs: 27_000 }],
+      27_000,
+    ),
+    true,
+  );
+  assert.equal(
+    contentionJobsFitLoadWindow(
+      [{ durationMs: 20_000 }, { durationMs: 27_001 }],
+      27_000,
+    ),
+    false,
+  );
 });
 
 await test('maps the Task 1 provider fixture to the public API request shape', () => {

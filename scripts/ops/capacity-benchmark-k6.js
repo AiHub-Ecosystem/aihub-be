@@ -3,6 +3,7 @@ import http from 'k6/http';
 import { Counter, Gauge, Trend } from 'k6/metrics';
 import {
   authAndGradingWorkload,
+  hasOneUserPerLoadVu,
   task1PayloadFromFixture,
 } from './capacity-benchmark-utils.mjs';
 
@@ -109,6 +110,11 @@ const grading = [
   'speaking_json',
 ];
 export function setup() {
+  if (!hasOneUserPerLoadVu(maxVUs, credentials.users?.length ?? 0)) {
+    throw new Error(
+      'benchmark seed must provide one refresh-token user per load VU',
+    );
+  }
   const reset = http.post(`${stubUrl}/__stats/reset`, null, {
     timeout: '5s',
   });
@@ -119,7 +125,7 @@ export function setup() {
 let refreshToken;
 
 export function load(data) {
-  const index = (exec.vu.idInTest - 1) % data.users.length;
+  const index = (exec.vu.idInScenario - 1) % data.users.length;
   const user = data.users[index];
   const organization = data.organizations[index % data.organizations.length];
   if (user === undefined || organization === undefined) {

@@ -7,6 +7,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import {
+  contentionJobsFitLoadWindow,
   hasCompleteLoadDelivery,
   highestPassingRate,
   jsonAfterPrefix,
@@ -32,6 +33,9 @@ const stubLatencyMs = positiveInteger(
 );
 const stubErrorRate = Number(process.env.BENCHMARK_STUB_ERROR_RATE ?? '0');
 const maxVUs = positiveInteger(process.env.BENCHMARK_MAX_VUS ?? '256');
+const seededUserCount = 512;
+const jobContentionDurationMs = 30_000;
+const jobContentionStartDelayMs = 3000;
 const appCpuLimit = 1.5;
 const appMemoryLimitBytes = 768 * 1024 * 1024;
 const runId = `${process.pid}-${Date.now()}`;
@@ -61,6 +65,11 @@ if (
   stubErrorRate > 1
 ) {
   throw new Error('invalid capacity benchmark settings');
+}
+if (maxVUs > seededUserCount) {
+  throw new Error(
+    `BENCHMARK_MAX_VUS cannot exceed the ${seededUserCount} seeded refresh-token users`,
+  );
 }
 
 const benchmarkRevision = gitRevision();
@@ -324,7 +333,7 @@ try {
         },
         syntheticOrganizations: 4,
         maxConcurrentPerOrganization: 20,
-        syntheticPreverifiedMfaDisabledUsers: 512,
+        syntheticPreverifiedMfaDisabledUsers: seededUserCount,
         syntheticUsageRows: 100000,
         passwordHash: 'Argon2id m=65536,t=3,p=1',
       },
@@ -910,7 +919,7 @@ function samplesInWindow(samples, startMs, endMs) {
 }
 
 async function runJobContention({ appContainerId, rate, routeNames }) {
-  const duration = '30s';
+  const duration = `${jobContentionDurationMs / 1000}s`;
   const startMs = Date.now();
   const loadPromise = runK6({
     appContainerId,
@@ -920,7 +929,9 @@ async function runJobContention({ appContainerId, rate, routeNames }) {
     runDuration: duration,
     label: `scheduled-job contention at ${rate} requests/s`,
   });
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+  await new Promise((resolve) =>
+    setTimeout(resolve, jobContentionStartDelayMs),
+  );
   const windowStart = new Date(startMs - 60 * 60 * 1000).toISOString();
   const windowEnd = new Date().toISOString();
   const jobsPromise = Promise.all([
@@ -974,6 +985,10 @@ async function runJobContention({ appContainerId, rate, routeNames }) {
       typeof hostCpuPercent === 'number' && hostCpuPercent <= 80,
     hostMemoryBelow80Percent:
       typeof hostMemoryPercent === 'number' && hostMemoryPercent <= 80,
+    scheduledJobsFinishedDuringLoad: contentionJobsFitLoadWindow(
+      jobs,
+      jobContentionDurationMs - jobContentionStartDelayMs,
+    ),
     scheduledJobsSucceeded: jobs.every((job) => job.exitCode === 0),
   };
   return {
@@ -991,6 +1006,8 @@ async function runJobContention({ appContainerId, rate, routeNames }) {
         postgresPoolWaitingClients: 0,
         hostCpuPercent: 80,
         hostMemoryPercentUsed: 80,
+        scheduledJobMaxDurationMs:
+          jobContentionDurationMs - jobContentionStartDelayMs,
       },
       observed: {
         appCpuPercentOfLimit: appCpuPercent,

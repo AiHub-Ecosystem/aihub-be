@@ -63,6 +63,29 @@ export function hasCompleteLoadDelivery(run) {
   );
 }
 
+export function hasOneUserPerLoadVu(maxVUs, userCount) {
+  return (
+    Number.isSafeInteger(maxVUs) &&
+    maxVUs > 0 &&
+    Number.isSafeInteger(userCount) &&
+    userCount >= maxVUs
+  );
+}
+
+export function contentionJobsFitLoadWindow(jobs, maxDurationMs) {
+  return (
+    jobs.length > 0 &&
+    Number.isSafeInteger(maxDurationMs) &&
+    maxDurationMs >= 0 &&
+    jobs.every(
+      (job) =>
+        Number.isSafeInteger(job.durationMs) &&
+        job.durationMs >= 0 &&
+        job.durationMs <= maxDurationMs,
+    )
+  );
+}
+
 export function overloadRate(stageRates, passingRate) {
   if (passingRate <= 0) {
     const highestStage = stageRates.at(-1);
