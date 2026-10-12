@@ -2,10 +2,12 @@
 .github
 .claude
 .agents
+.workbuddy-ai
 .env*
 node_modules
 dist
 coverage
+artifacts/capacity-benchmark
 *.log
 docs
 test

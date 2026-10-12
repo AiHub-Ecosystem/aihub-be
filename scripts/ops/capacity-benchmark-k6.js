@@ -2,7 +2,6 @@ import exec from 'k6/execution';
 import http from 'k6/http';
 import { Counter, Gauge, Trend } from 'k6/metrics';
 
-const apiErrors = new Counter('benchmark_api_errors');
 const allRoutes = [
   'writing_task1',
   'writing_task2',
@@ -224,7 +223,7 @@ function requestGrade(name, organization, user) {
             'Content-Type': 'application/json',
           }),
         });
-  recordResponse(name, route.path, response);
+  recordResponse(name, response);
   if (response.status >= 200 && response.status < 300) {
     const payload = parseJson(response.body);
     const timing = payload && payload.meta && payload.meta.timing;
@@ -245,7 +244,7 @@ function requestLogin(user) {
     { headers: { Host: host, 'Content-Type': 'application/json' } },
   );
   captureRefreshToken(response);
-  recordResponse('login', '/v1/auth/login', response);
+  recordResponse('login', response);
   return response;
 }
 
@@ -258,7 +257,7 @@ function requestRefresh(user) {
     },
   });
   captureRefreshToken(response);
-  recordResponse('refresh', '/v1/auth/refresh', response);
+  recordResponse('refresh', response);
   return response;
 }
 
@@ -274,32 +273,19 @@ function requestWebSession(user) {
       },
     },
   );
-  recordResponse(
-    'web_session_exchange',
-    '/v1/auth/web-sessions/exchange',
-    response,
-  );
+  recordResponse('web_session_exchange', response);
   return response;
 }
 
-function recordResponse(name, route, response) {
-  const code = errorCode(response);
-  const tags = Object.assign(
-    {
-      route,
-      status: String(response.status),
-    },
-    code === undefined ? {} : { code },
-  );
-  routeResponseCounts[name].add(1, tags);
+function recordResponse(name, response) {
+  routeResponseCounts[name].add(1);
   if (
     response.status === 0 ||
     response.error_code > 0 ||
     Boolean(response.error) ||
     response.status >= 400
   ) {
-    apiErrors.add(1, tags);
-    routeErrorCounts[name].add(1, tags);
+    routeErrorCounts[name].add(1);
   }
   apiLatency[name].add(response.timings.duration);
 }
@@ -315,25 +301,6 @@ function captureRefreshToken(response) {
       refreshToken = decodeURIComponent(match[1]);
     }
   }
-}
-
-function errorCode(response) {
-  if (
-    response.status === 0 ||
-    (response.status < 400 &&
-      (response.error_code > 0 || Boolean(response.error)))
-  ) {
-    return Number.isSafeInteger(response.error_code) && response.error_code > 0
-      ? `K6_${response.error_code}`
-      : 'K6_TRANSPORT';
-  }
-  if (response.status < 400) return undefined;
-  const payload = parseJson(response.body);
-  const code =
-    (payload && payload.error && payload.error.code) ||
-    (payload && payload.code) ||
-    (payload && payload.data && payload.data.code);
-  return typeof code === 'string' ? code : `HTTP_${response.status}`;
 }
 
 function parseJson(body) {

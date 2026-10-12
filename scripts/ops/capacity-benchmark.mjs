@@ -7,12 +7,12 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import {
+  hasCompleteLoadDelivery,
   highestPassingRate,
   jsonAfterPrefix,
   metricValue,
   overloadRate,
   parseDockerStats,
-  taggedMetricValues,
 } from './capacity-benchmark-utils.mjs';
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -62,11 +62,12 @@ if (
   throw new Error('invalid capacity benchmark settings');
 }
 
+const benchmarkRevision = gitRevision();
 await mkdir(artifactDirectory, { recursive: true });
 const appKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey;
 const benchmarkEnvironment = {
   ...process.env,
-  BENCHMARK_VCS_REF: gitRevision(),
+  BENCHMARK_VCS_REF: benchmarkRevision,
   BENCHMARK_JWT_PRIVATE_KEY_B64: Buffer.from(
     appKey.export({ type: 'pkcs8', format: 'pem' }),
   ).toString('base64'),
@@ -89,6 +90,11 @@ let hostWatcher;
 try {
   process.stdout.write('Building the isolated benchmark images...\n');
   await dockerCompose(['build', 'aihub', 'seed']);
+  if (gitRevision() !== benchmarkRevision) {
+    throw new Error(
+      'Git checkout changed while the benchmark images were built',
+    );
+  }
   process.stdout.write(
     'Starting disposable Postgres, Redis, and AI Service stub...\n',
   );
@@ -160,17 +166,19 @@ try {
       },
     ]),
   );
-  const firstMixedCeiling = mixedRuns.find((run) =>
-    gradingRoutes.some((name) => {
-      const route = run.routes[name];
-      return (
-        route === undefined ||
-        route.count === 0 ||
-        route.p99Ms === null ||
-        route.p99Ms > deadlines[name] ||
-        route.errorCount > 0
-      );
-    }),
+  const firstMixedCeiling = mixedRuns.find(
+    (run) =>
+      !hasCompleteLoadDelivery(run) ||
+      gradingRoutes.some((name) => {
+        const route = run.routes[name];
+        return (
+          route === undefined ||
+          route.count === 0 ||
+          route.p99Ms === null ||
+          route.p99Ms > deadlines[name] ||
+          route.errorCount > 0
+        );
+      }),
   );
   const nextOverloadRate = overloadRate(stageRates, mixedSafeRate);
   process.stdout.write(
@@ -226,7 +234,7 @@ try {
     benchmark: {
       startedAt: startedAt.toISOString(),
       completedAt: new Date().toISOString(),
-      runtimeCommit: gitRevision(),
+      runtimeCommit: benchmarkRevision,
       host: {
         operatingSystem: `${os.type()} ${os.release()}`,
         architecture: os.arch(),
@@ -304,7 +312,7 @@ try {
           ? {
               reached: false,
               details:
-                'No mixed stage exceeded a grading deadline or returned an API error.',
+                'No mixed stage exceeded a grading deadline, returned an API error, or failed to deliver its offered load.',
             }
           : {
               reached: true,
@@ -366,6 +374,13 @@ function positiveIntegerList(value) {
 }
 
 function gitRevision() {
+  if (
+    runSync('git', ['status', '--porcelain', '--untracked-files=all']).trim()
+  ) {
+    throw new Error(
+      'capacity benchmark requires a clean Git working tree so the image matches its revision',
+    );
+  }
   const result = runSync('git', ['rev-parse', 'HEAD']);
   return result.trim();
 }
@@ -569,7 +584,6 @@ async function runK6({
     routes: routeResults,
     appResourceSampleCount: appSamples.length,
     hostResourceSampleCount: hostSamples.length,
-    errorCountsByCode: errorCounts(summary.metrics),
     injectedStubErrors: stub.errors,
     processRssPeakBytes: metricValue(
       summary.metrics,
@@ -613,7 +627,6 @@ async function runK6({
 
 function routeSummary(metrics, name, logTiming) {
   const latency = metrics[`benchmark_latency_${name}`]?.values ?? {};
-  const statusMetrics = taggedMetricValues(metrics, 'benchmark_api_errors');
   const routePaths = {
     writing_task1: '/v1/ielts/writing/task1/grade',
     writing_task2: '/v1/ielts/writing/task2/grade',
@@ -624,9 +637,6 @@ function routeSummary(metrics, name, logTiming) {
     web_session_exchange: '/v1/auth/web-sessions/exchange',
   };
   const pathName = routePaths[name];
-  const routeErrors = statusMetrics
-    .filter((metric) => metric.labels.route === pathName)
-    .reduce((count, metric) => count + (metric.values.count ?? 0), 0);
   const p99Ms = finite(latency['p(99)']);
   const p95Ms = finite(latency['p(95)']);
   const timing = logTiming ?? { totalMs: [], admissionMs: [] };
@@ -638,16 +648,7 @@ function routeSummary(metrics, name, logTiming) {
     p95Ms,
     p99Ms,
     errorCount:
-      metricValue(metrics, `benchmark_api_errors_${name}`, 'count') ??
-      routeErrors,
-    errorsByCode: Object.fromEntries(
-      statusMetrics
-        .filter((metric) => metric.labels.route === pathName)
-        .map((metric) => [
-          metric.labels.code ?? 'unknown',
-          metric.values.count ?? 0,
-        ]),
-    ),
+      metricValue(metrics, `benchmark_api_errors_${name}`, 'count') ?? 0,
     correctedTotalMs: percentileSet(timing.totalMs),
     admissionMs: percentileSet(timing.admissionMs),
     downstreamMs: {
@@ -711,16 +712,6 @@ async function requestTimingLogs(containerId, since, sinceMs) {
     }
   }
   return results;
-}
-
-function errorCounts(metrics) {
-  const counts = {};
-  for (const metric of taggedMetricValues(metrics, 'benchmark_api_errors')) {
-    const code =
-      metric.labels.code ?? `HTTP_${metric.labels.status ?? 'unknown'}`;
-    counts[code] = (counts[code] ?? 0) + (metric.values.count ?? 0);
-  }
-  return counts;
 }
 
 function poolWaitingPeaks(metrics) {
@@ -903,6 +894,7 @@ async function runJobContention({ appContainerId, rate, routeNames }) {
     );
   });
   const thresholdResults = {
+    offeredLoadFullyDelivered: hasCompleteLoadDelivery(load),
     gradingP99WithinDeadline: gradingWithinDeadline,
     appCpuBelow80PercentOfLimit:
       typeof appCpuPercent === 'number' && appCpuPercent <= 80,

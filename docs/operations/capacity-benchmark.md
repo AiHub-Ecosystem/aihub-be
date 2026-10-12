@@ -6,6 +6,9 @@ Run the repeatable gateway capacity benchmark from a local checkout:
 pnpm capacity:benchmark
 ```
 
+The runner requires a clean Git checkout so the Docker image matches the commit
+recorded in the report.
+
 It starts a uniquely named Docker Compose project with a disposable Postgres
 volume, Redis, the AIHUB container, a controlled AI Service stub, and a pinned
 `grafana/k6:0.54.0` runner. The benchmark network is internal to Docker and has
@@ -46,7 +49,7 @@ stub error rate, and maximum VUs use `BENCHMARK_REDIS_RTT_MS`,
 `BENCHMARK_MAX_VUS`.
 
 During each stage, k6 scrapes `/metrics` once per second. The report includes
-offered and completed rates, route p50/p95/p99, HTTP error counts by code,
+offered and completed rates, route p50/p95/p99, and per-route error counts,
 injected stub failures, process RSS and heap, event-loop lag, Postgres pool
 waiting clients, downstream queue counts, and the corrected grading
 `total_ms`, `admission_ms`, and `downstream_ms`. It also records Docker CPU and
@@ -58,10 +61,10 @@ below 80%, host memory use below 80%, and zero Postgres pool waiting clients.
 These are local benchmark operating thresholds that leave headroom; they do
 not establish Production tenant capacity.
 
-At the highest measured mixed-grading rate that met all four p99 deadlines,
-the harness runs quota reconciliation and usage reporting concurrently in
-the disposable stack while grading continues. This intentionally exercises
-the highest-risk job pair. The Production host wrapper serializes different
+At the highest mixed-grading rate that met all four p99 deadlines and delivered
+its full offered load, the harness runs quota reconciliation and usage
+reporting concurrently in the disposable stack while grading continues. This
+exercises the highest-risk job pair. The Production host wrapper serializes different
 scheduled jobs under its host-wide lock; `scripts/ops/host-scheduled-job.spec.sh`
 checks that a competing job is logged as deferred while the lock is held. The
 report records route-specific latency, errors, queue/resource peaks, restart
