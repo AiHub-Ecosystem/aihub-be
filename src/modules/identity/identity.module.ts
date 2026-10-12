@@ -164,6 +164,7 @@ import {
 import { UserAssertionVerifier } from './user-assertions/application/user-assertion-verifier';
 import { UserIdentityResolver } from './user-assertions/application/user-identity-resolver';
 import { USER_IDENTITY_RESOLVER } from './user-assertions/application/user-identity-resolver.port';
+import { ValidateSandboxDemoKey } from './user-assertions/application/validate-sandbox-demo-key';
 import { EnvSandboxAssertionPolicy } from './user-assertions/infrastructure/env-sandbox-assertion-policy';
 import { JoseSandboxAssertionSigner } from './user-assertions/infrastructure/jose-sandbox-assertion-signer';
 import { JoseUserAssertionCrypto } from './user-assertions/infrastructure/jose-user-assertion-crypto';
@@ -537,6 +538,12 @@ type IdentityTransactionClient = ReturnType<
         ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
         SANDBOX_ASSERTION_SIGNER,
       ],
+    },
+    {
+      provide: ValidateSandboxDemoKey,
+      useFactory: (repository: OrganizationIdentityConfigRepositoryPort) =>
+        new ValidateSandboxDemoKey(repository),
+      inject: [ORGANIZATION_IDENTITY_CONFIG_REPOSITORY],
     },
     ApiKeyGuard,
     ApiKeyUserIdentityGuard,

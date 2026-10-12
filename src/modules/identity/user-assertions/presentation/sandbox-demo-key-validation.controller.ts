@@ -17,18 +17,12 @@ import {
   type SandboxDemoKeyValidationResponse,
 } from '@/contracts/sandbox/demo-key-validation';
 import { RateLimitGuard } from '@/modules/gateway/presentation/rate-limit.guard';
-import { forbidden } from '@/modules/identity/api-keys/presentation/authenticate-api-key';
 import { SandboxDemoKeyValidationGuard } from '@/modules/identity/api-keys/presentation/sandbox-demo-key-validation.guard';
-import {
-  ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
-  type OrganizationIdentityConfig,
-  type OrganizationIdentityConfigRepositoryPort,
-} from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
 } from '@/modules/identity/shared/presentation/authenticated-request';
-import { identityProviderUnavailable } from '@/modules/identity/user-assertions/application/user-identity-errors';
+import { ValidateSandboxDemoKey } from '@/modules/identity/user-assertions/application/validate-sandbox-demo-key';
 
 interface ValidationEnvelope {
   readonly data: SandboxDemoKeyValidationResponse;
@@ -39,11 +33,8 @@ interface ValidationEnvelope {
 @UseGuards(SandboxDemoKeyValidationGuard, RateLimitGuard)
 export class SandboxDemoKeyValidationController {
   constructor(
-    @Inject(ORGANIZATION_IDENTITY_CONFIG_REPOSITORY)
-    private readonly identityConfig: Pick<
-      OrganizationIdentityConfigRepositoryPort,
-      'findActiveByOrganizationId'
-    >,
+    @Inject(ValidateSandboxDemoKey)
+    private readonly validator: ValidateSandboxDemoKey,
   ) {}
 
   @Post(PUBLIC_ROUTES['sandbox.demo-key.validate'].path)
@@ -57,24 +48,15 @@ export class SandboxDemoKeyValidationController {
       body,
     );
     const authenticated = getAuthenticatedApiKey(request);
-    if (!authenticated.scopes.includes(input.scope)) throw forbidden();
 
-    let configuredIdentity: OrganizationIdentityConfig | null;
-    try {
-      configuredIdentity = await this.identityConfig.findActiveByOrganizationId(
-        authenticated.organizationId,
-      );
-    } catch (error) {
-      throw identityProviderUnavailable(error);
-    }
-    if (configuredIdentity !== null) throw forbidden();
+    await this.validator.validate({
+      organizationId: authenticated.organizationId,
+      scope: input.scope,
+      grantedScopes: authenticated.scopes,
+    });
 
     return {
-      data: {
-        valid: true,
-        environment: 'sandbox',
-        scope: input.scope,
-      },
+      data: { valid: true, environment: 'sandbox', scope: input.scope },
       meta: {
         request_id: isRequestId(request.id) ? request.id : String(request.id),
       },
