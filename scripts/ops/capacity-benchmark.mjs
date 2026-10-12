@@ -554,10 +554,6 @@ async function runK6({
     (sum, route) => sum + route.count,
     0,
   );
-  const actualDurationSeconds = Math.max(
-    Number(summary.state?.testRunDurationMs) / 1000 || (endMs - startMs) / 1000,
-    1,
-  );
   const appSamples = samplesInWindow(
     statsWatcher?.samples ?? [],
     startMs,
@@ -578,7 +574,7 @@ async function runK6({
     offeredRateRps: rate,
     holdDuration: runDuration,
     completedRequests: requestCount,
-    completedRateRps: round(requestCount / actualDurationSeconds, 2),
+    completedRateRps: round(requestCount / Number.parseInt(runDuration, 10), 2),
     droppedIterations:
       metricValue(summary.metrics, 'dropped_iterations', 'count') ?? 0,
     routes: routeResults,

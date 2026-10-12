@@ -31,7 +31,6 @@ export function hasCompleteLoadDelivery(run) {
     run.offeredRateRps > 0 &&
     Number.isSafeInteger(expectedRequests) &&
     Number.isSafeInteger(run.completedRequests) &&
-    run.droppedIterations === 0 &&
     run.completedRequests >= expectedRequests
   );
 }

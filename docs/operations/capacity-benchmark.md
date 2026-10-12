@@ -49,7 +49,8 @@ stub error rate, and maximum VUs use `BENCHMARK_REDIS_RTT_MS`,
 `BENCHMARK_MAX_VUS`.
 
 During each stage, k6 scrapes `/metrics` once per second. The report includes
-offered and completed rates, route p50/p95/p99, and per-route error counts,
+offered and completed rates (completed rate uses the configured hold interval),
+route p50/p95/p99, and per-route error counts,
 injected stub failures, process RSS and heap, event-loop lag, Postgres pool
 waiting clients, downstream queue counts, and the corrected grading
 `total_ms`, `admission_ms`, and `downstream_ms`. It also records Docker CPU and
