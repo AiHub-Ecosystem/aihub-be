@@ -602,8 +602,25 @@ async function runK6({
   const startMs = Date.now();
   const startIso = new Date(startMs).toISOString();
   const loadStartMarker = 'BENCHMARK_LOAD_STARTED';
-  let markerTail = '';
   let loadStartSignaled = false;
+  // k6 sends console output to stderr unless --log-output redirects it, so scan
+  // both streams for the readiness marker.
+  const loadStartScanner = () => {
+    let markerTail = '';
+    return (chunk) => {
+      if (onLoadStarted === undefined || loadStartSignaled) return;
+      const state = appendStreamingMarkerChunk(
+        markerTail,
+        chunk,
+        loadStartMarker,
+      );
+      markerTail = state.tail;
+      if (state.found) {
+        loadStartSignaled = true;
+        onLoadStarted(Date.now());
+      }
+    };
+  };
   const result = await dockerCompose(
     [
       'run',
@@ -622,19 +639,8 @@ async function runK6({
       '/scripts/capacity-benchmark-k6.js',
     ],
     {
-      onStdout: (chunk) => {
-        if (onLoadStarted === undefined || loadStartSignaled) return;
-        const state = appendStreamingMarkerChunk(
-          markerTail,
-          chunk,
-          loadStartMarker,
-        );
-        markerTail = state.tail;
-        if (state.found) {
-          loadStartSignaled = true;
-          onLoadStarted(Date.now());
-        }
-      },
+      onStdout: loadStartScanner(),
+      onStderr: loadStartScanner(),
     },
   );
   const endMs = Date.now();
