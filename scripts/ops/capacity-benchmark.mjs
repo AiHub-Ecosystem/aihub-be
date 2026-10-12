@@ -7,6 +7,8 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import {
+  appendStreamingMarkerChunk,
+  contentionJobsFitLoadWindow,
   hasCompleteLoadDelivery,
   highestPassingRate,
   jsonAfterPrefix,
@@ -32,6 +34,11 @@ const stubLatencyMs = positiveInteger(
 );
 const stubErrorRate = Number(process.env.BENCHMARK_STUB_ERROR_RATE ?? '0');
 const maxVUs = positiveInteger(process.env.BENCHMARK_MAX_VUS ?? '256');
+const metricsScenarioVUs = 1;
+const maxLoadVUs = 512;
+const seededUserCount = maxVUs + metricsScenarioVUs;
+const jobContentionDurationMs = 30_000;
+const jobContentionMarginMs = 3000;
 const appCpuLimit = 1.5;
 const appMemoryLimitBytes = 768 * 1024 * 1024;
 const runId = `${process.pid}-${Date.now()}`;
@@ -61,6 +68,11 @@ if (
   stubErrorRate > 1
 ) {
   throw new Error('invalid capacity benchmark settings');
+}
+if (maxVUs > maxLoadVUs) {
+  throw new Error(
+    `BENCHMARK_MAX_VUS cannot exceed the ${maxLoadVUs} supported load VUs`,
+  );
 }
 
 const benchmarkRevision = gitRevision();
@@ -93,6 +105,7 @@ if (gitRevision() !== benchmarkRevision) {
 const appKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey;
 const benchmarkEnvironment = {
   ...process.env,
+  BENCHMARK_USER_COUNT: String(seededUserCount),
   BENCHMARK_VCS_REF: benchmarkRevision,
   BENCHMARK_K6_SCRIPT_PATH: path
     .relative(path.dirname(composeFile), k6ScriptSnapshot)
@@ -324,7 +337,7 @@ try {
         },
         syntheticOrganizations: 4,
         maxConcurrentPerOrganization: 20,
-        syntheticPreverifiedMfaDisabledUsers: 512,
+        syntheticPreverifiedMfaDisabledUsers: seededUserCount,
         syntheticUsageRows: 100000,
         passwordHash: 'Argon2id m=65536,t=3,p=1',
       },
@@ -571,6 +584,7 @@ async function runK6({
   routeNames,
   runDuration,
   label,
+  onLoadStarted,
   isOverload = false,
   isRecovery = false,
 }) {
@@ -587,22 +601,48 @@ async function runK6({
   const restartCountBefore = await dockerRestartCount(appContainerId);
   const startMs = Date.now();
   const startIso = new Date(startMs).toISOString();
-  const result = await dockerCompose([
-    'run',
-    '--rm',
-    '--no-deps',
-    '-e',
-    `WORKLOAD=${workload}`,
-    '-e',
-    `RATE=${rate}`,
-    '-e',
-    `DURATION=${runDuration}`,
-    '-e',
-    `MAX_VUS=${maxVUs}`,
-    'k6',
-    'run',
-    '/scripts/capacity-benchmark-k6.js',
-  ]);
+  const loadStartMarker = 'BENCHMARK_LOAD_STARTED';
+  let loadStartSignaled = false;
+  // k6 sends console output to stderr unless --log-output redirects it, so scan
+  // both streams for the readiness marker.
+  const loadStartScanner = () => {
+    let markerTail = '';
+    return (chunk) => {
+      if (onLoadStarted === undefined || loadStartSignaled) return;
+      const state = appendStreamingMarkerChunk(
+        markerTail,
+        chunk,
+        loadStartMarker,
+      );
+      markerTail = state.tail;
+      if (state.found) {
+        loadStartSignaled = true;
+        onLoadStarted(Date.now());
+      }
+    };
+  };
+  const result = await dockerCompose(
+    [
+      'run',
+      '--rm',
+      '--no-deps',
+      '-e',
+      `WORKLOAD=${workload}`,
+      '-e',
+      `RATE=${rate}`,
+      '-e',
+      `DURATION=${runDuration}`,
+      '-e',
+      `MAX_VUS=${maxVUs}`,
+      'k6',
+      'run',
+      '/scripts/capacity-benchmark-k6.js',
+    ],
+    {
+      onStdout: loadStartScanner(),
+      onStderr: loadStartScanner(),
+    },
+  );
   const endMs = Date.now();
   const output = `${result.stdout}\n${result.stderr}`;
   const summary = jsonAfterPrefix(output, 'BENCHMARK_SUMMARY_JSON ');
@@ -910,8 +950,11 @@ function samplesInWindow(samples, startMs, endMs) {
 }
 
 async function runJobContention({ appContainerId, rate, routeNames }) {
-  const duration = '30s';
-  const startMs = Date.now();
+  const duration = `${jobContentionDurationMs / 1000}s`;
+  let signalLoadStarted;
+  const loadStarted = new Promise((resolve) => {
+    signalLoadStarted = resolve;
+  });
   const loadPromise = runK6({
     appContainerId,
     workload: 'mixed_grading',
@@ -919,10 +962,16 @@ async function runJobContention({ appContainerId, rate, routeNames }) {
     routeNames,
     runDuration: duration,
     label: `scheduled-job contention at ${rate} requests/s`,
+    onLoadStarted: signalLoadStarted,
   });
-  await new Promise((resolve) => setTimeout(resolve, 3000));
-  const windowStart = new Date(startMs - 60 * 60 * 1000).toISOString();
-  const windowEnd = new Date().toISOString();
+  const loadStartMs = await Promise.race([
+    loadStarted,
+    loadPromise.then(() => {
+      throw new Error('k6 completed before reporting its load start');
+    }),
+  ]);
+  const windowStart = new Date(loadStartMs - 60 * 60 * 1000).toISOString();
+  const windowEnd = new Date(loadStartMs).toISOString();
   const jobsPromise = Promise.all([
     runAppCommand(appContainerId, ['quota:reconcile']),
     runAppCommand(appContainerId, [
@@ -974,6 +1023,10 @@ async function runJobContention({ appContainerId, rate, routeNames }) {
       typeof hostCpuPercent === 'number' && hostCpuPercent <= 80,
     hostMemoryBelow80Percent:
       typeof hostMemoryPercent === 'number' && hostMemoryPercent <= 80,
+    scheduledJobsFinishedDuringLoad: contentionJobsFitLoadWindow(
+      jobs,
+      jobContentionDurationMs - jobContentionMarginMs,
+    ),
     scheduledJobsSucceeded: jobs.every((job) => job.exitCode === 0),
   };
   return {
@@ -991,6 +1044,8 @@ async function runJobContention({ appContainerId, rate, routeNames }) {
         postgresPoolWaitingClients: 0,
         hostCpuPercent: 80,
         hostMemoryPercentUsed: 80,
+        scheduledJobMaxDurationMs:
+          jobContentionDurationMs - jobContentionMarginMs,
       },
       observed: {
         appCpuPercentOfLimit: appCpuPercent,

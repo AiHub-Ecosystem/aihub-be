@@ -3,8 +3,11 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
+  appendStreamingMarkerChunk,
   authAndGradingWorkload,
+  contentionJobsFitLoadWindow,
   hasCompleteLoadDelivery,
+  hasOneUserPerVu,
   highestPassingRate,
   jsonAfterPrefix,
   metricValue,
@@ -72,6 +75,46 @@ await test('places the controlled overload stage above the highest passing stage
   assert.equal(overloadRate([4, 8, 16, 32], 16), 32);
   assert.equal(overloadRate([4, 8, 16, 32], 32), 48);
   assert.equal(overloadRate([4, 8, 16, 32], 0), 48);
+});
+
+await test('keeps one credential for every possible k6 VU', () => {
+  assert.equal(hasOneUserPerVu(513, 513), true);
+  assert.equal(hasOneUserPerVu(513, 512), false);
+  assert.equal(hasOneUserPerVu(0, 512), false);
+});
+
+await test('requires both scheduled jobs to finish within the active load window', () => {
+  assert.equal(
+    contentionJobsFitLoadWindow(
+      [{ durationMs: 20_000 }, { durationMs: 27_000 }],
+      27_000,
+    ),
+    true,
+  );
+  assert.equal(
+    contentionJobsFitLoadWindow(
+      [{ durationMs: 20_000 }, { durationMs: 27_001 }],
+      27_000,
+    ),
+    false,
+  );
+});
+
+await test('detects a load-start marker split across stdout chunks', () => {
+  const marker = 'BENCHMARK_LOAD_STARTED';
+  const first = appendStreamingMarkerChunk(
+    '',
+    'prefix BENCHMARK_LOAD_',
+    marker,
+  );
+  const second = appendStreamingMarkerChunk(
+    first.tail,
+    'STARTED suffix',
+    marker,
+  );
+
+  assert.equal(first.found, false);
+  assert.equal(second.found, true);
 });
 
 await test('maps the Task 1 provider fixture to the public API request shape', () => {
