@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-09
-- Renumbered: from ADR-0084 on 2026-10-12, because three records were created that day under that number
+- Renumbered: from ADR-0084 on 2026-10-12, because three records were created on 2026-10-09 under that number
 
 ## Context
 
