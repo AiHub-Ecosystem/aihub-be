@@ -450,9 +450,12 @@ function runSync(command, args) {
   const result = spawnSync(command, args, {
     cwd: repositoryRoot,
     encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
   if (result.status !== 0) {
-    throw new Error(result.stderr || `${command} failed`);
+    throw new Error(
+      result.error?.message || result.stderr || `${command} failed`,
+    );
   }
   return result.stdout;
 }
