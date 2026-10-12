@@ -22,6 +22,7 @@ import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-atte
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { SpeakingGradingController } from '@/modules/speaking/presentation/speaking-grading.controller';
 import { WritingGradingController } from '@/modules/writing/presentation/writing-grading.controller';
+import { getOwnPrototypeMethod } from '../../../test/support/own-prototype-method';
 import { DownstreamHttpClient } from './infrastructure/downstream-http.client';
 import { ConcurrencyPermitInterceptor } from './presentation/concurrency-permit.interceptor';
 import {
@@ -113,15 +114,10 @@ describe('graded request chain', () => {
     // handler and releases after (ADR-0058). Recording its acquire here, in the
     // same sequence as the guards, keeps the quota-before-concurrency guarantee
     // observable across the guard/interceptor boundary.
-    const permitDescriptor = Object.getOwnPropertyDescriptor(
+    const permitOriginal = getOwnPrototypeMethod(
       ConcurrencyPermitInterceptor.prototype,
       'intercept',
     );
-    if (permitDescriptor === undefined) {
-      throw new Error('Concurrency permit interceptor method is missing');
-    }
-    const permitOriginal =
-      permitDescriptor.value as typeof ConcurrencyPermitInterceptor.prototype.intercept;
     jest
       .spyOn(ConcurrencyPermitInterceptor.prototype, 'intercept')
       .mockImplementation(async function (this: unknown, context, next) {
