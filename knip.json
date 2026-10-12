@@ -43,6 +43,7 @@
     // so their runtime edges are outside Knip's JavaScript import graph.
     "scripts/ops/capacity-benchmark-k6.js",
     "scripts/ops/capacity-benchmark-seed.mjs",
+    "scripts/ops/capacity-benchmark-reset-refresh-tokens.mjs",
     "scripts/ops/capacity-benchmark-start-app.mjs",
     "scripts/ops/capacity-benchmark-support.mjs",
     // Operator CLI invoked by a documented host path (docs/operations), not by
