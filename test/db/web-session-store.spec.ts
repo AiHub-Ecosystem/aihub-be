@@ -150,7 +150,7 @@ async function insertRow(row: {
 
 describe('the web_sessions schema on PostgreSQL', () => {
   it('applies the migration with the columns the exchange and renewal read', async () => {
-    // The lane's global setup applies every file in database/migrations, so a
+    // The lane's global setup applies every Prisma migration, so a
     // row here proves 0033 ran; the catalog then says what it produced, which
     // no assertion on the migration text can.
     const { rows } = await pool.query<{

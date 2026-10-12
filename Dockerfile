@@ -47,7 +47,7 @@ COPY --from=build --chown=10001:10001 /app/scripts/cli/cli.mjs /app/scripts/cli/
 COPY --from=build --chown=10001:10001 /app/scripts/cli/migrate.mjs ./scripts/cli/migrate.mjs
 COPY --from=build --chown=10001:10001 /app/scripts/ops/probe-runtime-dependencies.cjs ./scripts/ops/probe-runtime-dependencies.cjs
 COPY --from=build --chown=10001:10001 /app/scripts/runtime/runtime-entrypoint.mjs ./scripts/runtime/runtime-entrypoint.mjs
-COPY --from=build --chown=10001:10001 /app/database/migrations ./database/migrations
+COPY --from=build --chown=10001:10001 /app/prisma/migrations ./prisma/migrations
 
 USER 10001:10001
 EXPOSE 3000

@@ -190,7 +190,7 @@ of care at each call site:
 - **The counter has one bounded label**, `kind`, whose three values are fixed in
   `src/common/observability/metrics.ts`. A recipient cannot become a series.
 - **`last_error_code` and `cancel_reason` are CHECK-constrained** to
-  `^[a-z0-9_]{1,64}$` in `database/migrations/0027_email_delivery_requests.sql`.
+  `^[a-z0-9_]{1,64}$` in `prisma/migrations/0027_email_delivery_requests/migration.sql`.
   Free-text provider output cannot be stored even by mistake.
 - **The provider error is never propagated.** `errorCodeOf` in the poller maps
   every provider failure to one of the two codes; the original error stays in the

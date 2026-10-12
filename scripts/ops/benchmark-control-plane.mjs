@@ -235,15 +235,19 @@ function canonical(value) {
 }
 
 async function applyMigrations(databaseUrl) {
-  const migrationsDirectory = join(ROOT, 'database/migrations');
-  const files = (await readdir(migrationsDirectory))
-    .filter((filename) => filename.endsWith('.sql'))
+  const migrationsDirectory = join(ROOT, 'prisma/migrations');
+  const files = (await readdir(migrationsDirectory, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
     .sort();
   const pool = new Pool({ connectionString: databaseUrl, max: 1 });
   try {
     for (const filename of files) {
       await pool.query(
-        await readFile(join(migrationsDirectory, filename), 'utf8'),
+        await readFile(
+          join(migrationsDirectory, filename, 'migration.sql'),
+          'utf8',
+        ),
       );
     }
   } finally {

@@ -12,7 +12,7 @@ import {
   testDatabaseUrl,
 } from './database';
 
-const MIGRATIONS_DIR = join(__dirname, '../../database/migrations');
+const MIGRATIONS_DIR = join(__dirname, '../../prisma/migrations');
 
 /**
  * Rebuilds the lane's database from the repository's own migration files.
@@ -49,19 +49,25 @@ export default async function globalSetup(): Promise<void> {
     await admin.end();
   }
 
-  const entries = await readdir(MIGRATIONS_DIR);
-  const migrations = entries.filter((name) => name.endsWith('.sql')).sort();
+  const entries = await readdir(MIGRATIONS_DIR, { withFileTypes: true });
+  const migrations = entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
 
   for (const databaseUrl of [testDatabaseUrl(), sandboxTestDatabaseUrl()]) {
     const target = new Client({ connectionString: databaseUrl });
     await target.connect();
     try {
-      for (const filename of migrations) {
-        const sql = await readFile(join(MIGRATIONS_DIR, filename), 'utf8');
+      for (const directory of migrations) {
+        const sql = await readFile(
+          join(MIGRATIONS_DIR, directory, 'migration.sql'),
+          'utf8',
+        );
         try {
           await target.query(sql);
         } catch (error) {
-          throw new Error(`Migration failed: ${filename}`, { cause: error });
+          throw new Error(`Migration failed: ${directory}`, { cause: error });
         }
       }
     } finally {

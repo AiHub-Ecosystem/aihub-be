@@ -6,7 +6,7 @@ describe('email delivery request migration', () => {
     const sql = readFileSync(
       join(
         __dirname,
-        '../../../../database/migrations/0027_email_delivery_requests.sql',
+        '../../../../prisma/migrations/0027_email_delivery_requests/migration.sql',
       ),
       'utf8',
     );

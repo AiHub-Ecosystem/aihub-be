@@ -4,7 +4,10 @@ import { join } from 'node:path';
 describe('web session migration', () => {
   it('keeps opaque web session credentials hash-only with an account index', () => {
     const sql = readFileSync(
-      join(__dirname, '../../../../database/migrations/0033_web_sessions.sql'),
+      join(
+        __dirname,
+        '../../../../prisma/migrations/0033_web_sessions/migration.sql',
+      ),
       'utf8',
     );
 

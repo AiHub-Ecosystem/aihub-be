@@ -6,7 +6,7 @@ describe('organization identity configuration migration', () => {
     const migration = await readFile(
       join(
         __dirname,
-        '../../../../../database/migrations/0003_organization_identity_configs.sql',
+        '../../../../../prisma/migrations/0003_organization_identity_configs/migration.sql',
       ),
       'utf8',
     );

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 const MIGRATION = join(
   __dirname,
-  '../../../../database/migrations/0028_email_delivery_request_lease.sql',
+  '../../../../prisma/migrations/0028_email_delivery_request_lease/migration.sql',
 );
 
 describe('email delivery request lease migration', () => {

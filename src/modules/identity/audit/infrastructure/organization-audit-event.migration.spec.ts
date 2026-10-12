@@ -12,7 +12,7 @@ describe('organization audit event migration', () => {
     const migration = await readFile(
       join(
         __dirname,
-        '../../../../../database/migrations/0011_organization_audit_events.sql',
+        '../../../../../prisma/migrations/0011_organization_audit_events/migration.sql',
       ),
       'utf8',
     );
@@ -72,7 +72,7 @@ describe('organization audit event migration', () => {
     const migration = await readFile(
       join(
         __dirname,
-        '../../../../../database/migrations/0012_organization_invitation_revocation.sql',
+        '../../../../../prisma/migrations/0012_organization_invitation_revocation/migration.sql',
       ),
       'utf8',
     );
@@ -90,7 +90,7 @@ describe('organization audit event migration', () => {
     const migration = await readFile(
       join(
         __dirname,
-        '../../../../../database/migrations/0015_organization_rename.sql',
+        '../../../../../prisma/migrations/0015_organization_rename/migration.sql',
       ),
       'utf8',
     );
@@ -116,7 +116,7 @@ describe('organization audit event migration', () => {
     const migration = await readFile(
       join(
         __dirname,
-        '../../../../../database/migrations/0016_organization_suspension.sql',
+        '../../../../../prisma/migrations/0016_organization_suspension/migration.sql',
       ),
       'utf8',
     );
@@ -139,7 +139,7 @@ describe('organization audit event migration', () => {
     const migration = await readFile(
       join(
         __dirname,
-        '../../../../../database/migrations/0017_first_owner_attachment.sql',
+        '../../../../../prisma/migrations/0017_first_owner_attachment/migration.sql',
       ),
       'utf8',
     );
@@ -162,7 +162,7 @@ describe('organization audit event migration', () => {
     const migration = await readFile(
       join(
         __dirname,
-        '../../../../../database/migrations/0021_organization_entitlement_grant.sql',
+        '../../../../../prisma/migrations/0021_organization_entitlement_grant/migration.sql',
       ),
       'utf8',
     );

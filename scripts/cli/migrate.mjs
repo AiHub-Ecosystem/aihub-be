@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import process, { loadEnvFile } from 'node:process';
 
 import { Pool } from 'pg';
@@ -29,16 +30,22 @@ if (databaseUrl === undefined || databaseUrl.trim().length === 0) {
   process.exit(1);
 }
 
-const MIGRATIONS_DIR = 'database/migrations';
+const MIGRATIONS_DIR = 'prisma/migrations';
 
 async function pendingMigrations(pool) {
-  const entries = await readdir(MIGRATIONS_DIR);
-  const filenames = entries.filter((name) => name.endsWith('.sql')).sort();
+  const entries = await readdir(MIGRATIONS_DIR, { withFileTypes: true });
+  const migrations = entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => ({
+      filename: `${entry.name}.sql`,
+      path: join(MIGRATIONS_DIR, entry.name, 'migration.sql'),
+    }))
+    .sort((left, right) => left.filename.localeCompare(right.filename));
 
   const applied = await pool.query('SELECT filename FROM schema_migrations');
   const appliedNames = new Set(applied.rows.map((row) => row.filename));
 
-  return filenames.filter((filename) => !appliedNames.has(filename));
+  return migrations.filter(({ filename }) => !appliedNames.has(filename));
 }
 
 const pool = new Pool({ connectionString: databaseUrl });
@@ -59,8 +66,8 @@ try {
     console.log('No pending migrations');
   }
 
-  for (const filename of pending) {
-    const sql = await readFile(`${MIGRATIONS_DIR}/${filename}`, 'utf8');
+  for (const migration of pending) {
+    const sql = await readFile(migration.path, 'utf8');
     const client = await pool.connect();
 
     try {
@@ -68,13 +75,15 @@ try {
       await client.query(sql);
       await client.query(
         'INSERT INTO schema_migrations (filename) VALUES ($1)',
-        [filename],
+        [migration.filename],
       );
       await client.query('COMMIT');
-      console.log(`Applied ${filename}`);
+      console.log(`Applied ${migration.filename}`);
     } catch (error) {
       await client.query('ROLLBACK');
-      throw new Error(`Migration failed: ${filename}`, { cause: error });
+      throw new Error(`Migration failed: ${migration.filename}`, {
+        cause: error,
+      });
     } finally {
       client.release();
     }

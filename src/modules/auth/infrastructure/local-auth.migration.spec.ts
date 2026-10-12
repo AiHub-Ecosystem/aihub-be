@@ -4,7 +4,10 @@ import { join } from 'node:path';
 describe('local auth migration', () => {
   it('keeps durable identity, hash-only token, and reservation constraints in Postgres', () => {
     const sql = readFileSync(
-      join(__dirname, '../../../../database/migrations/0006_local_auth.sql'),
+      join(
+        __dirname,
+        '../../../../prisma/migrations/0006_local_auth/migration.sql',
+      ),
       'utf8',
     );
 
@@ -24,7 +27,7 @@ describe('local auth migration', () => {
     const sql = readFileSync(
       join(
         __dirname,
-        '../../../../database/migrations/0029_auth_identity_password_hash_parameters.sql',
+        '../../../../prisma/migrations/0029_auth_identity_password_hash_parameters/migration.sql',
       ),
       'utf8',
     );
@@ -44,7 +47,7 @@ describe('local auth migration', () => {
     const sql = readFileSync(
       join(
         __dirname,
-        '../../../../database/migrations/0022_email_verification_sign_in.sql',
+        '../../../../prisma/migrations/0022_email_verification_sign_in/migration.sql',
       ),
       'utf8',
     );

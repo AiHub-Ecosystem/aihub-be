@@ -6,7 +6,7 @@ describe('organization invitation migration', () => {
     const migration = await readFile(
       join(
         __dirname,
-        '../../../../../database/migrations/0010_organization_invitations.sql',
+        '../../../../../prisma/migrations/0010_organization_invitations/migration.sql',
       ),
       'utf8',
     );
@@ -44,7 +44,7 @@ describe('organization invitation migration', () => {
     const migration = await readFile(
       join(
         __dirname,
-        '../../../../../database/migrations/0010_organization_invitations.sql',
+        '../../../../../prisma/migrations/0010_organization_invitations/migration.sql',
       ),
       'utf8',
     );

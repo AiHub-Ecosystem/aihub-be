@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 const MIGRATION = join(
   __dirname,
-  '../../../../database/migrations/0030_email_delivery_request_failure_notification.sql',
+  '../../../../prisma/migrations/0030_email_delivery_request_failure_notification/migration.sql',
 );
 
 describe('email delivery request failure notification migration', () => {

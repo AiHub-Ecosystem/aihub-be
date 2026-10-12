@@ -6,7 +6,7 @@ describe('idempotency records migration', () => {
     const migration = await readFile(
       join(
         __dirname,
-        '../../../../database/migrations/0004_idempotency_records.sql',
+        '../../../../prisma/migrations/0004_idempotency_records/migration.sql',
       ),
       'utf8',
     );
@@ -27,7 +27,7 @@ describe('idempotency records migration', () => {
     const migration = await readFile(
       join(
         __dirname,
-        '../../../../database/migrations/0013_idempotency_management_scope.sql',
+        '../../../../prisma/migrations/0013_idempotency_management_scope/migration.sql',
       ),
       'utf8',
     );

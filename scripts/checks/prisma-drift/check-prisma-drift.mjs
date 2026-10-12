@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * Fails when `prisma/schema.prisma` and `database/migrations/` disagree
+ * Fails when `prisma/schema.prisma` and `prisma/migrations/` disagree
  * (ADR-0088, #40).
  *
- * Migrations still build every database, so this check builds one from them in
- * a scratch database and asks Prisma what it would change to reach the schema.
+ * Migrations still build every database, so this check replays them into a
+ * scratch shadow database and asks Prisma what it would change to reach the schema.
  * An empty answer means the two are the same thing; anything else means a
  * column, index, or constraint exists in one and not the other, and the next
  * generated migration would be guessing which.
  *
  * Runs beside the database lane because it needs PostgreSQL. It creates and
- * drops its own database and never touches a developer's working one.
+ * drops its own scratch databases and never touches a developer's working one.
  *
  * Usage: `pnpm check:prisma-drift`
  */
@@ -36,13 +36,13 @@ function adminDatabaseUrl() {
 async function main() {
   const drifted = await driftAgainstMigrations({
     adminUrl: adminDatabaseUrl(),
-    migrationsDir: 'database/migrations',
+    migrationsDir: 'prisma/migrations',
     schemaPath: 'prisma/schema.prisma',
   });
 
   if (drifted.length > 0) {
     console.error(
-      'schema.prisma and database/migrations/ disagree. The statements below ' +
+      'schema.prisma and prisma/migrations/ disagree. The statements below ' +
         'are what Prisma would apply to reach the schema, so one of the two ' +
         'needs to change:',
     );
@@ -53,7 +53,7 @@ async function main() {
     return;
   }
 
-  console.log('schema.prisma agrees with database/migrations/.');
+  console.log('schema.prisma agrees with prisma/migrations/.');
 }
 
 main().catch((error) => {

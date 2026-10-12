@@ -148,7 +148,7 @@ End-user identity is **composite**, not an isolated string:
 
 Org A → `user_123` and Org B → `user_123` represent two completely distinct actors. A `Team` hierarchy is unnecessary as requirements dictate a single Organization tier.
 
-→ Implemented. Database schema: `database/migrations/0001_control_plane.sql`.
+→ Implemented. Database schema: `prisma/migrations/0001_control_plane/migration.sql`.
 
 ---
 

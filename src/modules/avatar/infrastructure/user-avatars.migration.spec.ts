@@ -4,7 +4,10 @@ import { join } from 'node:path';
 describe('user avatars migration', () => {
   it('keeps one Avatar per account whose key names its owner', () => {
     const sql = readFileSync(
-      join(__dirname, '../../../../database/migrations/0024_user_avatars.sql'),
+      join(
+        __dirname,
+        '../../../../prisma/migrations/0024_user_avatars/migration.sql',
+      ),
       'utf8',
     );
 

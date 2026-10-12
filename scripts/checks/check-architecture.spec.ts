@@ -426,17 +426,20 @@ describe('common layer environment boundary', () => {
  */
 describe('cross-module table access', () => {
   function migrations(): string {
-    return join(__dirname, '..', '..', 'database', 'migrations');
+    return join(__dirname, '..', '..', 'prisma', 'migrations');
   }
 
   function createdTables(): Set<string> {
     const tables = new Set<string>();
 
-    for (const file of readdirSync(migrations()).filter((entry) =>
-      entry.endsWith('.sql'),
-    )) {
+    const entries = readdirSync(migrations(), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+
+    for (const directory of entries) {
       for (const match of readFileSync(
-        join(migrations(), file),
+        join(migrations(), directory, 'migration.sql'),
         'utf8',
       ).matchAll(/CREATE TABLE(?: IF NOT EXISTS)?\s+([a-z_][a-z0-9_]*)/gi)) {
         const table = match[1];

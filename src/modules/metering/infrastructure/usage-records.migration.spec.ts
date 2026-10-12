@@ -4,7 +4,10 @@ import { join } from 'node:path';
 describe('usage records migration', () => {
   it('creates durable one-row-per-request evidence and billing indexes', async () => {
     const migration = await readFile(
-      join(__dirname, '../../../../database/migrations/0005_usage_records.sql'),
+      join(
+        __dirname,
+        '../../../../prisma/migrations/0005_usage_records/migration.sql',
+      ),
       'utf8',
     );
 

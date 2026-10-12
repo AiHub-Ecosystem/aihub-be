@@ -6,7 +6,7 @@ describe('password reset token migration', () => {
     const sql = readFileSync(
       join(
         __dirname,
-        '../../../../database/migrations/0008_password_reset_tokens.sql',
+        '../../../../prisma/migrations/0008_password_reset_tokens/migration.sql',
       ),
       'utf8',
     );

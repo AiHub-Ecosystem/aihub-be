@@ -1,11 +1,11 @@
-import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { driftAgainstMigrations } from '../../scripts/checks/prisma-drift/prisma-drift.cjs';
 import { adminDatabaseUrl } from './database';
 
-const MIGRATIONS_DIR = join(__dirname, '../../database/migrations');
+const MIGRATIONS_DIR = join(__dirname, '../../prisma/migrations');
 const SCHEMA_PATH = join(__dirname, '../../prisma/schema.prisma');
 
 // Its own scratch name, so it never races `pnpm check:prisma-drift`.
@@ -25,16 +25,19 @@ describe('schema.prisma against the real migration history', () => {
 
   it('names a column that a migration adds and the schema does not declare', async () => {
     const workspace = mkdtempSync(join(tmpdir(), 'aihub-drift-migrations-'));
+    const migrationsWorkspace = join(workspace, 'migrations');
     try {
-      cpSync(MIGRATIONS_DIR, workspace, { recursive: true });
+      cpSync(MIGRATIONS_DIR, migrationsWorkspace, { recursive: true });
+      const probeDirectory = join(migrationsWorkspace, '9999_drift_probe');
+      mkdirSync(probeDirectory);
       writeFileSync(
-        join(workspace, '9999_drift_probe.sql'),
+        join(probeDirectory, 'migration.sql'),
         'ALTER TABLE api_keys ADD COLUMN drift_probe text;\n',
       );
 
       const drifted = await driftAgainstMigrations({
         adminUrl: adminDatabaseUrl(),
-        migrationsDir: workspace,
+        migrationsDir: migrationsWorkspace,
         schemaPath: SCHEMA_PATH,
         scratchName: SCRATCH_NAME,
       });

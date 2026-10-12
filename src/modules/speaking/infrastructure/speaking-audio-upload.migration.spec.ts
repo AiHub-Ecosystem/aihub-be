@@ -6,7 +6,7 @@ describe('Speaking Audio upload migration', () => {
     const sql = readFileSync(
       join(
         __dirname,
-        '../../../../database/migrations/0025_speaking_audio_assets.sql',
+        '../../../../prisma/migrations/0025_speaking_audio_assets/migration.sql',
       ),
       'utf8',
     );
@@ -28,7 +28,7 @@ describe('Speaking Audio upload migration', () => {
     const sql = readFileSync(
       join(
         __dirname,
-        '../../../../database/migrations/0026_sandbox_speaking_audio_org_reference.sql',
+        '../../../../prisma/migrations/0026_sandbox_speaking_audio_org_reference/migration.sql',
       ),
       'utf8',
     );

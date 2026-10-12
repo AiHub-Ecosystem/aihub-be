@@ -6,7 +6,7 @@ describe('refresh token migration', () => {
     const sql = readFileSync(
       join(
         __dirname,
-        '../../../../database/migrations/0007_refresh_tokens.sql',
+        '../../../../prisma/migrations/0007_refresh_tokens/migration.sql',
       ),
       'utf8',
     );

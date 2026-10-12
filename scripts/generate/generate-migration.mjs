@@ -2,9 +2,9 @@
 /**
  * Writes the SQL for the next control-plane migration (ADR-0088, #40).
  *
- * `prisma/schema.prisma` is the shape; `database/migrations/` is what builds a
- * database. This prints the statements that carry one to the other, numbered
- * for the existing runner (`pnpm migrate`) that keeps applying them.
+ * `prisma/schema.prisma` is the shape; `prisma/migrations/` is what builds a
+ * database. This prints the statements that carry one to the other into the
+ * standard Prisma migration directory for the existing runner (`pnpm migrate`).
  *
  * The comparison needs a database already at the current migration state,
  * because that is what "before" means. Run `pnpm migrate` first.
@@ -12,24 +12,24 @@
  * Usage:
  *   DATABASE_URL=postgres://... node scripts/generate/generate-migration.mjs add_slug
  *
- * The generated file is an ordinary SQL file: review it, hand-edit it to add
- * the objects this schema language cannot declare, and commit it. Generation
+ * The generated migration is ordinary SQL: review it, hand-edit it to add the
+ * objects this schema language cannot declare, and commit it. Generation
  * removes the second hand-maintained copy of the schema, not the review.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 
-const MIGRATIONS_DIR = 'database/migrations';
+const MIGRATIONS_DIR = 'prisma/migrations';
 const SCHEMA = 'prisma/schema.prisma';
 
 function nextMigrationNumber() {
-  const highest = readdirSync(MIGRATIONS_DIR)
-    .filter((name) => name.endsWith('.sql'))
-    .map((name) => Number.parseInt(name.slice(0, 4), 10))
+  const highest = readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => Number.parseInt(entry.name.slice(0, 4), 10))
     .filter((value) => Number.isInteger(value))
     .reduce((largest, value) => Math.max(largest, value), 0);
 
@@ -88,13 +88,18 @@ if (sql === '' || sql.includes('-- This is an empty migration.')) {
   process.exit(1);
 }
 
-const target = join(MIGRATIONS_DIR, `${nextMigrationNumber()}_${slug}.sql`);
+const targetDirectory = join(
+  MIGRATIONS_DIR,
+  `${nextMigrationNumber()}_${slug}`,
+);
 
-if (existsSync(target)) {
-  console.error(`${target} already exists.`);
+if (existsSync(targetDirectory)) {
+  console.error(`${targetDirectory} already exists.`);
   process.exit(1);
 }
 
+mkdirSync(targetDirectory);
+const target = join(targetDirectory, 'migration.sql');
 writeFileSync(target, `${sql}\n`);
 console.log(
   `Wrote ${target}. Review it, hand-edit it, then run \`pnpm migrate\`.`,

@@ -2,7 +2,7 @@
 /**
  * Expand-only migration contract check.
  *
- * Mirrors scripts/checks/check-architecture.mjs: reads database/migrations/*.sql,
+ * Mirrors scripts/checks/check-architecture.mjs: reads Prisma migration directories,
  * fails on forbidden expand-only patterns, prints file:line statement + alternative.
  *
  * What it checks (narrow, honest):
@@ -29,15 +29,19 @@ import { join } from 'node:path';
 const require = createRequire(import.meta.url);
 const { checkSql, formatViolation } = require('./check-migrations.cjs');
 
-const MIGRATIONS_DIR = 'database/migrations';
+const MIGRATIONS_DIR = 'prisma/migrations';
 
 async function main() {
-  const entries = await readdir(MIGRATIONS_DIR);
-  const files = entries.filter((n) => n.endsWith('.sql')).sort();
+  const entries = await readdir(MIGRATIONS_DIR, { withFileTypes: true });
+  const files = entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
   let violations = [];
-  for (const file of files) {
-    const content = await readFile(join(MIGRATIONS_DIR, file), 'utf8');
-    violations.push(...checkSql(content, file));
+  for (const directory of files) {
+    const migrationPath = join(MIGRATIONS_DIR, directory, 'migration.sql');
+    const content = await readFile(migrationPath, 'utf8');
+    violations.push(...checkSql(content, `${directory}/migration.sql`));
   }
   if (violations.length > 0) {
     for (const v of violations) {
