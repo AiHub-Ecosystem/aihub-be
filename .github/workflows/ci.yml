@@ -328,6 +328,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      - name: Check production container log bounds
+        run: |
+          set -o pipefail
+          docker compose --profile "*" --env-file .env.production.example -f docker-compose.production.yml config --format json \
+            | node scripts/ci/check-production-compose-logs.cjs
+
       # Built and loaded into this runner's daemon, not pushed: the boot check
       # below has to start the exact image, and buildx cannot both load an image
       # and emit the manifest list a push needs. The push is a separate step

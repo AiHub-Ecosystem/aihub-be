@@ -21,10 +21,11 @@ proxied requests. A Web Session request reaches AIHUB from the Customer Web
 BFF; its observed address identifies that BFF. Issue #436 has not established
 validated end-user IP forwarding.
 
-Both application and nginx access logs can contain personal data. Issue #287
-has not yet recorded their categories and retention, and issue #363 has not yet
-chosen the application container log bounds. The host's default nginx access
-log is shared with other sites, so AIHUB-specific logging must remain isolated.
+Both application and nginx access logs can contain personal data. At the time
+this ADR was accepted, #287 had not recorded their categories and retention,
+and #363 had not chosen the application container log bounds. The host's
+default nginx access log is shared with other sites, so AIHUB-specific logging
+must remain isolated.
 
 ## Decision
 

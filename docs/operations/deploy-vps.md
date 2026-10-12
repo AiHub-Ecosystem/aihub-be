@@ -754,6 +754,40 @@ managed nginx Sandbox file and stale `app-sandbox` container. It does not drop
 `aihub_sandbox`; retain that database until its backup and disposal have been
 approved separately.
 
+## Container stdout and stderr logs (#363)
+
+Every service in `docker-compose.production.yml` uses Docker's `json-file`
+driver with `max-size: 10m` and `max-file: 3`. Docker retains at most three
+files of up to 10 MB each, for a configured maximum of 30 MB per container.
+The Compose file declares seven services, so even if every profile and
+migration service runs at once, their combined configured maximum is 210 MB.
+CI renders the complete Compose file and fails if any service is missing these
+options. This limit covers Docker-managed container stdout and stderr; it does
+not include the separate `deploy-logs/` snapshots described in the blue-green
+section below.
+
+Before the first deployment that applies these options, record the host's
+existing Docker log defaults on #363. Record only the logging keys (or that the
+file is absent), not unrelated daemon settings:
+
+```sh
+sudo python3 -c 'import json,pathlib; p=pathlib.Path("/etc/docker/daemon.json"); print("absent" if not p.exists() else json.dumps({k: json.loads(p.read_text()).get(k) for k in ("log-driver", "log-opts")}, sort_keys=True))'
+sudo docker info --format 'default_log_driver={{.LoggingDriver}}'
+```
+
+After deployment, inspect the actual container settings and record the output
+on #363. Existing containers keep their previous logging configuration until
+they are recreated.
+
+```sh
+for id in $(sudo docker ps -aq --filter label=com.docker.compose.project=aihub-production); do
+  sudo docker inspect --format '{{.Name}} driver={{.HostConfig.LogConfig.Type}} options={{json .HostConfig.LogConfig.Config}}' "$id"
+done
+```
+
+The expected values are `json-file`, `max-size: 10m`, and `max-file: 3` for
+each returned AIHUB container.
+
 ## Verify and operate
 
 ### Checking deployed state

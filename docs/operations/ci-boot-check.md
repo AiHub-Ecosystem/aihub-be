@@ -6,6 +6,12 @@ own health check to report healthy. CD runs only after CI succeeds, so a
 release that cannot start is blocked before it reaches the VPS instead of
 taking production down after `up -d`.
 
+Before building the image, the job also renders `docker-compose.production.yml`
+with the checked-in example environment and enables every profile before
+checking all services, including inactive profiles and migration services, for
+the required bounded `json-file` logging options. A service without the
+configured log bounds fails the job.
+
 It answers one question: **does this artifact start.**
 
 When the boot passes on a push to `main`, CI saves that image as an artifact.
