@@ -28,7 +28,7 @@ import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
 } from '@/modules/identity/shared/presentation/authenticated-request';
-import { identityProviderUnavailable } from '../application/user-identity-errors';
+import { identityProviderUnavailable } from '@/modules/identity/user-assertions/application/user-identity-errors';
 
 interface ValidationEnvelope {
   readonly data: SandboxDemoKeyValidationResponse;

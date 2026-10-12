@@ -19,7 +19,6 @@ export const SandboxDemoKeyValidationResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type SandboxDemoScope = Static<typeof SandboxDemoScopeSchema>;
 export type SandboxDemoKeyValidationRequest = Static<
   typeof SandboxDemoKeyValidationRequestSchema
 >;
