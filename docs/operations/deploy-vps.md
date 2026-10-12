@@ -954,24 +954,22 @@ The Production handoff matrix is split by safety boundary:
   provider, so they do not authenticate or exercise grading/model behavior.
   Failures identify the hostname or dependency name and a safe status/code; raw
   response bodies and configured URLs are not logged. Sandbox checks are skipped
-  when `AIHUB_SANDBOX_ENABLED=false`. The existing direct Compose release path
-  has no automatic rollback. The updated CD workflow uses the blue-green helper
-  when re-enabled; until then, use the direct rollback procedure below.
+  when `AIHUB_SANDBOX_ENABLED=false`. CD deploys through the blue-green helper.
+  The direct Compose rollback below is only for a release that predates its
+  successful blue-green history. Blue-green automatic rollback covers failed
+  cutover gates; a later latency or error-rate regression needs operator action.
 
 ## Rollback
 
-The deployed release still uses the direct Compose history until the first
-successful blue-green cutover. Those direct releases record each successful
-tier's replaced and deployed commit SHA in
-`$APP_DIR/.aihub-deploy-state/direct-releases.tsv` (directory mode `0700`, file
-mode `0600`) and adds the same rows to the CD Actions summary. Each row is
-`run_id`, UTC time, tier, previous SHA, deployed SHA. A failed CD run may leave
-`direct-release-pending.tsv`; it is not successful history. Use the latest
-successful run summary and host history together when choosing the last known
-good SHA. `.env.production` is the desired image setting, not release history.
-The CD workflow is manually disabled. After the blue-green activation gates
-pass, its deploy job will call `scripts/ops/blue-green-host.sh`; it will not
-rewrite `.env.production` or reset nginx to slot A.
+CD deploys with `scripts/ops/blue-green-host.sh`. Each successful blue-green
+deployment records per-tier history in
+`$APP_DIR/.aihub-deploy-state/releases.tsv`. Legacy direct Compose releases
+record their history in `$APP_DIR/.aihub-deploy-state/direct-releases.tsv`
+(directory mode `0700`, file mode `0600`) and in the CD Actions summary. A
+failed CD run may leave pending state; it is not successful history. Use the
+history for the release method that deployed the running tier. `.env.production`
+is configuration, not release history. Check GitHub Actions before host work:
+disabling CD does not cancel a run already in progress.
 
 ### Pause CD and select the rollback target
 
@@ -985,15 +983,12 @@ gh run list --workflow cd.yml --status in_progress
 gh workflow list --all
 ```
 
-Do not change the host while a CD run is applying a release. Verify CD is
-disabled, then inspect the last successful rows on the host and its matching
-Actions summary. If the current running SHA is the deployed SHA in the latest
-successful row, that row's previous SHA is the rollback candidate, provided it
-is still known good and its tag exists. If a failed CD run replaced the image
-before the history step, use the most recent successful deployed SHA that
-differs from the running SHA. After a manual rollback, the restored SHA should
-match an earlier deployed row. Never infer the previous SHA from
-`.env.production`.
+Do not change the host while a CD run is applying a release. Verify the
+workflow is disabled and no run is active. Use `blue-green-host.sh status` to
+read the active tier revisions. For a blue-green release, use its `releases.tsv`
+history and the helper below; for a legacy direct Compose release, use
+`direct-releases.tsv` and its matching Actions summary. Never infer the previous
+SHA from `.env.production`.
 
 GHCR was checked on 2026-10-09: the private package had 150 tagged versions,
 the oldest tagged version was from 2026-09-18, and the current and preceding
@@ -1002,24 +997,57 @@ workflow. The rollback retention floor is two SHA tags: the current release and
 its previous successful release. ADR-0064 currently retains every SHA tag; do
 not add cleanup that removes this floor. #115 may set a finite depth later, but
 it must preserve at least these two releases. Before rollback, verify the
-chosen tag is still listed in the private package and locally pullable. Prefer
-the previous image already cached on the host. If it is absent, use an operator-managed
-`read:packages` credential through `docker login --password-stdin`, pull the
-immutable SHA, and log out; never put the token in `.env.production` or a
-command argument. The rollback command below checks the local cache and
-performs that temporary login only when the target image is absent.
+chosen tag is still listed in the private package. The blue-green helper runs
+`sudo -n docker compose pull`, so authenticate that Docker daemon to GHCR with
+an operator-managed `read:packages` credential through
+`sudo -n docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin`;
+log out after rollback. Never put the token in `.env.production` or a command
+argument. The legacy direct Compose command below checks the local cache and
+performs a temporary login only when the target image is absent.
 
-### Roll back the direct Compose release
+### Roll back a blue-green release
 
+Use the helper when the tier has a successful blue-green deployment in
+`releases.tsv`. It selects the previous recorded image, and refuses if the
+active nginx route does not match the latest deployment record. It starts and
+checks the candidate, switches only the selected tier, and confirms public
+health, dependencies, readiness, and resource state before draining the old
+slot. Run one tier at a time. If rollback cannot be confirmed, preserve both
+slots and stop for operator repair.
+
+After the pause and GHCR authentication steps above, inspect status from the
+deployment directory:
+
+```bash
+cd "$APP_DIR"
+APP_DIR="$PWD" ./scripts/ops/blue-green-host.sh status
+```
+
+Then run exactly one command for the affected tier. For Production:
+
+```bash
+APP_DIR="$PWD" ./scripts/ops/blue-green-host.sh rollback production
+```
+
+For Sandbox:
+
+```bash
+APP_DIR="$PWD" ./scripts/ops/blue-green-host.sh rollback sandbox
+```
+
+### Legacy direct Compose rollback
+
+Use this only when the running release has no successful blue-green history.
 Use the exact 40-character target SHA selected above. This updates both enabled
-tiers to the same image, matching the legacy direct-Compose behavior. It leaves the
-expand-only schema in place and never deletes the database volume or runs a
-down-migration. In the same Bash session, record `recovery_started=$(date +%s)`
-immediately before changing `AIHUB_IMAGE`; once all health and authenticated
-probes pass, calculate `recovery_seconds=$(($(date +%s) - recovery_started))`
-and save it in the incident notes. This full-tier command is for an incident;
-use the Sandbox-only procedure below for a rehearsal so Production keeps
-serving its current container.
+tiers to the same image, matching the legacy direct-Compose behavior. It leaves
+the expand-only schema in place and never deletes the database volume or runs a
+down-migration. In the same Bash session, record
+`recovery_started=$(date +%s)` immediately before changing `AIHUB_IMAGE`; once
+all health and authenticated probes pass, calculate
+`recovery_seconds=$(($(date +%s) - recovery_started))` and save it in the
+incident notes. This full-tier command is for an incident; use the Sandbox-only
+procedure below for a rehearsal so Production keeps serving its current
+container.
 
 ```bash
 set -euo pipefail
@@ -1155,7 +1183,7 @@ The `/metrics` scrape also exposes unknown queued rows in the fixed
 `aihub_email_outbox_queued{kind="unknown"}` series and their oldest age; raw
 stored values are never metric labels.
 
-### Sandbox-only rehearsal rollback
+### Legacy Sandbox-only direct-Compose rehearsal rollback
 
 Use this variant only after CD is disabled, no deploy run is active, Sandbox
 is enabled, and the rollback image passed the registry/cache checks above. It
@@ -1277,25 +1305,29 @@ bundle changes such as the Web Session key, restore the previous compatible
 templates and Agent render before restarting the old image; follow the
 [coordinated secret cutover](#release-order-when-a-rollout-adds-a-runtime-secret).
 
-### Rehearsal record
+### Legacy direct-Compose rehearsal record
 
 Run one rehearsal against enabled Sandbox during a quiet window. Record UTC
 date, the deployed SHA, rollback target SHA, the commands/probes used, and the
 elapsed time from starting rollback until health and authenticated probes pass.
-Keep Production serving throughout. Do not enable blue-green CD as part of this
-rehearsal; it remains gated by #289 and ADR-0085.
+Keep Production serving throughout. This procedure records a legacy direct
+Compose rehearsal; it does not exercise blue-green rollback, which is covered
+by the automated rehearsal recorded in #224.
 
 | Date (UTC) | Sandbox SHA before                       | SHA restored                             | Steps and probe results                                                                                                                                                                                                                                                                                                                                                                                                                | Recovery time                                           |
 | ---------- | ---------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
 | 2026-10-10 | 00d97c5dd44cc43dcc465ecf8889b7742ff9f22a | f17a570c9381584ecad88ee8604936added3c781 | Sandbox-only rollback; Production container ID and revision stayed unchanged; health/readiness and runtime dependencies passed; Production auth 400, Sandbox auth 200; N-1 unknown-kind metric=1 while password-reset row reached provider_accepted. Fixed forward to 00d97c5; MFA login 200 and unknown-kind metric returned to 0. Fixture setup intentionally held Sandbox stopped for about 6m46 before the rollback timer started. | 9s from changing the image through authenticated probes |
 
-## Approved blue-green rollout target (#224)
+## Blue-green rollout and rollback (#224)
 
-This is the accepted target in [ADR-0085](../adr/0085-per-tier-blue-green-cutover.md).
-The CD workflow is currently disabled manually. Do not re-enable it until the
-implementation, automated Sandbox rollback rehearsal, manual rollback gate in
-#289, #284's background-work shutdown fix and lifecycle test, and live-host CPU
-limit measurement are complete.
+The accepted design in
+[ADR-0085](../adr/0085-per-tier-blue-green-cutover.md) is implemented by the CD
+workflow and host helper. Issue #224 records the controlled Sandbox
+post-cutover failure rehearsal and verified automatic rollback. The helper's
+automatic rollback covers its cutover health, dependency, readiness, and
+resource gates; it does not react to later SLO regressions. Use the manual
+helper procedure above for a later regression. Issue #483 tracks the staging
+decision and the release observation and rollback policy.
 
 Deploy Production, then Sandbox, one tier at a time. Keep the current tier
 serving while one candidate starts from the immutable CI SHA. Require private
@@ -1308,12 +1340,10 @@ available. Confirm rollback with the same dependency smoke on the restored
 service. Retain the old service until smoke passes, then wait for Compose's
 150-second stop grace. The budget is 60 seconds for HTTP drain, 75 seconds for
 background idempotent work, and 5 seconds for telemetry export, with 10 seconds
-of margin. This drain is safe only after #284 makes shutdown wait for both
-in-flight HTTP requests and background idempotent work before closing clients;
-keep CD disabled until that change and its lifecycle test pass. The
-validated upstream is the active-slot source of truth; the immutable image SHA
-and #289's durable record identify the release. `.env.production` is not the
-last-good release record.
+of margin. This drain relies on the background-work shutdown behavior and
+lifecycle coverage completed in #284. The validated upstream is the active-slot
+source of truth; the immutable image SHA and helper history identify the
+release. `.env.production` is not the last-good release record.
 
 Before each deploy, the helper reconciles `AIHUB_SANDBOX_ENABLED` with the
 managed Sandbox route. Disabling Sandbox removes and validates the route before
@@ -1339,18 +1369,20 @@ If confirmation fails, preserve both slots, fail CD, stop subsequent deploys,
 and require operator repair through #289. Do not touch other nginx sites or
 ports 80/443.
 
-Before enabling CD, rehearse a controlled post-cutover smoke failure and capture
-the automatic rollback evidence. During each rollout and its rehearsal, probe
-every enabled public hostname's `/health` every second; require no failed probes
-and no OOM, and record host/container CPU, memory, and OOM events. The live host
-has two vCPUs and shared workloads, so choose CPU limits from measured headroom
-with the third container before rollout. A running deployment is not cancelled;
+The controlled post-cutover smoke-failure rehearsal and automatic rollback
+evidence are recorded in #224. During each rollout, probe every enabled public
+hostname's `/health` every second; require no failed probes and no OOM, and
+record host/container CPU, memory, and OOM events. The live host has two vCPUs
+and shared workloads, so review CPU limits against measured headroom when
+capacity or workload changes (#327). A running deployment is not cancelled;
 the latest pending release wins.
 
-This automatic window ends after cutover, smoke, drain, and the short final
-health check. It does not roll back a later error-rate or latency regression.
-Until #237/#240 provide the needed metrics and #292 defines SLO alerts, use
-existing alerts and the rehearsed #289 manual rollback for later regressions.
+The automatic rollback window ends after cutover, smoke, drain, and the short
+final health check. It does not roll back a later error-rate or latency
+regression. Until the metrics and SLO alert work in #237, #240, #292, and #412
+is complete, an operator must detect the regression and use the manual helper
+rollback above. #483 records the decision about the observation window and
+rollback policy.
 
 The host helper supports `status`, `rollback production`, `rollback sandbox`,
 and `rehearse sandbox`. The rehearsal command deliberately injects a failed
@@ -1375,16 +1407,21 @@ helper.
 
 ## GitHub Actions CD
 
-The `CI` workflow publishes the image it booted to GHCR under the commit sha.
-The `CD` workflow is manually disabled. When re-enabled, it resolves the
-immutable SHA, checks the registry still holds the digest `CI` published, syncs
-the helper and deployment files, then calls the blue-green deploy command over
-SSH. The VPS must already be prepared using this runbook, with the Compose files
-and `.env.production` in the app directory. The deploy user must be allowed to
-run Docker non-interactively, either directly or via passwordless
-`sudo -n docker`.
+The `CI` workflow publishes the image it booted to GHCR under the commit SHA.
+After a successful CI run for a push to `main`, CD resolves that immutable SHA,
+checks the registry still holds the digest CI published and the SHA is still
+the tip of `main`, then syncs the helper and deployment files and deploys over
+SSH. The helper deploys Production and then Sandbox when enabled. CD uses the
+`production` GitHub Environment; its `main` branch allowlist is not a human
+review gate, and #300 tracks the separate branch and review protections. Check
+the workflow's current state before operating; this runbook does not assert
+that it is enabled at every future point. The VPS must already be prepared
+using this runbook, with the Compose files and `.env.production` in the app
+directory. The deploy user must be allowed to run Docker non-interactively,
+either directly or via passwordless `sudo -n docker`.
 
-Create a protected GitHub Environment named `production` and add these secrets:
+CD requires the `production` GitHub Environment to be configured with these
+secrets:
 
 - `VPS_HOST`
 - `VPS_USER`
