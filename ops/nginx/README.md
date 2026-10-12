@@ -32,8 +32,10 @@ keeps four rotated files, compressed after the first rotation. This is a
 size-based window, not a fixed number of days; the active file can exceed the
 threshold between host logrotate runs. The helper creates the active file as
 `root:adm` mode `0640` (or tightens those permissions without truncating it),
-and logrotate preserves that mode for new active files.
+and logrotate preserves that mode for new active files. The rotation policy
+uses `su root adm` because this host's shared `/var/log` directory is group
+writable.
 
-Run `bash ops/nginx/check-gzip.sh` with nginx and logrotate installed to prove
-the access-log fields and query redaction, validate rotation syntax, and check
-the two Speaking grading locations against the captured verdict fixture.
+Run `bash ops/nginx/check-gzip.sh` with nginx, logrotate, and sudo installed to
+prove the access-log fields and query redaction, validate rotation syntax, and
+check the two Speaking grading locations against the captured verdict fixture.

@@ -1,6 +1,7 @@
 /var/log/aihub-access.log {
     size 10M
     rotate 4
+    su root adm
     compress
     delaycompress
     missingok

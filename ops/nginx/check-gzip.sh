@@ -29,10 +29,11 @@ done
 sed "s#/var/log/aihub-access.log#$tmp/aihub-access.log#g" \
   "$repo_root/ops/nginx/aihub-access-logrotate" > "$tmp/aihub-access-logrotate"
 grep -Fq 'create 0640 root adm' "$tmp/aihub-access-logrotate"
+grep -Fq 'su root adm' "$tmp/aihub-access-logrotate"
 logrotate_sha256="$(sha256sum "$repo_root/ops/nginx/aihub-access-logrotate" | cut -d ' ' -f 1)"
 grep -Fq "readonly LOGROTATE_SHA256=$logrotate_sha256" \
   "$repo_root/ops/nginx/aihub-nginx-apply"
-logrotate --debug --state "$tmp/logrotate.status" \
+sudo logrotate --debug --state "$tmp/logrotate.status" \
   "$tmp/aihub-access-logrotate" >/dev/null
 install -m 0640 /dev/null "$tmp/aihub-access.log"
 
