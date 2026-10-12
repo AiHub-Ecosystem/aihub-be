@@ -78,10 +78,11 @@ exercises the highest-risk job pair. The Production host wrapper serializes diff
 scheduled jobs under its host-wide lock; `scripts/ops/host-scheduled-job.spec.sh`
 checks that a competing job is logged as deferred while the lock is held. The
 report records route-specific latency, errors, queue/resource peaks, restart
-count, job outcomes, and the recovery stage after offered load drops. The
-contention check fails if either job takes longer than the 27 seconds left after
-the load starts, so a late job cannot pass on measurements collected after
-traffic ended. The seed provides at least one refresh-token user per configured
+count, job outcomes, and the recovery stage after offered load drops. The runner
+starts the jobs after k6 reports its first load iteration and fails the
+contention check if either takes longer than 27 seconds, leaving a three-second
+margin before the 30-second arrival window ends. The seed provides at least one
+refresh-token user per configured
 maximum load VU plus the metrics scenario VU. The runner rejects settings above
 512 load VUs, and k6 checks the full credential pool before sending requests.
 

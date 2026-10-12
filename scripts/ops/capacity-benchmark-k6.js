@@ -129,6 +129,9 @@ export function setup() {
 let refreshToken;
 
 export function load(data) {
+  if (exec.scenario.iterationInTest === 0) {
+    console.log('BENCHMARK_LOAD_STARTED');
+  }
   const index = exec.vu.idInTest - 1;
   const user = data.users[index];
   const organization = data.organizations[index % data.organizations.length];

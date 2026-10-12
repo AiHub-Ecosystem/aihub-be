@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
+  appendStreamingMarkerChunk,
   authAndGradingWorkload,
   contentionJobsFitLoadWindow,
   hasCompleteLoadDelivery,
@@ -97,6 +98,23 @@ await test('requires both scheduled jobs to finish within the active load window
     ),
     false,
   );
+});
+
+await test('detects a load-start marker split across stdout chunks', () => {
+  const marker = 'BENCHMARK_LOAD_STARTED';
+  const first = appendStreamingMarkerChunk(
+    '',
+    'prefix BENCHMARK_LOAD_',
+    marker,
+  );
+  const second = appendStreamingMarkerChunk(
+    first.tail,
+    'STARTED suffix',
+    marker,
+  );
+
+  assert.equal(first.found, false);
+  assert.equal(second.found, true);
 });
 
 await test('maps the Task 1 provider fixture to the public API request shape', () => {

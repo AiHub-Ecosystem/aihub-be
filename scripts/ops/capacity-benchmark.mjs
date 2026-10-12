@@ -7,6 +7,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import {
+  appendStreamingMarkerChunk,
   contentionJobsFitLoadWindow,
   hasCompleteLoadDelivery,
   highestPassingRate,
@@ -37,7 +38,7 @@ const metricsScenarioVUs = 1;
 const maxLoadVUs = 512;
 const seededUserCount = maxVUs + metricsScenarioVUs;
 const jobContentionDurationMs = 30_000;
-const jobContentionStartDelayMs = 3000;
+const jobContentionMarginMs = 3000;
 const appCpuLimit = 1.5;
 const appMemoryLimitBytes = 768 * 1024 * 1024;
 const runId = `${process.pid}-${Date.now()}`;
@@ -583,6 +584,7 @@ async function runK6({
   routeNames,
   runDuration,
   label,
+  onLoadStarted,
   isOverload = false,
   isRecovery = false,
 }) {
@@ -599,22 +601,42 @@ async function runK6({
   const restartCountBefore = await dockerRestartCount(appContainerId);
   const startMs = Date.now();
   const startIso = new Date(startMs).toISOString();
-  const result = await dockerCompose([
-    'run',
-    '--rm',
-    '--no-deps',
-    '-e',
-    `WORKLOAD=${workload}`,
-    '-e',
-    `RATE=${rate}`,
-    '-e',
-    `DURATION=${runDuration}`,
-    '-e',
-    `MAX_VUS=${maxVUs}`,
-    'k6',
-    'run',
-    '/scripts/capacity-benchmark-k6.js',
-  ]);
+  const loadStartMarker = 'BENCHMARK_LOAD_STARTED';
+  let markerTail = '';
+  let loadStartSignaled = false;
+  const result = await dockerCompose(
+    [
+      'run',
+      '--rm',
+      '--no-deps',
+      '-e',
+      `WORKLOAD=${workload}`,
+      '-e',
+      `RATE=${rate}`,
+      '-e',
+      `DURATION=${runDuration}`,
+      '-e',
+      `MAX_VUS=${maxVUs}`,
+      'k6',
+      'run',
+      '/scripts/capacity-benchmark-k6.js',
+    ],
+    {
+      onStdout: (chunk) => {
+        if (onLoadStarted === undefined || loadStartSignaled) return;
+        const state = appendStreamingMarkerChunk(
+          markerTail,
+          chunk,
+          loadStartMarker,
+        );
+        markerTail = state.tail;
+        if (state.found) {
+          loadStartSignaled = true;
+          onLoadStarted(Date.now());
+        }
+      },
+    },
+  );
   const endMs = Date.now();
   const output = `${result.stdout}\n${result.stderr}`;
   const summary = jsonAfterPrefix(output, 'BENCHMARK_SUMMARY_JSON ');
@@ -923,7 +945,10 @@ function samplesInWindow(samples, startMs, endMs) {
 
 async function runJobContention({ appContainerId, rate, routeNames }) {
   const duration = `${jobContentionDurationMs / 1000}s`;
-  const startMs = Date.now();
+  let signalLoadStarted;
+  const loadStarted = new Promise((resolve) => {
+    signalLoadStarted = resolve;
+  });
   const loadPromise = runK6({
     appContainerId,
     workload: 'mixed_grading',
@@ -931,12 +956,16 @@ async function runJobContention({ appContainerId, rate, routeNames }) {
     routeNames,
     runDuration: duration,
     label: `scheduled-job contention at ${rate} requests/s`,
+    onLoadStarted: signalLoadStarted,
   });
-  await new Promise((resolve) =>
-    setTimeout(resolve, jobContentionStartDelayMs),
-  );
-  const windowStart = new Date(startMs - 60 * 60 * 1000).toISOString();
-  const windowEnd = new Date().toISOString();
+  const loadStartMs = await Promise.race([
+    loadStarted,
+    loadPromise.then(() => {
+      throw new Error('k6 completed before reporting its load start');
+    }),
+  ]);
+  const windowStart = new Date(loadStartMs - 60 * 60 * 1000).toISOString();
+  const windowEnd = new Date(loadStartMs).toISOString();
   const jobsPromise = Promise.all([
     runAppCommand(appContainerId, ['quota:reconcile']),
     runAppCommand(appContainerId, [
@@ -990,7 +1019,7 @@ async function runJobContention({ appContainerId, rate, routeNames }) {
       typeof hostMemoryPercent === 'number' && hostMemoryPercent <= 80,
     scheduledJobsFinishedDuringLoad: contentionJobsFitLoadWindow(
       jobs,
-      jobContentionDurationMs - jobContentionStartDelayMs,
+      jobContentionDurationMs - jobContentionMarginMs,
     ),
     scheduledJobsSucceeded: jobs.every((job) => job.exitCode === 0),
   };
@@ -1010,7 +1039,7 @@ async function runJobContention({ appContainerId, rate, routeNames }) {
         hostCpuPercent: 80,
         hostMemoryPercentUsed: 80,
         scheduledJobMaxDurationMs:
-          jobContentionDurationMs - jobContentionStartDelayMs,
+          jobContentionDurationMs - jobContentionMarginMs,
       },
       observed: {
         appCpuPercentOfLimit: appCpuPercent,

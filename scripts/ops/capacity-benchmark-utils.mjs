@@ -86,6 +86,14 @@ export function contentionJobsFitLoadWindow(jobs, maxDurationMs) {
   );
 }
 
+export function appendStreamingMarkerChunk(previousTail, chunk, marker) {
+  const combined = previousTail + chunk;
+  return {
+    found: combined.includes(marker),
+    tail: combined.slice(-marker.length),
+  };
+}
+
 export function overloadRate(stageRates, passingRate) {
   if (passingRate <= 0) {
     const highestStage = stageRates.at(-1);
