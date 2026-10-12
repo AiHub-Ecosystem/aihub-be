@@ -39,6 +39,13 @@
     // Container runtime evidence that package.json scripts do not name:
     // Dockerfile ENTRYPOINT; compose uses the same bootstrap as entrypoint.
     "scripts/runtime/runtime-entrypoint.mjs",
+    // Compose invokes these through bind mounts and a separate k6 container,
+    // so their runtime edges are outside Knip's JavaScript import graph.
+    "scripts/ops/capacity-benchmark-k6.js",
+    "scripts/ops/capacity-benchmark-seed.mjs",
+    "scripts/ops/capacity-benchmark-reset-refresh-tokens.mjs",
+    "scripts/ops/capacity-benchmark-start-app.mjs",
+    "scripts/ops/capacity-benchmark-support.mjs",
     // Operator CLI invoked by a documented host path (docs/operations), not by
     // package scripts, tests, or the container image; live runbook command.
     "scripts/cli/upload-speaking-audio.mjs",
@@ -65,6 +72,13 @@
     "dependency-cruiser",
     // Referenced by nest-cli.json `collection`; shipped for Nest schematics,
     // not imported by application code.
-    "@nestjs/schematics"
+    "@nestjs/schematics",
+    // Grafana k6 resolves its built-in modules inside the pinned runner image.
+    "k6"
+  ],
+  "ignoreUnresolved": [
+    // These image paths are supplied by the Dockerfile; their local sources
+    // are mounted/imported only inside the benchmark container.
+    "^/app/scripts/(cli/cli|runtime/runtime-entrypoint)\\.mjs$"
   ]
 }

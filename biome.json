@@ -1,7 +1,13 @@
 {
   "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
   "files": {
-    "ignore": ["dist", "coverage", "node_modules", "test/fixtures"]
+    "ignore": [
+      "dist",
+      "coverage",
+      "node_modules",
+      "test/fixtures",
+      "artifacts/capacity-benchmark"
+    ]
   },
   "formatter": {
     "enabled": true,
