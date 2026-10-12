@@ -4,3 +4,7 @@
 - [ ] If it adds a persisted enum/value, this release only teaches readers to accept or safely skip it; a later release starts writing it after the reader is deployed.
 - [ ] If it adds configuration or a Vault key, this release keeps existing keys; any strict Vault reader follows the coordinated cutover and rollback procedure.
 - [ ] If it removes or renames a key/value, no deployed image still reads it, or the approved contract migration and rollback plan is linked here.
+
+## Privacy inventory
+
+- [ ] If a migration adds or changes a column that holds personal data or an identifier linkable to a person, I updated the [personal data inventory](../docs/privacy/personal-data-inventory.md) with its purpose, classification, stores/recipients, retention trigger, deletion behavior, residency, and at-rest status.
