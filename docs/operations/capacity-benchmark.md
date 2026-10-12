@@ -7,7 +7,8 @@ pnpm capacity:benchmark
 ```
 
 The runner requires a clean Git checkout so the Docker image matches the commit
-recorded in the report.
+recorded in the report. It snapshots the k6 harness and its utility module into
+the run artifact so every stage uses the same source.
 
 It starts a uniquely named Docker Compose project with a disposable Postgres
 volume, Redis, the AIHUB container, a controlled AI Service stub, and a pinned
@@ -47,7 +48,8 @@ margin.
 After those measurements, the runner selects one mixed grading overload stage above the
 highest stage where all four grading p99 values met their operation deadlines.
 It then holds the mixed profile for 30 seconds at the selected passing rate to
-confirm recovery after offered load drops.
+confirm recovery after offered load drops. If no mixed stage passes, recovery
+and scheduled-job contention are skipped and marked unavailable in the report.
 The stage rates and hold duration can be changed with
 `BENCHMARK_STAGE_RATES_RPS` and `BENCHMARK_DURATION`; Redis RTT, stub latency,
 stub error rate, and maximum VUs use `BENCHMARK_REDIS_RTT_MS`,

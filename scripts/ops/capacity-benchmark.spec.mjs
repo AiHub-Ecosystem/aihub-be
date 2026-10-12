@@ -54,6 +54,10 @@ await test('chooses the highest offered rate meeting the deadline without errors
   ];
 
   assert.equal(highestPassingRate(runs, ['writing_task1'], 60_000), 40);
+  assert.equal(
+    highestPassingRate(runs.slice(1, 4), ['writing_task1'], 59_000),
+    0,
+  );
   assert.equal(hasCompleteLoadDelivery(runs[0]), true);
   assert.equal(hasCompleteLoadDelivery(runs[3]), false);
   assert.equal(hasCompleteLoadDelivery(runs[4]), true);

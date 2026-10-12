@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -64,10 +64,43 @@ if (
 
 const benchmarkRevision = gitRevision();
 await mkdir(artifactDirectory, { recursive: true });
+const harnessSnapshotDirectory = path.join(artifactDirectory, 'harness');
+await mkdir(harnessSnapshotDirectory, { recursive: true });
+const k6ScriptSnapshot = path.join(
+  harnessSnapshotDirectory,
+  'capacity-benchmark-k6.js',
+);
+const utilsScriptSnapshot = path.join(
+  harnessSnapshotDirectory,
+  'capacity-benchmark-utils.mjs',
+);
+await Promise.all([
+  copyFile(
+    path.join(repositoryRoot, 'scripts/ops/capacity-benchmark-k6.js'),
+    k6ScriptSnapshot,
+  ),
+  copyFile(
+    path.join(repositoryRoot, 'scripts/ops/capacity-benchmark-utils.mjs'),
+    utilsScriptSnapshot,
+  ),
+]);
+if (gitRevision() !== benchmarkRevision) {
+  throw new Error(
+    'Git checkout changed while benchmark harness was snapshotted',
+  );
+}
 const appKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey;
 const benchmarkEnvironment = {
   ...process.env,
   BENCHMARK_VCS_REF: benchmarkRevision,
+  BENCHMARK_K6_SCRIPT_PATH: path
+    .relative(path.dirname(composeFile), k6ScriptSnapshot)
+    .split(path.sep)
+    .join('/'),
+  BENCHMARK_UTILS_SCRIPT_PATH: path
+    .relative(path.dirname(composeFile), utilsScriptSnapshot)
+    .split(path.sep)
+    .join('/'),
   BENCHMARK_JWT_PRIVATE_KEY_B64: Buffer.from(
     appKey.export({ type: 'pkcs8', format: 'pem' }),
   ).toString('base64'),
@@ -86,6 +119,8 @@ const startedAt = new Date();
 const runs = [];
 let statsWatcher;
 let hostWatcher;
+let recovery;
+let contention;
 
 try {
   process.stdout.write('Building the isolated benchmark images...\n');
@@ -196,35 +231,35 @@ try {
     }),
   );
 
-  const recoveryRate = mixedSafeRate || stageRates[0];
-  if (recoveryRate === undefined) throw new Error('no recovery rate available');
-  process.stdout.write(
-    `Running post-overload recovery at ${recoveryRate} requests/s...\n`,
-  );
-  runs.push(
-    await runK6({
+  if (mixedSafeRate > 0) {
+    process.stdout.write(
+      `Running post-overload recovery at ${mixedSafeRate} requests/s...\n`,
+    );
+    recovery = await runK6({
       appContainerId,
       workload: 'mixed_grading',
-      rate: recoveryRate,
+      rate: mixedSafeRate,
       routeNames: gradingRoutes,
       runDuration: '30s',
-      label: `post-overload recovery at ${recoveryRate} requests/s`,
+      label: `post-overload recovery at ${mixedSafeRate} requests/s`,
       isRecovery: true,
-    }),
-  );
+    });
+    runs.push(recovery);
 
-  const contentionRate = mixedSafeRate || stageRates[0];
-  if (contentionRate === undefined)
-    throw new Error('no capacity rate available');
-  process.stdout.write(
-    `Running quota reconciliation and usage reporting under mixed grading at ${contentionRate} requests/s...\n`,
-  );
-  const contention = await runJobContention({
-    appContainerId,
-    rate: contentionRate,
-    routeNames: gradingRoutes,
-  });
-  runs.push(contention.load);
+    process.stdout.write(
+      `Running quota reconciliation and usage reporting under mixed grading at ${mixedSafeRate} requests/s...\n`,
+    );
+    contention = await runJobContention({
+      appContainerId,
+      rate: mixedSafeRate,
+      routeNames: gradingRoutes,
+    });
+    runs.push(contention.load);
+  } else {
+    process.stdout.write(
+      'Skipping recovery and job contention: no mixed-grading stage passed its delivery and latency thresholds.\n',
+    );
+  }
 
   await new Promise((resolve) => setTimeout(resolve, 1100));
   statsWatcher.stop();
@@ -269,6 +304,9 @@ try {
         placement:
           'separate Docker container on the isolated benchmark network',
         maxVUs,
+        harnessSnapshots: [k6ScriptSnapshot, utilsScriptSnapshot].map(
+          (filePath) => path.relative(repositoryRoot, filePath),
+        ),
       },
       configuration: {
         stageRatesRps: stageRates,
@@ -310,12 +348,28 @@ try {
               offeredRateRps: firstMixedCeiling.offeredRateRps,
               routeResults: firstMixedCeiling.routes,
             },
-      jobContention: {
-        jobs: contention.jobs,
-        thresholds: contention.thresholds,
-        hostWideLockDefersCompetingJobs:
-          contention.hostWideLockDefersCompetingJobs,
-      },
+      recovery:
+        recovery === undefined
+          ? {
+              available: false,
+              reason:
+                'No mixed-grading stage passed its delivery and latency thresholds.',
+            }
+          : { available: true, offeredRateRps: recovery.offeredRateRps },
+      jobContention:
+        contention === undefined
+          ? {
+              available: false,
+              reason:
+                'No mixed-grading stage passed its delivery and latency thresholds.',
+            }
+          : {
+              available: true,
+              jobs: contention.jobs,
+              thresholds: contention.thresholds,
+              hostWideLockDefersCompetingJobs:
+                contention.hostWideLockDefersCompetingJobs,
+            },
     },
     runs,
     sampledResources: {

@@ -140,8 +140,8 @@ services:
     command: ["run", "/scripts/capacity-benchmark-k6.js"]
     user: "0:0"
     volumes:
-      - ./capacity-benchmark-k6.js:/scripts/capacity-benchmark-k6.js:ro
-      - ./capacity-benchmark-utils.mjs:/scripts/capacity-benchmark-utils.mjs:ro
+      - ${BENCHMARK_K6_SCRIPT_PATH:-./capacity-benchmark-k6.js}:/scripts/capacity-benchmark-k6.js:ro
+      - ${BENCHMARK_UTILS_SCRIPT_PATH:-./capacity-benchmark-utils.mjs}:/scripts/capacity-benchmark-utils.mjs:ro
       - ../../test/fixtures:/fixtures:ro
       - benchmark-data:/data:ro
     networks: [benchmark]
