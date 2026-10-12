@@ -3,7 +3,7 @@ import http from 'k6/http';
 import { Counter, Gauge, Trend } from 'k6/metrics';
 import {
   authAndGradingWorkload,
-  hasOneUserPerLoadVu,
+  hasOneUserPerVu,
   task1PayloadFromFixture,
 } from './capacity-benchmark-utils.mjs';
 
@@ -74,6 +74,7 @@ const workload = __ENV.WORKLOAD || 'mixed_grading';
 const rate = Number(__ENV.RATE || 4);
 const duration = __ENV.DURATION || '15s';
 const maxVUs = Number(__ENV.MAX_VUS || 256);
+const metricsScenarioVUs = 1;
 
 export const options = {
   summaryTrendStats: ['min', 'med', 'avg', 'max', 'p(90)', 'p(95)', 'p(99)'],
@@ -94,8 +95,8 @@ export const options = {
       rate: 1,
       timeUnit: '1s',
       duration,
-      preAllocatedVUs: 1,
-      maxVUs: 1,
+      preAllocatedVUs: metricsScenarioVUs,
+      maxVUs: metricsScenarioVUs,
       gracefulStop: '5s',
       exec: 'scrapeMetrics',
     },
@@ -110,10 +111,13 @@ const grading = [
   'speaking_json',
 ];
 export function setup() {
-  if (!hasOneUserPerLoadVu(maxVUs, credentials.users?.length ?? 0)) {
-    throw new Error(
-      'benchmark seed must provide one refresh-token user per load VU',
-    );
+  if (
+    !hasOneUserPerVu(
+      maxVUs + metricsScenarioVUs,
+      credentials.users?.length ?? 0,
+    )
+  ) {
+    throw new Error('benchmark seed must provide one user per k6 VU');
   }
   const reset = http.post(`${stubUrl}/__stats/reset`, null, {
     timeout: '5s',
@@ -125,7 +129,7 @@ export function setup() {
 let refreshToken;
 
 export function load(data) {
-  const index = (exec.vu.idInScenario - 1) % data.users.length;
+  const index = exec.vu.idInTest - 1;
   const user = data.users[index];
   const organization = data.organizations[index % data.organizations.length];
   if (user === undefined || organization === undefined) {

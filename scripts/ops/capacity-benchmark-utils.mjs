@@ -63,7 +63,7 @@ export function hasCompleteLoadDelivery(run) {
   );
 }
 
-export function hasOneUserPerLoadVu(maxVUs, userCount) {
+export function hasOneUserPerVu(maxVUs, userCount) {
   return (
     Number.isSafeInteger(maxVUs) &&
     maxVUs > 0 &&

@@ -33,7 +33,9 @@ const stubLatencyMs = positiveInteger(
 );
 const stubErrorRate = Number(process.env.BENCHMARK_STUB_ERROR_RATE ?? '0');
 const maxVUs = positiveInteger(process.env.BENCHMARK_MAX_VUS ?? '256');
-const seededUserCount = 512;
+const metricsScenarioVUs = 1;
+const maxLoadVUs = 512;
+const seededUserCount = maxVUs + metricsScenarioVUs;
 const jobContentionDurationMs = 30_000;
 const jobContentionStartDelayMs = 3000;
 const appCpuLimit = 1.5;
@@ -66,9 +68,9 @@ if (
 ) {
   throw new Error('invalid capacity benchmark settings');
 }
-if (maxVUs > seededUserCount) {
+if (maxVUs > maxLoadVUs) {
   throw new Error(
-    `BENCHMARK_MAX_VUS cannot exceed the ${seededUserCount} seeded refresh-token users`,
+    `BENCHMARK_MAX_VUS cannot exceed the ${maxLoadVUs} supported load VUs`,
   );
 }
 
@@ -102,6 +104,7 @@ if (gitRevision() !== benchmarkRevision) {
 const appKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey;
 const benchmarkEnvironment = {
   ...process.env,
+  BENCHMARK_USER_COUNT: String(seededUserCount),
   BENCHMARK_VCS_REF: benchmarkRevision,
   BENCHMARK_K6_SCRIPT_PATH: path
     .relative(path.dirname(composeFile), k6ScriptSnapshot)

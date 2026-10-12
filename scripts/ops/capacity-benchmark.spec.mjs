@@ -6,7 +6,7 @@ import {
   authAndGradingWorkload,
   contentionJobsFitLoadWindow,
   hasCompleteLoadDelivery,
-  hasOneUserPerLoadVu,
+  hasOneUserPerVu,
   highestPassingRate,
   jsonAfterPrefix,
   metricValue,
@@ -76,10 +76,10 @@ await test('places the controlled overload stage above the highest passing stage
   assert.equal(overloadRate([4, 8, 16, 32], 0), 48);
 });
 
-await test('keeps one refresh credential for every possible load VU', () => {
-  assert.equal(hasOneUserPerLoadVu(512, 512), true);
-  assert.equal(hasOneUserPerLoadVu(513, 512), false);
-  assert.equal(hasOneUserPerLoadVu(0, 512), false);
+await test('keeps one credential for every possible k6 VU', () => {
+  assert.equal(hasOneUserPerVu(513, 513), true);
+  assert.equal(hasOneUserPerVu(513, 512), false);
+  assert.equal(hasOneUserPerVu(0, 512), false);
 });
 
 await test('requires both scheduled jobs to finish within the active load window', () => {

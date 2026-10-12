@@ -82,8 +82,8 @@ count, job outcomes, and the recovery stage after offered load drops. The
 contention check fails if either job takes longer than the 27 seconds left after
 the load starts, so a late job cannot pass on measurements collected after
 traffic ended. The seed provides at least one refresh-token user per configured
-maximum load VU; the runner rejects settings above its 512 seeded users, and k6 also
-rejects an undersized credential pool before sending requests.
+maximum load VU plus the metrics scenario VU. The runner rejects settings above
+512 load VUs, and k6 checks the full credential pool before sending requests.
 
 The JSON result is written to the ignored
 `artifacts/capacity-benchmark/<run-id>/results.json`. Keep the environment,

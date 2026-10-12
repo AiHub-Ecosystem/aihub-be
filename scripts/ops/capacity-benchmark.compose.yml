@@ -124,7 +124,7 @@ services:
     environment:
       DATABASE_URL: postgresql://aihub_benchmark:benchmark-local-only@postgres:5432/aihub_benchmark
       BENCHMARK_DATA_DIR: /data
-      BENCHMARK_USER_COUNT: 512
+      BENCHMARK_USER_COUNT: ${BENCHMARK_USER_COUNT:-513}
       BENCHMARK_ORGANIZATION_COUNT: 4
       BENCHMARK_USAGE_ROWS_PER_ORGANIZATION: 25000
     depends_on:
