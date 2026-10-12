@@ -154,6 +154,17 @@ class CapturedLog {
   text(): string {
     return this.lines.join('');
   }
+
+  completion(): Record<string, unknown> {
+    const line = this.lines.find((entry) =>
+      entry.includes('"event":"request_completed"'),
+    );
+    if (line === undefined) {
+      throw new Error('no request completion event was logged');
+    }
+
+    return JSON.parse(line) as Record<string, unknown>;
+  }
 }
 
 describe('web session HTTP boundary', () => {
@@ -477,10 +488,25 @@ describe('web session HTTP boundary', () => {
       expect(response.json().error).toEqual(
         expect.objectContaining({ code: 'UNAUTHORIZED' }),
       );
+      expect(log.completion()['client_ip_source']).toBe('direct_peer');
       expect(limiter.calls).toEqual([]);
       expect(state.webSessions.size).toBe(0);
     },
   );
+
+  it('labels a Web Session request as the BFF only after the client secret passes', async () => {
+    seedActiveAccount();
+
+    const response = await create();
+
+    expect(response.statusCode).toBe(201);
+    expect(log.completion()).toEqual(
+      expect.objectContaining({
+        client_ip: expect.any(String),
+        client_ip_source: 'customer_web_bff',
+      }),
+    );
+  });
 
   it('answers 503 with no credential when the deployment provisioned no secret', async () => {
     seedActiveAccount();

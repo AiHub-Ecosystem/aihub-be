@@ -43,3 +43,14 @@ End-User ID, applies rate limits, checks quota, and takes a concurrency slot
 (ADR-0057). The order is observable behaviour, because it decides whether a
 caller receives `RATE_LIMITED` or `QUOTA_EXCEEDED`.
 _Avoid_: middleware stack, guard chain, request pipeline
+
+**Request ID**:
+An AIHUB-generated identifier for one HTTP request. The same value connects
+the application's completion event, the response, and the proxy access record.
+_Avoid_: caller-supplied request ID
+
+**Observed caller IP**:
+The network address AIHUB attributes to the request at ingress. It can identify
+an intermediary, such as the Customer Web BFF, rather than the end user; the
+recorded source must make that distinction explicit.
+_Avoid_: end-user IP (unless verified forwarding is in place)

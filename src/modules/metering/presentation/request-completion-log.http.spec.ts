@@ -35,6 +35,10 @@ import type {
   IdempotencyWork,
 } from '@/modules/idempotency/application/idempotency-service.port';
 import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
+import {
+  API_KEY_AUTHENTICATOR,
+  type ApiKeyAuthenticatorPort,
+} from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { ApiKeyGuard } from '@/modules/identity/api-keys/presentation/api-key.guard';
 import type {
   UsageAggregate,
@@ -49,6 +53,8 @@ const GRADE_OPERATION = OPERATION_CATALOG['writing.task1.grade'];
 const GRADE_URL = GRADE_OPERATION.path;
 const GRADE_BODY_LIMIT = GRADE_OPERATION.maxBodyBytes;
 const RENAMABLE_ORGANIZATION = PUBLIC_ROUTES['organizations.rename'].path;
+const API_KEY_ID = 'ak_request_completion_test';
+const API_KEY_VALUE = 'request-completion-secret-marker';
 
 const VALID_BODY = {
   question: 'Describe the chart.',
@@ -113,6 +119,31 @@ const GRADED_RESPONSE: DispatchResult<unknown> = {
   operation: 'writing.task1.grade',
   data: { accepted: true },
   downstreamMs: 7,
+};
+
+const testApiKeyAuthenticator: ApiKeyAuthenticatorPort = {
+  authenticate: ({ environment, value }) => {
+    if (value.length === 0) {
+      return Promise.reject(
+        new AppError({
+          code: 'UNAUTHORIZED',
+          message: 'API key is invalid',
+          retryable: false,
+        }),
+      );
+    }
+
+    return Promise.resolve({
+      organizationId: 'local-development',
+      apiKeyId: API_KEY_ID,
+      environment,
+      scopes: [GRADE_OPERATION.requiredScope],
+      rateLimitRpm: 60,
+      maxConcurrent: 1,
+      monthlyRequestQuota: null,
+      hardStopOnQuota: false,
+    });
+  },
 };
 
 /** A dispatcher whose next answer the test chooses, so one seam covers every outcome. */
@@ -264,11 +295,14 @@ describe('request completion log over the HTTP boundary', () => {
       .useValue(dispatcher)
       .overrideProvider(IDEMPOTENCY_SERVICE)
       .useValue(idempotency)
+      .overrideProvider(API_KEY_AUTHENTICATOR)
+      .useValue(testApiKeyAuthenticator)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({
         ...createRequestLogging(log),
+        trustProxy: '127.0.0.1',
         genReqId: () => generateRequestId(),
       }),
     );
@@ -306,6 +340,7 @@ describe('request completion log over the HTTP boundary', () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(response.headers['x-request-id']).toBe(log.only()['request_id']);
     // Fastify's own per-request lines are off, so the completion event is the
     // only line the request writes.
     expect(log.all()).toHaveLength(1);
@@ -314,6 +349,8 @@ describe('request completion log over the HTTP boundary', () => {
       time: expect.any(Number),
       event: 'request_completed',
       request_id: expect.stringMatching(REQUEST_ID_PATTERN),
+      client_ip: '127.0.0.1',
+      client_ip_source: 'direct_peer',
       trace_id: expect.stringMatching(TRACE_ID_PATTERN),
       method: 'POST',
       route: GRADE_URL,
@@ -325,6 +362,42 @@ describe('request completion log over the HTTP boundary', () => {
       operation: 'writing.task1.grade',
       environment: 'development',
     });
+  });
+
+  it('records the authenticated API key id and address resolved through the proxy', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: GRADE_URL,
+      headers: {
+        'idempotency-key': 'completion-api-key',
+        'x-api-key': API_KEY_VALUE,
+        'x-forwarded-for': '203.0.113.42',
+      },
+      payload: VALID_BODY,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['x-request-id']).toBe(log.only()['request_id']);
+    expect(log.only()).toEqual({
+      level: 'info',
+      time: expect.any(Number),
+      event: 'request_completed',
+      request_id: expect.stringMatching(REQUEST_ID_PATTERN),
+      client_ip: '203.0.113.42',
+      client_ip_source: 'nginx',
+      trace_id: expect.stringMatching(TRACE_ID_PATTERN),
+      method: 'POST',
+      route: GRADE_URL,
+      http_status: 200,
+      total_ms: expect.any(Number),
+      admission_ms: expect.any(Number),
+      outcome: 'success',
+      api_key_id: API_KEY_ID,
+      org_id: 'local-development',
+      operation: 'writing.task1.grade',
+      environment: 'development',
+    });
+    expect(JSON.stringify(log.all())).not.toContain(API_KEY_VALUE);
   });
 
   it('reports the same total time the Metering record was written with', async () => {
@@ -574,6 +647,7 @@ describe('request completion log over the HTTP boundary', () => {
     });
 
     expect(response.statusCode).toBe(404);
+    expect(response.headers['x-request-id']).toBe(log.only()['request_id']);
     expect(log.only()).toEqual(
       expect.objectContaining({
         method: 'GET',
@@ -651,6 +725,7 @@ describe('request completion log over the HTTP boundary', () => {
       });
 
       expect(response.statusCode).toBe(401);
+      expect(response.headers['x-request-id']).toBe(log.only()['request_id']);
     } finally {
       runtimeConfiguration.AIHUB_ALLOW_UNAUTHENTICATED_DEV = true;
       delayGuard.mockRestore();
@@ -661,6 +736,8 @@ describe('request completion log over the HTTP boundary', () => {
     expect(event['total_ms']).toBeGreaterThanOrEqual(delayMs - 10);
     expect(event['admission_ms']).toBeGreaterThanOrEqual(delayMs - 10);
     expect(event['outcome']).toBe('client_error');
+    expect(event['client_ip_source']).toBe('direct_peer');
+    expect(Object.keys(event)).not.toContain('api_key_id');
     expect(Object.keys(event)).not.toContain('org_id');
     expect(Object.keys(event)).not.toContain('operation');
     expect(Object.keys(event)).not.toContain('environment');
@@ -739,12 +816,14 @@ describe('request completion log over the HTTP boundary', () => {
       headers: {
         'idempotency-key': 'completion-forged-id',
         'request-id': 'req_01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        'x-request-id': 'req_01ARZ3NDEKTSV4RRFFQ69G5FAV',
       },
       payload: VALID_BODY,
     });
 
     expect(response.statusCode).toBe(200);
     expect(log.only()['request_id']).not.toBe('req_01ARZ3NDEKTSV4RRFFQ69G5FAV');
+    expect(response.headers['x-request-id']).toBe(log.only()['request_id']);
   });
 
   it('names the trace the request ran inside so a line leads to its spans', async () => {

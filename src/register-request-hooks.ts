@@ -2,6 +2,7 @@ import type { Tracer } from '@opentelemetry/api';
 import type { FastifyInstance } from 'fastify';
 
 import { registerBodySizeGuard } from './common/http/body-size.hook';
+import { registerRequestIdResponseHeader } from './common/http/request-id-response-header.hook';
 import { registerRequestLifecycle } from './common/http/request-lifecycle.hook';
 import { registerRequestTiming } from './common/http/request-timing.hook';
 import { registerRequestTracing } from './common/http/request-tracing.hook';
@@ -33,6 +34,7 @@ export function registerRequestHooks(
   registerBodySizeGuard(instance);
   registerRequestLifecycle(instance);
   registerSecurityHeaders(instance);
+  registerRequestIdResponseHeader(instance);
   registerSpeakingGradingHeaders(instance);
 
   // Registered last: tracing owns the span this line names, and the lifecycle

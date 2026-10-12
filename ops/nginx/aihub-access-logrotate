@@ -1,0 +1,15 @@
+/var/log/aihub-access.log {
+    size 10M
+    rotate 4
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root adm
+    sharedscripts
+    postrotate
+        if systemctl is-active --quiet nginx.service; then
+            systemctl kill --signal=USR1 nginx.service
+        fi
+    endscript
+}

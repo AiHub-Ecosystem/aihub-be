@@ -4,8 +4,21 @@ set -Eeuo pipefail
 readonly STAGING_DIR=/var/lib/aihub-nginx-staging
 readonly API_SOURCE="$STAGING_DIR/aihub-api.conf"
 readonly SANDBOX_SOURCE="$STAGING_DIR/sandbox.conf"
+readonly LOG_FORMAT_SOURCE="$STAGING_DIR/00-aihub-log-format.conf"
+readonly LOGROTATE_SOURCE="$STAGING_DIR/aihub-access-logrotate"
+readonly LOGROTATE_SHA256=7c3760bfedd937fcfeaab2e9c019aa1fc1a7253ae25cdc131878302be07a7a65
 readonly API_DEST=/etc/nginx/conf.d/aihub-api.conf
 readonly SANDBOX_DEST=/etc/nginx/conf.d/sandbox.conf
+readonly LOG_FORMAT_DEST=/etc/nginx/conf.d/00-aihub-log-format.conf
+readonly LOGROTATE_DEST=/etc/logrotate.d/aihub-access
+readonly ACCESS_LOG_DEST=/var/log/aihub-access.log
+readonly -a MANAGED_DESTS=(
+  "$API_DEST"
+  "$SANDBOX_DEST"
+  "$LOG_FORMAT_DEST"
+  "$LOGROTATE_DEST"
+)
+readonly -a BACKUP_NAMES=(api.conf sandbox.conf log-format.conf logrotate.conf)
 
 if [[ $# -ne 0 ]]; then
   printf 'This helper accepts no arguments.\n' >&2
@@ -16,50 +29,71 @@ if [[ ! -d "$STAGING_DIR" || -L "$STAGING_DIR" ]]; then
   printf 'Missing or invalid nginx staging directory.\n' >&2
   exit 1
 fi
-if [[ ! -f "$API_SOURCE" || -L "$API_SOURCE" || ! -s "$API_SOURCE" ]]; then
-  printf 'Missing or invalid staged API nginx config.\n' >&2
-  exit 1
-fi
+
+for source in "$API_SOURCE" "$LOG_FORMAT_SOURCE" "$LOGROTATE_SOURCE"; do
+  if [[ ! -f "$source" || -L "$source" || ! -s "$source" ]]; then
+    printf 'Missing or invalid staged nginx file: %s\n' "$source" >&2
+    exit 1
+  fi
+done
 if [[ -L "$SANDBOX_SOURCE" ]]; then
   printf 'Staged Sandbox nginx config must not be a symlink.\n' >&2
   exit 1
 fi
+if [[ -e "$SANDBOX_SOURCE" && ( ! -f "$SANDBOX_SOURCE" || ! -s "$SANDBOX_SOURCE" ) ]]; then
+  printf 'Staged Sandbox nginx config must be a non-empty regular file.\n' >&2
+  exit 1
+fi
+if [[ -L "$ACCESS_LOG_DEST" || ( -e "$ACCESS_LOG_DEST" && ! -f "$ACCESS_LOG_DEST" ) ]]; then
+  printf 'Refusing invalid AIHUB access-log destination: %s\n' "$ACCESS_LOG_DEST" >&2
+  exit 1
+fi
 
-api_existed=0
-sandbox_existed=0
-if [[ -L "$API_DEST" ]]; then
-  printf 'Refusing symlink destination: %s\n' "$API_DEST" >&2
-  exit 1
-fi
-if [[ -L "$SANDBOX_DEST" ]]; then
-  printf 'Refusing symlink destination: %s\n' "$SANDBOX_DEST" >&2
-  exit 1
-fi
+for destination in "${MANAGED_DESTS[@]}"; do
+  if [[ -L "$destination" ]]; then
+    printf 'Refusing symlink destination: %s\n' "$destination" >&2
+    exit 1
+  fi
+  if [[ -e "$destination" && ! -f "$destination" ]]; then
+    printf 'Refusing non-file destination: %s\n' "$destination" >&2
+    exit 1
+  fi
+done
+
 backup_dir="$(mktemp -d /run/aihub-nginx.XXXXXX)"
-if [[ -e "$API_DEST" ]]; then
-  cp -a "$API_DEST" "$backup_dir/api.conf"
-  api_existed=1
+approved_logrotate="$backup_dir/approved-logrotate.conf"
+if ! cat -- "$LOGROTATE_SOURCE" > "$approved_logrotate" \
+  || ! printf '%s  %s\n' "$LOGROTATE_SHA256" "$approved_logrotate" | sha256sum --check --status; then
+  rm -rf "$backup_dir"
+  printf 'Staged AIHUB logrotate config does not match the operator-reviewed policy.\n' >&2
+  exit 1
 fi
-if [[ -e "$SANDBOX_DEST" ]]; then
-  cp -a "$SANDBOX_DEST" "$backup_dir/sandbox.conf"
-  sandbox_existed=1
-fi
+chmod 0600 "$approved_logrotate"
+
+declare -A existed=()
+for index in "${!MANAGED_DESTS[@]}"; do
+  destination="${MANAGED_DESTS[$index]}"
+  if [[ -e "$destination" ]]; then
+    cp -a "$destination" "$backup_dir/${BACKUP_NAMES[$index]}"
+    existed["$destination"]=1
+  else
+    existed["$destination"]=0
+  fi
+done
 
 rollback() {
-  local status="$1"
+  local status="$1" destination index
   trap - ERR INT TERM
   set +e
 
-  if [[ "$api_existed" -eq 1 ]]; then
-    cp -a "$backup_dir/api.conf" "$API_DEST"
-  else
-    rm -f "$API_DEST"
-  fi
-  if [[ "$sandbox_existed" -eq 1 ]]; then
-    cp -a "$backup_dir/sandbox.conf" "$SANDBOX_DEST"
-  else
-    rm -f "$SANDBOX_DEST"
-  fi
+  for index in "${!MANAGED_DESTS[@]}"; do
+    destination="${MANAGED_DESTS[$index]}"
+    if [[ "${existed[$destination]:-0}" -eq 1 ]]; then
+      cp -a "$backup_dir/${BACKUP_NAMES[$index]}" "$destination"
+    else
+      rm -f "$destination"
+    fi
+  done
 
   if nginx -t; then
     systemctl reload nginx
@@ -72,14 +106,24 @@ rollback() {
 trap 'rollback $?' ERR
 trap 'rollback 1' INT TERM
 
+if [[ -e "$ACCESS_LOG_DEST" ]]; then
+  # Keep the data file restricted even if later config validation rolls back.
+  chmod 0640 "$ACCESS_LOG_DEST"
+  chown root:adm "$ACCESS_LOG_DEST"
+else
+  install -o root -g adm -m 0640 /dev/null "$ACCESS_LOG_DEST"
+fi
+
 install -o root -g root -m 0644 "$API_SOURCE" "$API_DEST"
 if [[ -f "$SANDBOX_SOURCE" ]]; then
-  [[ -s "$SANDBOX_SOURCE" ]] || { printf 'Staged Sandbox nginx config is empty.\n' >&2; false; }
   install -o root -g root -m 0644 "$SANDBOX_SOURCE" "$SANDBOX_DEST"
 else
   rm -f "$SANDBOX_DEST"
 fi
+install -o root -g root -m 0644 "$LOG_FORMAT_SOURCE" "$LOG_FORMAT_DEST"
+install -o root -g root -m 0644 "$approved_logrotate" "$LOGROTATE_DEST"
 
+logrotate --debug "$LOGROTATE_DEST"
 nginx -t
 systemctl reload nginx
 trap - ERR INT TERM

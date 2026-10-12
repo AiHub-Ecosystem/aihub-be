@@ -20,7 +20,21 @@ for config in aihub-api.conf sandbox.conf; do
     printf '%s must overwrite X-Forwarded-Host from the routed Host.\n' "$config" >&2
     exit 1
   fi
+  if [[ "$(grep -Fc 'access_log /var/log/aihub-access.log aihub_access;' "$repo_root/ops/nginx/$config")" -ne 2 ]]; then
+    printf '%s must route both server blocks to the AIHUB access log.\n' "$config" >&2
+    exit 1
+  fi
 done
+
+sed "s#/var/log/aihub-access.log#$tmp/aihub-access.log#g" \
+  "$repo_root/ops/nginx/aihub-access-logrotate" > "$tmp/aihub-access-logrotate"
+grep -Fq 'create 0640 root adm' "$tmp/aihub-access-logrotate"
+logrotate_sha256="$(sha256sum "$repo_root/ops/nginx/aihub-access-logrotate" | cut -d ' ' -f 1)"
+grep -Fq "readonly LOGROTATE_SHA256=$logrotate_sha256" \
+  "$repo_root/ops/nginx/aihub-nginx-apply"
+logrotate --debug --state "$tmp/logrotate.status" \
+  "$tmp/aihub-access-logrotate" >/dev/null
+install -m 0640 /dev/null "$tmp/aihub-access.log"
 
 node -e '
   const { createServer } = require("node:http");
@@ -34,6 +48,7 @@ node -e '
     response.writeHead(200, {
       "Content-Type": "application/json",
       "Content-Length": body.length,
+      "X-Request-Id": "req_01ARZ3NDEKTSV4RRFFQ69G5FAV",
     });
     response.end(body);
   }).listen(3021, "127.0.0.1");
@@ -54,6 +69,7 @@ sed \
   -e '/ssl_certificate/d' \
   -e '/include \/etc\/letsencrypt\/options-ssl-nginx.conf/d' \
   -e '/ssl_dhparam/d' \
+  -e "s#/var/log/aihub-access.log#$tmp/aihub-access.log#g" \
   -e 's/listen 443 ssl;/listen 127.0.0.1:18080;/' \
   -e 's/listen 80;/listen 127.0.0.1:18081;/' \
   "$repo_root/ops/nginx/aihub-api.conf" > "$tmp/aihub-api.conf"
@@ -69,6 +85,7 @@ http {
   gzip_types application/json;
   gzip_proxied any;
   access_log off;
+  include $repo_root/ops/nginx/00-aihub-log-format.conf;
   include $tmp/aihub-api.conf;
 }
 EOF
@@ -79,7 +96,7 @@ nginx -p "$tmp/" -c "$tmp/nginx.conf"
 curl --silent --show-error -o /dev/null \
   -H 'Host: api.aihubproduction.com' \
   -H 'X-Forwarded-Host: sandbox.aihubproduction.com' \
-  http://127.0.0.1:18080/host-header-check
+  'http://127.0.0.1:18080/host-header-check?private-query-marker=do-not-log'
 node -e '
   const { readFileSync } = require("node:fs");
   const requests = readFileSync(process.argv[1], "utf8").trim().split("\n");
@@ -88,7 +105,20 @@ node -e '
       forwarded.forwardedHost !== "api.aihubproduction.com") {
     throw new Error(`Nginx forwarded caller-controlled host: ${JSON.stringify(forwarded)}`);
   }
-' "$tmp/upstream-headers.jsonl"
+  const accessLines = readFileSync(process.argv[2], "utf8").trim().split("\n");
+  const access = JSON.parse(accessLines.at(-1));
+  const expectedKeys = ["client_ip", "request_id", "method", "path", "status"];
+  if (JSON.stringify(Object.keys(access).sort()) !== JSON.stringify(expectedKeys.sort()) ||
+      access.client_ip !== "127.0.0.1" ||
+      access.request_id !== "req_01ARZ3NDEKTSV4RRFFQ69G5FAV" ||
+      access.method !== "GET" ||
+      access.path !== "/host-header-check" ||
+      access.status !== 200 ||
+      JSON.stringify(access).includes("private-query-marker")) {
+    throw new Error(`Unexpected AIHUB access record: ${JSON.stringify(access)}`);
+  }
+' "$tmp/upstream-headers.jsonl" "$tmp/aihub-access.log"
+test "$(stat -c '%a' "$tmp/aihub-access.log")" = 640
 
 for route in grading grading-json; do
   headers="$tmp/$route.headers"

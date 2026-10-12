@@ -595,18 +595,18 @@ bind port 80 against nginx.
 them unrelated to AIHUB, and `docker ps` lists around twenty containers from
 several projects. Taking port 80 or 443 from nginx takes those sites down with
 it. Do not stop nginx, do not add a container that binds those ports, and do not
-"free up" a port that appears to be in use. AIHUB owns only
-[`ops/nginx/aihub-api.conf`](../../ops/nginx/aihub-api.conf) and
-[`ops/nginx/sandbox.conf`](../../ops/nginx/sandbox.conf); the other hostnames
-and their Certbot blocks stay operator-managed.
+"free up" a port that appears to be in use. AIHUB owns only its API and Sandbox
+virtual hosts, [`ops/nginx/00-aihub-log-format.conf`](../../ops/nginx/00-aihub-log-format.conf),
+and its access-log rotation file; the other hostnames and their Certbot blocks
+stay operator-managed.
 
 ### Managed nginx configuration
 
 The operator-managed `/etc/nginx/conf.d/aihub.conf` retains the apex frontend,
-Certbot redirects, and legacy alias. CD manages the API and Sandbox files
-`/etc/nginx/conf.d/aihub-api.conf` and `/etc/nginx/conf.d/sandbox.conf`. On a
-host being migrated to these managed files, perform this one-time migration
-during a supervised change window:
+Certbot redirects, and legacy alias. CD manages the API and Sandbox virtual
+hosts, `/etc/nginx/conf.d/00-aihub-log-format.conf`, and
+`/etc/logrotate.d/aihub-access`. On a host being migrated to these managed
+files, perform this one-time migration during a supervised change window:
 
 1. Back up `/etc/nginx` and capture current behavior of both AIHUB hosts and at
    least one unrelated site.
@@ -640,8 +640,8 @@ during a supervised change window:
    only accepts status 200, 403, and 404. CI verifies compressed `200` verdict
    responses and `Vary: Accept-Encoding` using the captured fixture.
 
-5. Prepare the staging directory and install the reviewed helper as root before
-   enabling its CD invocation.
+5. Confirm `logrotate` is installed, prepare the staging directory, and install
+   the reviewed helper as root before enabling its CD invocation.
 
 Production cleanup completed 2026-10-10: the stale port-80 block in
 `/etc/nginx/sites-available/aihub` was disabled; its symlink remains enabled but
@@ -663,12 +663,30 @@ Add exactly this sudoers command for the deploy user using `visudo`:
 <deploy-user> ALL=(root) NOPASSWD: /usr/local/sbin/aihub-nginx-apply
 ```
 
-CD stages the API config and, when `AIHUB_SANDBOX_ENABLED=true`, the Sandbox
-config in `/var/lib/aihub-nginx-staging`. The no-argument root-owned helper only
-changes those two destinations, runs `nginx -t` before reload, and restores
-previous files if install, validation, or reload fails. With Sandbox disabled,
-it removes only `/etc/nginx/conf.d/sandbox.conf`. Operators review and install
-helper updates; CD cannot replace its code.
+CD stages the API config, the HTTP-context log format, the logrotate policy,
+and, when `AIHUB_SANDBOX_ENABLED=true`, the Sandbox config in
+`/var/lib/aihub-nginx-staging`. The no-argument root-owned helper changes only
+the two AIHUB virtual hosts, the AIHUB log-format include, and the AIHUB
+logrotate file. It creates the active access log as `root:adm` mode `0640` or
+tightens its existing permissions without truncating it. It validates
+logrotate and nginx before reload and restores the previous config files if
+install, validation, or reload fails. With Sandbox disabled, it removes only
+`/etc/nginx/conf.d/sandbox.conf`. Operators review and install helper updates;
+CD cannot replace its code. The helper verifies the staged logrotate file
+against its pinned SHA-256 because its `postrotate` command runs as root. If a
+config update fails, it keeps the active log file and restrictive permissions;
+rollback never deletes records or restores a broader mode.
+
+Both AIHUB hosts write to `/var/log/aihub-access.log`; this does not change the
+shared `/var/log/nginx/access.log` or another site's logging. Each JSON record
+contains only the observed IP, upstream `X-Request-Id`, method, `$uri` without
+the query string, and status. `/etc/logrotate.d/aihub-access` uses a 10 MiB
+threshold and keeps four rotated files, for five files including the active
+one. Its retained time window varies with request volume. The helper creates
+the active file as `root:adm` mode `0640` (or tightens those permissions
+without truncating existing records); logrotate uses the same mode after
+rotation. The active file may exceed the threshold between host logrotate
+runs.
 
 Do not enable this CD step until migration and bootstrap are complete. The API
 and Sandbox configs keep the 27 MiB request ceiling, 75-second proxy timeouts,
@@ -762,12 +780,12 @@ Use an SSH key for this, not a password: a credential pasted into a chat or a
 ticket stays in its history.
 
 A container's logs are deleted with the container, and every deploy replaces
-it. So before it recreates `app` and `app-sandbox`, the deploy saves what the
-running ones logged to `deploy-logs/<service>-<commit>-<time>.log` under the app
-directory (mode `700`, the last 20 MB of each, kept 30 days). To read an error
-that a later deploy has already removed from `docker logs`, open the file named
-for the commit that was running when it happened. Saving is best effort and
-never blocks a release.
+it. So before it recreates `app` and `app-sandbox`, the deploy saves the last
+20 MB from each running container to
+`deploy-logs/<service>-<commit>-<time>.log` under the app directory (mode
+`700`); files older than 30 days are removed. Saving is best effort and never
+blocks a release. These snapshots also contain request IPs after #450 and must
+be included in #287's personal-data and retention record.
 
 ### Diagnosing unmatched API 404s
 
@@ -779,55 +797,31 @@ matched route that returns 404 has its route template in `route` and needs to
 be diagnosed against that route. An Nginx-generated 404 does not reach the app
 and therefore has no AIHUB `request_completed` event.
 
-The completion event intentionally has no raw path, query, or body. Its Pino
-`time` field is a Unix timestamp in milliseconds; use its `method` and
-`http_status` to narrow the Nginx access-log entries. The `request_id` is an
-AIHUB identifier that Nginx does not share, so it cannot join the two logs.
+The completion event intentionally has no raw path, query, or body. Its
+AIHUB-generated `request_id` is returned in `X-Request-Id` and shared with the
+AIHUB nginx access record. Use that identifier to join the event to the path
+and status logged by nginx. The event also has `client_ip` and
+`client_ip_source`; `customer_web_bff` identifies the BFF address after its
+client-secret guard succeeds. A failed guard is classified from the network
+path as `nginx` or `direct_peer`. No end-user forwarded address is recorded
+until #436 validates that contract.
+
 Production and Sandbox app events come from separate `app` and `app-sandbox`
 containers; use the container that emitted the event because an unmatched
 request may not have an `environment` field. If that container has already
 been replaced, use its retained file under `deploy-logs/` as described above.
 
-The current VPS uses UTC. Nginx's default `combined` access-log format records
-time to the nearest second and may include a query in its request field. Copy
-the event's numeric `time`, `method`, and `http_status` into these variables;
-the conversion drops the milliseconds to match Nginx's timestamp precision:
+Search the current or rotated AIHUB access logs by request ID. The path is
+recorded without a query string. Access logs contain IP addresses; use an
+account allowed to read them:
 
 ```sh
-event_time_ms=... # numeric `time` from the event
-method=...        # `method` from the event
-status=...        # `http_status` from the event
-second="$(date -u -d "@$((event_time_ms / 1000))" '+%d/%b/%Y:%H:%M:%S')"
+request_id=... # `request_id` from the application event
+zgrep -h -F "\"request_id\":\"$request_id\"" /var/log/aihub-access.log*
 ```
 
-Run the following read-only search as an operator who can read the access log.
-It prints every entry in that second with the same method and status, strips
-the query before displaying the path, and does not print the client address or
-the raw request line:
-
-```sh
-awk -F '"' -v second="$second" -v method="$method" -v expected_status="$status" '
-  index($1, "[" second " ") {
-    split($2, request, " ")
-    path = request[2]
-    sub(/\?.*/, "", path)
-    logged_status = $3
-    sub(/^[[:space:]]*/, "", logged_status)
-    sub(/[[:space:]].*/, "", logged_status)
-    if (request[1] == method && logged_status == expected_status)
-      print request[1], path, logged_status
-  }
-' /var/log/nginx/access.log
-```
-
-The current host config sets the global access log to
-`/var/log/nginx/access.log` and does not define a custom log format, so the
-default is `combined` unless the API server block overrides it. If the log
-format or path has changed, inspect the effective Nginx config with
-`sudo nginx -T` and adjust the search accordingly. The access-log file is
-restricted; use an account with permission to read it. If several entries
-remain, report them as candidates: the event's timestamp, method, and status
-cannot identify one request when multiple requests match in the same second.
+An nginx-generated response does not have an AIHUB request ID because it never
+reached the application; its access record therefore has an empty `request_id`.
 
 ### Optional request tracing
 

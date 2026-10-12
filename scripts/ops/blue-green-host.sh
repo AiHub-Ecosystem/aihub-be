@@ -434,6 +434,10 @@ apply_slots() {
   else
     rm -f "$NGINX_STAGING/sandbox.conf"
   fi
+  install -o "$(id -u)" -g "$(id -g)" -m 0644 \
+    ops/nginx/00-aihub-log-format.conf "$NGINX_STAGING/00-aihub-log-format.conf"
+  install -o "$(id -u)" -g "$(id -g)" -m 0644 \
+    ops/nginx/aihub-access-logrotate "$NGINX_STAGING/aihub-access-logrotate"
   rm -f "$api_tmp" "$sandbox_tmp"
   sudo -n "$NGINX_HELPER"
   [[ "$(active_slot production "$API_CONFIG")" == "$api_slot" ]]

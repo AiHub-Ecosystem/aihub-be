@@ -250,6 +250,8 @@ jobs:
           scp "${scp_opts[@]}" \
             ops/nginx/aihub-api.conf \
             ops/nginx/sandbox.conf \
+            ops/nginx/00-aihub-log-format.conf \
+            ops/nginx/aihub-access-logrotate \
             "$target:$VPS_APP_DIR/ops/nginx/"
           scp "${scp_opts[@]}" \
             ops/vault/agent/aihub-runtime.hcl \
@@ -271,6 +273,8 @@ jobs:
           test -s "$APP_DIR/.aihub-host-jobs-candidate/aihub.crontab"
           test -s "$APP_DIR/ops/nginx/aihub-api.conf"
           test -s "$APP_DIR/ops/nginx/sandbox.conf"
+          test -s "$APP_DIR/ops/nginx/00-aihub-log-format.conf"
+          test -s "$APP_DIR/ops/nginx/aihub-access-logrotate"
           test -s "$APP_DIR/ops/vault/agent/aihub-runtime.hcl"
           test -s "$APP_DIR/ops/vault/templates/runtime-secrets.json.ctmpl"
           test -s "$APP_DIR/ops/vault/templates/auth-mfa-secrets.json.ctmpl"

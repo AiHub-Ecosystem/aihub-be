@@ -40,6 +40,7 @@ export class WebSessionClientGuard implements CanActivate {
         retryable: false,
       });
     }
+    http.getRequest<FastifyRequest>().aihubClientIpSource = 'customer_web_bff';
     return true;
   }
 }

@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { OPERATION_IDS, type OperationId } from '@/catalog/operation-id';
 import type { ErrorCode } from '@/common/errors/error-code';
+import { clientIpSource } from '@/common/http/client-ip-source';
 import { isHealthProbe } from '@/common/http/request-path';
 import {
   requestAdmissionMs,
@@ -35,6 +36,8 @@ const OPERATION_BY_ROUTE = new Map<string, OperationId>(
 interface RequestCompletionEvent {
   readonly event: typeof COMPLETION_EVENT;
   readonly request_id: string;
+  readonly client_ip: string;
+  readonly client_ip_source: ReturnType<typeof clientIpSource>;
   readonly method: string;
   readonly route: string;
   readonly http_status: number;
@@ -43,6 +46,7 @@ interface RequestCompletionEvent {
   readonly outcome: MeteringOutcome;
   readonly error_code?: ErrorCode;
   readonly org_id?: string;
+  readonly api_key_id?: string;
   readonly operation?: OperationId;
   readonly environment?: string;
   readonly trace_id?: string;
@@ -66,6 +70,8 @@ function completionEvent(
   return {
     event: COMPLETION_EVENT,
     request_id: String(request.id),
+    client_ip: request.ip,
+    client_ip_source: clientIpSource(request),
     method: request.method,
     route: routeTemplate(request),
     http_status: statusCode,
@@ -76,6 +82,10 @@ function completionEvent(
     ...(admissionMs === undefined ? {} : { admission_ms: admissionMs }),
     outcome: requestOutcome(statusCode, errorCode),
     ...(errorCode === undefined ? {} : { error_code: errorCode }),
+    ...(request.aihubAuth === undefined ||
+    request.aihubAuth.apiKeyId === 'local-development'
+      ? {}
+      : { api_key_id: request.aihubAuth.apiKeyId }),
     ...(evidence === undefined
       ? {}
       : {
