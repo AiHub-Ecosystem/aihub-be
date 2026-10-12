@@ -1,7 +1,8 @@
-# ADR-0084: Adopt a layered Clean Architecture dependency rule
+# ADR-0090: Adopt a layered Clean Architecture dependency rule
 
 - Status: Accepted
 - Date: 2026-10-09
+- Renumbered: from ADR-0084 on 2026-10-12, because three records were created on 2026-10-09 under that number
 
 ## Context
 

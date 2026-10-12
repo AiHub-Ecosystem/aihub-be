@@ -308,7 +308,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - Implemented: idempotency replay for completed successful attempts, the ErrorCode→httpStatus registry, and the public API docs page at `/docs` (with the raw spec at `/openapi.json`).
 - Implemented: durable internal metering evidence, missing-usage classification, replay-safe request/token aggregates, and safe failure breadcrumbs. AI Speaking's production telemetry has been observed and its usage-reporting declaration is enabled; AI Writing telemetry is verified in dev, with production evidence still pending and its declaration disabled. Model identity is neither required nor exposed.
 - Implemented: registration and invitation success report email as `queued`, not delivered; verification resend and password recovery remain generic and do not confirm inbox arrival. Existing rate limits and token lifetimes remain unchanged. Terminal failure emits `aihub_email_delivery_failed_total` and one error-level event carrying no address, token, body, or provider response; cancellation does neither, and no alert transport ships in the repository ([ADR-0074](docs/adr/0074-transactional-email-outbox.md), [email outbox runbook](docs/operations/email-outbox.md)).
-- Open, but not blocking: six fixes requested from the AI Writing team (chiefly aggregate usage and `metrics.ai_processing_ms`, which make token-based billing possible at all).
+- Open, but not blocking: all six fixes requested from the AI Writing team are tracked. Items 2, 3, and 6 by [#301](https://github.com/AiHub-Ecosystem/aihub-be/issues/301), [#313](https://github.com/AiHub-Ecosystem/aihub-be/issues/313), and [#387](https://github.com/AiHub-Ecosystem/aihub-be/issues/387); items 1, 4, and 5 by [#547](https://github.com/AiHub-Ecosystem/aihub-be/issues/547), [#548](https://github.com/AiHub-Ecosystem/aihub-be/issues/548), and [#549](https://github.com/AiHub-Ecosystem/aihub-be/issues/549). Item 1 (aggregate usage and `metrics.ai_processing_ms`) is the one that makes token-based billing possible at all, and [#550](https://github.com/AiHub-Ecosystem/aihub-be/issues/550) enables AI Writing's usage-reporting declaration once its production evidence exists.
 
 ## Canonical documents and historical references
 
@@ -319,7 +319,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - [ADR-0016: Durable metering boundary and billing evidence](docs/adr/0016-metering-boundary-and-billing-evidence.md)
 - [ADR-0026: CLI boundary for usage completeness reporting](docs/adr/0026-usage-completeness-report-boundary.md)
 - [ADR-0023: Thirteen-month usage retention](docs/adr/0023-thirteen-month-usage-retention.md)
-- [ADR-0088: Persist evidence for each AI Service dispatch attempt](docs/adr/0088-persist-dispatch-attempt-evidence.md)
+- [ADR-0092: Persist evidence for each AI Service dispatch attempt](docs/adr/0092-persist-dispatch-attempt-evidence.md)
 - [Usage completeness report runbook](docs/operations/usage-completeness.md)
 - [ADR-0020: Invite-only customer-web identity boundary for sandbox MVP](docs/adr/0020-customer-web-identity-boundary.md) — superseded by ADR-0046 at the #94 cutover
 - [ADR-0046: Customer Web identity boundary on AIHUB auth and Organization Membership](docs/adr/0046-customer-web-aihub-auth-identity-boundary.md)
