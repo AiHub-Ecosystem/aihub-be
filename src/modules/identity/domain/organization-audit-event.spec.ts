@@ -2,12 +2,14 @@ import {
   type OrganizationAuditDraft,
   type OrganizationAuditStamp,
   organizationAuditEvent,
+  organizationIdOf,
+  userAccountIdOf,
 } from './organization-audit-event';
 
 const STAMP: OrganizationAuditStamp = {
   id: 'oae_01J00000000000000000000000',
-  organizationId: 'org_acme',
-  actorUserAccountId: 'usr_01J00000000000000000000001',
+  organizationId: organizationIdOf('org_acme'),
+  actorUserAccountId: userAccountIdOf('usr_01J00000000000000000000001'),
   requestId: 'req_01J00000000000000000000002',
   occurredAt: new Date('2026-09-21T10:00:00.000Z'),
 };
@@ -294,6 +296,20 @@ describe('organizationAuditEvent', () => {
         expect(serialized).not.toContain(forbidden);
       }
     }
+  });
+
+  it('refuses a stamp that swaps the acting account for the tenant', () => {
+    // Both are the same primitive, and a stamp carrying the tenant in the
+    // actor's place attributes an act to the wrong tenant: an audit record that
+    // cannot be believed. The brand makes that a compile error, so this line
+    // fails the build if the brand is ever dropped.
+    const swapped: OrganizationAuditStamp = {
+      ...STAMP,
+      // @ts-expect-error a User Account ID is not an Organization ID
+      actorUserAccountId: organizationIdOf('usr_someone_else'),
+    };
+
+    expect(swapped.actorUserAccountId).toBe('usr_someone_else');
   });
 
   it('copies the stamped instant rather than aliasing the caller clock', () => {

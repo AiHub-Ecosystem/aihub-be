@@ -29,6 +29,36 @@ export type OrganizationAuditAction =
 
 export type OrganizationAuditOutcome = 'applied' | 'denied';
 
+declare const organizationIdBrand: unique symbol;
+declare const userAccountIdBrand: unique symbol;
+
+/**
+ * The two ID kinds the stamp receives positionally, branded so the compiler
+ * refuses to swap them: the account whose request performed the act, and the
+ * tenant it was performed in. A stamp carrying one in the other's place
+ * attributes an action to the wrong tenant, which is an audit record that
+ * cannot be believed.
+ *
+ * Draft fields are named and discriminated by `action`, so the compiler already
+ * rejects a mismatched pair there; they stay `string`.
+ */
+export type OrganizationId = string & {
+  readonly [organizationIdBrand]: never;
+};
+export type UserAccountId = string & {
+  readonly [userAccountIdBrand]: never;
+};
+
+/** Brands a resolved Organization ID. */
+export function organizationIdOf(value: string): OrganizationId {
+  return value as OrganizationId;
+}
+
+/** Brands a resolved User Account ID: the acting account, never the tenant. */
+export function userAccountIdOf(value: string): UserAccountId {
+  return value as UserAccountId;
+}
+
 export type OrganizationAuditTargetType =
   | 'organization'
   | 'membership'
@@ -52,16 +82,16 @@ export type OrganizationAuditDenial =
 /** Everything an event carries that does not depend on which act it records. */
 export interface OrganizationAuditStamp {
   readonly id: string;
-  readonly organizationId: string;
-  readonly actorUserAccountId: string;
+  readonly organizationId: OrganizationId;
+  readonly actorUserAccountId: UserAccountId;
   readonly requestId: string;
   readonly occurredAt: Date;
 }
 
 export interface OrganizationAuditEvent {
   readonly id: string;
-  readonly organizationId: string;
-  readonly actorUserAccountId: string;
+  readonly organizationId: OrganizationId;
+  readonly actorUserAccountId: UserAccountId;
   readonly action: OrganizationAuditAction;
   readonly outcome: OrganizationAuditOutcome;
   readonly targetType: OrganizationAuditTargetType;

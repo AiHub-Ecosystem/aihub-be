@@ -6,6 +6,8 @@ import {
   type OrganizationAuditDraft,
   type OrganizationAuditStamp,
   organizationAuditEvent,
+  organizationIdOf,
+  userAccountIdOf,
 } from '@/modules/identity/domain/organization-audit-event';
 
 import {
@@ -29,8 +31,8 @@ export function auditStamp(
   occurredAt: Date,
 ): Omit<OrganizationAuditStamp, 'id'> {
   return {
-    organizationId: input.organizationId,
-    actorUserAccountId,
+    organizationId: organizationIdOf(input.organizationId),
+    actorUserAccountId: userAccountIdOf(actorUserAccountId),
     requestId: input.context.requestId,
     occurredAt,
   };
