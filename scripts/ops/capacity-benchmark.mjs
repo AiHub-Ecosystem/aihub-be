@@ -409,7 +409,7 @@ function runProcess(command, args, options = {}) {
     });
     child.once('error', reject);
     child.once('close', (code) => {
-      if (code !== 0) {
+      if (code !== 0 && !options.allowNonZeroExit) {
         reject(
           new Error(
             `${command} exited ${code}: ${lastLines(stderr || stdout, 30)}`,
@@ -417,7 +417,7 @@ function runProcess(command, args, options = {}) {
         );
         return;
       }
-      resolve({ stdout, stderr });
+      resolve({ stdout, stderr, exitCode: code });
     });
   });
 }
@@ -490,6 +490,16 @@ async function runK6({
   isOverload = false,
   isRecovery = false,
 }) {
+  if (routeNames.includes('refresh')) {
+    await dockerCompose([
+      'run',
+      '--rm',
+      '--no-deps',
+      'seed',
+      'node',
+      'scripts/ops/capacity-benchmark-reset-refresh-tokens.mjs',
+    ]);
+  }
   const restartCountBefore = await dockerRestartCount(appContainerId);
   const startMs = Date.now();
   const startIso = new Date(startMs).toISOString();
@@ -909,7 +919,7 @@ async function runJobContention({ appContainerId, rate, routeNames }) {
     jobs: jobs.map((job, index) => ({
       name: index === 0 ? 'quota:reconcile' : 'usage:report',
       exitCode: job.exitCode,
-      outputTail: lastLines(job.stdout, 4),
+      outputTail: lastLines(job.stderr || job.stdout, 4),
       durationMs: job.durationMs,
     })),
     thresholds: {
@@ -950,7 +960,12 @@ async function runAppCommand(containerId, args) {
       'scripts/cli/cli.mjs',
       ...args,
     ],
-    { env: benchmarkEnvironment },
+    { env: benchmarkEnvironment, allowNonZeroExit: true },
   );
-  return { exitCode: 0, stdout: result.stdout, durationMs: Date.now() - start };
+  return {
+    exitCode: result.exitCode,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    durationMs: Date.now() - start,
+  };
 }

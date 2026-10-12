@@ -292,7 +292,12 @@ function recordResponse(name, route, response) {
     code === undefined ? {} : { code },
   );
   routeResponseCounts[name].add(1, tags);
-  if (response.status >= 400) {
+  if (
+    response.status === 0 ||
+    response.error_code > 0 ||
+    Boolean(response.error) ||
+    response.status >= 400
+  ) {
     apiErrors.add(1, tags);
     routeErrorCounts[name].add(1, tags);
   }
@@ -313,6 +318,15 @@ function captureRefreshToken(response) {
 }
 
 function errorCode(response) {
+  if (
+    response.status === 0 ||
+    (response.status < 400 &&
+      (response.error_code > 0 || Boolean(response.error)))
+  ) {
+    return Number.isSafeInteger(response.error_code) && response.error_code > 0
+      ? `K6_${response.error_code}`
+      : 'K6_TRANSPORT';
+  }
   if (response.status < 400) return undefined;
   const payload = parseJson(response.body);
   const code =

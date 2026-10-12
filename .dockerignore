@@ -24,6 +24,7 @@ scripts/runtime/*
 scripts/ops/*
 !scripts/ops/probe-runtime-dependencies.cjs
 !scripts/ops/capacity-benchmark-seed.mjs
+!scripts/ops/capacity-benchmark-reset-refresh-tokens.mjs
 database/*
 !database/migrations/
 !database/migrations/*.sql

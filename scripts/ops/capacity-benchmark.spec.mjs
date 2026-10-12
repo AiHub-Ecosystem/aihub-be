@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  hasCompleteLoadDelivery,
   highestPassingRate,
   jsonAfterPrefix,
   metricValue,
@@ -14,19 +15,49 @@ await test('chooses the highest offered rate meeting the deadline without errors
   const runs = [
     {
       offeredRateRps: 8,
+      holdDuration: '10s',
+      completedRequests: 80,
+      droppedIterations: 0,
       routes: { writing_task1: { count: 80, p99Ms: 900, errorCount: 0 } },
     },
     {
       offeredRateRps: 16,
+      holdDuration: '10s',
+      completedRequests: 160,
+      droppedIterations: 0,
       routes: { writing_task1: { count: 160, p99Ms: 60_000, errorCount: 0 } },
     },
     {
       offeredRateRps: 32,
+      holdDuration: '10s',
+      completedRequests: 320,
+      droppedIterations: 0,
       routes: { writing_task1: { count: 320, p99Ms: 1200, errorCount: 1 } },
+    },
+    {
+      offeredRateRps: 24,
+      holdDuration: '10s',
+      completedRequests: 239,
+      droppedIterations: 0,
+      routes: { writing_task1: { count: 239, p99Ms: 900, errorCount: 0 } },
+    },
+    {
+      offeredRateRps: 40,
+      holdDuration: '10s',
+      completedRequests: 400,
+      droppedIterations: 1,
+      routes: { writing_task1: { count: 400, p99Ms: 900, errorCount: 0 } },
     },
   ];
 
   assert.equal(highestPassingRate(runs, ['writing_task1'], 60_000), 16);
+  assert.equal(hasCompleteLoadDelivery(runs[0]), true);
+  assert.equal(hasCompleteLoadDelivery(runs[3]), false);
+  assert.equal(hasCompleteLoadDelivery(runs[4]), false);
+  assert.equal(
+    hasCompleteLoadDelivery({ ...runs[0], holdDuration: '10 seconds' }),
+    false,
+  );
 });
 
 await test('places the controlled overload stage above the highest passing stage', () => {

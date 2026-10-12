@@ -28,12 +28,14 @@ proxy adds 30 ms in each direction to Redis by default, for a configured 60 ms
 round trip. The report records the configured RTT; it is not a one-way delay.
 
 The default run measures each grading route alone, then a 50:50 Writing and
-Speaking mix split evenly across the four routes. It measures password login,
-refresh, and Web Session exchange alone, then mixes those auth routes with
-grading at exact offered shares of 75% grading and 25% auth. Within that auth
-share, login is 50%, refresh 25%, and Web Session exchange 25%. Each rate stage
-holds for 15 seconds at 4, 8, 16, and 32 requests per second. After those
-measurements, the runner selects one mixed grading overload stage above the
+Speaking mix split evenly across the four routes. Before each refresh-containing
+stage, the harness restores synthetic refresh-token state so rotation from a
+prior stage cannot turn later requests into reuse failures. It then measures
+password login, refresh, and Web Session exchange alone, then mixes those auth
+routes with grading at exact offered shares of 75% grading and 25% auth. Within
+that auth share, login is 50%, refresh 25%, and Web Session exchange 25%.
+Each rate stage holds for 15 seconds at 4, 8, 16, and 32 requests per second.
+After those measurements, the runner selects one mixed grading overload stage above the
 highest stage where all four grading p99 values met their operation deadlines.
 It then holds the mixed profile for 30 seconds at the selected passing rate to
 confirm recovery after offered load drops.

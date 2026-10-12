@@ -1,19 +1,39 @@
 export function highestPassingRate(runs, routeNames, deadlineMs) {
   return runs
-    .filter((run) =>
-      routeNames.every((name) => {
-        const route = run.routes[name];
-        return (
-          route !== undefined &&
-          route.count > 0 &&
-          route.p99Ms !== null &&
-          route.p99Ms <=
-            (typeof deadlineMs === 'number' ? deadlineMs : deadlineMs[name]) &&
-          route.errorCount === 0
-        );
-      }),
+    .filter(
+      (run) =>
+        hasCompleteLoadDelivery(run) &&
+        routeNames.every((name) => {
+          const route = run.routes[name];
+          return (
+            route !== undefined &&
+            route.count > 0 &&
+            route.p99Ms !== null &&
+            route.p99Ms <=
+              (typeof deadlineMs === 'number'
+                ? deadlineMs
+                : deadlineMs[name]) &&
+            route.errorCount === 0
+          );
+        }),
     )
     .reduce((highest, run) => Math.max(highest, run.offeredRateRps), 0);
+}
+
+export function hasCompleteLoadDelivery(run) {
+  const duration = /^(\d+)s$/.exec(run.holdDuration);
+  const durationSeconds = Number(duration?.[1]);
+  const expectedRequests = run.offeredRateRps * durationSeconds;
+  return (
+    Number.isSafeInteger(durationSeconds) &&
+    durationSeconds > 0 &&
+    Number.isSafeInteger(run.offeredRateRps) &&
+    run.offeredRateRps > 0 &&
+    Number.isSafeInteger(expectedRequests) &&
+    Number.isSafeInteger(run.completedRequests) &&
+    run.droppedIterations === 0 &&
+    run.completedRequests >= expectedRequests
+  );
 }
 
 export function overloadRate(stageRates, passingRate) {
