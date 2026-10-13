@@ -428,6 +428,10 @@
           {
             "key": "Accept",
             "value": "application/json"
+          },
+          {
+            "key": "X-AIHUB-Client-Secret",
+            "value": "{{webSessionClientSecret}}"
           }
         ],
         "method": "POST",

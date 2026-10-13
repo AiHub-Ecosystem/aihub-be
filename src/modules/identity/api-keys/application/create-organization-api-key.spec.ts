@@ -1,4 +1,4 @@
-import type { RequestContext } from '@/common/request-context/request-context';
+import { createRequestContext } from '@/common/request-context/request-context.factory';
 import { CreateOrganizationApiKey } from './create-organization-api-key';
 import type {
   CreateOrganizationApiKeyRecordInput,
@@ -6,8 +6,14 @@ import type {
   OrganizationApiKeyPort,
 } from './organization-api-key.port';
 
-const CONTEXT = { requestId: 'req_1' } as RequestContext;
 const CREATED_AT = new Date('2026-10-13T00:00:00.000Z');
+const CONTEXT = createRequestContext({
+  requestId: 'req_1',
+  receivedAt: CREATED_AT,
+  deadlineMs: 5_000,
+  scopes: [],
+  signal: new AbortController().signal,
+});
 
 class FakeMembership {
   resolveMembership(): Promise<{

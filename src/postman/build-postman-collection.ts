@@ -895,6 +895,37 @@ function addOrganizationRosterCheck(items: unknown[]): void {
   }
 }
 
+function addDemoValidationSecret(items: unknown[]): void {
+  for (const item of items) {
+    if (!isRecord(item)) continue;
+
+    if (isRecord(item.request)) {
+      const url = item.request.url;
+      const path = isRecord(url) ? url.path : undefined;
+      if (
+        Array.isArray(path) &&
+        path.every((part) => typeof part === 'string') &&
+        path.join('/') === 'v1/sandbox/demo/api-keys/validate'
+      ) {
+        const headers = Array.isArray(item.request.header)
+          ? item.request.header
+          : [];
+        if (
+          !headers.some(
+            (header) =>
+              isRecord(header) && header.key === BFF_CLIENT_SECRET_HEADER.key,
+          )
+        ) {
+          headers.push(BFF_CLIENT_SECRET_HEADER);
+        }
+        item.request.header = headers;
+      }
+    }
+
+    if (Array.isArray(item.item)) addDemoValidationSecret(item.item);
+  }
+}
+
 function convertOpenApiToPostman(
   openApiDocument: unknown,
 ): Promise<PostmanCollectionShape> {
@@ -946,6 +977,7 @@ export async function buildPostmanCollection(
   );
   normalizeRefreshCookieAuth(base);
   addOrganizationRosterCheck(base.item);
+  addDemoValidationSecret(base.item);
 
   return {
     ...base,

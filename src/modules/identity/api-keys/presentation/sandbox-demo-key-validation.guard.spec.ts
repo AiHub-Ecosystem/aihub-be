@@ -1,6 +1,10 @@
 import type { ExecutionContext } from '@nestjs/common';
+import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
 
-import type { ApiKeyAuthenticatorPort } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import type {
+  ApiKeyAuthenticatorPort,
+  AuthenticatedApiKey,
+} from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import type { RequestEnvironmentConfig } from '@/modules/identity/shared/presentation/request-environment';
 import { SandboxDemoKeyValidationGuard } from './sandbox-demo-key-validation.guard';
 
@@ -23,6 +27,12 @@ const AUTHENTICATED = {
   monthlyRequestQuota: null,
   hardStopOnQuota: false,
   allowedEnvironments: ['sandbox'],
+} satisfies AuthenticatedApiKey;
+
+type TestRequest = {
+  headers: Record<string, string>;
+  ip: string;
+  aihubAuth?: AuthenticatedApiKey;
 };
 
 class RecordingAuthenticator implements ApiKeyAuthenticatorPort {
@@ -43,7 +53,7 @@ class RecordingAuthenticator implements ApiKeyAuthenticatorPort {
   }
 }
 
-function request(headers: Record<string, string>) {
+function request(headers: Record<string, string>): TestRequest {
   return {
     headers: {
       host: 'sandbox.aihub.test',
@@ -55,11 +65,7 @@ function request(headers: Record<string, string>) {
 }
 
 function context(value: unknown): ExecutionContext {
-  return {
-    switchToHttp: () => ({ getRequest: () => value }),
-    getHandler: () => undefined,
-    getClass: () => undefined,
-  } as unknown as ExecutionContext;
+  return new ExecutionContextHost([value]);
 }
 
 function guard(
@@ -108,7 +114,7 @@ describe('SandboxDemoKeyValidationGuard', () => {
 
     await guard(authenticator).canActivate(context(value));
 
-    expect((value as { aihubAuth?: unknown }).aihubAuth).toMatchObject({
+    expect(value.aihubAuth).toMatchObject({
       apiKeyId: 'ak_01',
       rateLimitRpm: 5,
     });
