@@ -89,9 +89,8 @@ export class PostgresSandboxDispatchBudget
         month,
       );
 
-      // Reading the allowance under the same lock as the counts is what makes a
-      // lowering override take effect atomically: there is no window in which a
-      // request is admitted against an allowance an operator has just reduced.
+      // Runbook policy edits take this same lock, so a lowering override cannot
+      // race a reservation that has already read the older value.
       const monthlyLimit = await effectiveAllowance(
         transaction,
         input.organizationId,

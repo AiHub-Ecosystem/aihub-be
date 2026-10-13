@@ -20,6 +20,8 @@ export interface ValidateSandboxDemoKeyInput {
   readonly organizationId: string;
   /** The environment the demo page selected. */
   readonly environment: SandboxDemoEnvironment;
+  /** The environment resolved from the AIHUB host serving this request. */
+  readonly authenticatedEnvironment: string;
   /** The environments the key is durably bound to; the prefix is irrelevant. */
   readonly allowedEnvironments: readonly string[];
   readonly scope: SandboxDemoScope;
@@ -62,7 +64,10 @@ export class ValidateSandboxDemoKey {
   async validate(
     input: ValidateSandboxDemoKeyInput,
   ): Promise<SandboxDemoKeyEligibility> {
-    if (!input.allowedEnvironments.includes(input.environment)) {
+    if (
+      input.authenticatedEnvironment !== input.environment ||
+      !input.allowedEnvironments.includes(input.environment)
+    ) {
       throw forbidden(NOT_AUTHORIZED);
     }
     if (!input.grantedScopes.includes(input.scope)) {

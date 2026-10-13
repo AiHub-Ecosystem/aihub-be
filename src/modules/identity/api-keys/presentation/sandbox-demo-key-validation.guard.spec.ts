@@ -29,14 +29,14 @@ class RecordingAuthenticator implements ApiKeyAuthenticatorPort {
   readonly credentials: {
     value: string;
     clientIp: string;
-    additionalAbuseScopes?: readonly string[];
+    forceFresh?: boolean;
   }[] = [];
 
   async authenticate(input: {
     value: string;
     environment: string;
     clientIp: string;
-    additionalAbuseScopes?: readonly string[];
+    forceFresh?: boolean;
   }): Promise<typeof AUTHENTICATED> {
     this.credentials.push(input);
     return AUTHENTICATED;
@@ -45,7 +45,11 @@ class RecordingAuthenticator implements ApiKeyAuthenticatorPort {
 
 function request(headers: Record<string, string>) {
   return {
-    headers: { host: 'sandbox.aihub.test', ...headers },
+    headers: {
+      host: 'sandbox.aihub.test',
+      'x-aihub-visitor-ip': '203.0.113.25',
+      ...headers,
+    },
     ip: '172.16.7.9',
   };
 }
@@ -65,7 +69,7 @@ function guard(
 }
 
 describe('SandboxDemoKeyValidationGuard', () => {
-  it('scopes abuse protection to the presented credential as well as the shared BFF egress address', async () => {
+  it('scopes abuse protection to the visitor IP supplied by the authenticated BFF', async () => {
     const authenticator = new RecordingAuthenticator();
 
     await guard(authenticator).canActivate(
@@ -83,15 +87,19 @@ describe('SandboxDemoKeyValidationGuard', () => {
       ),
     );
 
-    // The address stays, so a grind from one egress is still bounded; the
-    // credential is added, so one visitor's mistakes cannot lock out the rest.
-    expect(authenticator.credentials[0]?.clientIp).toBe('172.16.7.9');
-    expect(authenticator.credentials[0]?.additionalAbuseScopes).toEqual([
-      expect.stringMatching(/^key:[0-9a-f]{64}$/),
-    ]);
-    expect(authenticator.credentials[0]?.additionalAbuseScopes).not.toEqual(
-      authenticator.credentials[1]?.additionalAbuseScopes,
-    );
+    expect(authenticator.credentials[0]?.clientIp).toBe('203.0.113.25');
+    expect(authenticator.credentials[0]?.forceFresh).toBe(true);
+  });
+
+  it('fails closed when the BFF omits a valid visitor IP', async () => {
+    const authenticator = new RecordingAuthenticator();
+
+    await expect(
+      guard(authenticator).canActivate(
+        context(request({ 'x-aihub-visitor-ip': 'forged' })),
+      ),
+    ).rejects.toMatchObject({ code: 'IDENTITY_PROVIDER_UNAVAILABLE' });
+    expect(authenticator.credentials).toEqual([]);
   });
 
   it('clamps the validation rate limit without touching the key identity', async () => {

@@ -407,6 +407,28 @@ describe('ApiKeyAuthenticator', () => {
     expect(repository.calls).toBe(1);
   });
 
+  it('observes legacy-key revocation on a forced-fresh grade authorization', async () => {
+    const { authenticator, repository, cache } = createAuthenticator();
+    cache.value = activeRecord;
+    const credentials = {
+      value: VALID_KEY,
+      environment: 'production',
+      clientIp: '203.0.113.10',
+      forceFresh: true,
+    };
+
+    await expect(
+      authenticator.authenticate(credentials),
+    ).resolves.toMatchObject({ organizationId: 'org_acme' });
+    repository.record = { ...activeRecord, status: 'revoked' };
+    await expect(authenticator.authenticate(credentials)).rejects.toMatchObject(
+      { code: 'UNAUTHORIZED' },
+    );
+    expect(repository.calls).toBe(2);
+    expect(cache.getCalls).toBe(0);
+    expect(cache.setCalls).toBe(0);
+  });
+
   it.each([
     ['aihub_sandbox_', 'sandbox'],
     ['aihub_prod_', 'production'],

@@ -2860,17 +2860,28 @@
     "/v1/sandbox/demo/api-keys/validate": {
       "post": {
         "operationId": "sandbox.demo-key.validate",
-        "summary": "Validate a Sandbox key for the AIHUB demo",
-        "description": "Checks that the presented API key is bound only to the Sandbox environment, is active, has the requested Writing or Speaking grading scope, and belongs to an Organization without active Identity Configuration.\n\nThis route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and should be called again by the grading operation, which authenticates the key independently.",
+        "summary": "Validate a demo key for the selected environment",
+        "description": "Customer Web BFF only. Checks that the active API key is bound to the selected environment, has the requested Writing or Speaking grading scope, and belongs to an Organization without active Identity Configuration.\n\nThis route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and advisory; each grading operation authenticates the key again.",
         "x-identity-scope": "organization",
         "security": [
           {
-            "ApiKeyAuth": []
+            "ApiKeyAuth": [],
+            "BffClientSecret": []
           }
         ],
         "parameters": [
           {
             "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "X-AIHUB-Visitor-IP",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "ip"
+            },
+            "description": "Trusted visitor IP forwarded by the authenticated Customer Web BFF for per-visitor failed-key protection."
           }
         ],
         "requestBody": {

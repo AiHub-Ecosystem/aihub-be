@@ -3,7 +3,6 @@ import type {
   ApiKeyAuthenticatorPort,
   AuthenticatedApiKey,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
-import { hashApiKey } from '@/modules/identity/domain/api-key';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import {
   type RequestEnvironmentConfig,
@@ -19,15 +18,10 @@ export function forbidden(): AppError {
 }
 
 export interface AuthenticateApiKeyOptions {
-  /** Requires the stored environment binding to match this set exactly. */
-  readonly requiredAllowedEnvironments?: readonly string[];
-  /**
-   * Also keys the brute-force counter on the presented credential. The public
-   * demo needs it because every visitor behind the Customer Web BFF presents
-   * from one shared egress address, so an address-scoped counter alone would let
-   * one visitor's failures lock out all the others.
-   */
-  readonly scopeFailuresByKey?: boolean;
+  /** Use when the route must observe revocation and policy changes immediately. */
+  readonly forceFresh?: boolean;
+  /** Trusted only after a server-to-server BFF guard has authenticated the caller. */
+  readonly clientIp?: string;
 }
 
 /**
@@ -52,13 +46,9 @@ export async function authenticateApiKey(
   const authenticated = await authenticator.authenticate({
     value,
     environment,
-    clientIp: request.ip.length === 0 ? 'unknown' : request.ip,
-    ...(options.requiredAllowedEnvironments === undefined
-      ? {}
-      : { requiredAllowedEnvironments: options.requiredAllowedEnvironments }),
-    ...(options.scopeFailuresByKey === true
-      ? { additionalAbuseScopes: [`key:${hashApiKey(value)}`] }
-      : {}),
+    clientIp:
+      options.clientIp ?? (request.ip.length === 0 ? 'unknown' : request.ip),
+    ...(options.forceFresh === true ? { forceFresh: true } : {}),
   });
 
   request.aihubAuth = authenticated;

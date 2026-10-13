@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import {
   type CanActivate,
   type ExecutionContext,
@@ -10,7 +11,13 @@ import { Reflector } from '@nestjs/core';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
+import type { ClientIpSource } from '@/common/http/client-ip-source';
+import { constantTimeEquals } from '@/common/security/constant-time-equals';
 import { appConfig } from '@/config/runtime-configuration';
+import {
+  WEB_SESSION_CLIENT_SECRET,
+  type WebSessionClientSecretPort,
+} from '@/modules/auth/application/web-session-client-secret.port';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
@@ -32,6 +39,36 @@ function configurationError(): AppError {
     message: 'Authentication configuration is invalid',
     retryable: false,
   });
+}
+
+function visitorIpForBffRequest(
+  request: AuthenticatedRequest,
+  secret: WebSessionClientSecretPort | undefined,
+): string | undefined {
+  const presented = request.headers['x-aihub-client-secret'];
+  if (presented === undefined) return undefined;
+
+  const expected = secret?.resolve();
+  if (expected === undefined || expected.length === 0) {
+    throw configurationError();
+  }
+  if (
+    typeof presented !== 'string' ||
+    !constantTimeEquals(presented, expected)
+  ) {
+    throw new AppError({
+      code: 'UNAUTHORIZED',
+      message: 'Client secret is missing or invalid',
+      retryable: false,
+    });
+  }
+
+  const visitorIp = request.headers['x-aihub-visitor-ip'];
+  if (typeof visitorIp !== 'string' || isIP(visitorIp) === 0) {
+    throw configurationError();
+  }
+  request.aihubClientIpSource = 'customer_web_bff' satisfies ClientIpSource;
+  return visitorIp;
 }
 
 function localDevelopmentIdentity(
@@ -61,6 +98,9 @@ export class ApiKeyGuard implements CanActivate {
     @Optional()
     @Inject(appConfig.KEY)
     private readonly configuration?: RequestEnvironmentConfig,
+    @Optional()
+    @Inject(WEB_SESSION_CLIENT_SECRET)
+    private readonly webSessionClientSecret?: WebSessionClientSecretPort,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -77,6 +117,10 @@ export class ApiKeyGuard implements CanActivate {
     const operation = OPERATION_CATALOG[operationId];
     const configuration = this.requireConfiguration();
     const environment = resolveAihubEnvironment(request, configuration);
+    const bffVisitorIp = visitorIpForBffRequest(
+      request,
+      this.webSessionClientSecret,
+    );
     const header = request.headers['x-api-key'];
 
     if (
@@ -99,9 +143,12 @@ export class ApiKeyGuard implements CanActivate {
       request,
       this.authenticator,
       configuration,
-      environment === 'sandbox'
-        ? { requiredAllowedEnvironments: ['sandbox'] }
-        : {},
+      {
+        ...(bffVisitorIp === undefined ? {} : { clientIp: bffVisitorIp }),
+        forceFresh:
+          operation.requiredScope === 'writing.grade' ||
+          operation.requiredScope === 'speaking.grade',
+      },
     );
     const authorized =
       environment === 'sandbox'

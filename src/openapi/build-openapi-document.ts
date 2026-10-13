@@ -1744,14 +1744,24 @@ function sandboxDemoKeyValidationPathItem(
   return {
     [PUBLIC_ROUTES[id].method.toLowerCase()]: {
       operationId: id,
-      summary: 'Validate a Sandbox key for the AIHUB demo',
+      summary: 'Validate a demo key for the selected environment',
       description: [
-        'Checks that the presented API key is bound only to the Sandbox environment, is active, has the requested Writing or Speaking grading scope, and belongs to an Organization without active Identity Configuration.',
-        'This route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and should be called again by the grading operation, which authenticates the key independently.',
+        'Customer Web BFF only. Checks that the active API key is bound to the selected environment, has the requested Writing or Speaking grading scope, and belongs to an Organization without active Identity Configuration.',
+        'This route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and advisory; each grading operation authenticates the key again.',
       ].join('\n\n'),
       ...routeIdentityScopeOf(id),
-      ...routeSecurityOf(id),
-      parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+      security: [{ ApiKeyAuth: [], BffClientSecret: [] }],
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        {
+          name: 'X-AIHUB-Visitor-IP',
+          in: 'header',
+          required: true,
+          schema: { type: 'string', format: 'ip' },
+          description:
+            'Trusted visitor IP forwarded by the authenticated Customer Web BFF for per-visitor failed-key protection.',
+        },
+      ],
       requestBody: {
         required: true,
         content: {

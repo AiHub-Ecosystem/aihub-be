@@ -89,8 +89,9 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     }
 
     const hashHex = hashApiKey(credentials.value);
-    const sandbox = credentials.environment === 'sandbox';
-    let record = sandbox ? undefined : await this.cacheableRecord(hashHex);
+    const forceFresh =
+      credentials.environment === 'sandbox' || credentials.forceFresh === true;
+    let record = forceFresh ? undefined : await this.cacheableRecord(hashHex);
 
     if (record === undefined) {
       // The brute-force gate sits specifically here, in front of the
@@ -107,7 +108,7 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       }
 
       record = await this.repository.findByHash(hashHex);
-      if (!sandbox) {
+      if (!forceFresh) {
         if (record === null) {
           await this.cache.setMiss(hashHex).catch(() => undefined);
         } else if (isCacheable(record)) {
@@ -135,17 +136,6 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     if (!record.allowedEnvironments.includes(credentials.environment)) {
       throw environmentNotAllowed();
     }
-    if (
-      credentials.requiredAllowedEnvironments !== undefined &&
-      (record.allowedEnvironments.length !==
-        credentials.requiredAllowedEnvironments.length ||
-        credentials.requiredAllowedEnvironments.some(
-          (environment) => !record.allowedEnvironments.includes(environment),
-        ))
-    ) {
-      throw environmentNotAllowed();
-    }
-
     void this.repository
       .touchLastUsed(record.apiKeyId, now)
       .catch(() => undefined);
@@ -190,7 +180,7 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
   }
 
   private abuseScopes(credentials: ApiKeyCredential): readonly string[] {
-    return [credentials.clientIp, ...(credentials.additionalAbuseScopes ?? [])];
+    return [credentials.clientIp];
   }
 
   private async isAbuseLimited(

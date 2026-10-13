@@ -395,11 +395,11 @@
     },
     {
       "id": "cd0b5771-ecb3-4303-988a-0b32effe786e",
-      "name": "Validate a Sandbox key for the AIHUB demo",
+      "name": "Validate a demo key for the selected environment",
       "request": {
-        "name": "Validate a Sandbox key for the AIHUB demo",
+        "name": "Validate a demo key for the selected environment",
         "description": {
-          "content": "Checks that the presented API key is bound only to the Sandbox environment, is active, has the requested Writing or Speaking grading scope, and belongs to an Organization without active Identity Configuration.\n\nThis route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and should be called again by the grading operation, which authenticates the key independently.",
+          "content": "Customer Web BFF only. Checks that the active API key is bound to the selected environment, has the requested Writing or Speaking grading scope, and belongs to an Organization without active Identity Configuration.\n\nThis route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and advisory; each grading operation authenticates the key again.",
           "type": "text/plain"
         },
         "url": {
@@ -414,6 +414,12 @@
             "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
             "key": "X-Correlation-Id",
             "value": "<string>"
+          },
+          {
+            "disabled": false,
+            "description": "(Required) Trusted visitor IP forwarded by the authenticated Customer Web BFF for per-visitor failed-key protection.",
+            "key": "X-AIHUB-Visitor-IP",
+            "value": "<ip>"
           },
           {
             "key": "Content-Type",

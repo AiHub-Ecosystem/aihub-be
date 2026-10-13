@@ -49,7 +49,8 @@ next UTC month at `5`. That is what makes the new default of five begin in the
 month after deployment while the deployment month keeps what it had. An
 allowance an operator already set for either month is left alone. Consumption
 lives in `sandbox_dispatch_reservations` and is never touched by these tables,
-so deployment and restart preserve it.
+so deployment and restart preserve it. Apply this migration first, then set the
+demo Organization override below before enabling the new application version.
 
 Before deploying, give the AIHUB demo Organization the allowance it needs for
 the deployment month. It used to be capped by its own configured
@@ -57,28 +58,52 @@ the deployment month. It used to be capped by its own configured
 every Organization, so nothing preserves that for it:
 
 ```sql
+BEGIN;
+SELECT pg_advisory_xact_lock(
+  182,
+  extract(year FROM (now() AT TIME ZONE 'UTC'))::integer * 100
+    + extract(month FROM (now() AT TIME ZONE 'UTC'))::integer
+);
+
 INSERT INTO sandbox_allowance_overrides (organization_id, month_start, allowance)
 VALUES ('org_...',
         date_trunc('month', now() AT TIME ZONE 'UTC')::date,
         500)
 ON CONFLICT (organization_id, month_start) DO UPDATE SET allowance = EXCLUDED.allowance;
+COMMIT;
 ```
 
 **Change the persisted default.** Insert a row for the month you want to change:
 
 ```sql
+BEGIN;
+SELECT pg_advisory_xact_lock(
+  182,
+  extract(year FROM DATE '2026-12-01')::integer * 100
+    + extract(month FROM DATE '2026-12-01')::integer
+);
+
 INSERT INTO sandbox_allowance_defaults (month_start, allowance)
 VALUES (DATE '2026-12-01', 5)
 ON CONFLICT (month_start) DO UPDATE SET allowance = EXCLUDED.allowance;
+COMMIT;
 ```
 
 **Set a month-specific Organization override.** It replaces the default for that
 month, does not reset consumption, and expires with the month:
 
 ```sql
+BEGIN;
+SELECT pg_advisory_xact_lock(
+  182,
+  extract(year FROM DATE '2026-11-01')::integer * 100
+    + extract(month FROM DATE '2026-11-01')::integer
+);
+
 INSERT INTO sandbox_allowance_overrides (organization_id, month_start, allowance)
 VALUES ('org_...', DATE '2026-11-01', 50)
 ON CONFLICT (organization_id, month_start) DO UPDATE SET allowance = EXCLUDED.allowance;
+COMMIT;
 ```
 
 **Verify the effective month and allowance.** Every month boundary is UTC; there

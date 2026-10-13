@@ -22,7 +22,7 @@ One Sandbox dispatch is consumed at the durable dispatch boundary, immediately b
 
 Writing retries use the same idempotency key for the same logical submission and a new key for a new submission. Only a completed successful replay avoids a second Sandbox dispatch. A timeout with an unknown dispatch outcome is not exactly-once delivery and is not refunded. Speaking has no idempotent replay or automatic retry; a user-initiated retry is a new dispatch and can consume another unit.
 
-Public key validation is rate-limited without letting a visitor identified only through an untrusted forwarding header control the limit. The Customer Web BFF applies per-visitor abuse limits using only its trusted ingress proxy chain; the backend does not treat the shared BFF egress IP as a unique visitor identity for that purpose. Request bodies are bounded before full buffering and upstream operations have deadlines. Credentials never appear in URLs, logs, traces, analytics, or error details.
+Public key validation is server-to-server only: AIHUB requires the Customer Web BFF client secret before API-key lookup. The BFF forwards the visitor address from the rightmost `X-Forwarded-For` value appended by its trusted ingress proxy; AIHUB validates that value and keys failed-key protection on it rather than on the shared BFF egress IP. The same authenticated visitor address accompanies BFF grading requests, while direct API callers continue to be limited by their observed caller IP. Request bodies are bounded before full buffering and upstream operations have deadlines. Credentials never appear in URLs, logs, traces, analytics, or error details.
 
 ## Consequences and limits
 

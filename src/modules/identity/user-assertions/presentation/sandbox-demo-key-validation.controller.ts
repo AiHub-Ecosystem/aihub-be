@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Header,
   HttpCode,
   Inject,
   Post,
@@ -16,6 +17,7 @@ import {
   SandboxDemoKeyValidationRequestSchema,
   type SandboxDemoKeyValidationResponse,
 } from '@/contracts/sandbox/demo-key-validation';
+import { WebSessionClientGuard } from '@/modules/auth/presentation/web-session-client.guard';
 import { RateLimitGuard } from '@/modules/gateway/presentation/rate-limit.guard';
 import { SandboxDemoKeyValidationGuard } from '@/modules/identity/api-keys/presentation/sandbox-demo-key-validation.guard';
 import {
@@ -30,7 +32,7 @@ interface ValidationEnvelope {
 }
 
 @Controller()
-@UseGuards(SandboxDemoKeyValidationGuard, RateLimitGuard)
+@UseGuards(WebSessionClientGuard, SandboxDemoKeyValidationGuard, RateLimitGuard)
 export class SandboxDemoKeyValidationController {
   constructor(
     @Inject(ValidateSandboxDemoKey)
@@ -39,6 +41,7 @@ export class SandboxDemoKeyValidationController {
 
   @Post(PUBLIC_ROUTES['sandbox.demo-key.validate'].path)
   @HttpCode(PUBLIC_ROUTES['sandbox.demo-key.validate'].successStatus)
+  @Header('Cache-Control', 'no-store')
   async validate(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
@@ -54,6 +57,7 @@ export class SandboxDemoKeyValidationController {
       // The schema default already applied while parsing; the fallback only
       // narrows the optional field back to the contract's union.
       environment: input.environment ?? 'sandbox',
+      authenticatedEnvironment: authenticated.environment,
       allowedEnvironments: authenticated.allowedEnvironments,
       scope: input.scope,
       grantedScopes: authenticated.scopes,

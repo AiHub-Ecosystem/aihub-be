@@ -39,6 +39,7 @@ function validate(
   return useCase.validate({
     organizationId: 'org_demo',
     environment: 'sandbox',
+    authenticatedEnvironment: 'sandbox',
     allowedEnvironments: ['sandbox'],
     scope: 'speaking.grade',
     grantedScopes: ['writing.grade', 'speaking.grade'],
@@ -52,6 +53,7 @@ describe('ValidateSandboxDemoKey', () => {
       validator(async () => null).validate({
         organizationId: 'org_demo',
         environment: 'sandbox',
+        authenticatedEnvironment: 'sandbox',
         allowedEnvironments: ['sandbox'],
         scope: 'speaking.grade',
         grantedScopes: ['writing.grade', 'speaking.grade'],
@@ -70,6 +72,7 @@ describe('ValidateSandboxDemoKey', () => {
         validator(async () => null),
         {
           environment: 'production',
+          authenticatedEnvironment: 'production',
           allowedEnvironments: ['production'],
         },
       ),
@@ -86,6 +89,15 @@ describe('ValidateSandboxDemoKey', () => {
       validate(
         validator(async () => null),
         { environment: 'production' },
+      ),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('refuses a selection that does not match the authenticated host', async () => {
+    await expect(
+      validate(
+        validator(async () => null),
+        { environment: 'production', authenticatedEnvironment: 'sandbox' },
       ),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
@@ -147,6 +159,7 @@ describe('ValidateSandboxDemoKey', () => {
       }).validate({
         organizationId: 'org_demo',
         environment: 'sandbox',
+        authenticatedEnvironment: 'sandbox',
         allowedEnvironments: ['sandbox'],
         scope: 'writing.grade',
         grantedScopes: ['writing.grade'],

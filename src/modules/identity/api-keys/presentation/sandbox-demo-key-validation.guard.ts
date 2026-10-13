@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import {
   type CanActivate,
   type ExecutionContext,
@@ -5,6 +6,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 
+import { AppError } from '@/common/errors/app-error';
 import { appConfig } from '@/config/runtime-configuration';
 import {
   API_KEY_AUTHENTICATOR,
@@ -33,11 +35,19 @@ export class SandboxDemoKeyValidationGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const visitorIp = request.headers['x-aihub-visitor-ip'];
+    if (typeof visitorIp !== 'string' || isIP(visitorIp) === 0) {
+      throw new AppError({
+        code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+        message: 'Demo key validation is unavailable',
+        retryable: true,
+      });
+    }
     const authenticated = await authenticateApiKey(
       request,
       this.authenticator,
       this.configuration,
-      { scopeFailuresByKey: true },
+      { clientIp: visitorIp, forceFresh: true },
     );
 
     request.aihubAuth = {

@@ -2,16 +2,8 @@ export interface ApiKeyCredential {
   readonly value: string;
   readonly environment: string;
   readonly clientIp: string;
-  /** Requires the stored environment binding to match this set exactly. */
-  readonly requiredAllowedEnvironments?: readonly string[];
-  /**
-   * Further identities the brute-force counter keys on, alongside `clientIp`.
-   * A request is refused only when at least one of them reaches the threshold,
-   * so a visitor who can only be identified by a shared address is never locked
-   * out by a co-located visitor while a sustained grind from that address still
-   * is.
-   */
-  readonly additionalAbuseScopes?: readonly string[];
+  /** Always read current durable authorization instead of trusting a cache. */
+  readonly forceFresh?: boolean;
 }
 
 export interface AuthenticatedApiKey {
