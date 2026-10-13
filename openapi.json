@@ -2976,13 +2976,26 @@
                             {
                               "additionalProperties": false,
                               "type": "object",
-                              "required": ["monthly_limit", "reserved"],
+                              "required": [
+                                "monthly_limit",
+                                "reserved",
+                                "shared_monthly_limit",
+                                "shared_reserved"
+                              ],
                               "properties": {
                                 "monthly_limit": {
                                   "minimum": 0,
                                   "type": "integer"
                                 },
                                 "reserved": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "shared_monthly_limit": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "shared_reserved": {
                                   "minimum": 0,
                                   "type": "integer"
                                 }

@@ -74,6 +74,8 @@ export class SandboxDemoKeyValidationController {
             : {
                 monthly_limit: eligibility.allowance.monthlyLimit,
                 reserved: eligibility.allowance.reserved,
+                shared_monthly_limit: eligibility.allowance.sharedMonthlyLimit,
+                shared_reserved: eligibility.allowance.sharedReserved,
               },
       },
       meta: {

@@ -125,9 +125,10 @@ describe('PostgresSandboxDispatchBudget allowance policy', () => {
     });
 
     await expect(
-      new PostgresSandboxDispatchBudget(client as never, () => OCTOBER).reserve(
-        { organizationId: 'org_acme', requestId: 'req_1' },
-      ),
+      new PostgresSandboxDispatchBudget(client, () => OCTOBER).reserve({
+        organizationId: 'org_acme',
+        requestId: 'req_1',
+      }),
     ).resolves.toBe(true);
     expect(client.created).toEqual([
       { organizationId: 'org_acme', requestId: 'req_1' },
@@ -141,9 +142,10 @@ describe('PostgresSandboxDispatchBudget allowance policy', () => {
     });
 
     await expect(
-      new PostgresSandboxDispatchBudget(client as never, () => OCTOBER).reserve(
-        { organizationId: 'org_acme', requestId: 'req_1' },
-      ),
+      new PostgresSandboxDispatchBudget(client, () => OCTOBER).reserve({
+        organizationId: 'org_acme',
+        requestId: 'req_1',
+      }),
     ).resolves.toBe(false);
     expect(client.created).toEqual([]);
   });
@@ -162,9 +164,10 @@ describe('PostgresSandboxDispatchBudget allowance policy', () => {
     });
 
     await expect(
-      new PostgresSandboxDispatchBudget(client as never, () => OCTOBER).reserve(
-        { organizationId: 'org_acme', requestId: 'req_1' },
-      ),
+      new PostgresSandboxDispatchBudget(client, () => OCTOBER).reserve({
+        organizationId: 'org_acme',
+        requestId: 'req_1',
+      }),
     ).resolves.toBe(true);
   });
 
@@ -184,7 +187,7 @@ describe('PostgresSandboxDispatchBudget allowance policy', () => {
       reservedByOrganization: { org_acme: 4 },
     });
     const november = new PostgresSandboxDispatchBudget(
-      client as never,
+      client,
       () => new Date('2026-11-02T00:00:00.000Z'),
     );
 
@@ -197,9 +200,10 @@ describe('PostgresSandboxDispatchBudget allowance policy', () => {
     const client = new FakeClient({ defaults: [] });
 
     await expect(
-      new PostgresSandboxDispatchBudget(client as never, () => OCTOBER).reserve(
-        { organizationId: 'org_acme', requestId: 'req_1' },
-      ),
+      new PostgresSandboxDispatchBudget(client, () => OCTOBER).reserve({
+        organizationId: 'org_acme',
+        requestId: 'req_1',
+      }),
     ).rejects.toThrow('Sandbox allowance policy is unavailable');
     expect(client.created).toEqual([]);
   });
@@ -213,9 +217,10 @@ describe('PostgresSandboxDispatchBudget allowance policy', () => {
     // The store's own failure propagates; what matters is that no reservation
     // is written, because the dispatcher turns any throw into a closed door.
     await expect(
-      new PostgresSandboxDispatchBudget(client as never, () => OCTOBER).reserve(
-        { organizationId: 'org_acme', requestId: 'req_1' },
-      ),
+      new PostgresSandboxDispatchBudget(client, () => OCTOBER).reserve({
+        organizationId: 'org_acme',
+        requestId: 'req_1',
+      }),
     ).rejects.toThrow('relation unavailable');
     expect(client.created).toEqual([]);
   });
@@ -228,9 +233,10 @@ describe('PostgresSandboxDispatchBudget allowance policy', () => {
     });
 
     await expect(
-      new PostgresSandboxDispatchBudget(client as never, () => OCTOBER).reserve(
-        { organizationId: 'org_acme', requestId: 'req_1' },
-      ),
+      new PostgresSandboxDispatchBudget(client, () => OCTOBER).reserve({
+        organizationId: 'org_acme',
+        requestId: 'req_1',
+      }),
     ).resolves.toBe(false);
   });
 
@@ -238,17 +244,33 @@ describe('PostgresSandboxDispatchBudget allowance policy', () => {
     const client = new FakeClient({
       defaults: [{ monthStart: OCTOBER_START, allowance: 5 }],
       reservedByOrganization: { org_acme: 2 },
+      reserved: 490,
     });
-    const instance = new PostgresSandboxDispatchBudget(
-      client as never,
-      () => OCTOBER,
-    );
+    const instance = new PostgresSandboxDispatchBudget(client, () => OCTOBER);
 
     await expect(instance.allowanceFor('org_acme')).resolves.toEqual({
       monthlyLimit: 5,
       reserved: 2,
+      sharedMonthlyLimit: 500,
+      sharedReserved: 490,
     });
     expect(client.created).toEqual([]);
+  });
+
+  it('reports an exhausted shared Sandbox cap when the Organization still has allowance', async () => {
+    const client = new FakeClient({
+      defaults: [{ monthStart: OCTOBER_START, allowance: 5 }],
+      reservedByOrganization: { org_acme: 0 },
+      reserved: 500,
+    });
+    const instance = new PostgresSandboxDispatchBudget(client, () => OCTOBER);
+
+    await expect(instance.allowanceFor('org_acme')).resolves.toEqual({
+      monthlyLimit: 5,
+      reserved: 0,
+      sharedMonthlyLimit: 500,
+      sharedReserved: 500,
+    });
   });
 
   it('reports no allowance rather than a default one when policy state cannot be read', async () => {
@@ -256,10 +278,7 @@ describe('PostgresSandboxDispatchBudget allowance policy', () => {
       defaults: [{ monthStart: OCTOBER_START, allowance: 5 }],
       failReads: true,
     });
-    const instance = new PostgresSandboxDispatchBudget(
-      client as never,
-      () => OCTOBER,
-    );
+    const instance = new PostgresSandboxDispatchBudget(client, () => OCTOBER);
 
     await expect(instance.allowanceFor('org_acme')).resolves.toBeNull();
   });

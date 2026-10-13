@@ -5,7 +5,6 @@ import type {
   SandboxDispatchReservation,
 } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
-import type { PrismaClient } from '@prisma-client/client';
 import { createPostgresSandboxDispatchBudgetClient } from './postgres-sandbox-dispatch-budget.fixture-client';
 
 export const SANDBOX_ENVIRONMENT_MONTHLY_LIMIT = 500;
@@ -27,6 +26,41 @@ interface AllowanceReader {
       orderBy: { monthStart: 'desc' };
     }): Promise<{ allowance: number } | null>;
   };
+}
+
+interface ReservationStore {
+  count(input: {
+    where: {
+      status: 'reserved';
+      monthStart: Date;
+      organizationId?: string;
+    };
+  }): Promise<number>;
+  create(input: {
+    data: {
+      requestId: string;
+      organizationId: string;
+      monthStart: Date;
+      createdAt: Date;
+    };
+  }): Promise<unknown>;
+  updateMany(input: {
+    where: { requestId: string; status: 'reserved' };
+    data: { status: 'released'; releasedAt: Date };
+  }): Promise<unknown>;
+}
+
+interface BudgetTransaction extends AllowanceReader {
+  sandboxDispatchReservation: ReservationStore;
+  $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number>;
+}
+
+interface BudgetClient extends BudgetTransaction {
+  $transaction<T>(
+    work: (transaction: BudgetTransaction) => Promise<T>,
+    options: typeof CONTROL_PLANE_TRANSACTION_OPTIONS,
+  ): Promise<T>;
+  close?: () => Promise<void>;
 }
 
 function utcMonth(now: Date): { month: number; monthStart: Date } {
@@ -66,12 +100,10 @@ async function effectiveAllowance(
 export class PostgresSandboxDispatchBudget
   implements SandboxDispatchBudgetPort
 {
-  private readonly client: PrismaClient & { close?: () => Promise<void> };
+  private readonly client: BudgetClient;
 
   constructor(
-    clientOrDatabaseUrl:
-      | (PrismaClient & { close?: () => Promise<void> })
-      | string,
+    clientOrDatabaseUrl: BudgetClient | string,
     private readonly now: () => Date = () => new Date(),
   ) {
     this.client =
@@ -154,6 +186,10 @@ export class PostgresSandboxDispatchBudget
         monthlyLimit,
         reserved: await this.client.sandboxDispatchReservation.count({
           where: { status: 'reserved', monthStart, organizationId },
+        }),
+        sharedMonthlyLimit: SANDBOX_ENVIRONMENT_MONTHLY_LIMIT,
+        sharedReserved: await this.client.sandboxDispatchReservation.count({
+          where: { status: 'reserved', monthStart },
         }),
       };
     } catch {

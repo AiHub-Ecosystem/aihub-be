@@ -10,6 +10,8 @@ export interface SandboxDispatchReservation {
 export interface SandboxAllowanceSnapshot {
   readonly monthlyLimit: number;
   readonly reserved: number;
+  readonly sharedMonthlyLimit: number;
+  readonly sharedReserved: number;
 }
 
 export interface SandboxDispatchBudgetPort {

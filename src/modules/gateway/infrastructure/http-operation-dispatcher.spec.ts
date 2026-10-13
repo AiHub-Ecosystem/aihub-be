@@ -118,7 +118,12 @@ function fakeSandboxBudget(admitted = true): SandboxDispatchBudgetPort & {
       this.releaseCalls.push(requestId);
     },
     async allowanceFor() {
-      return { monthlyLimit: 5, reserved: 0 };
+      return {
+        monthlyLimit: 5,
+        reserved: 0,
+        sharedMonthlyLimit: 500,
+        sharedReserved: 0,
+      };
     },
   };
   return budget;

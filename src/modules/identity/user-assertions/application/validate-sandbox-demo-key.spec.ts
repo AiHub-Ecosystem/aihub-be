@@ -15,6 +15,8 @@ function validator(
   allowance: SandboxAllowanceSnapshot | null = {
     monthlyLimit: 5,
     reserved: 1,
+    sharedMonthlyLimit: 500,
+    sharedReserved: 12,
   },
 ): ValidateSandboxDemoKey {
   const budget: SandboxDispatchBudgetPort = {
@@ -62,7 +64,12 @@ describe('ValidateSandboxDemoKey', () => {
       valid: true,
       environment: 'sandbox',
       scope: 'speaking.grade',
-      allowance: { monthlyLimit: 5, reserved: 1 },
+      allowance: {
+        monthlyLimit: 5,
+        reserved: 1,
+        sharedMonthlyLimit: 500,
+        sharedReserved: 12,
+      },
     });
   });
 

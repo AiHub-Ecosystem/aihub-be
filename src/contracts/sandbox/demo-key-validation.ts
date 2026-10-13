@@ -35,6 +35,8 @@ export const SandboxDemoAllowanceSchema = Type.Object(
   {
     monthly_limit: Type.Integer({ minimum: 0 }),
     reserved: Type.Integer({ minimum: 0 }),
+    shared_monthly_limit: Type.Integer({ minimum: 0 }),
+    shared_reserved: Type.Integer({ minimum: 0 }),
   },
   { additionalProperties: false },
 );
