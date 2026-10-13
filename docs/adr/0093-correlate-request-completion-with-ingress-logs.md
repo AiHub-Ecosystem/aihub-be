@@ -158,3 +158,10 @@ The production evidence gate for #450 is complete. #139 is closed and its
 production source-IP behavior is now observed. #436 remains open; until it
 validates end-user forwarding, Web Session events correctly identify the
 observed BFF address.
+
+API-key logging confirmation, 2026-10-13: one request to the production
+Writing Task 1 route authenticated with an API key and produced a matching
+`request_completed` event with `api_key_id` present. It returned
+`401 USER_IDENTITY_REQUIRED` because the probe intentionally omitted
+`X-User-Identity`; it stopped before dispatching a grading request. The event
+is identified by request ID `req_01M4SGBEX5134K3M5PBEM4VQ7P`.
