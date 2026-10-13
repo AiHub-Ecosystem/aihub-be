@@ -1,6 +1,7 @@
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import {
   type GeneratedApiKey,
+  type KeyEnvironment,
   generateApiKey,
 } from '@/modules/identity/domain/api-key';
 
@@ -9,7 +10,7 @@ const nextOrganizationApiKeyId = prefixedIdGenerator('ak_');
 
 export function generateOrganizationApiKey(
   now: Date = new Date(),
-  environment?: string,
+  environment?: KeyEnvironment,
 ): GeneratedApiKey {
   const id = nextOrganizationApiKeyId(now);
   return generateApiKey(id, environment);

@@ -179,35 +179,28 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       : record;
   }
 
-  private abuseScopes(credentials: ApiKeyCredential): readonly string[] {
-    return [credentials.clientIp];
-  }
-
   private async isAbuseLimited(
     credentials: ApiKeyCredential,
   ): Promise<boolean> {
-    const counts = await Promise.all(
-      this.abuseScopes(credentials).map((scope) =>
-        this.failureCounter.get(scope).catch(() => 0),
-      ),
-    );
-    return counts.some((count) => count >= AUTH_FAILURE_LIMIT);
+    try {
+      return (
+        (await this.failureCounter.get(credentials.clientIp)) >=
+        AUTH_FAILURE_LIMIT
+      );
+    } catch {
+      return false;
+    }
   }
 
   private async invalidCredential(
     credentials: ApiKeyCredential,
   ): Promise<AppError> {
     let failures = 0;
-    for (const scope of this.abuseScopes(credentials)) {
-      try {
-        // Redis only protects the hot path; authentication remains Postgres-backed.
-        failures = Math.max(
-          failures,
-          await this.failureCounter.recordFailure(scope),
-        );
-      } catch {
-        // A counter outage must never become an authorization.
-      }
+    try {
+      // Redis only protects the hot path; authentication remains Postgres-backed.
+      failures = await this.failureCounter.recordFailure(credentials.clientIp);
+    } catch {
+      // A counter outage must never become an authorization.
     }
 
     return failures >= AUTH_FAILURE_LIMIT ? rateLimited() : unauthorized();

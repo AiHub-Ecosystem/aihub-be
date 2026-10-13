@@ -102,6 +102,14 @@ describe('CreateOrganizationApiKey', () => {
     ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   });
 
+  it('does not issue new customer keys for Staging', async () => {
+    const { useCase } = createUseCase();
+
+    await expect(create(useCase, ['staging'])).rejects.toMatchObject({
+      code: 'INVALID_REQUEST',
+    });
+  });
+
   it('collapses a repeated environment to the single environment it names', async () => {
     const { useCase } = createUseCase();
 

@@ -1,3 +1,4 @@
+import { effectiveSandboxAllowance } from '@/modules/gateway/application/effective-sandbox-allowance';
 import type {
   SandboxAllowanceSnapshot,
   SandboxDispatchBudgetPort,
@@ -47,16 +48,19 @@ async function effectiveAllowance(
   organizationId: string,
   monthStart: Date,
 ): Promise<number | null> {
-  const override = await reader.sandboxAllowanceOverride.findUnique({
-    where: { organizationId_monthStart: { organizationId, monthStart } },
-  });
-  if (override !== null) return override.allowance;
-
-  const persistedDefault = await reader.sandboxAllowanceDefault.findFirst({
-    where: { monthStart: { lte: monthStart } },
-    orderBy: { monthStart: 'desc' },
-  });
-  return persistedDefault?.allowance ?? null;
+  const [override, persistedDefault] = await Promise.all([
+    reader.sandboxAllowanceOverride.findUnique({
+      where: { organizationId_monthStart: { organizationId, monthStart } },
+    }),
+    reader.sandboxAllowanceDefault.findFirst({
+      where: { monthStart: { lte: monthStart } },
+      orderBy: { monthStart: 'desc' },
+    }),
+  ]);
+  return effectiveSandboxAllowance(
+    override?.allowance ?? null,
+    persistedDefault?.allowance ?? null,
+  );
 }
 
 export class PostgresSandboxDispatchBudget

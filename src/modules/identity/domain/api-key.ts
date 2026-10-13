@@ -52,9 +52,20 @@ const API_KEY_FORMATS: readonly string[] = KNOWN_PREFIXES.map(
   (prefix) => `^${prefix}[A-Za-z0-9]{${API_KEY_SECRET_LENGTH}}$`,
 );
 
-/** The display prefix a key bound to `environment` is issued under. */
-export function apiKeyPrefixForEnvironment(environment: string): string {
-  return ENVIRONMENT_PREFIXES[environment as KeyEnvironment] ?? API_KEY_PREFIX;
+/** Whether a request value names an environment supported by API-key issuance. */
+export function isKeyEnvironment(
+  value: string | undefined,
+): value is KeyEnvironment {
+  return value === 'sandbox' || value === 'production' || value === 'staging';
+}
+
+/** The display prefix for a key bound to `environment`. */
+export function apiKeyPrefixForEnvironment(
+  environment?: KeyEnvironment,
+): string {
+  return environment === undefined
+    ? API_KEY_PREFIX
+    : ENVIRONMENT_PREFIXES[environment];
 }
 
 export function isApiKeyFormat(value: string): boolean {
@@ -80,7 +91,7 @@ export function apiKeyDisplayPrefix(rawKey: string): string {
  */
 export function generateApiKey(
   id: string,
-  environment?: string,
+  environment?: KeyEnvironment,
 ): GeneratedApiKey {
   let value = BigInt(`0x${randomBytes(32).toString('hex')}`);
   let secret = '';
@@ -93,7 +104,7 @@ export function generateApiKey(
     value /= 62n;
   }
 
-  const raw = `${apiKeyPrefixForEnvironment(environment ?? '')}${secret.padStart(
+  const raw = `${apiKeyPrefixForEnvironment(environment)}${secret.padStart(
     API_KEY_SECRET_LENGTH,
     '0',
   )}`;

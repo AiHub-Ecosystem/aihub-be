@@ -7,13 +7,14 @@ How to provision the demo organization used by `POST /v1/sandbox/assertions`, is
 Organization, API-key, and identity-configuration records live in the
 production control-plane database. The Sandbox application reads those records
 through the restricted `sandbox_control_plane_read_url` Vault connection.
-Sandbox usage, idempotency records, and monthly dispatch reservations live in
-`aihub_sandbox`; Redis uses logical database `/1` for sandbox cache and pacing
-state.
+Sandbox allowance policy, usage, idempotency records, and monthly dispatch
+reservations live in the Sandbox runtime database `aihub_sandbox`; Redis uses
+logical database `/1` for sandbox cache and pacing state.
 
 Customer keys created through the customer-facing key-creation path are bound to
-one environment and issued under that environment's display prefix
-(`aihub_sandbox_` or `aihub_prod_`). Keys issued before this rule keep the shared
+one public environment (Sandbox or Production) and issued under that
+environment's display prefix (`aihub_sandbox_` or `aihub_prod_`). Keys issued
+before this rule keep the shared
 `aihub_sk_` prefix and remain valid in every environment their stored
 `allowed_environments` lists; the prefix is a recognition aid and never
 authorizes anything. A Sandbox key may carry only `writing.grade`,
@@ -36,7 +37,9 @@ request-count ceilings, not a USD cost guarantee.
 
 ## Sandbox dispatch allowance
 
-The allowance is durable policy in the control-plane database, not code:
+The allowance is durable policy in the Sandbox runtime database, not code. Run
+these SQL examples against `aihub_sandbox` (the sandbox `DATABASE_URL`), not the
+production control-plane database:
 
 | Table                         | Holds                                                                                                         |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------- |

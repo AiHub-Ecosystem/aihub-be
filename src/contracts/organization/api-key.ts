@@ -24,10 +24,9 @@ const ApiKeyStatusSchema = Type.Union([
   Type.Literal('revoked'),
 ]);
 
-/** The Environments available to customer-owned API keys. */
-export const CustomerEnvironmentSchema = Type.Union([
+/** Public key creation only issues prefixes for Sandbox and Production. */
+const NewCustomerKeyEnvironmentSchema = Type.Union([
   Type.Literal('production'),
-  Type.Literal('staging'),
   Type.Literal('sandbox'),
 ]);
 
@@ -36,7 +35,7 @@ export const CreateOrganizationApiKeyRequestSchema = Type.Object(
     name: Type.String({ minLength: 1, maxLength: 100 }),
     scopes: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
     allowed_environments: Type.Optional(
-      Type.Array(CustomerEnvironmentSchema, { minItems: 1 }),
+      Type.Array(NewCustomerKeyEnvironmentSchema, { minItems: 1 }),
     ),
     expires_at: Type.Optional(Type.String({ format: 'date-time' })),
   },

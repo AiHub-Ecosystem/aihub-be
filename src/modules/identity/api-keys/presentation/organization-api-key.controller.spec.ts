@@ -340,16 +340,15 @@ describe('Organization API key creation HTTP flow', () => {
     expect(response.json().error.code).toBe('FORBIDDEN');
   });
 
-  it('binds the key to the requested customer environments', async () => {
+  it('rejects a Staging-only customer key request', async () => {
     const response = await create({
       name: 'Staging backend',
       scopes: ['writing.grade'],
       allowed_environments: ['staging'],
     });
 
-    expect(response.statusCode).toBe(201);
-    expect(response.json().data.allowed_environments).toEqual(['staging']);
-    expect(createCall().allowedEnvironments).toEqual(['staging']);
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('INVALID_REQUEST');
   });
 
   it.each([

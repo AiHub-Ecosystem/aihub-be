@@ -2,6 +2,7 @@ import { AppError } from '@/common/errors/app-error';
 import type { RequestContext } from '@/common/request-context/request-context';
 
 import type { ApiKeyCachePort } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import { isKeyEnvironment } from '@/modules/identity/domain/api-key';
 import {
   ORGANIZATION_API_KEY_ADMISSION,
   admitOrganizationApiKey,
@@ -78,9 +79,10 @@ export class RotateOrganizationApiKey {
         organizationId: input.organizationId,
       })
     ).find((key) => key.apiKeyId === input.apiKeyId);
+    const environment = retired?.allowedEnvironments[0];
     const generated = generateOrganizationApiKey(
       now,
-      retired?.allowedEnvironments[0],
+      isKeyEnvironment(environment) ? environment : undefined,
     );
     const result = await this.apiKeys.rotateApiKey({
       context: input.context,
