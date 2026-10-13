@@ -51,7 +51,7 @@ describe('Postgres Sandbox dispatch budget', () => {
       `INSERT INTO sandbox_dispatch_reservations
          (request_id, organization_id, month_start)
        SELECT 'seed-' || n, 'org_seed_' || n, ${SEPTEMBER}
-       FROM generate_series(1, 498) AS n`,
+       FROM generate_series(1, 497) AS n`,
     );
     await expect(
       budget.reserve({

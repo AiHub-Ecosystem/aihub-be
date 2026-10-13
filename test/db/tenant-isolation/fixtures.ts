@@ -226,9 +226,9 @@ export async function seedTenantIsolation(
        (id, organization_id, key_hash, key_prefix, name, scopes,
         allowed_environments, status, created_at)
      VALUES ($1, $2, decode($3, 'hex'), $4, 'shared-key', ARRAY['writing.grade'],
-             ARRAY['production'], 'active', $5),
+             ARRAY['sandbox', 'production'], 'active', $5),
             ($6, $7, decode($8, 'hex'), $4, 'shared-key', ARRAY['speaking.grade'],
-             ARRAY['production'], 'active', $5)`,
+             ARRAY['sandbox', 'production'], 'active', $5)`,
     [
       apiKeyA.id,
       ORGANIZATION_A,

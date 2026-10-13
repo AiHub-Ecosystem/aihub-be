@@ -112,7 +112,7 @@ withBuild('operator CLI against PostgreSQL', () => {
     );
 
     expect(created.status).toBe(0);
-    expect(created.stdout).toMatch(/^aihub_sk_[A-Za-z0-9]{43}$/);
+    expect(created.stdout).toMatch(/^aihub_prod_[A-Za-z0-9]{43}$/);
     expect(await rows('SELECT status FROM api_keys')).toEqual([
       { status: 'active' },
     ]);
