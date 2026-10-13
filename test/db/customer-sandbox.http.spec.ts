@@ -400,6 +400,7 @@ async function requestGrade(
 function createSandboxKey(
   userId: string,
   name = 'Sandbox integration',
+  scopes: readonly string[] = ['writing.grade'],
 ): Promise<LightMyRequestResponse> {
   return controlPlaneApp
     .getHttpAdapter()
@@ -410,7 +411,7 @@ function createSandboxKey(
       headers: { authorization: `Bearer ${userId}.test.token` },
       payload: {
         name,
-        scopes: ['writing.grade'],
+        scopes,
         allowed_environments: ['sandbox'],
       },
     });
@@ -563,6 +564,19 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
         allowed_environments: ['sandbox'],
       },
     ]);
+  });
+
+  it('creates one Sandbox key that can serve both public grading demos', async () => {
+    const response = await createSandboxKey(ownerUserId, 'Scoring demo key', [
+      'writing.grade',
+      'speaking.grade',
+    ]);
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().data).toMatchObject({
+      scopes: ['writing.grade', 'speaking.grade'],
+      allowed_environments: ['sandbox'],
+    });
   });
 
   it('allows an Organization admin to create a Sandbox-only Writing key', async () => {

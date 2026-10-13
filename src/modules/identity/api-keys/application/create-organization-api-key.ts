@@ -17,12 +17,8 @@ const CUSTOMER_ENVIRONMENTS: readonly string[] = [
   'sandbox',
 ];
 const DEFAULT_ENVIRONMENTS: readonly string[] = ['production'];
-/**
- * ADR-0056 keeps sandbox Speaking with the demo Organization's server-held key.
- * A self-service customer key is Writing-only; widening this would hand every
- * Speaking-entitled Organization a paid-grading sandbox credential.
- */
-const SANDBOX_SCOPE = 'writing.grade';
+/** Public demos may use only these grading scopes in the Sandbox Environment. */
+const SANDBOX_SCOPES: readonly string[] = ['writing.grade', 'speaking.grade'];
 const MAX_KEY_LIFETIME_MS = 365 * 24 * 60 * 60 * 1000;
 
 /**
@@ -110,8 +106,7 @@ function validateSandboxKey(
 
   if (
     environments.length !== 1 ||
-    scopes.length !== 1 ||
-    scopes[0] !== SANDBOX_SCOPE
+    scopes.some((scope) => !SANDBOX_SCOPES.includes(scope))
   ) {
     throw invalidRequest();
   }
