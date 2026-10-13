@@ -5,7 +5,7 @@
 - Related issue: [aihub-be #182](https://github.com/AiHub-Ecosystem/aihub-be/issues/182)
 - Related issue: [AiHub-Frontend #27](https://github.com/AiHub-Ecosystem/AiHub-Frontend/issues/27)
 - Amends: ADR-0017, ADR-0018, ADR-0030
-- Amended by: [ADR-0094](0094-sandbox-demo-key-admission.md), which extends customer Sandbox key scopes to Writing and Speaking for the public demos while retaining sandbox-only environment restriction and existing quotas
+- Amended by: [ADR-0094](0094-sandbox-demo-key-admission.md), which extends customer Sandbox key scopes to Writing and Speaking for the public demos; [ADR-0095](0095-demo-environments-and-sandbox-allowance-policy.md) accepts a new default allowance and monthly overrides, pending implementation
 
 At acceptance, AIHUB provided a free-to-customer test tier at `sandbox.aihubproduction.com` for customer Organizations. An owner or admin could issue a separate API key restricted to `sandbox`; those keys could grade Writing Task 1 and Task 2. ADR-0094 later extends customer Sandbox keys used by the public demos to `speaking.grade`, while keeping the Sandbox-only environment and existing request-count quotas. The calls use real AI services, so the allowance is finite and is not a USD-denominated cost guarantee. The existing demo Organization and its server-held Sandbox API key retain their separate Speaking flow.
 
