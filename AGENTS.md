@@ -46,6 +46,10 @@ If an older architecture draft conflicts with an implementation spec, record the
 - Organization identity is explicit in `RequestContext` and application inputs. Do not recover tenant identity from a repository-global variable.
 - Controllers validate and orchestrate; they do not call Postgres, Redis, or downstream HTTP clients directly.
 
+### Working files
+
+When a task generates throwaway files that must not be committed — issue-body scratch, captured diffs, log dumps, one-shot helper scripts — write them under `temp/` at the repository root, not beside source, not under `src/`, `scripts/`, `test/`, or `docs/`, and not in a shell home or an out-of-repo cache. Create `temp/` on demand; the folder is not committed and carries no sentinel. Delete every file you wrote there, and remove `temp/` itself if it becomes empty, before reporting the task complete. `temp/` is gitignored and never an input to build, test, or deploy.
+
 ### Runtime configuration
 
 - The Nest application has one TypeBox-backed environment schema under `src/config`. It owns names, types, defaults, requiredness, and secret metadata; validate one snapshot before pre-DI consumers such as OpenTelemetry, then expose typed configuration through `@nestjs/config` for DI. Direct `process.env` reads stay inside the configuration boundary; this rule does not cover independent CLI and operational scripts.

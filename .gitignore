@@ -32,3 +32,8 @@ bash.exe.stackdump
 .aihub-deploy-state/
 /artifacts/capacity-benchmark/
 .workbuddy-ai/
+
+# Agent-authored throwaway files (issue-body scratch, ad-hoc captures, one-shot
+# scripts). The folder is created on demand and emptied when the task ends; see
+# AGENTS.md "Working files" for the rule.
+temp/
