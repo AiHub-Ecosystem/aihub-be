@@ -36,30 +36,26 @@ import { type WebSessionTokenIssuerPort } from './web-session-token.port';
 
 const HOUR_MS = 60 * 60 * 1000;
 
-/**
- * The exchange's own limits, modelled on the refresh pair and deliberately at
- * the same numbers: `refresh_ip` 20/5min and `refresh_token` 5/15min. An
- * attacker guessing opaque tokens is in the same position as one guessing
- * refresh tokens, and a Customer Web BFF fronts many users from few IPs, so a
- * per-IP window looser than the per-token window is the pair that fits both.
- * Only failures consume them: a BFF exchanging a session it holds consumes
- * nothing and never has its window reset by a success.
- */
-const EXCHANGE_RATE_LIMITS = {
-  ip: { scope: 'web_session_exchange_ip', limit: 20, windowMs: 5 * 60 * 1000 },
-  token: {
-    scope: 'web_session_exchange_token',
-    limit: 5,
-    windowMs: 15 * 60 * 1000,
-  },
-} as const satisfies Record<
-  'ip' | 'token',
-  {
-    readonly scope: Parameters<AuthRateLimiterPort['consume']>[0]['scope'];
-    readonly limit: number;
-    readonly windowMs: number;
-  }
->;
+/** Exchange failures use a validated end-user address and the presented token hash. */
+const EXCHANGE_IP_RATE_LIMIT = {
+  scope: 'web_session_exchange_ip',
+  limit: 20,
+  windowMs: 5 * 60 * 1000,
+} as const satisfies {
+  readonly scope: Parameters<AuthRateLimiterPort['consume']>[0]['scope'];
+  readonly limit: number;
+  readonly windowMs: number;
+};
+
+const EXCHANGE_TOKEN_RATE_LIMIT = {
+  scope: 'web_session_exchange_token',
+  limit: 5,
+  windowMs: 15 * 60 * 1000,
+} as const satisfies {
+  readonly scope: Parameters<AuthRateLimiterPort['consume']>[0]['scope'];
+  readonly limit: number;
+  readonly windowMs: number;
+};
 
 function invalidVerificationToken(): AppError {
   return new AppError({
@@ -113,7 +109,7 @@ export class WebSessionService implements WebSessionServicePort {
       readonly password: string;
       readonly mfa_code?: string;
     },
-    ip: string,
+    endUserIp: string,
   ): Promise<CreateWebSessionOutcome> {
     // The same check, dummy hash, and login limits login applies, so this route
     // adds no way around them.
@@ -124,12 +120,12 @@ export class WebSessionService implements WebSessionServicePort {
         rateLimiter: this.rateLimiter,
       },
       input,
-      ip,
+      endUserIp,
     );
     const mfa = await this.mfa.loginProof(credentials.userId, input.mfa_code);
     if (mfa.kind === 'required') return { kind: 'mfa-required' };
     if (mfa.kind === 'invalid') {
-      await rejectCredentials(this.rateLimiter, ip, credentials.email);
+      await rejectCredentials(this.rateLimiter, endUserIp, credentials.email);
     }
 
     const now = this.clock.now();
@@ -137,7 +133,7 @@ export class WebSessionService implements WebSessionServicePort {
       credentials,
       this.tokenIssuer.issue(now),
       now,
-      ip,
+      endUserIp,
       mfa.kind === 'proved' ? mfa.proof : undefined,
     );
   }
@@ -203,10 +199,9 @@ export class WebSessionService implements WebSessionServicePort {
    */
   async exchangeWebSession(
     input: { readonly token: string | undefined },
-    ip: string,
+    endUserIp: string | undefined,
   ): Promise<IssuedUserAccessToken> {
     if (input.token === undefined || input.token.length === 0) {
-      await this.enforceExchangeFailureLimits(ip);
       throw invalidWebSession();
     }
 
@@ -223,14 +218,14 @@ export class WebSessionService implements WebSessionServicePort {
       // session rather than inside it: disabling an account has to stop every
       // session it owns, not revoke them.
       if (session === undefined) {
-        await this.enforceExchangeFailureLimits(ip, tokenHash);
+        await this.enforceExchangeFailureLimits(tokenHash, endUserIp);
         throw invalidWebSession();
       }
       const status = await this.userAccounts.findUserAccountStatus(
         session.userId,
       );
       if (status !== 'active') {
-        await this.enforceExchangeFailureLimits(ip, tokenHash);
+        await this.enforceExchangeFailureLimits(tokenHash, endUserIp);
         throw invalidWebSession();
       }
       userId = session.userId;
@@ -261,7 +256,7 @@ export class WebSessionService implements WebSessionServicePort {
       throw webSessionUnavailable(error);
     }
     if (stillExchangeable === undefined) {
-      await this.enforceExchangeFailureLimits(ip, tokenHash);
+      await this.enforceExchangeFailureLimits(tokenHash, endUserIp);
       throw invalidWebSession();
     }
     return issued;
@@ -275,9 +270,8 @@ export class WebSessionService implements WebSessionServicePort {
    * valid, revoked, unknown, expired, malformed, or offered in a transport it
    * refuses to read — answers the same `204`, so a counter here would only ever
    * measure how often a BFF logs somebody out. Guessing opaque tokens is what
-   * the exchange's own `web_session_exchange_ip` and `web_session_exchange_token`
-   * dimensions are for, and logout does not widen them: presenting a token here
-   * does not look one up.
+   * the exchange's `web_session_exchange_token` dimension is for, and logout
+   * does not widen it: presenting a token here does not look one up.
    *
    * Revoking by hash needs no read: the conditional update matches no row for an
    * unknown, already-revoked, or expired session, which is the same `204` as a
@@ -334,7 +328,7 @@ export class WebSessionService implements WebSessionServicePort {
     credentials: AuthenticatedCredentials,
     token: ReturnType<WebSessionTokenIssuerPort['issue']>,
     now: Date,
-    ip: string,
+    endUserIp: string,
     mfaProof?: MfaSessionProof,
   ): Promise<CreateWebSessionOutcome> {
     let created: boolean;
@@ -352,7 +346,7 @@ export class WebSessionService implements WebSessionServicePort {
     }
 
     if (!created) {
-      await rejectCredentials(this.rateLimiter, ip, credentials.email);
+      await rejectCredentials(this.rateLimiter, endUserIp, credentials.email);
     }
 
     return {
@@ -368,16 +362,18 @@ export class WebSessionService implements WebSessionServicePort {
    * dimension is keyed by the stored hash, never by the raw credential.
    */
   private async enforceExchangeFailureLimits(
-    ip: string,
-    tokenHash?: string,
+    tokenHash: string,
+    endUserIp: string | undefined,
   ): Promise<void> {
-    for (const limit of [
-      { ...EXCHANGE_RATE_LIMITS.ip, key: ip },
-      ...(tokenHash === undefined
-        ? []
-        : [{ ...EXCHANGE_RATE_LIMITS.token, key: tokenHash }]),
-    ]) {
-      await enforceAuthRateLimit(this.rateLimiter, limit);
+    if (endUserIp !== undefined) {
+      await enforceAuthRateLimit(this.rateLimiter, {
+        ...EXCHANGE_IP_RATE_LIMIT,
+        key: endUserIp,
+      });
     }
+    await enforceAuthRateLimit(this.rateLimiter, {
+      ...EXCHANGE_TOKEN_RATE_LIMIT,
+      key: tokenHash,
+    });
   }
 }

@@ -1,4 +1,17 @@
+import { isIP } from 'node:net';
 import type { FastifyRequest } from 'fastify';
+
+/**
+ * The Customer Web BFF supplies the end user's address in its own header; the
+ * client secret header and reader live in `@/common/http/client-secret-header`.
+ */
+export const WEB_SESSION_END_USER_IP_HEADER = 'X-AIHUB-End-User-IP';
+
+/** Read the BFF-supplied end-user address after its client-secret guard passes. */
+export function endUserIpFrom(request: FastifyRequest): string | undefined {
+  const header = request.headers[WEB_SESSION_END_USER_IP_HEADER.toLowerCase()];
+  return typeof header === 'string' && isIP(header) !== 0 ? header : undefined;
+}
 
 /**
  * The Web Session token has exactly one transport: the request body. This route

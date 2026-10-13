@@ -63,6 +63,7 @@ const LOGOUT_URL = '/v1/auth/web-sessions/logout';
 const VERIFY_EMAIL_URL = '/v1/auth/verify-email';
 const RESET_PASSWORD_URL = '/v1/auth/reset-password';
 const CLIENT_SECRET = 'bff-client-secret-value-that-must-not-leak';
+const END_USER_IP = '203.0.113.10';
 const USER_ID = 'usr_01J00000000000000000000000';
 const EMAIL = 'person@example.com';
 const PASSWORD = 'correct horse battery';
@@ -369,10 +370,16 @@ describe('web session HTTP boundary', () => {
     options: {
       readonly secret?: string | null;
       readonly body?: unknown;
+      readonly endUserIp?: string | null;
     } = {},
   ): Promise<LightMyRequestResponse> {
     const headers: Record<string, string> = {
       'content-type': 'application/json',
+      ...(options.endUserIp === null
+        ? {}
+        : {
+            'x-aihub-end-user-ip': options.endUserIp ?? END_USER_IP,
+          }),
     };
     if (options.secret !== null) {
       headers['x-aihub-client-secret'] = options.secret ?? CLIENT_SECRET;
@@ -522,7 +529,7 @@ describe('web session HTTP boundary', () => {
     expect(state.webSessions.size).toBe(0);
   });
 
-  it('keeps every credential failure generic and consumes the login limits', async () => {
+  it('keeps every credential failure generic and consumes the email limit', async () => {
     const rejected = await create();
 
     expect(rejected.statusCode).toBe(401);
@@ -1199,7 +1206,10 @@ describe('web session HTTP boundary', () => {
       // so the refusal came first and no row was looked up.
       webSessions.failFindWebSession = true;
 
-      const response = await exchange(token, { secret });
+      const response = await exchange(token, {
+        secret,
+        headers: { 'x-aihub-end-user-ip': '198.51.100.55' },
+      });
 
       expect(response.statusCode).toBe(401);
       expect(response.json().error.code).toBe('UNAUTHORIZED');
@@ -1213,7 +1223,6 @@ describe('web session HTTP boundary', () => {
 
       expect(failed.statusCode).toBe(401);
       expect(limiter.calls.map((call) => call.scope)).toEqual([
-        'web_session_exchange_ip',
         'web_session_exchange_token',
       ]);
       // The per-token key is the stored hash, never the credential itself.

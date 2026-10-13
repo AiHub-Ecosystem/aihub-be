@@ -41,6 +41,8 @@ const USER_ID = 'usr_01J00000000000000000000000';
 const BINDING = 'b'.repeat(43);
 const EMAIL = 'person@example.com';
 const PASSWORD = 'correct horse battery';
+const END_USER_IP = '198.51.100.10';
+const OTHER_END_USER_IP = '198.51.100.20';
 const NOW = Date.parse('2026-10-08T00:00:00.000Z');
 const redisUnavailable: AuthRedisClient = {
   eval: async () => {
@@ -105,11 +107,20 @@ describe('Web Session HTTP rate limits with Redis unavailable', () => {
     });
   });
 
-  function request(path: string, payload: Record<string, string>) {
+  function request(
+    path: string,
+    payload: Record<string, string>,
+    extraHeaders: Record<string, string> = {},
+    endUserIp: string | null = END_USER_IP,
+  ) {
     return app.inject({
       method: 'POST',
       url: path,
-      headers: { 'x-aihub-client-secret': SECRET },
+      headers: {
+        'x-aihub-client-secret': SECRET,
+        ...(endUserIp === null ? {} : { 'x-aihub-end-user-ip': endUserIp }),
+        ...extraHeaders,
+      },
       payload,
     });
   }
@@ -160,6 +171,69 @@ describe('Web Session HTTP rate limits with Redis unavailable', () => {
     ).toBe(401);
   });
 
+  it('does not share failed Web Session logins across users behind the BFF', async () => {
+    const otherEmail = 'other-person@example.com';
+    seedAccount(state, {
+      userId: 'usr_01J00000000000000000000002',
+      email: otherEmail,
+      passwordHash: '$argon2id$fake',
+    });
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await request(
+        BASE,
+        { email: EMAIL, password: 'wrong password' },
+        { 'x-aihub-end-user-ip': END_USER_IP },
+      );
+    }
+
+    const otherCallerFailure = await request(
+      BASE,
+      { email: EMAIL, password: 'wrong password' },
+      { 'x-aihub-end-user-ip': OTHER_END_USER_IP },
+    );
+    expect(otherCallerFailure.statusCode).toBe(401);
+
+    const otherUserFailure = await request(
+      BASE,
+      { email: otherEmail, password: 'wrong password' },
+      { 'x-aihub-end-user-ip': OTHER_END_USER_IP },
+    );
+    expect(otherUserFailure.statusCode).toBe(401);
+  });
+
+  it.each([
+    ['missing', null],
+    ['invalid', 'not-an-ip'],
+  ] as const)(
+    'fails closed when the BFF end-user IP is %s on password login',
+    async (_case, endUserIp) => {
+      const response = await request(
+        BASE,
+        { email: EMAIL, password: PASSWORD },
+        {},
+        endUserIp,
+      );
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json().error.code).toBe('AUTH_WEB_SESSION_UNAVAILABLE');
+      expect(state.webSessions.size).toBe(0);
+    },
+  );
+
+  it('checks the client secret before requiring the forwarded address', async () => {
+    const response = await request(
+      BASE,
+      { email: EMAIL, password: PASSWORD },
+      { 'x-aihub-client-secret': 'wrong-secret' },
+      null,
+    );
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.code).toBe('UNAUTHORIZED');
+    expect(state.webSessions.size).toBe(0);
+  });
+
   it('bounds failed exchanges while repeated successful exchanges consume no budget', async () => {
     const created = await request(BASE, { email: EMAIL, password: PASSWORD });
     const body: unknown = created.json();
@@ -204,6 +278,89 @@ describe('Web Session HTTP rate limits with Redis unavailable', () => {
         })
       ).statusCode,
     ).toBe(401);
+  });
+
+  it('does not share failed Web Session exchanges across users behind the BFF', async () => {
+    const otherEmail = 'other-person@example.com';
+    seedAccount(state, {
+      userId: 'usr_01J00000000000000000000002',
+      email: otherEmail,
+      passwordHash: '$argon2id$fake',
+    });
+    const created = await request(
+      BASE,
+      {
+        email: otherEmail,
+        password: PASSWORD,
+      },
+      { 'x-aihub-end-user-ip': OTHER_END_USER_IP },
+    );
+    const body: unknown = created.json();
+    if (!Value.Check(CreateWebSessionResponseSchema, body))
+      throw new Error('session not created');
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const failed = await request(
+        `${BASE}/exchange`,
+        {
+          web_session_token: `junk-session-${attempt}`,
+        },
+        { 'x-aihub-end-user-ip': END_USER_IP },
+      );
+      expect(failed.statusCode).toBe(401);
+    }
+
+    const otherUserFailure = await request(
+      `${BASE}/exchange`,
+      {
+        web_session_token: 'another-junk-session',
+      },
+      { 'x-aihub-end-user-ip': OTHER_END_USER_IP },
+    );
+    expect(otherUserFailure.statusCode).toBe(401);
+    expect(
+      (
+        await request(
+          `${BASE}/exchange`,
+          { web_session_token: 'same-end-user-junk-session' },
+          { 'x-aihub-end-user-ip': END_USER_IP },
+        )
+      ).statusCode,
+    ).toBe(429);
+    expect(
+      (
+        await request(
+          `${BASE}/exchange`,
+          { web_session_token: body.data.web_session_token },
+          { 'x-aihub-end-user-ip': OTHER_END_USER_IP },
+        )
+      ).statusCode,
+    ).toBe(200);
+  });
+
+  it('does not rate-limit an absent exchange credential as a shared token', async () => {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const response = await request(
+        `${BASE}/exchange`,
+        { web_session_token: 'body-token-is-refused' },
+        {
+          authorization: 'Bearer alternate-source',
+          'x-aihub-end-user-ip': END_USER_IP,
+        },
+      );
+      expect(response.statusCode).toBe(401);
+    }
+  });
+
+  it('ignores a malformed forwarded address instead of using the BFF peer', async () => {
+    for (let attempt = 0; attempt < 21; attempt += 1) {
+      const response = await request(
+        `${BASE}/exchange`,
+        { web_session_token: `bad-forwarded-ip-session-${attempt}` },
+        { 'x-aihub-end-user-ip': 'not-an-ip-address' },
+      );
+      expect(response.statusCode).toBe(401);
+    }
   });
 
   it('allows more than ten independent BFF confirmations behind one proxy', async () => {

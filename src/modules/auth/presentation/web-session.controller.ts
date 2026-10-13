@@ -26,14 +26,17 @@ import {
   type LogoutWebSessionRequest,
   LogoutWebSessionRequestSchema,
 } from '@/contracts/auth/web-session';
+import { webSessionUnavailable } from '@/modules/auth/application/web-session-errors';
 import {
   WEB_SESSION_SERVICE,
   type WebSessionServicePort,
 } from '@/modules/auth/application/web-session-service.port';
 import { accessTokenEnvelope } from './access-token-envelope';
-import { requestIp } from './auth-request';
 import { WebSessionClientGuard } from './web-session-client.guard';
-import { hasAlternateWebSessionSource } from './web-session-transport';
+import {
+  endUserIpFrom,
+  hasAlternateWebSessionSource,
+} from './web-session-transport';
 
 /** The one envelope both creation routes answer, so a BFF reads them alike. */
 function createdWebSession(
@@ -78,11 +81,14 @@ export class WebSessionController {
       CreateWebSessionRequestSchema,
       body,
     );
+    const endUserIp = endUserIpFrom(request);
+    if (endUserIp === undefined) {
+      throw webSessionUnavailable(
+        new Error('Customer Web BFF omitted or malformed X-AIHUB-End-User-IP'),
+      );
+    }
 
-    const result = await this.service.createWebSession(
-      input,
-      requestIp(request),
-    );
+    const result = await this.service.createWebSession(input, endUserIp);
 
     if (result.kind === 'mfa-required') {
       reply.status(202);
@@ -148,7 +154,7 @@ export class WebSessionController {
           ? undefined
           : input.web_session_token,
       },
-      requestIp(request),
+      endUserIpFrom(request),
     );
 
     // The envelope login answers, field for field: an integrator already parses
