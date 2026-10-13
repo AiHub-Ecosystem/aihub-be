@@ -13,6 +13,8 @@ The Customer Web login session becomes a first-class AIHUB concept, the **Web Se
 
 #347 originally reused the browser verification IP dimension for the BFF. The deployed proxy supplies a shared peer IP, so that would cap all Customer Web confirmations at ten per five minutes. BFF verification instead applies the same attempt budget to each verification token hash in a separate `web_session_verification_token` dimension; browser verification keeps `verify_ip` unchanged.
 
+Issue #436 extends that rule to every Web Session route. The BFF's observed address is never a rate-limit key. After the client-secret guard succeeds, AIHUB accepts `X-AIHUB-End-User-IP` only when it contains one valid IP address; the BFF must overwrite any incoming header with the address it observed. Password login requires that address and uses it for `login_ip` and the caller-and-email `login_email` key; if it is absent or invalid, AIHUB returns `AUTH_WEB_SESSION_UNAVAILABLE` before credential lookup. Exchange uses a valid address for `web_session_exchange_ip` when supplied and always keeps `web_session_exchange_token` keyed by the token hash, so it can still reject a bad token without relying on the BFF address. The Customer Web BFF must send this header before the Web Session login change is deployed. Verification keeps its per-token-hash `web_session_verification_token` budget, and logout has no failure budget. Application request logs continue to record the network address AIHUB observed, which is the BFF.
+
 ## What a Web Session is
 
 A Web Session is not a Refresh Session. It has no Refresh Token Family, its token does not rotate, and it lives in its own table rather than `refresh_tokens`.

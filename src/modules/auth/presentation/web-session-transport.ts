@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import type { FastifyRequest } from 'fastify';
 
 /**
@@ -5,6 +6,13 @@ import type { FastifyRequest } from 'fastify';
  * transport with the credential it authenticates.
  */
 export const WEB_SESSION_CLIENT_SECRET_HEADER = 'X-AIHUB-Client-Secret';
+export const WEB_SESSION_END_USER_IP_HEADER = 'X-AIHUB-End-User-IP';
+
+/** Read the BFF-supplied end-user address after its client-secret guard passes. */
+export function endUserIpFrom(request: FastifyRequest): string | undefined {
+  const header = request.headers[WEB_SESSION_END_USER_IP_HEADER.toLowerCase()];
+  return typeof header === 'string' && isIP(header) !== 0 ? header : undefined;
+}
 
 /**
  * Reads the BFF client secret, or `undefined` when the request carried none.

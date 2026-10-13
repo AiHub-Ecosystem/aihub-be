@@ -17,7 +17,7 @@ export interface WebSessionServicePort {
       readonly password: string;
       readonly mfa_code?: string;
     },
-    ip: string,
+    endUserIp: string,
   ): Promise<CreateWebSessionOutcome>;
   /**
    * Verification Sign-in. Answers the Web Session when the Signup Browser
@@ -35,8 +35,10 @@ export interface WebSessionServicePort {
    * from, which is one generic failure like any other unusable session.
    */
   exchangeWebSession(
-    input: { readonly token: string | undefined },
-    ip: string,
+    input: {
+      readonly token: string | undefined;
+    },
+    endUserIp: string | undefined,
   ): Promise<IssuedUserAccessToken>;
   /**
    * End the one Web Session the caller presented. `token` is `undefined` when

@@ -7,9 +7,9 @@ import { type PasswordHasherPort } from './password-hasher.port';
 import { type UserAccountRepositoryPort } from './user-account.port';
 
 /**
- * The two login dimensions, kept beside the check that consumes them so a
- * second route cannot copy the numbers and drift. `login_ip` bounds attempts
- * from one address, `login_email` bounds attempts against one account.
+ * The login dimensions, kept beside the check that consumes them so a second
+ * route cannot copy the numbers and drift. `login_email` is caller-and-account
+ * scoped, so a shared BFF address is never used.
  */
 export const LOGIN_RATE_LIMITS = {
   ip: { scope: 'login_ip', limit: 20, windowMs: 5 * 60 * 1000 },
@@ -45,7 +45,10 @@ async function enforceLoginLimits(
 ): Promise<void> {
   const limits = [
     { ...LOGIN_RATE_LIMITS.ip, key: ip },
-    { ...LOGIN_RATE_LIMITS.email, key: email },
+    {
+      ...LOGIN_RATE_LIMITS.email,
+      key: JSON.stringify([ip, email]),
+    },
   ];
   for (const limit of limits) {
     await enforceAuthRateLimit(rateLimiter, limit);
