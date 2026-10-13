@@ -33,12 +33,11 @@ export interface RotatedOrganizationApiKey {
 }
 
 /**
- * Replaces an Organization's credential while preserving the authority it
- * carried, and discloses the raw replacement exactly once.
+ * Replaces an Organization's credential and discloses the raw replacement
+ * exactly once. A replacement keeps the first stored environment only.
  *
- * The replacement inherits name, scopes, allowed environments, and expiry from
- * the store rather than from the request: rotation changes the credential, not
- * what the credential may do.
+ * Name, scopes, and expiry come from the store. Environment authority is
+ * narrowed to one because every newly issued customer key has one environment.
  */
 export class RotateOrganizationApiKey {
   constructor(
@@ -68,18 +67,17 @@ export class RotateOrganizationApiKey {
     }
 
     const now = this.now();
-    // The replacement is a newly issued credential, so it carries the display
-    // prefix of the environment it stays bound to. That environment is known
-    // only from the retired key, and the rotate transaction is what reads it, so
-    // the rotation path reuses the management read rather than adding a second
-    // row lookup. A key that is not listed here cannot be rotated anyway.
+    // Reuse the management read to pick the one environment the replacement
+    // keeps; the transaction still verifies that it belongs to the retired key.
     const retired = (
       await this.apiKeys.listApiKeys({
         context: input.context,
         organizationId: input.organizationId,
       })
     ).find((key) => key.apiKeyId === input.apiKeyId);
-    const environment = retired?.allowedEnvironments[0];
+    const replacementAllowedEnvironments =
+      retired?.allowedEnvironments.slice(0, 1) ?? [];
+    const environment = replacementAllowedEnvironments[0];
     const generated = generateOrganizationApiKey(
       now,
       isKeyEnvironment(environment) ? environment : undefined,
@@ -92,6 +90,7 @@ export class RotateOrganizationApiKey {
       replacementId: generated.id,
       keyHash: generated.hash,
       keyPrefix: generated.prefix,
+      replacementAllowedEnvironments,
       now,
     });
 

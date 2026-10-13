@@ -1217,7 +1217,7 @@ function organizationApiKeyRotatePathItem(): Record<string, unknown> {
       operationId: id,
       summary: 'Rotate an organization API key',
       description:
-        'Creates a replacement and revokes the named key in one act, with no window in which both work. The replacement inherits the name, scopes, allowed environments, and expiry, and its raw credential is returned in this response only. A revoked or expired key cannot be rotated.',
+        'Creates a replacement and revokes the named key in one act, with no window in which both work. The replacement inherits the name, scopes, and expiry. It keeps the first stored allowed environment only; a legacy key that allows multiple environments is narrowed to that one environment. Legacy environments without a dedicated key prefix keep the compatibility prefix. The raw credential is returned in this response only. A revoked or expired key cannot be rotated.',
       ...routeIdentityScopeOf(id),
       security: [{ BearerAuth: [] }],
       parameters: [

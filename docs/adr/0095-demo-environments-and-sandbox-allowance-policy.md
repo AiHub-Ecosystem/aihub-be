@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-13
 - Related: [AiHub-Frontend #68](https://github.com/AiHub-Ecosystem/AiHub-Frontend/issues/68), [FE PR #67](https://github.com/AiHub-Ecosystem/AiHub-Frontend/pull/67), [BE PR #602](https://github.com/AiHub-Ecosystem/aihub-be/pull/602), frontend ADR-0018
-- Amends: [ADR-0056](0056-customer-sandbox-test-tier.md) for the default Organization Sandbox allowance and monthly overrides; [ADR-0094](0094-sandbox-demo-key-admission.md) for demo environment selection and fresh admission
+- Amends: [ADR-0033](0033-organization-api-key-rotation-boundary.md) for rotation environment binding; [ADR-0056](0056-customer-sandbox-test-tier.md) for the default Organization Sandbox allowance and monthly overrides; [ADR-0094](0094-sandbox-demo-key-admission.md) for demo environment selection and fresh admission
 - Implemented by: issue [#617](https://github.com/AiHub-Ecosystem/aihub-be/issues/617); migration `0037_sandbox_allowance_policy`, `src/modules/gateway/public/sandbox-dispatch-budget.ts`, `src/modules/identity/domain/api-key.ts`
 
 ## Decision
@@ -11,6 +11,8 @@
 This records the accepted design. It is implemented; see the runbook in [`../operations/sandbox-provisioning.md`](../operations/sandbox-provisioning.md) for changing the persisted default and a month-specific Organization override.
 
 New customer API keys are bound to one environment. Their display prefixes are `aihub_sandbox_` and `aihub_prod_`. Key material continues to come from a cryptographically secure random generator with at least the existing 256 bits of entropy; AIHUB stores only a one-way hash and enforces hash uniqueness. A prefix helps a person recognize a key but never grants access. The persisted `allowed_environments` value is authoritative and must contain exactly the selected environment for a new key. Existing `aihub_sk_` keys remain valid under their stored `allowed_environments`, including keys that explicitly allow more than one environment. Existing hashes cannot be rewritten into a new prefix because the raw key is not stored.
+
+Rotating an existing key issues a new credential bound to one environment. A key already bound to one environment keeps it; a legacy multi-environment key's replacement keeps its first stored allowed environment. Name, scopes, and expiry remain unchanged, and the rotation response, stored authorization, and audit event report the narrowed environment.
 
 The demo explicitly selects Sandbox or Production, defaulting to Sandbox. Validation requires the key's current stored environment and the current page's grading scope to match the selection. A mismatch is rejected and never causes a host switch. The Customer Web BFF chooses only the pinned HTTPS host for that environment and rejects redirects. Validation performs no AI dispatch and consumes no monthly allowance. It may report a current allowance snapshot. Every actual grade independently checks the key, active Organization, environment, scope, identity policy, rate policy, and quota. Demo Production checks must not accept a stale positive authorization result after key revocation, scope change, or Organization suspension. An Organization with active Identity Configuration remains ineligible until its own signed assertion can be supplied; the AIHUB demo assertion signer is not reused for customer Organizations.
 

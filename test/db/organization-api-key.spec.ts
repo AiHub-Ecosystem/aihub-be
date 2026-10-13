@@ -519,8 +519,12 @@ describe('organization API key rotation against PostgreSQL', () => {
     readonly apiKeyId: string;
     readonly organizationId?: string;
     readonly now?: Date;
+    readonly replacementEnvironment?: 'sandbox' | 'production' | 'staging';
   }) {
-    const replacement = generateOrganizationApiKey();
+    const replacementEnvironment =
+      options.replacementEnvironment ?? 'production';
+    const now = options.now ?? new Date();
+    const replacement = generateOrganizationApiKey(now, replacementEnvironment);
     const organizationId = options.organizationId ?? ORGANIZATION_ID;
     return repository.rotateApiKey({
       context: listContext(organizationId),
@@ -530,7 +534,8 @@ describe('organization API key rotation against PostgreSQL', () => {
       replacementId: replacement.id,
       keyHash: replacement.hash,
       keyPrefix: replacement.prefix,
-      now: options.now ?? new Date(),
+      replacementAllowedEnvironments: [replacementEnvironment],
+      now,
     });
   }
 
@@ -593,7 +598,7 @@ describe('organization API key rotation against PostgreSQL', () => {
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
-  it('gives the replacement every piece of the retired key authority', async () => {
+  it('preserves scopes and expiry while narrowing the replacement to one environment', async () => {
     await seedOrganization({ entitlements: ['writing', 'speaking'] });
     const expiresAt = new Date('2027-03-04T05:06:07.000Z');
     const retired = await seedKeyWith({
@@ -609,7 +614,7 @@ describe('organization API key rotation against PostgreSQL', () => {
       kind: 'rotated',
       name: 'Prod backend',
       scopes: ['writing.grade', 'speaking.grade'],
-      allowedEnvironments: ['production', 'staging'],
+      allowedEnvironments: ['production'],
       expiresAt,
     });
     const keys = await repository.listApiKeys({
@@ -619,7 +624,76 @@ describe('organization API key rotation against PostgreSQL', () => {
     expect(keys).toHaveLength(1);
     expect(keys[0]?.expiresAt).toEqual(expiresAt);
     expect(keys[0]?.scopes).toEqual(['writing.grade', 'speaking.grade']);
-    expect(keys[0]?.allowedEnvironments).toEqual(['production', 'staging']);
+    expect(keys[0]?.allowedEnvironments).toEqual(['production']);
+  });
+
+  it('does not let a rotated legacy key keep the other environment', async () => {
+    await seedOrganization();
+    const retired = await seedKeyWith({
+      name: 'legacy shared key',
+      environments: ['sandbox', 'production'],
+    });
+    const replacement = generateOrganizationApiKey(new Date(), 'sandbox');
+
+    const result = await repository.rotateApiKey({
+      context: listContext(ORGANIZATION_ID),
+      organizationId: ORGANIZATION_ID,
+      actorUserId,
+      apiKeyId: retired.id,
+      replacementId: replacement.id,
+      keyHash: replacement.hash,
+      keyPrefix: replacement.prefix,
+      replacementAllowedEnvironments: ['sandbox'],
+      now: new Date(),
+    });
+
+    expect(result).toMatchObject({
+      kind: 'rotated',
+      allowedEnvironments: ['sandbox'],
+    });
+    const authenticator = new ApiKeyAuthenticator(
+      new PostgresApiKeyRepository(apiKeys),
+      emptyCache(),
+      { get: async () => 0, recordFailure: async () => 1 },
+    );
+    await expect(
+      authenticator.authenticate({
+        value: replacement.raw,
+        environment: 'sandbox',
+        clientIp: '198.51.100.7',
+      }),
+    ).resolves.toMatchObject({ allowedEnvironments: ['sandbox'] });
+    await expect(
+      authenticator.authenticate({
+        value: replacement.raw,
+        environment: 'production',
+        clientIp: '198.51.100.7',
+      }),
+    ).rejects.toMatchObject({ code: 'ENVIRONMENT_NOT_ALLOWED' });
+  });
+
+  it('refuses a rotation environment the retired key did not allow', async () => {
+    await seedOrganization();
+    const retired = await seedKeyWith({
+      name: 'production-only key',
+      environments: ['production'],
+    });
+    const replacement = generateOrganizationApiKey(new Date(), 'sandbox');
+
+    const result = await repository.rotateApiKey({
+      context: listContext(ORGANIZATION_ID),
+      organizationId: ORGANIZATION_ID,
+      actorUserId,
+      apiKeyId: retired.id,
+      replacementId: replacement.id,
+      keyHash: replacement.hash,
+      keyPrefix: replacement.prefix,
+      replacementAllowedEnvironments: ['sandbox'],
+      now: new Date(),
+    });
+
+    expect(result.kind).toBe('key_not_rotatable');
+    expect(await keyCount()).toBe(1);
   });
 
   it('rotates an organization sitting at its active key limit', async () => {
@@ -700,7 +774,7 @@ describe('organization API key rotation against PostgreSQL', () => {
     await seedOrganization();
     const retired = await seedKeyWith({ name: 'original' });
     const collision = await seedKeyWith({ name: 'collision' });
-    const replacement = generateOrganizationApiKey();
+    const replacement = generateOrganizationApiKey(new Date(), 'production');
 
     // Reusing an existing identifier makes the insert fail after the old key
     // has already been revoked, so only an atomic rotation leaves it usable.
@@ -713,6 +787,7 @@ describe('organization API key rotation against PostgreSQL', () => {
         replacementId: collision.id,
         keyHash: replacement.hash,
         keyPrefix: replacement.prefix,
+        replacementAllowedEnvironments: ['production'],
         now: new Date(),
       }),
     ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
@@ -1007,7 +1082,7 @@ describe('organization API key audit trail against PostgreSQL', () => {
       organizationId: ORGANIZATION_ID,
       name: 'original',
     });
-    const replacement = generateOrganizationApiKey();
+    const replacement = generateOrganizationApiKey(new Date(), 'production');
 
     await repository.rotateApiKey({
       context: listContext(ORGANIZATION_ID),
@@ -1017,6 +1092,7 @@ describe('organization API key audit trail against PostgreSQL', () => {
       replacementId: replacement.id,
       keyHash: replacement.hash,
       keyPrefix: replacement.prefix,
+      replacementAllowedEnvironments: ['production'],
       now: new Date(),
     });
 
@@ -1026,6 +1102,7 @@ describe('organization API key audit trail against PostgreSQL', () => {
     expect(event?.detail).toMatchObject({
       replacementId: replacement.id,
       replacementKeyPrefix: replacement.prefix,
+      allowedEnvironments: ['production'],
     });
     // The withdrawn key is the event's target, so its own prefix is what
     // identifies the record.
