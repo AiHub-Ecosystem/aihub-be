@@ -154,8 +154,8 @@ Mỗi endpoint item nên cho biết method, path, scope, auth headers, content t
 ### Customer Sandbox
 
 - Dành cho customer Organization keys và chỉ hỗ trợ Writing Task 1/2 với scope `writing.grade`.
-- Dùng base URL Sandbox và key riêng; không dùng key production/Sandbox chéo environment. AIHUB hiện không có public staging host.
-- Không tính phí khách hàng, nhưng gọi AI service thật và có allowance: tối đa 25 dispatch/Organization/tháng UTC, 500 dispatch toàn Sandbox/tháng UTC.
+- Dùng base URL Sandbox và key riêng; không dùng key production/Sandbox chéo environment. AIHUB hiện không có public staging host. Key mới chỉ gắn với một environment và có prefix hiển thị tương ứng (`aihub_sandbox_`, `aihub_prod_`); key `aihub_sk_` cũ vẫn dùng được theo `allowed_environments` đã lưu.
+- Không tính phí khách hàng, nhưng gọi AI service thật và có allowance: mặc định 5 dispatch/Organization/tháng UTC (dùng chung cho mọi key, client và skill của Organization đó), 500 dispatch toàn Sandbox/tháng UTC.
 - Dùng identity configuration của Organization: Declared ID nếu không có config active, Signed assertion nếu có.
 
 ### Demo assertion sandbox

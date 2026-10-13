@@ -9,7 +9,8 @@ const nextOrganizationApiKeyId = prefixedIdGenerator('ak_');
 
 export function generateOrganizationApiKey(
   now: Date = new Date(),
+  environment?: string,
 ): GeneratedApiKey {
   const id = nextOrganizationApiKeyId(now);
-  return generateApiKey(id);
+  return generateApiKey(id, environment);
 }

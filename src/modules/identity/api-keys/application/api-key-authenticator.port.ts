@@ -4,6 +4,14 @@ export interface ApiKeyCredential {
   readonly clientIp: string;
   /** Requires the stored environment binding to match this set exactly. */
   readonly requiredAllowedEnvironments?: readonly string[];
+  /**
+   * Further identities the brute-force counter keys on, alongside `clientIp`.
+   * A request is refused only when at least one of them reaches the threshold,
+   * so a visitor who can only be identified by a shared address is never locked
+   * out by a co-located visitor while a sustained grind from that address still
+   * is.
+   */
+  readonly additionalAbuseScopes?: readonly string[];
 }
 
 export interface AuthenticatedApiKey {
@@ -15,8 +23,8 @@ export interface AuthenticatedApiKey {
   readonly maxConcurrent: number;
   readonly monthlyRequestQuota: number | null;
   readonly hardStopOnQuota: boolean;
-  /** Sandbox per-Organization dispatch cap; null means no additional cap. */
-  readonly sandboxOrganizationDispatchLimit?: number | null;
+  /** The durable environment binding; a display prefix never authorizes. */
+  readonly allowedEnvironments: readonly string[];
 }
 
 export type OrganizationStatus = 'active' | 'suspended';

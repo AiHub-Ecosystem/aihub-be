@@ -22,6 +22,7 @@ const authenticated: AuthenticatedApiKey = {
   maxConcurrent: 3,
   monthlyRequestQuota: 500,
   hardStopOnQuota: true,
+  allowedEnvironments: ['production'],
 };
 
 const resolved: ResolvedUserIdentity = {

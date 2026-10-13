@@ -540,7 +540,12 @@ async function createKey(options) {
     'envs',
     'production',
   );
-  const generated = generateApiKey(`ak_${ulid()}`);
+  // A key bound to one environment is issued under that environment's display
+  // prefix; a key spanning several keeps the shared one.
+  const generated = generateApiKey(
+    `ak_${ulid()}`,
+    allowedEnvironments.length === 1 ? allowedEnvironments[0] : undefined,
+  );
 
   const outcome = await runCliCommand(createOperatorApiKeyDescriptor, {
     databaseUrl: controlPlaneDatabaseUrl(),

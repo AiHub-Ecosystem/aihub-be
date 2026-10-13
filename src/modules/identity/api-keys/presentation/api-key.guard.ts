@@ -23,10 +23,6 @@ import {
   resolveAihubEnvironment,
 } from '@/modules/identity/shared/presentation/request-environment';
 import { REQUIRED_OPERATION_METADATA } from '@/modules/identity/shared/presentation/require-operation.decorator';
-import {
-  SANDBOX_ASSERTION_POLICY,
-  type SandboxAssertionPolicyPort,
-} from '@/modules/identity/user-assertions/application/sandbox-assertion-policy.port';
 import { openMeteringEvidence } from '@/modules/metering/application/metering-evidence';
 import { authenticateApiKey, forbidden } from './authenticate-api-key';
 
@@ -51,6 +47,7 @@ function localDevelopmentIdentity(
     maxConcurrent: 20,
     monthlyRequestQuota: null,
     hardStopOnQuota: false,
+    allowedEnvironments: [environment],
   };
 }
 
@@ -61,9 +58,6 @@ export class ApiKeyGuard implements CanActivate {
     private readonly reflector: Reflector,
     @Inject(API_KEY_AUTHENTICATOR)
     private readonly authenticator: ApiKeyAuthenticatorPort,
-    @Optional()
-    @Inject(SANDBOX_ASSERTION_POLICY)
-    private readonly sandboxPolicy?: SandboxAssertionPolicyPort,
     @Optional()
     @Inject(appConfig.KEY)
     private readonly configuration?: RequestEnvironmentConfig,
@@ -105,19 +99,15 @@ export class ApiKeyGuard implements CanActivate {
       request,
       this.authenticator,
       configuration,
-      environment === 'sandbox' ? ['sandbox'] : undefined,
+      environment === 'sandbox'
+        ? { requiredAllowedEnvironments: ['sandbox'] }
+        : {},
     );
     const authorized =
       environment === 'sandbox'
         ? {
             ...authenticated,
             rateLimitRpm: Math.min(authenticated.rateLimitRpm, 5),
-            sandboxOrganizationDispatchLimit:
-              this.sandboxPolicy?.isConfiguredOrganization?.(
-                authenticated.organizationId,
-              )
-                ? authenticated.monthlyRequestQuota
-                : 25,
           }
         : authenticated;
     request.aihubAuth = authorized;

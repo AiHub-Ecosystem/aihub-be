@@ -4,7 +4,7 @@
 - Date: 2026-10-13
 - Related: [AiHub-Frontend #68](https://github.com/AiHub-Ecosystem/AiHub-Frontend/issues/68), [FE PR #67](https://github.com/AiHub-Ecosystem/AiHub-Frontend/pull/67), [BE PR #602](https://github.com/AiHub-Ecosystem/aihub-be/pull/602)
 - Amends: [ADR-0056](0056-customer-sandbox-test-tier.md) for public-demo key admission and the allowed Sandbox grading scopes; Sandbox quotas and host isolation remain unchanged
-- Extended by: [ADR-0095](0095-demo-environments-and-sandbox-allowance-policy.md), which accepts explicit demo environment selection and a revised Sandbox allowance; implementation is pending
+- Extended by: [ADR-0095](0095-demo-environments-and-sandbox-allowance-policy.md), which accepts explicit demo environment selection and a revised Sandbox allowance; implemented by issue [#617](https://github.com/AiHub-Ecosystem/aihub-be/issues/617)
 
 The public Writing and Speaking demos accept an optional Organization-owned API key that is restricted to the Sandbox Environment and carries `writing.grade`, `speaking.grade`, or both. This lets one temporary key serve both demo pages while keeping its environment and capability set narrow. `POST /v1/sandbox/demo/api-keys/validate` authenticates the key and checks the selected skill's scope without entering the grading dispatch or monthly quota path. This result is advisory to the browser: each actual grading endpoint authenticates the key again and runs its normal authorization, identity, rate-limit, and quota chain, so skipping or forging the first step cannot authorize grading. Sandbox key records remain uncached for request-time revocation and Organization-suspension enforcement.
 

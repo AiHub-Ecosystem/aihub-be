@@ -45,7 +45,10 @@ export class RotateOrganizationApiKey {
       OrganizationMembershipPort,
       'resolveMembership'
     >,
-    private readonly apiKeys: Pick<OrganizationApiKeyPort, 'rotateApiKey'>,
+    private readonly apiKeys: Pick<
+      OrganizationApiKeyPort,
+      'rotateApiKey' | 'listApiKeys'
+    >,
     private readonly cache: Pick<ApiKeyCachePort, 'delete'>,
     private readonly now: () => Date = () => new Date(),
   ) {}
@@ -64,7 +67,21 @@ export class RotateOrganizationApiKey {
     }
 
     const now = this.now();
-    const generated = generateOrganizationApiKey(now);
+    // The replacement is a newly issued credential, so it carries the display
+    // prefix of the environment it stays bound to. That environment is known
+    // only from the retired key, and the rotate transaction is what reads it, so
+    // the rotation path reuses the management read rather than adding a second
+    // row lookup. A key that is not listed here cannot be rotated anyway.
+    const retired = (
+      await this.apiKeys.listApiKeys({
+        context: input.context,
+        organizationId: input.organizationId,
+      })
+    ).find((key) => key.apiKeyId === input.apiKeyId);
+    const generated = generateOrganizationApiKey(
+      now,
+      retired?.allowedEnvironments[0],
+    );
     const result = await this.apiKeys.rotateApiKey({
       context: input.context,
       organizationId: input.organizationId,

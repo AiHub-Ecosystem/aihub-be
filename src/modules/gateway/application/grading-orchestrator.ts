@@ -157,12 +157,6 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
       organizationId: command.organizationId,
       apiKeyId: command.apiKeyId,
       environment: command.environment,
-      ...(command.sandboxOrganizationDispatchLimit === undefined
-        ? {}
-        : {
-            sandboxOrganizationDispatchLimit:
-              command.sandboxOrganizationDispatchLimit,
-          }),
       userId: command.userId,
       scopes: command.scopes,
       signal: command.signal,

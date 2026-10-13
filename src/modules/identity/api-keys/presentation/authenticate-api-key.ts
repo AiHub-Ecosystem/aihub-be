@@ -3,6 +3,7 @@ import type {
   ApiKeyAuthenticatorPort,
   AuthenticatedApiKey,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import { hashApiKey } from '@/modules/identity/domain/api-key';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import {
   type RequestEnvironmentConfig,
@@ -15,6 +16,18 @@ export function forbidden(): AppError {
     message: 'API key is not authorized for this operation',
     retryable: false,
   });
+}
+
+export interface AuthenticateApiKeyOptions {
+  /** Requires the stored environment binding to match this set exactly. */
+  readonly requiredAllowedEnvironments?: readonly string[];
+  /**
+   * Also keys the brute-force counter on the presented credential. The public
+   * demo needs it because every visitor behind the Customer Web BFF presents
+   * from one shared egress address, so an address-scoped counter alone would let
+   * one visitor's failures lock out all the others.
+   */
+  readonly scopeFailuresByKey?: boolean;
 }
 
 /**
@@ -31,17 +44,21 @@ export async function authenticateApiKey(
   request: AuthenticatedRequest,
   authenticator: ApiKeyAuthenticatorPort,
   configuration: RequestEnvironmentConfig,
-  requiredAllowedEnvironments?: readonly string[],
+  options: AuthenticateApiKeyOptions = {},
 ): Promise<AuthenticatedApiKey> {
   const environment = resolveAihubEnvironment(request, configuration);
-  const header = request.headers['x-api-key'];
+  const rawHeader = request.headers['x-api-key'];
+  const value = typeof rawHeader === 'string' ? rawHeader : '';
   const authenticated = await authenticator.authenticate({
-    value: typeof header === 'string' ? header : '',
+    value,
     environment,
     clientIp: request.ip.length === 0 ? 'unknown' : request.ip,
-    ...(requiredAllowedEnvironments === undefined
+    ...(options.requiredAllowedEnvironments === undefined
       ? {}
-      : { requiredAllowedEnvironments }),
+      : { requiredAllowedEnvironments: options.requiredAllowedEnvironments }),
+    ...(options.scopeFailuresByKey === true
+      ? { additionalAbuseScopes: [`key:${hashApiKey(value)}`] }
+      : {}),
   });
 
   request.aihubAuth = authenticated;

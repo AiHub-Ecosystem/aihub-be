@@ -15,9 +15,6 @@ export interface SandboxAssertionPolicyPort {
   isEnabled(): boolean;
 
   allows(organizationId: string): boolean;
-
-  /** Identifies the operator-configured demo Organization without signing material. */
-  isConfiguredOrganization?(organizationId: string): boolean;
 }
 
 export const SANDBOX_ASSERTION_POLICY = Symbol('SANDBOX_ASSERTION_POLICY');

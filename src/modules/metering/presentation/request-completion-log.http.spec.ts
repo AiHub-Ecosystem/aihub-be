@@ -142,6 +142,7 @@ const testApiKeyAuthenticator: ApiKeyAuthenticatorPort = {
       maxConcurrent: 1,
       monthlyRequestQuota: null,
       hardStopOnQuota: false,
+      allowedEnvironments: ['production'],
     });
   },
 };

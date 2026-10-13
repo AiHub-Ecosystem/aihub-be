@@ -21,6 +21,7 @@ const baseKey: AuthenticatedApiKey = {
   maxConcurrent: 3,
   monthlyRequestQuota: 500,
   hardStopOnQuota: true,
+  allowedEnvironments: ['production'],
 };
 
 function request(overrides: Record<string, unknown> = {}) {
@@ -47,7 +48,7 @@ function reflector(): Reflector {
 }
 
 function guard(authenticator: ApiKeyAuthenticatorPort): ApiKeyGuard {
-  return new ApiKeyGuard(reflector(), authenticator, undefined, {
+  return new ApiKeyGuard(reflector(), authenticator, {
     NODE_ENV: 'test',
     AIHUB_ALLOW_UNAUTHENTICATED_DEV: false,
     AIHUB_PRODUCTION_HOST: 'api.aihub.test',

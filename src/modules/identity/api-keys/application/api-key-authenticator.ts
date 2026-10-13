@@ -19,6 +19,18 @@ export { isApiKeyFormat } from '@/modules/identity/domain/api-key';
 export const AUTH_FAILURE_LIMIT = 20;
 const AUTH_FAILURE_WINDOW_MS = 5 * 60 * 1_000;
 
+/**
+ * Whether a positive record may be cached at all.
+ *
+ * A key bound to a single environment never is: it is re-read on every request,
+ * so revocation, suspension, and a scope change are observed at the next grade
+ * instead of waiting out the cache ceiling. A legacy key that still names more
+ * than one environment keeps the documented 60-second ceiling.
+ */
+function isCacheable(record: ApiKeyRecord): boolean {
+  return record.allowedEnvironments.length > 1;
+}
+
 export function effectiveScopes(record: ApiKeyRecord): readonly string[] {
   return record.scopes.filter((scope) => {
     const [entitlement] = scope.split('.');
@@ -73,12 +85,12 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     credentials: ApiKeyCredential,
   ): Promise<AuthenticatedApiKey> {
     if (!isApiKeyFormat(credentials.value)) {
-      throw await this.invalidCredential(credentials.clientIp);
+      throw await this.invalidCredential(credentials);
     }
 
     const hashHex = hashApiKey(credentials.value);
     const sandbox = credentials.environment === 'sandbox';
-    let record = sandbox ? undefined : await this.getCachedRecord(hashHex);
+    let record = sandbox ? undefined : await this.cacheableRecord(hashHex);
 
     if (record === undefined) {
       // The brute-force gate sits specifically here, in front of the
@@ -90,8 +102,7 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       // else's failed attempts — never pays this round trip and is never
       // gated by it, matching the "a legitimate request never touches this
       // counter" contract in the auth design.
-      const currentFailures = await this.getFailureCount(credentials.clientIp);
-      if (currentFailures >= AUTH_FAILURE_LIMIT) {
+      if (await this.isAbuseLimited(credentials)) {
         throw rateLimited();
       }
 
@@ -99,14 +110,14 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       if (!sandbox) {
         if (record === null) {
           await this.cache.setMiss(hashHex).catch(() => undefined);
-        } else {
+        } else if (isCacheable(record)) {
           await this.cache.set(hashHex, record).catch(() => undefined);
         }
       }
     }
 
     if (record === null || record.status !== 'active') {
-      throw await this.invalidCredential(credentials.clientIp);
+      throw await this.invalidCredential(credentials);
     }
 
     const now = this.now();
@@ -114,7 +125,7 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       record.expiresAt !== null &&
       record.expiresAt.getTime() <= now.getTime()
     ) {
-      throw await this.invalidCredential(credentials.clientIp);
+      throw await this.invalidCredential(credentials);
     }
 
     if (record.organizationStatus !== 'active') {
@@ -148,6 +159,7 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       maxConcurrent: record.maxConcurrent,
       monthlyRequestQuota: record.monthlyRequestQuota,
       hardStopOnQuota: record.hardStopOnQuota,
+      allowedEnvironments: record.allowedEnvironments,
     };
   }
 
@@ -161,20 +173,51 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     }
   }
 
-  private async getFailureCount(ip: string): Promise<number> {
-    try {
-      return await this.failureCounter.get(ip);
-    } catch {
-      return 0;
-    }
+  /**
+   * A positive record is only trusted for a key that still names more than one
+   * environment. A key bound to a single environment is re-read on every
+   * request, so revocation, suspension, and a scope change are observed at the
+   * next grade instead of waiting out the cache ceiling. Sandbox requests never
+   * consult the cache at all.
+   */
+  private async cacheableRecord(
+    hashHex: string,
+  ): Promise<ApiKeyRecord | null | undefined> {
+    const record = await this.getCachedRecord(hashHex);
+    return record !== null && record !== undefined && !isCacheable(record)
+      ? undefined
+      : record;
   }
 
-  private async invalidCredential(ip: string): Promise<AppError> {
+  private abuseScopes(credentials: ApiKeyCredential): readonly string[] {
+    return [credentials.clientIp, ...(credentials.additionalAbuseScopes ?? [])];
+  }
+
+  private async isAbuseLimited(
+    credentials: ApiKeyCredential,
+  ): Promise<boolean> {
+    const counts = await Promise.all(
+      this.abuseScopes(credentials).map((scope) =>
+        this.failureCounter.get(scope).catch(() => 0),
+      ),
+    );
+    return counts.some((count) => count >= AUTH_FAILURE_LIMIT);
+  }
+
+  private async invalidCredential(
+    credentials: ApiKeyCredential,
+  ): Promise<AppError> {
     let failures = 0;
-    try {
-      failures = await this.failureCounter.recordFailure(ip);
-    } catch {
-      // Redis only protects the hot path; authentication remains Postgres-backed.
+    for (const scope of this.abuseScopes(credentials)) {
+      try {
+        // Redis only protects the hot path; authentication remains Postgres-backed.
+        failures = Math.max(
+          failures,
+          await this.failureCounter.recordFailure(scope),
+        );
+      } catch {
+        // A counter outage must never become an authorization.
+      }
     }
 
     return failures >= AUTH_FAILURE_LIMIT ? rateLimited() : unauthorized();

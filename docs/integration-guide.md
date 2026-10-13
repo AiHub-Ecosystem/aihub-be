@@ -445,8 +445,9 @@ Note the path. Grading operations live under `/v1/ielts/...`, not `/v1/...`;
 Sandbox requests reach the same AI services as production traffic and incur real
 AI cost, but customers are not billed for Sandbox usage. Every AI dispatch,
 including demo Speaking calls, shares a hard ceiling of 500 dispatches per UTC
-month. The demo Organization also keeps its own configured quota. A dispatch
-counts even if the downstream call fails or times out. The Customer Sandbox
+month. Separately, each Organization gets a durable monthly dispatch allowance
+applied across all of its keys, clients, and skills. A dispatch counts even if
+the downstream call fails or times out. The Customer Sandbox
 allowance and the shared ceiling are separate from production usage and quota.
 
 Sandbox usage is recorded against the sandbox Environment. The request-count
@@ -472,10 +473,12 @@ Organization keys cannot call `POST /v1/sandbox/assertions`; that route remains
 restricted to the dedicated demo Organization. Use section 4 and `GET /docs`
 for the Writing request and response schemas.
 
-Sandbox dispatches are limited to 25 per Customer Organization per UTC calendar
-month and 500 across the entire Sandbox Environment per month. The global
-allowance includes the demo Organization, so it may be exhausted before a
-Customer Organization uses its individual 25 requests. AIHUB returns
+Sandbox dispatches are limited to 5 per Customer Organization per UTC calendar
+month by default and 500 across the entire Sandbox Environment per month. The
+per-Organization allowance is shared by every key and both skills of that
+Organization, and an operator may replace it for a specific month; the global
+ceiling includes the demo Organization, so it may be exhausted before a
+Customer Organization uses its individual allowance. AIHUB returns
 `429 QUOTA_EXCEEDED` at either limit until the next UTC month. During normal
 operation, Sandbox also limits each key to 5 requests per minute, each
 Organization to one concurrent grading request, and the whole Environment to
@@ -487,8 +490,9 @@ gateway fails closed.
 Each downstream Writing dispatch consumes one allowance, including a downstream
 error or timeout. A completed request replayed with the same `Idempotency-Key`
 returns its stored result without another AI call or allowance unit, even when
-the quota has run out. These request limits cap the number of calls, not their
-exact cost in USD.
+the quota has run out. Speaking has no idempotent replay: an explicit retry is a
+new attempt and can consume another unit. These request limits cap the number of
+calls, not their exact cost in USD.
 
 ## 3c. Account Avatar (Customer Web)
 

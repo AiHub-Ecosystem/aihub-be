@@ -31,7 +31,7 @@ const activeRecord: ApiKeyRecord = {
 class FakeRepository implements ApiKeyRepositoryPort {
   calls = 0;
 
-  constructor(private readonly record: ApiKeyRecord | null) {}
+  constructor(public record: ApiKeyRecord | null) {}
 
   findByHash(_hashHex: string): Promise<ApiKeyRecord | null> {
     this.calls += 1;
@@ -129,6 +129,7 @@ describe('ApiKeyAuthenticator', () => {
       maxConcurrent: 20,
       monthlyRequestQuota: null,
       hardStopOnQuota: false,
+      allowedEnvironments: ['development', 'production'],
     });
 
     expect(repository.calls).toBe(1);
@@ -362,4 +363,76 @@ describe('ApiKeyAuthenticator', () => {
     expect(cache.setCalls).toBe(0);
     expect(cache.missCalls).toBe(0);
   });
+
+  it('re-reads a key bound to one environment on every request, so a cached positive record cannot survive revocation', async () => {
+    const { authenticator, repository, cache } = createAuthenticator({
+      ...activeRecord,
+      allowedEnvironments: ['production'],
+    });
+    // A positive cache entry that predates the revocation, as the rotation and
+    // revocation commands could fail to purge.
+    cache.value = { ...activeRecord, allowedEnvironments: ['production'] };
+    const credentials = {
+      value: `aihub_prod_${'A'.repeat(43)}`,
+      environment: 'production',
+      clientIp: '203.0.113.10',
+    };
+
+    await expect(
+      authenticator.authenticate(credentials),
+    ).resolves.toMatchObject({ organizationId: 'org_acme' });
+
+    repository.record = {
+      ...activeRecord,
+      allowedEnvironments: ['production'],
+      status: 'revoked',
+    };
+    await expect(authenticator.authenticate(credentials)).rejects.toMatchObject(
+      { code: 'UNAUTHORIZED' },
+    );
+    expect(repository.calls).toBe(2);
+  });
+
+  it('keeps authenticating a legacy key that still names more than one environment', async () => {
+    const { authenticator, repository } = createAuthenticator();
+
+    await expect(
+      authenticator.authenticate({
+        value: VALID_KEY,
+        environment: 'production',
+        clientIp: '203.0.113.10',
+      }),
+    ).resolves.toMatchObject({ organizationId: 'org_acme' });
+
+    expect(repository.calls).toBe(1);
+  });
+
+  it.each([
+    ['aihub_sandbox_', 'sandbox'],
+    ['aihub_prod_', 'production'],
+  ])(
+    'authenticates a credential issued under the %s prefix only in its own environment',
+    async (prefix, environment) => {
+      const { authenticator } = createAuthenticator({
+        ...activeRecord,
+        allowedEnvironments: [environment],
+      });
+      const value = `${prefix}${'A'.repeat(43)}`;
+
+      await expect(
+        authenticator.authenticate({
+          value,
+          environment,
+          clientIp: '203.0.113.10',
+        }),
+      ).resolves.toMatchObject({ organizationId: 'org_acme' });
+      await expect(
+        authenticator.authenticate({
+          value,
+          environment: 'development',
+          clientIp: '203.0.113.10',
+        }),
+      ).rejects.toMatchObject({ code: 'ENVIRONMENT_NOT_ALLOWED' });
+    },
+  );
 });

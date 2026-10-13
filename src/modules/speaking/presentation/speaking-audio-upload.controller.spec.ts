@@ -256,6 +256,7 @@ describe('Speaking Audio upload HTTP flow', () => {
         maxConcurrent: 20,
         monthlyRequestQuota: null,
         hardStopOnQuota: false,
+        allowedEnvironments: ['production'],
       }),
     };
     const identities: UserIdentityResolverPort = {

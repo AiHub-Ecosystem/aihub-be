@@ -11,22 +11,98 @@ Sandbox usage, idempotency records, and monthly dispatch reservations live in
 `aihub_sandbox`; Redis uses logical database `/1` for sandbox cache and pacing
 state.
 
-Customer keys created through the customer-facing key-creation path may use
-`writing.grade`, `speaking.grade`, or both, but are restricted to the `sandbox`
-environment alone. The public Writing and Speaking demos accept a key only
-when it carries the selected skill's scope and the Organization has no active
-Identity Configuration. These live demo
-requests use the customer's Organization and its normal Sandbox quota, not the
-AIHUB demo Organization's key. The key-validation call does not dispatch a
-grade; each grading request authenticates the key again. This boundary is
-recorded in [ADR-0094](../adr/0094-sandbox-demo-key-admission.md).
+Customer keys created through the customer-facing key-creation path are bound to
+one environment and issued under that environment's display prefix
+(`aihub_sandbox_` or `aihub_prod_`). Keys issued before this rule keep the shared
+`aihub_sk_` prefix and remain valid in every environment their stored
+`allowed_environments` lists; the prefix is a recognition aid and never
+authorizes anything. A Sandbox key may carry only `writing.grade`,
+`speaking.grade`, or both. The public Writing and Speaking demos accept a key
+only when it carries the selected skill's scope, its stored environment matches
+the page's selection, and the Organization has no active Identity
+Configuration. These live demo requests use the customer's Organization and its
+normal Sandbox allowance, not the AIHUB demo Organization's key. The
+key-validation call does not dispatch a grade and reserves nothing; each grading
+request authenticates the key again. This boundary is recorded in
+[ADR-0094](../adr/0094-sandbox-demo-key-admission.md) and
+[ADR-0095](../adr/0095-demo-environments-and-sandbox-allowance-policy.md).
 
-Each customer Organization gets at most 25 dispatches per UTC month; the
-entire Sandbox environment, including the demo Organization, shares a
-500-dispatch monthly ceiling. The demo Organization's configured quota is an
-additional limit. Normal pacing is five requests per minute per key, one
-in-flight request per Organization, and ten across Sandbox. These are
+Each customer Organization gets at most 5 dispatches per UTC month from the
+persisted default; the entire Sandbox environment shares a 500-dispatch monthly
+ceiling. Every key, client, and Writing/Speaking skill for one Organization
+draws from the same allowance. Normal pacing is five requests per minute per
+key, one in-flight request per Organization, and ten across Sandbox. These are
 request-count ceilings, not a USD cost guarantee.
+
+## Sandbox dispatch allowance
+
+The allowance is durable policy in the control-plane database, not code:
+
+| Table                         | Holds                                                                                                         |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `sandbox_allowance_defaults`  | The default allowance per UTC month. The effective default for a month is the **latest row at or before it**. |
+| `sandbox_allowance_overrides` | One Organization's **total** allowance for one specific UTC month, replacing the default for that month.      |
+
+Migration `0037_sandbox_allowance_policy` derives two rows from the moment it
+runs: the current UTC month at `25` (the allowance already in effect) and the
+next UTC month at `5`. That is what makes the new default of five begin in the
+month after deployment while the deployment month keeps what it had. An
+allowance an operator already set for either month is left alone. Consumption
+lives in `sandbox_dispatch_reservations` and is never touched by these tables,
+so deployment and restart preserve it.
+
+Before deploying, give the AIHUB demo Organization the allowance it needs for
+the deployment month. It used to be capped by its own configured
+`monthly_request_quota`; the durable policy now applies the same default to
+every Organization, so nothing preserves that for it:
+
+```sql
+INSERT INTO sandbox_allowance_overrides (organization_id, month_start, allowance)
+VALUES ('org_...',
+        date_trunc('month', now() AT TIME ZONE 'UTC')::date,
+        500)
+ON CONFLICT (organization_id, month_start) DO UPDATE SET allowance = EXCLUDED.allowance;
+```
+
+**Change the persisted default.** Insert a row for the month you want to change:
+
+```sql
+INSERT INTO sandbox_allowance_defaults (month_start, allowance)
+VALUES (DATE '2026-12-01', 5)
+ON CONFLICT (month_start) DO UPDATE SET allowance = EXCLUDED.allowance;
+```
+
+**Set a month-specific Organization override.** It replaces the default for that
+month, does not reset consumption, and expires with the month:
+
+```sql
+INSERT INTO sandbox_allowance_overrides (organization_id, month_start, allowance)
+VALUES ('org_...', DATE '2026-11-01', 50)
+ON CONFLICT (organization_id, month_start) DO UPDATE SET allowance = EXCLUDED.allowance;
+```
+
+**Verify the effective month and allowance.** Every month boundary is UTC; there
+is no local-time input anywhere in this path.
+
+```sql
+SELECT date_trunc('month', now() AT TIME ZONE 'UTC')::date AS effective_month,
+       (SELECT allowance FROM sandbox_allowance_defaults d
+         WHERE d.month_start <= date_trunc('month', now() AT TIME ZONE 'UTC')::date
+         ORDER BY d.month_start DESC LIMIT 1) AS default_allowance,
+       (SELECT allowance FROM sandbox_allowance_overrides o
+         WHERE o.organization_id = 'org_...' AND o.month_start = date_trunc('month', now() AT TIME ZONE 'UTC')::date)
+         AS organization_override;
+
+SELECT status, count(*)
+  FROM sandbox_dispatch_reservations
+ WHERE organization_id = 'org_...' AND month_start = date_trunc('month', now() AT TIME ZONE 'UTC')::date
+ GROUP BY status;
+```
+
+Raising an allowance admits only the remaining difference. Lowering one below
+what is already consumed blocks further dispatches until the next effective
+allowance permits them. If either table cannot be read, grading fails closed
+with no dispatch and no permissive default is substituted.
 
 The demo mint route stays restricted to the Organization IDs configured in
 `AIHUB_SANDBOX_ORG_IDS`. Until its Organization, identity configuration, and
@@ -158,10 +234,12 @@ One key per person, named after them. A shared key cannot be revoked without dis
 
 For a public demo key, use only `writing.grade`, `speaking.grade`, or both;
 keep `--envs sandbox`, and provide the key directly to its holder.
+The key is issued as `aihub_sandbox_…` because it is bound to one environment.
 `/demo/scoring` requires `writing.grade`; `/demo/speaking` requires
 `speaking.grade`. The demo refuses Organizations with active Identity
 Configuration because it cannot collect an assertion signed by that
-Organization.
+Organization. A key created with several `--envs` keeps the shared `aihub_sk_`
+prefix, because a prefix names one environment.
 
 To revoke:
 

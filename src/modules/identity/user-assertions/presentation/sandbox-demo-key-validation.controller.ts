@@ -49,14 +49,29 @@ export class SandboxDemoKeyValidationController {
     );
     const authenticated = getAuthenticatedApiKey(request);
 
-    await this.validator.validate({
+    const eligibility = await this.validator.validate({
       organizationId: authenticated.organizationId,
+      // The schema default already applied while parsing; the fallback only
+      // narrows the optional field back to the contract's union.
+      environment: input.environment ?? 'sandbox',
+      allowedEnvironments: authenticated.allowedEnvironments,
       scope: input.scope,
       grantedScopes: authenticated.scopes,
     });
 
     return {
-      data: { valid: true, environment: 'sandbox', scope: input.scope },
+      data: {
+        valid: true,
+        environment: eligibility.environment,
+        scope: eligibility.scope,
+        allowance:
+          eligibility.allowance === null
+            ? null
+            : {
+                monthly_limit: eligibility.allowance.monthlyLimit,
+                reserved: eligibility.allowance.reserved,
+              },
+      },
       meta: {
         request_id: isRequestId(request.id) ? request.id : String(request.id),
       },

@@ -14,7 +14,14 @@ import type { AuthenticatedRequest } from '@/modules/identity/shared/presentatio
 import type { RequestEnvironmentConfig } from '@/modules/identity/shared/presentation/request-environment';
 import { authenticateApiKey } from './authenticate-api-key';
 
-/** Authenticates demo key checks without entering the metered grading chain. */
+/**
+ * Authenticates demo key checks without entering the metered grading chain.
+ *
+ * The stored environment binding is not forced to be Sandbox here: a legacy
+ * `aihub_sk_` key may still name more than one environment, and the demo page's
+ * selection is checked against the stored binding in the use case, where the
+ * scope it must also carry is known.
+ */
 @Injectable()
 export class SandboxDemoKeyValidationGuard implements CanActivate {
   constructor(
@@ -30,7 +37,7 @@ export class SandboxDemoKeyValidationGuard implements CanActivate {
       request,
       this.authenticator,
       this.configuration,
-      ['sandbox'],
+      { scopeFailuresByKey: true },
     );
 
     request.aihubAuth = {

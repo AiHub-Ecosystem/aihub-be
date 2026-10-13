@@ -2882,6 +2882,19 @@
                 "type": "object",
                 "required": ["scope"],
                 "properties": {
+                  "environment": {
+                    "default": "sandbox",
+                    "anyOf": [
+                      {
+                        "const": "sandbox",
+                        "type": "string"
+                      },
+                      {
+                        "const": "production",
+                        "type": "string"
+                      }
+                    ]
+                  },
                   "scope": {
                     "anyOf": [
                       {
@@ -2912,15 +2925,28 @@
                     "data": {
                       "additionalProperties": false,
                       "type": "object",
-                      "required": ["valid", "environment", "scope"],
+                      "required": [
+                        "valid",
+                        "environment",
+                        "scope",
+                        "allowance"
+                      ],
                       "properties": {
                         "valid": {
                           "const": true,
                           "type": "boolean"
                         },
                         "environment": {
-                          "const": "sandbox",
-                          "type": "string"
+                          "anyOf": [
+                            {
+                              "const": "sandbox",
+                              "type": "string"
+                            },
+                            {
+                              "const": "production",
+                              "type": "string"
+                            }
+                          ]
                         },
                         "scope": {
                           "anyOf": [
@@ -2931,6 +2957,28 @@
                             {
                               "const": "speaking.grade",
                               "type": "string"
+                            }
+                          ]
+                        },
+                        "allowance": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": ["monthly_limit", "reserved"],
+                              "properties": {
+                                "monthly_limit": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "reserved": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
                             }
                           ]
                         }
@@ -6078,7 +6126,7 @@
                       ],
                       "properties": {
                         "api_key": {
-                          "pattern": "^aihub_sk_[A-Za-z0-9]{43}$",
+                          "pattern": "^(aihub_sk_|aihub_sandbox_|aihub_prod_)[A-Za-z0-9]{43}$",
                           "type": "string"
                         },
                         "id": {
@@ -6464,7 +6512,7 @@
                       ],
                       "properties": {
                         "api_key": {
-                          "pattern": "^aihub_sk_[A-Za-z0-9]{43}$",
+                          "pattern": "^(aihub_sk_|aihub_sandbox_|aihub_prod_)[A-Za-z0-9]{43}$",
                           "type": "string"
                         },
                         "id": {

@@ -100,7 +100,6 @@ function sandboxContext(signal?: AbortSignal) {
     ...context(5_000, signal),
     organizationId: 'org_sandbox',
     environment: 'sandbox',
-    sandboxOrganizationDispatchLimit: 25,
   };
 }
 
@@ -117,6 +116,9 @@ function fakeSandboxBudget(admitted = true): SandboxDispatchBudgetPort & {
     },
     async release(requestId: string) {
       this.releaseCalls.push(requestId);
+    },
+    async allowanceFor() {
+      return { monthlyLimit: 5, reserved: 0 };
     },
   };
   return budget;
@@ -350,7 +352,6 @@ describe('HttpOperationDispatcher', () => {
       {
         organizationId: 'org_sandbox',
         requestId: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
-        organizationLimit: 25,
       },
     ]);
     expect(budget.releaseCalls).toEqual(['req_01J8QK3M7XW2P5NRTVA9BCDEFG']);

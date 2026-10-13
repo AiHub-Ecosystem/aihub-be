@@ -76,16 +76,22 @@ function validatedScopes(scopes: readonly string[]): readonly string[] {
   return requested;
 }
 
+/**
+ * A new key is bound to one environment and advertised under that
+ * environment's display prefix, so a holder can tell what a credential is for
+ * without it ever granting access. Environments without a prefix of their own
+ * keep the shared one.
+ */
 function validatedEnvironments(
   environments: readonly string[] | undefined,
 ): readonly string[] {
-  if (environments === undefined) {
-    return DEFAULT_ENVIRONMENTS;
-  }
+  const requested =
+    environments === undefined
+      ? [...DEFAULT_ENVIRONMENTS]
+      : [...new Set(environments)];
 
-  const requested = [...new Set(environments)];
   if (
-    requested.length === 0 ||
+    requested.length !== 1 ||
     requested.some(
       (environment) => !CUSTOMER_ENVIRONMENTS.includes(environment),
     )
@@ -100,12 +106,8 @@ function validateSandboxKey(
   scopes: readonly string[],
   environments: readonly string[],
 ): void {
-  if (!environments.includes('sandbox')) {
-    return;
-  }
-
   if (
-    environments.length !== 1 ||
+    environments.includes('sandbox') &&
     scopes.some((scope) => !SANDBOX_SCOPES.includes(scope))
   ) {
     throw invalidRequest();
@@ -185,7 +187,7 @@ export class CreateOrganizationApiKey {
       ),
     ];
 
-    const generated = generateOrganizationApiKey(now);
+    const generated = generateOrganizationApiKey(now, allowedEnvironments[0]);
     const result = await this.apiKeys.createApiKey({
       context: input.context,
       organizationId: input.organizationId,

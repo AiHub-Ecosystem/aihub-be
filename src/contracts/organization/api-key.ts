@@ -89,7 +89,12 @@ export const OrganizationApiKeySecretResponseSchema = Type.Object(
     data: Type.Composite(
       [
         Type.Object({
-          api_key: Type.String({ pattern: '^aihub_sk_[A-Za-z0-9]{43}$' }),
+          api_key: Type.String({
+            // Every prefix a key may be issued under: the shared one carried by
+            // every credential issued before ADR-0095 plus the per-environment
+            // pair. Recognition only — the durable environment binding authorizes.
+            pattern: '^(aihub_sk_|aihub_sandbox_|aihub_prod_)[A-Za-z0-9]{43}$',
+          }),
         }),
         OrganizationApiKeySchema,
       ],

@@ -109,6 +109,7 @@ describe('Sandbox assertion HTTP flow', () => {
       maxConcurrent: 3,
       monthlyRequestQuota: 500,
       hardStopOnQuota: true,
+      allowedEnvironments: ['sandbox'],
     };
   });
 

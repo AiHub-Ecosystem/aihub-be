@@ -161,10 +161,10 @@ describe('Organization API key creation HTTP flow', () => {
     expect(response.statusCode).toBe(201);
     expect(response.json()).toEqual({
       data: {
-        api_key: expect.stringMatching(/^aihub_sk_[A-Za-z0-9]{43}$/),
+        api_key: expect.stringMatching(/^aihub_prod_[A-Za-z0-9]{43}$/),
         id: expect.stringMatching(/^ak_[0-9A-HJKMNP-TV-Z]{26}$/),
         name: 'Prod backend',
-        key_prefix: expect.stringMatching(/^aihub_sk_[A-Za-z0-9]{6}$/),
+        key_prefix: expect.stringMatching(/^aihub_prod_[A-Za-z0-9]{6}$/),
         scopes: ['writing.grade'],
         allowed_environments: ['production'],
         status: 'active',
@@ -176,21 +176,35 @@ describe('Organization API key creation HTTP flow', () => {
     });
   });
 
-  it('returns a body the published response contract accepts', async () => {
-    const response = await create();
+  it.each([['production'], ['sandbox']])(
+    'returns a %s key in a body the published response contract accepts',
+    async (environment) => {
+      const response = await create({
+        name: 'Demo key',
+        scopes: ['writing.grade', 'speaking.grade'],
+        allowed_environments: [environment],
+      });
 
-    // The contract is what integrators generate clients from, so a response
-    // the published schema rejects is a broken contract, not a passing test.
-    expect(
-      Value.Check(OrganizationApiKeySecretResponseSchema, response.json()),
-    ).toBe(true);
-  });
+      // The contract is what integrators generate clients from, so a response
+      // the published schema rejects is a broken contract, not a passing test.
+      // Its credential pattern lists the prefixes literally, so this is also
+      // what catches a new prefix that never reached the contract.
+      expect(
+        Value.Check(OrganizationApiKeySecretResponseSchema, response.json()),
+      ).toBe(true);
+      expect(response.json().data.api_key).toMatch(
+        new RegExp(
+          `^aihub_(${environment === 'sandbox' ? 'sandbox' : 'prod'}_)[A-Za-z0-9]{43}$`,
+        ),
+      );
+    },
+  );
 
   it('derives the display prefix from the raw credential it returns', async () => {
     const response = await create();
 
     const { api_key: rawKey, key_prefix: prefix } = response.json().data;
-    expect(prefix).toBe(rawKey.slice(0, 15));
+    expect(prefix).toBe(rawKey.slice(0, 17));
   });
 
   it('marks the credential response uncacheable', async () => {
@@ -208,7 +222,7 @@ describe('Organization API key creation HTTP flow', () => {
     expect(persisted.keyHash).not.toContain(rawKey);
     expect(JSON.stringify(persisted)).not.toContain(rawKey);
     expect(persisted.organizationId).toBe(ORGANIZATION_ID);
-    expect(persisted.keyPrefix).toBe(rawKey.slice(0, 15));
+    expect(persisted.keyPrefix).toBe(rawKey.slice(0, 17));
   });
 
   it('creates a key for an organization admin', async () => {

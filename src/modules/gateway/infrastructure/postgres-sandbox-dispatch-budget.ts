@@ -1,4 +1,5 @@
 import type {
+  SandboxAllowanceSnapshot,
   SandboxDispatchBudgetPort,
   SandboxDispatchReservation,
 } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
@@ -7,6 +8,56 @@ import type { PrismaClient } from '@prisma-client/client';
 import { createPostgresSandboxDispatchBudgetClient } from './postgres-sandbox-dispatch-budget.fixture-client';
 
 export const SANDBOX_ENVIRONMENT_MONTHLY_LIMIT = 500;
+
+interface AllowanceReader {
+  sandboxAllowanceOverride: {
+    findUnique(input: {
+      where: {
+        organizationId_monthStart: {
+          organizationId: string;
+          monthStart: Date;
+        };
+      };
+    }): Promise<{ allowance: number } | null>;
+  };
+  sandboxAllowanceDefault: {
+    findFirst(input: {
+      where: { monthStart: { lte: Date } };
+      orderBy: { monthStart: 'desc' };
+    }): Promise<{ allowance: number } | null>;
+  };
+}
+
+function utcMonth(now: Date): { month: number; monthStart: Date } {
+  return {
+    month: now.getUTCFullYear() * 100 + now.getUTCMonth() + 1,
+    monthStart: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
+  };
+}
+
+/**
+ * A month-specific override replaces the persisted default for that month; a
+ * month with no override falls back to the latest default at or before it.
+ *
+ * null means the policy is missing for this month, which is not the same as an
+ * allowance of zero and is never treated as unlimited.
+ */
+async function effectiveAllowance(
+  reader: AllowanceReader,
+  organizationId: string,
+  monthStart: Date,
+): Promise<number | null> {
+  const override = await reader.sandboxAllowanceOverride.findUnique({
+    where: { organizationId_monthStart: { organizationId, monthStart } },
+  });
+  if (override !== null) return override.allowance;
+
+  const persistedDefault = await reader.sandboxAllowanceDefault.findFirst({
+    where: { monthStart: { lte: monthStart } },
+    orderBy: { monthStart: 'desc' },
+  });
+  return persistedDefault?.allowance ?? null;
+}
 
 export class PostgresSandboxDispatchBudget
   implements SandboxDispatchBudgetPort
@@ -27,10 +78,7 @@ export class PostgresSandboxDispatchBudget
 
   async reserve(input: SandboxDispatchReservation): Promise<boolean> {
     const now = this.now();
-    const month = now.getUTCFullYear() * 100 + now.getUTCMonth() + 1;
-    const monthStart = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-    );
+    const { month, monthStart } = utcMonth(now);
 
     return this.client.$transaction(async (transaction) => {
       // ponytail: one lock per UTC month serializes the 500/month admission check; split by Organization if dispatch volume makes this a bottleneck.
@@ -40,6 +88,18 @@ export class PostgresSandboxDispatchBudget
         182,
         month,
       );
+
+      // Reading the allowance under the same lock as the counts is what makes a
+      // lowering override take effect atomically: there is no window in which a
+      // request is admitted against an allowance an operator has just reduced.
+      const monthlyLimit = await effectiveAllowance(
+        transaction,
+        input.organizationId,
+        monthStart,
+      );
+      if (monthlyLimit === null) {
+        throw new Error('Sandbox allowance policy is unavailable');
+      }
 
       // Both counts run under the month's advisory lock, so no reservation
       // lands between them.
@@ -51,8 +111,7 @@ export class PostgresSandboxDispatchBudget
       const environmentCount =
         await transaction.sandboxDispatchReservation.count({ where: reserved });
       if (
-        (input.organizationLimit !== null &&
-          organizationCount >= input.organizationLimit) ||
+        organizationCount >= monthlyLimit ||
         environmentCount >= SANDBOX_ENVIRONMENT_MONTHLY_LIMIT
       ) {
         return false;
@@ -75,6 +134,28 @@ export class PostgresSandboxDispatchBudget
       where: { requestId, status: 'reserved' },
       data: { status: 'released', releasedAt: this.now() },
     });
+  }
+
+  async allowanceFor(
+    organizationId: string,
+  ): Promise<SandboxAllowanceSnapshot | null> {
+    const { monthStart } = utcMonth(this.now());
+    try {
+      const monthlyLimit = await effectiveAllowance(
+        this.client,
+        organizationId,
+        monthStart,
+      );
+      if (monthlyLimit === null) return null;
+      return {
+        monthlyLimit,
+        reserved: await this.client.sandboxDispatchReservation.count({
+          where: { status: 'reserved', monthStart, organizationId },
+        }),
+      };
+    } catch {
+      return null;
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

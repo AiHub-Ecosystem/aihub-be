@@ -444,7 +444,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"scope\": \"<string>\"\n}",
+          "raw": "{\n  \"scope\": \"<string>\",\n  \"environment\": \"<string>\"\n}",
           "options": {
             "raw": {
               "language": "json"

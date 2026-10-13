@@ -4,10 +4,11 @@
 - Date: 2026-10-13
 - Related: [AiHub-Frontend #68](https://github.com/AiHub-Ecosystem/AiHub-Frontend/issues/68), [FE PR #67](https://github.com/AiHub-Ecosystem/AiHub-Frontend/pull/67), [BE PR #602](https://github.com/AiHub-Ecosystem/aihub-be/pull/602), frontend ADR-0018
 - Amends: [ADR-0056](0056-customer-sandbox-test-tier.md) for the default Organization Sandbox allowance and monthly overrides; [ADR-0094](0094-sandbox-demo-key-admission.md) for demo environment selection and fresh admission
+- Implemented by: issue [#617](https://github.com/AiHub-Ecosystem/aihub-be/issues/617); migration `0037_sandbox_allowance_policy`, `src/modules/gateway/public/sandbox-dispatch-budget.ts`, `src/modules/identity/domain/api-key.ts`
 
 ## Decision
 
-This records the accepted design; implementation is pending.
+This records the accepted design. It is implemented; see the runbook in [`../operations/sandbox-provisioning.md`](../operations/sandbox-provisioning.md) for changing the persisted default and a month-specific Organization override.
 
 New customer API keys are bound to one environment. Their display prefixes are `aihub_sandbox_` and `aihub_prod_`. Key material continues to come from a cryptographically secure random generator with at least the existing 256 bits of entropy; AIHUB stores only a one-way hash and enforces hash uniqueness. A prefix helps a person recognize a key but never grants access. The persisted `allowed_environments` value is authoritative and must contain exactly the selected environment for a new key. Existing `aihub_sk_` keys remain valid under their stored `allowed_environments`, including keys that explicitly allow more than one environment. Existing hashes cannot be rewritten into a new prefix because the raw key is not stored.
 

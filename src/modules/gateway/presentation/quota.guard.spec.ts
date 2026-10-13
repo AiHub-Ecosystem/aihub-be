@@ -41,6 +41,7 @@ const baseAuthenticated: AuthenticatedApiKey = {
   maxConcurrent: 20,
   monthlyRequestQuota: 5,
   hardStopOnQuota: false,
+  allowedEnvironments: ['production'],
 };
 
 function contextFor(request: Record<string, unknown>): ExecutionContext {

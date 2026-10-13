@@ -44,6 +44,7 @@ const authenticatedApiKey: AuthenticatedApiKey = {
   maxConcurrent: 20,
   monthlyRequestQuota: null,
   hardStopOnQuota: false,
+  allowedEnvironments: ['production'],
 };
 
 const gradePayload = {
