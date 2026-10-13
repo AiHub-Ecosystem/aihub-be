@@ -134,13 +134,27 @@ The source-IP behavior follows accepted ADR-0086. The response header,
 completion-event fields, BFF source marker, AIHUB-only nginx access log, and
 size-based rotation are implemented. Focused HTTP tests cover generated IDs,
 trusted-proxy IP resolution, API-key IDs, and the BFF guard. Production
-deployment and evidence are still pending. The managed helper now installs only
-the two AIHUB vhosts, the AIHUB log-format include, and the AIHUB logrotate
-policy, and ensures the active access log is `root:adm` mode `0640` without
-truncating records; it leaves the shared host configuration outside its
-allowlist.
+deployment and evidence were pending when this ADR was accepted. The managed
+helper installs only the two AIHUB vhosts, the AIHUB log-format include, and the
+AIHUB logrotate policy, and ensures the active access log is `root:adm` mode
+`0640` without truncating records; it leaves the shared host configuration
+outside its allowlist.
 
-Before closing #450, run `pnpm verify`, confirm #287 records every IP-bearing
-store and the application/nginx bounds are documented, deploy the change on
-`main`, then record the production commit and observed IP/request-ID
-correlation on the issue. Issue #139 is closed; it is no longer a blocker.
+Production confirmation on 2026-10-13: `ops/status.sh` reported Production and
+Sandbox on revision `28510a2`, healthy with readiness `200`, zero restarts, and
+zero error-like log lines. Two probes from distinct source addresses returned
+AIHUB request IDs that matched both `request_completed` and the AIHUB nginx
+access records. In both events, `client_ip` matched nginx's observed address;
+one probe supplied a forged `X-Forwarded-For` value, which did not change the
+resolved address. Three recent Web Session events were labeled
+`customer_web_bff`. The observed request IDs and results are recorded on
+[#450](https://github.com/AiHub-Ecosystem/aihub-be/issues/450). The inventory
+in [#287](https://github.com/AiHub-Ecosystem/aihub-be/issues/287) now reflects
+the production container-log settings; application and nginx retention bounds
+are recorded there and in #363. CI `pnpm verify` passed for the deployed main
+revision.
+
+The production evidence gate for #450 is complete. #139 is closed and its
+production source-IP behavior is now observed. #436 remains open; until it
+validates end-user forwarding, Web Session events correctly identify the
+observed BFF address.
