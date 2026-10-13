@@ -1,6 +1,6 @@
 # ADR-0086: Trust the single nginx hop for caller IPs
 
-- Status: Accepted
+- Status: Accepted; authentication email dimensions amended by [ADR-0096](0096-authentication-rate-limits-by-caller-and-address.md)
 - Date: 2026-10-09
 - Related: [#139](https://github.com/AiHub-Ecosystem/aihub-be/issues/139), [ADR-0079](0079-managed-nginx-configuration-on-shared-vps.md), [ADR-0081](0081-aihub-owned-customer-web-web-sessions.md)
 
@@ -18,7 +18,7 @@ Keep `/ready` tied to the raw socket peer so it remains private when reached thr
 
 ## Consequences
 
-- Public callers receive separate IP-scoped auth and API-key failure budgets. Existing thresholds, windows, email dimensions, and counter behavior stay unchanged.
+- Public callers receive separate IP-scoped auth and API-key failure budgets. Existing thresholds and IP windows stay unchanged; authentication email dimensions follow ADR-0096.
 - A caller-supplied left side of `X-Forwarded-For` cannot choose the public caller's bucket because nginx appends its observed address and Fastify only accepts forwarded addresses from the host gateway.
 - Environment binding uses nginx's routed `Host`, not `X-Forwarded-Host`, so caller-supplied proxy headers cannot switch the authentication environment.
 - Direct container peers are not trusted to supply forwarded addresses; their socket address remains their bucket. If Docker recreates the backend network with another gateway, update the trusted peer before rollout or public requests will again share the socket-peer bucket.

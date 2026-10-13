@@ -61,6 +61,10 @@ export interface EmailDeliveryTransaction {
  * which would drift the first time the table changed.
  */
 export interface EmailDeliveryRequestWriterPort {
+  reserveAuthenticationEmailRecipient(
+    transaction: EmailDeliveryTransaction,
+    input: { readonly email: string; readonly now: Date },
+  ): Promise<boolean>;
   insert(
     transaction: EmailDeliveryTransaction,
     input: InsertEmailDeliveryRequestInput,

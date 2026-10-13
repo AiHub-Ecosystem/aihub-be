@@ -178,6 +178,31 @@ none of them is a lost email:
 The `id` is safe to quote in a ticket. It is the correlation handle between the
 alert, this row, and the instance that emitted the event.
 
+## Authentication recipient counters
+
+The authentication email ceiling in [ADR-0096](../adr/0096-authentication-rate-limits-by-caller-and-address.md)
+uses `auth_email_recipient_rate_limits`. It stores a versioned HMAC, a fixed
+24-hour window, and a count capped at nine; it does not store the recipient
+address. The HMAC key is derived from the Vault-provided Email Outbox keyring.
+Expired rows are removed at startup and hourly, so physical deletion can lag
+the 24-hour expiry by up to one hour. The table is included in Postgres dumps.
+
+To check active versions or overdue cleanup without reading fingerprints:
+
+```sql
+SELECT key_version, count(*) AS active_rows
+FROM auth_email_recipient_rate_limits
+WHERE expires_at > now()
+GROUP BY key_version;
+
+SELECT count(*) AS expired_rows
+FROM auth_email_recipient_rate_limits
+WHERE expires_at <= now();
+```
+
+Keep old Email Outbox key versions until queued ciphertext no longer needs them
+and their recipient counters have expired and been removed.
+
 ## What never appears in a signal
 
 The dispatch path cannot emit an email address, a token, a message body, a raw

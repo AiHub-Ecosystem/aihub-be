@@ -32,7 +32,7 @@ export interface LoginIdentity {
  * `AuthIdentityConflictError` when the email or username is taken.
  */
 export interface UserAccountRepositoryPort {
-  register(input: RegisterLocalAccountInput): Promise<void>;
+  register(input: RegisterLocalAccountInput): Promise<'queued' | 'suppressed'>;
   findLoginIdentityByEmail(email: string): Promise<LoginIdentity | undefined>;
   findLoginIdentityByUserId(userId: string): Promise<LoginIdentity | undefined>;
   findUserAccountStatus(

@@ -10,7 +10,9 @@ import type { InMemoryAuthState } from './in-memory-auth.state';
 export class InMemoryUserAccountAdapter implements UserAccountRepositoryPort {
   constructor(private readonly state: InMemoryAuthState) {}
 
-  async register(input: RegisterLocalAccountInput): Promise<void> {
+  async register(
+    input: RegisterLocalAccountInput,
+  ): Promise<'queued' | 'suppressed'> {
     const taken = [...this.state.accounts.values()].some(
       (account) =>
         account.email === input.email || account.username === input.username,
@@ -39,6 +41,7 @@ export class InMemoryUserAccountAdapter implements UserAccountRepositoryPort {
     if (input.emailDelivery !== undefined) {
       this.state.emailDeliveryRequests.push(input.emailDelivery);
     }
+    return 'queued';
   }
 
   async findLoginIdentityByEmail(

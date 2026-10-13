@@ -56,6 +56,17 @@ an intermediary, such as the Customer Web BFF, rather than the end user; the
 recorded source must make that distinction explicit.
 _Avoid_: end-user IP (unless verified forwarding is in place)
 
+**Caller-and-address budget**:
+A per-caller allowance for requests concerning one email address. It prevents one
+caller's repeated attempts from consuming every other caller's allowance.
+_Avoid_: email-only caller key
+
+**Authentication email ceiling**:
+A shared maximum for queued verification and password-recovery emails to one
+email address in a 24-hour window, across registration, verification resend, and
+password recovery.
+_Avoid_: per-route email cap
+
 **Personal-data classification**:
 An operational description of what personal data represents, such as a direct
 identifier, credential, user content, pseudonymous identifier, or metadata; it

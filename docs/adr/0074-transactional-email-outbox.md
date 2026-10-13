@@ -1,6 +1,6 @@
 # ADR-0074: Transactional outbox for account and invitation email
 
-- Status: Accepted; transaction-handle boundary amended by [ADR-0083](0083-email-delivery-transaction-handle-lifetime.md)
+- Status: Accepted; transaction-handle boundary amended by [ADR-0083](0083-email-delivery-transaction-handle-lifetime.md); authentication rate limits amended by [ADR-0096](0096-authentication-rate-limits-by-caller-and-address.md)
 - Date: 2026-10-05
 - Related issue: [#230](https://github.com/AiHub-Ecosystem/aihub-be/issues/230)
 - Amends: [ADR-0025](0025-password-recovery-boundary.md) (email delivery only), [ADR-0038](0038-bearer-management-idempotency-scope.md) (invitation email delivery only)
@@ -13,7 +13,7 @@ Registration, verification resend, password recovery, and organization invitatio
 
 Each affected operation writes its Email Delivery Request in the same PostgreSQL transaction as its account, token, or invitation mutation; invitation audit evidence stays in that transaction as well. A failed transaction commits neither the mutation nor the request. The HTTP request returns after this commit and never waits for Resend. Redis is not used as a queue because it is ephemeral protection/cache state, not durable control-plane storage.
 
-Registration and invitation creation keep their `201` success status and add `emailDeliveryStatus: "queued"`. That value is the acceptance-time result: it confirms AIHUB accepted the request for dispatch, not that a provider accepted it or that it reached an inbox. Verification resend remains a generic bodyless `202`. Password recovery remains a generic `202` for known, unknown, pending, and disabled accounts; its copy says that AIHUB accepted a request to send instructions only if the account is eligible and does not confirm email delivery. These two generic routes do not expose whether an outbox item exists. Provider delivery failure is no longer a synchronous `503`; a failure to commit durable state and its outbox request remains a safe `5xx`.
+Registration and invitation creation keep their `201` success status and add `emailDeliveryStatus: "queued"`. That value is the acceptance-time result: it confirms AIHUB accepted the request for dispatch, not that a provider accepted it or that it reached an inbox. Authentication registration can return `suppressed` when the recipient ceiling in ADR-0096 is full; it still commits the pending account without an outbox item. Verification resend remains a generic bodyless `202`. Password recovery remains a generic `202` for known, unknown, pending, and disabled accounts; its copy says that AIHUB accepted a request to send instructions only if the account is eligible and does not confirm email delivery. These two generic routes do not expose whether an outbox item exists. Provider delivery failure is no longer a synchronous `503`; a failure to commit durable state and its outbox request remains a safe `5xx`.
 
 ## Delivery lifecycle and retry
 
@@ -27,7 +27,7 @@ Each existing application instance runs the poller against its own environment d
 
 The outbox retains the email payload only as authenticated ciphertext under a versioned AEAD key supplied through Vault. The key version accompanies the ciphertext, and old key versions remain available while queued items need them. Plaintext message content and tokens are never persisted or logged. Token tables continue to store hashes; the encrypted outbox payload is erased when the request reaches a terminal state.
 
-Existing per-route rate limits and token lifetimes do not change: verification and organization invitation tokens remain valid for 24 hours, and password reset tokens for one hour. A delivery failure does not refund a rate-limit attempt. Invitation idempotency replay returns the original `201` result without creating another outbox item or spending another allowance.
+Existing per-route IP limits and token lifetimes do not change: verification and organization invitation tokens remain valid for 24 hours, and password reset tokens for one hour. Authentication email budgets follow ADR-0096. A delivery failure does not refund a rate-limit attempt. Invitation idempotency replay returns the original `201` result without creating another outbox item or spending another allowance.
 
 ## Consequences
 

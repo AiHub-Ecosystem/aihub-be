@@ -105,6 +105,7 @@ import { PostgresEmailCredentialRepository } from './infrastructure/postgres-ema
 import {
   PostgresEmailDeliveryRequestRepository,
   PostgresEmailDispatchStore,
+  pruneExpiredAuthEmailRecipientLimits,
 } from './infrastructure/postgres-email-delivery-request.repository';
 import { PostgresLocalAuthRepository } from './infrastructure/postgres-local-auth.repository';
 import { PostgresWebSessionRepository } from './infrastructure/postgres-web-session.repository';
@@ -132,9 +133,12 @@ import {
     },
     {
       provide: PostgresLocalAuthRepository,
-      inject: [RUNTIME_PRISMA_CLIENT],
-      useFactory: (runtime: PrismaClientHolder): PostgresLocalAuthRepository =>
-        new PostgresLocalAuthRepository(runtime.prisma),
+      inject: [RUNTIME_PRISMA_CLIENT, EMAIL_DELIVERY_REQUEST_WRITER],
+      useFactory: (
+        runtime: PrismaClientHolder,
+        emailRequests: EmailDeliveryRequestWriterPort,
+      ): PostgresLocalAuthRepository =>
+        new PostgresLocalAuthRepository(runtime.prisma, emailRequests),
     },
     {
       provide: AUTH_MFA_REPOSITORY,
@@ -290,8 +294,13 @@ import {
     // port, inside that mutation's transaction.
     {
       provide: EMAIL_DELIVERY_REQUEST_WRITER,
-      useFactory: (): EmailDeliveryRequestWriterPort =>
-        new PostgresEmailDeliveryRequestRepository(),
+      inject: [RUNTIME_SECRET_PROVIDER],
+      useFactory: (
+        provider: RuntimeSecretProvider,
+      ): EmailDeliveryRequestWriterPort =>
+        new PostgresEmailDeliveryRequestRepository(
+          provider.getSnapshot().emailOutbox,
+        ),
     },
     {
       provide: EMAIL_PAYLOAD_CIPHER,
@@ -337,6 +346,8 @@ import {
           EMAIL_OUTBOX_POLL_INTERVAL_MS,
           () => store.backlog({ now: new Date() }),
           configuration.NODE_ENV !== 'test',
+          () =>
+            pruneExpiredAuthEmailRecipientLimits(runtime.prisma, new Date()),
         );
       },
       inject: [EmailDeliveryPoller, RUNTIME_PRISMA_CLIENT, appConfig.KEY],

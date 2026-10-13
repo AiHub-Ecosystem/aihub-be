@@ -54,11 +54,9 @@ import { type VerificationTokenPort } from './verification-token.port';
 const LOCAL_AUTH_RATE_LIMITS = {
   register: {
     ip: { scope: 'register_ip', limit: 5, windowMs: 15 * 60 * 1000 },
-    email: { scope: 'register_email', limit: 3, windowMs: 24 * 60 * 60 * 1000 },
   },
   resend: {
     ip: { scope: 'resend_ip', limit: 3, windowMs: 15 * 60 * 1000 },
-    email: { scope: 'resend_email', limit: 3, windowMs: 24 * 60 * 60 * 1000 },
   },
   refresh: {
     ip: { scope: 'refresh_ip', limit: 20, windowMs: 5 * 60 * 1000 },
@@ -66,12 +64,16 @@ const LOCAL_AUTH_RATE_LIMITS = {
   },
   forgotPassword: {
     ip: { scope: 'forgot_ip', limit: 3, windowMs: 15 * 60 * 1000 },
-    email: { scope: 'forgot_email', limit: 3, windowMs: 24 * 60 * 60 * 1000 },
   },
   resetPassword: {
     ip: { scope: 'reset_ip', limit: 10, windowMs: 5 * 60 * 1000 },
     token: { scope: 'reset_token', limit: 5, windowMs: 15 * 60 * 1000 },
   },
+} as const;
+const AUTH_EMAIL_REQUEST_LIMIT = {
+  scope: 'auth_email_request',
+  limit: 3,
+  windowMs: 24 * 60 * 60 * 1000,
 } as const;
 const PASSWORD_RECOVERY_MESSAGE =
   'If the account exists and is eligible, AIHUB has accepted a request to send password reset instructions.';
@@ -81,7 +83,7 @@ export interface RegisteredLocalAccount {
   readonly username: string;
   readonly status: 'pending_verification';
   /** Acceptance-time only: the request is queued, not yet with the provider. */
-  readonly emailDeliveryStatus: 'queued';
+  readonly emailDeliveryStatus: 'queued' | 'suppressed';
 }
 
 export interface LocalAuthServiceClock {
@@ -159,15 +161,19 @@ export class LocalAuthService {
 
     await this.enforceRateLimits([
       { ...LOCAL_AUTH_RATE_LIMITS.register.ip, key: ip },
-      { ...LOCAL_AUTH_RATE_LIMITS.register.email, key: normalized.email },
+      {
+        ...AUTH_EMAIL_REQUEST_LIMIT,
+        key: JSON.stringify([ip, normalized.email]),
+      },
     ]);
 
     const now = this.clock.now();
     const issued = this.tokenIssuer.issue(now);
     const passwordHash = await this.passwordHasher.hash(normalized.password);
+    let emailDeliveryStatus: 'queued' | 'suppressed';
 
     try {
-      await this.userAccounts.register({
+      emailDeliveryStatus = await this.userAccounts.register({
         email: normalized.email,
         username: normalized.username,
         passwordHash,
@@ -202,7 +208,7 @@ export class LocalAuthService {
       email: normalized.email,
       username: normalized.username,
       status: 'pending_verification',
-      emailDeliveryStatus: 'queued',
+      emailDeliveryStatus,
     };
   }
 
@@ -252,7 +258,10 @@ export class LocalAuthService {
 
     await this.enforceRateLimits([
       { ...LOCAL_AUTH_RATE_LIMITS.resend.ip, key: ip },
-      { ...LOCAL_AUTH_RATE_LIMITS.resend.email, key: normalizedEmail },
+      {
+        ...AUTH_EMAIL_REQUEST_LIMIT,
+        key: JSON.stringify([ip, normalizedEmail]),
+      },
     ]);
 
     const now = this.clock.now();
@@ -297,8 +306,8 @@ export class LocalAuthService {
         key: ip,
       },
       {
-        ...LOCAL_AUTH_RATE_LIMITS.forgotPassword.email,
-        key: normalizedEmail,
+        ...AUTH_EMAIL_REQUEST_LIMIT,
+        key: JSON.stringify([ip, normalizedEmail]),
       },
     ]);
 

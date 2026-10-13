@@ -2,6 +2,7 @@ import { ulid } from 'ulid';
 
 import { AuthIdentityConflictError } from '@/modules/auth/application/auth-identity-conflict.error';
 import type {
+  EmailDeliveryRequestWriterPort,
   EmailDeliveryTransaction,
   InsertEmailDeliveryRequestInput,
 } from '@/modules/auth/application/email-delivery-request.port';
@@ -163,12 +164,20 @@ export class PostgresLocalAuthRepository
 {
   constructor(
     private readonly client: AuthRepositoryClient,
-    private readonly emailDeliveryRequests: PostgresEmailDeliveryRequestRepository = new PostgresEmailDeliveryRequestRepository(),
+    private readonly emailDeliveryRequests: EmailDeliveryRequestWriterPort = new PostgresEmailDeliveryRequestRepository(),
   ) {}
 
-  async register(input: RegisterLocalAccountInput): Promise<void> {
+  async register(
+    input: RegisterLocalAccountInput,
+  ): Promise<'queued' | 'suppressed'> {
     try {
-      await authTransaction(this.client, async (transaction) => {
+      return await authTransaction(this.client, async (transaction) => {
+        const recipientAllowed =
+          input.emailDelivery === undefined ||
+          (await this.emailDeliveryRequests.reserveAuthenticationEmailRecipient(
+            transaction as unknown as EmailDeliveryTransaction,
+            { email: input.email, now: input.now },
+          ));
         const userId = `usr_${ulid()}`;
         await transaction.userAccount.create({
           data: {
@@ -200,7 +209,10 @@ export class PostgresLocalAuthRepository
             browserBindingHash: input.browserBindingHash ?? null,
           },
         });
-        await this.insertEmailDelivery(transaction, input.emailDelivery);
+        if (recipientAllowed) {
+          await this.insertEmailDelivery(transaction, input.emailDelivery);
+        }
+        return recipientAllowed ? 'queued' : 'suppressed';
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -232,6 +244,16 @@ export class PostgresLocalAuthRepository
           row.status !== 'pending_verification' ||
           typeof row.id !== 'string' ||
           typeof row.canonical_email !== 'string'
+        ) {
+          return undefined;
+        }
+
+        if (
+          input.emailDelivery !== undefined &&
+          !(await this.emailDeliveryRequests.reserveAuthenticationEmailRecipient(
+            transaction as unknown as EmailDeliveryTransaction,
+            { email: input.email, now: input.now },
+          ))
         ) {
           return undefined;
         }
@@ -282,6 +304,16 @@ export class PostgresLocalAuthRepository
         row.status !== 'active' ||
         typeof row.id !== 'string' ||
         typeof row.canonical_email !== 'string'
+      ) {
+        return undefined;
+      }
+
+      if (
+        input.emailDelivery !== undefined &&
+        !(await this.emailDeliveryRequests.reserveAuthenticationEmailRecipient(
+          transaction as unknown as EmailDeliveryTransaction,
+          { email: input.email, now: input.now },
+        ))
       ) {
         return undefined;
       }

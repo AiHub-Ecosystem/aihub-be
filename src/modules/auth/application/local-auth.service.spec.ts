@@ -433,7 +433,7 @@ describe('LocalAuthService', () => {
           windowMs: 900000,
         }),
         expect.objectContaining({
-          scope: 'forgot_email',
+          scope: 'auth_email_request',
           limit: 3,
           windowMs: 86400000,
         }),

@@ -52,7 +52,22 @@ Rotation is startup-only:
    still valid.
 2. Confirm Agent renders the new snapshot without printing it.
 3. Restart instances gradually and run health plus one safe downstream request.
-4. Retire the old credential only after every instance is healthy.
+4. Retire the old credential only after every instance is healthy. For the
+   `email-outbox` keyring, distribute the new version to every instance while
+   keeping the old version current; only then switch the current version and
+   restart all instances. Retain an old key while queued ciphertext uses it or
+   while an active recipient counter uses its version:
+
+   ```sql
+   SELECT key_version, count(*)
+   FROM auth_email_recipient_rate_limits
+   WHERE expires_at > now()
+   GROUP BY key_version;
+   ```
+
+   The query exposes versions and counts only. The application deletes expired
+   counters at startup and hourly; wait for cleanup as well as expiry before
+   removing a version.
 
 Rollback restores the previous approved KV versions, restarts Vault Agent and
 the application, and repeats the same checks. It never reintroduces a

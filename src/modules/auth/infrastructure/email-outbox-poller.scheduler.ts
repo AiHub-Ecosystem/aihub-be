@@ -16,6 +16,7 @@ import { EmailDeliveryPoller } from '@/modules/auth/application/email-delivery-p
 
 /** How often an instance looks for work. The lease, not this, bounds overlap. */
 export const EMAIL_OUTBOX_POLL_INTERVAL_MS = 5_000;
+export const AUTH_EMAIL_RECIPIENT_LIMIT_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 /**
  * Runs the poller in this instance, against this instance's own database
@@ -33,6 +34,7 @@ export class EmailOutboxPollerScheduler
 {
   private readonly logger = new Logger(EmailOutboxPollerScheduler.name);
   private timer: NodeJS.Timeout | undefined;
+  private cleanupTimer: NodeJS.Timeout | undefined;
   private running = false;
 
   /**
@@ -47,6 +49,7 @@ export class EmailOutboxPollerScheduler
       readonly EmailOutboxBacklogSample[]
     >,
     private readonly enabled = true,
+    private readonly pruneExpiredRecipientLimits?: () => Promise<number>,
   ) {}
 
   onModuleInit(): void {
@@ -57,6 +60,13 @@ export class EmailOutboxPollerScheduler
     this.timer = setInterval(() => {
       void this.pass();
     }, this.intervalMs);
+    if (this.pruneExpiredRecipientLimits !== undefined) {
+      void this.pruneExpiredRecipientCounters();
+      this.cleanupTimer = setInterval(() => {
+        void this.pruneExpiredRecipientCounters();
+      }, AUTH_EMAIL_RECIPIENT_LIMIT_CLEANUP_INTERVAL_MS);
+      this.cleanupTimer.unref();
+    }
     // A pending claim must not hold the process open on shutdown; the lease
     // releases it once it lapses.
     this.timer.unref();
@@ -66,6 +76,10 @@ export class EmailOutboxPollerScheduler
     if (this.timer !== undefined) {
       clearInterval(this.timer);
       this.timer = undefined;
+    }
+    if (this.cleanupTimer !== undefined) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = undefined;
     }
     if (this.backlog !== undefined) {
       setEmailOutboxBacklogSource(undefined);
@@ -93,6 +107,16 @@ export class EmailOutboxPollerScheduler
       );
     } finally {
       this.running = false;
+    }
+  }
+
+  private async pruneExpiredRecipientCounters(): Promise<void> {
+    try {
+      await this.pruneExpiredRecipientLimits?.();
+    } catch {
+      this.logger.error(
+        'authentication email recipient counter cleanup failed',
+      );
     }
   }
 }

@@ -158,15 +158,35 @@ class LimiterFake implements AuthRateLimiterPort {
   allowed = true;
   calls: Parameters<AuthRateLimiterPort['consume']>[0][] = [];
   blockedKeys = new Set<string>();
+  private readonly counters = new Map<
+    string,
+    { readonly expiresAt: number; count: number }
+  >();
 
   async consume(
     input: Parameters<AuthRateLimiterPort['consume']>[0],
   ): Promise<{ allowed: boolean }> {
     this.calls.push(input);
-    return {
-      allowed:
-        this.allowed && !this.blockedKeys.has(`${input.scope}:${input.key}`),
-    };
+    if (!this.allowed || this.blockedKeys.has(`${input.scope}:${input.key}`)) {
+      return { allowed: false };
+    }
+    const key = `${input.scope}:${input.key}`;
+    const now = Date.now();
+    const current = this.counters.get(key);
+    const counter =
+      current === undefined || current.expiresAt <= now
+        ? { count: 0, expiresAt: now + input.windowMs }
+        : current;
+    counter.count += 1;
+    this.counters.set(key, counter);
+    return { allowed: counter.count <= input.limit };
+  }
+
+  reset(): void {
+    this.allowed = true;
+    this.calls = [];
+    this.blockedKeys.clear();
+    this.counters.clear();
   }
 }
 
@@ -314,9 +334,7 @@ describe('local auth HTTP boundary', () => {
     state.reset();
     hasher.result = true;
     hasher.verifyByHash = false;
-    limiter.allowed = true;
-    limiter.calls = [];
-    limiter.blockedKeys.clear();
+    limiter.reset();
     accessTokenIssuer.fail = false;
     refreshSessions.failCreateRefreshSession = false;
     refreshSessions.failFindRefreshToken = false;
@@ -356,6 +374,70 @@ describe('local auth HTTP boundary', () => {
         .map((call) => call.key),
     ).toEqual(['198.51.100.10', '198.51.100.11']);
   });
+
+  it.each([
+    ['/v1/auth/register', 'register'],
+    ['/v1/auth/resend-verification', 'resend'],
+    ['/v1/auth/forgot-password', 'forgot'],
+  ] as const)(
+    'keeps the shared mail-request budget caller-scoped when the next request uses %s',
+    async (url, route) => {
+      const email = 'Person@Example.com';
+      const send = async (
+        remoteAddress: string,
+        targetUrl: string,
+        targetEmail = email,
+      ) =>
+        app.inject({
+          method: 'POST',
+          url: targetUrl,
+          remoteAddress,
+          headers: { 'content-type': 'application/json' },
+          payload:
+            targetUrl === '/v1/auth/register'
+              ? {
+                  email: targetEmail,
+                  username: 'budget_user',
+                  password: 'correct horse battery',
+                }
+              : { email: targetEmail },
+        });
+
+      const callerOne = '192.0.2.10';
+      const callerTwo = '192.0.2.11';
+      expect(
+        (await send(callerOne, '/v1/auth/forgot-password')).statusCode,
+      ).toBe(202);
+      expect(
+        (
+          await send(
+            callerOne,
+            '/v1/auth/resend-verification',
+            ' person@example.com ',
+          )
+        ).statusCode,
+      ).toBe(202);
+      expect(
+        (
+          await send(
+            callerOne,
+            '/v1/auth/forgot-password',
+            'PERSON@example.com',
+          )
+        ).statusCode,
+      ).toBe(202);
+
+      const blocked = await send(
+        callerOne,
+        '/v1/auth/register',
+        'person@example.com',
+      );
+      expect(blocked.statusCode).toBe(429);
+
+      const otherCaller = await send(callerTwo, url);
+      expect(otherCaller.statusCode).toBe(route === 'register' ? 201 : 202);
+    },
+  );
 
   /** An account holder who already verified their email. */
   function seedActiveAccount(): void {

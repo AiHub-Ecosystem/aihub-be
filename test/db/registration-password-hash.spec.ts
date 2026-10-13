@@ -67,13 +67,13 @@ beforeAll(async () => {
 
   hasher = new Argon2PasswordHasher();
   authClient = createPostgresAuthClient(testDatabaseUrl());
+  const emailOutbox =
+    createCliRuntimeSecretProvider().getSnapshot().emailOutbox;
   const repository = new PostgresLocalAuthRepository(
     authClient,
-    new PostgresEmailDeliveryRequestRepository(),
+    new PostgresEmailDeliveryRequestRepository(emailOutbox),
   );
-  const cipher = createEmailPayloadCipher(
-    createCliRuntimeSecretProvider().getSnapshot().emailOutbox,
-  );
+  const cipher = createEmailPayloadCipher(emailOutbox);
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(USER_ACCOUNT_REPOSITORY)

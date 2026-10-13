@@ -26,11 +26,15 @@ class FakeRedis implements AuthRedisClient {
 
 describe('RedisAuthRateLimiter', () => {
   it('hashes identity-bearing keys before using the protection store', () => {
-    const email = 'person@example.com';
-    const hashed = hashRateLimitKey('resend_email', email);
+    const callerAndEmail = JSON.stringify([
+      '203.0.113.7',
+      'person@example.com',
+    ]);
+    const hashed = hashRateLimitKey('auth_email_request', callerAndEmail);
 
     expect(hashed).toMatch(/^[0-9a-f]{64}$/);
-    expect(hashed).not.toContain(email);
+    expect(hashed).not.toContain(callerAndEmail);
+    expect(hashed).not.toContain('person@example.com');
   });
 
   it.each([
@@ -75,7 +79,7 @@ describe('RedisAuthRateLimiter', () => {
 
     await expect(
       limiter.consume({
-        scope: 'resend_email',
+        scope: 'auth_email_request',
         key: 'person@example.com',
         limit: 2,
         windowMs: 60_000,
@@ -85,7 +89,7 @@ describe('RedisAuthRateLimiter', () => {
     expect(redis.call?.script).toContain('ARGV[1]');
     expect(redis.call?.numberOfKeys).toBe(1);
     expect(redis.call?.args).toEqual([
-      `aihub:auth:rate:${hashRateLimitKey('resend_email', 'person@example.com')}`,
+      `aihub:auth:rate:${hashRateLimitKey('auth_email_request', 'person@example.com')}`,
       '60000',
     ]);
   });
@@ -93,41 +97,21 @@ describe('RedisAuthRateLimiter', () => {
   it('keeps a bounded process-local fallback when Redis is unavailable', async () => {
     let now = 1_000;
     const limiter = new RedisAuthRateLimiter('', () => now);
+    const input = {
+      scope: 'auth_email_request' as const,
+      key: JSON.stringify(['203.0.113.7', 'person@example.com']),
+      limit: 2,
+      windowMs: 1_000,
+    };
 
-    await expect(
-      limiter.consume({
-        scope: 'verify_ip',
-        key: '203.0.113.7',
-        limit: 2,
-        windowMs: 1_000,
-      }),
-    ).resolves.toEqual({ allowed: true });
-    await expect(
-      limiter.consume({
-        scope: 'verify_ip',
-        key: '203.0.113.7',
-        limit: 2,
-        windowMs: 1_000,
-      }),
-    ).resolves.toEqual({ allowed: true });
-    await expect(
-      limiter.consume({
-        scope: 'verify_ip',
-        key: '203.0.113.7',
-        limit: 2,
-        windowMs: 1_000,
-      }),
-    ).resolves.toMatchObject({ allowed: false });
+    await expect(limiter.consume(input)).resolves.toEqual({ allowed: true });
+    await expect(limiter.consume(input)).resolves.toEqual({ allowed: true });
+    await expect(limiter.consume(input)).resolves.toMatchObject({
+      allowed: false,
+    });
 
     now += 1_001;
-    await expect(
-      limiter.consume({
-        scope: 'verify_ip',
-        key: '203.0.113.7',
-        limit: 2,
-        windowMs: 1_000,
-      }),
-    ).resolves.toEqual({ allowed: true });
+    await expect(limiter.consume(input)).resolves.toEqual({ allowed: true });
   });
 
   it('keeps an invitation scope available through fallback and resets its window', async () => {

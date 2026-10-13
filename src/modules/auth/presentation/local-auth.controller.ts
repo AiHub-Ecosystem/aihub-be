@@ -63,7 +63,7 @@ interface RegisterEnvelope {
     readonly email: string;
     readonly username: string;
     readonly status: 'pending_verification';
-    readonly email_delivery_status: 'queued';
+    readonly email_delivery_status: 'queued' | 'suppressed';
   };
   readonly meta: { readonly request_id: string };
 }

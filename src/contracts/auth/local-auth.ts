@@ -178,7 +178,10 @@ export const RegisterResponseSchema = Type.Object(
       status: Type.Literal('pending_verification'),
       // Acceptance-time only (ADR-0074): the email was accepted for dispatch,
       // not handed to a provider and not delivered.
-      email_delivery_status: Type.Literal('queued'),
+      email_delivery_status: Type.Union([
+        Type.Literal('queued'),
+        Type.Literal('suppressed'),
+      ]),
     }),
     meta: Type.Object({ request_id: Type.String() }),
   },

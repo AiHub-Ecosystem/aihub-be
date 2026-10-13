@@ -97,6 +97,23 @@ describe('EmailOutboxPollerScheduler', () => {
     expect(poller.calls).toBeGreaterThanOrEqual(1);
   });
 
+  it('runs recipient counter cleanup at startup', async () => {
+    const poller = new ControllablePoller();
+    const cleanup = jest.fn().mockResolvedValue(0);
+    const subject = new EmailOutboxPollerScheduler(
+      poller as unknown as EmailDeliveryPoller,
+      INTERVAL_MS,
+      undefined,
+      true,
+      cleanup,
+    );
+    subjects.push(subject);
+
+    subject.onModuleInit();
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
   it('skips a tick while the previous pass is still running', async () => {
     const poller = new ControllablePoller(true);
 

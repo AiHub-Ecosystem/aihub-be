@@ -106,6 +106,20 @@ model EmailDeliveryRequest {
   @@map("email_delivery_requests")
 }
 
+/// A short-lived keyed fingerprint budget for authentication email recipients.
+/// The retained keyring lets writers find an active window after rotation.
+model AuthEmailRecipientRateLimit {
+  keyVersion      String   @map("key_version")
+  addressHmac     String   @map("address_hmac")
+  windowStartedAt DateTime @map("window_started_at") @db.Timestamptz(6)
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz(6)
+  requestCount    Int      @map("request_count")
+
+  @@id([keyVersion, addressHmac], map: "auth_email_recipient_rate_limits_pkey")
+  @@index([expiresAt], map: "auth_email_recipient_rate_limits_expires_idx")
+  @@map("auth_email_recipient_rate_limits")
+}
+
 /// A pending local sign-up or sign-in verification.
 ///
 /// The partial unique index `email_verification_one_open_token` (one open token

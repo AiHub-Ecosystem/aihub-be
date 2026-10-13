@@ -34,8 +34,12 @@ import {
   type PostgresAuthClient,
   createPostgresAuthClient,
 } from '@/modules/auth/infrastructure/postgres-auth.client';
-import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
+import {
+  PostgresEmailDeliveryRequestRepository,
+  pruneExpiredAuthEmailRecipientLimits,
+} from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
 import { PostgresLocalAuthRepository } from '@/modules/auth/infrastructure/postgres-local-auth.repository';
+import type { EmailOutboxRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';
 
 import {
   createTestPool,
@@ -56,6 +60,39 @@ const RECOVERY_MESSAGE =
  */
 class SwitchableEmailDeliveryRequests extends PostgresEmailDeliveryRequestRepository {
   failInserts = false;
+  private secrets: EmailOutboxRuntimeSecrets;
+
+  constructor(secrets: EmailOutboxRuntimeSecrets) {
+    super(secrets);
+    this.secrets = secrets;
+  }
+
+  get currentKeyId(): string {
+    return this.secrets.currentKeyId;
+  }
+
+  rotateToNewKey(): void {
+    const currentKeyId = `${this.secrets.currentKeyId}-next`;
+    this.secrets = {
+      currentKeyId,
+      keys: {
+        ...this.secrets.keys,
+        [currentKeyId]: Buffer.alloc(32, 7).toString('base64'),
+      },
+    };
+  }
+
+  override reserveAuthenticationEmailRecipient(
+    ...args: Parameters<
+      PostgresEmailDeliveryRequestRepository['reserveAuthenticationEmailRecipient']
+    >
+  ): ReturnType<
+    PostgresEmailDeliveryRequestRepository['reserveAuthenticationEmailRecipient']
+  > {
+    return new PostgresEmailDeliveryRequestRepository(
+      this.secrets,
+    ).reserveAuthenticationEmailRecipient(...args);
+  }
 
   async insert(
     client: Parameters<PostgresEmailDeliveryRequestRepository['insert']>[0],
@@ -132,11 +169,11 @@ beforeAll(async () => {
 
   sender = new RecordingSender();
   authClient = createPostgresAuthClient(testDatabaseUrl());
-  outbox = new SwitchableEmailDeliveryRequests();
+  const emailOutbox =
+    createCliRuntimeSecretProvider().getSnapshot().emailOutbox;
+  outbox = new SwitchableEmailDeliveryRequests(emailOutbox);
   const repository = new PostgresLocalAuthRepository(authClient, outbox);
-  cipher = createEmailPayloadCipher(
-    createCliRuntimeSecretProvider().getSnapshot().emailOutbox,
-  );
+  cipher = createEmailPayloadCipher(emailOutbox);
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(USER_ACCOUNT_REPOSITORY)
@@ -304,6 +341,7 @@ describe('local auth email outbox over HTTP', () => {
     expect(response.statusCode).toBe(202);
     expect(response.payload).toBe('');
     expect(await queuedRequests()).toHaveLength(0);
+    expect(await countRows('auth_email_recipient_rate_limits')).toBe(0);
   });
 
   it.each(['active', 'pending_verification', 'disabled'] as const)(
@@ -318,6 +356,9 @@ describe('local auth email outbox over HTTP', () => {
         data: { message: RECOVERY_MESSAGE },
       });
       expect(await queuedRequests()).toHaveLength(status === 'active' ? 1 : 0);
+      expect(await countRows('auth_email_recipient_rate_limits')).toBe(
+        status === 'active' ? 1 : 0,
+      );
       expect(sender.calls).toHaveLength(0);
     },
   );
@@ -330,6 +371,158 @@ describe('local auth email outbox over HTTP', () => {
     expect(sealedPayload((await queuedRequests())[0])).toMatchObject({
       email: 'person@example.com',
     });
+  });
+
+  it('caps committed email requests across registration, resend, and recovery until the 24-hour window expires', async () => {
+    const registration = await app.inject(
+      registerRequest('person@example.com'),
+    );
+    expect(registration.statusCode).toBe(201);
+    expect(registration.json().data.email_delivery_status).toBe('queued');
+
+    for (let count = 0; count < 8; count += 1) {
+      const response = await app.inject(post(RESEND, ' Person@Example.com '));
+      expect(response.statusCode).toBe(202);
+    }
+
+    const firstWindow = await pool.query<{
+      readonly address_hmac: string;
+      readonly request_count: number;
+      readonly window_started_at: Date;
+      readonly expires_at: Date;
+    }>(
+      `SELECT address_hmac, request_count, window_started_at, expires_at
+       FROM auth_email_recipient_rate_limits`,
+    );
+    expect(firstWindow.rows).toHaveLength(1);
+    expect(firstWindow.rows[0]).toMatchObject({
+      request_count: 9,
+      window_started_at: expect.any(Date),
+      expires_at: expect.any(Date),
+    });
+    expect(firstWindow.rows[0]?.address_hmac).not.toContain(
+      'person@example.com',
+    );
+
+    const requestsBeforeResend = await queuedRequests();
+    const cappedResend = await app.inject(post(RESEND, 'person@example.com'));
+    expect(cappedResend.statusCode).toBe(202);
+    expect(await queuedRequests()).toHaveLength(requestsBeforeResend.length);
+    expect(await countRows('email_verification_tokens')).toBe(9);
+
+    const latestToken = sealedPayload(requestsBeforeResend.at(-1)).token;
+    const verify = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      headers: { 'content-type': 'application/json' },
+      payload: { token: latestToken },
+    });
+    expect(verify.statusCode).toBe(204);
+
+    const capped = await app.inject(post(FORGOT, 'person@example.com'));
+    expect(capped.statusCode).toBe(202);
+    expect(capped.json().data.message).toBe(RECOVERY_MESSAGE);
+    expect(await queuedRequests()).toHaveLength(9);
+    expect(await countRows('password_reset_tokens')).toBe(0);
+    const unchangedWindow = await pool.query(
+      `SELECT address_hmac, request_count, window_started_at, expires_at
+       FROM auth_email_recipient_rate_limits`,
+    );
+    expect(unchangedWindow.rows).toEqual(firstWindow.rows);
+
+    const account = await pool.query<{ readonly id: string }>(
+      `SELECT user_account_id AS id FROM auth_identities
+       WHERE provider = 'password' AND canonical_email = $1`,
+      ['person@example.com'],
+    );
+    const accountId = account.rows[0]?.id;
+    if (accountId === undefined) throw new Error('the account was not found');
+    await pool.query(
+      'DELETE FROM email_verification_tokens WHERE user_account_id = $1',
+      [accountId],
+    );
+    await pool.query('DELETE FROM auth_identities WHERE user_account_id = $1', [
+      accountId,
+    ]);
+    await pool.query('DELETE FROM user_accounts WHERE id = $1', [accountId]);
+
+    const suppressedRegistration = await app.inject(
+      registerRequest('person@example.com'),
+    );
+    expect(suppressedRegistration.statusCode).toBe(201);
+    expect(suppressedRegistration.json().data).toMatchObject({
+      status: 'pending_verification',
+      email_delivery_status: 'suppressed',
+    });
+    expect(await countRows('email_delivery_requests')).toBe(9);
+
+    await pool.query(
+      `UPDATE auth_email_recipient_rate_limits
+       SET window_started_at = now() - interval '24 hours' - interval '1 second',
+           expires_at = now() - interval '1 second'`,
+    );
+    const afterExpiry = await app.inject(post(RESEND, 'person@example.com'));
+    expect(afterExpiry.statusCode).toBe(202);
+    expect(await queuedRequests()).toHaveLength(10);
+  });
+
+  it('cannot commit more than nine requests for one recipient under concurrent recovery calls', async () => {
+    await seedAccount('active', 'person@example.com');
+
+    const responses = await Promise.all(
+      Array.from({ length: 12 }, () =>
+        app.inject(post(FORGOT, 'person@example.com')),
+      ),
+    );
+
+    expect(responses.every((response) => response.statusCode === 202)).toBe(
+      true,
+    );
+    expect(await queuedRequests()).toHaveLength(9);
+    const limits = await pool.query<{ readonly request_count: number }>(
+      'SELECT request_count FROM auth_email_recipient_rate_limits',
+    );
+    expect(limits.rows[0]?.request_count).toBe(9);
+  });
+
+  it('keeps an active window across staged key rotation and uses the new key for fresh windows', async () => {
+    const originalKeyId = outbox.currentKeyId;
+    await app.inject(registerRequest('person@example.com'));
+    outbox.rotateToNewKey();
+
+    for (let count = 0; count < 8; count += 1) {
+      await app.inject(post(RESEND, 'person@example.com'));
+    }
+    await seedAccount('active', 'new-person@example.com');
+    await app.inject(post(FORGOT, 'new-person@example.com'));
+
+    const limits = await pool.query<{
+      readonly key_version: string;
+      readonly request_count: number;
+    }>(
+      `SELECT key_version, request_count
+       FROM auth_email_recipient_rate_limits
+       ORDER BY key_version`,
+    );
+    expect(limits.rows).toEqual([
+      { key_version: originalKeyId, request_count: 9 },
+      { key_version: `${originalKeyId}-next`, request_count: 1 },
+    ]);
+  });
+
+  it('deletes recipient counters after their fixed window expires', async () => {
+    await seedAccount('active', 'person@example.com');
+    await app.inject(post(FORGOT, 'person@example.com'));
+    await pool.query(
+      `UPDATE auth_email_recipient_rate_limits
+       SET window_started_at = now() - interval '24 hours' - interval '1 second',
+           expires_at = now() - interval '1 second'`,
+    );
+
+    await expect(
+      pruneExpiredAuthEmailRecipientLimits(authClient, new Date()),
+    ).resolves.toBe(1);
+    expect(await countRows('auth_email_recipient_rate_limits')).toBe(0);
   });
 
   it('answers an unknown address exactly as it answers a known one', async () => {
@@ -352,6 +545,7 @@ describe('local auth email outbox over HTTP', () => {
     expect(await countRows('user_accounts')).toBe(0);
     expect(await countRows('email_verification_tokens')).toBe(0);
     expect(await countRows('email_delivery_requests')).toBe(0);
+    expect(await countRows('auth_email_recipient_rate_limits')).toBe(0);
   });
 
   it('rolls the verification rotation back when its outbox write fails', async () => {
@@ -362,6 +556,7 @@ describe('local auth email outbox over HTTP', () => {
 
     expect(response.statusCode).toBe(500);
     expect(await countRows('email_verification_tokens')).toBe(0);
+    expect(await countRows('auth_email_recipient_rate_limits')).toBe(0);
   });
 
   it('rolls the reset token back when its outbox write fails', async () => {
@@ -372,5 +567,6 @@ describe('local auth email outbox over HTTP', () => {
 
     expect(response.statusCode).toBe(500);
     expect(await countRows('password_reset_tokens')).toBe(0);
+    expect(await countRows('auth_email_recipient_rate_limits')).toBe(0);
   });
 });
