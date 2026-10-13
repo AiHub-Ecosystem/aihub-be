@@ -11,16 +11,22 @@ Sandbox usage, idempotency records, and monthly dispatch reservations live in
 `aihub_sandbox`; Redis uses logical database `/1` for sandbox cache and pacing
 state.
 
-Customer Sandbox keys are restricted to the `sandbox` environment and the
-`writing.grade` scope, which admits Writing Task 1 and Task 2. They use the
-customer Organization's own identity configuration and do not call the demo
-assertion mint route. Calls reach the real AI Writing service. Each customer
-Organization gets at most 25 dispatches per UTC month; the entire Sandbox
-environment, including the demo Organization, shares a 500-dispatch monthly
-ceiling. The demo Organization's configured quota is an additional limit.
-Normal pacing is five requests per minute per key, one in-flight request per
-Organization, and ten across Sandbox. These are request-count ceilings, not a
-USD cost guarantee.
+Customer keys created through the customer-facing key-creation path may use
+`writing.grade`, `speaking.grade`, or both, but are restricted to the `sandbox`
+environment alone. The public Writing and Speaking demos accept a key only
+when it carries the selected skill's scope and the Organization has no active
+Identity Configuration. These live demo
+requests use the customer's Organization and its normal Sandbox quota, not the
+AIHUB demo Organization's key. The key-validation call does not dispatch a
+grade; each grading request authenticates the key again. This boundary is
+recorded in [ADR-0094](../adr/0094-sandbox-demo-key-admission.md).
+
+Each customer Organization gets at most 25 dispatches per UTC month; the
+entire Sandbox environment, including the demo Organization, shares a
+500-dispatch monthly ceiling. The demo Organization's configured quota is an
+additional limit. Normal pacing is five requests per minute per key, one
+in-flight request per Organization, and ten across Sandbox. These are
+request-count ceilings, not a USD cost guarantee.
 
 The demo mint route stays restricted to the Organization IDs configured in
 `AIHUB_SANDBOX_ORG_IDS`. Until its Organization, identity configuration, and
@@ -149,6 +155,13 @@ pnpm cli key:create \
 `--actor` is the username of your own active AIHUB User Account. The issuance is recorded in the Organization Audit Trail with you as the actor, and the command refuses, exit code 2, an actor that is not an active account. The raw key is printed **once** and never stored. Send it to that person directly, not to a group channel.
 
 One key per person, named after them. A shared key cannot be revoked without disrupting everyone, and the `apiKeyId` in the mint audit line and in `usage_records` is only useful if it identifies someone.
+
+For a public demo key, use only `writing.grade`, `speaking.grade`, or both;
+keep `--envs sandbox`, and provide the key directly to its holder.
+`/demo/scoring` requires `writing.grade`; `/demo/speaking` requires
+`speaking.grade`. The demo refuses Organizations with active Identity
+Configuration because it cannot collect an assertion signed by that
+Organization.
 
 To revoke:
 

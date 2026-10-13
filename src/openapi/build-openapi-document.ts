@@ -1737,6 +1737,55 @@ function sandboxAssertionPathItem(
   };
 }
 
+function sandboxDemoKeyValidationPathItem(
+  groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+): Record<string, unknown> {
+  const id = 'sandbox.demo-key.validate' as const;
+  return {
+    [PUBLIC_ROUTES[id].method.toLowerCase()]: {
+      operationId: id,
+      summary: 'Validate a Sandbox key for the AIHUB demo',
+      description: [
+        'Checks that the presented API key is bound only to the Sandbox environment, is active, has the requested Writing or Speaking grading scope, and belongs to an Organization without active Identity Configuration.',
+        'This route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and should be called again by the grading operation, which authenticates the key independently.',
+      ].join('\n\n'),
+      ...routeIdentityScopeOf(id),
+      ...routeSecurityOf(id),
+      parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': { schema: routeSchemaOf(id, 'request') },
+        },
+      },
+      responses: {
+        [routeSuccessKeyOf(id)]: {
+          description: 'Key is eligible for the requested live demo skill',
+          content: {
+            'application/json': {
+              schema: Type.Object(
+                {
+                  data: routeSchemaOf(id, 'response'),
+                  meta: Type.Object(
+                    {
+                      request_id: Type.String({
+                        pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
+                      }),
+                    },
+                    { additionalProperties: false },
+                  ),
+                },
+                { additionalProperties: false },
+              ),
+            },
+          },
+        },
+        ...routeErrorResponsesOf(id, groupedErrors),
+      },
+    },
+  };
+}
+
 function avatarUploadPathItem(): Record<string, unknown> {
   const id = 'me.avatar.uploads.create' as const;
 
@@ -2045,6 +2094,8 @@ export function buildOpenApiDocument(version: string): unknown {
 
   paths[routePathOf('sandbox.assertions.mint')] =
     sandboxAssertionPathItem(groupedErrors);
+  paths[routePathOf('sandbox.demo-key.validate')] =
+    sandboxDemoKeyValidationPathItem(groupedErrors);
   paths[routePathOf('speaking.questions')] = speakingQuestionsPathItem();
   Object.assign(paths, speakingAudioUploadPathItems());
   paths[routePathOf('me.avatar.uploads.create')] = avatarUploadPathItem();

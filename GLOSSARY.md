@@ -2,8 +2,9 @@
 
 AIHUB is a B2B multi-tenant AI API Gateway and identity broker. An Organization
 authenticates to AIHUB, AIHUB enforces its policy and metering, then dispatches a
-typed operation to a private AI service. This glossary covers the structural
-language of the module tree; the business vocabulary lives in `CONTEXT.md`.
+typed operation to a private AI service. This glossary covers structural and
+stable integration terms; `CONTEXT.md` records current behavior and accepted
+designs that are pending implementation.
 
 ## Language
 
@@ -60,3 +61,20 @@ An operational description of what personal data represents, such as a direct
 identifier, credential, user content, pseudonymous identifier, or metadata; it
 does not make a legal determination.
 _Avoid_: legal category
+
+**Customer Sandbox API key**:
+An Organization-owned API key whose stored authorization permits the Sandbox
+Environment. Its prefix does not grant access; the backend checks the key's
+stored environment, scope, and Organization policy.
+
+**Customer Production API key**:
+An Organization-owned API key whose stored authorization permits Production;
+its use may incur charges under the Organization's Production policy.
+
+**Sandbox dispatch allowance**:
+The maximum number of Sandbox grading dispatches admitted for one Organization
+in one UTC calendar month, subject to the shared Sandbox ceiling.
+
+**Sandbox allowance override**:
+A month-specific total Sandbox dispatch allowance for one Organization that
+replaces the default for that month; it is not an additive bonus.

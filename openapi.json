@@ -2857,6 +2857,122 @@
         }
       }
     },
+    "/v1/sandbox/demo/api-keys/validate": {
+      "post": {
+        "operationId": "sandbox.demo-key.validate",
+        "summary": "Validate a Sandbox key for the AIHUB demo",
+        "description": "Checks that the presented API key is bound only to the Sandbox environment, is active, has the requested Writing or Speaking grading scope, and belongs to an Organization without active Identity Configuration.\n\nThis route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and should be called again by the grading operation, which authenticates the key independently.",
+        "x-identity-scope": "organization",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["scope"],
+                "properties": {
+                  "scope": {
+                    "anyOf": [
+                      {
+                        "const": "writing.grade",
+                        "type": "string"
+                      },
+                      {
+                        "const": "speaking.grade",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Key is eligible for the requested live demo skill",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["valid", "environment", "scope"],
+                      "properties": {
+                        "valid": {
+                          "const": true,
+                          "type": "boolean"
+                        },
+                        "environment": {
+                          "const": "sandbox",
+                          "type": "string"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "const": "writing.grade",
+                              "type": "string"
+                            },
+                            {
+                              "const": "speaking.grade",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
     "/v1/ielts/speaking/questions": {
       "get": {
         "operationId": "speaking.questions",

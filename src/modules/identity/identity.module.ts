@@ -65,6 +65,7 @@ import { ApiKeyUserIdentityGuard } from './api-keys/presentation/api-key-user-id
 import { ApiKeyGuard } from './api-keys/presentation/api-key.guard';
 import { OrganizationApiKeyController } from './api-keys/presentation/organization-api-key.controller';
 import { SandboxApiKeyGuard } from './api-keys/presentation/sandbox-api-key.guard';
+import { SandboxDemoKeyValidationGuard } from './api-keys/presentation/sandbox-demo-key-validation.guard';
 import {
   ORGANIZATION_AUDIT_EVENT_READ,
   type OrganizationAuditEventReadPort,
@@ -163,12 +164,14 @@ import {
 import { UserAssertionVerifier } from './user-assertions/application/user-assertion-verifier';
 import { UserIdentityResolver } from './user-assertions/application/user-identity-resolver';
 import { USER_IDENTITY_RESOLVER } from './user-assertions/application/user-identity-resolver.port';
+import { ValidateSandboxDemoKey } from './user-assertions/application/validate-sandbox-demo-key';
 import { EnvSandboxAssertionPolicy } from './user-assertions/infrastructure/env-sandbox-assertion-policy';
 import { JoseSandboxAssertionSigner } from './user-assertions/infrastructure/jose-sandbox-assertion-signer';
 import { JoseUserAssertionCrypto } from './user-assertions/infrastructure/jose-user-assertion-crypto';
 import { JwksKeyProvider } from './user-assertions/infrastructure/jwks-key-provider';
 import { readSandboxSigningMaterial } from './user-assertions/infrastructure/sandbox-assertion.config';
 import { SandboxAssertionController } from './user-assertions/presentation/sandbox-assertion.controller';
+import { SandboxDemoKeyValidationController } from './user-assertions/presentation/sandbox-demo-key-validation.controller';
 
 const IDENTITY_TRANSACTION_CLIENT = Symbol('IDENTITY_TRANSACTION_CLIENT');
 const IDENTITY_READ_CLIENT = Symbol('IDENTITY_READ_CLIENT');
@@ -187,6 +190,7 @@ type IdentityTransactionClient = ReturnType<
   ],
   controllers: [
     SandboxAssertionController,
+    SandboxDemoKeyValidationController,
     OrganizationController,
     OrganizationMembershipController,
     OrganizationInvitationController,
@@ -535,9 +539,16 @@ type IdentityTransactionClient = ReturnType<
         SANDBOX_ASSERTION_SIGNER,
       ],
     },
+    {
+      provide: ValidateSandboxDemoKey,
+      useFactory: (repository: OrganizationIdentityConfigRepositoryPort) =>
+        new ValidateSandboxDemoKey(repository),
+      inject: [ORGANIZATION_IDENTITY_CONFIG_REPOSITORY],
+    },
     ApiKeyGuard,
     ApiKeyUserIdentityGuard,
     SandboxApiKeyGuard,
+    SandboxDemoKeyValidationGuard,
     UserIdentityGuard,
   ],
   exports: [
