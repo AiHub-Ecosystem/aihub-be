@@ -123,7 +123,12 @@ describe('Postgres Sandbox dispatch budget', () => {
       ).resolves.toBe(true);
       await expect(
         octoberBudget.allowanceFor(ORGANIZATION_ID),
-      ).resolves.toEqual({ monthlyLimit: 5, reserved: 1 });
+      ).resolves.toEqual({
+        monthlyLimit: 5,
+        reserved: 1,
+        sharedMonthlyLimit: 500,
+        sharedReserved: 1,
+      });
     } finally {
       await octoberBudget.onModuleDestroy();
     }
@@ -148,6 +153,8 @@ describe('Postgres Sandbox dispatch budget', () => {
     await expect(budget.allowanceFor(ORGANIZATION_ID)).resolves.toEqual({
       monthlyLimit: 1,
       reserved: 1,
+      sharedMonthlyLimit: 500,
+      sharedReserved: 1,
     });
   });
 
