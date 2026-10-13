@@ -895,7 +895,18 @@ function addOrganizationRosterCheck(items: unknown[]): void {
   }
 }
 
-function addDemoValidationSecret(items: unknown[]): void {
+/**
+ * The converter publishes one scheme per request, so a route that needs the
+ * API key and the BFF secret together gets the secret header added here. The
+ * routes come from the catalog's `bff-api-key` caller auth, not from a path.
+ */
+const BFF_API_KEY_PATHS: ReadonlySet<string> = new Set(
+  Object.values(PUBLIC_ROUTES)
+    .filter((route) => route.callerAuth === 'bff-api-key')
+    .map((route) => route.path),
+);
+
+function addBffClientSecret(items: unknown[]): void {
   for (const item of items) {
     if (!isRecord(item)) continue;
 
@@ -905,7 +916,7 @@ function addDemoValidationSecret(items: unknown[]): void {
       if (
         Array.isArray(path) &&
         path.every((part) => typeof part === 'string') &&
-        path.join('/') === 'v1/sandbox/demo/api-keys/validate'
+        BFF_API_KEY_PATHS.has(`/${path.join('/')}`)
       ) {
         const headers = Array.isArray(item.request.header)
           ? item.request.header
@@ -922,7 +933,7 @@ function addDemoValidationSecret(items: unknown[]): void {
       }
     }
 
-    if (Array.isArray(item.item)) addDemoValidationSecret(item.item);
+    if (Array.isArray(item.item)) addBffClientSecret(item.item);
   }
 }
 
@@ -977,7 +988,7 @@ export async function buildPostmanCollection(
   );
   normalizeRefreshCookieAuth(base);
   addOrganizationRosterCheck(base.item);
-  addDemoValidationSecret(base.item);
+  addBffClientSecret(base.item);
 
   return {
     ...base,

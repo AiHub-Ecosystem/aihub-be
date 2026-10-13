@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { PostgresSandboxDispatchBudget } from '@/modules/gateway/infrastructure/postgres-sandbox-dispatch-budget';
 import { createSandboxTestPool, sandboxTestDatabaseUrl } from './database';
 
@@ -172,5 +175,76 @@ describe('Postgres Sandbox dispatch budget', () => {
       }),
     ).rejects.toThrow('Sandbox allowance policy is unavailable');
     await expect(budget.allowanceFor(ORGANIZATION_ID)).resolves.toBeNull();
+  });
+});
+
+describe('migration 0037 deployment-month seed', () => {
+  const MIGRATION = readFileSync(
+    join(
+      __dirname,
+      '../../prisma/migrations/0037_sandbox_allowance_policy/migration.sql',
+    ),
+    'utf8',
+  );
+  const SEED = MIGRATION.slice(
+    MIGRATION.indexOf('INSERT INTO sandbox_allowance_defaults'),
+  );
+
+  /** Runs the migration's seed as if it executed at `deployedAt`. */
+  async function seedAt(deployedAt: string): Promise<void> {
+    await pool.query('TRUNCATE sandbox_allowance_defaults');
+    await pool.query(SEED.replaceAll('now()', `TIMESTAMPTZ '${deployedAt}'`));
+  }
+
+  async function allowanceAt(now: string, organizationId: string) {
+    const instance = new PostgresSandboxDispatchBudget(
+      sandboxTestDatabaseUrl(),
+      () => new Date(now),
+    );
+    try {
+      return (await instance.allowanceFor(organizationId))?.monthlyLimit;
+    } finally {
+      await instance.onModuleDestroy();
+    }
+  }
+
+  it('keeps the allowance in effect for the deployment month and starts 5 the next UTC month', async () => {
+    await seedAt('2026-10-31T23:30:00Z');
+
+    expect(await allowanceAt('2026-10-31T23:59:59Z', 'org_any')).toBe(25);
+    expect(await allowanceAt('2026-11-01T00:00:00Z', 'org_any')).toBe(5);
+    expect(await allowanceAt('2027-03-15T00:00:00Z', 'org_any')).toBe(5);
+  });
+
+  it('reads the deployment month in UTC, not in the migration session time zone', async () => {
+    await pool.query('TRUNCATE sandbox_allowance_defaults');
+    // One connection, so the session time zone applies to the seed itself.
+    const session = await pool.connect();
+    try {
+      await session.query("SET TIME ZONE 'Asia/Ho_Chi_Minh'");
+      await session.query(
+        SEED.replaceAll('now()', "TIMESTAMPTZ '2026-10-31T20:00:00Z'"),
+      );
+    } finally {
+      await session.query('RESET TIME ZONE');
+      session.release();
+    }
+
+    expect(await allowanceAt('2026-10-31T21:00:00Z', 'org_any')).toBe(25);
+    expect(await allowanceAt('2026-11-01T00:00:00Z', 'org_any')).toBe(5);
+  });
+
+  it('leaves an allowance an operator already set for the deployment month', async () => {
+    await pool.query('TRUNCATE sandbox_allowance_defaults');
+    await pool.query(
+      `INSERT INTO sandbox_allowance_defaults (month_start, allowance)
+       VALUES (DATE '2026-10-01', 40)`,
+    );
+    await pool.query(
+      SEED.replaceAll('now()', "TIMESTAMPTZ '2026-10-13T00:00:00Z'"),
+    );
+
+    expect(await allowanceAt('2026-10-20T00:00:00Z', 'org_any')).toBe(40);
+    expect(await allowanceAt('2026-11-02T00:00:00Z', 'org_any')).toBe(5);
   });
 });

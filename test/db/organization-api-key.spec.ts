@@ -526,6 +526,12 @@ describe('organization API key rotation against PostgreSQL', () => {
     const now = options.now ?? new Date();
     const replacement = generateOrganizationApiKey(now, replacementEnvironment);
     const organizationId = options.organizationId ?? ORGANIZATION_ID;
+    // The allowlist the application would have read before choosing the
+    // replacement's environment.
+    const stored = await pool.query<{ allowed_environments: string[] }>(
+      'SELECT allowed_environments FROM api_keys WHERE id = $1',
+      [options.apiKeyId],
+    );
     return repository.rotateApiKey({
       context: listContext(organizationId),
       organizationId,
@@ -534,6 +540,7 @@ describe('organization API key rotation against PostgreSQL', () => {
       replacementId: replacement.id,
       keyHash: replacement.hash,
       keyPrefix: replacement.prefix,
+      retiredAllowedEnvironments: stored.rows[0]?.allowed_environments ?? [],
       replacementAllowedEnvironments: [replacementEnvironment],
       now,
     });
@@ -643,6 +650,7 @@ describe('organization API key rotation against PostgreSQL', () => {
       replacementId: replacement.id,
       keyHash: replacement.hash,
       keyPrefix: replacement.prefix,
+      retiredAllowedEnvironments: ['sandbox', 'production'],
       replacementAllowedEnvironments: ['sandbox'],
       now: new Date(),
     });
@@ -672,7 +680,7 @@ describe('organization API key rotation against PostgreSQL', () => {
     ).rejects.toMatchObject({ code: 'ENVIRONMENT_NOT_ALLOWED' });
   });
 
-  it('refuses a rotation environment the retired key did not allow', async () => {
+  it('refuses a rotation when the stored allowlist differs from the one it was chosen from', async () => {
     await seedOrganization();
     const retired = await seedKeyWith({
       name: 'production-only key',
@@ -688,6 +696,7 @@ describe('organization API key rotation against PostgreSQL', () => {
       replacementId: replacement.id,
       keyHash: replacement.hash,
       keyPrefix: replacement.prefix,
+      retiredAllowedEnvironments: ['sandbox', 'production'],
       replacementAllowedEnvironments: ['sandbox'],
       now: new Date(),
     });
@@ -787,6 +796,7 @@ describe('organization API key rotation against PostgreSQL', () => {
         replacementId: collision.id,
         keyHash: replacement.hash,
         keyPrefix: replacement.prefix,
+        retiredAllowedEnvironments: ['production'],
         replacementAllowedEnvironments: ['production'],
         now: new Date(),
       }),
@@ -1092,6 +1102,7 @@ describe('organization API key audit trail against PostgreSQL', () => {
       replacementId: replacement.id,
       keyHash: replacement.hash,
       keyPrefix: replacement.prefix,
+      retiredAllowedEnvironments: ['production'],
       replacementAllowedEnvironments: ['production'],
       now: new Date(),
     });

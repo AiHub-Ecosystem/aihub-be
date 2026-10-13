@@ -11,10 +11,12 @@ export const SandboxDemoEnvironmentSchema = Type.Union([
   Type.Literal('production'),
 ]);
 
-/** The same union, defaulting to the environment the demo opens on. */
+/** The environment the demo opens on when the request names none. */
+export const DEFAULT_SANDBOX_DEMO_ENVIRONMENT = 'sandbox';
+
 const SandboxDemoEnvironmentSchemaWithDefault = Type.Union(
-  [Type.Literal('sandbox'), Type.Literal('production')],
-  { default: 'sandbox' },
+  SandboxDemoEnvironmentSchema.anyOf,
+  { default: DEFAULT_SANDBOX_DEMO_ENVIRONMENT },
 );
 
 export const SandboxDemoKeyValidationRequestSchema = Type.Object(

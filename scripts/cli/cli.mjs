@@ -52,7 +52,7 @@ const PRIVATE_JWK_MEMBERS = new Set([
 import {
   CliUsageError,
   booleanOption,
-  environmentListOption,
+  environmentOption,
   quotaOption,
   usageError,
 } from './cli-options.cjs';
@@ -535,17 +535,9 @@ async function createKey(options) {
   const actorUsername = requiredOption(options, 'actor');
   const name = requiredOption(options, 'name');
   const scopes = listOption(options, 'scopes', 'writing.grade');
-  const allowedEnvironments = environmentListOption(
-    options,
-    'envs',
-    'production',
-  );
-  // A key bound to one environment is issued under that environment's display
-  // prefix; a key spanning several keeps the shared one.
-  const generated = generateApiKey(
-    `ak_${ulid()}`,
-    allowedEnvironments.length === 1 ? allowedEnvironments[0] : undefined,
-  );
+  // A new key is bound to one environment and issued under its display prefix.
+  const environment = environmentOption(options, 'envs', 'production');
+  const generated = generateApiKey(`ak_${ulid()}`, environment);
 
   const outcome = await runCliCommand(createOperatorApiKeyDescriptor, {
     databaseUrl: controlPlaneDatabaseUrl(),
@@ -559,7 +551,7 @@ async function createKey(options) {
     },
     name,
     scopes,
-    allowedEnvironments,
+    allowedEnvironments: [environment],
   });
   if (outcome !== 'created') {
     usageError();

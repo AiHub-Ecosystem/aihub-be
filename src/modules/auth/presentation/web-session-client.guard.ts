@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { clientSecretFrom } from '@/common/http/client-secret-header';
 import { constantTimeEquals } from '@/common/security/constant-time-equals';
 import {
   WEB_SESSION_CLIENT_SECRET,
@@ -12,7 +13,6 @@ import {
   Injectable,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { clientSecretFrom } from './web-session-transport';
 
 /** Authenticates the BFF before controller validation or application lookups. */
 @Injectable()

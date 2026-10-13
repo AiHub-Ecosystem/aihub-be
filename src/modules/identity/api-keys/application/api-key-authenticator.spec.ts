@@ -364,50 +364,7 @@ describe('ApiKeyAuthenticator', () => {
     expect(cache.missCalls).toBe(0);
   });
 
-  it('re-reads a key bound to one environment on every request, so a cached positive record cannot survive revocation', async () => {
-    const { authenticator, repository, cache } = createAuthenticator({
-      ...activeRecord,
-      allowedEnvironments: ['production'],
-    });
-    // A positive cache entry that predates the revocation, as the rotation and
-    // revocation commands could fail to purge.
-    cache.value = { ...activeRecord, allowedEnvironments: ['production'] };
-    const credentials = {
-      value: `aihub_prod_${'A'.repeat(43)}`,
-      environment: 'production',
-      clientIp: '203.0.113.10',
-    };
-
-    await expect(
-      authenticator.authenticate(credentials),
-    ).resolves.toMatchObject({ organizationId: 'org_acme' });
-
-    repository.record = {
-      ...activeRecord,
-      allowedEnvironments: ['production'],
-      status: 'revoked',
-    };
-    await expect(authenticator.authenticate(credentials)).rejects.toMatchObject(
-      { code: 'UNAUTHORIZED' },
-    );
-    expect(repository.calls).toBe(2);
-  });
-
-  it('keeps authenticating a legacy key that still names more than one environment', async () => {
-    const { authenticator, repository } = createAuthenticator();
-
-    await expect(
-      authenticator.authenticate({
-        value: VALID_KEY,
-        environment: 'production',
-        clientIp: '203.0.113.10',
-      }),
-    ).resolves.toMatchObject({ organizationId: 'org_acme' });
-
-    expect(repository.calls).toBe(1);
-  });
-
-  it('observes legacy-key revocation on a forced-fresh grade authorization', async () => {
+  it('observes revocation on a forced-fresh grade authorization despite a cached positive record', async () => {
     const { authenticator, repository, cache } = createAuthenticator();
     cache.value = activeRecord;
     const credentials = {

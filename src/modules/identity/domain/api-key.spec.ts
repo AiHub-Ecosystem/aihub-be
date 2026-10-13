@@ -5,6 +5,9 @@ import {
   generateApiKey,
   hashApiKey,
   isApiKeyFormat,
+  isGradingScope,
+  isKeyEnvironment,
+  rotatedKeyEnvironments,
 } from './api-key';
 
 const SECRET = 'A'.repeat(43);
@@ -46,6 +49,34 @@ describe('API key material', () => {
     expect(apiKeyDisplayPrefix(`${API_KEY_PREFIX}${SECRET}`)).toBe(
       'aihub_sk_AAAAAA',
     );
+  });
+
+  it('keeps the shared prefix for an environment that has none of its own', () => {
+    const generated = generateApiKey('ak_1', 'development');
+
+    expect(generated.raw).toMatch(/^aihub_sk_[A-Za-z0-9]{43}$/);
+    expect(isApiKeyFormat(generated.raw)).toBe(true);
+  });
+
+  it.each(['development', 'toString', '__proto__', ''])(
+    'does not take %s for an issuable environment',
+    (value) => {
+      expect(isKeyEnvironment(value)).toBe(false);
+    },
+  );
+
+  it('narrows a rotated key to its first stored environment', () => {
+    expect(rotatedKeyEnvironments(['production', 'sandbox'])).toEqual([
+      'production',
+    ]);
+    expect(rotatedKeyEnvironments(['sandbox'])).toEqual(['sandbox']);
+    expect(rotatedKeyEnvironments([])).toEqual([]);
+  });
+
+  it('names exactly the Writing and Speaking grading scopes', () => {
+    expect(isGradingScope('writing.grade')).toBe(true);
+    expect(isGradingScope('speaking.grade')).toBe(true);
+    expect(isGradingScope('writing.read')).toBe(false);
   });
 
   it('stores a one-way hash rather than any recoverable part of the credential', () => {

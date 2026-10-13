@@ -260,11 +260,11 @@ export class PostgresOrganizationApiKeyRepository
           return { kind: 'key_not_rotatable' as const };
         }
 
-        const [replacementEnvironment] = input.replacementAllowedEnvironments;
+        // The replacement was chosen from the allowlist the application read;
+        // a changed allowlist means that choice may no longer be valid.
         if (
-          input.replacementAllowedEnvironments.length !== 1 ||
-          replacementEnvironment === undefined ||
-          !allowedEnvironments.includes(replacementEnvironment)
+          allowedEnvironments.join(',') !==
+          input.retiredAllowedEnvironments.join(',')
         ) {
           return { kind: 'key_not_rotatable' as const };
         }

@@ -1,7 +1,7 @@
 import {
   CliUsageError,
   booleanOption,
-  environmentListOption,
+  environmentOption,
   quotaOption,
 } from './cli-options.cjs';
 
@@ -69,37 +69,31 @@ describe('booleanOption', () => {
   );
 });
 
-describe('environmentListOption', () => {
+describe('environmentOption', () => {
   it('defaults key creation to production', () => {
-    expect(environmentListOption(options(), 'envs')).toEqual(['production']);
+    expect(environmentOption(options(), 'envs')).toBe('production');
   });
 
   it.each(['development', 'staging', 'production', 'sandbox'])(
     'accepts %s',
     (environment) => {
-      expect(
-        environmentListOption(options({ envs: environment }), 'envs'),
-      ).toEqual([environment]);
+      expect(environmentOption(options({ envs: environment }), 'envs')).toBe(
+        environment,
+      );
     },
   );
 
-  it('accepts multiple non-sandbox environments', () => {
-    expect(
-      environmentListOption(options({ envs: 'development,staging' }), 'envs'),
-    ).toEqual(['development', 'staging']);
-  });
-
+  // A new key has exactly one environment, so a list is refused outright.
   it.each([
     'unknown',
     '',
     'production,',
     'production,production',
     'sandbox,production',
-    'sandbox,staging',
-    'sandbox,development',
-  ])('rejects invalid environment list %s', (value) => {
-    expect(() =>
-      environmentListOption(options({ envs: value }), 'envs'),
-    ).toThrow(CliUsageError);
+    'development,staging',
+  ])('rejects %s', (value) => {
+    expect(() => environmentOption(options({ envs: value }), 'envs')).toThrow(
+      CliUsageError,
+    );
   });
 });

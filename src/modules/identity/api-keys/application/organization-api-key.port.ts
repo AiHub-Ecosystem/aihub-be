@@ -63,7 +63,9 @@ export interface RotateOrganizationApiKeyRecordInput {
   /** Lowercase hex SHA-256 of the replacement; the raw value never arrives here. */
   readonly keyHash: string;
   readonly keyPrefix: string;
-  /** One environment retained by the replacement, selected from the retired key's allowlist. */
+  /** The retired key's stored allowlist the replacement was selected from. */
+  readonly retiredAllowedEnvironments: readonly string[];
+  /** The environments the replacement keeps. */
   readonly replacementAllowedEnvironments: readonly string[];
   /**
    * The application's clock. The store decides rotatability under its lock but

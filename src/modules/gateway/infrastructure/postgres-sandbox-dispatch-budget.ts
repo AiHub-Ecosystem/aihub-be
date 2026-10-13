@@ -1,67 +1,19 @@
-import { effectiveSandboxAllowance } from '@/modules/gateway/application/effective-sandbox-allowance';
 import type {
   SandboxAllowanceSnapshot,
   SandboxDispatchBudgetPort,
   SandboxDispatchReservation,
 } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
+import type { PrismaClient } from '@prisma-client/client';
 import { createPostgresSandboxDispatchBudgetClient } from './postgres-sandbox-dispatch-budget.fixture-client';
 
 export const SANDBOX_ENVIRONMENT_MONTHLY_LIMIT = 500;
 
-interface AllowanceReader {
-  sandboxAllowanceOverride: {
-    findUnique(input: {
-      where: {
-        organizationId_monthStart: {
-          organizationId: string;
-          monthStart: Date;
-        };
-      };
-    }): Promise<{ allowance: number } | null>;
-  };
-  sandboxAllowanceDefault: {
-    findFirst(input: {
-      where: { monthStart: { lte: Date } };
-      orderBy: { monthStart: 'desc' };
-    }): Promise<{ allowance: number } | null>;
-  };
-}
-
-interface ReservationStore {
-  count(input: {
-    where: {
-      status: 'reserved';
-      monthStart: Date;
-      organizationId?: string;
-    };
-  }): Promise<number>;
-  create(input: {
-    data: {
-      requestId: string;
-      organizationId: string;
-      monthStart: Date;
-      createdAt: Date;
-    };
-  }): Promise<unknown>;
-  updateMany(input: {
-    where: { requestId: string; status: 'reserved' };
-    data: { status: 'released'; releasedAt: Date };
-  }): Promise<unknown>;
-}
-
-interface BudgetTransaction extends AllowanceReader {
-  sandboxDispatchReservation: ReservationStore;
-  $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number>;
-}
-
-interface BudgetClient extends BudgetTransaction {
-  $transaction<T>(
-    work: (transaction: BudgetTransaction) => Promise<T>,
-    options: typeof CONTROL_PLANE_TRANSACTION_OPTIONS,
-  ): Promise<T>;
-  close?: () => Promise<void>;
-}
+type PersistenceClient = PrismaClient & { close?: () => Promise<void> };
+type AllowanceReader = Pick<
+  PrismaClient,
+  'sandboxAllowanceOverride' | 'sandboxAllowanceDefault'
+>;
 
 function utcMonth(now: Date): { month: number; monthStart: Date } {
   return {
@@ -91,19 +43,16 @@ async function effectiveAllowance(
       orderBy: { monthStart: 'desc' },
     }),
   ]);
-  return effectiveSandboxAllowance(
-    override?.allowance ?? null,
-    persistedDefault?.allowance ?? null,
-  );
+  return override?.allowance ?? persistedDefault?.allowance ?? null;
 }
 
 export class PostgresSandboxDispatchBudget
   implements SandboxDispatchBudgetPort
 {
-  private readonly client: BudgetClient;
+  private readonly client: PersistenceClient;
 
   constructor(
-    clientOrDatabaseUrl: BudgetClient | string,
+    clientOrDatabaseUrl: PersistenceClient | string,
     private readonly now: () => Date = () => new Date(),
   ) {
     this.client =

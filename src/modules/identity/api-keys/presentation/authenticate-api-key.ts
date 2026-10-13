@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+
 import { AppError } from '@/common/errors/app-error';
 import type {
   ApiKeyAuthenticatorPort,
@@ -15,6 +17,20 @@ export function forbidden(): AppError {
     message: 'API key is not authorized for this operation',
     retryable: false,
   });
+}
+
+/**
+ * The visitor address a Customer Web BFF forwards, or `undefined` when the
+ * header is absent or is not an IP address. Trust it only after the BFF's
+ * client secret has been verified.
+ */
+export function forwardedVisitorIp(
+  request: AuthenticatedRequest,
+): string | undefined {
+  const visitorIp = request.headers['x-aihub-visitor-ip'];
+  return typeof visitorIp === 'string' && isIP(visitorIp) !== 0
+    ? visitorIp
+    : undefined;
 }
 
 export interface AuthenticateApiKeyOptions {

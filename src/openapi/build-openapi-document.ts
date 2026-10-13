@@ -14,6 +14,7 @@ import {
   type HttpStatus,
   httpStatusForErrorCode,
 } from '@/common/errors/error-registry';
+import { WEB_SESSION_CLIENT_SECRET_HEADER } from '@/common/http/client-secret-header';
 import { PUBLIC_API_SERVERS } from '@/config/runtime-configuration';
 import {
   ForgotPasswordResponseSchema,
@@ -40,7 +41,6 @@ import {
   PASSWORD_MIN_CODE_POINTS,
 } from '@/modules/auth/domain/local-auth';
 import { REFRESH_COOKIE_NAME } from '@/modules/auth/presentation/refresh-cookie';
-import { WEB_SESSION_CLIENT_SECRET_HEADER } from '@/modules/auth/presentation/web-session-transport';
 import { toOpenApiPath } from './openapi-path';
 
 /**
@@ -79,6 +79,8 @@ function routeSecurityOf(routeId: PublicRouteId): Record<string, unknown> {
       return { security: [{ RefreshCookie: [] }] };
     case 'bff-client-secret':
       return { security: [{ BffClientSecret: [] }] };
+    case 'bff-api-key':
+      return { security: [{ ApiKeyAuth: [], BffClientSecret: [] }] };
     case 'none':
       return { security: [] };
   }
@@ -1750,7 +1752,7 @@ function sandboxDemoKeyValidationPathItem(
         'This route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and advisory; each grading operation authenticates the key again.',
       ].join('\n\n'),
       ...routeIdentityScopeOf(id),
-      security: [{ ApiKeyAuth: [], BffClientSecret: [] }],
+      ...routeSecurityOf(id),
       parameters: [
         { $ref: '#/components/parameters/CorrelationId' },
         {

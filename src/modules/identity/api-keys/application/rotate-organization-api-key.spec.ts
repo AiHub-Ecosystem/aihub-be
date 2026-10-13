@@ -93,7 +93,25 @@ describe('RotateOrganizationApiKey', () => {
 
     expect(replacement.apiKey).toMatch(/^aihub_prod_[A-Za-z0-9]{43}$/);
     expect(replacement.allowedEnvironments).toEqual(['production']);
+    expect(recorded[0]?.retiredAllowedEnvironments).toEqual([
+      'production',
+      'sandbox',
+    ]);
     expect(recorded[0]?.replacementAllowedEnvironments).toEqual(['production']);
+  });
+
+  it('refuses to rotate a key that stores no environment, issuing nothing', async () => {
+    const { useCase, recorded } = createUseCase([]);
+
+    await expect(
+      useCase.rotate({
+        context: CONTEXT,
+        userId: 'usr_owner',
+        organizationId: 'org_acme',
+        apiKeyId: 'ak_retired',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(recorded).toEqual([]);
   });
 
   it('keeps a single-environment key in the same environment when rotated', async () => {

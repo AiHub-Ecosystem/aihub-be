@@ -13,6 +13,7 @@ import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { parseRequestBody } from '@/common/http/parse-request-body';
 import { isRequestId } from '@/common/request-context/request-id';
 import {
+  DEFAULT_SANDBOX_DEMO_ENVIRONMENT,
   type SandboxDemoKeyValidationRequest,
   SandboxDemoKeyValidationRequestSchema,
   type SandboxDemoKeyValidationResponse,
@@ -56,7 +57,7 @@ export class SandboxDemoKeyValidationController {
       organizationId: authenticated.organizationId,
       // The schema default already applied while parsing; the fallback only
       // narrows the optional field back to the contract's union.
-      environment: input.environment ?? 'sandbox',
+      environment: input.environment ?? DEFAULT_SANDBOX_DEMO_ENVIRONMENT,
       authenticatedEnvironment: authenticated.environment,
       allowedEnvironments: authenticated.allowedEnvironments,
       scope: input.scope,

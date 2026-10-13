@@ -2,7 +2,10 @@ import { AppError } from '@/common/errors/app-error';
 import type { RequestContext } from '@/common/request-context/request-context';
 
 import type { ApiKeyCachePort } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
-import { isKeyEnvironment } from '@/modules/identity/domain/api-key';
+import {
+  isKeyEnvironment,
+  rotatedKeyEnvironments,
+} from '@/modules/identity/domain/api-key';
 import {
   ORGANIZATION_API_KEY_ADMISSION,
   admitOrganizationApiKey,
@@ -68,15 +71,20 @@ export class RotateOrganizationApiKey {
 
     const now = this.now();
     // Reuse the management read to pick the one environment the replacement
-    // keeps; the transaction still verifies that it belongs to the retired key.
+    // keeps; the transaction refuses if the stored allowlist changed since.
     const retired = (
       await this.apiKeys.listApiKeys({
         context: input.context,
         organizationId: input.organizationId,
       })
     ).find((key) => key.apiKeyId === input.apiKeyId);
-    const replacementAllowedEnvironments =
-      retired?.allowedEnvironments.slice(0, 1) ?? [];
+    const retiredAllowedEnvironments = retired?.allowedEnvironments ?? [];
+    const replacementAllowedEnvironments = rotatedKeyEnvironments(
+      retiredAllowedEnvironments,
+    );
+    if (retired !== undefined && replacementAllowedEnvironments.length !== 1) {
+      throw forbidden('API key cannot be rotated');
+    }
     const environment = replacementAllowedEnvironments[0];
     const generated = generateOrganizationApiKey(
       now,
@@ -90,6 +98,7 @@ export class RotateOrganizationApiKey {
       replacementId: generated.id,
       keyHash: generated.hash,
       keyPrefix: generated.prefix,
+      retiredAllowedEnvironments,
       replacementAllowedEnvironments,
       now,
     });

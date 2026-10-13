@@ -52,13 +52,24 @@ next UTC month at `5`. That is what makes the new default of five begin in the
 month after deployment while the deployment month keeps what it had. An
 allowance an operator already set for either month is left alone. Consumption
 lives in `sandbox_dispatch_reservations` and is never touched by these tables,
-so deployment and restart preserve it. Apply this migration first, then set the
-demo Organization override below before enabling the new application version.
+so deployment and restart preserve it.
 
-Before deploying, give the AIHUB demo Organization the allowance it needs for
-the deployment month. It used to be capped by its own configured
-`monthly_request_quota`; the durable policy now applies the same default to
-every Organization, so nothing preserves that for it:
+The migration cannot see an Organization's own configured
+`monthly_request_quota`, which lives in the production control-plane database.
+The AIHUB demo Organization used to be capped by that quota (or, with none, only
+by the shared ceiling of 500); the durable policy now applies the same default
+to every Organization. The migration and the new application version arrive in
+one release, and the policy is read on every request, so an override inserted
+**right after the migration step** takes effect with no restart. Until it
+exists the demo Organization is held to the 25 default, which fails
+conservative: it never admits more than before. Read the quota from the
+control-plane database, then use it (or `500` when it is `NULL`) as the
+override:
+
+```sql
+-- production control-plane database
+SELECT id, monthly_request_quota FROM organizations WHERE id = 'org_...';
+```
 
 ```sql
 BEGIN;
@@ -71,7 +82,7 @@ SELECT pg_advisory_xact_lock(
 INSERT INTO sandbox_allowance_overrides (organization_id, month_start, allowance)
 VALUES ('org_...',
         date_trunc('month', now() AT TIME ZONE 'UTC')::date,
-        500)
+        500) -- the quota read above, or 500 when it is NULL
 ON CONFLICT (organization_id, month_start) DO UPDATE SET allowance = EXCLUDED.allowance;
 COMMIT;
 ```
@@ -266,8 +277,9 @@ The key is issued as `aihub_sandbox_…` because it is bound to one environment.
 `/demo/scoring` requires `writing.grade`; `/demo/speaking` requires
 `speaking.grade`. The demo refuses Organizations with active Identity
 Configuration because it cannot collect an assertion signed by that
-Organization. A key created with several `--envs` keeps the shared `aihub_sk_`
-prefix, because a prefix names one environment.
+Organization. `--envs` takes exactly one environment: the command refuses a
+list, because every newly issued key is bound to one environment. Only keys
+issued before ADR-0095 keep the shared `aihub_sk_` prefix.
 
 To revoke:
 

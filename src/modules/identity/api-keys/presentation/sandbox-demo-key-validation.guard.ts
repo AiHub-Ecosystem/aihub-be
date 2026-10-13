@@ -1,4 +1,3 @@
-import { isIP } from 'node:net';
 import {
   type CanActivate,
   type ExecutionContext,
@@ -14,7 +13,7 @@ import {
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import type { RequestEnvironmentConfig } from '@/modules/identity/shared/presentation/request-environment';
-import { authenticateApiKey } from './authenticate-api-key';
+import { authenticateApiKey, forwardedVisitorIp } from './authenticate-api-key';
 
 /**
  * Authenticates demo key checks without entering the metered grading chain.
@@ -35,8 +34,8 @@ export class SandboxDemoKeyValidationGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const visitorIp = request.headers['x-aihub-visitor-ip'];
-    if (typeof visitorIp !== 'string' || isIP(visitorIp) === 0) {
+    const visitorIp = forwardedVisitorIp(request);
+    if (visitorIp === undefined) {
       throw new AppError({
         code: 'IDENTITY_PROVIDER_UNAVAILABLE',
         message: 'Demo key validation is unavailable',

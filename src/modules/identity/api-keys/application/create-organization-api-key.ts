@@ -2,6 +2,10 @@ import { publishedScopes } from '@/catalog/operation-catalog';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import type { RequestContext } from '@/common/request-context/request-context';
 import {
+  type KeyEnvironment,
+  isGradingScope,
+} from '@/modules/identity/domain/api-key';
+import {
   ORGANIZATION_API_KEY_ADMISSION,
   admitOrganizationApiKey,
 } from '@/modules/identity/membership/application/organization-admission';
@@ -11,10 +15,8 @@ import { generateOrganizationApiKey } from './organization-api-key-generator';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
 
 /** Only the two public customer environments have an issued key prefix. */
-type CustomerKeyEnvironment = 'production' | 'sandbox';
+type CustomerKeyEnvironment = Exclude<KeyEnvironment, 'staging'>;
 const DEFAULT_ENVIRONMENTS: readonly CustomerKeyEnvironment[] = ['production'];
-/** Public demos may use only these grading scopes in the Sandbox Environment. */
-const SANDBOX_SCOPES: readonly string[] = ['writing.grade', 'speaking.grade'];
 const MAX_KEY_LIFETIME_MS = 365 * 24 * 60 * 60 * 1000;
 
 /**
@@ -98,7 +100,7 @@ function validateSandboxKey(
 ): void {
   if (
     environments.includes('sandbox') &&
-    scopes.some((scope) => !SANDBOX_SCOPES.includes(scope))
+    scopes.some((scope) => !isGradingScope(scope))
   ) {
     throw invalidRequest();
   }

@@ -1,4 +1,3 @@
-import { isIP } from 'node:net';
 import {
   type CanActivate,
   type ExecutionContext,
@@ -12,6 +11,7 @@ import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
 import type { ClientIpSource } from '@/common/http/client-ip-source';
+import { clientSecretFrom } from '@/common/http/client-secret-header';
 import { constantTimeEquals } from '@/common/security/constant-time-equals';
 import { appConfig } from '@/config/runtime-configuration';
 import {
@@ -23,6 +23,7 @@ import {
   type ApiKeyAuthenticatorPort,
   type AuthenticatedApiKey,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import { isGradingScope } from '@/modules/identity/domain/api-key';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import {
   type RequestEnvironmentConfig,
@@ -31,7 +32,11 @@ import {
 } from '@/modules/identity/shared/presentation/request-environment';
 import { REQUIRED_OPERATION_METADATA } from '@/modules/identity/shared/presentation/require-operation.decorator';
 import { openMeteringEvidence } from '@/modules/metering/application/metering-evidence';
-import { authenticateApiKey, forbidden } from './authenticate-api-key';
+import {
+  authenticateApiKey,
+  forbidden,
+  forwardedVisitorIp,
+} from './authenticate-api-key';
 
 function configurationError(): AppError {
   return new AppError({
@@ -45,17 +50,14 @@ function visitorIpForBffRequest(
   request: AuthenticatedRequest,
   secret: WebSessionClientSecretPort | undefined,
 ): string | undefined {
-  const presented = request.headers['x-aihub-client-secret'];
+  const presented = clientSecretFrom(request);
   if (presented === undefined) return undefined;
 
   const expected = secret?.resolve();
   if (expected === undefined || expected.length === 0) {
     throw configurationError();
   }
-  if (
-    typeof presented !== 'string' ||
-    !constantTimeEquals(presented, expected)
-  ) {
+  if (!constantTimeEquals(presented, expected)) {
     throw new AppError({
       code: 'UNAUTHORIZED',
       message: 'Client secret is missing or invalid',
@@ -63,8 +65,8 @@ function visitorIpForBffRequest(
     });
   }
 
-  const visitorIp = request.headers['x-aihub-visitor-ip'];
-  if (typeof visitorIp !== 'string' || isIP(visitorIp) === 0) {
+  const visitorIp = forwardedVisitorIp(request);
+  if (visitorIp === undefined) {
     throw configurationError();
   }
   request.aihubClientIpSource = 'customer_web_bff' satisfies ClientIpSource;
@@ -145,9 +147,7 @@ export class ApiKeyGuard implements CanActivate {
       configuration,
       {
         ...(bffVisitorIp === undefined ? {} : { clientIp: bffVisitorIp }),
-        forceFresh:
-          operation.requiredScope === 'writing.grade' ||
-          operation.requiredScope === 'speaking.grade',
+        forceFresh: isGradingScope(operation.requiredScope),
       },
     );
     const authorized =

@@ -91,12 +91,16 @@ import type { IdempotencyMode } from './operation-catalog';
  * `X-AIHUB-Client-Secret`. It is a caller-auth kind of its own rather than a
  * variant of `api-key` because it identifies a BFF, not an Organization, and
  * because the document must label it as server-to-server only.
+ *
+ * `bff-api-key` is an Organization API key presented through the Customer Web
+ * BFF: the route needs both the `X-API-Key` credential and the BFF secret.
  */
 export type CallerAuth =
   | 'bearer'
   | 'refresh-cookie'
   | 'api-key'
   | 'bff-client-secret'
+  | 'bff-api-key'
   | 'none';
 
 /**
@@ -613,7 +617,7 @@ export const PUBLIC_ROUTES = {
   'sandbox.demo-key.validate': {
     method: 'POST',
     path: '/v1/sandbox/demo/api-keys/validate',
-    callerAuth: 'api-key',
+    callerAuth: 'bff-api-key',
     organizationResolution: 'caller',
     successStatus: 200,
     publishedIdentityScope: 'organization',

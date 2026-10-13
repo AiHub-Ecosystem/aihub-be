@@ -3,12 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 /** The shared prefix every key issued before ADR-0095 carries. */
 export const API_KEY_PREFIX = 'aihub_sk_';
 
-/**
- * The prefix a newly issued key advertises for the environment it is bound to.
- * It is a recognition hint and nothing more: authorization reads the durable
- * `allowed_environments`, so a prefix never grants access. Environments ADR-0095
- * did not name keep the shared prefix rather than invent one.
- */
+/** The environments a newly issued key may be bound to. */
 export type KeyEnvironment = 'sandbox' | 'production' | 'staging';
 
 /**
@@ -56,16 +51,34 @@ const API_KEY_FORMATS: readonly string[] = KNOWN_PREFIXES.map(
 export function isKeyEnvironment(
   value: string | undefined,
 ): value is KeyEnvironment {
-  return value === 'sandbox' || value === 'production' || value === 'staging';
+  return value !== undefined && Object.hasOwn(ENVIRONMENT_PREFIXES, value);
 }
 
-/** The display prefix for a key bound to `environment`. */
-export function apiKeyPrefixForEnvironment(
-  environment?: KeyEnvironment,
-): string {
-  return environment === undefined
-    ? API_KEY_PREFIX
-    : ENVIRONMENT_PREFIXES[environment];
+/** The grading scopes a Sandbox key may carry and the public demo may select. */
+const GRADING_SCOPES: readonly string[] = ['writing.grade', 'speaking.grade'];
+
+export function isGradingScope(scope: string): boolean {
+  return GRADING_SCOPES.includes(scope);
+}
+
+/**
+ * The display prefix for a key bound to `environment`. An environment without
+ * an issued prefix, such as a local `development` key, keeps the shared one.
+ */
+export function apiKeyPrefixForEnvironment(environment?: string): string {
+  return isKeyEnvironment(environment)
+    ? ENVIRONMENT_PREFIXES[environment]
+    : API_KEY_PREFIX;
+}
+
+/**
+ * The environments a replacement credential keeps. Rotation narrows a legacy
+ * key to its first stored environment; a key already bound to one keeps it.
+ */
+export function rotatedKeyEnvironments(
+  stored: readonly string[],
+): readonly string[] {
+  return stored.slice(0, 1);
 }
 
 export function isApiKeyFormat(value: string): boolean {
@@ -91,7 +104,7 @@ export function apiKeyDisplayPrefix(rawKey: string): string {
  */
 export function generateApiKey(
   id: string,
-  environment?: KeyEnvironment,
+  environment?: string,
 ): GeneratedApiKey {
   let value = BigInt(`0x${randomBytes(32).toString('hex')}`);
   let secret = '';
