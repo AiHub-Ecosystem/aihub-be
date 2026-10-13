@@ -260,15 +260,22 @@ export class PostgresOrganizationApiKeyRepository
           return { kind: 'key_not_rotatable' as const };
         }
 
+        // The replacement was chosen from the allowlist the application read;
+        // a changed allowlist means that choice may no longer be valid.
+        if (
+          allowedEnvironments.join(',') !==
+          input.retiredAllowedEnvironments.join(',')
+        ) {
+          return { kind: 'key_not_rotatable' as const };
+        }
+
         await transaction.apiKey.updateMany({
           where: { id: input.apiKeyId },
           data: { status: 'revoked', revokedAt: input.now },
         });
 
-        // The replacement inherits every column that describes what the key
-        // may do. Rotation is exempt from the active-key cap: it never changes
-        // how many active keys an Organization holds, and an Organization at
-        // its cap must still be able to replace a leaked credential.
+        // Rotation narrows environment authority to one. It is exempt from the
+        // active-key cap because it never changes how many keys are active.
         const { createdAt } = await transaction.apiKey.create({
           data: {
             id: input.replacementId,
@@ -277,7 +284,7 @@ export class PostgresOrganizationApiKeyRepository
             keyPrefix: input.keyPrefix,
             name,
             scopes: [...scopes],
-            allowedEnvironments: [...allowedEnvironments],
+            allowedEnvironments: [...input.replacementAllowedEnvironments],
             expiresAt,
           },
           select: { createdAt: true },
@@ -294,7 +301,7 @@ export class PostgresOrganizationApiKeyRepository
             replacementId: input.replacementId,
             replacementKeyPrefix: input.keyPrefix,
             scopes,
-            allowedEnvironments,
+            allowedEnvironments: input.replacementAllowedEnvironments,
           },
         );
 
@@ -303,7 +310,7 @@ export class PostgresOrganizationApiKeyRepository
           retiredKeyHash,
           name,
           scopes,
-          allowedEnvironments,
+          allowedEnvironments: [...input.replacementAllowedEnvironments],
           expiresAt,
           createdAt,
         };

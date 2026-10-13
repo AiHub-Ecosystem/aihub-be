@@ -895,6 +895,48 @@ function addOrganizationRosterCheck(items: unknown[]): void {
   }
 }
 
+/**
+ * The converter publishes one scheme per request, so a route that needs the
+ * API key and the BFF secret together gets the secret header added here. The
+ * routes come from the catalog's `bff-api-key` caller auth, not from a path.
+ */
+const BFF_API_KEY_PATHS: ReadonlySet<string> = new Set(
+  Object.values(PUBLIC_ROUTES)
+    .filter((route) => route.callerAuth === 'bff-api-key')
+    .map((route) => route.path),
+);
+
+function addBffClientSecret(items: unknown[]): void {
+  for (const item of items) {
+    if (!isRecord(item)) continue;
+
+    if (isRecord(item.request)) {
+      const url = item.request.url;
+      const path = isRecord(url) ? url.path : undefined;
+      if (
+        Array.isArray(path) &&
+        path.every((part) => typeof part === 'string') &&
+        BFF_API_KEY_PATHS.has(`/${path.join('/')}`)
+      ) {
+        const headers = Array.isArray(item.request.header)
+          ? item.request.header
+          : [];
+        if (
+          !headers.some(
+            (header) =>
+              isRecord(header) && header.key === BFF_CLIENT_SECRET_HEADER.key,
+          )
+        ) {
+          headers.push(BFF_CLIENT_SECRET_HEADER);
+        }
+        item.request.header = headers;
+      }
+    }
+
+    if (Array.isArray(item.item)) addBffClientSecret(item.item);
+  }
+}
+
 function convertOpenApiToPostman(
   openApiDocument: unknown,
 ): Promise<PostmanCollectionShape> {
@@ -946,6 +988,7 @@ export async function buildPostmanCollection(
   );
   normalizeRefreshCookieAuth(base);
   addOrganizationRosterCheck(base.item);
+  addBffClientSecret(base.item);
 
   return {
     ...base,

@@ -77,8 +77,12 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     }
 
     const hashHex = hashApiKey(credentials.value);
-    const sandbox = credentials.environment === 'sandbox';
-    let record = sandbox ? undefined : await this.getCachedRecord(hashHex);
+    // Sandbox and the callers that ask for it (every grade, key validation)
+    // read durable state, so revocation, suspension, and a scope change are
+    // observed at the next request instead of waiting out the cache ceiling.
+    const forceFresh =
+      credentials.environment === 'sandbox' || credentials.forceFresh === true;
+    let record = forceFresh ? undefined : await this.getCachedRecord(hashHex);
 
     if (record === undefined) {
       // The brute-force gate sits specifically here, in front of the
@@ -96,7 +100,7 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       }
 
       record = await this.repository.findByHash(hashHex);
-      if (!sandbox) {
+      if (!forceFresh) {
         if (record === null) {
           await this.cache.setMiss(hashHex).catch(() => undefined);
         } else {
@@ -124,17 +128,6 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     if (!record.allowedEnvironments.includes(credentials.environment)) {
       throw environmentNotAllowed();
     }
-    if (
-      credentials.requiredAllowedEnvironments !== undefined &&
-      (record.allowedEnvironments.length !==
-        credentials.requiredAllowedEnvironments.length ||
-        credentials.requiredAllowedEnvironments.some(
-          (environment) => !record.allowedEnvironments.includes(environment),
-        ))
-    ) {
-      throw environmentNotAllowed();
-    }
-
     void this.repository
       .touchLastUsed(record.apiKeyId, now)
       .catch(() => undefined);
@@ -148,6 +141,7 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       maxConcurrent: record.maxConcurrent,
       monthlyRequestQuota: record.monthlyRequestQuota,
       hardStopOnQuota: record.hardStopOnQuota,
+      allowedEnvironments: record.allowedEnvironments,
     };
   }
 

@@ -197,6 +197,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
   ],
   exports: [
     GATEWAY_REDIS_READINESS,
+    SANDBOX_DISPATCH_BUDGET,
     OPERATION_DISPATCHER,
     GRADING_ORCHESTRATOR,
     DownstreamHttpClient,

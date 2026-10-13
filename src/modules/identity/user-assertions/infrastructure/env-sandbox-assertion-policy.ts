@@ -44,10 +44,4 @@ export class EnvSandboxAssertionPolicy implements SandboxAssertionPolicyPort {
       readSandboxOrganizationIds(this.configuration).includes(organizationId)
     );
   }
-
-  isConfiguredOrganization(organizationId: string): boolean {
-    return readSandboxOrganizationIds(this.configuration).includes(
-      organizationId,
-    );
-  }
 }

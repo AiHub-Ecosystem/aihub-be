@@ -14,6 +14,7 @@ import {
   type HttpStatus,
   httpStatusForErrorCode,
 } from '@/common/errors/error-registry';
+import { WEB_SESSION_CLIENT_SECRET_HEADER } from '@/common/http/client-secret-header';
 import { PUBLIC_API_SERVERS } from '@/config/runtime-configuration';
 import {
   ForgotPasswordResponseSchema,
@@ -40,7 +41,6 @@ import {
   PASSWORD_MIN_CODE_POINTS,
 } from '@/modules/auth/domain/local-auth';
 import { REFRESH_COOKIE_NAME } from '@/modules/auth/presentation/refresh-cookie';
-import { WEB_SESSION_CLIENT_SECRET_HEADER } from '@/modules/auth/presentation/web-session-transport';
 import { toOpenApiPath } from './openapi-path';
 
 /**
@@ -79,6 +79,8 @@ function routeSecurityOf(routeId: PublicRouteId): Record<string, unknown> {
       return { security: [{ RefreshCookie: [] }] };
     case 'bff-client-secret':
       return { security: [{ BffClientSecret: [] }] };
+    case 'bff-api-key':
+      return { security: [{ ApiKeyAuth: [], BffClientSecret: [] }] };
     case 'none':
       return { security: [] };
   }
@@ -1217,7 +1219,7 @@ function organizationApiKeyRotatePathItem(): Record<string, unknown> {
       operationId: id,
       summary: 'Rotate an organization API key',
       description:
-        'Creates a replacement and revokes the named key in one act, with no window in which both work. The replacement inherits the name, scopes, allowed environments, and expiry, and its raw credential is returned in this response only. A revoked or expired key cannot be rotated.',
+        'Creates a replacement and revokes the named key in one act, with no window in which both work. The replacement inherits the name, scopes, and expiry. It keeps the first stored allowed environment only; a legacy key that allows multiple environments is narrowed to that one environment. Legacy environments without a dedicated key prefix keep the compatibility prefix. The raw credential is returned in this response only. A revoked or expired key cannot be rotated.',
       ...routeIdentityScopeOf(id),
       security: [{ BearerAuth: [] }],
       parameters: [
@@ -1744,14 +1746,24 @@ function sandboxDemoKeyValidationPathItem(
   return {
     [PUBLIC_ROUTES[id].method.toLowerCase()]: {
       operationId: id,
-      summary: 'Validate a Sandbox key for the AIHUB demo',
+      summary: 'Validate a demo key for the selected environment',
       description: [
-        'Checks that the presented API key is bound only to the Sandbox environment, is active, has the requested Writing or Speaking grading scope, and belongs to an Organization without active Identity Configuration.',
-        'This route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and should be called again by the grading operation, which authenticates the key independently.',
+        'Customer Web BFF only. Checks that the active API key is bound to the selected environment, has the requested Writing or Speaking grading scope, and belongs to an Organization without active Identity Configuration.',
+        'This route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and advisory; each grading operation authenticates the key again.',
       ].join('\n\n'),
       ...routeIdentityScopeOf(id),
       ...routeSecurityOf(id),
-      parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        {
+          name: 'X-AIHUB-Visitor-IP',
+          in: 'header',
+          required: true,
+          schema: { type: 'string', format: 'ip' },
+          description:
+            'Trusted visitor IP forwarded by the authenticated Customer Web BFF for per-visitor failed-key protection.',
+        },
+      ],
       requestBody: {
         required: true,
         content: {

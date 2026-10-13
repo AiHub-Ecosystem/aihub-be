@@ -2,6 +2,10 @@ import { publishedScopes } from '@/catalog/operation-catalog';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import type { RequestContext } from '@/common/request-context/request-context';
 import {
+  type KeyEnvironment,
+  isGradingScope,
+} from '@/modules/identity/domain/api-key';
+import {
   ORGANIZATION_API_KEY_ADMISSION,
   admitOrganizationApiKey,
 } from '@/modules/identity/membership/application/organization-admission';
@@ -10,15 +14,9 @@ import type { OrganizationMembershipPort } from '@/modules/identity/membership/a
 import { generateOrganizationApiKey } from './organization-api-key-generator';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
 
-/** Customer-facing request tiers. Development remains operator-only. */
-const CUSTOMER_ENVIRONMENTS: readonly string[] = [
-  'production',
-  'staging',
-  'sandbox',
-];
-const DEFAULT_ENVIRONMENTS: readonly string[] = ['production'];
-/** Public demos may use only these grading scopes in the Sandbox Environment. */
-const SANDBOX_SCOPES: readonly string[] = ['writing.grade', 'speaking.grade'];
+/** Only the two public customer environments have an issued key prefix. */
+type CustomerKeyEnvironment = Exclude<KeyEnvironment, 'staging'>;
+const DEFAULT_ENVIRONMENTS: readonly CustomerKeyEnvironment[] = ['production'];
 const MAX_KEY_LIFETIME_MS = 365 * 24 * 60 * 60 * 1000;
 
 /**
@@ -76,37 +74,33 @@ function validatedScopes(scopes: readonly string[]): readonly string[] {
   return requested;
 }
 
+/** New customer key requests support only the public Sandbox and Production tiers. */
 function validatedEnvironments(
   environments: readonly string[] | undefined,
-): readonly string[] {
-  if (environments === undefined) {
-    return DEFAULT_ENVIRONMENTS;
-  }
+): readonly CustomerKeyEnvironment[] {
+  const requested =
+    environments === undefined
+      ? [...DEFAULT_ENVIRONMENTS]
+      : [...new Set(environments)];
 
-  const requested = [...new Set(environments)];
-  if (
-    requested.length === 0 ||
-    requested.some(
-      (environment) => !CUSTOMER_ENVIRONMENTS.includes(environment),
-    )
-  ) {
+  if (requested.length !== 1) {
     throw invalidRequest();
   }
 
-  return requested;
+  const environment = requested[0];
+  if (environment !== 'production' && environment !== 'sandbox') {
+    throw invalidRequest();
+  }
+  return [environment];
 }
 
 function validateSandboxKey(
   scopes: readonly string[],
   environments: readonly string[],
 ): void {
-  if (!environments.includes('sandbox')) {
-    return;
-  }
-
   if (
-    environments.length !== 1 ||
-    scopes.some((scope) => !SANDBOX_SCOPES.includes(scope))
+    environments.includes('sandbox') &&
+    scopes.some((scope) => !isGradingScope(scope))
   ) {
     throw invalidRequest();
   }
@@ -185,7 +179,7 @@ export class CreateOrganizationApiKey {
       ),
     ];
 
-    const generated = generateOrganizationApiKey(now);
+    const generated = generateOrganizationApiKey(now, allowedEnvironments[0]);
     const result = await this.apiKeys.createApiKey({
       context: input.context,
       organizationId: input.organizationId,

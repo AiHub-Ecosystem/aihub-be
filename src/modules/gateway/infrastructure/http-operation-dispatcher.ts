@@ -206,20 +206,17 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
 
     if (sandboxRequest) {
       const organizationId = context.organizationId;
-      const organizationLimit = context.sandboxOrganizationDispatchLimit;
-      if (
-        this.sandboxBudget === undefined ||
-        organizationId === undefined ||
-        organizationLimit === undefined
-      ) {
+      if (this.sandboxBudget === undefined || organizationId === undefined) {
         throw sandboxBudgetUnavailable();
       }
       let admitted: boolean;
       try {
+        // The Organization's allowance is resolved inside the reserving
+        // transaction, so it cannot be read here and passed in as a number that
+        // an operator's override has already overtaken.
         admitted = await this.sandboxBudget.reserve({
           organizationId,
           requestId: context.requestId,
-          organizationLimit,
         });
       } catch {
         throw sandboxBudgetUnavailable();

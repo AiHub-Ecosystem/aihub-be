@@ -13,6 +13,32 @@ const REPO_ROOT = join(__dirname, '../..');
 const COLLECTION_PATH = join(REPO_ROOT, 'aihub.postman_collection.json');
 const OPENAPI_PATH = join(REPO_ROOT, 'openapi.json');
 
+interface PostmanEntry {
+  readonly name?: string;
+  readonly request?: {
+    readonly header?: { key: string; value: string }[];
+    readonly url?: { readonly path?: string[] };
+  };
+  readonly item?: PostmanEntry[];
+}
+
+interface PostmanCollection {
+  readonly item?: PostmanEntry[];
+  readonly variable?: { key: string; value: string }[];
+}
+
+function findPostmanRequest(
+  items: readonly PostmanEntry[] | undefined,
+  path: string,
+): PostmanEntry | undefined {
+  for (const entry of items ?? []) {
+    if (entry.request?.url?.path?.join('/') === path) return entry;
+    const child = findPostmanRequest(entry.item, path);
+    if (child !== undefined) return child;
+  }
+  return undefined;
+}
+
 function committedCollection(): unknown {
   return JSON.parse(readFileSync(COLLECTION_PATH, 'utf8'));
 }
@@ -62,16 +88,6 @@ describe('committed aihub.postman_collection.json', () => {
   });
 
   it('gives the Web Session routes their own folder with a fake BFF secret', () => {
-    interface PostmanEntry {
-      readonly name?: string;
-      readonly request?: { readonly header?: { key: string; value: string }[] };
-      readonly item?: PostmanEntry[];
-    }
-    interface PostmanCollection {
-      readonly item?: PostmanEntry[];
-      readonly variable?: { key: string; value: string }[];
-    }
-
     const collection = committedCollection() as PostmanCollection;
     const folder = collection.item?.find(
       (entry) =>
@@ -103,6 +119,19 @@ describe('committed aihub.postman_collection.json', () => {
         value: '{{webSessionClientSecret}}',
       });
     }
+  });
+
+  it('gives the demo-key validation request its required BFF secret placeholder', () => {
+    const collection = committedCollection() as PostmanCollection;
+    const validation = findPostmanRequest(
+      collection.item,
+      'v1/sandbox/demo/api-keys/validate',
+    );
+
+    expect(validation?.request?.header).toContainEqual({
+      key: 'X-AIHUB-Client-Secret',
+      value: '{{webSessionClientSecret}}',
+    });
   });
 
   it('keeps infrastructure health endpoints out of the generated collection', async () => {

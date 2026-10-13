@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+
 import { AppError } from '@/common/errors/app-error';
 import type {
   ApiKeyAuthenticatorPort,
@@ -18,6 +20,27 @@ export function forbidden(): AppError {
 }
 
 /**
+ * The visitor address a Customer Web BFF forwards, or `undefined` when the
+ * header is absent or is not an IP address. Trust it only after the BFF's
+ * client secret has been verified.
+ */
+export function forwardedVisitorIp(
+  request: AuthenticatedRequest,
+): string | undefined {
+  const visitorIp = request.headers['x-aihub-visitor-ip'];
+  return typeof visitorIp === 'string' && isIP(visitorIp) !== 0
+    ? visitorIp
+    : undefined;
+}
+
+export interface AuthenticateApiKeyOptions {
+  /** Use when the route must observe revocation and policy changes immediately. */
+  readonly forceFresh?: boolean;
+  /** Trusted only after a server-to-server BFF guard has authenticated the caller. */
+  readonly clientIp?: string;
+}
+
+/**
  * Turns the `X-API-Key` header into an authenticated identity and attaches it
  * to the request.
  *
@@ -31,17 +54,17 @@ export async function authenticateApiKey(
   request: AuthenticatedRequest,
   authenticator: ApiKeyAuthenticatorPort,
   configuration: RequestEnvironmentConfig,
-  requiredAllowedEnvironments?: readonly string[],
+  options: AuthenticateApiKeyOptions = {},
 ): Promise<AuthenticatedApiKey> {
   const environment = resolveAihubEnvironment(request, configuration);
-  const header = request.headers['x-api-key'];
+  const rawHeader = request.headers['x-api-key'];
+  const value = typeof rawHeader === 'string' ? rawHeader : '';
   const authenticated = await authenticator.authenticate({
-    value: typeof header === 'string' ? header : '',
+    value,
     environment,
-    clientIp: request.ip.length === 0 ? 'unknown' : request.ip,
-    ...(requiredAllowedEnvironments === undefined
-      ? {}
-      : { requiredAllowedEnvironments }),
+    clientIp:
+      options.clientIp ?? (request.ip.length === 0 ? 'unknown' : request.ip),
+    ...(options.forceFresh === true ? { forceFresh: true } : {}),
   });
 
   request.aihubAuth = authenticated;

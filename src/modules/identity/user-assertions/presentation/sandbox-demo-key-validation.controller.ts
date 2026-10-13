@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Header,
   HttpCode,
   Inject,
   Post,
@@ -12,10 +13,12 @@ import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { parseRequestBody } from '@/common/http/parse-request-body';
 import { isRequestId } from '@/common/request-context/request-id';
 import {
+  DEFAULT_SANDBOX_DEMO_ENVIRONMENT,
   type SandboxDemoKeyValidationRequest,
   SandboxDemoKeyValidationRequestSchema,
   type SandboxDemoKeyValidationResponse,
 } from '@/contracts/sandbox/demo-key-validation';
+import { WebSessionClientGuard } from '@/modules/auth/presentation/web-session-client.guard';
 import { RateLimitGuard } from '@/modules/gateway/presentation/rate-limit.guard';
 import { SandboxDemoKeyValidationGuard } from '@/modules/identity/api-keys/presentation/sandbox-demo-key-validation.guard';
 import {
@@ -30,7 +33,7 @@ interface ValidationEnvelope {
 }
 
 @Controller()
-@UseGuards(SandboxDemoKeyValidationGuard, RateLimitGuard)
+@UseGuards(WebSessionClientGuard, SandboxDemoKeyValidationGuard, RateLimitGuard)
 export class SandboxDemoKeyValidationController {
   constructor(
     @Inject(ValidateSandboxDemoKey)
@@ -39,6 +42,7 @@ export class SandboxDemoKeyValidationController {
 
   @Post(PUBLIC_ROUTES['sandbox.demo-key.validate'].path)
   @HttpCode(PUBLIC_ROUTES['sandbox.demo-key.validate'].successStatus)
+  @Header('Cache-Control', 'no-store')
   async validate(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
@@ -49,14 +53,32 @@ export class SandboxDemoKeyValidationController {
     );
     const authenticated = getAuthenticatedApiKey(request);
 
-    await this.validator.validate({
+    const eligibility = await this.validator.validate({
       organizationId: authenticated.organizationId,
+      // The schema default already applied while parsing; the fallback only
+      // narrows the optional field back to the contract's union.
+      environment: input.environment ?? DEFAULT_SANDBOX_DEMO_ENVIRONMENT,
+      authenticatedEnvironment: authenticated.environment,
+      allowedEnvironments: authenticated.allowedEnvironments,
       scope: input.scope,
       grantedScopes: authenticated.scopes,
     });
 
     return {
-      data: { valid: true, environment: 'sandbox', scope: input.scope },
+      data: {
+        valid: true,
+        environment: eligibility.environment,
+        scope: eligibility.scope,
+        allowance:
+          eligibility.allowance === null
+            ? null
+            : {
+                monthly_limit: eligibility.allowance.monthlyLimit,
+                reserved: eligibility.allowance.reserved,
+                shared_monthly_limit: eligibility.allowance.sharedMonthlyLimit,
+                shared_reserved: eligibility.allowance.sharedReserved,
+              },
+      },
       meta: {
         request_id: isRequestId(request.id) ? request.id : String(request.id),
       },

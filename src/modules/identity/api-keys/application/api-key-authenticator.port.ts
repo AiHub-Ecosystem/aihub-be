@@ -2,8 +2,8 @@ export interface ApiKeyCredential {
   readonly value: string;
   readonly environment: string;
   readonly clientIp: string;
-  /** Requires the stored environment binding to match this set exactly. */
-  readonly requiredAllowedEnvironments?: readonly string[];
+  /** Always read current durable authorization instead of trusting a cache. */
+  readonly forceFresh?: boolean;
 }
 
 export interface AuthenticatedApiKey {
@@ -15,8 +15,8 @@ export interface AuthenticatedApiKey {
   readonly maxConcurrent: number;
   readonly monthlyRequestQuota: number | null;
   readonly hardStopOnQuota: boolean;
-  /** Sandbox per-Organization dispatch cap; null means no additional cap. */
-  readonly sandboxOrganizationDispatchLimit?: number | null;
+  /** The durable environment binding; a display prefix never authorizes. */
+  readonly allowedEnvironments: readonly string[];
 }
 
 export type OrganizationStatus = 'active' | 'suspended';

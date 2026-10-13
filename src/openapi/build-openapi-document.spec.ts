@@ -340,6 +340,7 @@ describe('buildOpenApiDocument', () => {
       'api-key': 'ApiKeyAuth',
       'refresh-cookie': 'RefreshCookie',
       'bff-client-secret': 'BffClientSecret',
+      'bff-api-key': 'ApiKeyAuth,BffClientSecret',
       none: '',
     };
 
@@ -368,9 +369,7 @@ describe('buildOpenApiDocument', () => {
         readonly string[]
       >[];
       const expected = schemeFor[route.callerAuth];
-      const actual = published
-        .map((entry) => Object.keys(entry)[0] ?? '')
-        .join(',');
+      const actual = published.flatMap((entry) => Object.keys(entry)).join(',');
 
       if (actual !== expected) {
         mismatches[routeId] = {

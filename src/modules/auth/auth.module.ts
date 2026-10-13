@@ -417,7 +417,9 @@ import {
     REFRESH_SESSION_REPOSITORY,
     LOCAL_AUTH_SERVICE,
     USER_ACCESS_TOKEN_VERIFIER,
+    WEB_SESSION_CLIENT_SECRET,
     UserAccessJwtGuard,
+    WebSessionClientGuard,
   ],
 })
 export class AuthModule {}

@@ -2860,17 +2860,28 @@
     "/v1/sandbox/demo/api-keys/validate": {
       "post": {
         "operationId": "sandbox.demo-key.validate",
-        "summary": "Validate a Sandbox key for the AIHUB demo",
-        "description": "Checks that the presented API key is bound only to the Sandbox environment, is active, has the requested Writing or Speaking grading scope, and belongs to an Organization without active Identity Configuration.\n\nThis route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and should be called again by the grading operation, which authenticates the key independently.",
+        "summary": "Validate a demo key for the selected environment",
+        "description": "Customer Web BFF only. Checks that the active API key is bound to the selected environment, has the requested Writing or Speaking grading scope, and belongs to an Organization without active Identity Configuration.\n\nThis route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and advisory; each grading operation authenticates the key again.",
         "x-identity-scope": "organization",
         "security": [
           {
-            "ApiKeyAuth": []
+            "ApiKeyAuth": [],
+            "BffClientSecret": []
           }
         ],
         "parameters": [
           {
             "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "X-AIHUB-Visitor-IP",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "ip"
+            },
+            "description": "Trusted visitor IP forwarded by the authenticated Customer Web BFF for per-visitor failed-key protection."
           }
         ],
         "requestBody": {
@@ -2882,6 +2893,19 @@
                 "type": "object",
                 "required": ["scope"],
                 "properties": {
+                  "environment": {
+                    "default": "sandbox",
+                    "anyOf": [
+                      {
+                        "const": "sandbox",
+                        "type": "string"
+                      },
+                      {
+                        "const": "production",
+                        "type": "string"
+                      }
+                    ]
+                  },
                   "scope": {
                     "anyOf": [
                       {
@@ -2912,15 +2936,28 @@
                     "data": {
                       "additionalProperties": false,
                       "type": "object",
-                      "required": ["valid", "environment", "scope"],
+                      "required": [
+                        "valid",
+                        "environment",
+                        "scope",
+                        "allowance"
+                      ],
                       "properties": {
                         "valid": {
                           "const": true,
                           "type": "boolean"
                         },
                         "environment": {
-                          "const": "sandbox",
-                          "type": "string"
+                          "anyOf": [
+                            {
+                              "const": "sandbox",
+                              "type": "string"
+                            },
+                            {
+                              "const": "production",
+                              "type": "string"
+                            }
+                          ]
                         },
                         "scope": {
                           "anyOf": [
@@ -2931,6 +2968,41 @@
                             {
                               "const": "speaking.grade",
                               "type": "string"
+                            }
+                          ]
+                        },
+                        "allowance": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "monthly_limit",
+                                "reserved",
+                                "shared_monthly_limit",
+                                "shared_reserved"
+                              ],
+                              "properties": {
+                                "monthly_limit": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "reserved": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "shared_monthly_limit": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "shared_reserved": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
                             }
                           ]
                         }
@@ -6024,10 +6096,6 @@
                           "type": "string"
                         },
                         {
-                          "const": "staging",
-                          "type": "string"
-                        },
-                        {
                           "const": "sandbox",
                           "type": "string"
                         }
@@ -6078,7 +6146,7 @@
                       ],
                       "properties": {
                         "api_key": {
-                          "pattern": "^aihub_sk_[A-Za-z0-9]{43}$",
+                          "pattern": "^(aihub_sk_|aihub_sandbox_|aihub_prod_)[A-Za-z0-9]{43}$",
                           "type": "string"
                         },
                         "id": {
@@ -6397,7 +6465,7 @@
       "post": {
         "operationId": "organizations.apiKeys.rotate",
         "summary": "Rotate an organization API key",
-        "description": "Creates a replacement and revokes the named key in one act, with no window in which both work. The replacement inherits the name, scopes, allowed environments, and expiry, and its raw credential is returned in this response only. A revoked or expired key cannot be rotated.",
+        "description": "Creates a replacement and revokes the named key in one act, with no window in which both work. The replacement inherits the name, scopes, and expiry. It keeps the first stored allowed environment only; a legacy key that allows multiple environments is narrowed to that one environment. Legacy environments without a dedicated key prefix keep the compatibility prefix. The raw credential is returned in this response only. A revoked or expired key cannot be rotated.",
         "x-identity-scope": "organization",
         "security": [
           {
@@ -6464,7 +6532,7 @@
                       ],
                       "properties": {
                         "api_key": {
-                          "pattern": "^aihub_sk_[A-Za-z0-9]{43}$",
+                          "pattern": "^(aihub_sk_|aihub_sandbox_|aihub_prod_)[A-Za-z0-9]{43}$",
                           "type": "string"
                         },
                         "id": {

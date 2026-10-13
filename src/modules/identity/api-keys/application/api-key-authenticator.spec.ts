@@ -31,7 +31,7 @@ const activeRecord: ApiKeyRecord = {
 class FakeRepository implements ApiKeyRepositoryPort {
   calls = 0;
 
-  constructor(private readonly record: ApiKeyRecord | null) {}
+  constructor(public record: ApiKeyRecord | null) {}
 
   findByHash(_hashHex: string): Promise<ApiKeyRecord | null> {
     this.calls += 1;
@@ -129,6 +129,7 @@ describe('ApiKeyAuthenticator', () => {
       maxConcurrent: 20,
       monthlyRequestQuota: null,
       hardStopOnQuota: false,
+      allowedEnvironments: ['development', 'production'],
     });
 
     expect(repository.calls).toBe(1);
@@ -362,4 +363,55 @@ describe('ApiKeyAuthenticator', () => {
     expect(cache.setCalls).toBe(0);
     expect(cache.missCalls).toBe(0);
   });
+
+  it('observes revocation on a forced-fresh grade authorization despite a cached positive record', async () => {
+    const { authenticator, repository, cache } = createAuthenticator();
+    cache.value = activeRecord;
+    const credentials = {
+      value: VALID_KEY,
+      environment: 'production',
+      clientIp: '203.0.113.10',
+      forceFresh: true,
+    };
+
+    await expect(
+      authenticator.authenticate(credentials),
+    ).resolves.toMatchObject({ organizationId: 'org_acme' });
+    repository.record = { ...activeRecord, status: 'revoked' };
+    await expect(authenticator.authenticate(credentials)).rejects.toMatchObject(
+      { code: 'UNAUTHORIZED' },
+    );
+    expect(repository.calls).toBe(2);
+    expect(cache.getCalls).toBe(0);
+    expect(cache.setCalls).toBe(0);
+  });
+
+  it.each([
+    ['aihub_sandbox_', 'sandbox'],
+    ['aihub_prod_', 'production'],
+  ])(
+    'authenticates a credential issued under the %s prefix only in its own environment',
+    async (prefix, environment) => {
+      const { authenticator } = createAuthenticator({
+        ...activeRecord,
+        allowedEnvironments: [environment],
+      });
+      const value = `${prefix}${'A'.repeat(43)}`;
+
+      await expect(
+        authenticator.authenticate({
+          value,
+          environment,
+          clientIp: '203.0.113.10',
+        }),
+      ).resolves.toMatchObject({ organizationId: 'org_acme' });
+      await expect(
+        authenticator.authenticate({
+          value,
+          environment: 'development',
+          clientIp: '203.0.113.10',
+        }),
+      ).rejects.toMatchObject({ code: 'ENVIRONMENT_NOT_ALLOWED' });
+    },
+  );
 });

@@ -63,21 +63,18 @@ const ALLOWED_ENVIRONMENTS = new Set([
   'sandbox',
 ]);
 
-function environmentListOption(options, name, fallback = 'production') {
-  const raw = options.get(name) ?? fallback;
-  const values = raw.split(',').map((item) => item.trim());
-
-  if (
-    values.length === 0 ||
-    values.some((value) => value.length === 0) ||
-    new Set(values).size !== values.length ||
-    values.some((value) => !ALLOWED_ENVIRONMENTS.has(value)) ||
-    (values.includes('sandbox') && values.length !== 1)
-  ) {
+/**
+ * The one environment a new key is bound to (ADR-0095). A list is refused:
+ * every newly issued key has exactly one environment, so there is no shared
+ * multi-environment prefix to issue it under.
+ */
+function environmentOption(options, name, fallback = 'production') {
+  const value = (options.get(name) ?? fallback).trim();
+  if (!ALLOWED_ENVIRONMENTS.has(value)) {
     usageError();
   }
 
-  return values;
+  return value;
 }
 
 module.exports = {
@@ -85,5 +82,5 @@ module.exports = {
   usageError,
   quotaOption,
   booleanOption,
-  environmentListOption,
+  environmentOption,
 };

@@ -65,12 +65,6 @@ function requestMetadata(
     organizationId: authenticated.organizationId,
     apiKeyId: authenticated.apiKeyId,
     environment: authenticated.environment,
-    ...(authenticated.sandboxOrganizationDispatchLimit === undefined
-      ? {}
-      : {
-          sandboxOrganizationDispatchLimit:
-            authenticated.sandboxOrganizationDispatchLimit,
-        }),
     userId: requireUserId(request),
     scopes: authenticated.scopes,
   };
