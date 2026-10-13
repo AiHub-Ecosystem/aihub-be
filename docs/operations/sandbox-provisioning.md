@@ -63,8 +63,9 @@ one release, and the policy is read on every request, so an override inserted
 **right after the migration step** takes effect with no restart. Until it
 exists the demo Organization is held to the 25 default, which fails
 conservative: it never admits more than before. Read the quota from the
-control-plane database, then use it (or `500` when it is `NULL`) as the
-override:
+control-plane database. The effective allowance it had is the lower of that
+quota and the shared ceiling of 500 (a `NULL` quota means 500), so use that
+value as the override:
 
 ```sql
 -- production control-plane database
@@ -82,7 +83,7 @@ SELECT pg_advisory_xact_lock(
 INSERT INTO sandbox_allowance_overrides (organization_id, month_start, allowance)
 VALUES ('org_...',
         date_trunc('month', now() AT TIME ZONE 'UTC')::date,
-        500) -- the quota read above, or 500 when it is NULL
+        500) -- LEAST(quota read above, 500); 500 when the quota is NULL
 ON CONFLICT (organization_id, month_start) DO UPDATE SET allowance = EXCLUDED.allowance;
 COMMIT;
 ```
