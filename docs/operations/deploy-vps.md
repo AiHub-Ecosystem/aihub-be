@@ -840,19 +840,25 @@ client-secret guard succeeds. A failed guard is classified from the network
 path as `nginx` or `direct_peer`. No end-user forwarded address is recorded
 until #436 validates that contract.
 
-Production and Sandbox app events come from separate `app` and `app-sandbox`
-containers; use the container that emitted the event because an unmatched
-request may not have an `environment` field. If that container has already
-been replaced, use its retained file under `deploy-logs/` as described above.
+Production and Sandbox events come from separate app containers, and an
+unmatched request may not have an `environment` field. The lookup below checks
+both tiers and their retained `deploy-logs/` snapshots by request ID.
 
-Search the current or rotated AIHUB access logs by request ID. The path is
-recorded without a query string. Access logs contain IP addresses; use an
-account allowed to read them:
+Run the lookup from the AIHUB deployment directory. It searches the active and
+rotated Docker logs for all Production and Sandbox slots, retained container
+snapshots under `deploy-logs/`, and active or rotated AIHUB nginx access logs.
+It prints only the application route/status/outcome and nginx method/path/status
+for the exact request ID. A missing record or an unreadable source is reported
+separately; it never infers a match from time or path:
 
 ```sh
-request_id=... # `request_id` from the application event
-zgrep -h -F "\"request_id\":\"$request_id\"" /var/log/aihub-access.log*
+./scripts/ops/logs/request-log-lookup.sh req_01ARZ3NDEKTSV4RRFFQ69G5FAV
 ```
+
+Run it as an account that already has access to `deploy-logs/` and
+`/var/log/aihub-access.log*`; the latter is `root:adm` mode `0640`. The script
+uses non-interactive sudo only for Docker log reads and does not elevate nginx
+log access. Do not run the whole command with sudo to bypass those permissions.
 
 An nginx-generated response does not have an AIHUB request ID because it never
 reached the application; its access record therefore has an empty `request_id`.

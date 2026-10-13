@@ -230,7 +230,7 @@ jobs:
           cp -p -- "$APP_DIR/docker-compose.production.yml" "$sync_backup/docker-compose.production.yml"
           : >"$sync_backup/ready"
           chmod 600 "$sync_backup/ready"
-          mkdir -p "$APP_DIR/scripts/ops" "$APP_DIR/ops/nginx" \
+          mkdir -p "$APP_DIR/scripts/ops" "$APP_DIR/scripts/ops/logs" "$APP_DIR/ops/nginx" \
             "$APP_DIR/ops/vault/agent" "$APP_DIR/ops/vault/templates" \
             "$APP_DIR/ops/host-jobs" "$APP_DIR/.aihub-host-jobs-candidate"
           REMOTE
@@ -243,6 +243,9 @@ jobs:
           scp "${scp_opts[@]}" \
             scripts/ops/blue-green-host.sh \
             "$target:$VPS_APP_DIR/.aihub-host-jobs-sync-candidate/"
+          scp "${scp_opts[@]}" \
+            scripts/ops/logs/request-log-lookup.sh \
+            "$target:$VPS_APP_DIR/scripts/ops/logs/"
           scp "${scp_opts[@]}" \
             scripts/ops/host-scheduled-job.sh \
             ops/host-jobs/aihub.crontab \
@@ -264,8 +267,10 @@ jobs:
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -eu
           chmod 755 "$APP_DIR/scripts/ops/blue-green-host.sh"
+          chmod 755 "$APP_DIR/scripts/ops/logs/request-log-lookup.sh"
           test -s "$APP_DIR/docker-compose.production.yml"
           test -s "$APP_DIR/scripts/ops/blue-green-host.sh"
+          test -s "$APP_DIR/scripts/ops/logs/request-log-lookup.sh"
           test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/install-host-jobs.sh"
           test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/docker-compose.production.yml"
           test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/blue-green-host.sh"

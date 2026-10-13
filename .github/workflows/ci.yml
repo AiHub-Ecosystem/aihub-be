@@ -117,6 +117,9 @@ jobs:
       - name: Exercise scheduled host job wrappers with stubs
         run: bash scripts/ops/host-scheduled-job.spec.sh
 
+      - name: Exercise request log lookup with fixtures and stubs
+        run: bash test/cli/request-log-lookup.spec.sh
+
   build:
     name: Build
     runs-on: ubuntu-latest
