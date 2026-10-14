@@ -28,6 +28,8 @@ each hostname to its matching loopback port. See
   `AIHUB_SANDBOX_HOST`, `AIHUB_SANDBOX_ORG_IDS`, and
   `AIHUB_SANDBOX_APP_PORT` (default `3022`). Its database and Redis URLs are
   stored in the Vault connection bundles.
+- The external Docker network `aihub-production_backend` with subnet
+  `172.16.7.0/24` and gateway `172.16.7.1`.
 - The existing Docker network `aihub_aihub-network` with a healthy `aihub-db` container.
 - A production Vault AppRole whose policy can read only the exact AIHUB runtime
   paths under `secret/data/aihub/production/`.
@@ -49,6 +51,7 @@ sudo install -d -o 10001 -g 10001 -m 0700 /srv/aihub/secrets/runtime
 sudo install -d -m 0700 /srv/aihub/secrets
 sudo install -m 0600 -o 10001 -g 10001 vault-ca.pem /srv/aihub/secrets/vault-ca.pem
 sudo install -m 0600 -o 10001 -g 10001 vault-role-id /srv/aihub/secrets/vault-role-id
+sudo docker network create --driver bridge --subnet 172.16.7.0/24 --gateway 172.16.7.1 aihub-production_backend
 cp .env.production.example .env.production
 chmod 600 .env.production
 ```
@@ -66,14 +69,17 @@ token-only emails. Both URLs may include a path prefix, but must not include
 credentials, a query, or a fragment.
 
 `AIHUB_PRODUCTION_HOST` and `AIHUB_TRUSTED_PROXY_IP` are required. The trusted
-proxy value must be the immediate nginx peer address; the production Compose
-file pins the shared `backend` network to `172.16.7.0/24` with gateway
-`172.16.7.1`, so set `AIHUB_TRUSTED_PROXY_IP=172.16.7.1` in `.env.production`.
-Production and Sandbox use the same backend gateway. The separate external
-database network is not trusted. Staging must set the exact proxy peer for its
-own deployment. The app validates this value as an IP literal and has no
-hard-coded fallback. CI rejects a mismatch between the Compose gateway and
-runtime value.
+proxy value must be the immediate nginx peer address. Set
+`AIHUB_TRUSTED_PROXY_IP=172.16.7.1` in `.env.production`. The shared `backend`
+network is external so Compose cannot try to replace it while Production,
+Sandbox, and Vault Agent are attached; create it once with the subnet and
+gateway above. Before any rollout, the blue-green helper checks its actual
+subnet and gateway and checks that the runtime value matches. Production and
+Sandbox use the same backend gateway. The separate external database network is
+not trusted. Staging must set the exact proxy peer for its own deployment. The
+app validates this value as an IP literal and has no hard-coded fallback. CI
+rejects a runtime value or external network name that differs from the pinned
+AIHUB values.
 
 Setting `AIHUB_SANDBOX_ENABLED=true` and the sandbox host/organization allowlist enables
 the isolated Compose profile; the connection bundle supplies its database and

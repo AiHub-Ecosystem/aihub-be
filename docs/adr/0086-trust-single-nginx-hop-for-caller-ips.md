@@ -32,11 +32,16 @@ source-code fallback. Production, Sandbox, and staging must set the exact
 immediate nginx peer; development and test must also declare their own value.
 Fastify trusts that one IP only.
 
-Pin the shared Compose `backend` network to the current `172.16.7.0/24` subnet
-and `172.16.7.1` gateway. Production and Sandbox share this network today; the
-external database network is not trusted. Compose and CI verify that the
-runtime value equals the pinned gateway. A topology change must update both
-values together before rollout.
+Keep the shared `backend` network external to Compose at the fixed name
+`aihub-production_backend`. Compose previously attempted to replace the live
+network when its IPAM declaration changed, but Production, Sandbox, and Vault
+Agent were attached during the migration preflight. Create the external network
+with subnet `172.16.7.0/24` and gateway `172.16.7.1`; the blue-green helper
+checks the live network and `AIHUB_TRUSTED_PROXY_IP` before any Compose
+operation. CI verifies the runtime value and external network name. Production
+and Sandbox share this network; the external database network is not trusted.
+A topology change must update the network and trusted peer together before
+rollout.
 
 After each enabled tier is cut over, GitHub Actions requests the public
 `/docs` route and joins its AIHUB-generated `X-Request-Id` to the application

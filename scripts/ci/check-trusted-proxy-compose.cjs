@@ -1,18 +1,17 @@
 const { readFileSync } = require('node:fs');
 
-const EXPECTED_SUBNET = '172.16.7.0/24';
 const EXPECTED_GATEWAY = '172.16.7.1';
+const EXPECTED_BACKEND_NETWORK = 'aihub-production_backend';
 const APP_SERVICES = ['app', 'app-slot-b', 'app-sandbox', 'app-sandbox-slot-b'];
 
 function validateTrustedProxyCompose(compose) {
   const backend = compose?.networks?.backend;
-  const backendConfig = backend?.ipam?.config;
-  const pinnedNetwork = Array.isArray(backendConfig)
-    ? backendConfig.find((entry) => entry?.gateway === EXPECTED_GATEWAY)
-    : undefined;
-  if (pinnedNetwork?.subnet !== EXPECTED_SUBNET) {
+  if (
+    backend?.external !== true ||
+    backend?.name !== EXPECTED_BACKEND_NETWORK
+  ) {
     throw new Error(
-      'backend network subnet and gateway must match the pinned AIHUB values',
+      `backend network must be externally managed as ${EXPECTED_BACKEND_NETWORK}`,
     );
   }
 

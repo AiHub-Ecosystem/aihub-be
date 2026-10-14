@@ -7,6 +7,9 @@ readonly API_CONFIG=/etc/nginx/conf.d/aihub-api.conf
 readonly SANDBOX_CONFIG=/etc/nginx/conf.d/sandbox.conf
 readonly NGINX_STAGING=/var/lib/aihub-nginx-staging
 readonly NGINX_HELPER=/usr/local/sbin/aihub-nginx-apply
+readonly BACKEND_NETWORK=aihub-production_backend
+readonly BACKEND_SUBNET=172.16.7.0/24
+readonly BACKEND_GATEWAY=172.16.7.1
 readonly STATE_DIR=.aihub-deploy-state
 readonly HISTORY_FILE=$STATE_DIR/releases.tsv
 readonly PENDING_FILE=$STATE_DIR/pending.tsv
@@ -39,6 +42,24 @@ fi
 read_env() {
   local key="$1"
   sed -n "s/^${key}=//p" .env.production | tail -n 1 | tr -d '\r'
+}
+
+check_backend_network() {
+  local actual
+  if [[ "$(read_env AIHUB_TRUSTED_PROXY_IP)" != "$BACKEND_GATEWAY" ]]; then
+    printf 'AIHUB_TRUSTED_PROXY_IP must match the backend Docker gateway\n' >&2
+    return 1
+  fi
+  if ! actual="$(sudo -n docker network inspect --format \
+    '{{range .IPAM.Config}}{{.Subnet}} {{.Gateway}}{{end}}' "$BACKEND_NETWORK" 2>/dev/null)"; then
+    printf 'required backend Docker network %s is missing\n' "$BACKEND_NETWORK" >&2
+    return 1
+  fi
+  if [[ "$actual" != "$BACKEND_SUBNET $BACKEND_GATEWAY" ]]; then
+    printf 'backend Docker network %s has unexpected IPAM configuration\n' \
+      "$BACKEND_NETWORK" >&2
+    return 1
+  fi
 }
 
 configured_port() {
@@ -867,6 +888,7 @@ preflight() {
     printf 'an earlier rollout has pending state; recover it before continuing\n' >&2
     return 1
   }
+  check_backend_network || return 1
   "${compose[@]}" config --quiet
   check_vault_agent
   local expected_count=2

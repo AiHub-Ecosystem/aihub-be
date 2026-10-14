@@ -216,10 +216,8 @@ services:
 
 networks:
   backend:
-    ipam:
-      config:
-        - subnet: 172.16.7.0/24
-          gateway: 172.16.7.1
+    external: true
+    name: aihub-production_backend
   aihub-database:
     external: true
     name: ${AIHUB_DATABASE_NETWORK:-aihub_aihub-network}

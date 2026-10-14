@@ -7,9 +7,8 @@ describe('production trusted-proxy Compose alignment', () => {
   const config = () => ({
     networks: {
       backend: {
-        ipam: {
-          config: [{ subnet: '172.16.7.0/24', gateway: '172.16.7.1' }],
-        },
+        external: true,
+        name: 'aihub-production_backend',
       },
     },
     services: Object.fromEntries(
@@ -23,15 +22,23 @@ describe('production trusted-proxy Compose alignment', () => {
     ),
   });
 
-  it('accepts app runtime values that match the pinned backend gateway', () => {
+  it('accepts the shared externally managed network and matching app IPs', () => {
     expect(validateTrustedProxyCompose(config())).toHaveLength(4);
   });
 
-  it('rejects a backend subnet or gateway change', () => {
+  it('rejects a Compose-managed backend network', () => {
     const compose = config();
-    compose.networks.backend.ipam.config[0]!.gateway = '172.16.7.2';
+    compose.networks.backend.external = false;
     expect(() => validateTrustedProxyCompose(compose)).toThrow(
-      /backend network/,
+      /backend network.*externally managed/,
+    );
+  });
+
+  it('rejects a different external backend network name', () => {
+    const compose = config();
+    compose.networks.backend.name = 'aihub-other_backend';
+    expect(() => validateTrustedProxyCompose(compose)).toThrow(
+      /backend network.*aihub-production_backend/,
     );
   });
 
