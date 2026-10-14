@@ -15,6 +15,7 @@ import { MockAgent } from 'undici';
 import { AppModule } from '@/app.module';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { WEB_SESSION_CLIENT_SECRET } from '@/modules/auth/application/web-session-client-secret.port';
 import { IDEMPOTENCY_REPOSITORY } from '@/modules/idempotency/application/idempotency-repository.port';
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
 import { REQUIRED_OPERATION_METADATA } from '@/modules/identity/shared/presentation/require-operation.decorator';
@@ -150,6 +151,8 @@ describe('graded request chain', () => {
       .useValue(new InMemoryIdempotencyRepository())
       .overrideProvider(DISPATCH_ATTEMPT_RECORD)
       .useValue(noOpDispatchAttemptRecord)
+      .overrideProvider(WEB_SESSION_CLIENT_SECRET)
+      .useValue({ resolve: () => 'test-bff-client-secret' })
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -178,6 +181,27 @@ describe('graded request chain', () => {
       method: 'POST',
       url: '/v1/ielts/writing/task1/grade',
       headers: { 'idempotency-key': 'chain-order-1' },
+      payload: {
+        question: task1Request.question,
+        chart_type: task1Request.topic,
+        essay: task1Request.essay,
+        image_url: task1Request.url,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(executed).toEqual([...EXPECTED_ORDER]);
+  });
+
+  it('authenticates BFF grading requests with the shared client secret', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/grade',
+      headers: {
+        'idempotency-key': 'chain-order-bff',
+        'x-aihub-client-secret': 'test-bff-client-secret',
+        'x-aihub-visitor-ip': '203.0.113.10',
+      },
       payload: {
         question: task1Request.question,
         chart_type: task1Request.topic,

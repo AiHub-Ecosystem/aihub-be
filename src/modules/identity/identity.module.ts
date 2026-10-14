@@ -559,6 +559,7 @@ type IdentityTransactionClient = ReturnType<
     UserIdentityGuard,
   ],
   exports: [
+    AuthModule,
     IDENTITY_POSTGRES_READINESS,
     API_KEY_AUTHENTICATOR,
     ApiKeyGuard,
