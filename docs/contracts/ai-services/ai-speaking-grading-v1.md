@@ -206,3 +206,12 @@ drift spec: either change the schema, which section 8 says needs a versioned
 review and an approved fixture, or record the difference with its reason. AI
 Writing is not covered, because its document declares no response schema for
 its grading endpoints.
+
+## 10. Proposed work-deadline extension
+
+The proposed internal `x-request-deadline` behavior is defined in the
+[AIHUB to AI Service work-deadline contract](../aihub/ai-service-work-deadline-v1.md).
+It carries the remaining dispatch-work milliseconds for each call. This
+extension is pending written approval from the AI Speaking service owner, AIHUB,
+and WISPACE. No provider-side deadline honoring or model-compute cancellation is
+asserted until the service has its own implementation and tests.

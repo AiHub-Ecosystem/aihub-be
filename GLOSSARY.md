@@ -50,6 +50,19 @@ An AIHUB-generated identifier for one HTTP request. The same value connects
 the application's completion event, the response, and the proxy access record.
 _Avoid_: caller-supplied request ID
 
+**AIHUB response deadline**:
+The maximum time from request receipt that AIHUB gives a synchronous caller to
+receive its response. It does not end required-idempotency Writing work that is
+still running in the background.
+_Avoid_: downstream work deadline
+
+**Dispatch work deadline**:
+The latest time AIHUB permits one outbound AI Service call to keep running. It
+is sent as the remaining milliseconds in `x-request-deadline`; required-
+idempotency Writing uses its separate hard work deadline after the response
+deadline expires.
+_Avoid_: caller response timeout
+
 **Observed caller IP**:
 The network address AIHUB attributes to the request at ingress. It can identify
 an intermediary, such as the Customer Web BFF, rather than the end user; the
