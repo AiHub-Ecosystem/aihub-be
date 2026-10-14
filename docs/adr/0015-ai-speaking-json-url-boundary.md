@@ -27,7 +27,7 @@ Speaking grading job are already separate contracts.
    before dispatch.
 4. AIHUB validates the URL but does not download or proxy the audio. AI
    Speaking owns URL retrieval, redirect handling (no redirects), the 25 MiB
-   downloaded-audio ceiling, and completion within the shared 30-second
+   downloaded-audio ceiling, and completion within the shared 60-second
    operation deadline. These are integration preconditions, not client-
    controlled provider details.
 5. The JSON transport uses the same normalized `{data, meta}` response as
