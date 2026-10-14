@@ -39,6 +39,8 @@
     "check:imports:dist": "tsx scripts/checks/check-import-style.ts --dist",
     "check:migrations": "node scripts/checks/check-migrations.mjs",
     "check:prisma-drift": "node scripts/checks/prisma-drift/check-prisma-drift.mjs",
+    "check:issue-triage": "node scripts/checks/check-issue-triage.mjs",
+    "test:issue-triage": "node --test scripts/checks/check-issue-triage.spec.mjs",
     "knip": "pnpm generate:prisma-client && node scripts/checks/knip.mjs",
     "verify:summary": "node scripts/checks/verify-summary.cjs",
     "provider:refresh": "node scripts/generate/refresh-provider-contract.mjs",

@@ -1,0 +1,42 @@
+name: Issue triage audit
+
+# Scheduled, not per-PR: this gate reads the LIVE tracker, whose state is not
+# scoped to a pull request. Running it on every PR would couple each PR's result
+# to unrelated open issues. A daily pass catches the drift that happens when
+# issues are created without a milestone or priority (it happened twice under
+# parallel agents). It can also be run by hand via workflow_dispatch.
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+
+concurrency:
+  group: issue-triage-audit
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Open issues have milestone, role, priority
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Audit issue-triage metadata
+        # gh is preinstalled on the runner; GITHUB_TOKEN with issues:read is enough.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/checks/check-issue-triage.mjs
