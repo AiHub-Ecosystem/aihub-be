@@ -27,6 +27,10 @@ describe('operation catalog', () => {
     expect(entries.every((operation) => operation.timeoutMs > 0)).toBe(true);
   });
 
+  it('allows Speaking JSON grading to finish within the public proxy budget', () => {
+    expect(OPERATION_CATALOG['speaking.grading-json'].timeoutMs).toBe(60_000);
+  });
+
   // Every entry now holds a real schema, so `ResponseContract`'s `'unresolved'`
   // branch is statically unreachable here. The type checker proves it; a
   // runtime assertion would be dead code.

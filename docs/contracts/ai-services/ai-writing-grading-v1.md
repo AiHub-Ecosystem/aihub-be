@@ -243,3 +243,14 @@ provider detail text:
 - AI Writing, AIHUB, and WISPACE must approve fixture and contract changes
   together. Update this document, the machine schema, adapter tests, and
   `test/fixtures/ai-writing/` in the same change.
+
+## 9. Proposed work-deadline extension
+
+The proposed internal `x-request-deadline` behavior is defined in the
+[AIHUB to AI Service work-deadline contract](../aihub/ai-service-work-deadline-v1.md).
+It carries the remaining dispatch-work milliseconds; required-idempotency
+Writing can continue under its hard work deadline after the caller's response
+deadline or disconnect. This extension is pending written approval from the AI
+Writing service owner, AIHUB, and WISPACE. No provider-side deadline honoring or
+model-compute cancellation is asserted until the service has its own
+implementation and tests.

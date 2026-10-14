@@ -118,7 +118,8 @@ export const OPERATION_CATALOG = {
     family: 'speaking',
     meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
-    timeoutMs: 30_000,
+    // URL grading runs the same inference pipeline; leave room for its >30s responses.
+    timeoutMs: 60_000,
     downstream: 'ai-speaking',
     downstreamPath: '/api/v1/speaking/grading-json',
     requestSchema: SpeakingGradeJsonRequestSchema,

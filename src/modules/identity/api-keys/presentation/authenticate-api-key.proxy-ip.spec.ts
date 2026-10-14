@@ -45,10 +45,11 @@ class IpFailureCounter implements AuthFailureCounterPort {
 describe('API-key failure budgets behind the trusted proxy', () => {
   let fastify: FastifyInstance;
   let failures: IpFailureCounter;
+  let authenticator: ApiKeyAuthenticator;
 
   beforeAll(async () => {
     failures = new IpFailureCounter();
-    const authenticator = new ApiKeyAuthenticator(
+    authenticator = new ApiKeyAuthenticator(
       {
         findByHash: async () => null,
         touchLastUsed: async () => undefined,
@@ -129,5 +130,19 @@ describe('API-key failure budgets behind the trusted proxy', () => {
     );
     await expect(failures.get('198.51.100.11')).resolves.toBe(1);
     await expect(failures.get('172.16.3.4')).resolves.toBe(1);
+  });
+
+  it('counts a request whose peer has no address under one shared key instead of failing', async () => {
+    // A Unix-socket peer carries no address, and a request without a forwarded
+    // header then leaves `request.ip` undefined.
+    const request = {
+      ip: undefined,
+      headers: { host: 'localhost', 'x-api-key': 'invalid' },
+    } as unknown as AuthenticatedRequest;
+
+    await expect(
+      authenticateApiKey(request, authenticator, REQUEST_CONFIG),
+    ).rejects.toMatchObject({ httpStatus: 401 });
+    await expect(failures.get('unknown')).resolves.toBe(1);
   });
 });

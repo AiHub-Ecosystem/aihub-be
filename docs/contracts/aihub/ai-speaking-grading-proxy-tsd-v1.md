@@ -195,7 +195,7 @@ embedded credentials, fragments, and any URL longer than 2,048 characters. It
 does not resolve or download the URL. The JSON request body is capped at 256
 KiB. AI Speaking owns retrieval, does not
 follow redirects, enforces the 25 MiB downloaded-audio ceiling, and must finish
-retrieval and grading within the shared 30-second operation deadline.
+retrieval and grading within the shared 60-second operation deadline.
 These provider-side guarantees are not enforceable by AIHUB while it deliberately
 avoids fetching customer URLs. The authenticated Production JSON smoke recorded
 in #28 on 2026-09-15 used a real WAV object on `s3.wispace.app` and returned the
