@@ -330,8 +330,170 @@ jobs:
           "$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh" restore
           REMOTE
 
-      - name: Deploy release
+      - name: Deploy Production and verify caller IP
+        id: deploy_production
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          image_arg="$(printf '%q' "$AIHUB_IMAGE")"
+          rollback_tier() {
+            local tier_arg
+            tier_arg="$(printf '%q' "$1")"
+            ssh "${ssh_opts[@]}" "$target" \
+              "APP_DIR=$app_dir_arg TIER=$tier_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/blue-green-host.sh rollback "$TIER"
+          REMOTE
+          }
+          verify_request_id() {
+            local request_id_arg result remaining deadline=$((SECONDS + 10))
+            request_id_arg="$(printf '%q' "$1")"
+            while (( (remaining = deadline - SECONDS) > 0 )); do
+              if result="$(timeout "${remaining}s" ssh "${ssh_opts[@]}" "$target" \
+                "APP_DIR=$app_dir_arg REQUEST_ID=$request_id_arg bash -se" 2>/dev/null <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/logs/request-log-lookup.sh verify "$REQUEST_ID"
+          REMOTE
+              )" && [[ "$result" == PASS ]]; then
+                printf 'PASS\n'
+                return 0
+              fi
+              remaining=$((deadline - SECONDS))
+              (( remaining > 0 )) && sleep 1
+            done
+            printf 'FAIL\n'
+            return 1
+          }
+          if ! ssh "${ssh_opts[@]}" "$target" \
+            "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/blue-green-host.sh deploy production
+          REMOTE
+          then
+            ssh "${ssh_opts[@]}" "$target" \
+              "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE' || true
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/blue-green-host.sh recover-gate
+          REMOTE
+            exit 1
+          fi
+
+          if ! public_host="$(ssh "${ssh_opts[@]}" "$target" \
+            "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/blue-green-host.sh public-host production
+          REMOTE
+          )" 2>/dev/null; then
+            printf 'FAIL\n'
+            rollback_tier production
+            exit 1
+          fi
+          if ! request_id="$(node scripts/ops/probe-public-edge.cjs request-id "$public_host")"; then
+            printf 'FAIL\n'
+            rollback_tier production
+            exit 1
+          fi
+          if ! verify_request_id "$request_id"; then
+            rollback_tier production
+            exit 1
+          fi
+          sandbox_enabled="$(ssh "${ssh_opts[@]}" "$target" \
+            "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/blue-green-host.sh sandbox-enabled
+          REMOTE
+          )"
+          printf 'sandbox_enabled=%s\n' "$sandbox_enabled" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Sandbox release and verify caller IP
+        id: deploy_sandbox
+        if: ${{ steps.deploy_production.outcome == 'success' && steps.deploy_production.outputs.sandbox_enabled == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$VPS_USER@$VPS_HOST"
+          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          image_arg="$(printf '%q' "$AIHUB_IMAGE")"
+          rollback_tier() {
+            local tier_arg
+            tier_arg="$(printf '%q' "$1")"
+            ssh "${ssh_opts[@]}" "$target" \
+              "APP_DIR=$app_dir_arg TIER=$tier_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/blue-green-host.sh rollback "$TIER"
+          REMOTE
+          }
+          verify_request_id() {
+            local request_id_arg result remaining deadline=$((SECONDS + 10))
+            request_id_arg="$(printf '%q' "$1")"
+            while (( (remaining = deadline - SECONDS) > 0 )); do
+              if result="$(timeout "${remaining}s" ssh "${ssh_opts[@]}" "$target" \
+                "APP_DIR=$app_dir_arg REQUEST_ID=$request_id_arg bash -se" 2>/dev/null <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/logs/request-log-lookup.sh verify "$REQUEST_ID"
+          REMOTE
+              )" && [[ "$result" == PASS ]]; then
+                printf 'PASS\n'
+                return 0
+              fi
+              remaining=$((deadline - SECONDS))
+              (( remaining > 0 )) && sleep 1
+            done
+            printf 'FAIL\n'
+            return 1
+          }
+          if ! ssh "${ssh_opts[@]}" "$target" \
+            "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/blue-green-host.sh deploy sandbox
+          REMOTE
+          then
+            ssh "${ssh_opts[@]}" "$target" \
+              "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE' || true
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/blue-green-host.sh recover-gate
+          REMOTE
+            exit 1
+          fi
+
+          if ! public_host="$(ssh "${ssh_opts[@]}" "$target" \
+            "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/blue-green-host.sh public-host sandbox
+          REMOTE
+          )" 2>/dev/null; then
+            printf 'FAIL\n'
+            rollback_tier sandbox
+            exit 1
+          fi
+          if ! request_id="$(node scripts/ops/probe-public-edge.cjs request-id "$public_host")"; then
+            printf 'FAIL\n'
+            rollback_tier sandbox
+            exit 1
+          fi
+          if ! verify_request_id "$request_id"; then
+            rollback_tier sandbox
+            exit 1
+          fi
+
+      - name: Final public health window
         id: deploy
+        if: ${{ steps.deploy_production.outcome == 'success' && (steps.deploy_sandbox.outcome == 'success' || steps.deploy_sandbox.outcome == 'skipped') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -343,7 +505,7 @@ jobs:
             "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green-host.sh deploy
+          ./scripts/ops/blue-green-host.sh finalize
           REMOTE
 
       - name: Install and smoke the scheduled host jobs
@@ -365,6 +527,10 @@ jobs:
           target_sha="${AIHUB_IMAGE##*:}"
           if grep -Eq '^pending=' <<<"$state" || grep -Fxq 'sandbox enabled but not routed' <<<"$state"; then
             printf 'deployment state is unresolved; AIHUB host jobs remain suspended\n' >&2
+            exit 1
+          fi
+          if grep -Eq '^caller_ip_gate=' <<<"$state"; then
+            printf 'caller-IP deployment gate remains unresolved; AIHUB host jobs remain suspended\n' >&2
             exit 1
           fi
           if ! grep -Eq '^production active_slot=' <<<"$state" || ! grep -Eq '^sandbox (active_slot=|disabled$)' <<<"$state"; then

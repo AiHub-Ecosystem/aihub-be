@@ -44,6 +44,7 @@ x-app-environment: &app-environment
   # Deploy-time gate for the Web Session routes. The runtime value AIHUB
   # compares against comes from the Vault `web-session` bundle.
   AIHUB_RUNTIME_DATABASE_SCOPE: production
+  AIHUB_TRUSTED_PROXY_IP: ${AIHUB_TRUSTED_PROXY_IP:?AIHUB_TRUSTED_PROXY_IP is required}
   AIHUB_USER_ACCESS_ISSUER: ${AIHUB_USER_ACCESS_ISSUER:?AIHUB_USER_ACCESS_ISSUER is required}
   AIHUB_PRODUCTION_HOST: ${AIHUB_PRODUCTION_HOST:?AIHUB_PRODUCTION_HOST is required}
   AIHUB_STAGING_HOST: ${AIHUB_STAGING_HOST:-}
@@ -215,6 +216,10 @@ services:
 
 networks:
   backend:
+    ipam:
+      config:
+        - subnet: 172.16.7.0/24
+          gateway: 172.16.7.1
   aihub-database:
     external: true
     name: ${AIHUB_DATABASE_NETWORK:-aihub_aihub-network}

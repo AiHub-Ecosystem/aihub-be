@@ -6,7 +6,7 @@ import {
 import { Test } from '@nestjs/testing';
 import { Value } from '@sinclair/typebox/value';
 
-import { APP_FASTIFY_PROXY_OPTIONS } from '@/app-fastify-proxy-options';
+import { createAppFastifyProxyOptions } from '@/app-fastify-proxy-options';
 import { AppModule } from '@/app.module';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { ReadCurrentUserResponseSchema } from '@/contracts/auth/local-auth';
@@ -320,7 +320,7 @@ describe('local auth HTTP boundary', () => {
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({
-        ...APP_FASTIFY_PROXY_OPTIONS,
+        ...createAppFastifyProxyOptions('172.16.7.1'),
         genReqId: () => generateRequestId(),
       }),
     );

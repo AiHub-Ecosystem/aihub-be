@@ -21,6 +21,7 @@ function configuration(
     AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
     AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
     AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+    AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
     AIHUB_SANDBOX_ORG_IDS: 'org_sandbox',
     AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY: PEM,
     AIHUB_SANDBOX_ASSERTION_KID: 'sandbox-2026-09',

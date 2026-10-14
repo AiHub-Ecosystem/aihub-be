@@ -89,6 +89,7 @@ const BOOT_ENVIRONMENT = {
   AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: `${SECRETS_MOUNT}/connection-secrets.json`,
   AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
   AIHUB_USER_ACCESS_ISSUER: 'https://api.ci-boot.invalid',
+  AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
   AIHUB_PRODUCTION_HOST: 'api.ci-boot.invalid',
   AIHUB_STAGING_HOST: 'staging.ci-boot.invalid',
   AIHUB_DEVELOPMENT_HOST: 'development.ci-boot.invalid',

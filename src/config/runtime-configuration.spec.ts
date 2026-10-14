@@ -13,6 +13,7 @@ describe('runtime configuration', () => {
       AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
       AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
       AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+      AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
       PORT: '4312',
       AIHUB_ALLOW_UNAUTHENTICATED_DEV: 'true',
     });
@@ -22,6 +23,44 @@ describe('runtime configuration', () => {
     expect(config.LOG_LEVEL).toBe('info');
     expect(config.SEAWEEDFS_ENDPOINT_URL).toBe('https://s3.wispace.app');
     expect(config.SEAWEEDFS_REGION).toBe('us-east-1');
+  });
+
+  it('requires an explicit trusted-proxy IP literal in every runtime mode', () => {
+    const base = {
+      NODE_ENV: 'test',
+      AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
+      AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
+      AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
+      AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+    } as const;
+
+    for (const mode of ['development', 'test', 'staging', 'production']) {
+      for (const value of [undefined, '172.16.7.1/24', 'proxy.internal']) {
+        let caught: unknown;
+        try {
+          loadRuntimeConfiguration({
+            ...base,
+            NODE_ENV: mode,
+            AIHUB_TRUSTED_PROXY_IP: value,
+          });
+        } catch (error) {
+          caught = error;
+        }
+        expect(caught).toBeInstanceOf(RuntimeConfigurationError);
+        expect((caught as RuntimeConfigurationError).variableNames).toContain(
+          'AIHUB_TRUSTED_PROXY_IP',
+        );
+      }
+    }
+
+    for (const value of ['172.16.7.1', '::1']) {
+      expect(
+        loadRuntimeConfiguration({
+          ...base,
+          AIHUB_TRUSTED_PROXY_IP: value,
+        }).AIHUB_TRUSTED_PROXY_IP,
+      ).toBe(value);
+    }
   });
 
   it('aggregates missing and invalid variable names without their values', () => {
@@ -47,6 +86,7 @@ describe('runtime configuration', () => {
         'LOG_LEVEL',
         'AIHUB_USER_ACCESS_ISSUER',
         'AIHUB_PRODUCTION_HOST',
+        'AIHUB_TRUSTED_PROXY_IP',
         'DOWNSTREAM_AI_WRITING_URL',
         'DOWNSTREAM_AI_SPEAKING_URL',
         'RESEND_FROM',
@@ -154,6 +194,7 @@ describe('runtime configuration', () => {
         DATABASE_URL: 'postgres://fake:fake@db.test.invalid/aihub',
         REDIS_URL: 'redis://redis.test.invalid/0',
         AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+        AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
         AIHUB_PRODUCTION_HOST: 'api.test.invalid',
         DOWNSTREAM_AI_WRITING_URL: 'https://writing.test.invalid',
         DOWNSTREAM_AI_SPEAKING_URL: 'https://speaking.test.invalid',
@@ -165,7 +206,12 @@ describe('runtime configuration', () => {
   );
 
   it('keeps secret values out of the Nest application config provider', () => {
+    const previousProxyIp = process.env.AIHUB_TRUSTED_PROXY_IP;
+    process.env.AIHUB_TRUSTED_PROXY_IP ??= '127.0.0.1';
     const configuration = appConfig();
+    if (previousProxyIp === undefined) {
+      delete process.env.AIHUB_TRUSTED_PROXY_IP;
+    }
 
     expect(configuration).not.toHaveProperty('DATABASE_URL');
     expect(configuration).not.toHaveProperty('DOWNSTREAM_AI_WRITING_TOKEN');

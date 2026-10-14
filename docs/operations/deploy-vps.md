@@ -65,8 +65,17 @@ deployed. Until then, the API-only sandbox may leave it blank and keeps
 token-only emails. Both URLs may include a path prefix, but must not include
 credentials, a query, or a fragment.
 
-`AIHUB_PRODUCTION_HOST` is the only required host setting. Setting
-`AIHUB_SANDBOX_ENABLED=true` and the sandbox host/organization allowlist enables
+`AIHUB_PRODUCTION_HOST` and `AIHUB_TRUSTED_PROXY_IP` are required. The trusted
+proxy value must be the immediate nginx peer address; the production Compose
+file pins the shared `backend` network to `172.16.7.0/24` with gateway
+`172.16.7.1`, so set `AIHUB_TRUSTED_PROXY_IP=172.16.7.1` in `.env.production`.
+Production and Sandbox use the same backend gateway. The separate external
+database network is not trusted. Staging must set the exact proxy peer for its
+own deployment. The app validates this value as an IP literal and has no
+hard-coded fallback. CI rejects a mismatch between the Compose gateway and
+runtime value.
+
+Setting `AIHUB_SANDBOX_ENABLED=true` and the sandbox host/organization allowlist enables
 the isolated Compose profile; the connection bundle supplies its database and
 Redis URLs. Serving the hostname is a separate nginx change described in
 [The public edge](#the-public-edge). Leaving the sandbox flag false keeps the
@@ -1419,11 +1428,15 @@ rollback above. #483 records the decision about the observation window and
 rollback policy.
 
 The host helper supports `status`, `rollback production`, `rollback sandbox`,
-and `rehearse sandbox`. The rehearsal command deliberately injects a failed
-post-cutover smoke and succeeds only when Sandbox is restored and verified; it
-does not cut over Production. Use the immutable CI SHA for `AIHUB_IMAGE` when
-running it manually. The CD Actions summary reports the active SHA for each
-enabled tier after both successful and failed deploy attempts.
+and `rehearse sandbox`. `status` reports `caller_ip_gate=<tier>` if an external
+caller-IP proof still needs resolution. The CD workflow uses `public-host`,
+`sandbox-enabled`, `finalize`, and `recover-gate` to sequence the per-tier
+checks; do not clear an unresolved gate by editing its state file. The rehearsal
+command deliberately injects a failed post-cutover smoke and succeeds only
+when Sandbox is restored and verified; it does not cut over Production. Use the
+immutable CI SHA for `AIHUB_IMAGE` when running it manually. The CD Actions
+summary reports the active SHA for each enabled tier after both successful and
+failed deploy attempts.
 
 After syncing the reviewed helper to the VPS and logging Docker into GHCR, run
 the Sandbox rehearsal from the deployment directory:
@@ -1445,7 +1458,19 @@ The `CI` workflow publishes the image it booted to GHCR under the commit SHA.
 After a successful CI run for a push to `main`, CD resolves that immutable SHA,
 checks the registry still holds the digest CI published and the SHA is still
 the tip of `main`, then syncs the helper and deployment files and deploys over
-SSH. The helper deploys Production and then Sandbox when enabled. CD uses the
+SSH. CD migrates once, then gates each enabled tier: it cuts over Production,
+checks caller-IP resolution, and only then cuts over Sandbox. For each proof,
+the Actions runner requests the read-only `/docs` route on the public hostname,
+captures `X-Request-Id`, and asks the host to compare the matching application
+completion event with the AIHUB nginx access record. The check waits up to ten
+seconds for both records and prints only pass/fail. It requires
+`client_ip_source=nginx` and equal application/nginx `client_ip` values. A
+missing record or mismatch fails the gate and rolls back only that tier; a
+passing Production release stays active if Sandbox later fails. The ordinary
+`/health` smoke remains separate because health probes do not create completion
+events. The host helper records `caller_ip_gate=<tier>` while a tier awaits the
+external proof, and blocks another deploy until proof or rollback resolves it.
+CD uses the
 `production` GitHub Environment; its `main` branch allowlist is not a human
 review gate, and #300 tracks the separate branch and review protections. Check
 the workflow's current state before operating; this runbook does not assert

@@ -1,6 +1,6 @@
 # ADR-0086: Trust the single nginx hop for caller IPs
 
-- Status: Accepted; authentication email dimensions amended by [ADR-0096](0096-authentication-rate-limits-by-caller-and-address.md)
+- Status: Accepted; authentication email dimensions amended by [ADR-0096](0096-authentication-rate-limits-by-caller-and-address.md); runtime trust configuration and deployment verification clarified by #496
 - Date: 2026-10-09
 - Related: [#139](https://github.com/AiHub-Ecosystem/aihub-be/issues/139), [ADR-0079](0079-managed-nginx-configuration-on-shared-vps.md), [ADR-0081](0081-aihub-owned-customer-web-web-sessions.md)
 
@@ -23,3 +23,28 @@ Keep `/ready` tied to the raw socket peer so it remains private when reached thr
 - Environment binding uses nginx's routed `Host`, not `X-Forwarded-Host`, so caller-supplied proxy headers cannot switch the authentication environment.
 - Direct container peers are not trusted to supply forwarded addresses; their socket address remains their bucket. If Docker recreates the backend network with another gateway, update the trusted peer before rollout or public requests will again share the socket-peer bucket.
 - The API-key failure counter existed in production by at least 2026-09-14; local-auth IP limits were added on 2026-09-19. With proxy trust disabled, those callers shared the app's socket-peer bucket during that exposure window, so one caller's failures could consume the shared budget for others.
+
+## Runtime and deployment amendment for #496 (2026-10-14)
+
+Read the single trusted peer from the required `AIHUB_TRUSTED_PROXY_IP` runtime
+setting and validate it as an IP literal before Nest starts. Do not retain a
+source-code fallback. Production, Sandbox, and staging must set the exact
+immediate nginx peer; development and test must also declare their own value.
+Fastify trusts that one IP only.
+
+Pin the shared Compose `backend` network to the current `172.16.7.0/24` subnet
+and `172.16.7.1` gateway. Production and Sandbox share this network today; the
+external database network is not trusted. Compose and CI verify that the
+runtime value equals the pinned gateway. A topology change must update both
+values together before rollout.
+
+After each enabled tier is cut over, GitHub Actions requests the public
+`/docs` route and joins its AIHUB-generated `X-Request-Id` to the application
+completion event and AIHUB nginx access record. `/health` remains the health
+check, but it is intentionally excluded from completion events. The IP proof
+passes only when the application reports `client_ip_source: nginx` and its
+`client_ip` matches nginx's observed `client_ip`. Wait up to ten seconds for
+both records; missing or mismatched evidence fails the gate and rolls back only
+that tier. Actions output reports pass/fail without either address. Production
+is checked before Sandbox; a Sandbox failure does not roll back a passing
+Production release, consistent with ADR-0085.

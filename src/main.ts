@@ -10,7 +10,7 @@ import fastifyCookie from '@fastify/cookie';
 import { NestFactory } from '@nestjs/core';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 
-import { APP_FASTIFY_PROXY_OPTIONS } from './app-fastify-proxy-options';
+import { createAppFastifyProxyOptions } from './app-fastify-proxy-options';
 import { AppModule } from './app.module';
 import { registerMetricsRoute } from './common/observability/metrics.route';
 import { createRequestLogging } from './common/observability/request-logger';
@@ -28,7 +28,9 @@ export async function bootstrap(): Promise<void> {
     AppModule,
     new GracefulFastifyAdapter(
       {
-        ...APP_FASTIFY_PROXY_OPTIONS,
+        ...createAppFastifyProxyOptions(
+          configuration.AIHUB_TRUSTED_PROXY_IP as string,
+        ),
         // The structured request log, on Fastify's own Pino. One line per
         // response, built by the metering module's completion hook below.
         ...createRequestLogging(),

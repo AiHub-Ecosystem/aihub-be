@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+
 import { registerAs } from '@nestjs/config';
 import { type TSchema, Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
@@ -14,7 +16,7 @@ interface RuntimeField {
   readonly requiredWhenSecretSource?: boolean;
   readonly secret?: boolean;
   readonly allowEmpty?: boolean;
-  readonly format?: 'url' | 'uri' | 'hostname';
+  readonly format?: 'url' | 'uri' | 'hostname' | 'ip';
   readonly minValue?: number;
   readonly maxValue?: number;
 }
@@ -81,6 +83,11 @@ const fields = {
     kind: 'string',
     requiredIn: PROD_MODES,
     format: 'hostname',
+  },
+  AIHUB_TRUSTED_PROXY_IP: {
+    kind: 'string',
+    requiredIn: MODES,
+    format: 'ip',
   },
   AIHUB_STAGING_HOST: { kind: 'string', format: 'hostname' },
   AIHUB_DEVELOPMENT_HOST: { kind: 'string', format: 'hostname' },
@@ -361,6 +368,9 @@ export function loadRuntimeConfiguration(
         problems.push(name);
       }
       if (field.format === 'hostname' && !validHostname(value)) {
+        problems.push(name);
+      }
+      if (field.format === 'ip' && isIP(value) === 0) {
         problems.push(name);
       }
     }

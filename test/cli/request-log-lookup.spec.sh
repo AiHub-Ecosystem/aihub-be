@@ -94,6 +94,14 @@ run_lookup() {
   fi
 }
 
+run_verify() {
+  if bash "$lookup_script" verify "$request_id" >"$test_root/output.log" 2>&1; then
+    lookup_status=0
+  else
+    lookup_status=$?
+  fi
+}
+
 assert_status() {
   if [[ "$lookup_status" != "$1" ]]; then
     printf 'expected lookup exit %s, got %s:\n' "$1" "$lookup_status" >&2
@@ -104,7 +112,7 @@ assert_status() {
 
 write_app_event() {
   local file=$1 route=$2 status=$3 outcome=$4 error_code=${5:-}
-  printf '{"event":"request_completed","request_id":"%s","route":"%s","http_status":%s,"outcome":"%s"' \
+  printf '{"event":"request_completed","request_id":"%s","client_ip":"192.0.2.10","client_ip_source":"nginx","route":"%s","http_status":%s,"outcome":"%s"' \
     "$request_id" "$route" "$status" "$outcome" >"$file"
   [[ -z "$error_code" ]] || printf ',"error_code":"%s"' "$error_code" >>"$file"
   printf ',"request_body":"body-secret","headers":{"authorization":"header-secret"},"api_key":"api-key-secret","query":"query-secret"}\n' >>"$file"
@@ -132,6 +140,33 @@ for service in app app-slot-b app-sandbox app-sandbox-slot-b; do
   assert_contains "$FAKE_DOCKER_CALLS" "label=com.docker.compose.service=$service"
   assert_contains "$FAKE_DOCKER_CALLS" "--timestamps $service-container"
 done
+
+# The release gate outputs only PASS/FAIL even though the source lines contain
+# both observed addresses.
+run_verify
+assert_status 0
+[[ "$(cat "$test_root/output.log")" == PASS ]]
+assert_not_contains "$test_root/output.log" '192.0.2.10'
+
+write_app_event "$FAKE_DOCKER_LOGS/app-container.log" '/v1/items/:itemId' 200 success
+sed -i 's/"client_ip_source":"nginx"/"client_ip_source":"direct_peer"/' \
+  "$FAKE_DOCKER_LOGS/app-container.log"
+run_verify
+assert_status 1
+[[ "$(cat "$test_root/output.log")" == FAIL ]]
+
+write_app_event "$FAKE_DOCKER_LOGS/app-container.log" '/v1/items/:itemId' 200 success
+sed -i 's/"client_ip":"192.0.2.10"/"client_ip":"192.0.2.11"/' \
+  "$FAKE_DOCKER_LOGS/app-container.log"
+run_verify
+assert_status 1
+[[ "$(cat "$test_root/output.log")" == FAIL ]]
+
+: >"$FAKE_DOCKER_LOGS/app-container.log"
+: >"$FAKE_NGINX_ACTIVE"
+run_verify
+assert_status 1
+[[ "$(cat "$test_root/output.log")" == FAIL ]]
 
 # Container output remains searchable independently of deploy snapshots.
 for service in app app-slot-b app-sandbox app-sandbox-slot-b; do

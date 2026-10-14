@@ -383,6 +383,7 @@ describe('Self-serve Organization terms from injected configuration', () => {
         AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
         AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
         AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+        AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
         AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA: 'not-a-number',
       }),
     ).toThrow(/AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA/);

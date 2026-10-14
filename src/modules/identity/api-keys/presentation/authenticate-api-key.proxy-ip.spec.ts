@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 
-import { APP_FASTIFY_PROXY_OPTIONS } from '@/app-fastify-proxy-options';
+import { createAppFastifyProxyOptions } from '@/app-fastify-proxy-options';
 import { AppError } from '@/common/errors/app-error';
 import {
   AUTH_FAILURE_LIMIT,
@@ -62,7 +62,7 @@ describe('API-key failure budgets behind the trusted proxy', () => {
       failures,
     );
 
-    fastify = Fastify(APP_FASTIFY_PROXY_OPTIONS);
+    fastify = Fastify(createAppFastifyProxyOptions('172.16.7.1'));
     fastify.setErrorHandler((error, _request, reply) => {
       if (error instanceof AppError) {
         return reply.status(error.httpStatus).send({ code: error.code });

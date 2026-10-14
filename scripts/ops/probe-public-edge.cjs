@@ -2,6 +2,7 @@
 
 const DEFAULT_INTERVAL_MS = 1_000;
 const REQUEST_TIMEOUT_MS = 3_000;
+const REQUEST_ID_PATTERN = /^req_[0-9A-HJKMNP-TV-Z]{26}$/;
 
 function validateHostname(hostname, label) {
   if (typeof hostname !== 'string' || hostname.length === 0) {
@@ -43,6 +44,33 @@ async function probeHost(hostname, fetchImpl = fetch) {
       ok: false,
       result: error instanceof Error ? error.name : 'request error',
     };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function requestCompletionId(hostname, fetchImpl = fetch) {
+  validateHostname(hostname, 'public API');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetchImpl(`https://${hostname}/docs`, {
+      redirect: 'manual',
+      signal: controller.signal,
+    });
+    if (response.body) {
+      void response.body.cancel().catch(() => undefined);
+    }
+    const requestId = response.headers?.get('x-request-id');
+    if (
+      response.status < 200 ||
+      response.status >= 300 ||
+      !REQUEST_ID_PATTERN.test(requestId ?? '')
+    ) {
+      throw new Error('public request did not return a valid request ID');
+    }
+    return requestId;
   } finally {
     clearTimeout(timeout);
   }
@@ -176,16 +204,26 @@ async function main() {
 }
 
 if (require.main === module) {
-  void main().catch((error) => {
-    console.error(
-      error instanceof Error ? error.message : 'health probe failed',
-    );
-    process.exitCode = 1;
-  });
+  if (process.argv[2] === 'request-id') {
+    void requestCompletionId(process.argv[3] ?? '')
+      .then((requestId) => process.stdout.write(`${requestId}\n`))
+      .catch(() => {
+        process.stdout.write('FAIL\n');
+        process.exitCode = 1;
+      });
+  } else {
+    void main().catch((error) => {
+      console.error(
+        error instanceof Error ? error.message : 'health probe failed',
+      );
+      process.exitCode = 1;
+    });
+  }
 }
 
 module.exports = {
   probeHost,
+  requestCompletionId,
   startPublicHealthMonitor,
   validateHostname,
 };

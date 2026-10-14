@@ -10,6 +10,7 @@ readonly NGINX_HELPER=/usr/local/sbin/aihub-nginx-apply
 readonly STATE_DIR=.aihub-deploy-state
 readonly HISTORY_FILE=$STATE_DIR/releases.tsv
 readonly PENDING_FILE=$STATE_DIR/pending.tsv
+readonly GATE_FILE=$STATE_DIR/caller-ip-gate.tsv
 readonly DEPLOY_ENV=.aihub-deploy.env
 readonly LOCK_FILE=.aihub-deploy.lock
 RESOURCE_LOG=
@@ -963,48 +964,104 @@ final_edge_window() {
   return 1
 }
 
+write_gate() {
+  [[ "$1" == production || "$1" == sandbox ]] || return 2
+  printf '%s\n' "$1" >"$GATE_FILE"
+  chmod 600 "$GATE_FILE"
+}
+
+clear_gate() {
+  rm -f -- "$GATE_FILE"
+}
+
+gate_state() {
+  [[ -f "$GATE_FILE" ]] || return 0
+  cat "$GATE_FILE"
+}
+
+assert_gate_transition() {
+  local gate
+  gate="$(gate_state)"
+  if [[ -z "$gate" ]]; then
+    case "$COMMAND:$TIER" in
+      deploy: | deploy:production | deploy:all | rollback:production | rollback:sandbox | \
+        public-host:production | public-host:sandbox | sandbox-enabled: | status: | rehearse:sandbox)
+        return 0
+        ;;
+    esac
+  else
+    case "$COMMAND:$TIER:$gate" in
+      deploy:sandbox:production | finalize::production | finalize::sandbox | \
+      recover-gate::production | recover-gate::sandbox | \
+        rollback:production:production | rollback:sandbox:sandbox | \
+        public-host:production:production | public-host:sandbox:production | \
+        public-host:production:sandbox | public-host:sandbox:sandbox | \
+        sandbox-enabled::production | sandbox-enabled::sandbox | status::production | status::sandbox)
+        return 0
+        ;;
+    esac
+  fi
+  printf 'command is not allowed while caller-IP gate state is %s\n' "${gate:-none}" >&2
+  return 1
+}
+
 deploy() {
+  local tier="${1:-all}"
+  [[ "$tier" == all || "$tier" == production || "$tier" == sandbox ]] || {
+    printf 'deploy tier must be production, sandbox, or all\n' >&2
+    return 2
+  }
   [[ -n "$AIHUB_IMAGE" ]] || { printf 'AIHUB_IMAGE is required\n' >&2; return 1; }
   preflight
   capture_resources baseline
   # Baseline before the migrations: start_candidate rebaselines per tier, so a
   # restart or OOM caused here would otherwise become the accepted baseline.
   capture_running_app_baseline || return 1
-  compose_migrate=("${compose[@]}" --profile migration)
-  edge_monitor_start 0
-  migration_status=0
-  "${compose_migrate[@]}" run --no-deps --rm migrate </dev/null || migration_status=$?
-  if [[ "$sandbox_enabled" == true && "$migration_status" -eq 0 ]]; then
-    compose_sandbox_migrate=("${compose[@]}" --profile migration)
-    "${compose_sandbox_migrate[@]}" run --no-deps --rm migrate-sandbox </dev/null || migration_status=$?
+  if [[ "$tier" != sandbox ]]; then
+    compose_migrate=("${compose[@]}" --profile migration)
+    edge_monitor_start 0
+    migration_status=0
+    "${compose_migrate[@]}" run --no-deps --rm migrate </dev/null || migration_status=$?
+    if [[ "$sandbox_enabled" == true && "$migration_status" -eq 0 ]]; then
+      compose_sandbox_migrate=("${compose[@]}" --profile migration)
+      "${compose_sandbox_migrate[@]}" run --no-deps --rm migrate-sandbox </dev/null || migration_status=$?
+    fi
+    edge_monitor_stop
+    capture_resources after-migrations || migration_status=1
+    if [[ "$migration_status" -ne 0 ]]; then
+      capture_resources failed-migration || true
+      printf 'a migration failed\n' >&2
+      return 1
+    fi
+    if [[ -n "$edge_monitor_failures" ]]; then
+      capture_resources failed-migration || true
+      printf 'public edge probe failed while migrations ran: %s\n' "$edge_monitor_failures" >&2
+      return 1
+    fi
+    if ! app_containers_safe "" ""; then
+      capture_resources failed-migration || true
+      printf 'an application container restarted or OOMed while migrations ran\n' >&2
+      return 1
+    fi
+    probe_all
   fi
-  edge_monitor_stop
-  capture_resources after-migrations || migration_status=1
-  if [[ "$migration_status" -ne 0 ]]; then
-    capture_resources failed-migration || true
-    printf 'a migration failed\n' >&2
-    return 1
+
+  if [[ "$tier" != sandbox ]]; then
+    deploy_tier production
   fi
-  if [[ -n "$edge_monitor_failures" ]]; then
-    capture_resources failed-migration || true
-    printf 'public edge probe failed while migrations ran: %s\n' "$edge_monitor_failures" >&2
-    return 1
-  fi
-  if ! app_containers_safe "" ""; then
-    capture_resources failed-migration || true
-    printf 'an application container restarted or OOMed while migrations ran\n' >&2
-    return 1
-  fi
-  probe_all
-  deploy_tier production
-  if [[ "$sandbox_enabled" == true ]]; then
+  if [[ "$tier" != production && "$sandbox_enabled" == true ]]; then
     if [[ "$sandbox_routed" == true ]]; then
       deploy_tier sandbox
     else
       bootstrap_sandbox
     fi
+  elif [[ "$tier" == sandbox ]]; then
+    printf 'Sandbox disabled; skipped\n'
+    return 0
   fi
-  final_edge_window 10
+  if [[ "$tier" == all ]]; then
+    final_edge_window 10
+  fi
 }
 
 restore_active_after_rollback_failure() {
@@ -1208,6 +1265,9 @@ status() {
   else
     printf 'sandbox disabled\n'
   fi
+  if [[ -f "$GATE_FILE" ]]; then
+    printf 'caller_ip_gate=%s\n' "$(cat "$GATE_FILE")"
+  fi
   if [[ -s "$PENDING_FILE" ]]; then
     printf 'pending=%s\n' "$(tr '\t' ' ' <"$PENDING_FILE")"
   fi
@@ -1215,6 +1275,14 @@ status() {
 
 case "$COMMAND" in
   deploy)
+    assert_gate_transition || exit 1
+    if [[ "$TIER" == sandbox && "$sandbox_enabled" != true ]]; then
+      printf 'Sandbox disabled; skipped\n'
+      exit 0
+    fi
+    if [[ "$TIER" == production || "$TIER" == sandbox ]]; then
+      write_gate "$TIER" || exit 1
+    fi
     reconcile_sandbox_configuration || exit 1
     expected=2
     [[ "$sandbox_routed" == false ]] && expected=1
@@ -1225,16 +1293,82 @@ case "$COMMAND" in
       app_container_names >&2
       exit 1
     fi
-    deploy
+    deploy "$TIER"
     ;;
   rollback)
-    rollback "$TIER"
+    assert_gate_transition || exit 1
+    if rollback "$TIER"; then
+      [[ ! -f "$GATE_FILE" ]] || clear_gate
+    else
+      exit $?
+    fi
     ;;
   status)
+    assert_gate_transition || exit 1
     load_sandbox_route_state || exit 1
     status
     ;;
+  public-host)
+    assert_gate_transition || exit 1
+    case "$TIER" in
+      production) printf '%s\n' "$production_host" ;;
+      sandbox)
+        [[ "$sandbox_enabled" == true ]] || { printf 'Sandbox is disabled\n' >&2; exit 1; }
+        printf '%s\n' "$sandbox_host"
+        ;;
+      *) printf 'public-host tier must be production or sandbox\n' >&2; exit 2 ;;
+    esac
+    ;;
+  sandbox-enabled)
+    assert_gate_transition || exit 1
+    printf '%s\n' "$sandbox_enabled"
+    ;;
+  finalize)
+    assert_gate_transition || exit 1
+    reconcile_sandbox_configuration || exit 1
+    preflight
+    if final_edge_window 10; then
+      clear_gate
+    else
+      [[ -s "$PENDING_FILE" ]] || clear_gate
+      exit 1
+    fi
+    ;;
+  recover-gate)
+    assert_gate_transition || exit 1
+    [[ ! -s "$PENDING_FILE" ]] || {
+      printf 'a rollout is pending; refusing to recover the caller-IP gate\n' >&2
+      exit 1
+    }
+    target_sha="${AIHUB_IMAGE##*:}"
+    [[ "$target_sha" =~ ^[a-f0-9]{40}$ ]] || {
+      printf 'AIHUB_IMAGE with a commit SHA is required to clear the caller-IP gate\n' >&2
+      exit 1
+    }
+    gate="$(gate_state)"
+    if [[ "$gate" == production ]]; then
+      slot="$(active_slot production "$API_CONFIG")"
+      service="$(service_for_slot production "$slot")"
+    else
+      load_sandbox_route_state || exit 1
+      [[ "$sandbox_routed" == true ]] || {
+        printf 'Sandbox route is unresolved; refusing to clear the caller-IP gate\n' >&2
+        exit 1
+      }
+      service="$(service_for_slot sandbox "$sandbox_active_slot")"
+    fi
+    active_sha="$(container_revision "$(container_id "$service")")"
+    if [[ "$active_sha" == "$target_sha" ]]; then
+      rollback "$gate" || exit 1
+      [[ ! -f "$GATE_FILE" ]] || clear_gate
+      printf 'caller-IP gate release rolled back\n'
+    else
+      clear_gate
+      printf 'caller-IP gate cleared\n'
+    fi
+    ;;
   rehearse)
+    assert_gate_transition || exit 1
     load_sandbox_route_state || exit 1
     [[ "$TIER" == sandbox && "$sandbox_enabled" == true && "$sandbox_routed" == true ]] || {
       printf 'rollback rehearsal is limited to enabled Sandbox\n' >&2
@@ -1245,7 +1379,7 @@ case "$COMMAND" in
     deploy_tier sandbox true
     ;;
   *)
-    printf 'usage: %s deploy | rollback <production|sandbox> | rehearse sandbox | status\n' "$0" >&2
+    printf 'usage: %s deploy [production|sandbox|all] | rollback <production|sandbox> | rehearse sandbox | status | public-host <production|sandbox> | sandbox-enabled | finalize | recover-gate\n' "$0" >&2
     exit 2
     ;;
 esac
