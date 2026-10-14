@@ -62,6 +62,19 @@ check_backend_network() {
   fi
 }
 
+check_socket_dir() {
+  if [[ -z "$socket_dir" ]]; then
+    # Compose bind-mounts this default even while the socket is off; creating it
+    # here keeps Docker from creating it as root inside the deployment directory.
+    mkdir -p .aihub-socket
+    return 0
+  fi
+  if [[ ! -d "$socket_dir" ]]; then
+    printf 'AIHUB_SOCKET_DIR %s is not a directory\n' "$socket_dir" >&2
+    return 1
+  fi
+}
+
 configured_port() {
   local key="$1" default="$2" value
   value="$(read_env "$key")"
@@ -98,6 +111,14 @@ for ((i = 0; i < ${#reserved_ports[@]}; i += 1)); do
     fi
   done
 done
+
+# Optional. Set, the apps also listen on a Unix socket in this host directory and
+# nginx reaches a slot through it; unset, nginx keeps using the published ports.
+socket_dir="$(read_env AIHUB_SOCKET_DIR)"
+if [[ -n "$socket_dir" ]] && ! [[ "$socket_dir" =~ ^/[A-Za-z0-9._/-]*[A-Za-z0-9._-]$ ]]; then
+  printf 'AIHUB_SOCKET_DIR must be an absolute path without spaces or a trailing slash\n' >&2
+  exit 1
+fi
 
 production_host="$(read_env AIHUB_PRODUCTION_HOST)"
 sandbox_host="$(read_env AIHUB_SANDBOX_HOST)"
@@ -184,6 +205,31 @@ slot_for_port() {
   esac
 }
 
+# The slot a socket path belongs to. Only the file name counts, so a config that
+# still names a socket stays readable after AIHUB_SOCKET_DIR is unset.
+slot_for_socket() {
+  local tier="$1" path="$2"
+  case "$tier:${path##*/}" in
+    production:app.sock | sandbox:app-sandbox.sock) printf a ;;
+    production:app-slot-b.sock | sandbox:app-sandbox-slot-b.sock) printf b ;;
+    *) printf 'unsupported %s upstream socket: %s\n' "$tier" "$path" >&2; return 1 ;;
+  esac
+}
+
+# True when the slot's running container was started with a socket, which is
+# what decides how nginx must reach it: such a container listens on TCP only on
+# its own loopback, so its published port leads nowhere. A container started
+# before the socket was enabled, such as the one a rollback returns to, is
+# still reached through its port.
+slot_listens_on_socket() {
+  local service id
+  service="$(service_for_slot "$1" "$2")" || return 1
+  id="$(container_id "$service")"
+  [[ -n "$id" ]] || return 1
+  sudo -n docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$id" 2>/dev/null \
+    | grep -Fxq "AIHUB_LISTEN_SOCKET=/run/aihub-sock/$service.sock"
+}
+
 port_for_slot() {
   case "$1:$2" in
     production:a) printf '%s' "$production_slot_a_port" ;;
@@ -210,13 +256,16 @@ service_for_slot() {
 
 active_slot() {
   local tier="$1" config="$2"
-  local ports=()
-  mapfile -t ports < <(sed -nE 's#^[[:space:]]*proxy_pass http://127\.0\.0\.1:([0-9]+);.*#\1#p' "$config" | sort -u)
-  if [[ "${#ports[@]}" -ne 1 ]]; then
-    printf '%s nginx config must have exactly one active upstream port\n' "$tier" >&2
+  local upstreams=()
+  mapfile -t upstreams < <(sed -nE 's#^[[:space:]]*proxy_pass http://(127\.0\.0\.1:[0-9]+|unix:[^;[:space:]]+);.*#\1#p' "$config" | sort -u)
+  if [[ "${#upstreams[@]}" -ne 1 ]]; then
+    printf '%s nginx config must have exactly one active upstream\n' "$tier" >&2
     return 1
   fi
-  slot_for_port "$tier" "${ports[0]}"
+  case "${upstreams[0]}" in
+    unix:*) slot_for_socket "$tier" "${upstreams[0]#unix:}" ;;
+    *) slot_for_port "$tier" "${upstreams[0]##*:}" ;;
+  esac
 }
 
 container_id() {
@@ -426,20 +475,24 @@ probe_window() {
 }
 
 render_config() {
-  local tier="$1" slot="$2" output="$3" template default_port target_port ports=()
+  local tier="$1" slot="$2" output="$3" template default_port target ports=()
   default_port=3021
   template=ops/nginx/aihub-api.conf
   if [[ "$tier" == sandbox ]]; then
     default_port=3022
     template=ops/nginx/sandbox.conf
   fi
-  target_port="$(port_for_slot "$tier" "$slot")"
   mapfile -t ports < <(sed -nE 's#^[[:space:]]*proxy_pass http://127\.0\.0\.1:([0-9]+);.*#\1#p' "$template" | sort -u)
   if [[ "${#ports[@]}" -ne 1 || "${ports[0]}" != "$default_port" ]]; then
     printf '%s nginx source must use its slot-A port %s\n' "$tier" "$default_port" >&2
     return 1
   fi
-  sed -E "s#(proxy_pass[[:space:]]+http://127\\.0\\.0\\.1:)[0-9]+;#\\1${target_port};#g" "$template" >"$output"
+  if [[ -n "$socket_dir" ]] && slot_listens_on_socket "$tier" "$slot"; then
+    target="unix:$socket_dir/$(service_for_slot "$tier" "$slot").sock"
+  else
+    target="127.0.0.1:$(port_for_slot "$tier" "$slot")"
+  fi
+  sed -E "s#(proxy_pass[[:space:]]+http://)127\\.0\\.0\\.1:[0-9]+;#\\1${target};#g" "$template" >"$output"
 }
 
 apply_slots() {
@@ -889,6 +942,7 @@ preflight() {
     return 1
   }
   check_backend_network || return 1
+  check_socket_dir || return 1
   "${compose[@]}" config --quiet
   check_vault_agent
   local expected_count=2

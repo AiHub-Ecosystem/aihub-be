@@ -722,6 +722,45 @@ string `true` only after the supervised migration, staging directory, helper,
 and sudoers entry have been verified. This lets normal app deployments proceed
 while the operator-owned cutover is pending.
 
+### Unix socket ingress (optional)
+
+By default nginx reaches the app through the slot's published loopback port.
+Setting `AIHUB_SOCKET_DIR` in `.env.production` makes the apps also serve on a
+Unix socket in that host directory and makes nginx use it. Over a socket the
+caller address is the entry nginx appended, resolved from the socket peer alone,
+so no host process can present itself as the proxy by connecting to a port.
+
+Prepare the directory once, before setting the variable. The app runs as UID/GID
+`10001`, and nginx's worker user must be able to connect, so the directory needs
+a group both share (replace `<nginx-group>` with the worker's group):
+
+```sh
+sudo install -d -o 10001 -g <nginx-group> -m 2770 /srv/aihub/socket
+```
+
+Then add `AIHUB_SOCKET_DIR=/srv/aihub/socket` to `.env.production` and deploy as
+usual. Each slot creates `<service>.sock` there (`app`, `app-slot-b`,
+`app-sandbox`, `app-sandbox-slot-b`) with mode `0660`.
+
+What changes, and what does not:
+
+- A container started with the socket listens on TCP only on its own loopback
+  (health checks and `/ready` use that), so its published port no longer leads to
+  the app. The deploy script therefore renders nginx per slot: a slot whose
+  container was started with the socket gets its socket path, and a slot whose
+  container predates it (the one a rollback returns to) keeps its port.
+- The first deploy after setting the variable switches the candidate slot to the
+  socket and leaves the live slot on its port. After the next successful deploy
+  both tiers are on sockets.
+- `ops/status.sh` reads either form, so "Checking deployed state" works before and
+  after.
+- To go back, unset `AIHUB_SOCKET_DIR` and deploy. The new slot starts on its
+  port, and the deploy script reads the old socket config while it switches.
+- `AIHUB_TRUSTED_PROXY_IP` is still required and is ignored on a socket.
+- If nginx cannot connect (`502` with `Permission denied` in the nginx error
+  log), the directory group or its mode is wrong. The deploy's edge probe fails
+  and the rollout rolls back.
+
 ### Publishing another hostname
 
 certbot cannot create a server block, only attach a certificate to one that

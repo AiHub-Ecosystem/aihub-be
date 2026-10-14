@@ -30,6 +30,7 @@ demo-jwks.json
 .worktrees/
 bash.exe.stackdump
 .aihub-deploy-state/
+.aihub-socket/
 /artifacts/capacity-benchmark/
 .workbuddy-ai/
 

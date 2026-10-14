@@ -23,17 +23,26 @@ docker=(sudo -n docker)
 repository_url=https://github.com/AiHub-Ecosystem/aihub-be
 status=0
 
-active_port() {
-  local config="$1" ports=()
-  mapfile -t ports < <(sed -nE 's#^[[:space:]]*proxy_pass http://127\.0\.0\.1:([0-9]+);.*#\1#p' "$config" | sort -u)
-  [ "${#ports[@]}" -eq 1 ] || return 1
-  printf '%s\n' "${ports[0]}"
+# nginx reaches a slot through its published port or, once the apps listen on a
+# Unix socket, through the socket file named after its Compose service.
+active_upstream() {
+  local config="$1" upstreams=()
+  mapfile -t upstreams < <(sed -nE 's#^[[:space:]]*proxy_pass http://(127\.0\.0\.1:[0-9]+|unix:[^;[:space:]]+);.*#\1#p' "$config" | sort -u)
+  [ "${#upstreams[@]}" -eq 1 ] || return 1
+  printf '%s\n' "${upstreams[0]}"
 }
 
-container_for_port() {
-  local tier="$1" port="$2" service id selected= matches=0
+container_for_upstream() {
+  local tier="$1" upstream="$2" service id selected= matches=0 match
   local -a ids=()
-  mapfile -t ids < <("${docker[@]}" ps --all --quiet --filter "publish=$port" \
+  case "$upstream" in
+    unix:*)
+      service="${upstream##*/}"
+      match="label=com.docker.compose.service=${service%.sock}"
+      ;;
+    *) match="publish=${upstream##*:}" ;;
+  esac
+  mapfile -t ids < <("${docker[@]}" ps --all --quiet --filter "$match" \
     --filter "label=org.opencontainers.image.source=$repository_url")
   for id in "${ids[@]}"; do
     service="$("${docker[@]}" inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$id" \
@@ -58,13 +67,13 @@ for label in production sandbox; do
       continue
     fi
   fi
-  if ! port="$(active_port "$config")"; then
+  if ! upstream="$(active_upstream "$config")"; then
     printf '%-10s FAIL cannot read a single active nginx upstream\n' "$label"
     status=1
     continue
   fi
-  if ! container="$(container_for_port "$label" "$port")"; then
-    printf '%-10s FAIL no unique AIHUB container for nginx upstream port=%s\n' "$label" "$port"
+  if ! container="$(container_for_upstream "$label" "$upstream")"; then
+    printf '%-10s FAIL no unique AIHUB container for nginx upstream=%s\n' "$label" "$upstream"
     status=1
     continue
   fi
@@ -72,7 +81,7 @@ for label in production sandbox; do
   info=$("${docker[@]}" inspect "$container" --format \
     '{{index .Config.Labels "org.opencontainers.image.revision"}} {{.State.Status}} {{.State.Health.Status}} {{.RestartCount}} {{.State.StartedAt}}' \
     </dev/null 2>/dev/null) || {
-    printf '%-10s MISSING container for upstream port=%s\n' "$label" "$port"
+    printf '%-10s MISSING container for upstream=%s\n' "$label" "$upstream"
     status=1
     continue
   }

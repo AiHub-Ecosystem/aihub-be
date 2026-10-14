@@ -124,6 +124,9 @@ jobs:
       - name: Exercise request log lookup with fixtures and stubs
         run: bash test/cli/request-log-lookup.spec.sh
 
+      - name: Exercise nginx upstream selection for port and socket slots
+        run: bash test/ops/blue-green-upstream.spec.sh
+
   build:
     name: Build
     runs-on: ubuntu-latest

@@ -68,6 +68,10 @@ x-app-service: &app-service
   stop_grace_period: 150s
   volumes:
     - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro
+    # Where an app that listens on a Unix socket creates it, for nginx to reach.
+    # Unused until AIHUB_SOCKET_DIR is set, which also turns the socket on; the
+    # default only gives Docker a directory it does not have to invent as root.
+    - ${AIHUB_SOCKET_DIR:-./.aihub-socket}:/run/aihub-sock
   depends_on:
     vault-agent:
       condition: service_healthy
@@ -167,7 +171,9 @@ services:
 
   app:
     <<: *app-service
-    environment: *app-environment
+    environment:
+      <<: *app-environment
+      AIHUB_LISTEN_SOCKET: ${AIHUB_SOCKET_DIR:+/run/aihub-sock/app.sock}
     ports:
       - "127.0.0.1:${AIHUB_APP_PORT:-3021}:3000"
 
@@ -175,7 +181,9 @@ services:
     <<: *app-service
     profiles:
       - blue-green
-    environment: *app-environment
+    environment:
+      <<: *app-environment
+      AIHUB_LISTEN_SOCKET: ${AIHUB_SOCKET_DIR:+/run/aihub-sock/app-slot-b.sock}
     ports:
       - "127.0.0.1:3023:3000"
 
@@ -186,6 +194,7 @@ services:
     environment:
       <<: *app-environment
       AIHUB_RUNTIME_DATABASE_SCOPE: sandbox
+      AIHUB_LISTEN_SOCKET: ${AIHUB_SOCKET_DIR:+/run/aihub-sock/app-sandbox.sock}
       # Sandbox only: set on the production app, it enables the assertion mint
       # route there, and Production accepts what it mints (#442).
       AIHUB_SANDBOX_ORG_IDS: ${AIHUB_SANDBOX_ORG_IDS:-}
@@ -207,6 +216,7 @@ services:
     environment:
       <<: *app-environment
       AIHUB_RUNTIME_DATABASE_SCOPE: sandbox
+      AIHUB_LISTEN_SOCKET: ${AIHUB_SOCKET_DIR:+/run/aihub-sock/app-sandbox-slot-b.sock}
       AIHUB_SANDBOX_ORG_IDS: ${AIHUB_SANDBOX_ORG_IDS:-}
       CUSTOMER_WEB_BASE_URL: ${CUSTOMER_WEB_SANDBOX_BASE_URL:-}
       SEAWEEDFS_USER_ASSET_BUCKET: ${SEAWEEDFS_SANDBOX_USER_ASSET_BUCKET:-}
