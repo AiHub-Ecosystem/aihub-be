@@ -62,8 +62,7 @@ export async function authenticateApiKey(
   const authenticated = await authenticator.authenticate({
     value,
     environment,
-    clientIp:
-      options.clientIp ?? (request.ip.length === 0 ? 'unknown' : request.ip),
+    clientIp: options.clientIp ?? (request.ip || 'unknown'),
     ...(options.forceFresh === true ? { forceFresh: true } : {}),
   });
 
