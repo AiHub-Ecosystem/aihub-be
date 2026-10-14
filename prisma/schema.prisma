@@ -55,6 +55,8 @@ model ApiKey {
   lastUsedAt           DateTime?    @map("last_used_at") @db.Timestamptz(6)
   revokedAt            DateTime?    @map("revoked_at") @db.Timestamptz(6)
   createdAt            DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// A key AIHUB itself uses; left off customer statements (migration 0039).
+  internal             Boolean      @default(false)
   organization         Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([organizationId], map: "api_keys_org_idx")
@@ -281,6 +283,8 @@ model Organization {
   createdByUserAccountId     String?                     @map("created_by_user_account_id")
   apiKeys                    ApiKey[]
   auditEvents                OrganizationAuditEvent[]
+  billingAdjustments         BillingAdjustment[]
+  billingMonthClosures       BillingMonthClosure[]
   identityConfig             OrganizationIdentityConfig?
   invitations                OrganizationInvitation[]
   memberships                OrganizationMembership[]
@@ -453,6 +457,8 @@ model UsageRecord {
   downstreamMs     Int?     @map("downstream_ms")
   aiProcessingMs   Int?     @map("ai_processing_ms")
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// What the record bills; its `CHECK` is owned by migration 0039.
+  billingBasis     String   @default("response") @map("billing_basis")
 
   @@index([createdAt], map: "usage_created_brin", type: Brin)
   @@index([organizationId, createdAt(sort: Desc)], map: "usage_org_time_idx")
@@ -544,4 +550,43 @@ model WebSession {
 
   @@index([userAccountId], map: "web_sessions_user_account_id")
   @@map("web_sessions")
+}
+
+/// A correction to one Organization's bill for one UTC month (ADR-0097).
+///
+/// Its `CHECK` constraints and the append-only trigger
+/// `billing_adjustments_append_only` are owned by migration 0039.
+model BillingAdjustment {
+  id             String       @id
+  organizationId String       @map("organization_id")
+  billingMonth   DateTime     @map("billing_month") @db.Date
+  operation      String
+  requests       Int
+  reason         String
+  corrects       Json
+  actor          String
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, billingMonth], map: "billing_adjustments_org_month_idx")
+  @@map("billing_adjustments")
+}
+
+/// What a closed month billed, per Organization and operation (ADR-0097).
+///
+/// Its `CHECK` constraints and the append-only trigger
+/// `billing_month_closures_append_only` are owned by migration 0039.
+model BillingMonthClosure {
+  organizationId     String       @map("organization_id")
+  billingMonth       DateTime     @map("billing_month") @db.Date
+  operation          String
+  billableRequests   Int          @map("billable_requests")
+  adjustmentRequests Int          @map("adjustment_requests")
+  totalRequests      Int          @map("total_requests")
+  closedBy           String       @map("closed_by")
+  closedAt           DateTime     @default(now()) @map("closed_at") @db.Timestamptz(6)
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([organizationId, billingMonth, operation])
+  @@map("billing_month_closures")
 }

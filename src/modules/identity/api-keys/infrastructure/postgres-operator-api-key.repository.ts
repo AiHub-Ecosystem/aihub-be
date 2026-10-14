@@ -95,6 +95,7 @@ export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
             name: input.name,
             scopes: [...input.scopes],
             allowedEnvironments: [...input.allowedEnvironments],
+            internal: input.internal === true,
           },
         });
         await recordOrganizationAuditEvent(

@@ -30,19 +30,23 @@ The complete record payload is logged as JSON → reconstructible manually from 
 
 ## K.2 Unfinalized Billing Model — Measure Both Metrics
 
-```sql
--- Request-based pricing
-SELECT organization_id, operation, sum(billable_requests) AS billable_requests
-FROM usage_records
-WHERE created_at >= :month_start AND outcome = 'success'
-GROUP BY 1, 2;
+Request-based pricing is not computed by hand: `billing:statement` states what
+an Organization is billed for one UTC month, with what it excluded and why, its
+adjustments, and whether the month is closed ([ADR-0097](../../../adr/0097-billing-statements-adjustments-and-closed-months.md)).
+Its query is `BILLING_USAGE_SQL` in
+`src/modules/metering/infrastructure/postgres-billing-statement.repository.ts`,
+and it bounds the month on both sides. An earlier version of this section gave
+`WHERE created_at >= :month_start` with no upper bound, which counts every later
+month too; do not copy it.
 
--- Token-based pricing
+```sql
+-- Token-based pricing (exploration only; nothing bills by token today)
 SELECT organization_id,
        sum(total_tokens) FILTER (WHERE billable_requests = 1),
        count(*) FILTER (WHERE metering_status = 'missing_usage') AS unmetered
 FROM usage_records
-WHERE created_at >= :month_start AND outcome = 'success'
+WHERE created_at >= :month_start AND created_at < :next_month_start
+  AND outcome = 'success' AND environment = 'production'
 GROUP BY 1;
 ```
 

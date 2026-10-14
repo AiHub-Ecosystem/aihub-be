@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Related issues: #9, #56, #57
+- Amended by: [ADR-0097](0097-billing-statements-adjustments-and-closed-months.md) for billing statements, internal keys, adjustments, closed months, and the charge for a Writing grading completed after its `504`
 
 AIHUB records one durable internal metering record for each request after the API key has resolved the organization and key, including later assertion, validation, downstream, and internal failures; requests that never authenticate have no metering record. The record is written before the response, billability is limited to successful outcomes, and a metering write failure never changes a successful customer response. `request_id` is the uniqueness boundary; billable request units are binary and default to non-billable (deliberately overriding the earlier schema default of one), so an idempotency replay records evidence without charging a second request. Gateway validation/authentication and gateway rate-limit failures are client errors, downstream failures (including provider throttling) are downstream errors, and unexpected failures are internal errors.
 

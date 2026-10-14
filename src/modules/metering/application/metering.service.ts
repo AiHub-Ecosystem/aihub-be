@@ -120,6 +120,7 @@ function usageRecord(input: MeteringFinalizeInput): UsageRecord {
     ...(telemetry.aiProcessingMs === undefined
       ? {}
       : { aiProcessingMs: telemetry.aiProcessingMs }),
+    billingBasis: input.billingBasis ?? 'response',
   };
 }
 

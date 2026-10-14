@@ -819,9 +819,20 @@ layer.
 If you disconnect early, AIHUB cancels the downstream call rather than letting
 it finish for nobody — with one Writing exception. If the Writing request
 carried an `Idempotency-Key` and the timeout was ours, the AI service is allowed
-to finish in the background and its result is stored. You will get `504`, but
-retrying with the same key returns the finished result without paying for a
-second run. Speaking has no such replay guarantee.
+to finish in the background and its result is stored. You will get `504`, and
+retrying with the same key returns the finished result. What you pay: the `504`
+itself is free, and the grading that finished is billed **once**, when it
+finishes, whether or not you ever fetch it; it counts once toward your monthly
+quota at the same moment. Retries that return it are free, however many there
+are. Speaking has no such replay guarantee.
+
+### Billing month
+
+A request is billed in the **UTC** calendar month in which AIHUB finished
+handling it. For a customer in Vietnam (UTC+7), October's bill therefore starts
+at 07:00 on 1 October and ends at 06:59:59 on 1 November, local time. Only
+successful Production requests are billed; failures, replays, and Sandbox calls
+are not.
 
 ---
 

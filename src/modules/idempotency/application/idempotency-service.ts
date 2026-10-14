@@ -278,6 +278,11 @@ export class IdempotencyService implements IdempotencyServicePort {
     try {
       const result = await Promise.race([workPromise, hardDeadline]);
       await this.complete(input, requestId, result);
+      try {
+        await input.backgroundLifecycle?.completed?.();
+      } catch {
+        // A listener failing must not turn a stored result into a failed one.
+      }
     } catch (error) {
       if (!(error instanceof CompletionStorageError)) {
         await this.releaseAfterFailure(input, requestId, error);

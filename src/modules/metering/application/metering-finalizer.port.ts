@@ -12,6 +12,14 @@ export type MeteringStatus =
   | 'not_applicable'
   | 'quota_unverified';
 
+/**
+ * Which event a Metering record bills (ADR-0097). `response` is the request
+ * the caller received an answer to. `background_completion` is the one charge
+ * for a grading AIHUB finished after it had already answered `504`; the
+ * `504` record itself stays a `response` and stays non-billable.
+ */
+export type BillingBasis = 'response' | 'background_completion';
+
 export interface MeteringUsage {
   readonly inputTokens?: number;
   readonly outputTokens?: number;
@@ -48,6 +56,8 @@ export interface MeteringFinalizeInput {
   readonly modelCalled?: boolean;
   readonly quotaTracked?: boolean;
   readonly quotaUnverified?: boolean;
+  /** Defaults to `response`. */
+  readonly billingBasis?: BillingBasis;
   /**
    * Called with the status the record was finally written with, after every
    * mutation the finalizer applies.

@@ -293,8 +293,18 @@ describe('application shutdown drain', () => {
       await closing;
 
       expect(idempotencyRepository.completed).toHaveLength(1);
-      expect(usageRepository.records).toHaveLength(1);
-      expect(usageRepository.records[0]?.httpStatus).toBe(504);
+      // The 504 the caller saw, and the one charge for the grading the drain
+      // let finish (ADR-0097): the drain waits for that write too.
+      expect(
+        usageRepository.records.map((record) => [
+          record.httpStatus,
+          record.billableRequests,
+          record.billingBasis,
+        ]),
+      ).toEqual([
+        [504, 0, 'response'],
+        [200, 1, 'background_completion'],
+      ]);
       expect(
         exporter.exported.some((span) => span.name === `POST ${GRADE_PATH}`),
       ).toBe(true);

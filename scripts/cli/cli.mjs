@@ -126,6 +126,16 @@ const revokeOperatorApiKeyDescriptor = cliRunnerDescriptor(
   'runRevokeOperatorApiKeyCommand',
   'operator API key command is unavailable',
 );
+const billingStatementDescriptor = cliRunnerDescriptor(
+  'billing-statement',
+  'runBillingStatementCommand',
+  'billing statement command is unavailable',
+);
+const billingAdjustDescriptor = cliRunnerDescriptor(
+  'billing-statement',
+  'runBillingAdjustCommand',
+  'billing adjustment command is unavailable',
+);
 const quotaTargetMonthDescriptor = cliRunnerDescriptor(
   'quota-reconcile',
   'parseTargetMonth',
@@ -552,6 +562,7 @@ async function createKey(options) {
     name,
     scopes,
     allowedEnvironments: [environment],
+    internal: booleanOption(options, 'internal'),
   });
   if (outcome !== 'created') {
     usageError();
@@ -850,6 +861,96 @@ async function reportUsageCommand(options) {
   });
 }
 
+function invalidBillingInput(error) {
+  return (
+    error instanceof Error &&
+    typeof error.code === 'string' &&
+    (error.code === 'BILLING_INVALID_MONTH' ||
+      error.code === 'BILLING_INVALID_ADJUSTMENT' ||
+      error.code === 'BILLING_MONTH_NOT_ENDED')
+  );
+}
+
+async function runBilling(descriptor, input) {
+  try {
+    return await runCliCommand(descriptor, input);
+  } catch (error) {
+    if (invalidBillingInput(error)) {
+      usageError();
+    }
+    throw error;
+  }
+}
+
+// billing:statement --month YYYY-MM [--org <id>] [--close true --actor <username>]
+async function billingStatementCommand(options) {
+  for (const name of options.keys()) {
+    if (!['month', 'org', 'close', 'actor'].includes(name)) {
+      usageError();
+    }
+  }
+  const close = booleanOption(options, 'close');
+  if (close !== options.has('actor')) {
+    usageError();
+  }
+  await runBilling(billingStatementDescriptor, {
+    databaseUrl: process.env.DATABASE_URL ?? '',
+    month: requiredOption(options, 'month'),
+    ...(options.has('org')
+      ? { organizationId: requiredOption(options, 'org') }
+      : {}),
+    ...(close ? { closeAs: requiredOption(options, 'actor') } : {}),
+  });
+}
+
+// billing:adjust --org <id> --month YYYY-MM --operation <id> --requests <+/-n>
+//   --reason <text> --actor <username>
+//   (--request-ids <id,id> | --period-from <iso> --period-to <iso>)
+async function billingAdjustCommand(options) {
+  const allowed = [
+    'org',
+    'month',
+    'operation',
+    'requests',
+    'reason',
+    'actor',
+    'request-ids',
+    'period-from',
+    'period-to',
+  ];
+  for (const name of options.keys()) {
+    if (!allowed.includes(name)) {
+      usageError();
+    }
+  }
+  const byIds = options.has('request-ids');
+  const byPeriod = options.has('period-from') || options.has('period-to');
+  if (byIds === byPeriod) {
+    usageError();
+  }
+  const rawRequests = requiredOption(options, 'requests');
+  if (!/^[+-]?[1-9][0-9]{0,8}$/.test(rawRequests)) {
+    usageError();
+  }
+  await runBilling(billingAdjustDescriptor, {
+    databaseUrl: process.env.DATABASE_URL ?? '',
+    organizationId: requiredOption(options, 'org'),
+    month: requiredOption(options, 'month'),
+    operation: requiredOption(options, 'operation'),
+    requests: Number(rawRequests),
+    reason: requiredOption(options, 'reason'),
+    actor: requiredOption(options, 'actor'),
+    corrects: byIds
+      ? { requestIds: listOption(options, 'request-ids', '') }
+      : {
+          period: {
+            from: requiredOption(options, 'period-from'),
+            to: requiredOption(options, 'period-to'),
+          },
+        },
+  });
+}
+
 async function main() {
   const [command, ...values] = process.argv.slice(2);
   const options = parseOptions(values);
@@ -912,6 +1013,14 @@ async function main() {
   }
   if (command === 'usage:report') {
     await reportUsageCommand(options);
+    return;
+  }
+  if (command === 'billing:statement') {
+    await billingStatementCommand(options);
+    return;
+  }
+  if (command === 'billing:adjust') {
+    await billingAdjustCommand(options);
     return;
   }
 

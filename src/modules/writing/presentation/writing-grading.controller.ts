@@ -27,6 +27,12 @@ import {
   getAuthenticatedApiKey,
 } from '@/modules/identity/shared/presentation/authenticated-request';
 import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
+import { getMeteringEvidence } from '@/modules/metering/application/metering-evidence';
+import {
+  METERING_FINALIZER,
+  type MeteringFinalizerPort,
+} from '@/modules/metering/application/metering-finalizer.port';
+import { billBackgroundCompletion } from '@/modules/metering/public/background-completion-billing';
 
 const TASK1_OPERATION = 'writing.task1.grade' as const;
 const TASK2_OPERATION = 'writing.task2.grade' as const;
@@ -50,6 +56,25 @@ function requestLifecycle(
     throw new Error('request lifecycle state is missing');
   }
   return lifecycle;
+}
+
+/**
+ * The concurrency permit's lifecycle, plus the one charge for a grading that
+ * completes after its `504` (ADR-0097).
+ */
+function backgroundLifecycleFor(
+  request: AuthenticatedRequest,
+  lifecycle: RequestLifecycleState,
+  finalizer: MeteringFinalizerPort,
+) {
+  const concurrency = getConcurrencyBackgroundLifecycle(request);
+  return billBackgroundCompletion({
+    requestId: String(request.id),
+    receivedAt: lifecycle.receivedAt,
+    evidence: getMeteringEvidence(request),
+    finalizer,
+    ...(concurrency === undefined ? {} : { inner: concurrency }),
+  });
 }
 
 function requestMetadata(
@@ -82,6 +107,8 @@ export class WritingGradingController {
   constructor(
     @Inject(GRADING_ORCHESTRATOR)
     private readonly orchestrator: GradingOrchestratorPort,
+    @Inject(METERING_FINALIZER)
+    private readonly finalizer: MeteringFinalizerPort,
   ) {}
 
   @Post(OPERATION_CATALOG[TASK1_OPERATION].path)
@@ -96,8 +123,12 @@ export class WritingGradingController {
       TASK1_OPERATION,
       request.headers['idempotency-key'],
     );
-    const backgroundLifecycle = getConcurrencyBackgroundLifecycle(request);
     const lifecycle = requestLifecycle(request);
+    const backgroundLifecycle = backgroundLifecycleFor(
+      request,
+      lifecycle,
+      this.finalizer,
+    );
 
     try {
       return await this.orchestrator.execute({
@@ -124,8 +155,12 @@ export class WritingGradingController {
       TASK2_OPERATION,
       request.headers['idempotency-key'],
     );
-    const backgroundLifecycle = getConcurrencyBackgroundLifecycle(request);
     const lifecycle = requestLifecycle(request);
+    const backgroundLifecycle = backgroundLifecycleFor(
+      request,
+      lifecycle,
+      this.finalizer,
+    );
 
     try {
       return await this.orchestrator.execute({

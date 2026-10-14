@@ -542,6 +542,8 @@ describe('cross-module table access', () => {
 
   it('names exactly the tables more than one module reads or writes', () => {
     expect(sharedTableAccesses()).toEqual([
+      // ADR-0097: a billing statement leaves keys marked internal off the bill.
+      'api_keys: identity + metering',
       // Identity resolves the invitation a request was minted for.
       'auth_identities: auth + identity',
       // ADR-0074: Auth asks whether the credential is still actionable.

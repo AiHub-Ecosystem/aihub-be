@@ -33,6 +33,7 @@
     // production and the `.ts` source under tsx, so knip cannot follow those
     // imports statically. Entry status also treats their exports as public
     // surface.
+    "src/cli/billing-statement.ts",
     "src/cli/quota-reconcile.ts",
     "src/cli/usage-report.ts",
     "src/cli/usage-prune.ts",

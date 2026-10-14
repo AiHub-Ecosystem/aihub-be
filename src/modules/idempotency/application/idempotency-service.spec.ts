@@ -354,6 +354,66 @@ describe('IdempotencyService', () => {
     expect(lifecycle.settled).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ['stores its result', true, 1],
+    ['fails', false, 0],
+  ])(
+    'reports background completion only when the late work %s',
+    async (_label, succeeds, completions) => {
+      const repository = new FakeRepository();
+      const service = new IdempotencyService(repository);
+      let finish: ((ok: boolean) => void) | undefined;
+      const workPromise = new Promise<{ value: string }>((resolve, reject) => {
+        finish = (ok) =>
+          ok ? resolve({ value: 'done' }) : reject(new Error('downstream'));
+      });
+      const lifecycle = {
+        started: jest.fn(),
+        settled: jest.fn(),
+        completed: jest.fn(),
+      };
+
+      await expect(
+        service.execute(
+          {
+            ...input('req_background_completed', 5),
+            backgroundLifecycle: lifecycle,
+          },
+          () => workPromise,
+          () => ({ value: 'unused' }),
+        ),
+      ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
+      expect(lifecycle.completed).not.toHaveBeenCalled();
+
+      finish?.(succeeds);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect({
+        completed: lifecycle.completed.mock.calls.length,
+        stored: repository.completed.length,
+        settled: lifecycle.settled.mock.calls.length,
+      }).toEqual({ completed: completions, stored: completions, settled: 1 });
+    },
+  );
+
+  it('does not report background completion for work that answered in time', async () => {
+    const repository = new FakeRepository();
+    const service = new IdempotencyService(repository);
+    const lifecycle = {
+      started: jest.fn(),
+      settled: jest.fn(),
+      completed: jest.fn(),
+    };
+
+    await service.execute(
+      { ...input('req_in_time'), backgroundLifecycle: lifecycle },
+      async () => ({ value: 'fast' }),
+      () => ({ value: 'unused' }),
+    );
+
+    expect(lifecycle.completed).not.toHaveBeenCalled();
+  });
+
   it('allows only one downstream execution when two requests race for one key', async () => {
     const repository = new AtomicRepository();
     const service = new IdempotencyService(repository);

@@ -90,6 +90,7 @@ export class PostgresUsageRepository implements UsageRepositoryPort {
           totalMs: record.totalMs,
           downstreamMs: record.downstreamMs ?? null,
           aiProcessingMs: record.aiProcessingMs ?? null,
+          billingBasis: record.billingBasis,
         },
       });
     }, CONTROL_PLANE_TRANSACTION_OPTIONS);

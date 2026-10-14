@@ -22,6 +22,12 @@ export interface IdempotencyExecutionInput {
 export interface IdempotencyBackgroundLifecycle {
   started(): void;
   settled(): void;
+  /**
+   * The work that outlived its response finished and its result is stored, so
+   * a replay will now deliver it. Called at most once and awaited before
+   * `settled`, so a shutdown drain also waits for what it does.
+   */
+  completed?(): void | Promise<void>;
 }
 
 export interface IdempotencyWorkContext {

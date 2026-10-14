@@ -69,6 +69,7 @@ async function usageRecord(
     },
     meteringStatus: 'not_applicable',
     totalMs: 1,
+    billingBasis: 'response',
   });
   await pool.query(
     'UPDATE usage_records SET created_at = $2 WHERE request_id = $1',

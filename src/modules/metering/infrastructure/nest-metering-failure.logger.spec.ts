@@ -21,6 +21,7 @@ const record = {
   totalMs: 100,
   downstreamMs: 80,
   aiProcessingMs: 70,
+  billingBasis: 'response',
   essay: forbiddenEssay,
 } satisfies UsageRecord & { readonly essay: string };
 

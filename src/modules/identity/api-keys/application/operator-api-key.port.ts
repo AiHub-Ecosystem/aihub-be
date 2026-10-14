@@ -8,6 +8,11 @@ export interface CreateOperatorApiKeyInput {
   readonly name: string;
   readonly scopes: readonly string[];
   readonly allowedEnvironments: readonly string[];
+  /**
+   * A key AIHUB itself uses (smoke tests, canaries, operator checks). Its
+   * traffic is metered but left off the Organization's statement (ADR-0097).
+   */
+  readonly internal?: boolean;
   readonly requestId: string;
   readonly occurredAt: Date;
 }

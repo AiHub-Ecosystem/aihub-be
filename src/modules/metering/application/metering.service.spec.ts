@@ -95,6 +95,42 @@ describe('MeteringService', () => {
     ]);
   });
 
+  it('bills a background completion once and counts it against quota once', async () => {
+    const repository = new FakeUsageRepository();
+    const quota = new FakeQuotaCounter();
+    const service = new MeteringService(
+      repository,
+      new FakeFailureLogger(),
+      quota,
+    );
+
+    await service.finalize({
+      ...input,
+      requestId: 'req_late:background',
+      billingBasis: 'background_completion',
+      quotaTracked: true,
+    });
+
+    expect({
+      records: repository.records.map(({ billingBasis, billableRequests }) => ({
+        billingBasis,
+        billableRequests,
+      })),
+      increments: quota.increments,
+    }).toEqual({
+      records: [{ billingBasis: 'background_completion', billableRequests: 1 }],
+      increments: ['org_acme'],
+    });
+  });
+
+  it('records an ordinary request as billing its response', async () => {
+    const repository = new FakeUsageRepository();
+
+    await new MeteringService(repository).finalize(input);
+
+    expect(repository.records[0]?.billingBasis).toBe('response');
+  });
+
   it('keeps incomplete usage unremarkable for non-reporting AI Writing', async () => {
     const repository = new FakeUsageRepository();
     const service = new MeteringService(repository);

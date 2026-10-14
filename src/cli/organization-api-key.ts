@@ -27,6 +27,7 @@ export interface CreateOperatorApiKeyCliInput {
   readonly name: string;
   readonly scopes: readonly string[];
   readonly allowedEnvironments: readonly string[];
+  readonly internal?: boolean;
   readonly repository?: OperatorApiKeyPort;
   /** The raw key, on stdout: `demo-bootstrap` captures it from there. */
   readonly print?: (line: string) => void;
@@ -87,6 +88,7 @@ export async function runCreateOperatorApiKeyCommand(
         name: input.name,
         scopes: input.scopes,
         allowedEnvironments: input.allowedEnvironments,
+        ...(input.internal === true ? { internal: true } : {}),
         requestId,
         occurredAt,
       }),

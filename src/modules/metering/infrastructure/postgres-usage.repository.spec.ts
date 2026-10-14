@@ -54,6 +54,7 @@ const record: UsageRecord = {
   totalMs: 100,
   downstreamMs: 80,
   aiProcessingMs: 70,
+  billingBasis: 'response',
 };
 
 describe('PostgresUsageRepository', () => {
@@ -83,6 +84,7 @@ describe('PostgresUsageRepository', () => {
         totalMs: record.totalMs,
         downstreamMs: record.downstreamMs,
         aiProcessingMs: record.aiProcessingMs,
+        billingBasis: record.billingBasis,
       },
     });
   });

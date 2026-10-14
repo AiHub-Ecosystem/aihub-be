@@ -1,4 +1,5 @@
 import type {
+  BillingBasis,
   MeteringModel,
   MeteringOutcome,
   MeteringStatus,
@@ -23,6 +24,7 @@ export interface UsageRecord {
   readonly totalMs: number;
   readonly downstreamMs?: number;
   readonly aiProcessingMs?: number;
+  readonly billingBasis: BillingBasis;
 }
 
 export interface UsageAggregateQuery {
