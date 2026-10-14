@@ -68,7 +68,7 @@ describe('Fastify proxy trust over a Unix socket', () => {
   }
 
   it('resolves the caller to the entry the reverse proxy appended, never one the client wrote', async () => {
-    const app = Fastify({ trustProxy: (_address, hop) => hop === 0 });
+    const app = Fastify(createAppFastifyProxyOptions('172.16.7.1', socketPath));
     app.get('/caller-ip', (incoming) => ({
       ip: incoming.ip ?? null,
       ips: incoming.ips ?? [],

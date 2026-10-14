@@ -1,4 +1,5 @@
 import { isIP } from 'node:net';
+import { isAbsolute } from 'node:path';
 
 import { registerAs } from '@nestjs/config';
 import { type TSchema, Type } from '@sinclair/typebox';
@@ -16,7 +17,7 @@ interface RuntimeField {
   readonly requiredWhenSecretSource?: boolean;
   readonly secret?: boolean;
   readonly allowEmpty?: boolean;
-  readonly format?: 'url' | 'uri' | 'hostname' | 'ip';
+  readonly format?: 'url' | 'uri' | 'hostname' | 'ip' | 'absolute-path';
   readonly minValue?: number;
   readonly maxValue?: number;
 }
@@ -89,6 +90,9 @@ const fields = {
     requiredIn: MODES,
     format: 'ip',
   },
+  // Optional. When set the app also serves on this Unix socket, trusts only
+  // that peer for forwarded addresses, and keeps its TCP listener on loopback.
+  AIHUB_LISTEN_SOCKET: { kind: 'string', format: 'absolute-path' },
   AIHUB_STAGING_HOST: { kind: 'string', format: 'hostname' },
   AIHUB_DEVELOPMENT_HOST: { kind: 'string', format: 'hostname' },
   AIHUB_SANDBOX_HOST: { kind: 'string', format: 'hostname' },
@@ -371,6 +375,9 @@ export function loadRuntimeConfiguration(
         problems.push(name);
       }
       if (field.format === 'ip' && isIP(value) === 0) {
+        problems.push(name);
+      }
+      if (field.format === 'absolute-path' && !isAbsolute(value)) {
         problems.push(name);
       }
     }

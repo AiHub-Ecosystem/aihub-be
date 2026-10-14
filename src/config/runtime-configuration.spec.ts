@@ -1,3 +1,6 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import {
   RuntimeConfigurationError,
   appConfig,
@@ -61,6 +64,34 @@ describe('runtime configuration', () => {
         }).AIHUB_TRUSTED_PROXY_IP,
       ).toBe(value);
     }
+  });
+
+  it('accepts an absolute listen socket path and leaves it unset by default', () => {
+    const base = {
+      NODE_ENV: 'test',
+      AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
+      AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
+      AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
+      AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+      AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
+    } as const;
+    const absolute = join(tmpdir(), 'aihub.sock');
+
+    expect(loadRuntimeConfiguration(base).AIHUB_LISTEN_SOCKET).toBeUndefined();
+    expect(
+      loadRuntimeConfiguration({ ...base, AIHUB_LISTEN_SOCKET: '' })
+        .AIHUB_LISTEN_SOCKET,
+    ).toBeUndefined();
+    expect(
+      loadRuntimeConfiguration({ ...base, AIHUB_LISTEN_SOCKET: absolute })
+        .AIHUB_LISTEN_SOCKET,
+    ).toBe(absolute);
+    expect(() =>
+      loadRuntimeConfiguration({
+        ...base,
+        AIHUB_LISTEN_SOCKET: 'run/aihub.sock',
+      }),
+    ).toThrow('AIHUB_LISTEN_SOCKET');
   });
 
   it('aggregates missing and invalid variable names without their values', () => {
