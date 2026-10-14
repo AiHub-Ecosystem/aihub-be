@@ -160,6 +160,10 @@ class FakeLimiter implements AuthRateLimiterPort {
   calls: unknown[] = [];
   allowed = true;
 
+  async check() {
+    return { allowed: true };
+  }
+
   async consume(input: Parameters<AuthRateLimiterPort['consume']>[0]) {
     this.calls.push(input);
     return { allowed: this.allowed, retryAfterMs: 1000 };

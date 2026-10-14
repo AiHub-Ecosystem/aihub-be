@@ -1,7 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import { normalizeLogin } from '@/modules/auth/domain/local-auth';
-import { enforceAuthRateLimit } from './auth-rate-limit';
 import { type AuthRateLimiterPort } from './auth-rate-limiter.port';
 import { type PasswordHasherPort } from './password-hasher.port';
 import { type UserAccountRepositoryPort } from './user-account.port';
@@ -38,7 +37,42 @@ export interface CredentialCheckPorts {
   readonly rateLimiter: AuthRateLimiterPort;
 }
 
-async function enforceLoginLimits(
+function loginRateLimited(retryAfterMs: number | undefined): AppError {
+  return new AppError({
+    code: 'RATE_LIMITED',
+    message: 'Too many requests',
+    retryable: true,
+    retryAfterHeader: true,
+    ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+  });
+}
+
+export async function checkLoginLimits(
+  rateLimiter: AuthRateLimiterPort,
+  ip: string,
+  email: string,
+): Promise<void> {
+  const limits = [
+    { ...LOGIN_RATE_LIMITS.ip, key: ip },
+    { ...LOGIN_RATE_LIMITS.email, key: JSON.stringify([ip, email]) },
+  ];
+  let blocked = false;
+  let retryAfterMs: number | undefined;
+  for (const limit of limits) {
+    const result = await rateLimiter.check(limit);
+    if (!result.allowed) {
+      blocked = true;
+      if (result.retryAfterMs !== undefined) {
+        retryAfterMs = Math.max(retryAfterMs ?? 0, result.retryAfterMs);
+      }
+    }
+  }
+  if (blocked) {
+    throw loginRateLimited(retryAfterMs);
+  }
+}
+
+async function consumeLoginFailureLimits(
   rateLimiter: AuthRateLimiterPort,
   ip: string,
   email: string,
@@ -50,8 +84,19 @@ async function enforceLoginLimits(
       key: JSON.stringify([ip, email]),
     },
   ];
+  let blocked = false;
+  let retryAfterMs: number | undefined;
   for (const limit of limits) {
-    await enforceAuthRateLimit(rateLimiter, limit);
+    const result = await rateLimiter.consume(limit);
+    if (!result.allowed) {
+      blocked = true;
+      if (result.retryAfterMs !== undefined) {
+        retryAfterMs = Math.max(retryAfterMs ?? 0, result.retryAfterMs);
+      }
+    }
+  }
+  if (blocked) {
+    throw loginRateLimited(retryAfterMs);
   }
 }
 
@@ -67,7 +112,7 @@ export async function rejectCredentials(
   ip: string,
   email: string,
 ): Promise<never> {
-  await enforceLoginLimits(rateLimiter, ip, email);
+  await consumeLoginFailureLimits(rateLimiter, ip, email);
   throw new AppError({
     code: 'AUTH_CREDENTIALS_INVALID',
     message: 'Email or password is invalid',
@@ -97,6 +142,8 @@ export async function authenticateCredentials(
   } catch (error) {
     throw invalidRequest(error);
   }
+
+  await checkLoginLimits(ports.rateLimiter, ip, normalized.email);
 
   const identity = await ports.userAccounts.findLoginIdentityByEmail(
     normalized.email,

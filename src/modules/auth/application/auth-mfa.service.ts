@@ -14,6 +14,7 @@ import type {
 import type { LocalAuthServiceClock } from './local-auth.service';
 import {
   authenticateCredentials,
+  checkLoginLimits,
   rejectCredentials,
 } from './local-credentials';
 import {
@@ -136,6 +137,7 @@ export class AuthMfaService implements AuthMfaServicePort {
   }): Promise<readonly string[]> {
     const factor = await this.repository.findPendingFactor(input.userId);
     if (factor === undefined) throw invalidCredentials();
+    await checkLoginLimits(this.rateLimiter, input.ip, factor.email);
     const secret = this.cipher.decrypt(factor.keyId, factor.ciphertext, factor);
     if (!verifyTotp(secret, input.code, this.clock.now())) {
       return rejectCredentials(this.rateLimiter, input.ip, factor.email);
@@ -187,6 +189,7 @@ export class AuthMfaService implements AuthMfaServicePort {
       expectedPasswordHash = credentials.passwordHash;
     } else {
       if (factor === undefined) throw invalidCredentials();
+      await checkLoginLimits(this.rateLimiter, input.ip, factor.email);
       const secret = this.cipher.decrypt(
         factor.keyId,
         factor.ciphertext,

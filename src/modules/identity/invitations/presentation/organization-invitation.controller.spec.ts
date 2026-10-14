@@ -66,6 +66,10 @@ type CallerOverride = {
 class RateLimiterFake implements AuthRateLimiterPort {
   allowed = true;
 
+  async check(): Promise<{ readonly allowed: boolean }> {
+    return { allowed: this.allowed };
+  }
+
   async consume(
     _input: Parameters<AuthRateLimiterPort['consume']>[0],
   ): Promise<{ readonly allowed: boolean; readonly retryAfterMs?: number }> {

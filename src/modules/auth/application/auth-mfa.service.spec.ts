@@ -65,6 +65,10 @@ class FakeHasher implements PasswordHasherPort {
 class FakeLimiter implements AuthRateLimiterPort {
   readonly calls: Parameters<AuthRateLimiterPort['consume']>[0][] = [];
 
+  async check() {
+    return { allowed: true };
+  }
+
   async consume(input: Parameters<AuthRateLimiterPort['consume']>[0]) {
     this.calls.push(input);
     return { allowed: true };

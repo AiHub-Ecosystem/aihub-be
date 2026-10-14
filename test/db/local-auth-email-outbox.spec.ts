@@ -126,6 +126,10 @@ class RecordingSender implements EmailSenderPort {
 }
 
 class RateLimiterFake implements AuthRateLimiterPort {
+  async check(): Promise<{ readonly allowed: true }> {
+    return { allowed: true };
+  }
+
   async consume(): Promise<{ readonly allowed: true }> {
     return { allowed: true };
   }

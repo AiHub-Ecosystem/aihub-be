@@ -163,6 +163,10 @@ class LimiterFake implements AuthRateLimiterPort {
     { readonly expiresAt: number; count: number }
   >();
 
+  async check(): Promise<{ allowed: boolean }> {
+    return { allowed: this.allowed };
+  }
+
   async consume(
     input: Parameters<AuthRateLimiterPort['consume']>[0],
   ): Promise<{ allowed: boolean }> {

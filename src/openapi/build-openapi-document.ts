@@ -86,6 +86,14 @@ function routeSecurityOf(routeId: PublicRouteId): Record<string, unknown> {
   }
 }
 
+const LOGIN_PRECHECK_ROUTES: ReadonlySet<PublicRouteId> = new Set([
+  'auth.login',
+  'auth.web_sessions.create',
+  'auth.mfa.enrollment',
+  'auth.mfa.enrollment.confirm',
+  'auth.mfa.remove',
+]);
+
 function routeErrorResponsesOf(
   routeId: PublicRouteId,
   groupedErrors?: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
@@ -111,7 +119,12 @@ function routeErrorResponsesOf(
   return Object.fromEntries(
     errorStatuses.map((status) => [
       String(status),
-      { $ref: `#/components/responses/Error${status}` },
+      {
+        $ref:
+          status === 429 && LOGIN_PRECHECK_ROUTES.has(routeId)
+            ? '#/components/responses/AuthLoginRateLimited'
+            : `#/components/responses/Error${status}`,
+      },
     ]),
   );
 }
@@ -2152,6 +2165,22 @@ export function buildOpenApiDocument(version: string): unknown {
       },
     };
   }
+  errorResponses.AuthLoginRateLimited = {
+    description:
+      'Login proof budget exhausted before password or second-factor verification.',
+    headers: {
+      'Retry-After': {
+        description:
+          'Whole seconds to wait before retrying, rounded up from the longer exhausted login window.',
+        schema: { type: 'string', pattern: '^[0-9]+$' },
+      },
+    },
+    content: {
+      'application/json': {
+        schema: errorResponseSchema(['RATE_LIMITED']),
+      },
+    },
+  };
 
   return {
     openapi: OPENAPI_VERSION,

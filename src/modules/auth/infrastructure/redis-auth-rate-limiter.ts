@@ -15,7 +15,13 @@ end
 return { current, redis.call('PTTL', KEYS[1]) }
 `;
 
+const CHECK_SCRIPT = `
+local current = tonumber(redis.call('GET', KEYS[1]) or '0')
+return { current, redis.call('PTTL', KEYS[1]) }
+`;
+
 export const AUTH_RATE_LIMIT_WINDOW_SCRIPT = WINDOW_SCRIPT;
+export const AUTH_RATE_LIMIT_CHECK_SCRIPT = CHECK_SCRIPT;
 
 export function hashRateLimitKey(
   scope: AuthRateLimitScope,
@@ -98,6 +104,29 @@ export class RedisAuthRateLimiter implements AuthRateLimiterPort {
     return this.consumeFallback(hashed, input.limit, input.windowMs);
   }
 
+  async check(input: Parameters<AuthRateLimiterPort['check']>[0]) {
+    const hashed = hashRateLimitKey(input.scope, input.key);
+    if (this.redis !== undefined) {
+      try {
+        const result = await this.redis.eval(
+          AUTH_RATE_LIMIT_CHECK_SCRIPT,
+          1,
+          `aihub:auth:rate:${hashed}`,
+        );
+        const [count, ttl] = Array.isArray(result) ? result : [];
+        if (typeof count === 'number' && typeof ttl === 'number') {
+          return count < input.limit
+            ? { allowed: true }
+            : { allowed: false, retryAfterMs: Math.max(0, ttl) };
+        }
+      } catch {
+        // Redis is protection state; a bounded local fallback keeps auth
+        // available while the shared counter recovers.
+      }
+    }
+    return this.checkFallback(hashed, input.limit);
+  }
+
   async onModuleDestroy(): Promise<void> {
     this.redis?.disconnect();
   }
@@ -126,5 +155,17 @@ export class RedisAuthRateLimiter implements AuthRateLimiterPort {
     return state.count <= limit
       ? { allowed: true }
       : { allowed: false, retryAfterMs: Math.max(0, state.resetAt - now) };
+  }
+
+  private checkFallback(
+    hashed: string,
+    limit: number,
+  ): { readonly allowed: boolean; readonly retryAfterMs?: number } {
+    const now = this.now();
+    const state = this.fallback.get(hashed);
+    if (state === undefined || state.resetAt <= now || state.count < limit) {
+      return { allowed: true };
+    }
+    return { allowed: false, retryAfterMs: Math.max(0, state.resetAt - now) };
   }
 }

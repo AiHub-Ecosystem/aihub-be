@@ -105,6 +105,10 @@ class RecordingSender implements EmailSenderPort {
 class CountingRateLimiter implements AuthRateLimiterPort {
   consumed = 0;
 
+  async check(): Promise<{ readonly allowed: true }> {
+    return { allowed: true };
+  }
+
   async consume(): Promise<{ readonly allowed: true }> {
     this.consumed += 1;
     return { allowed: true };

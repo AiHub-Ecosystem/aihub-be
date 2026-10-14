@@ -801,6 +801,33 @@ describe('buildOpenApiDocument', () => {
     expect(JSON.stringify(register?.responses['201'])).not.toContain('token');
   });
 
+  it('documents the Retry-After header only on pre-verification auth lockouts', () => {
+    const doc = build();
+    for (const path of [
+      '/v1/auth/login',
+      '/v1/auth/web-sessions',
+      '/v1/auth/mfa/enrollment',
+      '/v1/auth/mfa/enrollment/confirm',
+      '/v1/auth/mfa',
+    ]) {
+      const method = path === '/v1/auth/mfa' ? 'delete' : 'post';
+      const operation = doc.paths[path]?.[method];
+      expect(operation?.responses['429']).toEqual({
+        $ref: '#/components/responses/AuthLoginRateLimited',
+      });
+    }
+    expect(doc.paths['/v1/auth/register']?.post?.responses['429']).toEqual({
+      $ref: '#/components/responses/Error429',
+    });
+    expect(doc.components.responses.AuthLoginRateLimited).toMatchObject({
+      headers: {
+        'Retry-After': {
+          schema: { type: 'string', pattern: '^[0-9]+$' },
+        },
+      },
+    });
+  });
+
   it('publishes only verification-specific Web Session failures', () => {
     const responses =
       build().paths['/v1/auth/web-sessions/verification']?.post?.responses;

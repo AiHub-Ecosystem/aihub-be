@@ -79,6 +79,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
       exception,
       requestId ?? 'unknown',
     );
+    if (
+      exception instanceof AppError &&
+      exception.code === 'RATE_LIMITED' &&
+      exception.retryAfterHeader === true &&
+      exception.retryAfterMs !== undefined
+    ) {
+      response.header(
+        'Retry-After',
+        String(Math.ceil(exception.retryAfterMs / 1_000)),
+      );
+    }
 
     // Reported for the Request Completion Event, so a failure line carries the
     // same public error code the caller received rather than one derived from

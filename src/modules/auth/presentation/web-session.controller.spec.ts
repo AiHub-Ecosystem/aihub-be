@@ -96,6 +96,11 @@ class HasherFake implements PasswordHasherPort {
 class LimiterFake implements AuthRateLimiterPort {
   allowed = true;
   calls: Parameters<AuthRateLimiterPort['consume']>[0][] = [];
+
+  async check(): Promise<{ allowed: boolean }> {
+    return { allowed: this.allowed };
+  }
+
   async consume(
     input: Parameters<AuthRateLimiterPort['consume']>[0],
   ): Promise<{ allowed: boolean }> {

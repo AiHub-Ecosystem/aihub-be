@@ -41,6 +41,12 @@ success, cancellation, or form reset. Do not place it in local/session storage,
 URLs, telemetry, or logs. Both responses are `no-store`; a page reload starts a
 new login attempt.
 
+After five failed proofs for one caller IP and email in 15 minutes, or 20
+failed proofs from one caller IP in five minutes, AIHUB returns
+`429 RATE_LIMITED` before checking another password or second factor. The
+response includes `Retry-After` in whole seconds and `error.retry_after_ms` in
+milliseconds; wait for the longer exhausted window before trying again.
+
 ## 1. How the pieces fit
 
 AIHUB sits between your backend and the private AI services. Your end users
@@ -840,7 +846,9 @@ or database messages:
 part of the contract. `retryable` tells you whether a retry can possibly help,
 so you do not have to infer it from the status.
 
-When present, `retry_after_ms` is in the body, not in a `Retry-After` header.
+`retry_after_ms` is in the response body. AI grading rate limits in this guide
+do not add a `Retry-After` header. Auth login lockouts also send that header in
+whole seconds, rounded up from the longer exhausted login window.
 
 The table below covers the customer-facing AI grading operations. It does not
 try to list every error from account, Organization, or other control-plane

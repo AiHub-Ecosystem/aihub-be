@@ -47,6 +47,7 @@ import {
   type LocalAuthServicePort,
   RefreshRotationCommittedError,
 } from '@/modules/auth/application/local-auth-service.port';
+import { webSessionUnavailable } from '@/modules/auth/application/web-session-errors';
 import { accessTokenEnvelope } from './access-token-envelope';
 import { requestIp } from './auth-request';
 import {
@@ -57,6 +58,8 @@ import {
   refreshCookieFrom,
 } from './refresh-cookie';
 import { UserAccessJwtGuard } from './user-access-jwt.guard';
+import { OptionalWebSessionClientGuard } from './web-session-client.guard';
+import { endUserIpFrom } from './web-session-transport';
 
 interface RegisterEnvelope {
   readonly data: {
@@ -87,6 +90,19 @@ function authenticatedUserId(request: FastifyRequest): string {
     });
   }
   return userId;
+}
+
+function credentialIp(request: FastifyRequest): string {
+  if (request.aihubClientIpSource !== 'customer_web_bff') {
+    return requestIp(request);
+  }
+  const ip = endUserIpFrom(request);
+  if (ip === undefined) {
+    throw webSessionUnavailable(
+      new Error('Customer Web BFF omitted or malformed X-AIHUB-End-User-IP'),
+    );
+  }
+  return ip;
 }
 
 /** Sets the refresh cookie and returns the envelope every session-issuing route shares. */
@@ -187,7 +203,7 @@ export class LocalAuthController {
 
   @Post(PUBLIC_ROUTES['auth.mfa.enrollment'].path)
   @HttpCode(PUBLIC_ROUTES['auth.mfa.enrollment'].successStatus)
-  @UseGuards(UserAccessJwtGuard)
+  @UseGuards(UserAccessJwtGuard, OptionalWebSessionClientGuard)
   @Header('Cache-Control', 'no-store')
   async beginMfaEnrollment(
     @Req() request: FastifyRequest,
@@ -197,7 +213,7 @@ export class LocalAuthController {
     const enrollment = await this.mfa.beginEnrollment({
       userId: authenticatedUserId(request),
       password: input.password,
-      ip: requestIp(request),
+      ip: credentialIp(request),
     });
     return {
       data: { secret: enrollment.secret, otpauth_uri: enrollment.otpauthUri },
@@ -207,7 +223,7 @@ export class LocalAuthController {
 
   @Post(PUBLIC_ROUTES['auth.mfa.enrollment.confirm'].path)
   @HttpCode(PUBLIC_ROUTES['auth.mfa.enrollment.confirm'].successStatus)
-  @UseGuards(UserAccessJwtGuard)
+  @UseGuards(UserAccessJwtGuard, OptionalWebSessionClientGuard)
   @Header('Cache-Control', 'no-store')
   async confirmMfaEnrollment(
     @Req() request: FastifyRequest,
@@ -217,7 +233,7 @@ export class LocalAuthController {
     const recoveryCodes = await this.mfa.confirmEnrollment({
       userId: authenticatedUserId(request),
       code: input.code,
-      ip: requestIp(request),
+      ip: credentialIp(request),
     });
     return {
       data: { recovery_codes: [...recoveryCodes] },
@@ -227,7 +243,7 @@ export class LocalAuthController {
 
   @Delete(PUBLIC_ROUTES['auth.mfa.remove'].path)
   @HttpCode(PUBLIC_ROUTES['auth.mfa.remove'].successStatus)
-  @UseGuards(UserAccessJwtGuard)
+  @UseGuards(UserAccessJwtGuard, OptionalWebSessionClientGuard)
   @Header('Cache-Control', 'no-store')
   async removeMfaFactor(
     @Req() request: FastifyRequest,
@@ -237,7 +253,7 @@ export class LocalAuthController {
     await this.mfa.removeFactor({
       userId: authenticatedUserId(request),
       proof,
-      ip: requestIp(request),
+      ip: credentialIp(request),
     });
   }
 

@@ -18,6 +18,12 @@ export type AuthRateLimitScope =
   | 'organization_invitation_email';
 
 export interface AuthRateLimiterPort {
+  check(input: {
+    readonly scope: AuthRateLimitScope;
+    readonly key: string;
+    readonly limit: number;
+    readonly windowMs: number;
+  }): Promise<{ readonly allowed: boolean; readonly retryAfterMs?: number }>;
   consume(input: {
     readonly scope: AuthRateLimitScope;
     readonly key: string;

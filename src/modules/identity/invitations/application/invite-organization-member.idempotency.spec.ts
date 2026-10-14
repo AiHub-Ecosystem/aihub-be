@@ -212,6 +212,10 @@ class RateLimiterFake implements AuthRateLimiterPort {
   private readonly counts = new Map<string, number>();
   rejectScope: AuthRateLimitScope | undefined;
 
+  async check(): Promise<{ readonly allowed: true }> {
+    return { allowed: true };
+  }
+
   async consume(
     input: Parameters<AuthRateLimiterPort['consume']>[0],
   ): Promise<{ readonly allowed: boolean; readonly retryAfterMs?: number }> {

@@ -80,6 +80,8 @@ describe('Web Session HTTP rate limits with Redis unavailable', () => {
       .useValue({ now: () => new Date(now) })
       .overrideProvider(AUTH_RATE_LIMITER)
       .useValue({
+        check: (input: Parameters<AuthRateLimiterPort['check']>[0]) =>
+          limiter.check(input),
         consume: (input: Parameters<AuthRateLimiterPort['consume']>[0]) =>
           limiter.consume(input),
       })
@@ -163,8 +165,11 @@ describe('Web Session HTTP rate limits with Redis unavailable', () => {
     expect(state.webSessions.size).toBe(0);
     expect(
       (await request(BASE, { email: EMAIL, password: PASSWORD })).statusCode,
-    ).toBe(201);
+    ).toBe(429);
     now += 15 * 60_000;
+    expect(
+      (await request(BASE, { email: EMAIL, password: PASSWORD })).statusCode,
+    ).toBe(201);
     expect(
       (await request(BASE, { email: EMAIL, password: 'a wrong password' }))
         .statusCode,

@@ -1,4 +1,5 @@
 import {
+  AUTH_RATE_LIMIT_CHECK_SCRIPT,
   AUTH_RATE_LIMIT_WINDOW_SCRIPT,
   type AuthRedisClient,
   RedisAuthRateLimiter,
@@ -92,6 +93,63 @@ describe('RedisAuthRateLimiter', () => {
       `aihub:auth:rate:${hashRateLimitKey('auth_email_request', 'person@example.com')}`,
       '60000',
     ]);
+  });
+
+  it('checks the distributed counter and TTL without changing the window', async () => {
+    const redis = new FakeRedis();
+    const limiter = new RedisAuthRateLimiter(
+      'redis://test',
+      () => 1_000,
+      redis,
+    );
+
+    await expect(
+      limiter.check({
+        scope: 'login_email',
+        key: JSON.stringify(['203.0.113.7', 'person@example.com']),
+        limit: 3,
+        windowMs: 15 * 60_000,
+      }),
+    ).resolves.toEqual({ allowed: false, retryAfterMs: 2_500 });
+    expect(redis.call?.script).toBe(AUTH_RATE_LIMIT_CHECK_SCRIPT);
+    expect(redis.call?.script).toContain("redis.call('GET'");
+    expect(redis.call?.script).toContain("redis.call('PTTL'");
+    expect(redis.call?.script).not.toContain("redis.call('INCR'");
+    expect(redis.call?.script).not.toContain("redis.call('PEXPIRE'");
+    expect(redis.call?.numberOfKeys).toBe(1);
+    expect(redis.call?.args).toEqual([
+      `aihub:auth:rate:${hashRateLimitKey(
+        'login_email',
+        JSON.stringify(['203.0.113.7', 'person@example.com']),
+      )}`,
+    ]);
+  });
+
+  it('checks the process fallback without spending a failure or extending its window', async () => {
+    let now = 1_000;
+    const limiter = new RedisAuthRateLimiter('', () => now);
+    const input = {
+      scope: 'login_ip' as const,
+      key: '203.0.113.7',
+      limit: 2,
+      windowMs: 1_000,
+    };
+
+    await expect(limiter.consume(input)).resolves.toEqual({ allowed: true });
+    await expect(limiter.check(input)).resolves.toEqual({ allowed: true });
+    await expect(limiter.check(input)).resolves.toEqual({ allowed: true });
+    await expect(limiter.consume(input)).resolves.toEqual({ allowed: true });
+    await expect(limiter.check(input)).resolves.toEqual({
+      allowed: false,
+      retryAfterMs: 1_000,
+    });
+    await expect(limiter.check(input)).resolves.toEqual({
+      allowed: false,
+      retryAfterMs: 1_000,
+    });
+
+    now += 1_001;
+    await expect(limiter.check(input)).resolves.toEqual({ allowed: true });
   });
 
   it('keeps a bounded process-local fallback when Redis is unavailable', async () => {

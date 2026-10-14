@@ -113,7 +113,10 @@ import { RedisAuthRateLimiter } from './infrastructure/redis-auth-rate-limiter';
 import { ResendEmailSender } from './infrastructure/resend-email.sender';
 import { LocalAuthController } from './presentation/local-auth.controller';
 import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
-import { WebSessionClientGuard } from './presentation/web-session-client.guard';
+import {
+  OptionalWebSessionClientGuard,
+  WebSessionClientGuard,
+} from './presentation/web-session-client.guard';
 import { WebSessionController } from './presentation/web-session.controller';
 import {
   AUTH_POSTGRES_READINESS,
@@ -413,6 +416,7 @@ import {
       ],
     },
     UserAccessJwtGuard,
+    OptionalWebSessionClientGuard,
     WebSessionClientGuard,
   ],
   exports: [
