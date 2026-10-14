@@ -39,11 +39,12 @@ import {
   forwardedVisitorIp,
 } from './authenticate-api-key';
 
-function configurationError(): AppError {
+function configurationError(diagnostic?: string): AppError {
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Authentication configuration is invalid',
     retryable: false,
+    ...(diagnostic === undefined ? {} : { diagnostic }),
   });
 }
 
@@ -56,7 +57,7 @@ function visitorIpForBffRequest(
 
   const expected = secret?.resolve();
   if (expected === undefined || expected.length === 0) {
-    throw configurationError();
+    throw configurationError('bff-client-secret-not-configured');
   }
   if (!constantTimeEquals(presented, expected)) {
     throw new AppError({
@@ -68,7 +69,7 @@ function visitorIpForBffRequest(
 
   const visitorIp = forwardedVisitorIp(request);
   if (visitorIp === undefined) {
-    throw configurationError();
+    throw configurationError('bff-visitor-ip-missing-or-invalid');
   }
   request.aihubClientIpSource = 'customer_web_bff' satisfies ClientIpSource;
   return visitorIp;
@@ -201,6 +202,9 @@ export class ApiKeyGuard implements CanActivate {
             : {}),
           stage,
           error_type: error instanceof Error ? error.name : typeof error,
+          ...(error instanceof AppError && error.diagnostic !== undefined
+            ? { error_diagnostic: error.diagnostic }
+            : {}),
         });
       }
       throw error;

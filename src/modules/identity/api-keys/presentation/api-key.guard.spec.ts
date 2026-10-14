@@ -183,6 +183,35 @@ describe('ApiKeyGuard scope check', () => {
     );
   });
 
+  it('logs a safe reason when a BFF request omits its visitor IP', async () => {
+    const logError = jest.fn();
+    const value = request({
+      headers: {
+        host: 'api.aihub.test',
+        'x-api-key': 'aihub_sk_value',
+        'x-aihub-client-secret': 'bff-secret',
+      },
+      log: { error: logError },
+    });
+
+    await expect(
+      guard(
+        { authenticate: jest.fn(async () => baseKey) },
+        {
+          resolve: () => 'bff-secret',
+        },
+      ).canActivate(context(value)),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+
+    expect(logError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stage: 'bff_authentication',
+        error_diagnostic: 'bff-visitor-ip-missing-or-invalid',
+      }),
+    );
+    expect(JSON.stringify(logError.mock.calls)).not.toContain('bff-secret');
+  });
+
   it('refuses a key without the operation requiredScope', async () => {
     await expect(
       guard({
