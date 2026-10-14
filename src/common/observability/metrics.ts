@@ -72,6 +72,24 @@ const downstreamDuration = new Histogram({
   registers: [registry],
 });
 
+const dispatchDeadlineMsRemaining = new Histogram({
+  name: 'aihub_dispatch_deadline_ms_remaining',
+  help: 'AIHUB work-deadline budget remaining immediately before downstream dispatch, in milliseconds.',
+  labelNames: ['operation'],
+  buckets: [
+    1, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000,
+    60_000, 120_000,
+  ],
+  registers: [registry],
+});
+
+const dispatchCancelledByDeadlineTotal = new Counter({
+  name: 'aihub_dispatch_cancelled_by_deadline_total',
+  help: 'In-flight downstream calls aborted by an AIHUB work deadline.',
+  labelNames: ['operation'],
+  registers: [registry],
+});
+
 const admissionDuration = new Histogram({
   name: 'aihub_admission_duration_seconds',
   help: 'Time from request receipt to gateway dispatch admission, in seconds.',
@@ -288,6 +306,21 @@ export type EmailDeliveryKindLabel =
 
 export function recordEmailDeliveryFailed(kind: EmailDeliveryKindLabel): void {
   emailDeliveryFailedTotal.inc({ kind });
+}
+
+export function observeDispatchDeadlineMsRemaining(
+  operation: OperationId,
+  remainingMs: number,
+): void {
+  if (Number.isInteger(remainingMs) && remainingMs > 0) {
+    dispatchDeadlineMsRemaining.observe({ operation }, remainingMs);
+  }
+}
+
+export function recordDispatchCancelledByDeadline(
+  operation: OperationId,
+): void {
+  dispatchCancelledByDeadlineTotal.inc({ operation });
 }
 
 const EMAIL_DELIVERY_KIND_LABELS: readonly EmailDeliveryKindLabel[] = [

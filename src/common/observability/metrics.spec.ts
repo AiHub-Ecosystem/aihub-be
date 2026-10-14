@@ -1,6 +1,8 @@
 import { METRICS_ROUTE_PATH, getMetrics } from './metrics';
 import {
+  observeDispatchDeadlineMsRemaining,
   recordCompletedRequest,
+  recordDispatchCancelledByDeadline,
   recordEmailDeliveryFailed,
   setDispatchAttemptUnresolvedSource,
   setDownstreamPoolQueuedSource,
@@ -189,7 +191,9 @@ describe('email delivery failure metric', () => {
   it('has no series for a cancelled request, which is not a failure', async () => {
     recordEmailDeliveryFailed('verification_email');
 
-    expect(await getMetrics()).not.toContain('cancelled');
+    expect(await getMetrics()).not.toContain(
+      'aihub_email_delivery_failed_total{kind="cancelled"}',
+    );
   });
 });
 
@@ -297,6 +301,31 @@ describe('unresolved dispatch-attempt metrics', () => {
 
     expect(await getMetrics()).not.toContain(
       'aihub_dispatch_attempts_unresolved{',
+    );
+  });
+});
+
+describe('dispatch deadline metrics', () => {
+  it('records remaining milliseconds and deadline cancellations by operation', async () => {
+    observeDispatchDeadlineMsRemaining(GRADE, 750);
+    recordDispatchCancelledByDeadline(GRADE);
+
+    expect(
+      Number(
+        await sample('aihub_dispatch_deadline_ms_remaining_count', {
+          operation: GRADE,
+        }),
+      ),
+    ).toBeGreaterThan(0);
+    expect(
+      Number(
+        await sample('aihub_dispatch_cancelled_by_deadline_total', {
+          operation: GRADE,
+        }),
+      ),
+    ).toBeGreaterThan(0);
+    expect(await getMetrics()).not.toMatch(
+      /aihub_dispatch_(?:deadline_ms_remaining|cancelled_by_deadline)[^\n]*\b(?:org|request|user)_id=/,
     );
   });
 });

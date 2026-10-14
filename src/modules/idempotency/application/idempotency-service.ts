@@ -207,7 +207,9 @@ export class IdempotencyService implements IdempotencyServicePort {
       rejectHardDeadline = reject;
     });
     const hardTimer = setTimeout(() => {
-      controller.abort();
+      controller.abort(
+        new DOMException('AIHUB work deadline exceeded', 'TimeoutError'),
+      );
       rejectHardDeadline?.(new HardDeadlineReached());
     }, hardTimeoutMs);
     const workContext: IdempotencyWorkContext = {

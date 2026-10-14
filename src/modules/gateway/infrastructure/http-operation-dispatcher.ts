@@ -3,6 +3,10 @@ import { Logger } from '@nestjs/common';
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
 import type { ErrorCode } from '@/common/errors/error-code';
+import {
+  observeDispatchDeadlineMsRemaining,
+  recordDispatchCancelledByDeadline,
+} from '@/common/observability/metrics';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { InternalAIServiceResponse } from '@/downstream/downstream.types';
@@ -191,16 +195,10 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
       adapter.downstream === 'ai-writing'
         ? `Bearer ${await this.tokenIssuer.mint(context, operation)}`
         : undefined;
-    const remainingMs = Math.max(1, context.deadlineAt.getTime() - Date.now());
-    const timeoutMs = remainingMs;
-    const signal = AbortSignal.any([
-      context.signal,
-      AbortSignal.timeout(timeoutMs),
-    ]);
     const sandboxRequest = context.environment === 'sandbox';
     const deadlineExpired = (): boolean =>
       context.deadlineAt.getTime() <= Date.now();
-    if (sandboxRequest && (signal.aborted || deadlineExpired())) {
+    if (sandboxRequest && (context.signal.aborted || deadlineExpired())) {
       throw dispatchTimedOut();
     }
 
@@ -221,7 +219,7 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
       } catch {
         throw sandboxBudgetUnavailable();
       }
-      if (signal.aborted || deadlineExpired()) {
+      if (context.signal.aborted || deadlineExpired()) {
         if (admitted) {
           await this.sandboxBudget
             .release(context.requestId)
@@ -241,10 +239,12 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
     let response: InternalAIServiceResponse<unknown> | undefined;
     let downstreamResponseStatus: number | undefined;
     let downstreamDispatchStarted = false;
+    let downstreamCallInFlight = false;
+    let deadlineAbortWhileInFlight = false;
     let attemptId: string | undefined;
 
     try {
-      if (signal.aborted || deadlineExpired()) {
+      if (context.signal.aborted || deadlineExpired()) {
         throw dispatchTimedOut();
       }
       if (context.organizationId === undefined) {
@@ -262,20 +262,49 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
       } catch (error) {
         throw dispatchEvidenceUnavailable(error);
       }
+      if (context.signal.aborted || deadlineExpired()) {
+        throw dispatchTimedOut();
+      }
+      const remainingMs = context.deadlineAt.getTime() - Date.now();
+      if (remainingMs <= 0) {
+        throw dispatchTimedOut();
+      }
+      const signal = AbortSignal.any([
+        context.signal,
+        AbortSignal.timeout(remainingMs),
+      ]);
       if (signal.aborted || deadlineExpired()) {
         throw dispatchTimedOut();
       }
+      const recordDeadlineAbort = (): void => {
+        const reason = signal.reason as { readonly name?: unknown } | undefined;
+        if (downstreamCallInFlight && reason?.name === 'TimeoutError') {
+          deadlineAbortWhileInFlight = true;
+        }
+      };
+      signal.addEventListener('abort', recordDeadlineAbort, { once: true });
+      if (signal.aborted || deadlineExpired()) {
+        signal.removeEventListener('abort', recordDeadlineAbort);
+        throw dispatchTimedOut();
+      }
+      observeDispatchDeadlineMsRemaining(operation, remainingMs);
       downstreamDispatchStarted = true;
-      response = await this.httpClient.request(downstreamRequest, {
-        ...(authorization === undefined ? {} : { authorization }),
-        downstream: adapter.downstream,
-        requestId: context.requestId,
-        deadlineMs: timeoutMs,
-        signal,
-        onResponseReceived: (statusCode) => {
-          downstreamResponseStatus = statusCode;
-        },
-      });
+      downstreamCallInFlight = true;
+      try {
+        response = await this.httpClient.request(downstreamRequest, {
+          ...(authorization === undefined ? {} : { authorization }),
+          downstream: adapter.downstream,
+          requestId: context.requestId,
+          deadlineMs: remainingMs,
+          signal,
+          onResponseReceived: (statusCode) => {
+            downstreamResponseStatus = statusCode;
+          },
+        });
+      } finally {
+        downstreamCallInFlight = false;
+        signal.removeEventListener('abort', recordDeadlineAbort);
+      }
       await this.recordAttemptOutcome(attemptId, 'response_received');
 
       if (response.status < 200 || response.status >= 300) {
@@ -299,6 +328,9 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
           : { aiProcessingMs: telemetry.aiProcessingMs }),
       } as DispatchResult<ResponseFor<O>>;
     } catch (error) {
+      if (deadlineAbortWhileInFlight) {
+        recordDispatchCancelledByDeadline(operation);
+      }
       const definitelyNotDispatched = isDefinitelyNotDispatched(error);
       const notDispatched =
         !downstreamDispatchStarted || definitelyNotDispatched;

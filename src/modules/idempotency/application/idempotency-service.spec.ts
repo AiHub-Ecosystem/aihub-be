@@ -445,17 +445,22 @@ describe('IdempotencyService', () => {
       requestId: 'req_hard',
     });
     const service = new IdempotencyService(repository);
+    let workSignal: AbortSignal | undefined;
 
     await expect(
       service.execute(
         input('req_hard', 5),
-        () => new Promise<{ value: string }>(() => undefined),
+        ({ signal }) => {
+          workSignal = signal;
+          return new Promise<{ value: string }>(() => undefined);
+        },
         () => ({ value: 'unused' }),
       ),
     ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
 
     await new Promise((resolve) => setTimeout(resolve, 15));
     expect(repository.failed[0]?.requestId).toBe('req_hard');
+    expect(workSignal?.reason).toMatchObject({ name: 'TimeoutError' });
   });
 
   it('deletes the record when delayed downstream work eventually returns a 4xx', async () => {
