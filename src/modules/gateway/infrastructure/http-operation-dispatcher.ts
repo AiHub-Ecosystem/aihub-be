@@ -278,7 +278,14 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
       }
       const recordDeadlineAbort = (): void => {
         const reason = signal.reason as { readonly name?: unknown } | undefined;
-        if (downstreamCallInFlight && reason?.name === 'TimeoutError') {
+        const errorResponseReceived =
+          downstreamResponseStatus !== undefined &&
+          (downstreamResponseStatus < 200 || downstreamResponseStatus >= 300);
+        if (
+          downstreamCallInFlight &&
+          !errorResponseReceived &&
+          reason?.name === 'TimeoutError'
+        ) {
           deadlineAbortWhileInFlight = true;
         }
       };

@@ -56,6 +56,30 @@ const gradeInput: GradeTask1Request = {
   image_url: 'https://example.com/chart.png',
 };
 
+const gradeResponse: GradeResponse = {
+  overall_band: 7,
+  language: 'vi',
+  criteria: (
+    [
+      'task_achievement',
+      'task_response',
+      'coherence_cohesion',
+      'lexical_resource',
+    ] satisfies GradeResponse['criteria'][number]['id'][]
+  ).map((id) => ({
+    id,
+    name: id,
+    band: 7,
+    band_reason: 'clear',
+    strengths: [],
+    improvements: [],
+  })),
+  summary: '',
+  suggestions: [],
+  next_steps: [],
+  annotations: [],
+};
+
 class FakeTokenIssuer implements InternalTokenIssuerPort {
   constructor(private readonly token = 'token-abc') {}
 
@@ -153,18 +177,8 @@ function downstreamMs(logLine: string): number {
   return payload.downstream_ms;
 }
 
-async function deadlineCancellationCount(): Promise<number> {
-  const prefix =
-    'aihub_dispatch_cancelled_by_deadline_total{operation="writing.task1.grade"} ';
-  const line = (await getMetrics())
-    .split('\n')
-    .find((candidate) => candidate.startsWith(prefix));
-  return Number(line?.slice(prefix.length) ?? 0);
-}
-
-async function deadlineHistogramCount(): Promise<number> {
-  const prefix =
-    'aihub_dispatch_deadline_ms_remaining_count{operation="writing.task1.grade"} ';
+async function metricCount(name: string): Promise<number> {
+  const prefix = `${name}{operation="writing.task1.grade"} `;
   const line = (await getMetrics())
     .split('\n')
     .find((candidate) => candidate.startsWith(prefix));
@@ -225,7 +239,9 @@ describe('HttpOperationDispatcher', () => {
       [fakeGradeAdapter('/task-one')],
       attempts.recorder,
     );
-    const cancellationsBefore = await deadlineCancellationCount();
+    const cancellationsBefore = await metricCount(
+      'aihub_dispatch_cancelled_by_deadline_total',
+    );
 
     await expect(
       dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
@@ -255,7 +271,9 @@ describe('HttpOperationDispatcher', () => {
       operation: 'writing.task1.grade',
       operationTimeoutMs: 5_000,
     });
-    expect(await deadlineCancellationCount()).toBe(cancellationsBefore);
+    expect(
+      await metricCount('aihub_dispatch_cancelled_by_deadline_total'),
+    ).toBe(cancellationsBefore);
   });
 
   it('fails closed and releases sandbox quota when the durable record cannot be created', async () => {
@@ -309,7 +327,9 @@ describe('HttpOperationDispatcher', () => {
       [fakeGradeAdapter('/task-one')],
       attempts.recorder,
     );
-    const cancellationsBefore = await deadlineCancellationCount();
+    const cancellationsBefore = await metricCount(
+      'aihub_dispatch_cancelled_by_deadline_total',
+    );
 
     await expect(
       dispatcher.dispatch('writing.task1.grade', gradeInput, context(100)),
@@ -318,7 +338,9 @@ describe('HttpOperationDispatcher', () => {
     expect(attempts.outcomes).toEqual([
       { attemptId: 'attempt-test', outcome: 'not_dispatched' },
     ]);
-    expect(await deadlineCancellationCount()).toBe(cancellationsBefore);
+    expect(
+      await metricCount('aihub_dispatch_cancelled_by_deadline_total'),
+    ).toBe(cancellationsBefore);
   });
 
   it('recomputes the outbound timeout after persisting dispatch evidence', async () => {
@@ -346,10 +368,12 @@ describe('HttpOperationDispatcher', () => {
       .reply(200, { ok: true });
     const send = httpClient.request.bind(httpClient);
     const request = jest.spyOn(httpClient, 'request').mockImplementation(send);
-    const histogramBefore = await deadlineHistogramCount();
+    const histogramBefore = await metricCount(
+      'aihub_dispatch_deadline_ms_remaining_count',
+    );
     const adapter: DownstreamAdapter<GradeTask1Request, GradeResponse> = {
       ...fakeGradeAdapter('/task-one'),
-      parseResponse: () => ({ overall_band: 7 }) as GradeResponse,
+      parseResponse: () => gradeResponse,
     };
     const dispatcher = new HttpOperationDispatcher(
       httpClient,
@@ -366,7 +390,9 @@ describe('HttpOperationDispatcher', () => {
     expect(deadlineMs).toBeGreaterThan(0);
     expect(deadlineMs).toBeLessThan(950);
     expect(Number(sentDeadlineHeader)).toBe(deadlineMs);
-    expect(await deadlineHistogramCount()).toBe(histogramBefore + 1);
+    expect(
+      await metricCount('aihub_dispatch_deadline_ms_remaining_count'),
+    ).toBe(histogramBefore + 1);
   });
 
   it('counts an in-flight call aborted by the work deadline', async () => {
@@ -398,13 +424,17 @@ describe('HttpOperationDispatcher', () => {
       [fakeGradeAdapter('/task-one')],
       attempts.recorder,
     );
-    const before = await deadlineCancellationCount();
+    const before = await metricCount(
+      'aihub_dispatch_cancelled_by_deadline_total',
+    );
 
     await expect(
       dispatcher.dispatch('writing.task1.grade', gradeInput, context(100)),
     ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
 
-    expect(await deadlineCancellationCount()).toBe(before + 1);
+    expect(
+      await metricCount('aihub_dispatch_cancelled_by_deadline_total'),
+    ).toBe(before + 1);
     expect(attempts.outcomes).toEqual([
       { attemptId: 'attempt-test', outcome: 'outcome_unknown' },
     ]);
@@ -445,7 +475,9 @@ describe('HttpOperationDispatcher', () => {
       [fakeGradeAdapter('/task-one')],
       attempts.recorder,
     );
-    const before = await deadlineCancellationCount();
+    const before = await metricCount(
+      'aihub_dispatch_cancelled_by_deadline_total',
+    );
     const pending = dispatcher.dispatch(
       'writing.task1.grade',
       gradeInput,
@@ -456,7 +488,55 @@ describe('HttpOperationDispatcher', () => {
 
     await expect(pending).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
 
-    expect(await deadlineCancellationCount()).toBe(before);
+    expect(
+      await metricCount('aihub_dispatch_cancelled_by_deadline_total'),
+    ).toBe(before);
+  });
+
+  it('does not count a deadline abort after a downstream error response', async () => {
+    const attempts = fakeDispatchAttempts();
+    const httpClient = new DownstreamHttpClient(
+      'https://ai-writing.test',
+      mockAgent,
+    );
+    jest.spyOn(httpClient, 'request').mockImplementation(
+      (_request, options) =>
+        new Promise((_, reject) => {
+          options.onResponseReceived?.(503);
+          const rejectOnAbort = () =>
+            reject(
+              new AppError({
+                code: 'AI_SERVICE_TIMEOUT',
+                message: 'AI service request timed out',
+                retryable: true,
+              }),
+            );
+          options.signal.addEventListener('abort', rejectOnAbort, {
+            once: true,
+          });
+          if (options.signal.aborted) rejectOnAbort();
+        }),
+    );
+    const dispatcher = new HttpOperationDispatcher(
+      httpClient,
+      new FakeTokenIssuer(),
+      [fakeGradeAdapter('/task-one')],
+      attempts.recorder,
+    );
+    const before = await metricCount(
+      'aihub_dispatch_cancelled_by_deadline_total',
+    );
+
+    await expect(
+      dispatcher.dispatch('writing.task1.grade', gradeInput, context(100)),
+    ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
+
+    expect(
+      await metricCount('aihub_dispatch_cancelled_by_deadline_total'),
+    ).toBe(before);
+    expect(attempts.outcomes).toEqual([
+      { attemptId: 'attempt-test', outcome: 'response_received' },
+    ]);
   });
 
   it('keeps a downstream success when recording its known outcome fails', async () => {
@@ -480,7 +560,7 @@ describe('HttpOperationDispatcher', () => {
         path: '/task-one',
         body: input,
       }),
-      parseResponse: () => ({ overall_band: 7 }) as GradeResponse,
+      parseResponse: () => gradeResponse,
     };
     const dispatcher = new HttpOperationDispatcher(
       new DownstreamHttpClient('https://ai-writing.test', mockAgent),
@@ -727,7 +807,9 @@ describe('HttpOperationDispatcher', () => {
       [fakeGradeAdapter('/task-one')],
       attempts.recorder,
     );
-    const cancellationsBefore = await deadlineCancellationCount();
+    const cancellationsBefore = await metricCount(
+      'aihub_dispatch_cancelled_by_deadline_total',
+    );
 
     await expect(
       dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
@@ -755,7 +837,9 @@ describe('HttpOperationDispatcher', () => {
     expect(attempts.outcomes).toEqual([
       { attemptId: 'attempt-test', outcome: 'outcome_unknown' },
     ]);
-    expect(await deadlineCancellationCount()).toBe(cancellationsBefore);
+    expect(
+      await metricCount('aihub_dispatch_cancelled_by_deadline_total'),
+    ).toBe(cancellationsBefore);
   });
 
   it('records a received HTTP response when its body cannot be parsed', async () => {
