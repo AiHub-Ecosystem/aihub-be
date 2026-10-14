@@ -12,6 +12,7 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 
 import { createAppFastifyProxyOptions } from './app-fastify-proxy-options';
 import { AppModule } from './app.module';
+import { prepareSocketListener } from './common/http/unix-socket-listener';
 import { registerMetricsRoute } from './common/observability/metrics.route';
 import { createRequestLogging } from './common/observability/request-logger';
 import { generateRequestId } from './common/request-context/request-id';
@@ -23,6 +24,7 @@ const MAX_BODY_BYTES = 1024 * 1024;
 
 export async function bootstrap(): Promise<void> {
   const configuration = getRuntimeConfiguration();
+  const listenSocket = configuration.AIHUB_LISTEN_SOCKET as string | undefined;
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
@@ -30,6 +32,7 @@ export async function bootstrap(): Promise<void> {
       {
         ...createAppFastifyProxyOptions(
           configuration.AIHUB_TRUSTED_PROXY_IP as string,
+          listenSocket,
         ),
         // The structured request log, on Fastify's own Pino. One line per
         // response, built by the metering module's completion hook below.
@@ -65,7 +68,19 @@ export async function bootstrap(): Promise<void> {
   // (`/v1/ielts/writing/task1/grade`) so it stays the single source of truth and
   // matches the D1 contract verbatim. A prefix here would produce `/v1/v1/...`.
   // `/health` stays unversioned because probes are infrastructure, not API.
-  await app.listen(configuration.PORT, '0.0.0.0');
+  //
+  // With a socket, the reverse proxy uses it and the TCP listener stays on
+  // loopback for in-container health checks: forwarded addresses are trusted
+  // from any peer of either listener, so neither may be reachable by others.
+  const openSocket =
+    listenSocket === undefined
+      ? undefined
+      : prepareSocketListener(fastify, listenSocket);
+  await app.listen(
+    configuration.PORT,
+    listenSocket === undefined ? '0.0.0.0' : '127.0.0.1',
+  );
+  await openSocket?.();
 }
 
 void bootstrap();
