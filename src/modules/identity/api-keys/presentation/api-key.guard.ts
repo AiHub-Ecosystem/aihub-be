@@ -1,6 +1,7 @@
 import {
   type CanActivate,
   type ExecutionContext,
+  HttpException,
   Inject,
   Injectable,
   Optional,
@@ -107,69 +108,103 @@ export class ApiKeyGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const operationId = this.reflector.getAllAndOverride<OperationId>(
-      REQUIRED_OPERATION_METADATA,
-      [context.getHandler(), context.getClass()],
-    );
+    let stage = 'operation_metadata';
 
-    if (operationId === undefined || !(operationId in OPERATION_CATALOG)) {
-      throw configurationError();
-    }
+    try {
+      const operationId = this.reflector.getAllAndOverride<OperationId>(
+        REQUIRED_OPERATION_METADATA,
+        [context.getHandler(), context.getClass()],
+      );
 
-    const operation = OPERATION_CATALOG[operationId];
-    const configuration = this.requireConfiguration();
-    const environment = resolveAihubEnvironment(request, configuration);
-    const bffVisitorIp = visitorIpForBffRequest(
-      request,
-      this.webSessionClientSecret,
-    );
-    const header = request.headers['x-api-key'];
+      if (operationId === undefined || !(operationId in OPERATION_CATALOG)) {
+        throw configurationError();
+      }
 
-    if (
-      environment === 'development' &&
-      header === undefined &&
-      isLocalAuthBypassEnabled(configuration)
-    ) {
-      const authenticated = localDevelopmentIdentity(operation, environment);
-      request.aihubAuth = authenticated;
+      const operation = OPERATION_CATALOG[operationId];
+      stage = 'runtime_configuration';
+      const configuration = this.requireConfiguration();
+      stage = 'environment_resolution';
+      const environment = resolveAihubEnvironment(request, configuration);
+      stage = 'bff_authentication';
+      const bffVisitorIp = visitorIpForBffRequest(
+        request,
+        this.webSessionClientSecret,
+      );
+      const header = request.headers['x-api-key'];
+
+      if (
+        environment === 'development' &&
+        header === undefined &&
+        isLocalAuthBypassEnabled(configuration)
+      ) {
+        const authenticated = localDevelopmentIdentity(operation, environment);
+        request.aihubAuth = authenticated;
+        stage = 'metering_evidence';
+        openMeteringEvidence(request, {
+          operation: operationId,
+          organizationId: authenticated.organizationId,
+          apiKeyId: authenticated.apiKeyId,
+          environment: authenticated.environment,
+        });
+        return true;
+      }
+
+      stage = 'api_key_authentication';
+      const authenticated = await authenticateApiKey(
+        request,
+        this.authenticator,
+        configuration,
+        {
+          ...(bffVisitorIp === undefined ? {} : { clientIp: bffVisitorIp }),
+          forceFresh: isGradingScope(operation.requiredScope),
+        },
+      );
+      const authorized =
+        environment === 'sandbox'
+          ? {
+              ...authenticated,
+              rateLimitRpm: Math.min(authenticated.rateLimitRpm, 5),
+            }
+          : authenticated;
+      request.aihubAuth = authorized;
+      stage = 'metering_evidence';
       openMeteringEvidence(request, {
         operation: operationId,
-        organizationId: authenticated.organizationId,
-        apiKeyId: authenticated.apiKeyId,
-        environment: authenticated.environment,
+        organizationId: authorized.organizationId,
+        apiKeyId: authorized.apiKeyId,
+        environment: authorized.environment,
       });
+
+      stage = 'scope_authorization';
+      if (!authorized.scopes.includes(operation.requiredScope)) {
+        throw forbidden();
+      }
+
       return true;
+    } catch (error) {
+      const isServerError =
+        error instanceof AppError
+          ? error.httpStatus >= 500
+          : error instanceof HttpException
+            ? error.getStatus() >= 500
+            : true;
+      if (isServerError) {
+        const correlationId = request.headers['x-correlation-id'];
+        request.log.error({
+          event: 'api_key_guard_internal_error',
+          request_id: String(request.id),
+          ...(typeof correlationId === 'string' &&
+          /^req_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            correlationId,
+          )
+            ? { correlation_id: correlationId }
+            : {}),
+          stage,
+          error_type: error instanceof Error ? error.name : typeof error,
+        });
+      }
+      throw error;
     }
-
-    const authenticated = await authenticateApiKey(
-      request,
-      this.authenticator,
-      configuration,
-      {
-        ...(bffVisitorIp === undefined ? {} : { clientIp: bffVisitorIp }),
-        forceFresh: isGradingScope(operation.requiredScope),
-      },
-    );
-    const authorized =
-      environment === 'sandbox'
-        ? {
-            ...authenticated,
-            rateLimitRpm: Math.min(authenticated.rateLimitRpm, 5),
-          }
-        : authenticated;
-    request.aihubAuth = authorized;
-    openMeteringEvidence(request, {
-      operation: operationId,
-      organizationId: authorized.organizationId,
-      apiKeyId: authorized.apiKeyId,
-      environment: authorized.environment,
-    });
-
-    if (!authorized.scopes.includes(operation.requiredScope)) {
-      throw forbidden();
-    }
-
-    return true;
   }
 
   private requireConfiguration(): RequestEnvironmentConfig {

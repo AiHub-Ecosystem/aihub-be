@@ -1,6 +1,7 @@
 import type { ExecutionContext } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
 
+import { AppError } from '@/common/errors/app-error';
 import type { WebSessionClientSecretPort } from '@/modules/auth/application/web-session-client-secret.port';
 import type {
   ApiKeyAuthenticatorPort,
@@ -143,6 +144,43 @@ describe('ApiKeyGuard scope check', () => {
       ),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(authenticate).not.toHaveBeenCalled();
+  });
+
+  it('logs the failing stage for internal errors without logging error contents', async () => {
+    const logError = jest.fn();
+    const internalError = new AppError({
+      code: 'INTERNAL_ERROR',
+      message: 'private error detail',
+      retryable: false,
+    });
+    const value = request({
+      id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+      headers: {
+        host: 'api.aihub.test',
+        'x-api-key': 'aihub_sk_value',
+        'x-correlation-id': 'req_123e4567-e89b-42d3-a456-426614174000',
+      },
+      log: { error: logError },
+    });
+
+    await expect(
+      guard({
+        authenticate: async () => {
+          throw internalError;
+        },
+      }).canActivate(context(value)),
+    ).rejects.toBe(internalError);
+
+    expect(logError).toHaveBeenCalledWith({
+      event: 'api_key_guard_internal_error',
+      request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+      correlation_id: 'req_123e4567-e89b-42d3-a456-426614174000',
+      stage: 'api_key_authentication',
+      error_type: 'AppError',
+    });
+    expect(JSON.stringify(logError.mock.calls)).not.toContain(
+      'private error detail',
+    );
   });
 
   it('refuses a key without the operation requiredScope', async () => {
