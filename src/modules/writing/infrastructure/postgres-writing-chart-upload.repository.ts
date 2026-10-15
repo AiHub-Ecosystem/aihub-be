@@ -2,6 +2,7 @@ import { AppError } from '@/common/errors/app-error';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import {
   WRITING_CHART_ORG_HOURLY_LIMIT,
+  WRITING_CHART_RATE_WINDOW_MS,
   WRITING_CHART_RETENTION_MS,
 } from '@/modules/writing/application/writing-chart-upload.policy';
 import type {
@@ -100,7 +101,9 @@ export class PostgresWritingChartUploadRepository
   async createIntent(intent: WritingChartUploadIntent): Promise<boolean> {
     return this.transaction(async (client) => {
       await this.lock(client, advisoryKey(intent, 'intents'));
-      const since = new Date(intent.createdAt.getTime() - 60 * 60 * 1000);
+      const since = new Date(
+        intent.createdAt.getTime() - WRITING_CHART_RATE_WINDOW_MS,
+      );
       const count = await client.writingChartUpload.count({
         where: {
           organizationId: intent.organizationId,
@@ -172,7 +175,9 @@ export class PostgresWritingChartUploadRepository
         return 'missing';
       if (row.status === 'publishing') return 'started';
 
-      const since = new Date(input.now.getTime() - 60 * 60 * 1000);
+      const since = new Date(
+        input.now.getTime() - WRITING_CHART_RATE_WINDOW_MS,
+      );
       const [published, publishing] = await Promise.all([
         client.writingChartUpload.count({
           where: {
