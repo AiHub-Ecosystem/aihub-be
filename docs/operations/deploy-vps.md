@@ -221,6 +221,34 @@ browser heuristics. An upload must be
 completed within one hour; a completion older than that answers `404` and
 deletes the object.
 
+### Writing Task 1 chart storage
+
+Create separate Production and Sandbox staging/public buckets:
+`aihub-writing-chart-staging`, `aihub-writing-charts`,
+`aihub-sandbox-writing-chart-staging`, and `aihub-sandbox-writing-charts`.
+Set the matching `SEAWEEDFS_*_CHART_*_BUCKET` values in `.env.production`;
+Compose maps Sandbox values into the Sandbox app. Set
+`AIHUB_CHART_PUBLIC_BASE_URL` and `AIHUB_SANDBOX_CHART_PUBLIC_BASE_URL` to
+dedicated HTTPS hosts on registrable domains distinct from the API and
+`s3.wispace.app`. Upload creation fails closed until its selected bucket names
+and public origin match the environment.
+
+Keep both staging buckets private. Configure their S3 CORS rules for the exact
+deployed Customer Web origins (`CUSTOMER_WEB_BASE_URL` and
+`CUSTOMER_WEB_SANDBOX_BASE_URL`), allow `PUT` and the `Content-Type` request
+header, and do not enable credentials. The public buckets allow anonymous
+`GetObject` only: no list, write, or delete. Route each public chart hostname
+only to its matching public bucket, never to staging. Keep public writes and
+deletes under the AIHUB storage identity.
+
+Before public rollout, verify from outside the host that a published object is
+readable at its dedicated chart URL, an incomplete staging object and bucket
+listing return `403`, and anonymous writes to the public bucket return `403`.
+Verify a browser `PUT` from each deployed Customer Web origin succeeds and that
+the other environment cannot read either bucket. The hostnames, bucket policies,
+and CORS settings are deployment gates; this source change does not provision
+them.
+
 ### Sweeping Speaking Audio upload orphans
 
 `speaking:audio-upload-sweep` removes rejected uploads and incomplete intents
@@ -292,6 +320,22 @@ any delete failed, or when the bucket, the storage credentials, or the
 database is not configured, in which case it has deleted nothing. Alert on a
 non-zero exit and on a missed run for either container.
 
+### Sweeping Writing Task 1 chart uploads
+
+Before enabling the managed schedule, inspect eligible records with a dry run:
+
+```sh
+./scripts/ops/host-scheduled-job.sh chart-upload-sweep --dry-run true
+```
+
+The managed job runs every 15 minutes for each enabled deployment. Published
+objects become eligible 24 hours after publication; incomplete staging objects
+become eligible 24 hours after their one-hour intent expires. Deletion happens
+on the first successful sweep after the deadline. The wrapper logs per-tier
+counts to `~/aihub-writing-chart-upload-sweep.log`; alert on a non-zero exit or
+a missed run. The sweep deletes object bytes before its durable row, so failed
+storage deletion remains retryable.
+
 ### Scheduled operator jobs
 
 The versioned schedule is [`ops/host-jobs/aihub.crontab`](../../ops/host-jobs/aihub.crontab).
@@ -335,18 +379,20 @@ The schedule uses the VPS's UTC clock:
 - `report` runs at 5 minutes past each hour for the preceding UTC hour;
 - `ttl-audit` runs at 01:45 daily;
 - `avatar-sweep` runs `avatar:sweep` at 03:30 daily.
+- `chart-upload-sweep` runs `writing:chart-upload-sweep` every 15 minutes.
 
 Each CLI invocation has a hard deadline per enabled deployment. Production and
 Sandbox each get the full limit; a failure or timeout in Production is logged
 and does not prevent the Sandbox invocation.
 
-| Job            | Per-deployment limit |
-| -------------- | -------------------: |
-| `quota`        |           15 minutes |
-| `prune`        |           30 minutes |
-| `report`       |            3 minutes |
-| `ttl-audit`    |           15 minutes |
-| `avatar-sweep` |           30 minutes |
+| Job                  | Per-deployment limit |
+| -------------------- | -------------------: |
+| `quota`              |           15 minutes |
+| `prune`              |           30 minutes |
+| `report`             |            3 minutes |
+| `ttl-audit`          |           15 minutes |
+| `avatar-sweep`       |           30 minutes |
+| `chart-upload-sweep` |           30 minutes |
 
 The wrapper also caps deployment-status lookup at 30 seconds. The in-container
 CLI stops at its listed deadline; if Docker exec has not returned 15 seconds

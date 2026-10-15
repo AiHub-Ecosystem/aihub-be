@@ -530,6 +530,40 @@ read it again before retrying. `503 AVATAR_STORAGE_UNAVAILABLE` is retryable.
 
 ---
 
+## 3d. Writing Task 1 chart uploads
+
+An API key with `writing.grade` can upload a chart for a Writing Task 1 grade.
+The request must include the same `X-User-Identity` value as grading: a
+Declared User ID when the Organization has no active identity configuration,
+or a Signed User Assertion when it does. The upload is bound to the
+Organization, End User, and API-key environment. The no-key Customer Web demo
+stays in its fixed Mock mode.
+
+Create an intent with `POST /v1/ielts/writing/task1/chart-uploads` and
+`{ "content_type": "image/png", "byte_size": 1234 }`. JPEG, PNG, and WebP are
+accepted up to 10 MiB compressed and 20 megapixels. SVG is rejected. Upload
+bytes directly to the signed `PUT` URL using its returned headers, then call
+`POST /v1/ielts/writing/task1/chart-uploads/{asset_id}/complete`. An expired
+five-minute URL can be refreshed while the one-hour intent is open; refresh
+does not extend the intent. Completion checks bounded ranges of the stored
+object before publishing it.
+
+Put the completion response's `image_url` into the existing Task 1
+`image_url` grading field. A completed image is publicly readable by anyone
+who learns its URL. AIHUB schedules deletion 24 hours after publication; the
+15-minute cleanup job deletes it on the first successful run after that
+deadline. Do not upload a chart you cannot expose publicly. AIHUB also deletes
+private incomplete objects 24 hours after the intent expires. Each Organization is limited to five new intents and five
+successful publications per rolling hour. Uploads do not consume grading
+quota or create grading or billing records.
+
+The public chart hostname and abuse-report contact are deployment values. The
+upload service remains unavailable until the dedicated HTTPS hostname and
+environment-specific chart buckets are configured. Public rollout also waits
+for the abuse contact and the provider URL-fetch security gate tracked in #376.
+
+---
+
 ## 4. Endpoints
 
 All public grading operations are `POST` routes. Writing and Speaking

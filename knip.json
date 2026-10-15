@@ -37,6 +37,7 @@
     "src/cli/quota-reconcile.ts",
     "src/cli/usage-report.ts",
     "src/cli/usage-prune.ts",
+    "src/cli/writing-chart-upload-sweep.ts",
     // Container runtime evidence that package.json scripts do not name:
     // Dockerfile ENTRYPOINT; compose uses the same bootstrap as entrypoint.
     "scripts/runtime/runtime-entrypoint.mjs",

@@ -101,6 +101,9 @@ const BOOT_ENVIRONMENT = {
   CUSTOMER_WEB_BASE_URL: 'https://customer.ci-boot.invalid',
   SEAWEEDFS_USER_ASSET_BUCKET: '',
   SEAWEEDFS_AUDIO_ASSET_BUCKET: '',
+  SEAWEEDFS_CHART_STAGING_BUCKET: '',
+  SEAWEEDFS_CHART_PUBLIC_BUCKET: '',
+  AIHUB_CHART_PUBLIC_BASE_URL: '',
 };
 
 function writeBootConfig(directory) {

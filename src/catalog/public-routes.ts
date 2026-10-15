@@ -80,6 +80,11 @@ import {
   SpeakingAudioUploadUrlResponseSchema,
 } from '@/contracts/speaking/audio-upload';
 import { SpeakingQuestionsResponseSchema } from '@/contracts/speaking/questions';
+import {
+  CreateWritingChartUploadRequestSchema,
+  WritingChartAssetResponseSchema,
+  WritingChartUploadGrantResponseSchema,
+} from '@/contracts/writing/chart-upload';
 import type { IdempotencyMode } from './operation-catalog';
 
 /**
@@ -726,6 +731,42 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: null,
     responseSchema: SpeakingAudioAssetResponseSchema,
+    errorStatuses: [400, 401, 403, 404, 413, 429, 500, 503],
+  },
+  'writing.chartUploads.create': {
+    method: 'POST',
+    path: '/v1/ielts/writing/task1/chart-uploads',
+    callerAuth: 'api-key',
+    organizationResolution: 'caller',
+    successStatus: 201,
+    publishedIdentityScope: 'user',
+    idempotency: 'none',
+    requestSchema: CreateWritingChartUploadRequestSchema,
+    responseSchema: WritingChartUploadGrantResponseSchema,
+    errorStatuses: [400, 401, 403, 413, 429, 500, 503],
+  },
+  'writing.chartUploads.refresh': {
+    method: 'POST',
+    path: '/v1/ielts/writing/task1/chart-uploads/:assetId/refresh',
+    callerAuth: 'api-key',
+    organizationResolution: 'caller',
+    successStatus: 200,
+    publishedIdentityScope: 'user',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: WritingChartUploadGrantResponseSchema,
+    errorStatuses: [400, 401, 403, 404, 429, 500, 503],
+  },
+  'writing.chartUploads.complete': {
+    method: 'POST',
+    path: '/v1/ielts/writing/task1/chart-uploads/:assetId/complete',
+    callerAuth: 'api-key',
+    organizationResolution: 'caller',
+    successStatus: 200,
+    publishedIdentityScope: 'user',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: WritingChartAssetResponseSchema,
     errorStatuses: [400, 401, 403, 404, 413, 429, 500, 503],
   },
 } as const satisfies Record<string, PublicRouteDef>;

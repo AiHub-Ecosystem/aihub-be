@@ -204,6 +204,13 @@ const fields = {
   SEAWEEDFS_REGION: { kind: 'string', defaultValue: DEFAULT_SEAWEEDFS_REGION },
   SEAWEEDFS_USER_ASSET_BUCKET: { kind: 'string' },
   SEAWEEDFS_AUDIO_ASSET_BUCKET: { kind: 'string' },
+  SEAWEEDFS_CHART_STAGING_BUCKET: { kind: 'string', allowEmpty: true },
+  SEAWEEDFS_CHART_PUBLIC_BUCKET: { kind: 'string', allowEmpty: true },
+  AIHUB_CHART_PUBLIC_BASE_URL: {
+    kind: 'string',
+    allowEmpty: true,
+    format: 'url',
+  },
   SEAWEEDFS_ACCESS_KEY_ID: { kind: 'string', secret: true },
   SEAWEEDFS_SECRET_ACCESS_KEY: { kind: 'string', secret: true },
   AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY: { kind: 'string', secret: true },

@@ -2064,6 +2064,98 @@ function speakingAudioUploadPathItems(): Record<
   };
 }
 
+function writingChartUploadPathItems(): Record<
+  string,
+  Record<string, unknown>
+> {
+  const create = 'writing.chartUploads.create' as const;
+  const refresh = 'writing.chartUploads.refresh' as const;
+  const complete = 'writing.chartUploads.complete' as const;
+  const sharedParameters = [
+    { $ref: '#/components/parameters/CorrelationId' },
+    { $ref: '#/components/parameters/UserIdentity' },
+  ];
+  const assetIdParameter = {
+    name: 'assetId',
+    in: 'path',
+    required: true,
+    description:
+      'The chart asset ID returned when the upload intent was created.',
+    schema: { type: 'string', pattern: '^chart_[0-9A-HJKMNP-TV-Z]{26}$' },
+  };
+  const noStore = {
+    'Cache-Control': {
+      description: 'Upload URLs and chart metadata must not be cached.',
+      schema: { type: 'string', enum: ['no-store'] },
+    },
+  };
+  const grantSchema = routeSchemaOf(create, 'response');
+  const assetSchema = routeSchemaOf(complete, 'response');
+  const grantResponse = (id: typeof create | typeof refresh) => ({
+    [routeSuccessKeyOf(id)]: {
+      description: 'A five-minute signed PUT URL for private staging storage.',
+      headers: noStore,
+      content: { 'application/json': { schema: grantSchema } },
+    },
+    ...routeErrorResponsesOf(id),
+  });
+  return {
+    [routePathOf(create)]: {
+      post: {
+        operationId: create,
+        summary: 'Create a Writing Task 1 chart upload intent',
+        description: [
+          'Requires an API key with `writing.grade` and the same declared or signed `X-User-Identity` accepted by Writing Task 1 grading. The intent is bound to that Organization, End User, and API-key environment.',
+          'Upload directly to the returned URL with the returned headers. Staging remains private. The URL expires after five minutes; the intent expires after one hour and can be refreshed without extending that deadline. Limits are five intents and five published charts per Organization in a rolling hour.',
+        ].join('\n\n'),
+        ...routeIdentityScopeOf(create),
+        ...routeSecurityOf(create),
+        parameters: sharedParameters,
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': { schema: routeSchemaOf(create, 'request') },
+          },
+        },
+        responses: grantResponse(create),
+      },
+    },
+    [routePathOf(refresh)]: {
+      post: {
+        operationId: refresh,
+        summary: 'Refresh a Writing Task 1 chart upload URL',
+        description:
+          'Refreshes the signed URL for the same private staging object without extending the intent deadline.',
+        ...routeIdentityScopeOf(refresh),
+        ...routeSecurityOf(refresh),
+        parameters: [...sharedParameters, assetIdParameter],
+        responses: grantResponse(refresh),
+      },
+    },
+    [routePathOf(complete)]: {
+      post: {
+        operationId: complete,
+        summary: 'Verify and publish a Writing Task 1 chart',
+        description: [
+          'Checks the stored bytes using bounded ranged reads, verifies JPEG, PNG, or WebP headers and image dimensions, then copies the verified object from private staging into the environment-specific public chart bucket.',
+          'The returned `image_url` is anonymously readable and shareable until it expires 24 hours after publication. Anyone who learns the URL can read and reuse it. Only the same Organization, End User, and environment can complete the upload.',
+        ].join('\n\n'),
+        ...routeIdentityScopeOf(complete),
+        ...routeSecurityOf(complete),
+        parameters: [...sharedParameters, assetIdParameter],
+        responses: {
+          [routeSuccessKeyOf(complete)]: {
+            description: 'The public image URL and its fixed expiration time.',
+            headers: noStore,
+            content: { 'application/json': { schema: assetSchema } },
+          },
+          ...routeErrorResponsesOf(complete),
+        },
+      },
+    },
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -2123,6 +2215,7 @@ export function buildOpenApiDocument(version: string): unknown {
     sandboxDemoKeyValidationPathItem(groupedErrors);
   paths[routePathOf('speaking.questions')] = speakingQuestionsPathItem();
   Object.assign(paths, speakingAudioUploadPathItems());
+  Object.assign(paths, writingChartUploadPathItems());
   paths[routePathOf('me.avatar.uploads.create')] = avatarUploadPathItem();
   paths[routePathOf('me.avatar.uploads.complete')] = avatarCompletePathItem();
   paths[routePathOf('me.avatar.remove')] = avatarItemPathItem();

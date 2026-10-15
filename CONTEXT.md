@@ -115,11 +115,18 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Speaking sample answer:** a publicly fetchable recording of a candidate's
   answer to one Speaking prompt; it is distinct from audio that reads the
   prompt and from caller-uploaded Pass-through audio.
+- **Writing Task 1 chart asset:** a planned customer image owned by one
+  Organization and End User, uploaded with an eligible API key, verified before
+  publication, publicly readable and shareable for 24 hours, and isolated on
+  the dedicated chart origin. Ownership scopes upload and completion, not
+  public reads ([ADR-0100](docs/adr/0100-writing-task1-chart-image-uploads.md)).
 - **Published image URL:** an HTTPS reference supplied for a Writing Task 1
-  chart, publicly readable without a signature or credentials. Customers may
-  host the image on any public host; the AIHUB sample remains on `s3.wispace.app`
+  chart, publicly readable without a signature or credentials. It may point to
+  a customer-hosted image or, once implemented, a completed AIHUB Writing Task
+  1 chart asset. The AIHUB sample remains on `s3.wispace.app`
   ([ADR-0084](docs/adr/0084-writing-task1-public-image-fetch-boundary.md)); its
-  sample storage remains as recorded in [ADR-0060](docs/adr/0060-writing-task1-sample-image-is-published-not-signed.md).
+  sample storage remains as recorded in
+  [ADR-0060](docs/adr/0060-writing-task1-sample-image-is-published-not-signed.md).
   _Avoid_: calling it an approved asset URL, or treating the sample image's
   host as the only supported host.
 - **JSON-by-URL grading:** the synchronous Speaking grading transport that
@@ -344,6 +351,8 @@ Demo key validation requires the server-to-server Customer Web BFF secret; the B
 - [ADR-0056: Customer API-key sandbox test tier](docs/adr/0056-customer-sandbox-test-tier.md)
 - [ADR-0094: Sandbox key admission for public demos](docs/adr/0094-sandbox-demo-key-admission.md)
 - [ADR-0095: Demo environments and Sandbox allowance policy](docs/adr/0095-demo-environments-and-sandbox-allowance-policy.md)
+- [ADR-0099: Keep Writing Task 1 charts caller-hosted](docs/adr/0099-writing-task1-charts-remain-caller-hosted.md) — superseded by ADR-0100
+- [ADR-0100: Upload Writing Task 1 chart images for authenticated callers](docs/adr/0100-writing-task1-chart-image-uploads.md)
 - [Agent and architecture design](docs/superpowers/specs/2026-09-07-aihub/12-agent-workflow-and-clean-architecture-design.md)
 - [Matt issue workflow](docs/agents/issue-tracker.md)
 - [Follow-up issue #92: durable audit trail for organization membership and API-key mutations](https://github.com/AiHub-Ecosystem/aihub-be/issues/92)

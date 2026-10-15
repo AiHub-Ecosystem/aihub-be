@@ -745,6 +745,222 @@
       }
     },
     {
+      "id": "0ed58ce7-bd1d-4286-8531-e0d1bc72c566",
+      "name": "Create a Writing Task 1 chart upload intent",
+      "request": {
+        "name": "Create a Writing Task 1 chart upload intent",
+        "description": {
+          "content": "Requires an API key with `writing.grade` and the same declared or signed `X-User-Identity` accepted by Writing Task 1 grading. The intent is bound to that Organization, End User, and API-key environment.\n\nUpload directly to the returned URL with the returned headers. Staging remains private. The URL expires after five minutes; the intent expires after one hour and can be refreshed without extending that deadline. Limits are five intents and five published charts per Organization in a rolling hour.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "ielts", "writing", "task1", "chart-uploads"],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "disabled": false,
+            "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
+            "key": "X-User-Identity",
+            "value": "<string>"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "apikey",
+          "apikey": [
+            {
+              "key": "key",
+              "value": "X-API-Key"
+            },
+            {
+              "key": "value",
+              "value": "{{apiKey}}"
+            },
+            {
+              "key": "in",
+              "value": "header"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content_type\": \"<string>\",\n  \"byte_size\": \"<integer>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "84386c2d-f6e1-4bc3-ad4e-2b79f15f661e",
+      "name": "Refresh a Writing Task 1 chart upload URL",
+      "request": {
+        "name": "Refresh a Writing Task 1 chart upload URL",
+        "description": {
+          "content": "Refreshes the signed URL for the same private staging object without extending the intent deadline.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": [
+            "v1",
+            "ielts",
+            "writing",
+            "task1",
+            "chart-uploads",
+            ":asset_id",
+            "refresh"
+          ],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": [
+            {
+              "disabled": false,
+              "type": "any",
+              "value": "<string>",
+              "key": "assetId",
+              "description": "(Required) The chart asset ID returned when the upload intent was created."
+            }
+          ]
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "disabled": false,
+            "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
+            "key": "X-User-Identity",
+            "value": "<string>"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "apikey",
+          "apikey": [
+            {
+              "key": "key",
+              "value": "X-API-Key"
+            },
+            {
+              "key": "value",
+              "value": "{{apiKey}}"
+            },
+            {
+              "key": "in",
+              "value": "header"
+            }
+          ]
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "5dbacfcd-fd48-434b-a515-dcd9599c4018",
+      "name": "Verify and publish a Writing Task 1 chart",
+      "request": {
+        "name": "Verify and publish a Writing Task 1 chart",
+        "description": {
+          "content": "Checks the stored bytes using bounded ranged reads, verifies JPEG, PNG, or WebP headers and image dimensions, then copies the verified object from private staging into the environment-specific public chart bucket.\n\nThe returned `image_url` is anonymously readable and shareable until it expires 24 hours after publication. Anyone who learns the URL can read and reuse it. Only the same Organization, End User, and environment can complete the upload.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": [
+            "v1",
+            "ielts",
+            "writing",
+            "task1",
+            "chart-uploads",
+            ":asset_id",
+            "complete"
+          ],
+          "host": ["{{baseUrl}}"],
+          "query": [],
+          "variable": [
+            {
+              "disabled": false,
+              "type": "any",
+              "value": "<string>",
+              "key": "assetId",
+              "description": "(Required) The chart asset ID returned when the upload intent was created."
+            }
+          ]
+        },
+        "header": [
+          {
+            "disabled": false,
+            "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
+            "key": "X-Correlation-Id",
+            "value": "<string>"
+          },
+          {
+            "disabled": false,
+            "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
+            "key": "X-User-Identity",
+            "value": "<string>"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "auth": {
+          "type": "apikey",
+          "apikey": [
+            {
+              "key": "key",
+              "value": "X-API-Key"
+            },
+            {
+              "key": "value",
+              "value": "{{apiKey}}"
+            },
+            {
+              "key": "in",
+              "value": "header"
+            }
+          ]
+        }
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
       "id": "524c778e-de50-4fed-833a-92b201ec45d5",
       "name": "Request an Avatar upload URL",
       "request": {

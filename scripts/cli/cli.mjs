@@ -101,6 +101,11 @@ const speakingAudioUploadSweepDescriptor = cliRunnerDescriptor(
   'runSpeakingAudioUploadSweepCommand',
   'Speaking Audio upload sweep command is unavailable',
 );
+const writingChartUploadSweepDescriptor = cliRunnerDescriptor(
+  'writing-chart-upload-sweep',
+  'runWritingChartUploadSweepCommand',
+  'Writing chart upload sweep command is unavailable',
+);
 const usageReportDescriptor = cliRunnerDescriptor(
   'usage-report',
   'runUsageReportCommand',
@@ -837,6 +842,19 @@ async function sweepSpeakingAudioUploadsCommand(options) {
   }
 }
 
+async function sweepWritingChartUploadsCommand(options) {
+  for (const name of options.keys()) {
+    if (name !== 'dry-run') usageError();
+  }
+  const summary = await runCliCommand(writingChartUploadSweepDescriptor, {
+    databaseUrl: process.env.DATABASE_URL ?? '',
+    dryRun: booleanOption(options, 'dry-run'),
+  });
+  if (summary.failed > 0) {
+    throw new Error('Writing chart upload sweep could not delete every object');
+  }
+}
+
 async function pruneUsageCommand(options) {
   if (options.size > 0) {
     usageError();
@@ -1005,6 +1023,10 @@ async function main() {
   }
   if (command === 'speaking:audio-upload-sweep') {
     await sweepSpeakingAudioUploadsCommand(options);
+    return;
+  }
+  if (command === 'writing:chart-upload-sweep') {
+    await sweepWritingChartUploadsCommand(options);
     return;
   }
   if (command === 'usage:prune') {

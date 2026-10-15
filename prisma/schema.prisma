@@ -431,6 +431,32 @@ model SpeakingAudioUploadIntent {
   @@map("speaking_audio_upload_intents")
 }
 
+/// An owner-bound Writing Task 1 chart upload and its published URL.
+///
+/// Status and image constraints are owned by migration 0040.
+model WritingChartUpload {
+  id                String    @id
+  organizationId    String    @map("organization_id")
+  endUserId         String    @map("end_user_id")
+  environment       String
+  stagingKey        String    @unique(map: "writing_chart_uploads_staging_key_key") @map("staging_key")
+  publishedKey      String    @unique(map: "writing_chart_uploads_published_key_key") @map("published_key")
+  contentType       String    @map("content_type")
+  byteSize          Int       @map("byte_size")
+  status            String    @default("open")
+  imageUrl          String?   @map("image_url")
+  createdAt         DateTime  @map("created_at") @db.Timestamptz(6)
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(6)
+  publishedAt       DateTime? @map("published_at") @db.Timestamptz(6)
+  retentionExpiresAt DateTime? @map("retention_expires_at") @db.Timestamptz(6)
+
+  @@index([organizationId, environment, createdAt], map: "writing_chart_uploads_org_created_idx")
+  @@index([organizationId, environment, publishedAt], map: "writing_chart_uploads_org_published_idx", where: raw("(status = 'published'::text)"))
+  @@index([expiresAt, createdAt], map: "writing_chart_uploads_intent_expiry_idx", where: raw("(status IN ('open'::text, 'rejected'::text, 'publishing'::text))"))
+  @@index([retentionExpiresAt, createdAt], map: "writing_chart_uploads_retention_idx", where: raw("(status = 'published'::text)"))
+  @@map("writing_chart_uploads")
+}
+
 /// The durable per-request usage record.
 ///
 /// `CHECK` constraints are owned by migration 0005. The BRIN index

@@ -4,4 +4,5 @@
 5 * * * * '@AIHUB_APP_DIR@/scripts/ops/host-scheduled-job.sh' report >/dev/null 2>&1
 45 1 * * * '@AIHUB_APP_DIR@/scripts/ops/host-scheduled-job.sh' ttl-audit >/dev/null 2>&1
 30 3 * * * '@AIHUB_APP_DIR@/scripts/ops/host-scheduled-job.sh' avatar-sweep >/dev/null 2>&1
+*/15 * * * * '@AIHUB_APP_DIR@/scripts/ops/host-scheduled-job.sh' chart-upload-sweep >/dev/null 2>&1
 # END AIHUB MANAGED JOBS

@@ -572,7 +572,7 @@
         }
       },
       "Error503": {
-        "description": "IDENTITY_PROVIDER_UNAVAILABLE | IDENTITY_JWKS_SOURCE_UNAVAILABLE | IDENTITY_CONFIG_CACHE_UNAVAILABLE | AUTH_WEB_SESSION_UNAVAILABLE | AVATAR_STORAGE_UNAVAILABLE | SPEAKING_AUDIO_STORAGE_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
+        "description": "IDENTITY_PROVIDER_UNAVAILABLE | IDENTITY_JWKS_SOURCE_UNAVAILABLE | IDENTITY_CONFIG_CACHE_UNAVAILABLE | AUTH_WEB_SESSION_UNAVAILABLE | AVATAR_STORAGE_UNAVAILABLE | SPEAKING_AUDIO_STORAGE_UNAVAILABLE | WRITING_CHART_STORAGE_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
         "content": {
           "application/json": {
             "schema": {
@@ -609,6 +609,10 @@
                         },
                         {
                           "const": "SPEAKING_AUDIO_STORAGE_UNAVAILABLE",
+                          "type": "string"
+                        },
+                        {
+                          "const": "WRITING_CHART_STORAGE_UNAVAILABLE",
                           "type": "string"
                         },
                         {
@@ -3823,6 +3827,433 @@
                       "properties": {
                         "request_id": {
                           "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/v1/ielts/writing/task1/chart-uploads": {
+      "post": {
+        "operationId": "writing.chartUploads.create",
+        "summary": "Create a Writing Task 1 chart upload intent",
+        "description": "Requires an API key with `writing.grade` and the same declared or signed `X-User-Identity` accepted by Writing Task 1 grading. The intent is bound to that Organization, End User, and API-key environment.\n\nUpload directly to the returned URL with the returned headers. Staging remains private. The URL expires after five minutes; the intent expires after one hour and can be refreshed without extending that deadline. Limits are five intents and five published charts per Organization in a rolling hour.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/UserIdentity"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["content_type", "byte_size"],
+                "properties": {
+                  "content_type": {
+                    "anyOf": [
+                      {
+                        "const": "image/jpeg",
+                        "type": "string"
+                      },
+                      {
+                        "const": "image/png",
+                        "type": "string"
+                      },
+                      {
+                        "const": "image/webp",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "byte_size": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "A five-minute signed PUT URL for private staging storage.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Upload URLs and chart metadata must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "asset_id",
+                        "upload_url",
+                        "method",
+                        "headers",
+                        "expires_at",
+                        "intent_expires_at"
+                      ],
+                      "properties": {
+                        "asset_id": {
+                          "pattern": "^chart_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "upload_url": {
+                          "format": "uri",
+                          "type": "string"
+                        },
+                        "method": {
+                          "const": "PUT",
+                          "type": "string"
+                        },
+                        "headers": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": ["Content-Type"],
+                          "properties": {
+                            "Content-Type": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "expires_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "intent_expires_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/v1/ielts/writing/task1/chart-uploads/{asset_id}/refresh": {
+      "post": {
+        "operationId": "writing.chartUploads.refresh",
+        "summary": "Refresh a Writing Task 1 chart upload URL",
+        "description": "Refreshes the signed URL for the same private staging object without extending the intent deadline.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/UserIdentity"
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "description": "The chart asset ID returned when the upload intent was created.",
+            "schema": {
+              "type": "string",
+              "pattern": "^chart_[0-9A-HJKMNP-TV-Z]{26}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A five-minute signed PUT URL for private staging storage.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Upload URLs and chart metadata must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "asset_id",
+                        "upload_url",
+                        "method",
+                        "headers",
+                        "expires_at",
+                        "intent_expires_at"
+                      ],
+                      "properties": {
+                        "asset_id": {
+                          "pattern": "^chart_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "upload_url": {
+                          "format": "uri",
+                          "type": "string"
+                        },
+                        "method": {
+                          "const": "PUT",
+                          "type": "string"
+                        },
+                        "headers": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": ["Content-Type"],
+                          "properties": {
+                            "Content-Type": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "expires_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "intent_expires_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/v1/ielts/writing/task1/chart-uploads/{asset_id}/complete": {
+      "post": {
+        "operationId": "writing.chartUploads.complete",
+        "summary": "Verify and publish a Writing Task 1 chart",
+        "description": "Checks the stored bytes using bounded ranged reads, verifies JPEG, PNG, or WebP headers and image dimensions, then copies the verified object from private staging into the environment-specific public chart bucket.\n\nThe returned `image_url` is anonymously readable and shareable until it expires 24 hours after publication. Anyone who learns the URL can read and reuse it. Only the same Organization, End User, and environment can complete the upload.",
+        "x-identity-scope": "user",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/UserIdentity"
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "description": "The chart asset ID returned when the upload intent was created.",
+            "schema": {
+              "type": "string",
+              "pattern": "^chart_[0-9A-HJKMNP-TV-Z]{26}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The public image URL and its fixed expiration time.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Upload URLs and chart metadata must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "asset_id",
+                        "image_url",
+                        "content_type",
+                        "byte_size",
+                        "published_at",
+                        "expires_at"
+                      ],
+                      "properties": {
+                        "asset_id": {
+                          "pattern": "^chart_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "image_url": {
+                          "format": "uri",
+                          "type": "string"
+                        },
+                        "content_type": {
+                          "anyOf": [
+                            {
+                              "const": "image/jpeg",
+                              "type": "string"
+                            },
+                            {
+                              "const": "image/png",
+                              "type": "string"
+                            },
+                            {
+                              "const": "image/webp",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "byte_size": {
+                          "minimum": 1,
+                          "maximum": 10485760,
+                          "type": "integer"
+                        },
+                        "published_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "expires_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
                           "type": "string"
                         }
                       }
