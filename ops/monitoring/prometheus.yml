@@ -50,6 +50,8 @@ scrape_configs:
       - targets:
           - api.aihubproduction.com:443
           - sandbox.aihubproduction.com:443
+          - aihubproduction.com:443
+          - www.aihubproduction.com:443
           - s3.wispace.app:443
     relabel_configs:
       - source_labels: [__address__]
