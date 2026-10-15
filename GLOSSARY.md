@@ -124,3 +124,10 @@ in one UTC calendar month, subject to the shared Sandbox ceiling.
 **Sandbox allowance override**:
 A month-specific total Sandbox dispatch allowance for one Organization that
 replaces the default for that month; it is not an additive bonus.
+
+**User identity mode**:
+The `user_identity_mode` signal a successful demo key validation reports:
+`signed_assertion` when the Organization has an active Identity Configuration,
+`declared_id` otherwise. It selects which identity input the demo collects; it
+carries no issuer, JWKS, or key detail, and it authorizes nothing on its own.
+_Also known as_: `user_identity_mode`

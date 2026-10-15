@@ -50,6 +50,8 @@ function validate(
 }
 
 describe('ValidateSandboxDemoKey', () => {
+  // A disabled configuration is absent from the active lookup, which filters on
+  // persisted status, so absent and disabled share this one outcome.
   it('admits the selected environment and scope and reports the Sandbox allowance', async () => {
     await expect(
       validator(async () => null).validate({
@@ -193,6 +195,24 @@ describe('ValidateSandboxDemoKey', () => {
         scope: 'writing.grade',
         grantedScopes: ['writing.grade'],
       }),
+    ).rejects.toMatchObject({
+      code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+      retryable: true,
+    });
+  });
+
+  it('reports an unreachable control plane the same way for a Production selection', async () => {
+    await expect(
+      validate(
+        validator(async () => {
+          throw new Error('connection terminated');
+        }),
+        {
+          environment: 'production',
+          authenticatedEnvironment: 'production',
+          allowedEnvironments: ['production'],
+        },
+      ),
     ).rejects.toMatchObject({
       code: 'IDENTITY_PROVIDER_UNAVAILABLE',
       retryable: true,

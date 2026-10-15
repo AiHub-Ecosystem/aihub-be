@@ -3,10 +3,12 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
+import { SandboxDemoKeyValidationResponseSchema } from '@/contracts/sandbox/demo-key-validation';
 import { WEB_SESSION_CLIENT_SECRET } from '@/modules/auth/application/web-session-client-secret.port';
 import { SANDBOX_DISPATCH_BUDGET } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import type { SandboxDispatchBudgetPort } from '@/modules/gateway/public/sandbox-dispatch-budget';
@@ -44,21 +46,30 @@ const authenticatedApiKey: AuthenticatedApiKey = {
   allowedEnvironments: ['sandbox'],
 };
 
+interface ErrorBody {
+  readonly error: {
+    readonly code: string;
+    readonly message: string;
+    readonly retryable: boolean;
+  };
+}
+
 describe('Sandbox demo key validation HTTP flow', () => {
   let app: NestFastifyApplication;
+  let hostConfig: Record<string, unknown>;
   let authenticated: AuthenticatedApiKey;
   let activeConfig: OrganizationIdentityConfig | null;
   let configReadFailure: Error | null;
-  let reservations: number;
+  let keysIssued = 0;
 
   beforeAll(async () => {
     const authenticator: ApiKeyAuthenticatorPort = {
       authenticate: async () => authenticated,
     };
     const budget: SandboxDispatchBudgetPort = {
-      // Validation reserves nothing, so a reservation here is a test failure.
+      // Validation reserves nothing, so reaching this is a test failure on its
+      // own; no counter is needed to notice it.
       reserve: async () => {
-        reservations += 1;
         throw new Error('validation must never reserve a dispatch');
       },
       release: async () => undefined,
@@ -70,18 +81,20 @@ describe('Sandbox demo key validation HTTP flow', () => {
       }),
     };
 
+    // The selected environment is derived from the serving host, so each case
+    // points that host at the environment its request selects.
+    hostConfig = {
+      ...appConfig(),
+      NODE_ENV: 'test',
+      AIHUB_ALLOW_UNAUTHENTICATED_DEV: false,
+      AIHUB_SANDBOX_HOST: 'localhost',
+      AIHUB_PRODUCTION_HOST: undefined,
+      AIHUB_STAGING_HOST: undefined,
+      AIHUB_DEVELOPMENT_HOST: undefined,
+    };
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(appConfig.KEY)
-      .useValue({
-        ...appConfig(),
-        NODE_ENV: 'test',
-        AIHUB_ALLOW_UNAUTHENTICATED_DEV: false,
-        // The demo selects Sandbox, so the serving host must resolve to it.
-        AIHUB_SANDBOX_HOST: 'localhost',
-        AIHUB_STAGING_HOST: undefined,
-        AIHUB_PRODUCTION_HOST: undefined,
-        AIHUB_DEVELOPMENT_HOST: undefined,
-      })
+      .useValue(hostConfig)
       .overrideProvider(WEB_SESSION_CLIENT_SECRET)
       .useValue({ resolve: () => 'test-bff-client-secret' })
       .overrideProvider(API_KEY_AUTHENTICATOR)
@@ -109,10 +122,16 @@ describe('Sandbox demo key validation HTTP flow', () => {
   });
 
   beforeEach(() => {
-    authenticated = { ...authenticatedApiKey };
+    hostConfig.AIHUB_SANDBOX_HOST = 'localhost';
+    hostConfig.AIHUB_PRODUCTION_HOST = undefined;
+    // A key per case, so the per-key rate limit cannot couple these cases.
+    keysIssued += 1;
+    authenticated = {
+      ...authenticatedApiKey,
+      apiKeyId: `ak_demo_${keysIssued}`,
+    };
     activeConfig = null;
     configReadFailure = null;
-    reservations = 0;
   });
 
   function validate(payload: Readonly<Record<string, unknown>>) {
@@ -129,67 +148,106 @@ describe('Sandbox demo key validation HTTP flow', () => {
     });
   }
 
-  it('reports declared_id for an Organization without active Identity Configuration', async () => {
-    const response = await validate({ scope: 'speaking.grade' });
-
+  /** The validated `data` object, proven against the published schema. */
+  function validatedData(response: {
+    statusCode: number;
+    json(): unknown;
+  }): Record<string, unknown> {
     expect(response.statusCode).toBe(200);
-    const body: unknown = response.json();
-    expect(body).toMatchObject({
-      data: {
-        valid: true,
-        environment: 'sandbox',
-        scope: 'speaking.grade',
-        user_identity_mode: 'declared_id',
-        allowance: { monthly_limit: 5, reserved: 0 },
-      },
-      meta: { request_id: expect.stringMatching(/^req_/) },
+    const body = response.json() as { data?: unknown };
+    expect(Object.keys(body).sort()).toEqual(['data', 'meta']);
+    // The whole response matches the closed contract, so an extra or an
+    // unspecified field fails here rather than reaching the browser.
+    expect(Value.Check(SandboxDemoKeyValidationResponseSchema, body.data)).toBe(
+      true,
+    );
+    return body.data as Record<string, unknown>;
+  }
+
+  /** A refusal envelope carries no `data`, so no identity mode escapes with it. */
+  function refusal(
+    response: { statusCode: number; json(): unknown },
+    status: number,
+  ) {
+    expect(response.statusCode).toBe(status);
+    const body = response.json() as ErrorBody;
+    expect(Object.keys(body)).toEqual(['error']);
+    return body.error;
+  }
+
+  it('reports declared_id for an Organization without active Identity Configuration', async () => {
+    const data = validatedData(await validate({ scope: 'speaking.grade' }));
+
+    expect(data).toMatchObject({
+      valid: true,
+      environment: 'sandbox',
+      scope: 'speaking.grade',
+      user_identity_mode: 'declared_id',
+      allowance: { monthly_limit: 5, reserved: 0 },
     });
-    // The signal carries no Identity Configuration detail.
-    expect(JSON.stringify(body)).not.toContain('issuer');
-    expect(JSON.stringify(body)).not.toContain('jwks');
-    expect(reservations).toBe(0);
   });
 
   it('admits an Organization with active Identity Configuration and reports signed_assertion', async () => {
     activeConfig = identityConfig;
 
-    const response = await validate({ scope: 'writing.grade' });
+    const data = validatedData(await validate({ scope: 'writing.grade' }));
 
-    expect(response.statusCode).toBe(200);
-    const body: unknown = response.json();
-    expect(body).toMatchObject({
-      data: { valid: true, user_identity_mode: 'signed_assertion' },
+    expect(data).toMatchObject({
+      valid: true,
+      scope: 'writing.grade',
+      user_identity_mode: 'signed_assertion',
     });
-    expect(JSON.stringify(body)).not.toContain('issuer');
-    expect(JSON.stringify(body)).not.toContain('jwks');
-    expect(reservations).toBe(0);
+  });
+
+  it('applies the same identity mode to a Production selection with no allowance', async () => {
+    activeConfig = identityConfig;
+    hostConfig.AIHUB_SANDBOX_HOST = undefined;
+    hostConfig.AIHUB_PRODUCTION_HOST = 'localhost';
+    authenticated = {
+      ...authenticatedApiKey,
+      environment: 'production',
+      allowedEnvironments: ['production'],
+    };
+
+    const data = validatedData(
+      await validate({ scope: 'speaking.grade', environment: 'production' }),
+    );
+
+    expect(data).toMatchObject({
+      environment: 'production',
+      user_identity_mode: 'signed_assertion',
+      allowance: null,
+    });
   });
 
   it('refuses an environment the key is not bound to without reporting a mode', async () => {
-    const response = await validate({
-      scope: 'speaking.grade',
-      environment: 'production',
-    });
+    const error = refusal(
+      await validate({ scope: 'speaking.grade', environment: 'production' }),
+      403,
+    );
 
-    expect(response.statusCode).toBe(403);
-    expect(response.json()).not.toHaveProperty('data');
+    expect(error).toMatchObject({ code: 'FORBIDDEN', retryable: false });
   });
 
   it('refuses a scope the key does not carry without reporting a mode', async () => {
-    authenticated = { ...authenticatedApiKey, scopes: ['writing.grade'] };
+    authenticated = {
+      ...authenticated,
+      scopes: ['writing.grade'],
+    };
 
-    const response = await validate({ scope: 'speaking.grade' });
+    const error = refusal(await validate({ scope: 'speaking.grade' }), 403);
 
-    expect(response.statusCode).toBe(403);
-    expect(response.json()).not.toHaveProperty('data');
+    expect(error).toMatchObject({ code: 'FORBIDDEN', retryable: false });
   });
 
   it('fails closed and retryable when the identity configuration cannot be read', async () => {
     configReadFailure = new Error('connection terminated');
 
-    const response = await validate({ scope: 'speaking.grade' });
+    const error = refusal(await validate({ scope: 'speaking.grade' }), 503);
 
-    expect(response.statusCode).toBe(503);
-    expect(JSON.stringify(response.json())).not.toContain('declared_id');
+    expect(error).toMatchObject({
+      code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+      retryable: true,
+    });
   });
 });
