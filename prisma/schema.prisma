@@ -452,7 +452,7 @@ model WritingChartUpload {
 
   @@index([organizationId, environment, createdAt], map: "writing_chart_uploads_org_created_idx")
   @@index([organizationId, environment, publishedAt], map: "writing_chart_uploads_org_published_idx", where: raw("(status = 'published'::text)"))
-  @@index([expiresAt, createdAt], map: "writing_chart_uploads_intent_expiry_idx", where: raw("(status IN ('open'::text, 'rejected'::text, 'publishing'::text))"))
+  @@index([expiresAt, createdAt], map: "writing_chart_uploads_intent_expiry_idx", where: raw("(status = ANY (ARRAY['open'::text, 'rejected'::text, 'publishing'::text]))"))
   @@index([retentionExpiresAt, createdAt], map: "writing_chart_uploads_retention_idx", where: raw("(status = 'published'::text)"))
   @@map("writing_chart_uploads")
 }
