@@ -30,7 +30,9 @@ remains a fixed Mock preview.
 **Upload flow.** The client requests a short-lived upload URL, sends the image
 directly to object storage, then completes the upload through AIHUB. Completion
 returns the published HTTPS URL for the existing `image_url` grading field.
-AIHUB does not proxy image bytes through the grading API.
+The storage POST policy binds the exact declared byte size, so oversized or
+mismatched bodies are rejected before storage accepts the file. AIHUB does not
+proxy image bytes through the grading API.
 
 **Public delivery.** Customer chart images use a dedicated chart hostname and
 dedicated storage bucket, on a registrable domain separate from the API domain

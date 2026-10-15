@@ -3867,7 +3867,7 @@
       "post": {
         "operationId": "writing.chartUploads.create",
         "summary": "Create a Writing Task 1 chart upload intent",
-        "description": "Requires an API key with `writing.grade` and the same declared or signed `X-User-Identity` accepted by Writing Task 1 grading. The intent is bound to that Organization, End User, and API-key environment.\n\nUpload directly to the returned URL with the returned headers. Staging remains private. The URL expires after five minutes; the intent expires after one hour and can be refreshed without extending that deadline. Limits are five intents and five published charts per Organization in a rolling hour.",
+        "description": "Requires an API key with `writing.grade` and the same declared or signed `X-User-Identity` accepted by Writing Task 1 grading. The intent is bound to that Organization, End User, and API-key environment.\n\nUpload directly to the returned URL as `multipart/form-data`, including every returned `fields` entry and the file under `file`. The signed policy limits the stored file to the declared byte size. Staging remains private. The policy expires after five minutes; the intent expires after one hour and can be refreshed without extending that deadline. Limits are five intents and five published charts per Organization in a rolling hour.",
         "x-identity-scope": "user",
         "security": [
           {
@@ -3918,7 +3918,7 @@
         },
         "responses": {
           "201": {
-            "description": "A five-minute signed PUT URL for private staging storage.",
+            "description": "A five-minute signed POST policy and form fields for private staging storage, limited to the declared byte size.",
             "headers": {
               "Cache-Control": {
                 "description": "Upload URLs and chart metadata must not be cached.",
@@ -3942,7 +3942,7 @@
                         "asset_id",
                         "upload_url",
                         "method",
-                        "headers",
+                        "fields",
                         "expires_at",
                         "intent_expires_at"
                       ],
@@ -3956,15 +3956,13 @@
                           "type": "string"
                         },
                         "method": {
-                          "const": "PUT",
+                          "const": "POST",
                           "type": "string"
                         },
-                        "headers": {
-                          "additionalProperties": false,
+                        "fields": {
                           "type": "object",
-                          "required": ["Content-Type"],
-                          "properties": {
-                            "Content-Type": {
+                          "patternProperties": {
+                            "^(.*)$": {
                               "type": "string"
                             }
                           }
@@ -4049,7 +4047,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A five-minute signed PUT URL for private staging storage.",
+            "description": "A five-minute signed POST policy and form fields for private staging storage, limited to the declared byte size.",
             "headers": {
               "Cache-Control": {
                 "description": "Upload URLs and chart metadata must not be cached.",
@@ -4073,7 +4071,7 @@
                         "asset_id",
                         "upload_url",
                         "method",
-                        "headers",
+                        "fields",
                         "expires_at",
                         "intent_expires_at"
                       ],
@@ -4087,15 +4085,13 @@
                           "type": "string"
                         },
                         "method": {
-                          "const": "PUT",
+                          "const": "POST",
                           "type": "string"
                         },
-                        "headers": {
-                          "additionalProperties": false,
+                        "fields": {
                           "type": "object",
-                          "required": ["Content-Type"],
-                          "properties": {
-                            "Content-Type": {
+                          "patternProperties": {
+                            "^(.*)$": {
                               "type": "string"
                             }
                           }

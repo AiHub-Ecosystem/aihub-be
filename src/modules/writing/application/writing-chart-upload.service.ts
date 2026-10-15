@@ -3,16 +3,18 @@ import { invalidRequest } from '@/common/errors/invalid-request';
 import type { IdMinter } from '@/common/ids/prefixed-id';
 import type { RequestContext } from '@/common/request-context/request-context';
 import {
-  WRITING_CHART_INTENT_TTL_MS,
-  WRITING_CHART_MAX_BYTES,
-  type WritingChartEnvironment,
   type WritingChartUploadIntent,
   isWritingChartAssetId,
   isWritingChartContentType,
-  verifyWritingChartBytes,
   writingChartPublishedKey,
   writingChartStagingKey,
 } from '@/modules/writing/domain/writing-chart-upload';
+import { verifyWritingChartImageHeaders } from './writing-chart-image-verifier';
+import {
+  WRITING_CHART_INTENT_TTL_MS,
+  WRITING_CHART_MAX_BYTES,
+  WRITING_CHART_RATE_WINDOW_MS,
+} from './writing-chart-upload.policy';
 import type {
   WritingChartUploadOwner,
   WritingChartUploadRepositoryPort,
@@ -42,31 +44,35 @@ function rateLimited(): AppError {
     code: 'RATE_LIMITED',
     message: 'Writing chart upload limit reached; retry later',
     retryable: true,
-    retryAfterMs: 60 * 60 * 1000,
+    retryAfterMs: WRITING_CHART_RATE_WINDOW_MS,
     retryAfterHeader: true,
   });
 }
 
-function uploadEnvironment(context: RequestContext): WritingChartEnvironment {
-  if (
-    context.organizationId === undefined ||
-    context.userId === undefined ||
-    (context.environment !== 'production' && context.environment !== 'sandbox')
-  ) {
-    throw storageUnavailable();
-  }
-  return context.environment;
+function payloadTooLarge(): AppError {
+  return new AppError({
+    code: 'PAYLOAD_TOO_LARGE',
+    message: 'Writing chart must be 10 MiB or smaller',
+    retryable: false,
+  });
 }
 
 function ownerFromContext(
   context: RequestContext,
   assetId: string,
 ): WritingChartUploadOwner {
-  const environment = uploadEnvironment(context);
+  const { organizationId, userId, environment } = context;
+  if (
+    organizationId === undefined ||
+    userId === undefined ||
+    (environment !== 'production' && environment !== 'sandbox')
+  ) {
+    throw storageUnavailable();
+  }
   return {
     assetId,
-    organizationId: context.organizationId!,
-    endUserId: context.userId!,
+    organizationId,
+    endUserId: userId,
     environment,
   };
 }
@@ -79,17 +85,17 @@ function invalidStoredObject(
     stored?.byteSize !== undefined &&
     stored.byteSize > WRITING_CHART_MAX_BYTES
   ) {
-    return new AppError({
-      code: 'PAYLOAD_TOO_LARGE',
-      message: 'Writing chart must be 10 MiB or smaller',
-      retryable: false,
-    });
+    return payloadTooLarge();
   }
   if (
     stored === undefined ||
     stored.byteSize !== intent.byteSize ||
-    stored.contentType !== intent.contentType ||
-    !verifyWritingChartBytes({
+    stored.contentType !== intent.contentType
+  ) {
+    return invalidRequest();
+  }
+  if (
+    !verifyWritingChartImageHeaders({
       contentType: intent.contentType,
       byteSize: intent.byteSize,
       prefix: stored.prefix,
@@ -120,22 +126,16 @@ export class WritingChartUploadService
     if (!Number.isInteger(input.byteSize) || input.byteSize < 1) {
       throw invalidRequest();
     }
-    if (input.byteSize > WRITING_CHART_MAX_BYTES) {
-      throw new AppError({
-        code: 'PAYLOAD_TOO_LARGE',
-        message: 'Writing chart must be 10 MiB or smaller',
-        retryable: false,
-      });
-    }
+    if (input.byteSize > WRITING_CHART_MAX_BYTES) throw payloadTooLarge();
 
-    const environment = uploadEnvironment(input.context);
     const createdAt = this.now();
     const assetId = this.newAssetId(createdAt);
+    const owner = ownerFromContext(input.context, assetId);
     const intent: WritingChartUploadIntent = {
       assetId,
-      organizationId: input.context.organizationId!,
-      endUserId: input.context.userId!,
-      environment,
+      organizationId: owner.organizationId,
+      endUserId: owner.endUserId,
+      environment: owner.environment,
       stagingKey: writingChartStagingKey(assetId),
       publishedKey: writingChartPublishedKey(assetId),
       contentType: input.contentType,
@@ -145,7 +145,7 @@ export class WritingChartUploadService
       status: 'open',
     };
     const signed = await this.storage.createUploadUrl({
-      environment,
+      environment: owner.environment,
       stagingKey: intent.stagingKey,
       contentType: intent.contentType,
       byteSize: intent.byteSize,
@@ -157,6 +157,7 @@ export class WritingChartUploadService
       contentType: intent.contentType,
       byteSize: intent.byteSize,
       uploadUrl: signed.url,
+      uploadFields: signed.fields,
       uploadUrlExpiresAt: signed.expiresAt,
       intentExpiresAt: intent.expiresAt,
     };
@@ -184,6 +185,8 @@ export class WritingChartUploadService
       contentType: found.intent.contentType,
       byteSize: found.intent.byteSize,
     });
+    // A signed URL can outlive the intent it was issued for; re-read before
+    // handing it back so a completed or expired upload cannot be refreshed.
     const stillOpen = await this.repository.findUpload(owner);
     if (
       stillOpen.kind !== 'intent' ||
@@ -197,6 +200,7 @@ export class WritingChartUploadService
       contentType: found.intent.contentType,
       byteSize: found.intent.byteSize,
       uploadUrl: signed.url,
+      uploadFields: signed.fields,
       uploadUrlExpiresAt: signed.expiresAt,
       intentExpiresAt: found.intent.expiresAt,
     };
@@ -239,8 +243,6 @@ export class WritingChartUploadService
       }
       throw refusal;
     }
-    if (stored === undefined) throw uploadNotFound();
-
     const imageUrl = this.storage.publicUrl({
       environment: found.intent.environment,
       publishedKey: found.intent.publishedKey,

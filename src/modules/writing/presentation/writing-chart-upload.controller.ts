@@ -58,10 +58,8 @@ function uploadResponse(
     data: {
       asset_id: upload.assetId,
       upload_url: upload.uploadUrl,
-      method: 'PUT',
-      headers: {
-        'Content-Type': upload.contentType,
-      },
+      method: 'POST',
+      fields: upload.uploadFields,
       expires_at: upload.uploadUrlExpiresAt.toISOString(),
       intent_expires_at: upload.intentExpiresAt.toISOString(),
     },

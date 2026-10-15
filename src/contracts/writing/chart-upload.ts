@@ -21,13 +21,8 @@ const UploadGrantDataSchema = Type.Object(
   {
     asset_id: Type.String({ pattern: '^chart_[0-9A-HJKMNP-TV-Z]{26}$' }),
     upload_url: Type.String({ format: 'uri' }),
-    method: Type.Literal('PUT'),
-    headers: Type.Object(
-      {
-        'Content-Type': Type.String(),
-      },
-      { additionalProperties: false },
-    ),
+    method: Type.Literal('POST'),
+    fields: Type.Record(Type.String(), Type.String()),
     expires_at: Type.String({ format: 'date-time' }),
     intent_expires_at: Type.String({ format: 'date-time' }),
   },

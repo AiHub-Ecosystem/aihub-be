@@ -235,7 +235,7 @@ and public origin match the environment.
 
 Keep both staging buckets private. Configure their S3 CORS rules for the exact
 deployed Customer Web origins (`CUSTOMER_WEB_BASE_URL` and
-`CUSTOMER_WEB_SANDBOX_BASE_URL`), allow `PUT` and the `Content-Type` request
+`CUSTOMER_WEB_SANDBOX_BASE_URL`), allow `POST` and the `Content-Type` request
 header, and do not enable credentials. The public buckets allow anonymous
 `GetObject` only: no list, write, or delete. Route each public chart hostname
 only to its matching public bucket, never to staging. Keep public writes and
@@ -244,7 +244,7 @@ deletes under the AIHUB storage identity.
 Before public rollout, verify from outside the host that a published object is
 readable at its dedicated chart URL, an incomplete staging object and bucket
 listing return `403`, and anonymous writes to the public bucket return `403`.
-Verify a browser `PUT` from each deployed Customer Web origin succeeds and that
+Verify a browser `POST` from each deployed Customer Web origin succeeds and that
 the other environment cannot read either bucket. The hostnames, bucket policies,
 and CORS settings are deployment gates; this source change does not provision
 them.

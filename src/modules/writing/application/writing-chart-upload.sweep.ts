@@ -1,3 +1,4 @@
+import { WRITING_CHART_ORPHAN_GRACE_MS } from './writing-chart-upload.policy';
 import type {
   WritingChartUploadRepositoryPort,
   WritingChartUploadStoragePort,
@@ -30,6 +31,9 @@ export class WritingChartUploadSweep {
     while (true) {
       const candidates = await this.repository.cleanupCandidates({
         now: input.now,
+        orphanBefore: new Date(
+          input.now.getTime() - WRITING_CHART_ORPHAN_GRACE_MS,
+        ),
         limit: BATCH_SIZE,
         ...(after === undefined ? {} : { after }),
       });

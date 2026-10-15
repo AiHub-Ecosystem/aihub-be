@@ -3,21 +3,24 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
-  PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 
 import { AppError } from '@/common/errors/app-error';
 import {
-  WRITING_CHART_BUCKETS,
   WRITING_CHART_MAX_BYTES,
   WRITING_CHART_RANGE_BYTES,
-  WRITING_CHART_UPLOAD_URL_TTL_SECONDS,
+} from '@/modules/writing/application/writing-chart-upload.policy';
+import type { WritingChartUploadStoragePort } from '@/modules/writing/application/writing-chart-upload.port';
+import {
   type WritingChartContentType,
   type WritingChartEnvironment,
 } from '@/modules/writing/domain/writing-chart-upload';
-import type { WritingChartUploadStoragePort } from '../application/writing-chart-upload.port';
+import {
+  WRITING_CHART_BUCKETS,
+  WRITING_CHART_UPLOAD_URL_TTL_SECONDS,
+} from './writing-chart-storage.policy';
 
 type S3ClientPort = Pick<S3Client, 'send'>;
 
@@ -26,7 +29,6 @@ export interface S3WritingChartUploadStorageOptions {
   readonly stagingBucket?: string;
   readonly publicBucket?: string;
   readonly publicBaseUrl?: string;
-  readonly now?: () => Date;
   readonly client?: S3ClientPort;
 }
 
@@ -41,11 +43,15 @@ function storageUnavailable(cause?: unknown): AppError {
 
 function isNotFound(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
-  const { name, $metadata } = error as {
-    name?: unknown;
-    $metadata?: { httpStatusCode?: unknown };
-  };
-  return name === 'NotFound' || $metadata?.httpStatusCode === 404;
+  if (!('name' in error) || !('$metadata' in error)) return false;
+  const metadata = error.$metadata;
+  return (
+    error.name === 'NotFound' ||
+    (typeof metadata === 'object' &&
+      metadata !== null &&
+      'httpStatusCode' in metadata &&
+      metadata.httpStatusCode === 404)
+  );
 }
 
 function validBaseUrl(value: string | undefined): URL | undefined {
@@ -88,7 +94,6 @@ export class S3WritingChartUploadStorage
   private readonly stagingBucket: string | undefined;
   private readonly publicBucket: string | undefined;
   private readonly publicBaseUrl: URL | undefined;
-  private readonly now: () => Date;
 
   constructor(
     sharedClient: S3Client | undefined,
@@ -97,7 +102,6 @@ export class S3WritingChartUploadStorage
     this.signer = sharedClient;
     this.client = options.client ?? sharedClient;
     this.environment = options.environment;
-    this.now = options.now ?? (() => new Date());
     const buckets = WRITING_CHART_BUCKETS[options.environment];
     this.stagingBucket =
       options.stagingBucket === buckets.staging
@@ -115,7 +119,11 @@ export class S3WritingChartUploadStorage
     readonly stagingKey: string;
     readonly contentType: WritingChartContentType;
     readonly byteSize: number;
-  }): Promise<{ readonly url: string; readonly expiresAt: Date }> {
+  }): Promise<{
+    readonly url: string;
+    readonly fields: Readonly<Record<string, string>>;
+    readonly expiresAt: Date;
+  }> {
     const { signer, bucket } = this.require(
       input.environment,
       input.stagingKey,
@@ -127,23 +135,17 @@ export class S3WritingChartUploadStorage
     }
     if (signer === undefined) throw storageUnavailable();
     const expiresAt = new Date(
-      this.now().getTime() + WRITING_CHART_UPLOAD_URL_TTL_SECONDS * 1_000,
+      Date.now() + WRITING_CHART_UPLOAD_URL_TTL_SECONDS * 1_000,
     );
     try {
-      const url = await getSignedUrl(
-        signer,
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: input.stagingKey,
-          ContentType: input.contentType,
-        }),
-        {
-          expiresIn: WRITING_CHART_UPLOAD_URL_TTL_SECONDS,
-          // Browser Fetch controls Content-Length; completion verifies the stored size.
-          signableHeaders: new Set(['content-type']),
-        },
-      );
-      return { url, expiresAt };
+      const { url, fields } = await createPresignedPost(signer, {
+        Bucket: bucket,
+        Key: input.stagingKey,
+        Expires: WRITING_CHART_UPLOAD_URL_TTL_SECONDS,
+        Conditions: [['content-length-range', input.byteSize, input.byteSize]],
+        Fields: { 'Content-Type': input.contentType },
+      });
+      return { url, fields, expiresAt };
     } catch (error) {
       throw storageUnavailable(error);
     }
@@ -160,9 +162,9 @@ export class S3WritingChartUploadStorage
       'staging',
     );
     try {
-      const head = (await client!.send(
+      const head = await client.send(
         new HeadObjectCommand({ Bucket: bucket, Key: input.stagingKey }),
-      )) as { ContentType?: string; ContentLength?: number; ETag?: string };
+      );
       if (
         head.ContentLength === undefined ||
         head.ContentLength < 1 ||
@@ -170,7 +172,7 @@ export class S3WritingChartUploadStorage
       )
         return undefined;
       const size = head.ContentLength;
-      if (size > WRITING_CHART_MAX_BYTES) {
+      if (size > WRITING_CHART_MAX_BYTES || size !== input.byteSize) {
         return {
           contentType: head.ContentType,
           byteSize: size,
@@ -179,22 +181,31 @@ export class S3WritingChartUploadStorage
           suffix: new Uint8Array(),
         };
       }
-      const firstEnd = Math.min(size, WRITING_CHART_RANGE_BYTES) - 1;
+      const prefixEnd = Math.min(size, WRITING_CHART_RANGE_BYTES) - 1;
       const suffixStart = Math.max(0, size - WRITING_CHART_RANGE_BYTES);
       const [prefix, suffix] = await Promise.all([
-        this.readRange(client!, bucket, input.stagingKey, 0, firstEnd, size),
         this.readRange(
-          client!,
+          client,
+          bucket,
+          input.stagingKey,
+          0,
+          prefixEnd,
+          size,
+          head.ETag,
+        ),
+        this.readRange(
+          client,
           bucket,
           input.stagingKey,
           suffixStart,
           size - 1,
           size,
+          head.ETag,
         ),
       ]);
       return {
         contentType: head.ContentType,
-        byteSize: head.ContentLength,
+        byteSize: size,
         etag: head.ETag,
         prefix,
         suffix,
@@ -219,7 +230,7 @@ export class S3WritingChartUploadStorage
       'published',
     );
     try {
-      await source.client!.send(
+      await source.client.send(
         new CopyObjectCommand({
           Bucket: target.bucket,
           Key: input.publishedKey,
@@ -262,7 +273,7 @@ export class S3WritingChartUploadStorage
       input.stagingKey,
       'staging',
     );
-    await this.delete(client!, bucket, input.stagingKey);
+    await this.delete(client, bucket, input.stagingKey);
   }
 
   async deletePublishedObject(input: {
@@ -274,44 +285,7 @@ export class S3WritingChartUploadStorage
       input.publishedKey,
       'published',
     );
-    await this.delete(client!, bucket, input.publishedKey);
-  }
-
-  private async readRange(
-    client: S3ClientPort,
-    bucket: string,
-    key: string,
-    start: number,
-    end: number,
-    size: number,
-  ): Promise<Uint8Array> {
-    if (end < start) return new Uint8Array();
-    const response = (await client.send(
-      new GetObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Range: `bytes=${start}-${end}`,
-      }),
-    )) as {
-      ContentRange?: string;
-      ContentLength?: number;
-      Body?: { transformToByteArray?: () => Promise<Uint8Array> };
-    };
-    const expected = `bytes ${start}-${end}/${size}`;
-    if (
-      response.ContentRange !== expected ||
-      response.ContentLength !== end - start + 1 ||
-      response.Body?.transformToByteArray === undefined
-    )
-      throw storageUnavailable();
-    const bytes = await response.Body.transformToByteArray();
-    if (
-      bytes.byteLength !== end - start + 1 ||
-      bytes.byteLength > WRITING_CHART_RANGE_BYTES
-    ) {
-      throw storageUnavailable();
-    }
-    return bytes;
+    await this.delete(client, bucket, input.publishedKey);
   }
 
   private async delete(
@@ -326,6 +300,42 @@ export class S3WritingChartUploadStorage
     }
   }
 
+  private async readRange(
+    client: S3ClientPort,
+    bucket: string,
+    key: string,
+    start: number,
+    end: number,
+    size: number,
+    etag: string,
+  ): Promise<Uint8Array> {
+    const response = await client.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Range: `bytes=${start}-${end}`,
+        IfMatch: etag,
+      }),
+    );
+    const expectedSize = end - start + 1;
+    if (
+      response.ContentRange !== `bytes ${start}-${end}/${size}` ||
+      response.ContentLength !== expectedSize ||
+      response.ETag !== etag ||
+      response.Body === undefined
+    ) {
+      throw storageUnavailable();
+    }
+    const bytes = await response.Body.transformToByteArray();
+    if (
+      bytes.byteLength !== expectedSize ||
+      bytes.byteLength > WRITING_CHART_RANGE_BYTES
+    ) {
+      throw storageUnavailable();
+    }
+    return bytes;
+  }
+
   private require(
     environment: WritingChartEnvironment,
     key: string,
@@ -333,24 +343,25 @@ export class S3WritingChartUploadStorage
     requirePublicUrl = false,
   ): {
     readonly signer: S3Client | undefined;
-    readonly client: S3ClientPort | undefined;
+    readonly client: S3ClientPort;
     readonly bucket: string;
     readonly publicBaseUrl: URL | undefined;
   } {
     const validKey = isChartKey(key, target);
+    const client = this.client;
     const bucket =
       target === 'staging' ? this.stagingBucket : this.publicBucket;
     if (
       environment !== this.environment ||
       !validKey ||
-      this.client === undefined ||
+      client === undefined ||
       (requirePublicUrl && this.publicBaseUrl === undefined) ||
       bucket === undefined
     )
       throw storageUnavailable();
     return {
       signer: this.signer,
-      client: this.client,
+      client,
       bucket,
       publicBaseUrl: this.publicBaseUrl,
     };

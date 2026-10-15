@@ -2093,7 +2093,8 @@ function writingChartUploadPathItems(): Record<
   const assetSchema = routeSchemaOf(complete, 'response');
   const grantResponse = (id: typeof create | typeof refresh) => ({
     [routeSuccessKeyOf(id)]: {
-      description: 'A five-minute signed PUT URL for private staging storage.',
+      description:
+        'A five-minute signed POST policy and form fields for private staging storage, limited to the declared byte size.',
       headers: noStore,
       content: { 'application/json': { schema: grantSchema } },
     },
@@ -2106,7 +2107,7 @@ function writingChartUploadPathItems(): Record<
         summary: 'Create a Writing Task 1 chart upload intent',
         description: [
           'Requires an API key with `writing.grade` and the same declared or signed `X-User-Identity` accepted by Writing Task 1 grading. The intent is bound to that Organization, End User, and API-key environment.',
-          'Upload directly to the returned URL with the returned headers. Staging remains private. The URL expires after five minutes; the intent expires after one hour and can be refreshed without extending that deadline. Limits are five intents and five published charts per Organization in a rolling hour.',
+          'Upload directly to the returned URL as `multipart/form-data`, including every returned `fields` entry and the file under `file`. The signed policy limits the stored file to the declared byte size. Staging remains private. The policy expires after five minutes; the intent expires after one hour and can be refreshed without extending that deadline. Limits are five intents and five published charts per Organization in a rolling hour.',
         ].join('\n\n'),
         ...routeIdentityScopeOf(create),
         ...routeSecurityOf(create),

@@ -1,5 +1,9 @@
 import { AppError } from '@/common/errors/app-error';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
+import {
+  WRITING_CHART_ORG_HOURLY_LIMIT,
+  WRITING_CHART_RETENTION_MS,
+} from '@/modules/writing/application/writing-chart-upload.policy';
 import type {
   WritingChartCleanupCandidate,
   WritingChartUploadLookup,
@@ -7,13 +11,11 @@ import type {
   WritingChartUploadRepositoryPort,
 } from '@/modules/writing/application/writing-chart-upload.port';
 import {
-  WRITING_CHART_ORG_HOURLY_LIMIT,
-  WRITING_CHART_ORPHAN_GRACE_MS,
-  WRITING_CHART_RETENTION_MS,
   type WritingChartAsset,
-  type WritingChartEnvironment,
   type WritingChartUploadIntent,
   isWritingChartContentType,
+  isWritingChartEnvironment,
+  isWritingChartUploadStatus,
 } from '@/modules/writing/domain/writing-chart-upload';
 import type {
   Prisma,
@@ -33,8 +35,8 @@ function storeUnavailable(cause?: unknown): AppError {
 function mapIntent(row: WritingChartUploadModel): WritingChartUploadIntent {
   if (
     !isWritingChartContentType(row.contentType) ||
-    !['open', 'rejected', 'publishing'].includes(row.status) ||
-    (row.environment !== 'production' && row.environment !== 'sandbox')
+    !isWritingChartUploadStatus(row.status) ||
+    !isWritingChartEnvironment(row.environment)
   ) {
     throw storeUnavailable(new Error('Writing chart upload intent is invalid'));
   }
@@ -42,14 +44,14 @@ function mapIntent(row: WritingChartUploadModel): WritingChartUploadIntent {
     assetId: row.id,
     organizationId: row.organizationId,
     endUserId: row.endUserId,
-    environment: row.environment as WritingChartEnvironment,
+    environment: row.environment,
     stagingKey: row.stagingKey,
     publishedKey: row.publishedKey,
     contentType: row.contentType,
     byteSize: row.byteSize,
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
-    status: row.status as WritingChartUploadIntent['status'],
+    status: row.status,
   };
 }
 
@@ -84,10 +86,10 @@ function ownerWhere(owner: WritingChartUploadOwner) {
 }
 
 function advisoryKey(
-  owner: Pick<WritingChartUploadOwner, 'organizationId' | 'environment'>,
+  owner: Pick<WritingChartUploadOwner, 'organizationId'>,
   action: string,
 ) {
-  return `${owner.organizationId}:${owner.environment}:writing-chart:${action}`;
+  return `${owner.organizationId}:writing-chart:${action}`;
 }
 
 export class PostgresWritingChartUploadRepository
@@ -102,7 +104,6 @@ export class PostgresWritingChartUploadRepository
       const count = await client.writingChartUpload.count({
         where: {
           organizationId: intent.organizationId,
-          environment: intent.environment,
           createdAt: { gt: since },
         },
       });
@@ -176,7 +177,6 @@ export class PostgresWritingChartUploadRepository
         client.writingChartUpload.count({
           where: {
             organizationId: input.owner.organizationId,
-            environment: input.owner.environment,
             status: 'published',
             publishedAt: { gt: since },
           },
@@ -184,7 +184,6 @@ export class PostgresWritingChartUploadRepository
         client.writingChartUpload.count({
           where: {
             organizationId: input.owner.organizationId,
-            environment: input.owner.environment,
             status: 'publishing',
           },
         }),
@@ -235,12 +234,10 @@ export class PostgresWritingChartUploadRepository
 
   async cleanupCandidates(input: {
     readonly now: Date;
+    readonly orphanBefore: Date;
     readonly limit: number;
     readonly after?: { readonly createdAt: Date; readonly assetId: string };
   }): Promise<readonly WritingChartCleanupCandidate[]> {
-    const orphanDeadline = new Date(
-      input.now.getTime() - WRITING_CHART_ORPHAN_GRACE_MS,
-    );
     const rows = await this.run(() =>
       this.client.writingChartUpload.findMany({
         where: {
@@ -249,7 +246,7 @@ export class PostgresWritingChartUploadRepository
               OR: [
                 {
                   status: { in: ['open', 'rejected', 'publishing'] },
-                  expiresAt: { lte: orphanDeadline },
+                  expiresAt: { lte: input.orphanBefore },
                 },
                 { status: 'published', retentionExpiresAt: { lte: input.now } },
               ],
@@ -273,14 +270,20 @@ export class PostgresWritingChartUploadRepository
         take: input.limit,
       }),
     );
-    return rows.map((row) => ({
-      kind: row.status === 'published' ? 'asset' : 'intent',
-      assetId: row.id,
-      environment: row.environment as WritingChartEnvironment,
-      stagingKey: row.stagingKey,
-      publishedKey: row.publishedKey,
-      createdAt: row.createdAt,
-    }));
+    return rows.map((row) => {
+      if (!isWritingChartEnvironment(row.environment))
+        throw storeUnavailable(
+          new Error('Writing chart environment is invalid'),
+        );
+      return {
+        kind: row.status === 'published' ? 'asset' : 'intent',
+        assetId: row.id,
+        environment: row.environment,
+        stagingKey: row.stagingKey,
+        publishedKey: row.publishedKey,
+        createdAt: row.createdAt,
+      };
+    });
   }
 
   async removeCleanupCandidate(

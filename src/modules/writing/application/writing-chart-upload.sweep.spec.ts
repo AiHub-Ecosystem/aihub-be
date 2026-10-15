@@ -65,6 +65,11 @@ describe('WritingChartUploadSweep', () => {
     expect(storage.deleteStagingObject).toHaveBeenCalledTimes(2);
     expect(storage.deletePublishedObject).toHaveBeenCalledTimes(1);
     expect(repository.removeCleanupCandidate).toHaveBeenCalledTimes(2);
+    expect(repository.cleanupCandidates).toHaveBeenCalledWith({
+      now: new Date('2026-10-16T00:00:00.000Z'),
+      orphanBefore: new Date('2026-10-15T00:00:00.000Z'),
+      limit: 500,
+    });
   });
 
   it('retains the durable row when either object deletion fails', async () => {

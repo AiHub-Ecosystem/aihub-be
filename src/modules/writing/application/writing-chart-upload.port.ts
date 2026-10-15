@@ -43,6 +43,7 @@ export interface WritingChartUploadRepositoryPort {
   releasePublication(owner: WritingChartUploadOwner): Promise<void>;
   cleanupCandidates(input: {
     readonly now: Date;
+    readonly orphanBefore: Date;
     readonly limit: number;
     readonly after?: { readonly createdAt: Date; readonly assetId: string };
   }): Promise<readonly WritingChartCleanupCandidate[]>;
@@ -57,7 +58,11 @@ export interface WritingChartUploadStoragePort {
     readonly stagingKey: string;
     readonly contentType: WritingChartContentType;
     readonly byteSize: number;
-  }): Promise<{ readonly url: string; readonly expiresAt: Date }>;
+  }): Promise<{
+    readonly url: string;
+    readonly fields: Readonly<Record<string, string>>;
+    readonly expiresAt: Date;
+  }>;
   inspectObject(input: {
     readonly environment: WritingChartEnvironment;
     readonly stagingKey: string;
@@ -98,6 +103,7 @@ export interface WritingChartUploadGrant {
   readonly contentType: WritingChartContentType;
   readonly byteSize: number;
   readonly uploadUrl: string;
+  readonly uploadFields: Readonly<Record<string, string>>;
   readonly uploadUrlExpiresAt: Date;
   readonly intentExpiresAt: Date;
 }

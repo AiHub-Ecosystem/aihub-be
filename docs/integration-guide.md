@@ -542,7 +542,8 @@ stays in its fixed Mock mode.
 Create an intent with `POST /v1/ielts/writing/task1/chart-uploads` and
 `{ "content_type": "image/png", "byte_size": 1234 }`. JPEG, PNG, and WebP are
 accepted up to 10 MiB compressed and 20 megapixels. SVG is rejected. Upload
-bytes directly to the signed `PUT` URL using its returned headers, then call
+bytes directly to the signed `POST` URL as `multipart/form-data`, including
+every returned `fields` entry and the file under the `file` field, then call
 `POST /v1/ielts/writing/task1/chart-uploads/{asset_id}/complete`. An expired
 five-minute URL can be refreshed while the one-hour intent is open; refresh
 does not extend the intent. Completion checks bounded ranges of the stored

@@ -26,6 +26,7 @@ import {
 } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
+import { WRITING_CHART_RANGE_BYTES } from '@/modules/writing/application/writing-chart-upload.policy';
 import {
   WRITING_CHART_UPLOAD_CLOCK,
   WRITING_CHART_UPLOAD_REPOSITORY,
@@ -45,17 +46,16 @@ const task1 = JSON.parse(
   readFileSync(join(FIXTURES, 'grade-task1.request.json'), 'utf8'),
 ) as { question: string; url: string; topic: string; essay: string };
 
-function chartBytes(width = 1, height = 1) {
-  const prefix = new Uint8Array(24);
-  prefix.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  const view = new DataView(prefix.buffer);
-  view.setUint32(8, 13, false);
-  prefix.set([0x49, 0x48, 0x44, 0x52], 12);
-  view.setUint32(16, width, false);
-  view.setUint32(20, height, false);
-  const suffix = new Uint8Array(12);
-  suffix.set([0x49, 0x45, 0x4e, 0x44], 4);
-  return { prefix, suffix, byteSize: 36 };
+const VALID_CHART_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWP4//8/AAX+Av5Y8msOAAAAAElFTkSuQmCC',
+  'base64',
+);
+
+function chartBytes() {
+  return {
+    bytes: new Uint8Array(VALID_CHART_PNG),
+    byteSize: VALID_CHART_PNG.length,
+  };
 }
 
 class FakeRepository implements WritingChartUploadRepositoryPort {
@@ -68,7 +68,6 @@ class FakeRepository implements WritingChartUploadRepositoryPort {
     const recent = [...this.rows.values()].filter(
       (row) =>
         row.organizationId === intent.organizationId &&
-        row.environment === intent.environment &&
         row.createdAt.getTime() > intent.createdAt.getTime() - 60 * 60 * 1000,
     );
     if (recent.length >= 5) return false;
@@ -122,7 +121,6 @@ class FakeRepository implements WritingChartUploadRepositoryPort {
     const recent = [...this.rows.values()].filter(
       (row) =>
         row.organizationId === input.owner.organizationId &&
-        row.environment === input.owner.environment &&
         (row.status === 'publishing' ||
           (row.status === 'published' &&
             row.publishedAt.getTime() > input.now.getTime() - 60 * 60 * 1000)),
@@ -197,6 +195,7 @@ class FakeStorage implements WritingChartUploadStoragePort {
     this.uploads.push(input.stagingKey);
     return {
       url: `https://s3.wispace.app/private/${input.stagingKey}?signature=opaque`,
+      fields: { 'Content-Type': input.contentType },
       expiresAt: new Date('2026-10-14T00:05:00.000Z'),
     };
   }
@@ -230,8 +229,10 @@ class FakeStorage implements WritingChartUploadStoragePort {
       contentType: 'image/png',
       byteSize: input.byteSize,
       etag: '"verified-etag"',
-      prefix: input.prefix,
-      suffix: input.suffix,
+      prefix: input.bytes.subarray(0, WRITING_CHART_RANGE_BYTES),
+      suffix: input.bytes.subarray(
+        Math.max(0, input.byteSize - WRITING_CHART_RANGE_BYTES),
+      ),
     });
   }
 }
@@ -343,19 +344,19 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
       method: 'POST',
       url: '/v1/ielts/writing/task1/chart-uploads',
       headers: { host: 'sandbox.test' },
-      payload: { content_type: 'image/png', byte_size: 36 },
+      payload: { content_type: 'image/png', byte_size: chartBytes().byteSize },
     });
     const noScope = await app.inject({
       method: 'POST',
       url: '/v1/ielts/writing/task1/chart-uploads',
       headers: headers('learner-42', 'scope-less'),
-      payload: { content_type: 'image/png', byte_size: 36 },
+      payload: { content_type: 'image/png', byte_size: chartBytes().byteSize },
     });
     const noIdentity = await app.inject({
       method: 'POST',
       url: '/v1/ielts/writing/task1/chart-uploads',
       headers: { host: 'sandbox.test', 'x-api-key': 'valid-key' },
-      payload: { content_type: 'image/png', byte_size: 36 },
+      payload: { content_type: 'image/png', byte_size: chartBytes().byteSize },
     });
     expect(missingKey.statusCode).toBe(401);
     expect(noScope.statusCode).toBe(403);
@@ -369,11 +370,15 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
       method: 'POST',
       url: '/v1/ielts/writing/task1/chart-uploads',
       headers: headers(),
-      payload: { content_type: 'image/png', byte_size: 36 },
+      payload: { content_type: 'image/png', byte_size: chartBytes().byteSize },
     });
     expect(create.statusCode).toBe(201);
     expect(create.headers['cache-control']).toBe('no-store');
     const grant = create.json().data;
+    expect(grant).toMatchObject({
+      method: 'POST',
+      fields: { 'Content-Type': 'image/png' },
+    });
     const intent = repository.rows.get(
       grant.asset_id,
     ) as WritingChartUploadIntent;
@@ -445,13 +450,15 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
       method: 'POST',
       url: '/v1/ielts/writing/task1/chart-uploads',
       headers: headers(),
-      payload: { content_type: 'image/png', byte_size: 36 },
+      payload: { content_type: 'image/png', byte_size: chartBytes().byteSize },
     });
     const assetId = create.json().data.asset_id as string;
     const intent = repository.rows.get(assetId) as WritingChartUploadIntent;
+    const invalidImage = new Uint8Array(chartBytes().byteSize).fill(0x20);
+    invalidImage.set(new TextEncoder().encode('<html>not an image</html>'));
     storage.upload(intent.stagingKey, {
-      ...chartBytes(),
-      prefix: new TextEncoder().encode('<html>not an image</html>'),
+      bytes: invalidImage,
+      byteSize: invalidImage.byteLength,
     });
     const complete = await app.inject({
       method: 'POST',
