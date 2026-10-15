@@ -22,6 +22,8 @@
     "canary:ai-writing": "tsx scripts/ops/canary-ai-writing.ts",
     "capacity:benchmark": "node scripts/ops/capacity-benchmark.mjs",
     "test:capacity-benchmark": "node --test scripts/ops/capacity-benchmark.spec.mjs",
+    "test:monitoring-config": "node --test scripts/ops/check-monitoring-config.spec.cjs",
+    "check:monitoring-config": "node scripts/ops/check-monitoring-config.cjs",
     "benchmark:control-plane": "node scripts/ops/benchmark-control-plane.mjs",
     "vault:provision": "node ops/vault/provision-runtime-secrets.mjs",
     "vault:smoke": "node scripts/ops/vault-smoke.mjs",
@@ -44,7 +46,7 @@
     "knip": "pnpm generate:prisma-client && node scripts/checks/knip.mjs",
     "verify:summary": "node scripts/checks/verify-summary.cjs",
     "provider:refresh": "node scripts/generate/refresh-provider-contract.mjs",
-    "verify": "pnpm knip && pnpm lint && pnpm format:check && pnpm type-check && pnpm arch-check && pnpm check:imports && pnpm check:migrations && pnpm validate:openapi && pnpm test && pnpm test:capacity-benchmark && pnpm build && pnpm check:imports:dist",
+    "verify": "pnpm knip && pnpm lint && pnpm format:check && pnpm type-check && pnpm arch-check && pnpm check:imports && pnpm check:migrations && pnpm validate:openapi && pnpm test && pnpm test:capacity-benchmark && pnpm test:monitoring-config && pnpm build && pnpm check:imports:dist",
     "prepare": "husky"
   },
   "dependencies": {

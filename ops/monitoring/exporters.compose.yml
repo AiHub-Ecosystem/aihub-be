@@ -1,0 +1,93 @@
+name: aihub-monitoring-exporters
+
+services:
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.12.1
+    profiles: [production, monitoring]
+    network_mode: host
+    pid: host
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/host/root
+      - --web.listen-address=${AIHUB_METRICS_BIND_IP:-127.0.0.1}:9100
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro,rslave
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.60.6
+    profiles: [container-metrics]
+    network_mode: host
+    pid: host
+    user: "0:0"
+    command:
+      - --listen_ip=${AIHUB_METRICS_BIND_IP:-127.0.0.1}
+      - --docker_only
+      - --port=19101
+    volumes:
+      - /:/rootfs:ro,rslave
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    restart: unless-stopped
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
+    profiles: [production]
+    network_mode: host
+    command:
+      - --web.listen-address=${AIHUB_METRICS_BIND_IP:-127.0.0.1}:9187
+    environment:
+      DATA_SOURCE_URI: ${AIHUB_POSTGRES_EXPORTER_URI:?set the approved PostgreSQL monitoring URI}
+      DATA_SOURCE_USER: ${AIHUB_POSTGRES_EXPORTER_USER:?set the approved PostgreSQL monitoring role}
+      DATA_SOURCE_PASS_FILE: /run/secrets/postgres-exporter-password
+    volumes:
+      - ${AIHUB_POSTGRES_EXPORTER_PASSWORD_FILE:?set the secret file path}:/run/secrets/postgres-exporter-password:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    restart: unless-stopped
+
+  redis-exporter:
+    image: ghcr.io/oliver006/redis_exporter:v1.93.0-alpine
+    profiles: [monitoring]
+    network_mode: host
+    command:
+      - --web.listen-address=${AIHUB_METRICS_BIND_IP:-127.0.0.1}:9121
+    environment:
+      REDIS_ADDR: ${AIHUB_REDIS_EXPORTER_ADDRESS:?set the observed AIHUB Redis endpoint}
+      REDIS_PASSWORD_FILE: /run/secrets/redis-exporter-password
+    volumes:
+      - ${AIHUB_REDIS_EXPORTER_PASSWORD_FILE:?set the secret file path}:/run/secrets/redis-exporter-password:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    restart: unless-stopped
+
+  blackbox-exporter:
+    image: quay.io/prometheus/blackbox-exporter:v0.28.0
+    profiles: [monitoring]
+    network_mode: host
+    command:
+      - --config.file=/etc/blackbox/blackbox.yml
+      - --web.listen-address=${AIHUB_METRICS_BIND_IP:-127.0.0.1}:9115
+    volumes:
+      - ./blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    restart: unless-stopped
