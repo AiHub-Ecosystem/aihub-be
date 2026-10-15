@@ -9,7 +9,7 @@ function fakePrisma(count: jest.Mock) {
   const findFirst = jest.fn();
   const updateMany = jest.fn().mockResolvedValue({ count: 1 });
   const transaction = {
-    $queryRawUnsafe: lock,
+    $executeRawUnsafe: lock,
     writingChartUpload: { count, create, findFirst, updateMany },
   } as unknown as Prisma.TransactionClient;
   const runTransaction = jest.fn(

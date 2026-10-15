@@ -313,7 +313,8 @@ export class PostgresWritingChartUploadRepository
     client: Prisma.TransactionClient,
     key: string,
   ): Promise<void> {
-    await client.$queryRawUnsafe(
+    // Prisma's query path cannot deserialize PostgreSQL's void result.
+    await client.$executeRawUnsafe(
       'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
       key,
     );
