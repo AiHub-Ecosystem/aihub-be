@@ -229,25 +229,28 @@ Create separate Production and Sandbox staging/public buckets:
 Set the matching `SEAWEEDFS_*_CHART_*_BUCKET` values in `.env.production`;
 Compose maps Sandbox values into the Sandbox app. Set
 `AIHUB_CHART_PUBLIC_BASE_URL` and `AIHUB_SANDBOX_CHART_PUBLIC_BASE_URL` to
-dedicated HTTPS hosts on registrable domains distinct from the API and
-`s3.wispace.app`. Upload creation fails closed until its selected bucket names
-and public origin match the environment.
+`https://s3.wispace.app`. The adapter adds the selected public bucket and object
+key to the URL, so Production and Sandbox remain isolated at
+`/aihub-writing-charts/` and `/aihub-sandbox-writing-charts/`. Upload creation
+fails closed until its selected bucket names and public origin match the
+environment.
 
 Keep both staging buckets private. Configure their S3 CORS rules for the exact
 deployed Customer Web origins (`CUSTOMER_WEB_BASE_URL` and
 `CUSTOMER_WEB_SANDBOX_BASE_URL`), allow `POST` and the `Content-Type` request
 header, and do not enable credentials. The public buckets allow anonymous
-`GetObject` only: no list, write, or delete. Route each public chart hostname
-only to its matching public bucket, never to staging. Keep public writes and
-deletes under the AIHUB storage identity.
+`GetObject` only: no list, write, or delete. The shared S3 host routes bucket
+paths to SeaweedFS; bucket policies keep staging private and restrict anonymous
+access to the two public buckets. Keep public writes and deletes under the AIHUB
+storage identity.
 
 Before public rollout, verify from outside the host that a published object is
-readable at its dedicated chart URL, an incomplete staging object and bucket
-listing return `403`, and anonymous writes to the public bucket return `403`.
-Verify a browser `POST` from each deployed Customer Web origin succeeds and that
-the other environment cannot read either bucket. The hostnames, bucket policies,
-and CORS settings are deployment gates; this source change does not provision
-them.
+readable at its shared-host bucket URL, an incomplete staging object and bucket
+listing return `403`, and anonymous writes and deletes on public buckets return
+`403`. Verify a browser `POST` from each configured Customer Web origin
+succeeds. Completed objects in either public bucket are intentionally readable
+by anyone with the URL; staging remains private. Bucket policies and CORS
+settings are deployment gates; source changes do not provision them.
 
 ### Sweeping Speaking Audio upload orphans
 

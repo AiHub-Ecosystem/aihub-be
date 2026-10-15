@@ -558,10 +558,10 @@ private incomplete objects 24 hours after the intent expires. Each Organization 
 successful publications per rolling hour. Uploads do not consume grading
 quota or create grading or billing records.
 
-The public chart hostname and abuse-report contact are deployment values. The
-upload service remains unavailable until the dedicated HTTPS hostname and
-environment-specific chart buckets are configured. Public rollout also waits
-for the abuse contact and the provider URL-fetch security gate tracked in #376.
+The shared chart delivery origin is `https://s3.wispace.app`; URLs include the
+environment-specific public bucket path. The upload service remains unavailable
+until the matching chart buckets are configured. Public rollout also waits for
+the abuse contact and the provider URL-fetch security gate tracked in #376.
 
 ---
 
@@ -624,10 +624,13 @@ The `image_url` above is a real, reachable URL; the API host is a placeholder
 for your own deployment. The difference is deliberate: the AI Writing service
 fetches the chart itself, outside your request. Use an HTTPS URL from any
 public host; it must be readable with an unauthenticated GET and must not rely
-on credentials or an expiring signature. The accepted provider contract requires
-the URL to resolve only to public addresses and return the image directly,
-without a redirect. Fetches are limited to 10 MiB and 10 seconds. Replace it
-with your own chart's URL when you supply your own essay.
+on credentials or an expiring signature. AIHUB rejects URLs with embedded
+credentials, a port other than 443, or a literal IP address that is not public.
+AIHUB does not resolve hostnames; AI Writing checks every resolved IPv4 and
+IPv6 address before fetching and rejects non-public or special-use destinations.
+It also rejects redirects, limits the response to 10 MiB, and applies a
+10-second total fetch deadline. Replace it with your own chart's URL when you
+supply your own essay.
 
 The `image_url` above points at a sample chart AIHUB hosts, showing UK
 telephone call minutes from 1995 to 2002, and the question and essay in that

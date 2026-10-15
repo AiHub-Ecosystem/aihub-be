@@ -1,6 +1,7 @@
 import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { invalidRequest } from '@/common/errors/invalid-request';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
 import { parseRequestBody } from '@/common/http/parse-request-body';
 import {
@@ -33,6 +34,7 @@ import {
   type MeteringFinalizerPort,
 } from '@/modules/metering/application/metering-finalizer.port';
 import { billBackgroundCompletion } from '@/modules/metering/public/background-completion-billing';
+import { isAllowedTask1ImageUrl } from '@/modules/writing/application/task1-image-url.policy';
 
 const TASK1_OPERATION = 'writing.task1.grade' as const;
 const TASK2_OPERATION = 'writing.task2.grade' as const;
@@ -119,6 +121,10 @@ export class WritingGradingController {
     @Body() body: unknown,
   ): Promise<DispatchResult<GradeResponse>> {
     const input = parseRequestBody(GradeTask1RequestSchema, body);
+    if (!isAllowedTask1ImageUrl(input.image_url)) {
+      throw invalidRequest();
+    }
+
     const idempotencyKey = resolveIdempotencyKey(
       TASK1_OPERATION,
       request.headers['idempotency-key'],

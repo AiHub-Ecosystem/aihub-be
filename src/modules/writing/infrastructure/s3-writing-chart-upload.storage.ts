@@ -62,13 +62,11 @@ function validBaseUrl(value: string | undefined): URL | undefined {
       url.protocol !== 'https:' ||
       url.username !== '' ||
       url.password !== '' ||
+      url.port !== '' ||
+      url.hostname.toLowerCase() !== 's3.wispace.app' ||
+      url.pathname !== '/' ||
       url.search !== '' ||
-      url.hash !== '' ||
-      ['aihubproduction.com', 'wispace.app'].some(
-        (domain) =>
-          url.hostname.toLowerCase() === domain ||
-          url.hostname.toLowerCase().endsWith(`.${domain}`),
-      )
+      url.hash !== ''
     )
       return undefined;
     return new URL(url.href.endsWith('/') ? url.href : `${url.href}/`);
@@ -254,14 +252,14 @@ export class S3WritingChartUploadStorage
     readonly environment: WritingChartEnvironment;
     readonly publishedKey: string;
   }): string {
-    const { publicBaseUrl } = this.require(
+    const { bucket, publicBaseUrl } = this.require(
       input.environment,
       input.publishedKey,
       'published',
       true,
     );
     if (publicBaseUrl === undefined) throw storageUnavailable();
-    return new URL(input.publishedKey, publicBaseUrl).href;
+    return new URL(`${bucket}/${input.publishedKey}`, publicBaseUrl).href;
   }
 
   async deleteStagingObject(input: {

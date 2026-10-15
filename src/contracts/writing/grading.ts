@@ -29,6 +29,8 @@ export const CRITERION_IDS = [
   'grammatical_range_accuracy',
 ] as const;
 
+export const TASK1_IMAGE_URL_MAX_LENGTH = 2_000;
+
 export type CriterionId = (typeof CRITERION_IDS)[number];
 
 const CriterionIdSchema = Type.Union(
@@ -43,7 +45,9 @@ export const GradeTask1RequestSchema = Type.Object(
     image_url: Type.String({
       format: 'uri',
       pattern: '^[hH][tT][tT][pP][sS]://',
-      maxLength: 2_000,
+      maxLength: TASK1_IMAGE_URL_MAX_LENGTH,
+      description:
+        'HTTPS URL without userinfo or a non-443 port. IP literals must be public; DNS hosts are checked by AI Writing.',
     }),
     language: Type.Optional(LanguageSchema),
   },

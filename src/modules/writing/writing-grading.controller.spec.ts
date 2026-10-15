@@ -15,7 +15,6 @@ import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstrea
 import { IDEMPOTENCY_REPOSITORY } from '@/modules/idempotency/application/idempotency-repository.port';
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
-import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 
 const FIXTURES = join(__dirname, '../../../test/fixtures/ai-writing');
 
@@ -46,6 +45,7 @@ describe('Writing grading HTTP flow', () => {
   let mockAgent: MockAgent;
   let task1DownstreamCalls = 0;
   let task2DownstreamCalls = 0;
+  let dispatchAttemptCalls = 0;
   const originalEnv = {
     allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
     nodeEnv: process.env.NODE_ENV,
@@ -104,7 +104,13 @@ describe('Writing grading HTTP flow', () => {
       .overrideProvider(IDEMPOTENCY_REPOSITORY)
       .useValue(new InMemoryIdempotencyRepository())
       .overrideProvider(DISPATCH_ATTEMPT_RECORD)
-      .useValue(noOpDispatchAttemptRecord)
+      .useValue({
+        beginAttempt: async () => {
+          dispatchAttemptCalls += 1;
+          return `test-dispatch-attempt-${dispatchAttemptCalls}`;
+        },
+        recordOutcome: async () => undefined,
+      })
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -188,24 +194,48 @@ describe('Writing grading HTTP flow', () => {
     expect(task1DownstreamCalls).toBe(before + 1);
   });
 
-  it('rejects a non-HTTPS Task 1 image URL before downstream dispatch', async () => {
-    const before = task1DownstreamCalls;
-    const response = await app.inject({
-      method: 'POST',
-      url: '/v1/ielts/writing/task1/grade',
-      headers: { 'idempotency-key': 'fixture-task1-http-image-url' },
-      payload: {
-        question: task1Request.question,
-        chart_type: task1Request.topic,
-        essay: task1Request.essay,
-        image_url: 'http://charts.customer.example/chart.png',
-      },
-    });
+  it.each([
+    ['http', 'http://charts.customer.example/chart.png'],
+    ['file', 'file:///etc/passwd'],
+    ['userinfo', 'https://user:pass@charts.customer.example/chart.png'],
+    ['empty userinfo', 'https://@charts.customer.example/chart.png'],
+    ['private IPv4', 'https://10.0.0.5/chart.png'],
+    ['loopback IPv4', 'https://127.0.0.1/chart.png'],
+    ['short IPv4 loopback form', 'https://127.1/chart.png'],
+    ['link-local IPv4', 'https://169.254.169.254/latest/meta-data/'],
+    ['unspecified IPv4', 'https://0.0.0.0/chart.png'],
+    ['multicast IPv4', 'https://224.0.0.1/chart.png'],
+    ['loopback IPv6', 'https://[::1]/chart.png'],
+    ['private IPv6', 'https://[fc00::1]/chart.png'],
+    ['link-local IPv6', 'https://[fe80::1]/chart.png'],
+    ['multicast IPv6', 'https://[ff02::1]/chart.png'],
+    ['non-default port', 'https://charts.customer.example:8443/chart.png'],
+    ['oversized URL', `https://charts.customer.example/${'a'.repeat(2_000)}`],
+  ])(
+    'rejects unsafe Task 1 image URL (%s) before dispatch',
+    async (kind, imageUrl) => {
+      const beforeDownstreamCalls = task1DownstreamCalls;
+      const beforeDispatchAttempts = dispatchAttemptCalls;
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/writing/task1/grade',
+        headers: {
+          'idempotency-key': `fixture-task1-rejected-${kind.toLowerCase().replaceAll(' ', '-')}`,
+        },
+        payload: {
+          question: task1Request.question,
+          chart_type: task1Request.topic,
+          essay: task1Request.essay,
+          image_url: imageUrl,
+        },
+      });
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
-    expect(task1DownstreamCalls).toBe(before);
-  });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expect(task1DownstreamCalls).toBe(beforeDownstreamCalls);
+      expect(dispatchAttemptCalls).toBe(beforeDispatchAttempts);
+    },
+  );
 
   it('replays a completed Task 1 result and marks the response', async () => {
     const headers = { 'idempotency-key': 'fixture-task1-replay' };

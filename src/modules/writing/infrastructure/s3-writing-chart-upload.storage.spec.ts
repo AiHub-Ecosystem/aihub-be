@@ -17,7 +17,7 @@ function createStorage(send = jest.fn().mockResolvedValue({}), overrides = {}) {
       environment: 'sandbox',
       stagingBucket: 'aihub-sandbox-writing-chart-staging',
       publicBucket: 'aihub-sandbox-writing-charts',
-      publicBaseUrl: 'https://charts.example.net',
+      publicBaseUrl: 'https://s3.wispace.app',
       client: { send } as unknown as Pick<S3Client, 'send'>,
       ...overrides,
     },
@@ -159,7 +159,9 @@ describe('S3WritingChartUploadStorage contract', () => {
       environment: 'sandbox',
       publishedKey: PUBLISHED_KEY,
     });
-    expect(url).toBe(`https://charts.example.net/${PUBLISHED_KEY}`);
+    expect(url).toBe(
+      `https://s3.wispace.app/aihub-sandbox-writing-charts/${PUBLISHED_KEY}`,
+    );
     expect(url).not.toContain('?');
     expect(() =>
       adapter.publicUrl({
@@ -169,12 +171,30 @@ describe('S3WritingChartUploadStorage contract', () => {
     ).toThrow('Writing chart storage is unavailable');
   });
 
-  it('rejects shared media buckets and a public origin on the API or S3 registrable domain', async () => {
+  it('uses the Production public bucket in shared-host URLs', () => {
+    const adapter = createStorage(jest.fn(), {
+      environment: 'production',
+      stagingBucket: 'aihub-writing-chart-staging',
+      publicBucket: 'aihub-writing-charts',
+    });
+
+    expect(
+      adapter.publicUrl({
+        environment: 'production',
+        publishedKey: PUBLISHED_KEY,
+      }),
+    ).toBe(`https://s3.wispace.app/aihub-writing-charts/${PUBLISHED_KEY}`);
+  });
+
+  it('rejects shared media buckets and public origins other than the configured S3 host', async () => {
     for (const options of [
       { publicBucket: 'aihub-user-assets' },
       { publicBaseUrl: undefined },
       { publicBaseUrl: 'https://charts.aihubproduction.com' },
       { publicBaseUrl: 'https://media.wispace.app' },
+      { publicBaseUrl: 'https://s3.wispace.app/charts' },
+      { publicBaseUrl: 'https://s3.wispace.app:8443' },
+      { publicBaseUrl: 'http://s3.wispace.app' },
     ]) {
       const adapter = createStorage(jest.fn().mockResolvedValue({}), options);
       await expect(
