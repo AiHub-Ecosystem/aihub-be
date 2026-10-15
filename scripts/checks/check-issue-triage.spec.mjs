@@ -18,14 +18,14 @@ function issue({
   return out;
 }
 
-test('well-formed ready issue passes', () => {
+await test('well-formed ready issue passes', () => {
   assert.deepEqual(
     findViolations([issue({ labels: ['ready-for-agent', 'P2'] })]),
     [],
   );
 });
 
-test('missing milestone is flagged', () => {
+await test('missing milestone is flagged', () => {
   const v = findViolations([
     issue({ labels: ['ready-for-agent', 'P2'], milestone: null }),
   ]);
@@ -33,39 +33,39 @@ test('missing milestone is flagged', () => {
   assert.ok(v[0].reasons.some((r) => r.includes('no milestone')));
 });
 
-test('no triage role is flagged', () => {
+await test('no triage role is flagged', () => {
   const v = findViolations([issue({ labels: ['P1'] })]);
   assert.ok(v[0].reasons.some((r) => r.includes('no triage role')));
 });
 
-test('multiple roles are flagged', () => {
+await test('multiple roles are flagged', () => {
   const v = findViolations([
     issue({ labels: ['ready-for-agent', 'needs-triage', 'P1'] }),
   ]);
   assert.ok(v[0].reasons.some((r) => r.includes('multiple triage roles')));
 });
 
-test('multiple priorities are flagged', () => {
+await test('multiple priorities are flagged', () => {
   const v = findViolations([
     issue({ labels: ['ready-for-agent', 'P1', 'P2'] }),
   ]);
   assert.ok(v[0].reasons.some((r) => r.includes('multiple priority labels')));
 });
 
-test('ready-for-* without a priority is flagged', () => {
+await test('ready-for-* without a priority is flagged', () => {
   const v = findViolations([issue({ labels: ['ready-for-human'] })]);
   assert.ok(v[0].reasons.some((r) => r.includes('without a priority')));
 });
 
-test('needs-triage without a priority is allowed (not yet prioritised)', () => {
+await test('needs-triage without a priority is allowed (not yet prioritised)', () => {
   assert.deepEqual(findViolations([issue({ labels: ['needs-triage'] })]), []);
 });
 
-test('needs-info without a priority is allowed', () => {
+await test('needs-info without a priority is allowed', () => {
   assert.deepEqual(findViolations([issue({ labels: ['needs-info'] })]), []);
 });
 
-test('pull requests are skipped', () => {
+await test('pull requests are skipped', () => {
   assert.deepEqual(
     findViolations([issue({ pull_request: {}, labels: [] })]),
     [],
