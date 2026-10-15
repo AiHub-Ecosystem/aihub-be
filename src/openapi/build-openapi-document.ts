@@ -1761,8 +1761,9 @@ function sandboxDemoKeyValidationPathItem(
       operationId: id,
       summary: 'Validate a demo key for the selected environment',
       description: [
-        'Customer Web BFF only. Checks that the active API key is bound to the selected environment, has the requested Writing or Speaking grading scope, and belongs to an Organization without active Identity Configuration.',
-        'This route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and advisory; each grading operation authenticates the key again.',
+        'Customer Web BFF only. Checks that the active API key is bound to the selected environment and carries the requested Writing or Speaking grading scope, then reports which user-identity input the demo collects next.',
+        '`user_identity_mode` is `signed_assertion` when the Organization has an active Identity Configuration and `declared_id` otherwise. It selects the browser input only and exposes no Identity Configuration detail.',
+        'This route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and advisory; each upload and grading operation authenticates the key again and enforces the Organization identity policy. Active Identity Configuration requires a valid Signed User Assertion; otherwise, the Declared User ID flow applies.',
       ].join('\n\n'),
       ...routeIdentityScopeOf(id),
       ...routeSecurityOf(id),
