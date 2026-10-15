@@ -86,6 +86,28 @@ identifier, credential, user content, pseudonymous identifier, or metadata; it
 does not make a legal determination.
 _Avoid_: legal category
 
+**End-User ID**:
+The identifier AIHUB associates with a user's operation and usage record. It is
+obtained from either a Signed User Assertion or a Declared User ID.
+_Avoid_: API-key owner ID
+
+**Organization Identity Configuration**:
+An Organization-owned policy for verifying end-user identity. When active, it
+requires Signed User Assertions; when absent or disabled, it permits Declared
+User IDs.
+_Avoid_: JWKS health
+
+**Signed User Assertion**:
+A short-lived signed token issued by an Organization's backend that asserts an
+End-User ID under that Organization's active identity policy.
+_Avoid_: API key, plain user ID
+
+**Declared User ID**:
+A plain End-User ID supplied by an application when its Organization has no
+active Identity Configuration; AIHUB does not cryptographically verify who it
+identifies.
+_Avoid_: signed assertion
+
 **Customer Sandbox API key**:
 An Organization-owned API key whose stored authorization permits the Sandbox
 Environment. Its prefix does not grant access; the backend checks the key's
