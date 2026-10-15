@@ -2918,7 +2918,7 @@
       "post": {
         "operationId": "sandbox.demo-key.validate",
         "summary": "Validate a demo key for the selected environment",
-        "description": "Customer Web BFF only. Checks that the active API key is bound to the selected environment, has the requested Writing or Speaking grading scope, and belongs to an Organization without active Identity Configuration.\n\nThis route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and advisory; each grading operation authenticates the key again.",
+        "description": "Customer Web BFF only. Checks that the active API key is bound to the selected environment and carries the requested Writing or Speaking grading scope, then reports which user-identity input the demo collects next.\n\n`user_identity_mode` is `signed_assertion` when the Organization has an active Identity Configuration and `declared_id` otherwise. It selects the browser input only and exposes no Identity Configuration detail.\n\nThis route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and advisory; each grading operation authenticates the key again and verifies its own Signed User Assertion.",
         "x-identity-scope": "organization",
         "security": [
           {
@@ -2997,6 +2997,7 @@
                         "valid",
                         "environment",
                         "scope",
+                        "user_identity_mode",
                         "allowance"
                       ],
                       "properties": {
@@ -3024,6 +3025,18 @@
                             },
                             {
                               "const": "speaking.grade",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "user_identity_mode": {
+                          "anyOf": [
+                            {
+                              "const": "signed_assertion",
+                              "type": "string"
+                            },
+                            {
+                              "const": "declared_id",
                               "type": "string"
                             }
                           ]

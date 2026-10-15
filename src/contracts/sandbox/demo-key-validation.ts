@@ -43,11 +43,21 @@ export const SandboxDemoAllowanceSchema = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * Which user-identity input the demo must collect next. Advisory: it selects
+ * the browser's input only, and exposes no identity configuration detail.
+ */
+export const SandboxDemoUserIdentityModeSchema = Type.Union([
+  Type.Literal('signed_assertion'),
+  Type.Literal('declared_id'),
+]);
+
 export const SandboxDemoKeyValidationResponseSchema = Type.Object(
   {
     valid: Type.Literal(true),
     environment: SandboxDemoEnvironmentSchema,
     scope: SandboxDemoScopeSchema,
+    user_identity_mode: SandboxDemoUserIdentityModeSchema,
     /** Absent in Production, and in Sandbox when the policy store cannot be read. */
     allowance: Type.Union([SandboxDemoAllowanceSchema, Type.Null()]),
   },
@@ -57,6 +67,9 @@ export const SandboxDemoKeyValidationResponseSchema = Type.Object(
 export type SandboxDemoScope = Static<typeof SandboxDemoScopeSchema>;
 export type SandboxDemoEnvironment = Static<
   typeof SandboxDemoEnvironmentSchema
+>;
+export type SandboxDemoUserIdentityMode = Static<
+  typeof SandboxDemoUserIdentityModeSchema
 >;
 export type SandboxDemoKeyValidationRequest = Static<
   typeof SandboxDemoKeyValidationRequestSchema

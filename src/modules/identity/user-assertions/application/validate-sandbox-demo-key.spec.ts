@@ -64,6 +64,7 @@ describe('ValidateSandboxDemoKey', () => {
       valid: true,
       environment: 'sandbox',
       scope: 'speaking.grade',
+      userIdentityMode: 'declared_id',
       allowance: {
         monthlyLimit: 5,
         reserved: 1,
@@ -87,6 +88,7 @@ describe('ValidateSandboxDemoKey', () => {
       valid: true,
       environment: 'production',
       scope: 'speaking.grade',
+      userIdentityMode: 'declared_id',
       allowance: null,
     });
   });
@@ -141,7 +143,7 @@ describe('ValidateSandboxDemoKey', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
-  it('refuses an Organization with an active Identity Configuration', async () => {
+  it('admits an Organization with an active Identity Configuration and reports signed assertion', async () => {
     await expect(
       validate(
         validator(async () => CONFIG),
@@ -150,7 +152,27 @@ describe('ValidateSandboxDemoKey', () => {
           grantedScopes: ['writing.grade'],
         },
       ),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    ).resolves.toMatchObject({
+      valid: true,
+      userIdentityMode: 'signed_assertion',
+    });
+  });
+
+  it('admits a Production selection for an Organization with active Identity Configuration', async () => {
+    await expect(
+      validate(
+        validator(async () => CONFIG),
+        {
+          environment: 'production',
+          authenticatedEnvironment: 'production',
+          allowedEnvironments: ['production'],
+        },
+      ),
+    ).resolves.toMatchObject({
+      valid: true,
+      environment: 'production',
+      userIdentityMode: 'signed_assertion',
+    });
   });
 
   it('reports an unreadable allowance as absent rather than as a default', async () => {

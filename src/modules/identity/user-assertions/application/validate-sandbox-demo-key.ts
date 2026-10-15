@@ -1,6 +1,7 @@
 import type {
   SandboxDemoEnvironment,
   SandboxDemoScope,
+  SandboxDemoUserIdentityMode,
 } from '@/contracts/sandbox/demo-key-validation';
 import type {
   SandboxAllowanceSnapshot,
@@ -33,6 +34,7 @@ export interface SandboxDemoKeyEligibility {
   readonly valid: true;
   readonly environment: SandboxDemoEnvironment;
   readonly scope: SandboxDemoScope;
+  readonly userIdentityMode: SandboxDemoUserIdentityMode;
   /** null in Production, and in Sandbox when policy state cannot be read. */
   readonly allowance: SandboxAllowanceSnapshot | null;
 }
@@ -42,12 +44,14 @@ export interface SandboxDemoKeyEligibility {
  * environment and scope.
  *
  * The selected environment is checked against the key's stored binding and its
- * prefix against nothing: the database is the only authority. The Organization
- * must have no active Identity Configuration: a configured Organization
- * authenticates its end users through signed assertions rather than through a
- * customer-managed key, so its key is not a demo credential. The repositories
- * are reached here, in the application layer, so the lookups and the translation
- * of a persistence failure stay out of the controller.
+ * prefix against nothing: the database is the only authority. An active Identity
+ * Configuration no longer refuses the key; it selects which user-identity input
+ * the demo collects next. That signal authorizes nothing: every identity-scoped
+ * upload and grading call re-reads the configuration and verifies the supplied
+ * assertion itself, and an unreadable configuration fails closed as retryable
+ * rather than falling back to `declared_id`. The repositories are reached here,
+ * in the application layer, so the lookups and the translation of a persistence
+ * failure stay out of the controller.
  *
  * Nothing here dispatches: the only budget call is the read that reports a
  * current allowance, and it reserves nothing.
@@ -82,12 +86,13 @@ export class ValidateSandboxDemoKey {
     } catch (error) {
       throw identityProviderUnavailable(error);
     }
-    if (configured !== null) throw forbidden(NOT_AUTHORIZED);
 
     return {
       valid: true,
       environment: input.environment,
       scope: input.scope,
+      userIdentityMode:
+        configured === null ? 'declared_id' : 'signed_assertion',
       allowance:
         input.environment === 'sandbox'
           ? await this.budget.allowanceFor(input.organizationId)
