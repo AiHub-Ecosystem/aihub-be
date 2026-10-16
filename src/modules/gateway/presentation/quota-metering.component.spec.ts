@@ -45,10 +45,6 @@ class FakeUsageRepository implements UsageRepositoryPort {
   async insert(record: UsageRecord): Promise<void> {
     this.records.push(record);
   }
-
-  aggregate(): Promise<never> {
-    return Promise.reject(new Error('not used in this test'));
-  }
 }
 
 const baseAuthenticated: AuthenticatedApiKey = {

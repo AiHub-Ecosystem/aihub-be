@@ -21,7 +21,6 @@ describe('background-completed grading billing', () => {
     insert: async (record) => {
       records.push(record);
     },
-    aggregate: () => Promise.reject(new Error('unused')),
   };
   const quota: Pick<QuotaCounterPort, 'increment'> = {
     increment: async ({ organizationId }) => {

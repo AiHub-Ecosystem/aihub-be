@@ -3,6 +3,8 @@ import type { Pool } from 'pg';
 import { createPostgresIdempotencyClient } from '@/modules/idempotency/infrastructure/postgres-idempotency.client';
 import { PostgresIdempotencyRepository } from '@/modules/idempotency/infrastructure/postgres-idempotency.repository';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
+import { parseBillingMonth } from '@/modules/metering/application/billing-statement';
+import { PostgresBillingStatementRepository } from '@/modules/metering/infrastructure/postgres-billing-statement.repository';
 import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/postgres-usage.repository';
 import { PostgresUsageRepository } from '@/modules/metering/infrastructure/postgres-usage.repository';
 
@@ -31,7 +33,9 @@ let redisClients: TenantIsolationRedisClients;
 let fixture: TenantIsolationFixture;
 let idempotency: PostgresIdempotencyRepository;
 let idempotencyClient: ReturnType<typeof createPostgresIdempotencyClient>;
+let meteringClient: ReturnType<typeof createPostgresMeteringClient>;
 let usage: PostgresUsageRepository;
+let billingStatement: PostgresBillingStatementRepository;
 
 function idempotencyInput(organizationId: string, requestId: string) {
   return {
@@ -82,9 +86,9 @@ beforeAll(async () => {
   redisClients = createTenantIsolationRedisClients();
   idempotencyClient = createPostgresIdempotencyClient(testDatabaseUrl());
   idempotency = new PostgresIdempotencyRepository(idempotencyClient);
-  usage = new PostgresUsageRepository(
-    createPostgresMeteringClient(testDatabaseUrl()),
-  );
+  meteringClient = createPostgresMeteringClient(testDatabaseUrl());
+  usage = new PostgresUsageRepository(meteringClient);
+  billingStatement = new PostgresBillingStatementRepository(meteringClient);
 });
 
 beforeEach(async () => {
@@ -148,7 +152,7 @@ describe('tenant isolation for durable records', () => {
     expect(JSON.stringify(replay)).not.toContain(B_RESPONSE.marker);
   });
 
-  it('keeps usage aggregates and billable evidence inside the requested Organization', async () => {
+  it('keeps billing statement evidence inside the requested Organization', async () => {
     await usageRecord(
       ORGANIZATION_A,
       'req_usage_a',
@@ -162,22 +166,17 @@ describe('tenant isolation for durable records', () => {
       22,
     );
 
-    const from = new Date('2026-01-01T00:00:00.000Z');
-    const to = new Date('2027-01-01T00:00:00.000Z');
+    const month = parseBillingMonth('2026-09');
     await expect(
-      usage.aggregate({ organizationId: ORGANIZATION_A, from, to }),
-    ).resolves.toEqual({
-      billableRequestCount: 1,
-      billableTokenCount: 11,
-      missingUsageCount: 0,
-    });
+      billingStatement.usage(month, ORGANIZATION_A),
+    ).resolves.toEqual([
+      expect.objectContaining({ organizationId: ORGANIZATION_A }),
+    ]);
     await expect(
-      usage.aggregate({ organizationId: ORGANIZATION_B, from, to }),
-    ).resolves.toEqual({
-      billableRequestCount: 1,
-      billableTokenCount: 22,
-      missingUsageCount: 0,
-    });
+      billingStatement.usage(month, ORGANIZATION_B),
+    ).resolves.toEqual([
+      expect.objectContaining({ organizationId: ORGANIZATION_B }),
+    ]);
     const foreignUsage = await pool.query<{ request_id: string }>(
       `SELECT request_id
        FROM usage_records

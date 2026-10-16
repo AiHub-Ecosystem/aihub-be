@@ -27,22 +27,8 @@ export interface UsageRecord {
   readonly billingBasis: BillingBasis;
 }
 
-export interface UsageAggregateQuery {
-  readonly organizationId: string;
-  readonly from: Date;
-  readonly to: Date;
-  readonly operation?: string;
-}
-
-export interface UsageAggregate {
-  readonly billableRequestCount: number;
-  readonly billableTokenCount: number;
-  readonly missingUsageCount: number;
-}
-
 export interface UsageRepositoryPort {
   insert(record: UsageRecord): Promise<void>;
-  aggregate(query: UsageAggregateQuery): Promise<UsageAggregate>;
   close?(): Promise<void>;
 }
 

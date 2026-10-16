@@ -43,8 +43,6 @@ import type {
 } from '@/modules/idempotency/application/idempotency-service.port';
 import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
 import type {
-  UsageAggregate,
-  UsageAggregateQuery,
   UsageRecord,
   UsageRepositoryPort,
 } from '@/modules/metering/application/usage-repository.port';
@@ -154,14 +152,6 @@ class InMemoryUsageRepository implements UsageRepositoryPort {
 
   async insert(record: UsageRecord): Promise<void> {
     this.records.push(record);
-  }
-
-  async aggregate(_query: UsageAggregateQuery): Promise<UsageAggregate> {
-    return {
-      billableRequestCount: 0,
-      billableTokenCount: 0,
-      missingUsageCount: 0,
-    };
   }
 }
 

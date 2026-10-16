@@ -7,11 +7,9 @@ import {
 
 function fakePrisma(
   options: {
-    aggregateRows?: readonly unknown[];
     createFails?: Error;
   } = {},
 ) {
-  const raw = jest.fn().mockResolvedValue(options.aggregateRows ?? []);
   const create = jest.fn(async (_args: unknown) => {
     if (options.createFails !== undefined) {
       throw options.createFails;
@@ -26,12 +24,10 @@ function fakePrisma(
       callback(transaction),
   );
   const client = {
-    $queryRawUnsafe: raw,
     $transaction: runTransaction,
   } as unknown as PrismaClient;
   return {
     client: client as PrismaMeteringClient,
-    raw,
     create,
     runTransaction,
   };
@@ -106,36 +102,5 @@ describe('PostgresUsageRepository', () => {
     await expect(
       new PostgresUsageRepository(client).insert(record),
     ).rejects.toBe(collision);
-  });
-
-  it('maps aggregate counts without exposing SQL rows to callers', async () => {
-    const { client, raw } = fakePrisma({
-      aggregateRows: [
-        {
-          billable_request_count: 2n,
-          billable_token_count: 15n,
-          missing_usage_count: 1n,
-        },
-      ],
-    });
-    const result = await new PostgresUsageRepository(client).aggregate({
-      organizationId: 'org_acme',
-      from: new Date('2026-09-01T00:00:00Z'),
-      to: new Date('2026-10-01T00:00:00Z'),
-      operation: 'writing.task1.grade',
-    });
-
-    expect(result).toEqual({
-      billableRequestCount: 2,
-      billableTokenCount: 15,
-      missingUsageCount: 1,
-    });
-    expect(raw).toHaveBeenCalledWith(
-      expect.any(String),
-      'org_acme',
-      new Date('2026-09-01T00:00:00Z'),
-      new Date('2026-10-01T00:00:00Z'),
-      'writing.task1.grade',
-    );
   });
 });

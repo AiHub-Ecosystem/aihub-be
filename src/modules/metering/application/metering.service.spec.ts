@@ -22,10 +22,6 @@ class FakeUsageRepository implements UsageRepositoryPort {
     }
     this.records.push(record);
   }
-
-  aggregate(): Promise<never> {
-    return Promise.reject(new Error('not used in this test'));
-  }
 }
 
 class FakeFailureLogger implements MeteringFailureLoggerPort {

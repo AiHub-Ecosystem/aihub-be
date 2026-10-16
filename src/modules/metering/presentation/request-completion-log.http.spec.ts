@@ -40,11 +40,7 @@ import {
   type ApiKeyAuthenticatorPort,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { ApiKeyGuard } from '@/modules/identity/api-keys/presentation/api-key.guard';
-import type {
-  UsageAggregate,
-  UsageAggregateQuery,
-  UsageRecord,
-} from '@/modules/metering/application/usage-repository.port';
+import type { UsageRecord } from '@/modules/metering/application/usage-repository.port';
 import { USAGE_REPOSITORY } from '@/modules/metering/application/usage-repository.port';
 import { registerRequestHooks } from '@/register-request-hooks';
 import { getOwnPrototypeMethod } from '../../../../test/support/own-prototype-method';
@@ -202,14 +198,6 @@ class ScriptedUsageRepository {
 
     this.records.push(record);
     return Promise.resolve();
-  }
-
-  aggregate(_query: UsageAggregateQuery): Promise<UsageAggregate> {
-    return Promise.resolve({
-      billableRequestCount: 0,
-      billableTokenCount: 0,
-      missingUsageCount: 0,
-    });
   }
 }
 
