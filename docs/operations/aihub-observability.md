@@ -56,7 +56,7 @@ Redis uses a dedicated ACL user with only `PING`, aggregate `INFO`, `CLIENT SETN
 
 ## Deploy and validate
 
-Keep the Compose file, Prometheus config/rules, blackbox config, PostgreSQL query, and SQL function under `/home/ngoc_anh/aihub-monitoring` on each host. Keep `.env` and secret files outside that directory's tracked source if it is a checkout; set directory/file permissions before starting containers.
+Keep the Compose file, Prometheus config/rules, blackbox config, PostgreSQL aggregate query/function, and statement installer/report under `/home/ngoc_anh/aihub-monitoring` on each host. Keep `.env` and secret files outside that directory's tracked source if it is a checkout; set directory/file permissions before starting containers.
 
 On Production, set `AIHUB_METRICS_BIND_IP=127.0.0.1`, `AIHUB_POSTGRES_EXPORTER_URI=127.0.0.1:5433/aihub?sslmode=disable`, and the secret-file path. Enable `production` and `container-metrics` profiles. On the monitoring host, set `AIHUB_METRICS_BIND_IP=172.27.0.1`, the observed Redis address `redis://redis:6379`, the restricted SSH identity, and its pinned host key; enable the `monitoring` profile. The `.env` file on each host must satisfy Compose interpolation for the complete file, including fields for inactive profiles.
 
@@ -114,6 +114,18 @@ Use the cAdvisor `name` label to identify the affected `aihub...` container, the
 
 Compare `connections_total` with `max_connections`; investigate the shared cluster using its approved operator workflow. The exporter function exposes counts and durations only, not SQL text or per-role activity.
 
+#### Statement statistics and privacy gate
+
+The read-only production check on 2026-10-16 found PostgreSQL 16.15 with an empty `shared_preload_libraries`, `compute_query_id=auto`, and `pg_stat_statements` 1.10 available but not installed in any connectable database. PostgreSQL last started at `2026-10-12 08:11:15 UTC`. The `aihub_monitoring` login exists, is a non-superuser, and is not a member of `pg_monitor` or `pg_read_all_stats`. The database container belongs to the separate Compose project `/home/VietHXQ/aihub`; #362 has not recorded its owner contact or a change-notification agreement. Do not change or restart it without a maintenance window coordinated with every affected application owner.
+
+`pg_stat_statements` must be loaded through the cluster-wide `shared_preload_libraries` setting and requires a PostgreSQL restart. Loading it collects statement statistics across the shared cluster; install the extension only in `aihub` and `aihub_sandbox` ([PostgreSQL 16 documentation](https://www.postgresql.org/docs/16/pgstatstatements.html)). The current shared `aihub_admin` superuser is used by multiple applications (#298), so the cluster owner and affected application owners must review this data exposure before enabling it.
+
+After the coordinated restart, verify the module is loaded and `compute_query_id` is not `off`, then run [`postgres-statements.sql`](../../ops/monitoring/postgres-statements.sql) separately in `aihub` and `aihub_sandbox` as `aihub_admin`. Its database guard rejects other databases. Verify the extension exists in those two databases only. The `aihub_monitoring.statement_stats()` `SECURITY DEFINER` function filters rows to the current database and returns only `queryid`, database name, calls, total execution time, and mean execution time. It never returns statement text. Do not grant `pg_monitor`, `pg_read_all_stats`, or direct access to query text.
+
+Before accepting the privacy gate, review a sample of normalized statement text in a privileged, private session, filtered to one AIHUB database. Do not copy the text to a terminal transcript, issue, or report. PostgreSQL usually replaces constants with parameter markers, but may expose original constants when entries are frequently evicted; if a sample contains personal data or credentials, disable the feature and resolve the exposure before continuing. Record only pass/fail and the sample count ([normalization caveat](https://www.postgresql.org/docs/16/pgstatstatements.html)).
+
+Use [`postgres-statements-report.sql`](../../ops/monitoring/postgres-statements-report.sql) with the `aihub_monitoring` login to produce separate top-20 lists by total and mean execution time. The report deliberately omits SQL text; `calls` provides context for high mean times. Preserve the cumulative statistics and do not reset them during verification.
+
 ### Redis
 
 Check `redis_memory_used_bytes`, command latency, and the observed 256 MiB limit. Use the Redis operator's ACL-safe checks; do not enable key collection or `CONFIG` access to investigate an alert.
@@ -127,6 +139,8 @@ Inspect `/api/v1/targets` through the loopback Prometheus tunnel and check the a
 Inspect the `probe_success` and `probe_ssl_earliest_cert_expiry` series for the named hostname. The probe runs hourly; a failed probe is distinct from an expiry threshold alert.
 
 ## Deployment evidence
+
+On 2026-10-16, a temporary `AIHUBAlertDeliveryTest` warning alert was accepted by Alertmanager's v2 API (`HTTP 200`) and routed to `discord-warning`. During the 35-second observation window, the Discord notification-latency sample count rose from 209 to 211 and Discord notification failure counters remained zero. The canary was absent from the active alert groups after its five-minute expiry. These are aggregate counters and do not confirm a human saw the message. Critical/Pushover/Telegram receivers were not exercised.
 
 2026-10-16 rollout: UFW is active with default-deny input and allows only Prometheus `172.27.0.12` over bridge `br-21a4afb75b60` to gateway `172.27.0.1` on TCP `9100` and `19100-19102`. AIHUB Prometheus now reserves `.12`; access from another monitoring-network container timed out while the configured Prometheus container reached all four exporter endpoints. The AIHUB Prometheus UI and candidate exporter ports `9094`, `9100`, `9115`, `9121`, `9187`, and `19100-19102` were closed/filtered from the operator workstation on both hosts. Production Docker reports the `overlayfs` containerd snapshotter, so cAdvisor also mounts the read-only containerd socket; both runtime sockets remain root-equivalent access.
 
@@ -144,6 +158,7 @@ Do not record secrets, raw connection strings, or IPs from request data here.
 - No exporter or Prometheus UI is reachable from the internet; outside-port results are recorded.
 - The certificate job completes an hourly scrape for all five agreed hostnames and emits fresh expiry data.
 - `pg_stat_statements` is enabled and privacy-checked after a shared-cluster restart coordinated with all affected service owners.
+- The monitoring role can read only AIHUB database/queryid timing fields through the restricted function; the top-statements report contains no SQL text.
 - All #474 rules have entries in the #412 alert catalog.
 - PostgreSQL and Redis access is verified at the restricted-function/ACL boundary.
 - Measured service and host resource use fits the approved ceilings.
