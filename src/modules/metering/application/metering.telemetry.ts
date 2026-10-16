@@ -1,3 +1,4 @@
+import { isUsableCount } from '@/common/counts/is-usable-count';
 import type {
   MeteringModel,
   MeteringTelemetry,
@@ -9,9 +10,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function nonNegativeInteger(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0
-    ? value
-    : undefined;
+  return isUsableCount(value) ? value : undefined;
 }
 
 function boundedText(value: unknown): string | undefined {

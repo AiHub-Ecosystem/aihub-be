@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 
+import { isUsableCount } from '@/common/counts/is-usable-count';
 import type {
   QuotaCounterPort,
   QuotaCounterRequest,
@@ -30,17 +31,13 @@ function monthKey(organizationId: string, now: Date): string {
   return quotaKeyForMonth(organizationId, quotaPeriod(now).key);
 }
 
-function validCount(value: number): boolean {
-  return Number.isSafeInteger(value) && value >= 0;
-}
-
 function parseCount(value: string): number {
   if (!/^(?:0|[1-9]\d*)$/.test(value)) {
     throw new Error('Redis quota counter value is invalid');
   }
 
   const count = Number(value);
-  if (!validCount(count)) {
+  if (!isUsableCount(count)) {
     throw new Error('Redis quota counter value is invalid');
   }
   return count;
@@ -94,7 +91,7 @@ export class RedisQuotaCounter implements QuotaCounterPort {
     try {
       const key = monthKey(request.organizationId, this.now());
       const count = await this.client.incr(key);
-      if (!validCount(count) || count === 0) {
+      if (!isUsableCount(count) || count === 0) {
         throw new Error('Redis quota counter result is invalid');
       }
 

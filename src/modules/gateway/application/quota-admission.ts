@@ -1,3 +1,5 @@
+import { isUsableCount } from '@/common/counts/is-usable-count';
+
 import type { QuotaCounterPort } from './quota-counter.port';
 import { quotaExceededError } from './quota-period';
 
@@ -9,10 +11,6 @@ export interface QuotaAdmissionInput {
 
 /** `unverified`: admitted although the counter could not be trusted. */
 export type QuotaAdmission = 'verified' | 'unverified';
-
-function validCount(value: number): boolean {
-  return Number.isSafeInteger(value) && value >= 0;
-}
 
 /**
  * Decides whether a production request fits the monthly quota. A counter that
@@ -27,7 +25,7 @@ export async function admitMonthlyQuota(
   let count: number;
   try {
     count = await counter.read({ organizationId: input.organizationId });
-    if (!validCount(count)) {
+    if (!isUsableCount(count)) {
       throw new Error('quota counter value is invalid');
     }
   } catch {

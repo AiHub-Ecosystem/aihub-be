@@ -1,3 +1,4 @@
+import { isUsableCount } from '@/common/counts/is-usable-count';
 import type {
   QuotaCounterOverwritePort,
   QuotaCounterOverwriteRequest,
@@ -10,17 +11,13 @@ export type RedisQuotaReconciliationClient = Pick<
   'set' | 'quit'
 >;
 
-function validCount(value: number): boolean {
-  return Number.isSafeInteger(value) && value >= 0;
-}
-
 export class RedisQuotaReconciliationCounter
   implements QuotaCounterOverwritePort
 {
   constructor(private readonly client: RedisQuotaReconciliationClient) {}
 
   async overwrite(request: QuotaCounterOverwriteRequest): Promise<void> {
-    if (!validCount(request.count)) {
+    if (!isUsableCount(request.count)) {
       throw new Error('Redis quota counter value is invalid');
     }
 

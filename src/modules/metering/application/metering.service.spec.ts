@@ -173,6 +173,29 @@ describe('MeteringService', () => {
     ]);
   });
 
+  // A token count above the largest exactly representable integer is not a
+  // count. `Number.isInteger` calls it one, and a usage record that reads as
+  // complete while its own numbers cannot be summed exactly is worse than one
+  // that admits something is missing.
+  it('refuses a token count that cannot be represented exactly', async () => {
+    const repository = new FakeUsageRepository();
+    const service = new MeteringService(repository);
+
+    await service.finalize({
+      ...input,
+      operation: 'speaking.grading',
+      usage: {
+        inputTokens: Number.MAX_SAFE_INTEGER + 1,
+        outputTokens: 8,
+        totalTokens: 20,
+      },
+    });
+
+    expect(repository.records[0]).toEqual(
+      expect.objectContaining({ meteringStatus: 'missing_usage' }),
+    );
+  });
+
   it('preserves valid partial usage without marking a non-reporting service anomalous', async () => {
     const repository = new FakeUsageRepository();
     const service = new MeteringService(repository);

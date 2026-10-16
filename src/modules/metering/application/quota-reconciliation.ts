@@ -1,3 +1,4 @@
+import { isUsableCount } from '@/common/counts/is-usable-count';
 import { quotaMonth, quotaPeriod } from '@/modules/gateway/public/quota-period';
 import type {
   QuotaCounterOverwritePort,
@@ -128,10 +129,6 @@ export function parseTargetMonth(
   };
 }
 
-function validCount(value: number): boolean {
-  return Number.isSafeInteger(value) && value >= 0;
-}
-
 interface OrderedSnapshot {
   readonly organizationId: string;
   readonly billableCount: number;
@@ -161,10 +158,8 @@ function orderedSnapshots(
       if (
         typeof snapshot.organizationId !== 'string' ||
         snapshot.organizationId.length === 0 ||
-        typeof snapshot.monthlyRequestQuota !== 'number' ||
-        !validCount(snapshot.monthlyRequestQuota) ||
-        typeof snapshot.billableRequestCount !== 'number' ||
-        !validCount(snapshot.billableRequestCount)
+        !isUsableCount(snapshot.monthlyRequestQuota) ||
+        !isUsableCount(snapshot.billableRequestCount)
       ) {
         throw new QuotaReconciliationSnapshotError();
       }

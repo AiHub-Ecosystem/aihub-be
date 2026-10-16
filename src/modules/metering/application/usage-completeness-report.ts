@@ -1,4 +1,5 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { isUsableCount } from '@/common/counts/is-usable-count';
 import type { DownstreamId } from '@/downstream/downstream.types';
 import { DOWNSTREAM_USAGE_REPORTING } from './metering.service';
 
@@ -103,10 +104,6 @@ export function usageReportOperations(): readonly UsageReportOperationDefinition
     .sort((left, right) => left.operation.localeCompare(right.operation));
 }
 
-function validCount(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
-}
-
 function orderedOperations(
   operations: readonly UsageReportOperationDefinition[],
 ): readonly UsageReportOperationDefinition[] {
@@ -166,8 +163,8 @@ function snapshotMap(
       typeof row.operation !== 'string' ||
       !eligible.has(row.operation) ||
       result.has(row.operation) ||
-      !validCount(row.successfulCount) ||
-      !validCount(row.missingUsageCount) ||
+      !isUsableCount(row.successfulCount) ||
+      !isUsableCount(row.missingUsageCount) ||
       row.missingUsageCount > row.successfulCount
     ) {
       throw new UsageReportSnapshotError();

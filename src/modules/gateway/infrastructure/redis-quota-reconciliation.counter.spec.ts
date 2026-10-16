@@ -72,6 +72,23 @@ describe('RedisQuotaReconciliationCounter', () => {
     ).toBe('4');
   });
 
+  // The admission guard refuses this value, so the overwrite path must refuse it
+  // too: a reconciliation that stored a counter the guard would have rejected
+  // would leave the two disagreeing about what the same number means.
+  it('refuses a count above the largest exactly representable integer', async () => {
+    const redis = new FakeRedis();
+    const counter = new RedisQuotaReconciliationCounter(redis);
+
+    await expect(
+      counter.overwrite({
+        organizationId: 'org_alpha',
+        month: '2026-09',
+        count: Number.MAX_SAFE_INTEGER + 1,
+      }),
+    ).rejects.toThrow('Redis quota counter value is invalid');
+    expect(redis.values.size).toBe(0);
+  });
+
   it('surfaces a failed SET without pretending the key was repaired', async () => {
     const redis = new FakeRedis();
     redis.result = null;

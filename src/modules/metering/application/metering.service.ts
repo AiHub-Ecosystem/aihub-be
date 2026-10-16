@@ -2,6 +2,7 @@ import {
   type MeteringMode,
   OPERATION_CATALOG,
 } from '@/catalog/operation-catalog';
+import { isUsableCount } from '@/common/counts/is-usable-count';
 import type { DownstreamId } from '@/downstream/downstream.types';
 import type { QuotaCounterPort } from '@/modules/gateway/application/quota-counter.port';
 import type {
@@ -26,9 +27,7 @@ const NOOP_QUOTA_COUNTER: Pick<QuotaCounterPort, 'increment'> = {
 };
 
 function nonNegativeInteger(value: number | undefined): number | undefined {
-  return value !== undefined && Number.isInteger(value) && value >= 0
-    ? value
-    : undefined;
+  return isUsableCount(value) ? value : undefined;
 }
 
 function safeText(value: string | undefined): string | undefined {
@@ -66,8 +65,8 @@ export function resolveMeteringStatus(input: {
     usage?.inputTokens !== undefined &&
     usage.outputTokens !== undefined &&
     usage.totalTokens !== undefined &&
-    [usage.inputTokens, usage.outputTokens, usage.totalTokens].every(
-      (value) => Number.isInteger(value) && value >= 0,
+    [usage.inputTokens, usage.outputTokens, usage.totalTokens].every((value) =>
+      isUsableCount(value),
     );
   if (complete) {
     return 'complete';
