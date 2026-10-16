@@ -115,8 +115,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The unit lane reports coverage as well as asserting: it is the only job
+      # that runs where no Redis or Postgres answers, which is what the lane's
+      # contract is, and the `coverage` job merges this report with the database
+      # lane's to judge one figure.
       - name: Run unit tests
-        run: pnpm test
+        run: pnpm coverage:unit
+
+      - name: Upload the unit lane coverage report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unit-coverage
+          path: coverage/unit/coverage-final.json
+          if-no-files-found: error
+          # Consumed by the `coverage` job in this same run and never after.
+          retention-days: 1
 
       - name: Test monitoring config checker
         run: pnpm test:monitoring-config
@@ -252,15 +265,24 @@ jobs:
       # the lane's default in test/db/database.ts, so CI exercises the same path
       # a developer does and a broken default fails here too.
       #
-      # This lane is deliberately NOT also asked for a coverage report. Merged
-      # coverage needs the unit lane's report in this job's workspace, and the
-      # unit lane must run where no Redis answers: this job sets REDIS_URL for
-      # the database lane, so running the unit suite here left the lane's rate
-      # limiter counters in Redis and the unit suite answered 429. Wiring the
-      # merge needs the unit report to travel from the `test` job as an
-      # artifact, which is waiting on pinned upload/download action SHAs.
+      # This lane is deliberately NOT also asked to run the unit suite: it sets
+      # REDIS_URL, so running the unit suite here left the lane's rate limiter
+      # counters in Redis and that suite answered 429 where it expected 200.
+      # The unit lane's report travels from the `test` job as an artifact
+      # instead, and the `coverage` job is where the two are merged.
+      #
+      # `coverage:db` is this same lane plus a coverage report, not a second
+      # run: the assertions and the advisory lock are identical.
       - name: Run the database-backed lane
-        run: pnpm test:db
+        run: pnpm coverage:db
+
+      - name: Upload the database lane coverage report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: db-coverage
+          path: coverage/db/coverage-final.json
+          if-no-files-found: error
+          retention-days: 1
 
       # `schema.prisma` and the migration history describe the same schema. This
       # builds one from the migrations in a scratch database and fails when
@@ -324,6 +346,60 @@ jobs:
 
       - name: Run the cross-tenant isolation lane
         run: pnpm test:tenant-isolation
+
+  # One coverage figure per pull request, merged across the lanes that test
+  # `src`, and a failure when it falls past the agreed margin. Reading a single
+  # lane's number answers a different question than the next: the database
+  # repositories report 0% branches in the unit lane because only the database
+  # lane runs them.
+  coverage:
+    name: Merged coverage
+    needs:
+      - test
+      - database
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.20.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download the unit lane coverage report
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: unit-coverage
+          path: coverage/unit
+
+      - name: Download the database lane coverage report
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: db-coverage
+          path: coverage/db
+
+      # The margin and the reason for it live beside the constant in the script.
+      # The baseline is committed, so a drop is measured against main rather
+      # than against whatever the previous run produced. `pipefail` keeps the
+      # gate's exit code through the pipe that publishes the report.
+      - name: Report merged coverage and fail on a drop past the agreed margin
+        run: |
+          set -o pipefail
+          pnpm coverage:merged -- --check | tee -a "$GITHUB_STEP_SUMMARY"
 
   # The only job that runs the artifact CD deploys. The build lane builds `dist` with
   # the host's Node and the unit and database lanes each assemble a slice of
@@ -490,6 +566,7 @@ jobs:
       - audit
       - database
       - tenant-isolation
+      - coverage
       - image
       - publish-image
     runs-on: ubuntu-latest
@@ -504,6 +581,7 @@ jobs:
           AUDIT_RESULT: ${{ needs.audit.result }}
           DATABASE_RESULT: ${{ needs.database.result }}
           TENANT_ISOLATION_RESULT: ${{ needs.tenant-isolation.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
           IMAGE_RESULT: ${{ needs.image.result }}
           PUBLISH_IMAGE_RESULT: ${{ needs.publish-image.result }}
           EVENT_NAME: ${{ github.event_name }}
@@ -515,6 +593,7 @@ jobs:
           test "$AUDIT_RESULT" = success
           test "$DATABASE_RESULT" = success
           test "$TENANT_ISOLATION_RESULT" = success
+          test "$COVERAGE_RESULT" = success
           test "$IMAGE_RESULT" = success
           if [ "$EVENT_NAME" = push ] && [ "$REF" = refs/heads/main ]; then
             test "$PUBLISH_IMAGE_RESULT" = success
