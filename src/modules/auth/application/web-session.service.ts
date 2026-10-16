@@ -4,7 +4,7 @@ import type {
   AuthMfaServicePort,
   MfaSessionProof,
 } from './auth-mfa-repository.port';
-import { enforceAuthRateLimit } from './auth-rate-limit';
+import { enforceAuthRateLimits } from './auth-rate-limit';
 import { type AuthRateLimiterPort } from './auth-rate-limiter.port';
 import { type LocalAuthServiceClock } from './local-auth.service';
 import {
@@ -365,15 +365,14 @@ export class WebSessionService implements WebSessionServicePort {
     tokenHash: string,
     endUserIp: string | undefined,
   ): Promise<void> {
-    if (endUserIp !== undefined) {
-      await enforceAuthRateLimit(this.rateLimiter, {
-        ...EXCHANGE_IP_RATE_LIMIT,
-        key: endUserIp,
-      });
-    }
-    await enforceAuthRateLimit(this.rateLimiter, {
-      ...EXCHANGE_TOKEN_RATE_LIMIT,
-      key: tokenHash,
-    });
+    // Both dimensions are spent before the refusal is built, so a caller held by
+    // the token budget is also charged for the address budget and is told the
+    // longer of the two waits.
+    await enforceAuthRateLimits(this.rateLimiter, [
+      ...(endUserIp === undefined
+        ? []
+        : [{ ...EXCHANGE_IP_RATE_LIMIT, key: endUserIp }]),
+      { ...EXCHANGE_TOKEN_RATE_LIMIT, key: tokenHash },
+    ]);
   }
 }

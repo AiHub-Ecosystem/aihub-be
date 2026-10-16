@@ -1,6 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import { normalizeLogin } from '@/modules/auth/domain/local-auth';
+import { checkAuthRateLimits, enforceAuthRateLimits } from './auth-rate-limit';
 import { type AuthRateLimiterPort } from './auth-rate-limiter.port';
 import { type PasswordHasherPort } from './password-hasher.port';
 import { type UserAccountRepositoryPort } from './user-account.port';
@@ -37,39 +38,15 @@ export interface CredentialCheckPorts {
   readonly rateLimiter: AuthRateLimiterPort;
 }
 
-function loginRateLimited(retryAfterMs: number | undefined): AppError {
-  return new AppError({
-    code: 'RATE_LIMITED',
-    message: 'Too many requests',
-    retryable: true,
-    retryAfterHeader: true,
-    ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
-  });
-}
-
 export async function checkLoginLimits(
   rateLimiter: AuthRateLimiterPort,
   ip: string,
   email: string,
 ): Promise<void> {
-  const limits = [
+  await checkAuthRateLimits(rateLimiter, [
     { ...LOGIN_RATE_LIMITS.ip, key: ip },
     { ...LOGIN_RATE_LIMITS.email, key: JSON.stringify([ip, email]) },
-  ];
-  let blocked = false;
-  let retryAfterMs: number | undefined;
-  for (const limit of limits) {
-    const result = await rateLimiter.check(limit);
-    if (!result.allowed) {
-      blocked = true;
-      if (result.retryAfterMs !== undefined) {
-        retryAfterMs = Math.max(retryAfterMs ?? 0, result.retryAfterMs);
-      }
-    }
-  }
-  if (blocked) {
-    throw loginRateLimited(retryAfterMs);
-  }
+  ]);
 }
 
 async function consumeLoginFailureLimits(
@@ -77,27 +54,10 @@ async function consumeLoginFailureLimits(
   ip: string,
   email: string,
 ): Promise<void> {
-  const limits = [
+  await enforceAuthRateLimits(rateLimiter, [
     { ...LOGIN_RATE_LIMITS.ip, key: ip },
-    {
-      ...LOGIN_RATE_LIMITS.email,
-      key: JSON.stringify([ip, email]),
-    },
-  ];
-  let blocked = false;
-  let retryAfterMs: number | undefined;
-  for (const limit of limits) {
-    const result = await rateLimiter.consume(limit);
-    if (!result.allowed) {
-      blocked = true;
-      if (result.retryAfterMs !== undefined) {
-        retryAfterMs = Math.max(retryAfterMs ?? 0, result.retryAfterMs);
-      }
-    }
-  }
-  if (blocked) {
-    throw loginRateLimited(retryAfterMs);
-  }
+    { ...LOGIN_RATE_LIMITS.email, key: JSON.stringify([ip, email]) },
+  ]);
 }
 
 /** The verified password snapshot must still match when a session is committed. */

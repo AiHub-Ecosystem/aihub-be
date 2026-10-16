@@ -86,13 +86,15 @@ function routeSecurityOf(routeId: PublicRouteId): Record<string, unknown> {
   }
 }
 
-const LOGIN_PRECHECK_ROUTES: ReadonlySet<PublicRouteId> = new Set([
-  'auth.login',
-  'auth.web_sessions.create',
-  'auth.mfa.enrollment',
-  'auth.mfa.enrollment.confirm',
-  'auth.mfa.remove',
-]);
+/**
+ * Every `429` on an authentication route is the one refusal the auth module
+ * builds, so every one of them answers with the retry hint. The gateway's
+ * per-operation limit is a different refusal on routes that carry an API key,
+ * and it carries no header; that difference is what this keeps separate.
+ */
+function carriesRetryAfterHeader(routeId: PublicRouteId): boolean {
+  return routeId.startsWith('auth.');
+}
 
 function routeErrorResponsesOf(
   routeId: PublicRouteId,
@@ -121,8 +123,8 @@ function routeErrorResponsesOf(
       String(status),
       {
         $ref:
-          status === 429 && LOGIN_PRECHECK_ROUTES.has(routeId)
-            ? '#/components/responses/AuthLoginRateLimited'
+          status === 429 && carriesRetryAfterHeader(routeId)
+            ? '#/components/responses/AuthRateLimited'
             : `#/components/responses/Error${status}`,
       },
     ]),
@@ -2260,13 +2262,13 @@ export function buildOpenApiDocument(version: string): unknown {
       },
     };
   }
-  errorResponses.AuthLoginRateLimited = {
+  errorResponses.AuthRateLimited = {
     description:
-      'Login proof budget exhausted before password or second-factor verification.',
+      'An authentication rate budget is exhausted. The refusal is the same one on every authentication route, so the response always carries the wait in `retry_after_ms` and, whenever a wait is known, in the `Retry-After` header.',
     headers: {
       'Retry-After': {
         description:
-          'Whole seconds to wait before retrying, rounded up from the longer exhausted login window.',
+          'Whole seconds to wait before retrying, rounded up from the longest exhausted window.',
         schema: { type: 'string', pattern: '^[0-9]+$' },
       },
     },

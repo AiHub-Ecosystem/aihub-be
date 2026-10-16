@@ -693,11 +693,11 @@
           }
         }
       },
-      "AuthLoginRateLimited": {
-        "description": "Login proof budget exhausted before password or second-factor verification.",
+      "AuthRateLimited": {
+        "description": "An authentication rate budget is exhausted. The refusal is the same one on every authentication route, so the response always carries the wait in `retry_after_ms` and, whenever a wait is known, in the `Retry-After` header.",
         "headers": {
           "Retry-After": {
-            "description": "Whole seconds to wait before retrying, rounded up from the longer exhausted login window.",
+            "description": "Whole seconds to wait before retrying, rounded up from the longest exhausted window.",
             "schema": {
               "type": "string",
               "pattern": "^[0-9]+$"
@@ -8443,7 +8443,7 @@
             "$ref": "#/components/responses/Error409"
           },
           "429": {
-            "$ref": "#/components/responses/Error429"
+            "$ref": "#/components/responses/AuthRateLimited"
           },
           "500": {
             "$ref": "#/components/responses/Error500"
@@ -8603,7 +8603,7 @@
             "$ref": "#/components/responses/Error401"
           },
           "429": {
-            "$ref": "#/components/responses/AuthLoginRateLimited"
+            "$ref": "#/components/responses/AuthRateLimited"
           },
           "500": {
             "$ref": "#/components/responses/Error500"
@@ -8709,7 +8709,7 @@
             "$ref": "#/components/responses/Error409"
           },
           "429": {
-            "$ref": "#/components/responses/AuthLoginRateLimited"
+            "$ref": "#/components/responses/AuthRateLimited"
           },
           "500": {
             "$ref": "#/components/responses/Error500"
@@ -8808,7 +8808,7 @@
             "$ref": "#/components/responses/Error401"
           },
           "429": {
-            "$ref": "#/components/responses/AuthLoginRateLimited"
+            "$ref": "#/components/responses/AuthRateLimited"
           },
           "500": {
             "$ref": "#/components/responses/Error500"
@@ -8887,7 +8887,7 @@
             "$ref": "#/components/responses/Error401"
           },
           "429": {
-            "$ref": "#/components/responses/AuthLoginRateLimited"
+            "$ref": "#/components/responses/AuthRateLimited"
           },
           "500": {
             "$ref": "#/components/responses/Error500"
@@ -8996,7 +8996,7 @@
             "$ref": "#/components/responses/Error400"
           },
           "429": {
-            "$ref": "#/components/responses/Error429"
+            "$ref": "#/components/responses/AuthRateLimited"
           },
           "500": {
             "$ref": "#/components/responses/Error500"
@@ -9047,7 +9047,7 @@
             "$ref": "#/components/responses/Error400"
           },
           "429": {
-            "$ref": "#/components/responses/Error429"
+            "$ref": "#/components/responses/AuthRateLimited"
           },
           "500": {
             "$ref": "#/components/responses/Error500"
@@ -9126,7 +9126,7 @@
             "$ref": "#/components/responses/Error400"
           },
           "429": {
-            "$ref": "#/components/responses/Error429"
+            "$ref": "#/components/responses/AuthRateLimited"
           },
           "500": {
             "$ref": "#/components/responses/Error500"
@@ -9192,7 +9192,7 @@
             "$ref": "#/components/responses/Error400"
           },
           "429": {
-            "$ref": "#/components/responses/Error429"
+            "$ref": "#/components/responses/AuthRateLimited"
           },
           "500": {
             "$ref": "#/components/responses/Error500"
@@ -9338,7 +9338,7 @@
             }
           },
           "429": {
-            "$ref": "#/components/responses/Error429"
+            "$ref": "#/components/responses/AuthRateLimited"
           },
           "500": {
             "$ref": "#/components/responses/Error500"
@@ -9713,7 +9713,7 @@
             }
           },
           "429": {
-            "$ref": "#/components/responses/AuthLoginRateLimited"
+            "$ref": "#/components/responses/AuthRateLimited"
           },
           "500": {
             "$ref": "#/components/responses/Error500"
@@ -9924,7 +9924,7 @@
             }
           },
           "429": {
-            "$ref": "#/components/responses/Error429"
+            "$ref": "#/components/responses/AuthRateLimited"
           },
           "500": {
             "$ref": "#/components/responses/Error500"
@@ -10084,7 +10084,7 @@
             }
           },
           "429": {
-            "$ref": "#/components/responses/Error429"
+            "$ref": "#/components/responses/AuthRateLimited"
           },
           "500": {
             "$ref": "#/components/responses/Error500"

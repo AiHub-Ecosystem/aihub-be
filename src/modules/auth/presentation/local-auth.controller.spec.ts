@@ -169,7 +169,7 @@ class LimiterFake implements AuthRateLimiterPort {
 
   async consume(
     input: Parameters<AuthRateLimiterPort['consume']>[0],
-  ): Promise<{ allowed: boolean }> {
+  ): Promise<{ readonly allowed: boolean; readonly retryAfterMs?: number }> {
     this.calls.push(input);
     if (!this.allowed || this.blockedKeys.has(`${input.scope}:${input.key}`)) {
       return { allowed: false };
@@ -183,7 +183,11 @@ class LimiterFake implements AuthRateLimiterPort {
         : current;
     counter.count += 1;
     this.counters.set(key, counter);
-    return { allowed: counter.count <= input.limit };
+    return counter.count <= input.limit
+      ? { allowed: true }
+      : // The real limiter reports the rest of the window it just refused, and a
+        // refusal that claims no wait publishes no header either.
+        { allowed: false, retryAfterMs: Math.max(0, counter.expiresAt - now) };
   }
 
   reset(): void {
@@ -442,6 +446,35 @@ describe('local auth HTTP boundary', () => {
       expect(otherCaller.statusCode).toBe(route === 'register' ? 201 : 202);
     },
   );
+
+  // The budget that refuses this request and the one standing behind it run on
+  // different clocks: fifteen minutes for the address, a full day for the
+  // address-and-caller pair. Reporting the first one would send the caller back
+  // into a refusal it was told it had waited out.
+  it('answers an exhausted mail budget with the longest wait and the header that agrees with it', async () => {
+    const send = () =>
+      app.inject({
+        method: 'POST',
+        url: '/v1/auth/forgot-password',
+        remoteAddress: '192.0.2.30',
+        headers: { 'content-type': 'application/json' },
+        payload: { email: 'person@example.com' },
+      });
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      expect((await send()).statusCode).toBe(202);
+    }
+
+    const blocked = await send();
+
+    expect(blocked.statusCode).toBe(429);
+    const error = blocked.json().error;
+    expect(error).toMatchObject({ code: 'RATE_LIMITED', retryable: true });
+    expect(error.retry_after_ms).toBeGreaterThan(23 * 60 * 60_000);
+    expect(blocked.headers['retry-after']).toBe(
+      String(Math.ceil(error.retry_after_ms / 1_000)),
+    );
+  });
 
   /** An account holder who already verified their email. */
   function seedActiveAccount(): void {

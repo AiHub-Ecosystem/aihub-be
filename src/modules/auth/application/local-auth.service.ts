@@ -14,6 +14,7 @@ import {
   type AuthMfaServicePort,
   type MfaSessionProof,
 } from './auth-mfa-repository.port';
+import { enforceAuthRateLimits } from './auth-rate-limit';
 import { type AuthRateLimiterPort } from './auth-rate-limiter.port';
 import {
   type EmailDeliveryKind,
@@ -159,7 +160,7 @@ export class LocalAuthService {
       throw invalidRequest(error);
     }
 
-    await this.enforceRateLimits([
+    await enforceAuthRateLimits(this.rateLimiter, [
       { ...LOCAL_AUTH_RATE_LIMITS.register.ip, key: ip },
       {
         ...AUTH_EMAIL_REQUEST_LIMIT,
@@ -256,7 +257,7 @@ export class LocalAuthService {
       throw invalidRequest(error);
     }
 
-    await this.enforceRateLimits([
+    await enforceAuthRateLimits(this.rateLimiter, [
       { ...LOCAL_AUTH_RATE_LIMITS.resend.ip, key: ip },
       {
         ...AUTH_EMAIL_REQUEST_LIMIT,
@@ -300,7 +301,7 @@ export class LocalAuthService {
       throw invalidRequest(error);
     }
 
-    await this.enforceRateLimits([
+    await enforceAuthRateLimits(this.rateLimiter, [
       {
         ...LOCAL_AUTH_RATE_LIMITS.forgotPassword.ip,
         key: ip,
@@ -522,34 +523,11 @@ export class LocalAuthService {
     });
   }
 
-  private async enforceRateLimits(
-    limits: ReadonlyArray<{
-      readonly scope: Parameters<AuthRateLimiterPort['consume']>[0]['scope'];
-      readonly key: string;
-      readonly limit: number;
-      readonly windowMs: number;
-    }>,
-  ): Promise<void> {
-    for (const limit of limits) {
-      const result = await this.rateLimiter.consume(limit);
-      if (!result.allowed) {
-        throw new AppError({
-          code: 'RATE_LIMITED',
-          message: 'Too many requests',
-          retryable: true,
-          ...(result.retryAfterMs === undefined
-            ? {}
-            : { retryAfterMs: result.retryAfterMs }),
-        });
-      }
-    }
-  }
-
   private async enforceRefreshFailureLimits(
     ip: string,
     tokenHash?: string,
   ): Promise<void> {
-    await this.enforceRateLimits([
+    await enforceAuthRateLimits(this.rateLimiter, [
       {
         ...LOCAL_AUTH_RATE_LIMITS.refresh.ip,
         key: ip,
@@ -569,7 +547,7 @@ export class LocalAuthService {
     ip: string,
     tokenHash: string,
   ): Promise<void> {
-    await this.enforceRateLimits([
+    await enforceAuthRateLimits(this.rateLimiter, [
       {
         ...LOCAL_AUTH_RATE_LIMITS.resetPassword.ip,
         key: ip,

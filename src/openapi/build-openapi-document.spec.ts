@@ -801,31 +801,72 @@ describe('buildOpenApiDocument', () => {
     expect(JSON.stringify(register?.responses['201'])).not.toContain('token');
   });
 
-  it('documents the Retry-After header only on pre-verification auth lockouts', () => {
+  // One refusal for the whole authentication surface, so the header is documented
+  // on every authentication 429 rather than on the routes that happened to set the
+  // flag first. A hardcoded list of those routes is what let the other eight drift.
+  it('documents the Retry-After header on every authentication lockout', () => {
     const doc = build();
-    for (const path of [
-      '/v1/auth/login',
-      '/v1/auth/web-sessions',
-      '/v1/auth/mfa/enrollment',
-      '/v1/auth/mfa/enrollment/confirm',
-      '/v1/auth/mfa',
-    ]) {
-      const method = path === '/v1/auth/mfa' ? 'delete' : 'post';
-      const operation = doc.paths[path]?.[method];
-      expect(operation?.responses['429']).toEqual({
-        $ref: '#/components/responses/AuthLoginRateLimited',
-      });
+    const authenticationRoutes: string[] = [];
+    const authenticationRefs: unknown[] = [];
+    const otherRefs: unknown[] = [];
+    for (const [path, operations] of Object.entries(doc.paths)) {
+      for (const [method, operation] of Object.entries(operations)) {
+        const lockout = (
+          operation as { responses?: Record<string, { $ref?: unknown }> }
+        ).responses?.['429'];
+        if (lockout === undefined) {
+          continue;
+        }
+        if (path.startsWith('/v1/auth')) {
+          authenticationRoutes.push(`${method} ${path}`);
+          authenticationRefs.push(lockout.$ref);
+        } else {
+          otherRefs.push(lockout.$ref);
+        }
+      }
     }
-    expect(doc.paths['/v1/auth/register']?.post?.responses['429']).toEqual({
-      $ref: '#/components/responses/Error429',
-    });
-    expect(doc.components.responses.AuthLoginRateLimited).toMatchObject({
+
+    expect(authenticationRefs.length).toBeGreaterThan(0);
+    expect(authenticationRefs).toEqual(
+      authenticationRoutes.map(() => '#/components/responses/AuthRateLimited'),
+    );
+    expect(otherRefs).not.toContain('#/components/responses/AuthRateLimited');
+    // The routes that answered with a header before this rule existed, kept so a
+    // future registry edit that drops one of them is visible here.
+    expect(authenticationRoutes).toEqual(
+      expect.arrayContaining([
+        'post /v1/auth/login',
+        'post /v1/auth/web-sessions',
+        'post /v1/auth/mfa/enrollment',
+        'post /v1/auth/mfa/enrollment/confirm',
+        'delete /v1/auth/mfa',
+        'post /v1/auth/register',
+        'post /v1/auth/forgot-password',
+        'post /v1/auth/reset-password',
+      ]),
+    );
+    expect(doc.components.responses.AuthRateLimited).toMatchObject({
       headers: {
         'Retry-After': {
           schema: { type: 'string', pattern: '^[0-9]+$' },
         },
       },
     });
+  });
+
+  // The identity module's own rate limit is a different refusal and carries no
+  // header, so a 429 outside authentication keeps the plain response.
+  it('leaves a non-authentication lockout without the retry header', () => {
+    const doc = build();
+    const operation =
+      doc.paths['/v1/organizations/{organization_id}/invitations']?.post;
+
+    expect(operation?.responses['429']).toEqual({
+      $ref: '#/components/responses/Error429',
+    });
+    expect(JSON.stringify(doc.components.responses.Error429)).not.toContain(
+      'Retry-After',
+    );
   });
 
   it('publishes only verification-specific Web Session failures', () => {

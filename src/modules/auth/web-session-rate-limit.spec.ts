@@ -162,6 +162,9 @@ describe('Web Session HTTP rate limits with Redis unavailable', () => {
     expect(blocked.statusCode).toBe(429);
     expect(blocked.json().error.code).toBe('RATE_LIMITED');
     expect(blocked.json().error.retry_after_ms).toBe(15 * 60_000);
+    // Same refusal as login's, so the header an integrator honours says the same
+    // thing here as it does there.
+    expect(blocked.headers['retry-after']).toBe('900');
     expect(state.webSessions.size).toBe(0);
     expect(
       (await request(BASE, { email: EMAIL, password: PASSWORD })).statusCode,
@@ -267,6 +270,14 @@ describe('Web Session HTTP rate limits with Redis unavailable', () => {
     });
     expect(blocked.statusCode).toBe(429);
     expect(blocked.json().error.code).toBe('RATE_LIMITED');
+    // The exchange refusal carries both dimensions' wait now, so the header
+    // answers the same body field it always did.
+    expect(blocked.json().error.retry_after_ms).toBeGreaterThanOrEqual(
+      5 * 60_000,
+    );
+    expect(blocked.headers['retry-after']).toBe(
+      String(Math.ceil(blocked.json().error.retry_after_ms / 1_000)),
+    );
     expect(blocked.payload).not.toContain('access_token');
     expect(
       (

@@ -1,4 +1,4 @@
-import { enforceAuthRateLimit } from './auth-rate-limit';
+import { enforceAuthRateLimits } from './auth-rate-limit';
 import { type AuthRateLimiterPort } from './auth-rate-limiter.port';
 import { type VerificationTokenPort } from './verification-token.port';
 
@@ -16,20 +16,18 @@ export async function enforceVerificationRateLimit(
   rateLimiter: AuthRateLimiterPort,
   ip: string,
 ): Promise<void> {
-  await enforceAuthRateLimit(rateLimiter, {
-    ...VERIFICATION_RATE_LIMITS.ip,
-    key: ip,
-  });
+  await enforceAuthRateLimits(rateLimiter, [
+    { ...VERIFICATION_RATE_LIMITS.ip, key: ip },
+  ]);
 }
 
 export async function enforceWebSessionVerificationRateLimit(
   rateLimiter: AuthRateLimiterPort,
   tokenHash: string,
 ): Promise<void> {
-  await enforceAuthRateLimit(rateLimiter, {
-    ...VERIFICATION_RATE_LIMITS.token,
-    key: tokenHash,
-  });
+  await enforceAuthRateLimits(rateLimiter, [
+    { ...VERIFICATION_RATE_LIMITS.token, key: tokenHash },
+  ]);
 }
 
 /**
