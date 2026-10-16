@@ -6,20 +6,16 @@ import {
   Optional,
 } from '@nestjs/common';
 
+import { admitMonthlyQuota } from '@/modules/gateway/application/quota-admission';
 import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
 } from '@/modules/gateway/application/quota-counter.port';
-import { quotaExceededError } from '@/modules/gateway/application/quota-period';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
 } from '@/modules/identity/shared/presentation/authenticated-request';
 import { addMeteringEvidence } from '@/modules/metering/application/metering-evidence';
-
-function validCount(value: number): boolean {
-  return Number.isSafeInteger(value) && value >= 0;
-}
 
 @Injectable()
 export class QuotaGuard implements CanActivate {
@@ -45,25 +41,17 @@ export class QuotaGuard implements CanActivate {
       return true;
     }
 
-    let count: number;
-    try {
-      count = await this.counter.read({
+    const admission = await admitMonthlyQuota(
+      this.counter,
+      {
         organizationId: authenticated.organizationId,
-      });
-      if (!validCount(count)) {
-        throw new Error('quota counter value is invalid');
-      }
-    } catch {
-      if (authenticated.hardStopOnQuota) {
-        throw quotaExceededError(this.now());
-      }
-
+        quota,
+        hardStopOnQuota: authenticated.hardStopOnQuota,
+      },
+      this.now,
+    );
+    if (admission === 'unverified') {
       addMeteringEvidence(request, { quotaUnverified: true });
-      return true;
-    }
-
-    if (count >= quota) {
-      throw quotaExceededError(this.now());
     }
 
     return true;

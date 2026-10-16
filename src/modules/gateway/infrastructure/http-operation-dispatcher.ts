@@ -3,13 +3,10 @@ import { Logger } from '@nestjs/common';
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
 import type { ErrorCode } from '@/common/errors/error-code';
-import {
-  observeDispatchDeadlineMsRemaining,
-  recordDispatchCancelledByDeadline,
-} from '@/common/observability/metrics';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { InternalAIServiceResponse } from '@/downstream/downstream.types';
+import { GuardedOperationDispatcher } from '@/modules/gateway/application/guarded-operation-dispatcher';
 import type { InternalTokenIssuerPort } from '@/modules/gateway/application/internal-token-issuer.port';
 import type {
   DispatchResult,
@@ -17,12 +14,13 @@ import type {
   RequestFor,
   ResponseFor,
 } from '@/modules/gateway/application/operation-dispatcher.port';
-import { quotaExceededError } from '@/modules/gateway/application/quota-period';
-import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import type {
-  DispatchAttemptOutcome,
-  DispatchAttemptRecordPort,
-} from '@/modules/metering/public/dispatch-attempts';
+  OperationTransportPort,
+  PreparedDispatch,
+} from '@/modules/gateway/application/operation-transport.port';
+import { SandboxAdmission } from '@/modules/gateway/application/sandbox-admission';
+import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
+import type { DispatchAttemptRecordPort } from '@/modules/metering/public/dispatch-attempts';
 import { extractDownstreamTelemetry } from '@/modules/metering/public/telemetry';
 import {
   type DownstreamHttpClient,
@@ -118,32 +116,21 @@ function downstreamFailureMessage(
   }
 }
 
-function sandboxBudgetUnavailable(): AppError {
-  return new AppError({
-    code: 'INTERNAL_ERROR',
-    message: 'Sandbox dispatch admission is unavailable',
-    retryable: true,
-  });
+interface DownstreamFailure {
+  readonly requestId: string;
+  readonly operation: OperationId;
+  readonly downstream: string;
+  readonly path: string;
+  readonly status: number | null;
+  readonly elapsedMs: number;
 }
 
-function dispatchTimedOut(): AppError {
-  return new AppError({
-    code: 'AI_SERVICE_TIMEOUT',
-    message: 'AI service request timed out',
-    retryable: true,
-  });
-}
-
-function dispatchEvidenceUnavailable(cause: unknown): AppError {
-  return new AppError({
-    code: 'INTERNAL_ERROR',
-    message: 'Internal server error',
-    retryable: false,
-    cause,
-  });
-}
-
-export class HttpOperationDispatcher implements OperationDispatcherPort {
+/**
+ * Transport only: adapter lookup, the internal-token header, the HTTP call,
+ * the status mapping, and the `downstream_failed` log line. Admission, attempt
+ * evidence, and the deadline belong to `GuardedOperationDispatcher`.
+ */
+export class HttpOperationTransport implements OperationTransportPort {
   // `unknown` on both sides is the one place a dispatch table for a
   // heterogeneous set of adapters has to erase the per-operation types the
   // public `OperationDispatcherPort` generic keeps precise. It is populated
@@ -161,19 +148,21 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
     private readonly httpClient: DownstreamHttpClient,
     private readonly tokenIssuer: InternalTokenIssuerPort,
     adapters: readonly DownstreamAdapter<unknown, unknown>[],
-    private readonly dispatchAttempts: DispatchAttemptRecordPort,
-    private readonly sandboxBudget?: SandboxDispatchBudgetPort,
   ) {
     this.adapters = new Map(
       adapters.map((adapter) => [adapter.operation, adapter]),
     );
   }
 
-  async dispatch<O extends OperationId>(
+  isUndelivered(error: unknown): boolean {
+    return isDefinitelyNotDispatched(error);
+  }
+
+  async prepare<O extends OperationId>(
     operation: O,
     input: RequestFor<O>,
     context: RequestContext,
-  ): Promise<DispatchResult<ResponseFor<O>>> {
+  ): Promise<PreparedDispatch<O>> {
     const adapter = this.adapters.get(operation);
     if (adapter === undefined) {
       throw unconfiguredOperation(operation);
@@ -184,216 +173,119 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
       adapter.downstream === 'ai-writing'
         ? `Bearer ${await this.tokenIssuer.mint(context, operation)}`
         : undefined;
-    const sandboxRequest = context.environment === 'sandbox';
-    const deadlineExpired = (): boolean =>
-      context.deadlineAt.getTime() <= Date.now();
-    if (sandboxRequest && (context.signal.aborted || deadlineExpired())) {
-      throw dispatchTimedOut();
-    }
 
-    if (sandboxRequest) {
-      const organizationId = context.organizationId;
-      if (this.sandboxBudget === undefined || organizationId === undefined) {
-        throw sandboxBudgetUnavailable();
-      }
-      let admitted: boolean;
-      try {
-        // The Organization's allowance is resolved inside the reserving
-        // transaction, so it cannot be read here and passed in as a number that
-        // an operator's override has already overtaken.
-        admitted = await this.sandboxBudget.reserve({
-          organizationId,
-          requestId: context.requestId,
-        });
-      } catch {
-        throw sandboxBudgetUnavailable();
-      }
-      if (context.signal.aborted || deadlineExpired()) {
-        if (admitted) {
-          await this.sandboxBudget
-            .release(context.requestId)
-            .catch(() =>
-              this.logger.warn(
-                'Sandbox dispatch reservation could not be released after a pre-dispatch failure',
-              ),
-            );
-        }
-        throw dispatchTimedOut();
-      }
-      if (!admitted) {
-        throw quotaExceededError(new Date());
-      }
-    }
-    const startedAt = performance.now();
-    let response: InternalAIServiceResponse<unknown> | undefined;
-    let downstreamResponseStatus: number | undefined;
-    let downstreamDispatchStarted = false;
-    let downstreamCallInFlight = false;
-    let deadlineAbortWhileInFlight = false;
-    let attemptId: string | undefined;
+    return {
+      send: async (call) => {
+        const startedAt = performance.now();
+        let response: InternalAIServiceResponse<unknown> | undefined;
+        let responseStatus: number | undefined;
+        try {
+          response = await this.httpClient.request(downstreamRequest, {
+            ...(authorization === undefined ? {} : { authorization }),
+            downstream: adapter.downstream,
+            requestId: context.requestId,
+            deadlineMs: call.deadlineMs,
+            signal: call.signal,
+            onResponseReceived: (statusCode) => {
+              responseStatus = statusCode;
+              call.onResponseReceived(statusCode);
+            },
+          });
+          if (response.status < 200 || response.status >= 300) {
+            throw mapDownstreamStatus(response.status);
+          }
 
-    try {
-      if (context.signal.aborted || deadlineExpired()) {
-        throw dispatchTimedOut();
-      }
-      if (context.organizationId === undefined) {
-        throw dispatchEvidenceUnavailable(
-          new Error('organization context is required'),
-        );
-      }
-      try {
-        attemptId = await this.dispatchAttempts.beginAttempt({
-          requestId: context.requestId,
-          organizationId: context.organizationId,
-          operation,
-          operationTimeoutMs: context.operationTimeoutMs,
-        });
-      } catch (error) {
-        throw dispatchEvidenceUnavailable(error);
-      }
-      if (context.signal.aborted || deadlineExpired()) {
-        throw dispatchTimedOut();
-      }
-      const remainingMs = context.deadlineAt.getTime() - Date.now();
-      if (remainingMs <= 0) {
-        throw dispatchTimedOut();
-      }
-      const signal = AbortSignal.any([
-        context.signal,
-        AbortSignal.timeout(remainingMs),
-      ]);
-      if (signal.aborted || deadlineExpired()) {
-        throw dispatchTimedOut();
-      }
-      const recordDeadlineAbort = (): void => {
-        const reason = signal.reason as { readonly name?: unknown } | undefined;
-        const errorResponseReceived =
-          downstreamResponseStatus !== undefined &&
-          (downstreamResponseStatus < 200 || downstreamResponseStatus >= 300);
-        if (
-          downstreamCallInFlight &&
-          !errorResponseReceived &&
-          reason?.name === 'TimeoutError'
-        ) {
-          deadlineAbortWhileInFlight = true;
-        }
-      };
-      signal.addEventListener('abort', recordDeadlineAbort, { once: true });
-      if (signal.aborted || deadlineExpired()) {
-        signal.removeEventListener('abort', recordDeadlineAbort);
-        throw dispatchTimedOut();
-      }
-      observeDispatchDeadlineMsRemaining(operation, remainingMs);
-      downstreamDispatchStarted = true;
-      downstreamCallInFlight = true;
-      try {
-        response = await this.httpClient.request(downstreamRequest, {
-          ...(authorization === undefined ? {} : { authorization }),
-          downstream: adapter.downstream,
-          requestId: context.requestId,
-          deadlineMs: remainingMs,
-          signal,
-          onResponseReceived: (statusCode) => {
-            downstreamResponseStatus = statusCode;
-          },
-        });
-      } finally {
-        downstreamCallInFlight = false;
-        signal.removeEventListener('abort', recordDeadlineAbort);
-      }
-      await this.recordAttemptOutcome(attemptId, 'response_received');
-
-      if (response.status < 200 || response.status >= 300) {
-        throw mapDownstreamStatus(response.status);
-      }
-
-      const telemetry = extractDownstreamTelemetry(response.body);
-      // The one place the dispatch table's type erasure surfaces as a cast:
-      // the adapter registered for this operation literal produced `data`,
-      // so its shape matches `ResponseFor<O>` by construction.
-      return {
-        operation,
-        data: adapter.parseResponse(response),
-        downstreamMs: Math.round(performance.now() - startedAt),
-        ...(telemetry?.usage === undefined ? {} : { usage: telemetry.usage }),
-        ...(telemetry?.models === undefined
-          ? {}
-          : { models: telemetry.models }),
-        ...(telemetry?.aiProcessingMs === undefined
-          ? {}
-          : { aiProcessingMs: telemetry.aiProcessingMs }),
-      } as DispatchResult<ResponseFor<O>>;
-    } catch (error) {
-      if (deadlineAbortWhileInFlight) {
-        recordDispatchCancelledByDeadline(operation);
-      }
-      const definitelyNotDispatched = isDefinitelyNotDispatched(error);
-      const notDispatched =
-        !downstreamDispatchStarted || definitelyNotDispatched;
-      const releaseSandboxReservation = notDispatched;
-      if (attemptId !== undefined && response === undefined) {
-        let outcome: DispatchAttemptOutcome;
-        if (downstreamResponseStatus !== undefined) {
-          outcome = 'response_received';
-        } else if (notDispatched) {
-          outcome = 'not_dispatched';
-        } else {
-          outcome = 'outcome_unknown';
-        }
-        await this.recordAttemptOutcome(attemptId, outcome);
-      }
-      if (sandboxRequest && releaseSandboxReservation) {
-        await this.sandboxBudget
-          ?.release(context.requestId)
-          .catch(() =>
-            this.logger.warn(
-              'Sandbox dispatch reservation could not be released after a pre-dispatch failure',
-            ),
-          );
-      }
-      const errorCode = downstreamDispatchStarted
-        ? loggedDownstreamErrorCode(error)
-        : undefined;
-      if (errorCode !== undefined) {
-        const downstreamStatus =
-          response?.status ?? downstreamResponseStatus ?? null;
-        const downstreamMs = Math.max(
-          0,
-          Math.round(performance.now() - startedAt),
-        );
-
-        const reason = contractViolationReason(error);
-
-        this.logger.error(
-          JSON.stringify({
-            event: 'downstream_failed',
-            request_id: context.requestId,
+          const telemetry = extractDownstreamTelemetry(response.body);
+          // The one place the dispatch table's type erasure surfaces as a
+          // cast: the adapter registered for this operation literal produced
+          // `data`, so its shape matches `ResponseFor<O>` by construction.
+          return {
             operation,
-            ai_service: adapter.downstream,
-            private_endpoint: downstreamRequest.path,
-            downstream_status: downstreamStatus,
-            downstream_error_code: null,
-            downstream_message: null,
-            downstream_ms: downstreamMs,
-            error_code: errorCode,
-            message: downstreamFailureMessage(errorCode, downstreamStatus),
-            ...(reason === undefined ? {} : { reason }),
-          }),
-        );
-      }
-
-      throw error;
-    }
+            data: adapter.parseResponse(response),
+            downstreamMs: Math.round(performance.now() - startedAt),
+            ...(telemetry?.usage === undefined
+              ? {}
+              : { usage: telemetry.usage }),
+            ...(telemetry?.models === undefined
+              ? {}
+              : { models: telemetry.models }),
+            ...(telemetry?.aiProcessingMs === undefined
+              ? {}
+              : { aiProcessingMs: telemetry.aiProcessingMs }),
+          } as DispatchResult<ResponseFor<O>>;
+        } catch (error) {
+          this.logDownstreamFailure(error, {
+            requestId: context.requestId,
+            operation,
+            downstream: adapter.downstream,
+            path: downstreamRequest.path,
+            status: response?.status ?? responseStatus ?? null,
+            elapsedMs: performance.now() - startedAt,
+          });
+          throw error;
+        }
+      },
+    };
   }
 
-  private async recordAttemptOutcome(
-    attemptId: string,
-    outcome: DispatchAttemptOutcome,
-  ): Promise<void> {
-    try {
-      await this.dispatchAttempts.recordOutcome(attemptId, outcome);
-    } catch {
-      this.logger.warn('Dispatch attempt outcome could not be recorded');
+  private logDownstreamFailure(
+    error: unknown,
+    failure: DownstreamFailure,
+  ): void {
+    const errorCode = loggedDownstreamErrorCode(error);
+    if (errorCode === undefined) {
+      return;
     }
+    const reason = contractViolationReason(error);
+
+    this.logger.error(
+      JSON.stringify({
+        event: 'downstream_failed',
+        request_id: failure.requestId,
+        operation: failure.operation,
+        ai_service: failure.downstream,
+        private_endpoint: failure.path,
+        downstream_status: failure.status,
+        downstream_error_code: null,
+        downstream_message: null,
+        downstream_ms: Math.max(0, Math.round(failure.elapsedMs)),
+        error_code: errorCode,
+        message: downstreamFailureMessage(errorCode, failure.status),
+        ...(reason === undefined ? {} : { reason }),
+      }),
+    );
+  }
+}
+
+/**
+ * The HTTP-backed `OperationDispatcherPort`: wires the transport into the
+ * application's dispatch policy and holds no decision of its own.
+ */
+export class HttpOperationDispatcher implements OperationDispatcherPort {
+  private readonly logger = new Logger(HttpOperationDispatcher.name);
+  private readonly guarded: GuardedOperationDispatcher;
+
+  constructor(
+    httpClient: DownstreamHttpClient,
+    tokenIssuer: InternalTokenIssuerPort,
+    adapters: readonly DownstreamAdapter<unknown, unknown>[],
+    dispatchAttempts: DispatchAttemptRecordPort,
+    sandboxBudget?: SandboxDispatchBudgetPort,
+  ) {
+    const warn = (message: string): void => this.logger.warn(message);
+    this.guarded = new GuardedOperationDispatcher(
+      new HttpOperationTransport(httpClient, tokenIssuer, adapters),
+      dispatchAttempts,
+      new SandboxAdmission(sandboxBudget, warn),
+      warn,
+    );
+  }
+
+  dispatch<O extends OperationId>(
+    operation: O,
+    input: RequestFor<O>,
+    context: RequestContext,
+  ): Promise<DispatchResult<ResponseFor<O>>> {
+    return this.guarded.dispatch(operation, input, context);
   }
 }
