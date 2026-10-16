@@ -33,7 +33,7 @@
     "coverage:unit": "node scripts/generate/generate-prisma-client.mjs --runtime && jest --coverage --coverageReporters=json --coverageDirectory=coverage/unit",
     "coverage:db": "node scripts/checks/db-lane/run-database-lane.cjs db --coverage --coverageReporters=json --coverageDirectory=coverage/db",
     "coverage:tenant-isolation": "node scripts/checks/db-lane/run-database-lane.cjs tenant-isolation --coverage --coverageReporters=json --coverageDirectory=coverage/tenant-isolation",
-    "coverage:merged": "node scripts/checks/merged-coverage.mjs",
+    "coverage:merged": "node scripts/checks/merged-coverage.cjs",
     "test:watch": "node scripts/generate/generate-prisma-client.mjs --runtime && jest --watch",
     "type-check": "node scripts/generate/generate-prisma-client.mjs && tsc --noEmit",
     "type-check:tsgo": "node scripts/generate/generate-prisma-client.mjs && tsgo --noEmit",

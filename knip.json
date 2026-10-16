@@ -63,6 +63,8 @@
     "scripts/ci/ci-boot-config.d.cts",
     // Hand-written types for scripts/checks/verify-summary.cjs — same reason.
     "scripts/checks/verify-summary.d.cts",
+    // Hand-written types for scripts/checks/merged-coverage.cjs — same reason.
+    "scripts/checks/merged-coverage.d.cts",
     // Child Jest config for the Postgres crash-durability worker process.
     "jest.config.db-worker.cjs"
   ],

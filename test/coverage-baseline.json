@@ -1,0 +1,8 @@
+{
+  "lines": 81.89179241810821,
+  "branches": 67.82048701952102,
+  "statements": 80.94242661789043,
+  "functions": 80.06932409012131,
+  "marginPoints": 0.5,
+  "recordedLanes": ["unit", "db", "tenant-isolation"]
+}
