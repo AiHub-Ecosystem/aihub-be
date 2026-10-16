@@ -47,7 +47,7 @@ export const GradeTask1RequestSchema = Type.Object(
       pattern: '^[hH][tT][tT][pP][sS]://',
       maxLength: TASK1_IMAGE_URL_MAX_LENGTH,
       description:
-        'HTTPS URL without userinfo or a non-443 port. IP literals must be public; DNS hosts are checked by AI Writing.',
+        'HTTPS URL without userinfo or a non-443 port. IP literals must be public, and host names must be able to be public (no single-label, localhost, .local, .home.arpa, or .internal names); resolved addresses are checked by AI Writing.',
     }),
     language: Type.Optional(LanguageSchema),
   },

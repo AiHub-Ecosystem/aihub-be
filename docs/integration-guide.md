@@ -629,7 +629,9 @@ for your own deployment. The difference is deliberate: the AI Writing service
 fetches the chart itself, outside your request. Use an HTTPS URL from any
 public host; it must be readable with an unauthenticated GET and must not rely
 on credentials or an expiring signature. AIHUB rejects URLs with embedded
-credentials, a port other than 443, or a literal IP address that is not public.
+credentials, a port other than 443, a literal IP address that is not public, or
+a host name that cannot be public (a name without a dot, `localhost`, or a name
+under `.local`, `.home.arpa`, or `.internal`).
 AIHUB does not resolve hostnames; AI Writing checks every resolved IPv4 and
 IPv6 address before fetching and rejects non-public or special-use destinations.
 It also rejects redirects, limits the response to 10 MiB, and applies a

@@ -209,6 +209,9 @@ describe('Writing grading HTTP flow', () => {
     ['private IPv6', 'https://[fc00::1]/chart.png'],
     ['link-local IPv6', 'https://[fe80::1]/chart.png'],
     ['multicast IPv6', 'https://[ff02::1]/chart.png'],
+    ['localhost name', 'https://localhost/chart.png'],
+    ['private-use .internal name', 'https://metadata.google.internal/'],
+    ['single-label name', 'https://intranet/chart.png'],
     ['non-default port', 'https://charts.customer.example:8443/chart.png'],
     ['oversized URL', `https://charts.customer.example/${'a'.repeat(2_000)}`],
   ])(

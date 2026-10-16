@@ -71,6 +71,26 @@ function isNonPublicIpv6(address: string): boolean {
   );
 }
 
+// Names a resolver near the fetcher may answer with a loopback or private
+// address (RFC 6761 localhost, RFC 6762 .local, RFC 8375 .home.arpa, ICANN's
+// private-use .internal). A name without a dot is a search-domain lookup.
+const NON_PUBLIC_NAME_SUFFIXES = [
+  'localhost',
+  'local',
+  'internal',
+  'home.arpa',
+] as const;
+
+function isNonPublicName(hostname: string): boolean {
+  const name = hostname.toLowerCase().replace(/\.$/, '');
+  return (
+    !name.includes('.') ||
+    NON_PUBLIC_NAME_SUFFIXES.some(
+      (suffix) => name === suffix || name.endsWith(`.${suffix}`),
+    )
+  );
+}
+
 /**
  * Checks only the submitted URL's structure. DNS destination checks stay with
  * AI Writing, which performs the image fetch.
@@ -104,7 +124,7 @@ export function isAllowedTask1ImageUrl(value: string): boolean {
     const host = url.hostname.replace(/^\[|\]$/g, '');
     const version = isIP(host);
     return (
-      version === 0 ||
+      (version === 0 && !isNonPublicName(host)) ||
       (version === 4 && !isNonPublicIpv4(host)) ||
       (version === 6 && !isNonPublicIpv6(host))
     );
