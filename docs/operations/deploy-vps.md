@@ -40,6 +40,69 @@ each hostname to its matching loopback port. See
 
 Do not reuse the development AppRole or the development rendered snapshot.
 
+## Shared PostgreSQL connection budget (#560)
+
+The production cluster was measured read-only on 2026-10-15 over SSH with
+`nproc`, `free -h`, `swapon --show`, and `sudo docker exec aihub-db psql`:
+PostgreSQL 16.15; `max_connections = 100`; `superuser_reserved_connections = 3`;
+`reserved_connections = 0`; `shared_buffers = 128MB`; `effective_cache_size = 4GB`;
+and `work_mem = 4MB`. The host reported 2 vCPUs, 7.7 GiB RAM, no swap, and
+3.3 GiB available. Remeasure before changing a pool or cluster setting because
+host availability can change.
+
+The same `pg_stat_activity` snapshot contained 8 rows, including the inspection
+query: one idle connection to each of `aihub` and `aihub_sandbox`, plus five
+background entries without a database. A connection snapshot is not a capacity
+budget. The current source configures up to 74 pool connections per application
+process when the three roles share a database URL. ADR-0085 permits three
+application containers during a blue-green cutover, making 222 the theoretical
+source maximum for that overlap. This is configuration math, not observed
+usage or an approved target.
+
+AIHUB owner `@lengocanh2005it` accepted 20 connections of
+operational/monitoring headroom on 2026-10-15. At the measured settings, this
+leaves an aggregate application budget ceiling of 77 connections
+(`100 - 3 superuser-reserved - 0 reserved - 20 headroom`) across all four
+applications. This is a policy reserve, not a workload measurement. Allocate
+each application's share from its measured peak and owner approval; do not split
+the 77 equally or assign the unused remainder.
+
+Before changing pool maxima or shared PostgreSQL settings:
+
+1. Record the measurement date, PostgreSQL version, `max_connections`, all
+   configured reserved-connection settings, `shared_buffers`,
+   `effective_cache_size`, `work_mem`, and host CPU, RAM, swap, and available
+   memory. Do not tune the memory settings without workload evidence and written
+   approval from the shared-cluster owner.
+2. Obtain written, dated budgets from the owner of each of the four applications.
+   The AIHUB owner approved 20 connections of operational/monitoring headroom on
+   2026-10-15. Record each app owner, amount, and evidence source in
+   [#560](https://github.com/AiHub-Ecosystem/aihub-be/issues/560).
+   The application budgets plus that headroom must not exceed measured
+   `max_connections` after configured reserved slots are removed. Never infer a
+   share from an equal split or a connection snapshot.
+3. Calculate AIHUB's maximum by summing the pool maxima for every process and
+   database URL that reaches this cluster in each supported overlap: three app
+   containers; two app containers plus one migration connection; or two app
+   containers plus one scheduled CLI connection. Enforce a one-connection pool
+   cap in `scripts/cli/cli.mjs`, the Operator CLI clients in
+   `src/cli/operator-*.ts` through
+   `src/modules/persistence/infrastructure/prisma-client.ts`, and
+   `scripts/cli/migrate.mjs`; serial queries alone do not make a larger pool cap
+   equal one. Run only one CLI operator command at a time. Deployment suspends
+   scheduled jobs and runs migrations before starting the candidate. Do not add
+   migration or CLI connections to the three-container case.
+4. Set per-process pool maxima from the approved AIHUB allocation and record the
+   computed per-tier peaks and measurement date in #560 and [ADR-0103](../adr/0103-budget-postgresql-connections-on-shared-cluster.md).
+   Keep #588's numeric admission/general split unset until this budget is approved.
+5. Before closing #560, verify that #474's PostgreSQL connection metric and
+   alert are deployed and that the alert fires at 80% of measured
+   `max_connections`. #474 currently depends on #456.
+
+If #298 selects a dedicated PostgreSQL instance for AIHUB, repeat the sizing and
+approval against that instance instead of carrying over the shared-cluster
+budget.
+
 ## Prepare the host
 
 Clone the release into a dedicated directory, then create the secret mounts outside
