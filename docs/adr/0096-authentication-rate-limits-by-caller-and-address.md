@@ -61,6 +61,8 @@ This amendment specifies when the login failure budgets above are checked. It do
 
 **Shared-IP trade-off.** The `login_ip` budget is shared by accounts using the same selected caller IP. Reaching 20 failures in five minutes can therefore refuse correct logins from other accounts behind that address, including an office or NAT address, until its fixed window expires. This is accepted; verified Customer Web BFF requests use the end-user address to avoid applying one BFF peer's budget to all its users.
 
+**Distributed-guessing trade-off.** No counter is keyed by account alone. Both budgets include the caller IP, so guesses at one account's password from many addresses are bounded only by the cost of the password hash and, when the account has enrolled one, by the TOTP factor, which is optional. An account-wide counter would let a stranger keep the owner locked out, the harm this ADR exists to remove, so none is added. This is accepted. Reopen it if an account that holds an Organization's API keys is taken over by password guessing, or if a customer requires a stronger bound. The options then are to require a second factor for Organization owners (see #667) or to add an escalating delay per account that does not refuse the owner's own correct attempt.
+
 ### Acceptance boundaries for #278
 
 - Every listed route checks the applicable `login_email` and `login_ip` budgets before verifying password or second-factor proof; over-budget requests with correct or incorrect proof receive the same `429 RATE_LIMITED` response and retry hint.
