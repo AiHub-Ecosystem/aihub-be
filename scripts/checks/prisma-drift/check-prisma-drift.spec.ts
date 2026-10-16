@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { driftStatements } from './prisma-drift.cjs';
+import { driftStatements, runDiffProcess } from './prisma-drift.cjs';
 
 const HEADER =
   'generator client {\n  provider = "prisma-client"\n  output   = "./client"\n}\n\ndatasource db {\n  provider = "postgresql"\n}\n';
@@ -74,6 +74,37 @@ describe('prisma drift verdict', () => {
       'ALTER TABLE "api_keys" DROP COLUMN "key_hash",',
       'ADD COLUMN     "keyHash" BYTEA NOT NULL;',
     ]);
+  });
+
+  it('names the Prisma phase when its child process times out', () => {
+    expect(() =>
+      runDiffProcess({
+        command: process.execPath,
+        args: ['-e', 'setTimeout(() => {}, 5000)'],
+        timeoutMs: 100,
+        phase: 'Prisma migrate diff',
+      }),
+    ).toThrow('Prisma migrate diff timed out after 100ms');
+  });
+
+  it('redacts database URLs from Prisma child errors', () => {
+    let errorMessage = '';
+    try {
+      runDiffProcess({
+        command: process.execPath,
+        args: [
+          '-e',
+          "console.error('postgres://test-user:secret@localhost:5432/aihub'); process.exit(1)",
+        ],
+        timeoutMs: 5_000,
+        phase: 'Prisma migrate diff',
+      });
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(errorMessage).toContain('<redacted database URL>');
+    expect(errorMessage).not.toContain('secret');
   });
 });
 

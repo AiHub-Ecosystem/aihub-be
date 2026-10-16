@@ -18,6 +18,12 @@ import { Pool } from 'pg';
 const DEFAULT_ADMIN_URL = 'postgres://aihub:change-me@localhost:5432/aihub';
 const DEFAULT_TEST_DATABASE_NAME = 'aihub_db_lane';
 export const SANDBOX_TEST_DATABASE_NAME = 'aihub_sandbox_db_lane';
+export const DATABASE_LANE_POSTGRES_TIMEOUTS = {
+  connectionTimeoutMillis: 10_000,
+  query_timeout: 30_000,
+  statement_timeout: 25_000,
+  lock_timeout: 15_000,
+};
 const configuredTestDatabaseName = process.env.DB_LANE_DATABASE_NAME?.trim();
 const TEST_DATABASE_NAME =
   configuredTestDatabaseName !== undefined &&
@@ -65,11 +71,19 @@ export function sandboxTestDatabaseUrl(): string {
 export { TEST_DATABASE_NAME };
 
 export function createTestPool(): Pool {
-  return new Pool({ connectionString: testDatabaseUrl(), max: 4 });
+  return new Pool({
+    connectionString: testDatabaseUrl(),
+    max: 4,
+    ...DATABASE_LANE_POSTGRES_TIMEOUTS,
+  });
 }
 
 export function createSandboxTestPool(): Pool {
-  return new Pool({ connectionString: sandboxTestDatabaseUrl(), max: 4 });
+  return new Pool({
+    connectionString: sandboxTestDatabaseUrl(),
+    max: 4,
+    ...DATABASE_LANE_POSTGRES_TIMEOUTS,
+  });
 }
 
 export function sandboxTestRedisUrl(): string {

@@ -1,5 +1,6 @@
 const databaseConfig = require('./jest.config.db.cjs');
 delete databaseConfig.globalSetup;
+delete databaseConfig.globalTeardown;
 
 module.exports = {
   ...databaseConfig,
