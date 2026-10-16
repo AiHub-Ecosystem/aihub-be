@@ -85,6 +85,47 @@ describe('PostgresRefreshSessionRepository', () => {
     ]);
   });
 
+  it('commits the rotation and its successor in one transaction', async () => {
+    const script = new ScriptedPrisma();
+    script.inside = [
+      [
+        {
+          id: refreshToken.id,
+          familyId: refreshToken.familyId,
+          userAccountId: USER_ID,
+          expiresAt: refreshToken.expiresAt,
+          usedAt: null,
+          revokedAt: null,
+          status: 'active',
+        },
+      ],
+    ];
+
+    await expect(
+      repositoryOver(script).rotateRefreshToken({
+        tokenId: refreshToken.id,
+        tokenHash: refreshToken.hash,
+        successor: {
+          ...refreshToken,
+          id: 'rft_01J00000000000000000000001',
+          raw: 'successor-token',
+          hash: 'c'.repeat(64),
+          expiresAt: new Date('2026-11-18T00:00:00.000Z'),
+        },
+        now: input.now,
+      }),
+    ).resolves.toEqual({ kind: 'rotated', userId: USER_ID });
+
+    // The consumption and the successor ride ONE transaction, so a failure
+    // storing the successor leaves the presented token unspent and exchangeable
+    // again rather than stranding the caller with neither.
+    expect(script.opened).toBe(1);
+    expect(
+      script.statements.every(({ transaction }) => transaction === 1),
+    ).toBe(true);
+    expect(allArgs(script)).not.toContain('successor-token');
+  });
+
   it('revokes a whole family for a known stale token and ignores unknown logout tokens', async () => {
     const script = new ScriptedPrisma();
     script.inside = [[{ family_id: refreshToken.familyId }]];

@@ -19,6 +19,7 @@ import {
   isUniqueViolation,
 } from './auth-prisma';
 import {
+  LOCK_PASSWORD_IDENTITY_SQL,
   insertEmailDelivery,
   insertRefreshSession,
 } from './local-auth-statements';
@@ -54,13 +55,7 @@ export class PostgresVerificationTokenRepository
       return await authTransaction(this.client, async (transaction) => {
         const rows = await authQueryRows(
           transaction,
-          `
-            SELECT ua.id, ai.canonical_email, ua.status
-            FROM user_accounts ua
-            JOIN auth_identities ai ON ai.user_account_id = ua.id
-            WHERE ai.provider = 'password' AND ai.canonical_email = $1
-            FOR UPDATE
-          `,
+          LOCK_PASSWORD_IDENTITY_SQL,
           [input.email],
         );
         const row = rows[0];

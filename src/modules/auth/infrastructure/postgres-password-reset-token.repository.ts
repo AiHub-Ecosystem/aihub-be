@@ -15,7 +15,10 @@ import {
   authTransaction,
 } from './auth-prisma';
 import { isAccountStatus } from './auth-row';
-import { insertEmailDelivery } from './local-auth-statements';
+import {
+  LOCK_PASSWORD_IDENTITY_SQL,
+  insertEmailDelivery,
+} from './local-auth-statements';
 import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
 import { revokeUserWebSessions } from './web-session-statements';
 
@@ -100,13 +103,7 @@ export class PostgresPasswordResetTokenRepository
     return authTransaction(this.client, async (transaction) => {
       const rows = await authQueryRows(
         transaction,
-        `
-          SELECT ua.id, ai.canonical_email, ua.status
-          FROM user_accounts ua
-          JOIN auth_identities ai ON ai.user_account_id = ua.id
-          WHERE ai.provider = 'password' AND ai.canonical_email = $1
-          FOR UPDATE
-        `,
+        LOCK_PASSWORD_IDENTITY_SQL,
         [input.email],
       );
       const row = rows[0];
