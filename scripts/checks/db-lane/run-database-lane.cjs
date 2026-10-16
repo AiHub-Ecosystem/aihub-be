@@ -92,6 +92,8 @@ async function runDatabaseLane(lane, options = {}) {
     throw new Error(`Unknown database lane: ${lane}`);
   }
 
+  options = { passthrough: process.argv.slice(3), ...options };
+
   const env = options.env ?? process.env;
   const adminUrl = databaseLaneAdminUrl(env);
   const lockUrl = databaseLaneLockConnectionString(adminUrl);
@@ -118,6 +120,9 @@ async function runDatabaseLane(lane, options = {}) {
       '--config',
       config,
       '--runInBand',
+      // Anything after the lane name reaches jest, so a caller can ask for a
+      // coverage report without giving up the lane lock above.
+      ...(options.passthrough ?? []),
     ]);
   });
 }
