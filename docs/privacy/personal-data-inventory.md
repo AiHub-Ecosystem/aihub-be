@@ -47,6 +47,9 @@ below.
 
 The upload record stores the Organization, End User, API-key environment,
 declared content type and byte size, object keys, and lifecycle timestamps.
+At completion, AIHUB decodes and re-encodes the image, normalizes its
+orientation, and removes embedded source metadata before publication. The
+chart content itself may still contain personal information.
 Staging objects stay private and are eligible for deletion 24 hours after the
 one-hour intent expires. Published images are publicly readable by anyone who
 has the URL; their deletion deadline is 24 hours after publication, handled by

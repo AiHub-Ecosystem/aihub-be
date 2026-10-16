@@ -893,7 +893,7 @@
       "request": {
         "name": "Verify and publish a Writing Task 1 chart",
         "description": {
-          "content": "Checks the stored bytes using bounded ranged reads, verifies JPEG, PNG, or WebP headers and image dimensions, then copies the verified object from private staging into the environment-specific public chart bucket.\n\nThe returned `image_url` is anonymously readable and shareable until it expires 24 hours after publication. Anyone who learns the URL can read and reuse it. Only the same Organization, End User, and environment can complete the upload.",
+          "content": "Downloads the complete staged object (up to 10 MiB), decodes and verifies the JPEG, PNG, or WebP image, applies EXIF orientation, strips source metadata, and re-encodes it before publishing the sanitized bytes. Completion returns 413 and rejects the intent if the sanitized output exceeds 10 MiB; malformed or mismatched images are rejected with 400.\n\nThe returned `image_url` is anonymously readable and shareable until it expires 24 hours after publication. Anyone who learns the URL can read and reuse it. Only the same Organization, End User, and environment can complete the upload.",
           "type": "text/plain"
         },
         "url": {

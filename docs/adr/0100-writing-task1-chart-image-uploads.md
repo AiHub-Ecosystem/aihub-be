@@ -52,9 +52,11 @@ does not send customer authentication on its image fetch.
 
 **Accepted content.** Accept JPEG, PNG, and WebP only. Reject SVG. Compressed
 size is at most 10 MiB, matching the provider fetch ceiling, and decoded image
-size is at most 20 megapixels. Completion verifies actual bytes and bounded
-image dimensions before publication; it must satisfy the image verification
-boundary in #568 rather than trusting storage metadata alone.
+size is at most 20 megapixels. Completion fully decodes and re-encodes the
+image before publication, applies EXIF orientation, strips source metadata,
+rejects malformed or multi-frame images, and enforces the same 10 MiB limit on
+the published bytes. Storage metadata alone is not trusted; this is the image
+verification boundary tracked in #568.
 
 **Retention and abuse limits.** Permit at most five new upload intents and at
 most five successful publications per Organization in any rolling one-hour

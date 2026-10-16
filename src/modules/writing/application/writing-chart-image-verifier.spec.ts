@@ -1,71 +1,185 @@
-import { verifyWritingChartImageHeaders } from './writing-chart-image-verifier';
+import sharp from 'sharp';
+
+import { getMetrics } from '@/common/observability/metrics';
+import { sanitizeWritingChartImage } from './writing-chart-image-verifier';
 import {
   WRITING_CHART_MAX_BYTES,
   WRITING_CHART_MAX_PIXELS,
 } from './writing-chart-upload.policy';
 
-const PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWP4//8/AAX+Av5Y8msOAAAAAElFTkSuQmCC',
-  'base64',
-);
-const JPEG = Uint8Array.from([
-  0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 0, 2, 0, 3, 3, 1, 0x11, 0, 2, 0x11, 0, 3,
-  0x11, 0, 0xff, 0xd9,
-]);
-const WEBP = Uint8Array.from([
-  0x52, 0x49, 0x46, 0x46, 22, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38,
-  0x20, 10, 0, 0, 0, 0, 0, 0, 0x9d, 0x01, 0x2a, 3, 0, 2, 0,
-]);
-
-function boundedImage(
-  contentType: 'image/jpeg' | 'image/png' | 'image/webp',
-  bytes: Uint8Array,
-) {
-  return {
-    contentType,
-    byteSize: bytes.byteLength,
-    prefix: bytes,
-    suffix: bytes,
-  };
+async function image(format: 'jpeg' | 'png' | 'webp', width = 2, height = 2) {
+  const pipeline = sharp({
+    create: {
+      width,
+      height,
+      channels: 3,
+      background: { r: 80, g: 120, b: 160 },
+    },
+  });
+  return pipeline[format]().toBuffer();
 }
 
-describe('verifyWritingChartImageHeaders', () => {
-  it('matches JPEG, PNG, and WebP signatures and dimensions to the MIME type', () => {
-    expect(
-      verifyWritingChartImageHeaders(boundedImage('image/jpeg', JPEG)),
-    ).toBe(true);
-    expect(verifyWritingChartImageHeaders(boundedImage('image/png', PNG))).toBe(
-      true,
+function webpChunk(name: string, bytes: Uint8Array): Buffer {
+  const header = Buffer.alloc(8);
+  header.write(name, 0, 'ascii');
+  header.writeUInt32LE(bytes.byteLength, 4);
+  return Buffer.concat([
+    header,
+    Buffer.from(bytes),
+    ...(bytes.byteLength % 2 === 0 ? [] : [Buffer.alloc(1)]),
+  ]);
+}
+
+function animatedWebp(still: Uint8Array): Buffer {
+  let offset = 12;
+  let frame: Buffer | undefined;
+  while (offset + 8 <= still.byteLength) {
+    const name = Buffer.from(still).toString('ascii', offset, offset + 4);
+    const size = Buffer.from(still).readUInt32LE(offset + 4);
+    if (name === 'VP8L' || name === 'VP8 ') {
+      frame = webpChunk(name, still.subarray(offset + 8, offset + 8 + size));
+      break;
+    }
+    offset += 8 + size + (size % 2);
+  }
+  if (frame === undefined) throw new Error('Missing WebP frame');
+
+  const extendedHeader = Buffer.alloc(10);
+  extendedHeader[0] = 0x02;
+  const animation = Buffer.alloc(6);
+  const frameHeader = Buffer.alloc(16);
+  frameHeader[6] = 0;
+  frameHeader[9] = 0;
+  const frameData = webpChunk('ANMF', Buffer.concat([frameHeader, frame]));
+  const body = Buffer.concat([
+    Buffer.from('WEBP'),
+    webpChunk('VP8X', extendedHeader),
+    webpChunk('ANIM', animation),
+    frameData,
+    frameData,
+  ]);
+  const riff = Buffer.alloc(8);
+  riff.write('RIFF', 0, 'ascii');
+  riff.writeUInt32LE(body.byteLength, 4);
+  return Buffer.concat([riff, body]);
+}
+
+describe('sanitizeWritingChartImage', () => {
+  it.each([
+    ['image/jpeg', 'jpeg'],
+    ['image/png', 'png'],
+    ['image/webp', 'webp'],
+  ] as const)(
+    're-encodes a valid %s image as %s',
+    async (contentType, format) => {
+      const source = await image(format);
+      const sanitized = await sanitizeWritingChartImage({
+        contentType,
+        bytes: source,
+      });
+
+      expect(sanitized).toMatchObject({ kind: 'sanitized' });
+      if (sanitized?.kind !== 'sanitized')
+        throw new Error('Image not sanitized');
+      await expect(sharp(sanitized.bytes).metadata()).resolves.toMatchObject({
+        format,
+        width: 2,
+        height: 2,
+      });
+    },
+  );
+
+  it('rejects mismatched, truncated, oversized, and multi-frame images', async () => {
+    const png = await image('png');
+    const oversized = await image(
+      'png',
+      Math.ceil(Math.sqrt(WRITING_CHART_MAX_PIXELS)) + 1,
+      Math.ceil(Math.sqrt(WRITING_CHART_MAX_PIXELS)) + 1,
     );
-    expect(
-      verifyWritingChartImageHeaders(boundedImage('image/webp', WEBP)),
-    ).toBe(true);
-    expect(
-      verifyWritingChartImageHeaders(boundedImage('image/jpeg', PNG)),
-    ).toBe(false);
-  });
+    const webp = await image('webp');
 
-  it('rejects truncated image containers and dimensions above 20 megapixels', () => {
-    const truncated = PNG.subarray(0, PNG.byteLength - 12);
-    expect(
-      verifyWritingChartImageHeaders(boundedImage('image/png', truncated)),
-    ).toBe(false);
-
-    const oversized = new Uint8Array(PNG);
-    new DataView(oversized.buffer).setUint32(16, 4_500, false);
-    new DataView(oversized.buffer).setUint32(20, 4_500, false);
-    expect(4_500 * 4_500).toBeGreaterThan(WRITING_CHART_MAX_PIXELS);
-    expect(
-      verifyWritingChartImageHeaders(boundedImage('image/png', oversized)),
-    ).toBe(false);
-  });
-
-  it('rejects objects above the compressed-byte limit before reading headers', () => {
-    expect(
-      verifyWritingChartImageHeaders({
-        ...boundedImage('image/png', PNG),
-        byteSize: WRITING_CHART_MAX_BYTES + 1,
+    await expect(
+      sanitizeWritingChartImage({ contentType: 'image/jpeg', bytes: png }),
+    ).resolves.toBeUndefined();
+    await expect(
+      sanitizeWritingChartImage({
+        contentType: 'image/png',
+        bytes: png.subarray(0, png.byteLength - 8),
       }),
+    ).resolves.toBeUndefined();
+    const jpeg = await image('jpeg');
+    await expect(
+      sanitizeWritingChartImage({
+        contentType: 'image/jpeg',
+        bytes: jpeg.subarray(0, jpeg.byteLength - 2),
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      sanitizeWritingChartImage({ contentType: 'image/png', bytes: oversized }),
+    ).resolves.toBeUndefined();
+    await expect(
+      sanitizeWritingChartImage({
+        contentType: 'image/webp',
+        bytes: animatedWebp(webp),
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      sanitizeWritingChartImage({
+        contentType: 'image/png',
+        bytes: Buffer.alloc(WRITING_CHART_MAX_BYTES + 1),
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('drops EXIF and ICC metadata from JPEG images', async () => {
+    const withMetadata = await sharp(await image('jpeg'))
+      .withExif({ IFD0: { Make: 'private-camera', Model: 'private-model' } })
+      .withIccProfile('srgb')
+      .jpeg()
+      .toBuffer();
+    const sanitized = await sanitizeWritingChartImage({
+      contentType: 'image/jpeg',
+      bytes: withMetadata,
+    });
+
+    expect(sanitized).toMatchObject({ kind: 'sanitized' });
+    if (sanitized?.kind !== 'sanitized') throw new Error('Image not sanitized');
+    const metadata = await sharp(sanitized.bytes).metadata();
+    expect(metadata.exif).toBeUndefined();
+    expect(metadata.icc).toBeUndefined();
+  });
+
+  it('drops trailing bytes outside a complete PNG container', async () => {
+    const source = await image('png');
+    const uploaded = Buffer.concat([source, Buffer.from([0xde, 0xad])]);
+    const sanitized = await sanitizeWritingChartImage({
+      contentType: 'image/png',
+      bytes: uploaded,
+    });
+
+    expect(sanitized).toMatchObject({ kind: 'sanitized' });
+    expect(
+      sanitized?.kind === 'sanitized' &&
+        sanitized.bytes.subarray(-2).equals(Buffer.from([0xde, 0xad])),
     ).toBe(false);
+  });
+
+  it('keeps the event loop responsive for a 20-megapixel image', async () => {
+    const source = await image('jpeg', 5_000, 4_000);
+    await getMetrics();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await getMetrics();
+
+    const sanitized = await sanitizeWritingChartImage({
+      contentType: 'image/jpeg',
+      bytes: source,
+    });
+    expect(sanitized).toMatchObject({ kind: 'sanitized' });
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const metrics = await getMetrics();
+    const lag = metrics.match(/^aihub_event_loop_lag_seconds (\S+)$/m);
+    expect(lag).not.toBeNull();
+    expect(Number(lag?.[1])).toBeLessThan(0.1);
   });
 });

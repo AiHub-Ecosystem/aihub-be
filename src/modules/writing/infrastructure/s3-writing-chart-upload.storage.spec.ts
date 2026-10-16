@@ -1,7 +1,7 @@
-import type { S3Client } from '@aws-sdk/client-s3';
+import { PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
 
 import { createSeaweedFsS3Client } from '@/modules/secrets/infrastructure/seaweedfs-s3-client.factory';
-import { WRITING_CHART_RANGE_BYTES } from '@/modules/writing/application/writing-chart-upload.policy';
+import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/application/writing-chart-upload.policy';
 import { S3WritingChartUploadStorage } from './s3-writing-chart-upload.storage';
 
 const STAGING_KEY = 'writing-charts/chart_01J00000000000000000000001/staging';
@@ -58,7 +58,7 @@ describe('S3WritingChartUploadStorage contract', () => {
     );
   });
 
-  it('reads bounded, ETag-matched ranges from private staging', async () => {
+  it('reads one bounded, ETag-matched object from private staging', async () => {
     const image = Buffer.alloc(160_000, 0x61);
     const send = jest.fn().mockImplementation(async (raw: unknown) => {
       const command = raw as {
@@ -106,53 +106,74 @@ describe('S3WritingChartUploadStorage contract', () => {
     expect(object).toMatchObject({
       contentType: 'image/png',
       byteSize: image.length,
-      etag: '"verified-etag"',
-      prefix: image.subarray(0, WRITING_CHART_RANGE_BYTES),
-      suffix: image.subarray(image.length - WRITING_CHART_RANGE_BYTES),
+      bytes: image,
     });
-    expect(send).toHaveBeenCalledTimes(3);
-    expect(
-      send.mock.calls
-        .slice(1)
-        .map(
-          ([command]) => (command as { input: Record<string, unknown> }).input,
-        ),
-    ).toEqual([
-      {
+    expect(send).toHaveBeenCalledTimes(2);
+    const commands = send.mock.calls.map(
+      ([command]) =>
+        command as {
+          constructor: { readonly name: string };
+          input: Record<string, unknown>;
+        },
+    );
+    expect(commands.map(({ constructor }) => constructor.name)).toEqual(
+      expect.arrayContaining(['HeadObjectCommand', 'GetObjectCommand']),
+    );
+    expect(commands.map(({ input }) => input)).toContainEqual(
+      expect.objectContaining({
         Bucket: 'aihub-sandbox-writing-chart-staging',
         Key: STAGING_KEY,
-        Range: `bytes=0-${WRITING_CHART_RANGE_BYTES - 1}`,
+        Range: `bytes=0-${image.length - 1}`,
         IfMatch: '"verified-etag"',
-      },
-      {
-        Bucket: 'aihub-sandbox-writing-chart-staging',
-        Key: STAGING_KEY,
-        Range: `bytes=${image.length - WRITING_CHART_RANGE_BYTES}-${image.length - 1}`,
-        IfMatch: '"verified-etag"',
-      },
-    ]);
+      }),
+    );
   });
 
-  it('publishes to a different environment-isolated bucket and returns an unsigned chart URL', async () => {
+  it('does not download a staging object larger than the upload limit', async () => {
+    const send = jest.fn().mockResolvedValue({
+      ContentType: 'image/png',
+      ContentLength: WRITING_CHART_MAX_BYTES + 1,
+      ETag: '"oversized"',
+    });
+    const adapter = createStorage(send);
+
+    await expect(
+      adapter.inspectObject({
+        environment: 'sandbox',
+        stagingKey: STAGING_KEY,
+        byteSize: WRITING_CHART_MAX_BYTES + 1,
+      }),
+    ).resolves.toMatchObject({
+      contentType: 'image/png',
+      byteSize: WRITING_CHART_MAX_BYTES + 1,
+      bytes: new Uint8Array(),
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('publishes only prepared bytes to the environment-isolated public bucket', async () => {
     const send = jest.fn().mockResolvedValue({});
     const adapter = createStorage(send);
+    const bytes = Buffer.from('re-encoded-chart');
 
     await adapter.publishObject({
       environment: 'sandbox',
       stagingKey: STAGING_KEY,
       publishedKey: PUBLISHED_KEY,
       contentType: 'image/webp',
-      etag: '"verified-etag"',
+      bytes,
     });
 
-    expect(send.mock.calls[0]?.[0]).toMatchObject({
+    const command = send.mock.calls[0]?.[0];
+    expect(command).toBeInstanceOf(PutObjectCommand);
+    expect(command).toMatchObject({
       input: {
         Bucket: 'aihub-sandbox-writing-charts',
         Key: PUBLISHED_KEY,
-        CopySourceIfMatch: '"verified-etag"',
+        Body: bytes,
+        ContentLength: bytes.byteLength,
         ContentType: 'image/webp',
         ContentDisposition: 'inline',
-        MetadataDirective: 'REPLACE',
       },
     });
     const url = adapter.publicUrl({

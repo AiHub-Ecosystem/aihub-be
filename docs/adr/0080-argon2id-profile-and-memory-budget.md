@@ -25,6 +25,21 @@ Two runs used the repository's pinned runtime image with the Nest/Fastify server
 
 Both peaks are more than 220 MiB below the 614 MiB gate, so keep the current profile. The DNS p95 increase is recorded as evidence; no DNS SLO was set, so it does not trigger a profile change.
 
+## Writing chart decoding cap (2026-10-16)
+
+Writing chart completion decodes and re-encodes at most one image at a time per
+application process. The runtime sets `UV_THREADPOOL_SIZE=4` (ADR-0091); one
+active async Sharp operation can use at most one of those libuv worker slots,
+leaving up to three for Argon2 and other libuv work. This is a cap, not a worker
+reservation, so concurrent work can still contend for CPU and memory. Sharp's
+libvips concurrency is set to one thread per image, and the upload policy caps
+decoded dimensions at 20 megapixels. The 20-megapixel regression test scrapes
+`aihub_event_loop_lag_seconds` and requires its p99 to stay below 0.1 seconds;
+this is a test guard, not an operational SLO. The measurements above did not
+include chart decoding, so they do not establish combined Argon2 and
+image-decoder RSS or DNS latency. Re-measure both before increasing the chart
+pixel or concurrency limits.
+
 OWASP lists `m=19456 KiB, t=2, p=1` as a minimum recommended Argon2id profile. [Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
 
 If the lower profile still exceeds the RSS threshold, record that result and revisit the wider container budget under #268; do not keep lowering password-hash cost in this issue. The confirmation run repeated the current profile after the decision; no profile migration or login rehash is needed while the RSS gate passes.
