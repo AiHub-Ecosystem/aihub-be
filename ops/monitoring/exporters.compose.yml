@@ -52,7 +52,7 @@ services:
     restart: unless-stopped
 
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.60.6
+    image: ghcr.io/google/cadvisor:v0.60.6
     profiles: [container-metrics]
     network_mode: host
     pid: host
