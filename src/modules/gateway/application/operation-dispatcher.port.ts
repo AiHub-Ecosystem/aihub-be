@@ -50,9 +50,10 @@ export type ResponseFor<K extends OperationId> =
 
 export interface OperationDispatcherPort {
   /**
-   * Concrete implementation: `HttpOperationDispatcher` in
-   * `src/modules/gateway/infrastructure/`. The per-operation adapters it
-   * selects from the composition-root array live in `src/downstream/<service>/`
+   * Concrete implementation: `GuardedOperationDispatcher` (policy) over
+   * `HttpOperationTransport` in `src/modules/gateway/infrastructure/`, wired in
+   * `GatewayModule`. The per-operation adapters the transport selects from the
+   * composition-root array live in `src/downstream/<service>/`
    * (`writing/`, `speaking/`), as a source boundary, never inside a feature
    * module.
    */

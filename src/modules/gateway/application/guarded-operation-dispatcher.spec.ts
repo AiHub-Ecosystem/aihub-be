@@ -88,10 +88,14 @@ function fixture(options: { admit?: boolean | Error } = {}) {
     allowanceFor: jest.fn(),
   } as unknown as SandboxDispatchBudgetPort;
   const warn = jest.fn();
+  const deadlineMsRemaining = jest.fn();
+  const cancelledByDeadline = jest.fn();
   const dispatcher = new GuardedOperationDispatcher(
     transport,
     attempts,
     new SandboxAdmission(budget, warn),
+    { deadlineMsRemaining, cancelledByDeadline },
+    warn,
   );
   return {
     dispatcher,
@@ -101,6 +105,8 @@ function fixture(options: { admit?: boolean | Error } = {}) {
     reserve,
     release,
     warn,
+    deadlineMsRemaining,
+    cancelledByDeadline,
   };
 }
 
@@ -135,6 +141,37 @@ describe('GuardedOperationDispatcher', () => {
     expect(call?.deadlineMs).toBeGreaterThan(0);
     expect(call?.deadlineMs).toBeLessThanOrEqual(5_000);
     expect(call?.signal.aborted).toBe(false);
+  });
+
+  it('reports the remaining deadline to the observer before the call', async () => {
+    const { dispatcher, deadlineMsRemaining } = fixture();
+
+    await dispatcher.dispatch('writing.task1.grade', input, context());
+
+    expect(deadlineMsRemaining).toHaveBeenCalledWith(
+      'writing.task1.grade',
+      expect.any(Number),
+    );
+  });
+
+  it('reports a call cancelled by the deadline to the observer', async () => {
+    const { dispatcher, transport, cancelledByDeadline } = fixture();
+    transport.behavior = (call) =>
+      new Promise((_resolve, reject) => {
+        call.signal.addEventListener('abort', () =>
+          reject(new Error('aborted')),
+        );
+      });
+
+    await expect(
+      dispatcher.dispatch(
+        'writing.task1.grade',
+        input,
+        context({ deadlineMs: 20 }),
+      ),
+    ).rejects.toThrow('aborted');
+
+    expect(cancelledByDeadline).toHaveBeenCalledWith('writing.task1.grade');
   });
 
   describe('outcome classification', () => {
@@ -267,7 +304,7 @@ describe('GuardedOperationDispatcher', () => {
       );
 
       expect(error.code).toBe('AI_SERVICE_TIMEOUT');
-      expect(release).toHaveBeenCalledTimes(1);
+      expect(release.mock.calls).toEqual([['req_01J8QK3M7XW2P5NRTVA9BCDEFG']]);
       expect(beginAttempt).not.toHaveBeenCalled();
     });
 
@@ -289,7 +326,9 @@ describe('GuardedOperationDispatcher', () => {
       );
 
       expect(error.code).toBe('AI_SERVICE_TIMEOUT');
-      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        'Sandbox dispatch reservation could not be released after a pre-dispatch failure',
+      );
     });
   });
 

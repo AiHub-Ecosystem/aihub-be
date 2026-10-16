@@ -1,15 +1,12 @@
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
-import {
-  observeDispatchDeadlineMsRemaining,
-  recordDispatchCancelledByDeadline,
-} from '@/common/observability/metrics';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   DispatchAttemptOutcome,
   DispatchAttemptRecordPort,
 } from '@/modules/metering/public/dispatch-attempts';
 import { requireTimeLeft } from './dispatch-deadline';
+import type { DispatchObserverPort } from './dispatch-observer.port';
 import type {
   DispatchResult,
   OperationDispatcherPort,
@@ -20,15 +17,27 @@ import type {
   OperationTransportPort,
   PreparedDispatch,
 } from './operation-transport.port';
-import type { SandboxAdmission } from './sandbox-admission';
+import type { SandboxAdmission, SandboxReservation } from './sandbox-admission';
 
-/** What one dispatch has observed so far; the evidence the outcome is read from. */
+/**
+ * One dispatch and what it has observed so far: the evidence its outcome is
+ * read from.
+ */
 interface DispatchRun {
+  readonly operation: OperationId;
+  readonly context: RequestContext;
+  readonly reservation: SandboxReservation;
   attemptId?: string;
   callStarted: boolean;
   callInFlight: boolean;
   responseStatus?: number;
   deadlineAbortedCall: boolean;
+}
+
+/** The time the one downstream call may take, and how to cancel it. */
+interface CallWindow {
+  readonly signal: AbortSignal;
+  readonly deadlineMs: number;
 }
 
 function dispatchEvidenceUnavailable(cause: unknown): AppError {
@@ -64,7 +73,8 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
     private readonly transport: OperationTransportPort,
     private readonly attempts: DispatchAttemptRecordPort,
     private readonly sandbox: SandboxAdmission,
-    private readonly warn: (message: string) => void = () => undefined,
+    private readonly observer: DispatchObserverPort,
+    private readonly warn: (message: string) => void,
   ) {}
 
   async dispatch<O extends OperationId>(
@@ -73,27 +83,29 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
     context: RequestContext,
   ): Promise<DispatchResult<ResponseFor<O>>> {
     const prepared = await this.transport.prepare(operation, input, context);
-    await this.sandbox.admit(context);
+    const reservation = await this.sandbox.admit(context);
 
     const run: DispatchRun = {
+      operation,
+      context,
+      reservation,
       callStarted: false,
       callInFlight: false,
       deadlineAbortedCall: false,
     };
     try {
-      return await this.attempt(prepared, operation, context, run);
+      return await this.attempt(prepared, run);
     } catch (error) {
-      await this.settle(error, operation, context, run);
+      await this.settle(error, run);
       throw error;
     }
   }
 
   private async attempt<O extends OperationId>(
     prepared: PreparedDispatch<O>,
-    operation: O,
-    context: RequestContext,
     run: DispatchRun,
   ): Promise<DispatchResult<ResponseFor<O>>> {
+    const { context, operation } = run;
     requireTimeLeft(context);
     const organizationId = context.organizationId;
     if (organizationId === undefined) {
@@ -116,9 +128,12 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
       context.signal,
       AbortSignal.timeout(remainingMs),
     ]);
-    observeDispatchDeadlineMsRemaining(operation, remainingMs);
+    this.observer.deadlineMsRemaining(operation, remainingMs);
 
-    const result = await this.call(prepared, run, signal, remainingMs);
+    const result = await this.call(prepared, run, {
+      signal,
+      deadlineMs: remainingMs,
+    });
     await this.record(run.attemptId, 'response_received');
     return result;
   }
@@ -126,9 +141,9 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
   private async call<O extends OperationId>(
     prepared: PreparedDispatch<O>,
     run: DispatchRun,
-    signal: AbortSignal,
-    deadlineMs: number,
+    window: CallWindow,
   ): Promise<DispatchResult<ResponseFor<O>>> {
+    const { signal } = window;
     const noteDeadlineAbort = (): void => {
       const reason = signal.reason as { readonly name?: unknown } | undefined;
       if (
@@ -144,8 +159,7 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
     run.callInFlight = true;
     try {
       return await prepared.send({
-        deadlineMs,
-        signal,
+        ...window,
         onResponseReceived: (statusCode) => {
           run.responseStatus = statusCode;
         },
@@ -156,14 +170,9 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
     }
   }
 
-  private async settle<O extends OperationId>(
-    error: unknown,
-    operation: O,
-    context: RequestContext,
-    run: DispatchRun,
-  ): Promise<void> {
+  private async settle(error: unknown, run: DispatchRun): Promise<void> {
     if (run.deadlineAbortedCall) {
-      recordDispatchCancelledByDeadline(operation);
+      this.observer.cancelledByDeadline(run.operation);
     }
     const notDispatched =
       !run.callStarted || this.transport.isUndelivered(error);
@@ -174,7 +183,7 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
       );
     }
     if (notDispatched) {
-      await this.sandbox.release(context);
+      await run.reservation.release();
     }
   }
 

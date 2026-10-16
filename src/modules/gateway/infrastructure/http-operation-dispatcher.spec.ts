@@ -13,6 +13,7 @@ import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { DownstreamRequest } from '@/downstream/downstream.types';
 import type { InternalTokenIssuerPort } from '@/modules/gateway/application/internal-token-issuer.port';
 import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
+import { createHttpOperationDispatcher } from '@/modules/gateway/infrastructure/http-operation-dispatcher.testing';
 import type {
   DispatchAttemptOutcome,
   DispatchAttemptRecordPort,
@@ -20,7 +21,6 @@ import type {
 } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { DownstreamHttpClient } from './downstream-http.client';
-import { HttpOperationDispatcher } from './http-operation-dispatcher';
 
 function fakeGradeAdapter(
   path: string,
@@ -207,7 +207,7 @@ describe('HttpOperationDispatcher', () => {
       'https://ai-writing.test',
       mockAgent,
     );
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [],
@@ -233,7 +233,7 @@ describe('HttpOperationDispatcher', () => {
       'https://ai-writing.test',
       mockAgent,
     );
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
@@ -287,7 +287,7 @@ describe('HttpOperationDispatcher', () => {
       mockAgent,
     );
     const request = jest.spyOn(httpClient, 'request');
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
@@ -321,7 +321,7 @@ describe('HttpOperationDispatcher', () => {
       mockAgent,
     );
     const request = jest.spyOn(httpClient, 'request');
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
@@ -375,7 +375,7 @@ describe('HttpOperationDispatcher', () => {
       ...fakeGradeAdapter('/task-one'),
       parseResponse: () => gradeResponse,
     };
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [adapter],
@@ -418,7 +418,7 @@ describe('HttpOperationDispatcher', () => {
           if (options.signal.aborted) rejectOnAbort();
         }),
     );
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
@@ -469,7 +469,7 @@ describe('HttpOperationDispatcher', () => {
           if (options.signal.aborted) rejectOnAbort();
         }),
     );
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
@@ -517,7 +517,7 @@ describe('HttpOperationDispatcher', () => {
           if (options.signal.aborted) rejectOnAbort();
         }),
     );
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
@@ -562,7 +562,7 @@ describe('HttpOperationDispatcher', () => {
       }),
       parseResponse: () => gradeResponse,
     };
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       new DownstreamHttpClient('https://ai-writing.test', mockAgent),
       new FakeTokenIssuer(),
       [successfulAdapter],
@@ -582,7 +582,7 @@ describe('HttpOperationDispatcher', () => {
     const attempts = fakeDispatchAttempts();
     const budget = fakeSandboxBudget();
     const httpClient = new DownstreamHttpClient('', mockAgent);
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
@@ -615,7 +615,7 @@ describe('HttpOperationDispatcher', () => {
       mockAgent,
     );
     const request = jest.spyOn(httpClient, 'request');
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
@@ -649,7 +649,7 @@ describe('HttpOperationDispatcher', () => {
       mockAgent,
     );
     const request = jest.spyOn(httpClient, 'request');
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
@@ -675,7 +675,7 @@ describe('HttpOperationDispatcher', () => {
       .get('https://ai-writing.test')
       .intercept({ method: 'POST', path: '/task-one' })
       .reply(503, {});
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       new DownstreamHttpClient('https://ai-writing.test', mockAgent),
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
@@ -697,7 +697,7 @@ describe('HttpOperationDispatcher', () => {
       mockAgent,
     );
     const request = jest.spyOn(httpClient, 'request');
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
@@ -722,7 +722,7 @@ describe('HttpOperationDispatcher', () => {
       'https://ai-writing.test',
       mockAgent,
     );
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
@@ -762,7 +762,7 @@ describe('HttpOperationDispatcher', () => {
       mockAgent,
     );
     jest.spyOn(httpClient, 'request').mockRejectedValue(originalError);
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
@@ -801,7 +801,7 @@ describe('HttpOperationDispatcher', () => {
       'https://ai-writing.test',
       mockAgent,
     );
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
@@ -848,7 +848,7 @@ describe('HttpOperationDispatcher', () => {
       .get('https://ai-writing.test')
       .intercept({ method: 'POST', path: '/task-one' })
       .reply(200, 'not-json');
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       new DownstreamHttpClient('https://ai-writing.test', mockAgent),
       new FakeTokenIssuer(),
       [fakeGradeAdapter('/task-one')],
@@ -888,7 +888,7 @@ describe('HttpOperationDispatcher', () => {
       'https://ai-writing.test',
       mockAgent,
     );
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       new FakeTokenIssuer(tokenMarker),
       [fakeGradeAdapter('/grade', originalError)],
@@ -934,7 +934,7 @@ describe('HttpOperationDispatcher', () => {
         .get('https://ai-writing.test')
         .intercept({ method: 'POST', path: '/grade' })
         .reply(200, { unexpected: true });
-      const dispatcher = new HttpOperationDispatcher(
+      const dispatcher = createHttpOperationDispatcher(
         new DownstreamHttpClient('https://ai-writing.test', mockAgent),
         new FakeTokenIssuer('token'),
         [fakeGradeAdapter('/grade', error)],

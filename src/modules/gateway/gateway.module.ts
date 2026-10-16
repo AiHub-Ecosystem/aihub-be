@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import {
   GATEWAY_REDIS_READINESS,
@@ -39,6 +39,7 @@ import {
 } from './application/concurrency-limiter.port';
 import { GradingOrchestrator } from './application/grading-orchestrator';
 import { GRADING_ORCHESTRATOR } from './application/grading-orchestrator.port';
+import { GuardedOperationDispatcher } from './application/guarded-operation-dispatcher';
 import { INTERNAL_TOKEN_ISSUER } from './application/internal-token-issuer.port';
 import {
   OPERATION_DISPATCHER,
@@ -49,13 +50,18 @@ import {
   type QuotaCounterPort,
 } from './application/quota-counter.port';
 import { RATE_LIMITER } from './application/rate-limiter.port';
+import { SandboxAdmission } from './application/sandbox-admission';
 import {
   SANDBOX_DISPATCH_BUDGET,
   type SandboxDispatchBudgetPort,
 } from './application/sandbox-dispatch-budget.port';
 import { ConfiguredTokenIssuer } from './infrastructure/configured-token-issuer';
 import { DownstreamHttpClient } from './infrastructure/downstream-http.client';
-import { HttpOperationDispatcher } from './infrastructure/http-operation-dispatcher';
+import {
+  DISPATCHER_LOG_CONTEXT,
+  HttpOperationTransport,
+} from './infrastructure/http-operation-dispatcher';
+import { metricsDispatchObserver } from './infrastructure/metrics-dispatch-observer';
 import { PostgresSandboxDispatchBudget } from './infrastructure/postgres-sandbox-dispatch-budget';
 import { RedisConcurrencyLimiter } from './infrastructure/redis-concurrency-limiter';
 import {
@@ -162,19 +168,22 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
         tokenIssuer: ConfiguredTokenIssuer,
         dispatchAttempts: DispatchAttemptRecordPort,
         sandboxBudget: SandboxDispatchBudgetPort,
-      ): HttpOperationDispatcher =>
-        new HttpOperationDispatcher(
-          httpClient,
-          tokenIssuer,
-          [
+      ): OperationDispatcherPort => {
+        const logger = new Logger(DISPATCHER_LOG_CONTEXT);
+        const warn = (message: string): void => logger.warn(message);
+        return new GuardedOperationDispatcher(
+          new HttpOperationTransport(httpClient, tokenIssuer, [
             task1GradeAdapter,
             task2GradeAdapter,
             speakingGradingAdapter,
             speakingGradingJsonAdapter,
-          ],
+          ]),
           dispatchAttempts,
-          sandboxBudget,
-        ),
+          new SandboxAdmission(sandboxBudget, warn),
+          metricsDispatchObserver,
+          warn,
+        );
+      },
       inject: [
         DownstreamHttpClient,
         INTERNAL_TOKEN_ISSUER,

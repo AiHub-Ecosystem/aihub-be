@@ -6,11 +6,9 @@ import type { ErrorCode } from '@/common/errors/error-code';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { InternalAIServiceResponse } from '@/downstream/downstream.types';
-import { GuardedOperationDispatcher } from '@/modules/gateway/application/guarded-operation-dispatcher';
 import type { InternalTokenIssuerPort } from '@/modules/gateway/application/internal-token-issuer.port';
 import type {
   DispatchResult,
-  OperationDispatcherPort,
   RequestFor,
   ResponseFor,
 } from '@/modules/gateway/application/operation-dispatcher.port';
@@ -18,9 +16,6 @@ import type {
   OperationTransportPort,
   PreparedDispatch,
 } from '@/modules/gateway/application/operation-transport.port';
-import { SandboxAdmission } from '@/modules/gateway/application/sandbox-admission';
-import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
-import type { DispatchAttemptRecordPort } from '@/modules/metering/public/dispatch-attempts';
 import { extractDownstreamTelemetry } from '@/modules/metering/public/telemetry';
 import {
   type DownstreamHttpClient,
@@ -116,6 +111,9 @@ function downstreamFailureMessage(
   }
 }
 
+/** The log context the dispatcher has always logged under. */
+export const DISPATCHER_LOG_CONTEXT = 'HttpOperationDispatcher';
+
 interface DownstreamFailure {
   readonly requestId: string;
   readonly operation: OperationId;
@@ -142,7 +140,7 @@ export class HttpOperationTransport implements OperationTransportPort {
     OperationId,
     DownstreamAdapter<unknown, unknown>
   >;
-  private readonly logger = new Logger(HttpOperationDispatcher.name);
+  private readonly logger = new Logger(DISPATCHER_LOG_CONTEXT);
 
   constructor(
     private readonly httpClient: DownstreamHttpClient,
@@ -191,6 +189,9 @@ export class HttpOperationTransport implements OperationTransportPort {
               call.onResponseReceived(statusCode);
             },
           });
+          // The client reports a response through the callback; repeating it
+          // here means a returned response is never classified as unknown.
+          call.onResponseReceived(response.status);
           if (response.status < 200 || response.status >= 300) {
             throw mapDownstreamStatus(response.status);
           }
@@ -254,38 +255,5 @@ export class HttpOperationTransport implements OperationTransportPort {
         ...(reason === undefined ? {} : { reason }),
       }),
     );
-  }
-}
-
-/**
- * The HTTP-backed `OperationDispatcherPort`: wires the transport into the
- * application's dispatch policy and holds no decision of its own.
- */
-export class HttpOperationDispatcher implements OperationDispatcherPort {
-  private readonly logger = new Logger(HttpOperationDispatcher.name);
-  private readonly guarded: GuardedOperationDispatcher;
-
-  constructor(
-    httpClient: DownstreamHttpClient,
-    tokenIssuer: InternalTokenIssuerPort,
-    adapters: readonly DownstreamAdapter<unknown, unknown>[],
-    dispatchAttempts: DispatchAttemptRecordPort,
-    sandboxBudget?: SandboxDispatchBudgetPort,
-  ) {
-    const warn = (message: string): void => this.logger.warn(message);
-    this.guarded = new GuardedOperationDispatcher(
-      new HttpOperationTransport(httpClient, tokenIssuer, adapters),
-      dispatchAttempts,
-      new SandboxAdmission(sandboxBudget, warn),
-      warn,
-    );
-  }
-
-  dispatch<O extends OperationId>(
-    operation: O,
-    input: RequestFor<O>,
-    context: RequestContext,
-  ): Promise<DispatchResult<ResponseFor<O>>> {
-    return this.guarded.dispatch(operation, input, context);
   }
 }

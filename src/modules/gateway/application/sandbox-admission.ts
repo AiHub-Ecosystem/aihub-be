@@ -4,6 +4,16 @@ import { requireTimeLeft } from './dispatch-deadline';
 import { quotaExceededError } from './quota-period';
 import type { SandboxDispatchBudgetPort } from './sandbox-dispatch-budget.port';
 
+/** What an admitted request holds until its call is known to have left. */
+export interface SandboxReservation {
+  /** Gives the allowance back; never throws, a failure is only logged. */
+  release(): Promise<void>;
+}
+
+const NO_RESERVATION: SandboxReservation = {
+  release: async () => undefined,
+};
+
 function sandboxBudgetUnavailable(): AppError {
   return new AppError({
     code: 'INTERNAL_ERROR',
@@ -14,8 +24,7 @@ function sandboxBudgetUnavailable(): AppError {
 
 /**
  * Sandbox admission: reserves the Organization's dispatch allowance before a
- * downstream call and gives it back when the call provably never left. A
- * production request passes through untouched.
+ * downstream call. A production request passes through holding nothing.
  */
 export class SandboxAdmission {
   constructor(
@@ -23,13 +32,14 @@ export class SandboxAdmission {
     private readonly warn: (message: string) => void,
   ) {}
 
-  async admit(context: RequestContext): Promise<void> {
+  async admit(context: RequestContext): Promise<SandboxReservation> {
     if (context.environment !== 'sandbox') {
-      return;
+      return NO_RESERVATION;
     }
     requireTimeLeft(context);
+    const { budget } = this;
     const organizationId = context.organizationId;
-    if (this.budget === undefined || organizationId === undefined) {
+    if (budget === undefined || organizationId === undefined) {
       throw sandboxBudgetUnavailable();
     }
     let admitted: boolean;
@@ -37,31 +47,35 @@ export class SandboxAdmission {
       // The Organization's allowance is resolved inside the reserving
       // transaction, so it cannot be read here and passed in as a number that
       // an operator's override has already overtaken.
-      admitted = await this.budget.reserve({
+      admitted = await budget.reserve({
         organizationId,
         requestId: context.requestId,
       });
     } catch {
       throw sandboxBudgetUnavailable();
     }
+    const reservation: SandboxReservation = {
+      release: () => this.release(budget, context.requestId),
+    };
     try {
       requireTimeLeft(context);
     } catch (error) {
       if (admitted) {
-        await this.release(context);
+        await reservation.release();
       }
       throw error;
     }
     if (!admitted) {
       throw quotaExceededError(new Date());
     }
+    return reservation;
   }
 
-  async release(context: RequestContext): Promise<void> {
-    if (context.environment !== 'sandbox') {
-      return;
-    }
-    await this.budget?.release(context.requestId).catch(() => {
+  private async release(
+    budget: SandboxDispatchBudgetPort,
+    requestId: string,
+  ): Promise<void> {
+    await budget.release(requestId).catch(() => {
       this.warn(
         'Sandbox dispatch reservation could not be released after a pre-dispatch failure',
       );

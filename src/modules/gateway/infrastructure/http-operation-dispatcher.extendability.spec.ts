@@ -4,9 +4,9 @@ import type { OperationId } from '@/catalog/operation-id';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { DownstreamRequest } from '@/downstream/downstream.types';
+import { createHttpOperationDispatcher } from '@/modules/gateway/infrastructure/http-operation-dispatcher.testing';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { DownstreamHttpClient } from './downstream-http.client';
-import { HttpOperationDispatcher } from './http-operation-dispatcher';
 
 describe('HttpOperationDispatcher fifth-operation extensibility', () => {
   it('routes a fifth operation when only its adapter is registered', async () => {
@@ -28,7 +28,7 @@ describe('HttpOperationDispatcher fifth-operation extensibility', () => {
       },
       parseResponse: () => ({ echoed: true }),
     };
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       httpClient,
       { mint: async () => 'token-abc' },
       [fifthAdapter],

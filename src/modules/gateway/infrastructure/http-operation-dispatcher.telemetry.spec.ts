@@ -8,9 +8,9 @@ import type {
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { DownstreamRequest } from '@/downstream/downstream.types';
 import type { InternalTokenIssuerPort } from '@/modules/gateway/application/internal-token-issuer.port';
+import { createHttpOperationDispatcher } from '@/modules/gateway/infrastructure/http-operation-dispatcher.testing';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { DownstreamHttpClient } from './downstream-http.client';
-import { HttpOperationDispatcher } from './http-operation-dispatcher';
 
 const gradeInput: GradeTask1Request = {
   question: 'Describe the chart.',
@@ -97,7 +97,7 @@ describe('HttpOperationDispatcher telemetry', () => {
         metrics: { ai_processing_ms: 70 },
       });
 
-    const dispatcher = new HttpOperationDispatcher(
+    const dispatcher = createHttpOperationDispatcher(
       new DownstreamHttpClient('https://ai-writing.test', agent),
       issuer,
       [adapter],
