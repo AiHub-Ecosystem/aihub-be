@@ -5,7 +5,11 @@ import type {
   JwksCacheSnapshot,
   JwksRefreshLock,
 } from '@/modules/identity/user-assertions/application/jwks-cache.port';
-import { JWKS_MAX_RESPONSE_BYTES, JwksKeyProvider } from './jwks-key-provider';
+import {
+  JWKS_MAX_RESPONSE_BYTES,
+  JWKS_REFRESH_COOLDOWN_MS,
+  JwksKeyProvider,
+} from './jwks-key-provider';
 
 const jwks = {
   keys: [
@@ -93,6 +97,47 @@ function configWithUrl(jwksUrl: string): OrganizationIdentityConfig {
   return { ...remoteConfig, jwksUrl };
 }
 
+/**
+ * An IP-literal JWKS URL is refused on the address itself, so the provider must
+ * never reach the DNS resolver or the network. A literal host is the one path
+ * where the production resolver is the code under test rather than an injected
+ * fake, which is why these cases pass a resolver that fails loudly if called.
+ *
+ * The refusal surfaces as `IDENTITY_PROVIDER_UNAVAILABLE`, not as
+ * `IDENTITY_JWKS_URL_UNSAFE`: a refresh failure with no usable stale cache is
+ * reported uniformly, and that includes an address rejected as private. What
+ * matters here is that the fetch never happens.
+ */
+describe('JwksKeyProvider address safety on a literal host', () => {
+  it.each([
+    ['IPv4 literal', 'https://127.0.0.1/keys'],
+    ['bracketed IPv6 literal', 'https://[::1]/keys'],
+    ['IPv4-mapped IPv6 private address', 'https://[::ffff:127.0.0.1]/keys'],
+  ])(
+    'refuses a JWKS URL whose host is a private %s',
+    async (_name, jwksUrl) => {
+      const fetcher = jest.fn(async () => new Response(JSON.stringify(jwks)));
+      const resolverFactory = jest.fn(() => {
+        throw new Error('a literal host must not be resolved');
+      });
+      const provider = new JwksKeyProvider(
+        new FakeCache(),
+        fetcher,
+        resolverFactory,
+      );
+
+      await expect(
+        provider.resolve({
+          organizationId: 'org_acme',
+          config: configWithUrl(jwksUrl),
+        }),
+      ).rejects.toMatchObject({ code: 'IDENTITY_PROVIDER_UNAVAILABLE' });
+      expect(fetcher).not.toHaveBeenCalled();
+      expect(resolverFactory).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe('JwksKeyProvider', () => {
   it('fetches, validates, and caches a remote JWKS without credentials or redirects', async () => {
     const cache = new FakeCache();
@@ -141,6 +186,55 @@ describe('JwksKeyProvider', () => {
       ]),
     ).resolves.toEqual([jwks, jwks]);
     expect(fetches).toBe(1);
+  });
+
+  it('keeps an unavailable refresh lock from causing a refetch during its cooldown, and refetches after it', async () => {
+    const cache = new FakeCache();
+    let lockRequests = 0;
+    cache.tryAcquireRefresh = async () => {
+      lockRequests += 1;
+      return { acquired: false, available: false };
+    };
+    const fetcher = jest.fn(async () => new Response(JSON.stringify(jwks)));
+    let clock = 5_000;
+    const provider = new JwksKeyProvider(
+      cache,
+      fetcher,
+      publicLookup(),
+      () => clock,
+    );
+    const forced = () =>
+      provider.resolve({
+        organizationId: 'org_acme',
+        config: remoteConfig,
+        forceRefresh: true,
+      });
+
+    // The first forced refresh finds the lock unavailable, records a cooldown,
+    // and fetches anyway.
+    await expect(forced()).resolves.toEqual(jwks);
+    expect({ lockRequests, fetches: fetcher.mock.calls.length }).toEqual({
+      lockRequests: 1,
+      fetches: 1,
+    });
+
+    // Inside the cooldown the provider keeps asking for the lock but serves what
+    // it has instead of refetching, so an unavailable lock cannot turn every
+    // request into an outbound JWKS fetch.
+    clock += JWKS_REFRESH_COOLDOWN_MS - 1;
+    await expect(forced()).resolves.toEqual(jwks);
+    expect({ lockRequests, fetches: fetcher.mock.calls.length }).toEqual({
+      lockRequests: 2,
+      fetches: 1,
+    });
+
+    // Past the cooldown it refetches.
+    clock += 2;
+    await expect(forced()).resolves.toEqual(jwks);
+    expect({ lockRequests, fetches: fetcher.mock.calls.length }).toEqual({
+      lockRequests: 3,
+      fetches: 2,
+    });
   });
 
   it('coalesces concurrent forced refreshes before acquiring the Redis refresh lock', async () => {
