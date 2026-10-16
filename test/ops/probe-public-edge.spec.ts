@@ -54,6 +54,7 @@ describe('public edge health probe', () => {
     expect(workflow).toContain(
       './scripts/ops/blue-green-host.sh deploy sandbox',
     );
+    expect(workflow).toContain('already runs target; skipping cutover');
     expect(workflow).toContain('request-log-lookup.sh verify');
     expect(
       workflow.indexOf('      - name: Deploy Production and verify caller IP'),

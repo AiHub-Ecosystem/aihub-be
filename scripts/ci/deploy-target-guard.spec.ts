@@ -13,8 +13,10 @@ type DeployTargetGuard = {
   }) => void;
 };
 
-const { parseActiveRevisions, validateDeployTarget }: DeployTargetGuard =
-  require('./deploy-target-guard.cjs');
+const {
+  parseActiveRevisions,
+  validateDeployTarget,
+}: DeployTargetGuard = require('./deploy-target-guard.cjs');
 
 let repository: string;
 let oldSha: string;
@@ -84,6 +86,28 @@ describe('CD deployment target guard', () => {
     ).not.toThrow();
   });
 
+  it('allows a retry when the target is already active on one tier', () => {
+    expect(() =>
+      validateDeployTarget({
+        targetSha: mainSha,
+        mainSha,
+        activeShas: [mainSha, oldSha],
+        cwd: repository,
+      }),
+    ).not.toThrow();
+  });
+
+  it('allows a retry to finish host-job recovery when all tiers match target', () => {
+    expect(() =>
+      validateDeployTarget({
+        targetSha: mainSha,
+        mainSha,
+        activeShas: [mainSha, mainSha],
+        cwd: repository,
+      }),
+    ).not.toThrow();
+  });
+
   it('reads active Production and routed Sandbox revisions from host status', () => {
     expect(
       parseActiveRevisions(
@@ -100,6 +124,20 @@ describe('CD deployment target guard', () => {
     expect(() => parseActiveRevisions('sandbox disabled')).toThrow(
       /Production revision is missing/,
     );
+  });
+
+  it.each([
+    'caller_ip_gate=sandbox',
+    'pending=2026-10-16 sandbox a old b main',
+    'sandbox enabled but not routed',
+  ])('refuses to deploy with unresolved host state: %s', (state) => {
+    expect(() =>
+      parseActiveRevisions(
+        [`production active_slot=a sha=${oldSha} service=app`, state].join(
+          '\n',
+        ),
+      ),
+    ).toThrow(/unresolved/);
   });
 
   it('fails closed when an active tier revision is unavailable in Git history', () => {
