@@ -167,6 +167,29 @@ describe('PostgresOrganizationAuditReadRepository', () => {
     expect(client.queries).toHaveLength(0);
   });
 
+  it('requires an Organization in the request context', async () => {
+    const client = new FakePostgres();
+
+    await expect(
+      new PostgresOrganizationAuditReadRepository(
+        prismaFromQueryFake(client),
+      ).listAuditEvents(
+        input({
+          context: createRequestContext({
+            requestId: 'req_01J00000000000000000000000',
+            receivedAt: new Date('2026-09-22T00:00:00.000Z'),
+            deadlineMs: 5_000,
+            userId: USER_ID,
+            scopes: [],
+          }),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      message: 'Identity organization audit input is invalid',
+    });
+    expect(client.queries).toHaveLength(0);
+  });
+
   it('reports an unavailable store without leaking the driver error', async () => {
     const client = new FakePostgres();
     client.failure = new Error('connection terminated: password=hunter2');

@@ -47,6 +47,10 @@ import {
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {
+  type OrganizationContextPolicy,
+  isOrganizationContextAllowed,
+} from '@/modules/identity/shared/infrastructure/organization-context-policy';
+import {
   type IdentityRepositoryClient,
   identityRows,
   identityTransaction,
@@ -397,10 +401,11 @@ type MembershipMutationDecision =
 
 function validateMutationInput(
   input: OrganizationMembershipMutationInput,
+  organizationContextPolicy: OrganizationContextPolicy,
 ): void {
   if (
     input.context.userId !== input.userId ||
-    input.context.organizationId !== input.organizationId ||
+    !isOrganizationContextAllowed(input.context, organizationContextPolicy) ||
     input.userId.trim().length === 0 ||
     input.organizationId.trim().length === 0 ||
     input.username.trim().length === 0
@@ -566,12 +571,13 @@ async function rethrowMutationFailure(
 function prepareMembershipMutation(
   client: IdentityRepositoryClient,
   input: OrganizationMembershipMutationInput,
+  organizationContextPolicy: OrganizationContextPolicy,
 ): {
   readonly stamp: ReturnType<typeof auditStamp>;
   readonly refuse: (draft: OrganizationAuditDraft) => void;
   readonly rethrow: (error: unknown) => Promise<never>;
 } {
-  validateMutationInput(input);
+  validateMutationInput(input, organizationContextPolicy);
   const stamp = auditStamp(input, input.userId, input.context.receivedAt);
   let refused: OrganizationAuditDraft | undefined;
 
@@ -763,8 +769,10 @@ export class PostgresOrganizationMembershipRepository
   ): Promise<OrganizationMembershipResolution> {
     if (
       input.context.userId !== input.userId ||
-      (input.context.organizationId !== undefined &&
-        input.context.organizationId !== input.organizationId) ||
+      !isOrganizationContextAllowed(input.context, {
+        kind: 'optional',
+        organizationId: input.organizationId,
+      }) ||
       input.userId.trim().length === 0 ||
       input.organizationId.trim().length === 0
     ) {
@@ -827,7 +835,10 @@ export class PostgresOrganizationMembershipRepository
   ): Promise<OrganizationMembershipListResult> {
     if (
       input.context.userId !== input.userId ||
-      input.context.organizationId !== input.organizationId ||
+      !isOrganizationContextAllowed(input.context, {
+        kind: 'required',
+        organizationId: input.organizationId,
+      }) ||
       input.userId.trim().length === 0 ||
       input.organizationId.trim().length === 0 ||
       (input.status !== 'active' && input.status !== 'disabled')
@@ -855,7 +866,10 @@ export class PostgresOrganizationMembershipRepository
   async changeRole(
     input: ChangeOrganizationMemberRoleInput,
   ): Promise<OrganizationMembershipMutationResult> {
-    const mutation = prepareMembershipMutation(this.client, input);
+    const mutation = prepareMembershipMutation(this.client, input, {
+      kind: 'required',
+      organizationId: input.organizationId,
+    });
     try {
       return await identityTransaction(this.client, async (transaction) => {
         const { caller, target } = await lockMutationContext(
@@ -913,7 +927,10 @@ export class PostgresOrganizationMembershipRepository
   async disable(
     input: OrganizationMembershipMutationInput,
   ): Promise<OrganizationMembershipMutationResult> {
-    const mutation = prepareMembershipMutation(this.client, input);
+    const mutation = prepareMembershipMutation(this.client, input, {
+      kind: 'required',
+      organizationId: input.organizationId,
+    });
     try {
       return await identityTransaction(this.client, async (transaction) => {
         const { caller, target } = await lockMutationContext(
@@ -969,7 +986,10 @@ export class PostgresOrganizationMembershipRepository
   async transfer(
     input: OrganizationMembershipMutationInput,
   ): Promise<OrganizationMembershipMutationResult> {
-    const mutation = prepareMembershipMutation(this.client, input);
+    const mutation = prepareMembershipMutation(this.client, input, {
+      kind: 'required',
+      organizationId: input.organizationId,
+    });
     try {
       return await identityTransaction(this.client, async (transaction) => {
         const { caller, target } = await lockMutationContext(

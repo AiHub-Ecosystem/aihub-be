@@ -18,6 +18,7 @@ import {
   isRecord,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
+import { isOrganizationContextAllowed } from '@/modules/identity/shared/infrastructure/organization-context-policy';
 import { identityRows } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 type IdentitySqlClient = Parameters<typeof identityRows>[0];
@@ -177,7 +178,10 @@ export class PostgresOrganizationAuditReadRepository
     input: ListOrganizationAuditEventsInput,
   ): Promise<readonly OrganizationAuditEventRecord[]> {
     if (
-      input.context.organizationId !== input.organizationId ||
+      !isOrganizationContextAllowed(input.context, {
+        kind: 'required',
+        organizationId: input.organizationId,
+      }) ||
       input.organizationId.trim().length === 0 ||
       !Number.isInteger(input.limit) ||
       input.limit < 1

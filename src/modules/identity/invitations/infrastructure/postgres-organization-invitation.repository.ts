@@ -30,6 +30,7 @@ import {
   organizationStatusValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
+import { isOrganizationContextAllowed } from '@/modules/identity/shared/infrastructure/organization-context-policy';
 import {
   type IdentityRepositoryClient,
   identityRows,
@@ -181,7 +182,10 @@ export class PostgresOrganizationInvitationRepository
   ): Promise<CreateOrganizationInvitationResult> {
     if (
       input.context.userId !== input.invitedBy ||
-      input.context.organizationId !== input.organizationId ||
+      !isOrganizationContextAllowed(input.context, {
+        kind: 'required',
+        organizationId: input.organizationId,
+      }) ||
       input.organizationId.trim().length === 0 ||
       input.email.trim().length === 0 ||
       !/^[0-9a-f]{64}$/.test(input.tokenHash) ||
@@ -306,7 +310,10 @@ export class PostgresOrganizationInvitationRepository
   ): Promise<readonly OpenOrganizationInvitationRecord[]> {
     if (
       input.context.userId !== input.userId ||
-      input.context.organizationId !== input.organizationId ||
+      !isOrganizationContextAllowed(input.context, {
+        kind: 'required',
+        organizationId: input.organizationId,
+      }) ||
       input.userId.trim().length === 0 ||
       input.organizationId.trim().length === 0 ||
       !(input.now instanceof Date) ||
@@ -365,7 +372,10 @@ export class PostgresOrganizationInvitationRepository
   ): Promise<RevokeOrganizationInvitationResult> {
     if (
       input.context.userId !== input.actorUserId ||
-      input.context.organizationId !== input.organizationId ||
+      !isOrganizationContextAllowed(input.context, {
+        kind: 'required',
+        organizationId: input.organizationId,
+      }) ||
       input.actorUserId.trim().length === 0 ||
       input.organizationId.trim().length === 0 ||
       input.invitationId.trim().length === 0 ||
@@ -496,7 +506,7 @@ export class PostgresOrganizationInvitationRepository
   ): Promise<AcceptOrganizationInvitationResult> {
     if (
       input.context.userId !== input.userId ||
-      input.context.organizationId !== undefined ||
+      !isOrganizationContextAllowed(input.context, { kind: 'forbidden' }) ||
       !/^[0-9a-f]{64}$/.test(input.tokenHash)
     ) {
       throw identityStoreError(

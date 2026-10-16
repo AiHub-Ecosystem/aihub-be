@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import type { RequestContext } from '@/common/request-context/request-context';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type {
   PostgresIdentityQueryClient,
@@ -151,7 +152,98 @@ function mutationInput(username = 'bob') {
   } as const;
 }
 
+function contextForOrganization(organizationId: string): RequestContext {
+  return createRequestContext({
+    requestId: 'req_01J00000000000000000000000',
+    receivedAt: new Date('2026-09-21T00:00:00.000Z'),
+    deadlineMs: 5_000,
+    userId: membershipRow.user_account_id,
+    organizationId,
+    scopes: [],
+  });
+}
+
+interface RequiredOrganizationContextEntryPoint {
+  readonly name: string;
+  readonly invoke: (
+    repository: PostgresOrganizationMembershipRepository,
+    requestContext: RequestContext,
+  ) => Promise<unknown>;
+}
+
+const requiredOrganizationContextEntryPoints: readonly RequiredOrganizationContextEntryPoint[] =
+  [
+    {
+      name: 'changeRole',
+      invoke: (repository, requestContext) =>
+        repository.changeRole({
+          ...mutationInput(),
+          context: requestContext,
+          role: 'admin',
+        }),
+    },
+    {
+      name: 'disable',
+      invoke: (repository, requestContext) =>
+        repository.disable({ ...mutationInput(), context: requestContext }),
+    },
+    {
+      name: 'transfer',
+      invoke: (repository, requestContext) =>
+        repository.transfer({ ...mutationInput(), context: requestContext }),
+    },
+    {
+      name: 'listOrganizationMembers',
+      invoke: (repository, requestContext) =>
+        repository.listOrganizationMembers({
+          context: requestContext,
+          userId: membershipRow.user_account_id,
+          organizationId: 'org_acme',
+          status: 'active',
+        }),
+    },
+  ];
+
 describe('PostgresOrganizationMembershipRepository', () => {
+  it.each(requiredOrganizationContextEntryPoints)(
+    '$name requires its Organization context',
+    async ({ invoke }) => {
+      for (const requestContext of [
+        context,
+        contextForOrganization('org_other'),
+      ]) {
+        const client = new FakePostgres();
+        const repository = new PostgresOrganizationMembershipRepository(
+          prismaFromQueryFake(client),
+        );
+
+        await expect(invoke(repository, requestContext)).rejects.toMatchObject({
+          message: 'Identity organization membership input is invalid',
+        });
+        expect(client.queries).toHaveLength(0);
+        expect(client.transactionQueries).toHaveLength(0);
+      }
+    },
+  );
+
+  it('allows a missing Organization context but refuses a different one when resolving membership', async () => {
+    const client = new FakePostgres();
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).resolveMembership({
+        context: contextForOrganization('org_other'),
+        userId: membershipRow.user_account_id,
+        organizationId: 'org_acme',
+      }),
+    ).rejects.toMatchObject({
+      message: 'Identity organization membership input is invalid',
+    });
+    expect(client.queries).toHaveLength(0);
+    expect(client.transactionQueries).toHaveLength(0);
+  });
+
   it('resolves an active membership with organization status', async () => {
     const client = new FakePostgres();
 

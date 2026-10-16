@@ -15,6 +15,7 @@ import {
   auditStamp,
   recordOrganizationAuditEvent,
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
+import { isOrganizationContextAllowed } from '@/modules/identity/shared/infrastructure/organization-context-policy';
 import {
   type IdentityRepositoryClient,
   identityRows,
@@ -201,7 +202,10 @@ export class PostgresOrganizationApiKeyRepository
     input: RotateOrganizationApiKeyRecordInput,
   ): Promise<RotateOrganizationApiKeyRecordResult> {
     if (
-      input.context.organizationId !== input.organizationId ||
+      !isOrganizationContextAllowed(input.context, {
+        kind: 'required',
+        organizationId: input.organizationId,
+      }) ||
       input.organizationId.trim().length === 0 ||
       input.apiKeyId.trim().length === 0 ||
       input.replacementId.trim().length === 0 ||
@@ -327,7 +331,10 @@ export class PostgresOrganizationApiKeyRepository
     input: RevokeOrganizationApiKeyRecordInput,
   ): Promise<RevokeOrganizationApiKeyRecordResult> {
     if (
-      input.context.organizationId !== input.organizationId ||
+      !isOrganizationContextAllowed(input.context, {
+        kind: 'required',
+        organizationId: input.organizationId,
+      }) ||
       input.organizationId.trim().length === 0 ||
       input.apiKeyId.trim().length === 0
     ) {
@@ -409,7 +416,10 @@ export class PostgresOrganizationApiKeyRepository
     input: ListOrganizationApiKeysInput,
   ): Promise<readonly OrganizationApiKeyRecord[]> {
     if (
-      input.context.organizationId !== input.organizationId ||
+      !isOrganizationContextAllowed(input.context, {
+        kind: 'required',
+        organizationId: input.organizationId,
+      }) ||
       input.organizationId.trim().length === 0
     ) {
       throw identityStoreError('Identity API key query is invalid');
@@ -446,7 +456,10 @@ export class PostgresOrganizationApiKeyRepository
     input: CreateOrganizationApiKeyRecordInput,
   ): Promise<CreateOrganizationApiKeyRecordResult> {
     if (
-      input.context.organizationId !== input.organizationId ||
+      !isOrganizationContextAllowed(input.context, {
+        kind: 'required',
+        organizationId: input.organizationId,
+      }) ||
       input.organizationId.trim().length === 0 ||
       !/^[0-9a-f]{64}$/.test(input.keyHash) ||
       input.scopes.length === 0 ||
