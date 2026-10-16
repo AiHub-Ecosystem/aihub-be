@@ -9,7 +9,8 @@ import {
   writingChartPublishedKey,
   writingChartStagingKey,
 } from '@/modules/writing/domain/writing-chart-upload';
-import { verifyWritingChartImageHeaders } from './writing-chart-image-verifier';
+import { serializeWritingChartImageProcessing } from './writing-chart-image-processing';
+import { sanitizeWritingChartImage } from './writing-chart-image-verifier';
 import {
   WRITING_CHART_INTENT_TTL_MS,
   WRITING_CHART_MAX_BYTES,
@@ -90,21 +91,34 @@ function invalidStoredObject(
   if (
     stored === undefined ||
     stored.byteSize !== intent.byteSize ||
-    stored.contentType !== intent.contentType
-  ) {
-    return invalidRequest();
-  }
-  if (
-    !verifyWritingChartImageHeaders({
-      contentType: intent.contentType,
-      byteSize: intent.byteSize,
-      prefix: stored.prefix,
-      suffix: stored.suffix,
-    })
+    stored.contentType !== intent.contentType ||
+    stored.bytes.byteLength !== stored.byteSize
   ) {
     return invalidRequest();
   }
   return undefined;
+}
+
+const completionTailsByAsset = new Map<string, Promise<void>>();
+
+function serializeWritingChartUploadCompletion<T>(
+  assetId: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const previous = completionTailsByAsset.get(assetId) ?? Promise.resolve();
+  const result = previous.then(operation, operation);
+  const tail = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  completionTailsByAsset.set(assetId, tail);
+  void tail.then(() => {
+    if (completionTailsByAsset.get(assetId) === tail) {
+      completionTailsByAsset.delete(assetId);
+    }
+    return undefined;
+  });
+  return result;
 }
 
 export class WritingChartUploadService
@@ -212,80 +226,92 @@ export class WritingChartUploadService
   }) {
     if (!isWritingChartAssetId(input.assetId)) throw invalidRequest();
     const owner = ownerFromContext(input.context, input.assetId);
-    const found = await this.repository.findUpload(owner);
-    if (found.kind === 'asset') return found.asset;
-    const now = this.now();
-    if (
-      found.kind !== 'intent' ||
-      (found.intent.status !== 'open' &&
-        found.intent.status !== 'publishing') ||
-      found.intent.expiresAt.getTime() <= now.getTime()
-    ) {
-      throw uploadNotFound();
-    }
+    return serializeWritingChartUploadCompletion(owner.assetId, async () => {
+      const found = await this.repository.findUpload(owner);
+      if (found.kind === 'asset') return found.asset;
+      const now = this.now();
+      if (
+        found.kind !== 'intent' ||
+        (found.intent.status !== 'open' &&
+          found.intent.status !== 'publishing') ||
+        found.intent.expiresAt.getTime() <= now.getTime()
+      ) {
+        throw uploadNotFound();
+      }
 
-    const stored = await this.storage.inspectObject({
-      environment: found.intent.environment,
-      stagingKey: found.intent.stagingKey,
-      byteSize: found.intent.byteSize,
-    });
-    if (stored === undefined) throw uploadNotFound();
-    const refusal = invalidStoredObject(stored, found.intent);
-    if (refusal !== undefined) {
-      await this.repository.rejectIntent(owner, this.now());
+      const stored = await this.storage.inspectObject({
+        environment: found.intent.environment,
+        stagingKey: found.intent.stagingKey,
+        byteSize: found.intent.byteSize,
+      });
+      if (stored === undefined) throw uploadNotFound();
+      const refusal = invalidStoredObject(stored, found.intent);
+      const sanitized =
+        refusal === undefined
+          ? await serializeWritingChartImageProcessing(() =>
+              sanitizeWritingChartImage({
+                contentType: found.intent.contentType,
+                bytes: stored.bytes,
+              }),
+            )
+          : undefined;
+      if (refusal !== undefined || sanitized === undefined) {
+        await this.repository.rejectIntent(owner, this.now());
+        try {
+          await this.storage.deleteStagingObject({
+            environment: found.intent.environment,
+            stagingKey: found.intent.stagingKey,
+          });
+        } catch {
+          // The expiration sweep retries a failed staging deletion.
+        }
+        throw refusal ?? invalidRequest();
+      }
+
+      const imageUrl = this.storage.publicUrl({
+        environment: found.intent.environment,
+        publishedKey: found.intent.publishedKey,
+      });
+      const reservation = await this.repository.beginPublication({
+        owner,
+        now: this.now(),
+      });
+      if (reservation === 'published') {
+        const current = await this.repository.findUpload(owner);
+        if (current.kind === 'asset') return current.asset;
+        throw uploadNotFound();
+      }
+      if (reservation === 'limited') throw rateLimited();
+      if (reservation !== 'started') throw uploadNotFound();
+
+      try {
+        await this.storage.publishObject({
+          environment: found.intent.environment,
+          stagingKey: found.intent.stagingKey,
+          publishedKey: found.intent.publishedKey,
+          contentType: found.intent.contentType,
+          bytes: sanitized,
+        });
+      } catch (error) {
+        await this.repository.releasePublication(owner);
+        throw error;
+      }
+
+      const asset = await this.repository.markPublished({
+        owner,
+        now: this.now(),
+        imageUrl,
+      });
+      if (asset === undefined) throw storageUnavailable();
       try {
         await this.storage.deleteStagingObject({
           environment: found.intent.environment,
           stagingKey: found.intent.stagingKey,
         });
       } catch {
-        // The expiration sweep retries a failed staging deletion.
+        // The retention sweep retries staging deletion while the public asset lives.
       }
-      throw refusal;
-    }
-    const imageUrl = this.storage.publicUrl({
-      environment: found.intent.environment,
-      publishedKey: found.intent.publishedKey,
+      return asset;
     });
-    const reservation = await this.repository.beginPublication({
-      owner,
-      now: this.now(),
-    });
-    if (reservation === 'published') {
-      const current = await this.repository.findUpload(owner);
-      if (current.kind === 'asset') return current.asset;
-      throw uploadNotFound();
-    }
-    if (reservation === 'limited') throw rateLimited();
-    if (reservation !== 'started') throw uploadNotFound();
-
-    try {
-      await this.storage.publishObject({
-        environment: found.intent.environment,
-        stagingKey: found.intent.stagingKey,
-        publishedKey: found.intent.publishedKey,
-        contentType: found.intent.contentType,
-        etag: stored.etag,
-      });
-    } catch (error) {
-      await this.repository.releasePublication(owner);
-      throw error;
-    }
-
-    const asset = await this.repository.markPublished({
-      owner,
-      now: this.now(),
-      imageUrl,
-    });
-    if (asset === undefined) throw storageUnavailable();
-    try {
-      await this.storage.deleteStagingObject({
-        environment: found.intent.environment,
-        stagingKey: found.intent.stagingKey,
-      });
-    } catch {
-      // The retention sweep retries staging deletion while the public asset lives.
-    }
-    return asset;
   }
 }
