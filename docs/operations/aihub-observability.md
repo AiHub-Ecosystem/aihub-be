@@ -28,13 +28,14 @@ flowchart LR
   Prom -->|blackbox TLS probes every hour| Public
 ```
 
-The `monitoring` Docker network is the existing `172.27.0.0/16` bridge; its observed gateway is `172.27.0.1`. Redis is on the existing `redis_default` network. No exporter publishes a host port. Prometheus publishes only `127.0.0.1:9094`; operators reach it with an SSH local forward. Existing Prometheus, Grafana, Alertmanager, and their files are not recreated or modified.
+The `monitoring` Docker network is the existing `172.27.0.0/16` bridge; its observed gateway is `172.27.0.1`. AIHUB Prometheus reserves `172.27.0.12` on that bridge so the host firewall can allow only this scraper. On the monitoring host, UFW allows TCP from `172.27.0.12` through the `monitoring` bridge to `172.27.0.1:9100` and `172.27.0.1:19100-19102`; its default-deny input policy blocks other sources. Redis is on the existing `redis_default` network. No exporter publishes a host port. Prometheus publishes only `127.0.0.1:9094`; operators reach it with an SSH local forward. Existing Prometheus, Grafana, Alertmanager, and their files are not recreated or modified. If this Docker network is recreated or its subnet changes, update the reserved address and matching firewall rules before restarting AIHUB Prometheus.
 
 On Production, node_exporter listens on `127.0.0.1:9100`, cAdvisor on `127.0.0.1:19101`, and postgres_exporter on `127.0.0.1:9187`. A key restricted by `authorized_keys` may forward only to those three destinations. The monitoring-host tunnel binds the forwards to `172.27.0.1:19100`, `:19101`, and `:19102`. The SSH host key is pinned in a separate `known_hosts` file.
 
 On the monitoring host, node_exporter listens on `172.27.0.1:9100`. Redis exporter and blackbox exporter have no published ports and join only their required private Docker networks. The certificate job probes `api.aihubproduction.com`, `sandbox.aihubproduction.com`, `aihubproduction.com`, `www.aihubproduction.com`, and `s3.wispace.app` once per hour.
 
 Run the PostgreSQL exporter as the Production host's unprivileged account, and the Redis exporter and SSH tunnel as the monitoring host's unprivileged account. Set `AIHUB_PRODUCTION_UID_GID` and `AIHUB_MONITORING_UID_GID` to the corresponding numeric `id -u:id -g` values so each process can read its mode-0600 secret without running as root.
+The SSH tunnel image creates a passwd entry for that monitoring UID/GID because OpenSSH requires one when run under a numeric account.
 
 ## Resource ceilings
 
@@ -74,14 +75,14 @@ Inspect `http://127.0.0.1:9094/api/v1/targets` through SSH. Every `aihub-*` targ
 
 ```promql
 node_uname_info{job=~"aihub-(production|monitoring)-node"}
-container_memory_usage_bytes{job="aihub-production-containers",name=~"/aihub.*"}
+container_memory_usage_bytes{job="aihub-production-containers",name=~"aihub.*"}
 aihub_postgres_snapshot_value{job="aihub-postgres",metric="connections_total"}
 redis_memory_used_bytes{job="aihub-redis"}
 redis_commands_duration_seconds_total{job="aihub-redis"}
 probe_ssl_earliest_cert_expiry{job="aihub-certificate-expiry"}
 ```
 
-Also confirm the Postgres scrape exposes only the custom aggregate families and the Redis exporter has no key/config access. cAdvisor's read-only Docker socket still gives root-equivalent Docker API access; its metric relabel filter keeps only container names beginning `/aihub`.
+Also confirm the Postgres scrape exposes only the custom aggregate families and the Redis exporter has no key/config access. cAdvisor's read-only Docker and containerd sockets still give it root-equivalent runtime API access; its metric relabel filter keeps only container names beginning `aihub`.
 
 From a workstation outside both hosts, probe `9100`, `9115`, `9121`, `9187`, `9094`, and `19100-19102` on both hosts. All must be closed or filtered while the host remains reachable. A `closed` result is valid for the loopback Prometheus UI; its operator access is through SSH.
 
@@ -89,7 +90,7 @@ Compare per-container `docker stats` and `free -m`/disk use with the ceilings ab
 
 ## Alert thresholds and routing
 
-The rule slice for this issue is listed in the [host/dependency alert catalog](alert-catalog.md), which is a scoped contribution to #412, not completion of the full #412 catalog. The existing Alertmanager currently routes `warning` to `discord-warning`, and `critical` to `discord-critical`, Pushover, and Telegram. Disk 80%, PostgreSQL connections 80% of measured `max_connections`, and certificate expiry within 14 days are issue-defined thresholds. Memory below 10%, Redis memory above 80% of the observed bound, Redis mean command latency above 100 ms, restart loop, and failed-probe severity are proposals for the #412 review. The owner approved collector and resource scope; this does not approve a general paging policy.
+The rule slice for this issue is listed in the [host/dependency alert catalog](alert-catalog.md), which is a scoped contribution to #412, not completion of the full #412 catalog. The existing Alertmanager currently routes `warning` to `discord-warning`, and `critical` to `discord-critical`, Pushover, and Telegram. Disk 80%, PostgreSQL connections 80% of measured `max_connections`, and certificate expiry within 14 days are issue-defined thresholds. The five-second clock bound, memory below 10%, Redis memory above 80% of the observed bound, Redis mean command latency above 100 ms, restart loop, and failed-probe severity are proposals for the #412 review. The owner approved collector and resource scope; this does not approve a general paging policy.
 
 The Redis threshold is static because its exporter is explicitly forbidden from calling `CONFIG`. The target-down alert covers every `aihub-*` scrape job. Do not claim alert delivery has been exercised unless it was deliberately tested through the configured receiver route.
 
@@ -101,9 +102,13 @@ Use the `AIHUBHostDiskAbove80Percent` series to identify the host and mountpoint
 
 Use `AIHUBHostMemoryPressure` and `node_memory_MemAvailable_bytes`; compare with `free -m` and container usage before restarting a service.
 
+### Host clock
+
+Use `node_timex_offset_seconds` and `node_timex_sync_status` for Production and monitoring. `AIHUBHostClockUnsynchronizedOrOffsetAboveBound` warns when synchronization is lost or absolute offset exceeds the proposed five-second bound for one minute. Five seconds is below the 30-second TOTP step and the 60-second JWT/assertion skew allowance. Confirm the host's time-service state before changing its configuration; #412 owns the final alert-policy review.
+
 ### Containers
 
-Use the cAdvisor `name` label to identify the affected `/aihub...` container, then inspect `docker stats`, `docker ps -a`, and that container's restart history. cAdvisor has no stopped-container history, so its OOM/restart series are not a complete event log.
+Use the cAdvisor `name` label to identify the affected `aihub...` container, then inspect `docker stats`, `docker ps -a`, and that container's restart history. cAdvisor has no stopped-container history, so its OOM/restart series are not a complete event log.
 
 ### PostgreSQL
 
@@ -123,14 +128,22 @@ Inspect the `probe_success` and `probe_ssl_earliest_cert_expiry` series for the 
 
 ## Deployment evidence
 
-Add dated evidence here after the rollout: commit/config revision, target health and sample checks, external-port probe, PostgreSQL/Redis permission checks, certificate sample schedule, resource measurements, and any remaining gates. Do not record secrets, raw connection strings, or IPs from request data here.
+2026-10-16 rollout: UFW is active with default-deny input and allows only Prometheus `172.27.0.12` over bridge `br-21a4afb75b60` to gateway `172.27.0.1` on TCP `9100` and `19100-19102`. AIHUB Prometheus now reserves `.12`; access from another monitoring-network container timed out while the configured Prometheus container reached all four exporter endpoints. The AIHUB Prometheus UI and candidate exporter ports `9094`, `9100`, `9115`, `9121`, `9187`, and `19100-19102` were closed/filtered from the operator workstation on both hosts. Production Docker reports the `overlayfs` containerd snapshotter, so cAdvisor also mounts the read-only containerd socket; both runtime sockets remain root-equivalent access.
+
+Prometheus returns two `node_uname_info` series and two clock offset/synchronization series (both hosts report synchronized; Production offset 0 seconds and monitoring offset about -1.7 ms), eight `aihub...` container memory series, one PostgreSQL connection sample, one Redis memory sample, and Redis command-latency series. All six non-certificate AIHUB scrape targets are `UP`. All five TLS targets produced `probe_success=1` and an expiry series during a temporary 15-second bootstrap scrape; the live configuration was restored to one-hour intervals afterward. They are currently `unknown` until their next scheduled scrape, so verify their next hourly run before closing #474.
+
+At the sample, Production had 3.3 GiB available RAM, no swap, and 28% disk use; its three exporters used about 122 MiB together. Monitoring had 1.8 GiB available RAM, no swap, and 60% disk use; its five AIHUB monitoring containers used about 66 MiB together. Both resource sets are below the approved container ceilings. The 16 candidate exporter/UI TCP ports were closed or filtered from the operator workstation on both hosts. The dedicated PostgreSQL aggregate query and Redis ACL boundary were verified during rollout; Redis key and configuration commands remain denied.
+
+Do not record secrets, raw connection strings, or IPs from request data here.
 
 ## Close criteria for #474
 
 - Existing dashboard and watchdog behavior is recorded above, with their app-level work not duplicated.
 - Production and monitoring host metrics, AIHUB container metrics, shared PostgreSQL metrics, and AIHUB Redis metrics are `UP` with expected samples.
+- Both hosts expose clock offset and synchronization status, with the clock alert listed in the #412 catalog.
 - No exporter or Prometheus UI is reachable from the internet; outside-port results are recorded.
-- The certificate job runs on an hourly schedule and emits expiry data for all five agreed hostnames.
+- The certificate job completes an hourly scrape for all five agreed hostnames and emits fresh expiry data.
+- `pg_stat_statements` is enabled and privacy-checked after a shared-cluster restart coordinated with all affected service owners.
 - All #474 rules have entries in the #412 alert catalog.
 - PostgreSQL and Redis access is verified at the restricted-function/ACL boundary.
 - Measured service and host resource use fits the approved ceilings.

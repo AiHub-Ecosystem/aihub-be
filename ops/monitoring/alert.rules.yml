@@ -24,7 +24,7 @@ groups:
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#host-memory
 
       - alert: AIHUBContainerOOM
-        expr: increase(container_oom_events_total{job=~"aihub-(production|monitoring)-containers",name=~"/aihub.*"}[10m]) > 0
+        expr: increase(container_oom_events_total{job=~"aihub-(production|monitoring)-containers",name=~"aihub.*"}[10m]) > 0
         for: 0m
         labels:
           severity: critical
@@ -35,7 +35,7 @@ groups:
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#containers
 
       - alert: AIHUBContainerRestartLoop
-        expr: changes(container_start_time_seconds{job=~"aihub-(production|monitoring)-containers",name=~"/aihub.*"}[10m]) > 2
+        expr: changes(container_start_time_seconds{job=~"aihub-(production|monitoring)-containers",name=~"aihub.*"}[10m]) > 2
         for: 0m
         labels:
           severity: warning
@@ -82,6 +82,17 @@ groups:
 
   - name: aihub-certificates-and-clock
     rules:
+      - alert: AIHUBHostClockUnsynchronizedOrOffsetAboveBound
+        expr: abs(node_timex_offset_seconds{job=~"aihub-(production|monitoring)-node"}) > 5 or node_timex_sync_status{job=~"aihub-(production|monitoring)-node"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "AIHUB host clock is unsynchronized or offset by more than five seconds"
+          description: "{{ $labels.host }} reports an unsynchronized time service or an offset above five seconds. This proposed bound is below the 30-second TOTP step and 60-second JWT/assertion skew allowance."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#host-clock
+
       - alert: AIHUBMonitoringTargetDown
         expr: up{job=~"aihub-.*"} == 0
         for: 2m

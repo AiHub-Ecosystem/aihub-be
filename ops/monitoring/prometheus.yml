@@ -23,7 +23,7 @@ scrape_configs:
         labels: { host: production }
     metric_relabel_configs:
       - source_labels: [name]
-        regex: "/aihub.*"
+        regex: "aihub.*"
         action: keep
 
   - job_name: aihub-postgres

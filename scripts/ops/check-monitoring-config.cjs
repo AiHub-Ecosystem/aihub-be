@@ -75,6 +75,12 @@ function validateExporterCompose(compose) {
   if (services['redis-exporter'].user !== services['ssh-tunnel'].user) {
     throw new Error('redis-exporter must use the monitoring host account');
   }
+  if (
+    services['ssh-tunnel'].build?.args?.AIHUB_MONITORING_UID_GID !==
+    services['ssh-tunnel'].user
+  ) {
+    throw new Error('ssh-tunnel image must create the monitoring host account');
+  }
 
   for (const name of EXPORTER_SERVICES) {
     const service = services[name];
@@ -97,6 +103,11 @@ function validateExporterCompose(compose) {
             (port.protocol ?? 'tcp') === 'tcp';
       if (!loopbackPort || service.ports.length !== 1) {
         throw new Error('prometheus-aihub must publish only on loopback');
+      }
+      if (service.networks?.monitoring?.ipv4_address !== '172.27.0.12') {
+        throw new Error(
+          'prometheus-aihub must use its reserved monitoring-network address',
+        );
       }
     } else if (Array.isArray(service.ports) && service.ports.length > 0) {
       throw new Error(`${name} must not publish ports`);
@@ -132,6 +143,16 @@ function validateExporterCompose(compose) {
       )
     ) {
       throw new Error('cadvisor Docker socket mount must be read-only');
+    }
+    if (
+      name === 'cadvisor' &&
+      !service.volumes?.some(
+        (volume) =>
+          volume.target === '/run/containerd/containerd.sock' &&
+          volume.read_only === true,
+      )
+    ) {
+      throw new Error('cadvisor containerd socket mount must be read-only');
     }
 
     if (name === 'redis-exporter') {

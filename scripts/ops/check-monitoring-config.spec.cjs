@@ -25,7 +25,7 @@ function validExporterCompose() {
           protocol: 'tcp',
         },
       ],
-      networks: { monitoring: {} },
+      networks: { monitoring: { ipv4_address: '172.27.0.12' } },
       mem_limit: '256m',
       cpus: 0.35,
     },
@@ -41,7 +41,10 @@ function validExporterCompose() {
       mem_limit: '192m',
       cpus: 0.25,
       profiles: ['container-metrics'],
-      volumes: [{ target: '/var/run/docker.sock', read_only: true }],
+      volumes: [
+        { target: '/var/run/docker.sock', read_only: true },
+        { target: '/run/containerd/containerd.sock', read_only: true },
+      ],
     },
     'postgres-exporter': {
       command: ['--web.listen-address=127.0.0.1:9187'],
@@ -65,6 +68,7 @@ function validExporterCompose() {
       cpus: 0.1,
     },
     'ssh-tunnel': {
+      build: { args: { AIHUB_MONITORING_UID_GID: '1004:1004' } },
       network_mode: 'host',
       user: '1004:1004',
       mem_limit: '32m',
@@ -184,6 +188,35 @@ void test('accepts loopback or private exporter listeners without published port
   ]);
 });
 
+void test('reserves the source address used by host firewall rules', () => {
+  const compose = validExporterCompose();
+  compose.services['prometheus-aihub'].networks.monitoring.ipv4_address =
+    '172.27.0.13';
+  assert.throws(
+    () => validateExporterCompose(compose),
+    /reserved monitoring-network address/,
+  );
+});
+
+void test('requires read-only Docker and containerd sockets for cAdvisor', () => {
+  const missingContainerdSocket = validExporterCompose();
+  missingContainerdSocket.services.cadvisor.volumes =
+    missingContainerdSocket.services.cadvisor.volumes.filter(
+      (volume) => volume.target !== '/run/containerd/containerd.sock',
+    );
+  assert.throws(
+    () => validateExporterCompose(missingContainerdSocket),
+    /containerd socket mount must be read-only/,
+  );
+
+  const writableContainerdSocket = validExporterCompose();
+  writableContainerdSocket.services.cadvisor.volumes[1].read_only = false;
+  assert.throws(
+    () => validateExporterCompose(writableContainerdSocket),
+    /containerd socket mount must be read-only/,
+  );
+});
+
 void test('requires secret-reading services to use non-root host accounts', () => {
   const compose = validExporterCompose();
   compose.services['ssh-tunnel'].user = '0:0';
@@ -204,6 +237,15 @@ void test('requires secret-reading services to use non-root host accounts', () =
   assert.throws(
     () => validateExporterCompose(mismatchedRedis),
     /redis-exporter must use the monitoring host account/,
+  );
+
+  const mismatchedTunnelImage = validExporterCompose();
+  mismatchedTunnelImage.services[
+    'ssh-tunnel'
+  ].build.args.AIHUB_MONITORING_UID_GID = '1005:1005';
+  assert.throws(
+    () => validateExporterCompose(mismatchedTunnelImage),
+    /ssh-tunnel image must create the monitoring host account/,
   );
 });
 
