@@ -31,7 +31,7 @@ Derive AIHUB's peak from the largest supported overlap, summing every pool maxim
 
 Require each CLI and migration pool to cap at one concurrent PostgreSQL connection. The relevant code surfaces are `scripts/cli/cli.mjs`, the Operator CLI clients in `src/cli/operator-*.ts` through `src/modules/persistence/infrastructure/prisma-client.ts`, and `scripts/cli/migrate.mjs`. Only one CLI operator command may run at a time. Scheduled jobs are suspended during deployment; migrations finish before the candidate container starts. Do not add CLI or migration headroom to the three-container scenario when deployment does not overlap those activities. The historical 74-connection process maximum is not the target; derive the per-process pool maxima from the approved AIHUB budget and these overlap scenarios.
 
-The PostgreSQL metric and cluster-wide alert belong to #474. Alert when total connections reach 80% of the measured `max_connections`; verify the deployed metric and alert before closing #560. #474 is currently blocked by #456.
+The PostgreSQL metric and cluster-wide alert belong to #474. Alert when total connections reach 80% of the measured `max_connections`; verify the deployed metric and alert before closing #560. #456 is closed; #474 remains open pending its monitoring acceptance criteria.
 
 ## Consequences
 

@@ -95,9 +95,9 @@ Before changing pool maxima or shared PostgreSQL settings:
 4. Set per-process pool maxima from the approved AIHUB allocation and record the
    computed per-tier peaks and measurement date in #560 and [ADR-0103](../adr/0103-budget-postgresql-connections-on-shared-cluster.md).
    Keep #588's numeric admission/general split unset until this budget is approved.
-5. Before closing #560, verify that #474's PostgreSQL connection metric and
-   alert are deployed and that the alert fires at 80% of measured
-   `max_connections`. #474 currently depends on #456.
+5. Before closing #560, verify that #474's PostgreSQL connection metric is
+   deployed and that its alert fires at 80% of measured `max_connections`.
+   #456 is closed; #474 remains open pending its monitoring acceptance criteria.
 
 If #298 selects a dedicated PostgreSQL instance for AIHUB, repeat the sizing and
 approval against that instance instead of carrying over the shared-cluster
