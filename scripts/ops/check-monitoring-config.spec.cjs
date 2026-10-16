@@ -10,29 +10,74 @@ const {
 
 function validExporterCompose() {
   const services = {
-    'node-exporter': ['--web.listen-address=127.0.0.1:9100'],
-    cadvisor: ['--listen_ip=127.0.0.1', '--port=19101'],
-    'postgres-exporter': ['--web.listen-address=192.168.1.5:9187'],
-    'redis-exporter': ['--web.listen-address=127.0.0.1:9121'],
-    'blackbox-exporter': ['--web.listen-address=172.16.0.1:9115'],
+    'prometheus-aihub': {
+      image: 'prom/prometheus:v3.13.4',
+      command: [
+        '--config.file=/etc/prometheus/prometheus.yml',
+        '--storage.tsdb.path=/prometheus',
+        '--storage.tsdb.retention.size=512MB',
+      ],
+      ports: [
+        {
+          host_ip: '127.0.0.1',
+          target: 9090,
+          published: '9094',
+          protocol: 'tcp',
+        },
+      ],
+      networks: { monitoring: {} },
+      mem_limit: '256m',
+      cpus: 0.35,
+    },
+    'node-exporter': {
+      command: ['--web.listen-address=127.0.0.1:9100'],
+      network_mode: 'host',
+      mem_limit: '96m',
+      cpus: 0.1,
+    },
+    cadvisor: {
+      command: ['--listen_ip=127.0.0.1', '--port=19101'],
+      network_mode: 'host',
+      mem_limit: '192m',
+      cpus: 0.25,
+      profiles: ['container-metrics'],
+      volumes: [{ target: '/var/run/docker.sock', read_only: true }],
+    },
+    'postgres-exporter': {
+      command: ['--web.listen-address=127.0.0.1:9187'],
+      network_mode: 'host',
+      mem_limit: '96m',
+      cpus: 0.1,
+    },
+    'redis-exporter': {
+      command: ['--web.listen-address=:9121', '--config-command=-'],
+      networks: { monitoring: {}, redis: {} },
+      environment: { REDIS_ADDR: 'redis://redis:6379' },
+      mem_limit: '64m',
+      cpus: 0.1,
+    },
+    'blackbox-exporter': {
+      command: ['--web.listen-address=:9115'],
+      networks: { monitoring: {} },
+      mem_limit: '64m',
+      cpus: 0.1,
+    },
+    'ssh-tunnel': {
+      network_mode: 'host',
+      mem_limit: '32m',
+      cpus: 0.05,
+    },
   };
   return {
     services: Object.fromEntries(
-      Object.entries(services).map(([name, command]) => [
+      Object.entries(services).map(([name, service]) => [
         name,
         {
-          command,
-          network_mode: 'host',
+          ...service,
           read_only: true,
           cap_drop: ['ALL'],
           security_opt: ['no-new-privileges:true'],
           pids_limit: 64,
-          ...(name === 'cadvisor'
-            ? {
-                profiles: ['container-metrics'],
-                volumes: [{ target: '/var/run/docker.sock', read_only: true }],
-              }
-            : {}),
         },
       ]),
     ),
@@ -126,11 +171,13 @@ void test('stops at the first invalid monitoring config', () => {
 
 void test('accepts loopback or private exporter listeners without published ports', () => {
   assert.deepEqual(validateExporterCompose(validExporterCompose()), [
+    'prometheus-aihub',
     'node-exporter',
     'cadvisor',
     'postgres-exporter',
     'redis-exporter',
     'blackbox-exporter',
+    'ssh-tunnel',
   ]);
 });
 
@@ -194,6 +241,41 @@ void test('rejects a public listener, published port, or weakened container boun
   assert.throws(
     () => validateExporterCompose(writableSocket),
     /socket mount must be read-only/,
+  );
+
+  const publicRedisExporter = validExporterCompose();
+  publicRedisExporter.services['redis-exporter'].ports = ['9121:9121'];
+  assert.throws(
+    () => validateExporterCompose(publicRedisExporter),
+    /must not publish ports/,
+  );
+
+  const publicPrometheus = validExporterCompose();
+  publicPrometheus.services['prometheus-aihub'].ports[0].host_ip = '0.0.0.0';
+  assert.throws(
+    () => validateExporterCompose(publicPrometheus),
+    /must publish only on loopback/,
+  );
+
+  const missingRedisNetwork = validExporterCompose();
+  delete missingRedisNetwork.services['redis-exporter'].networks.redis;
+  assert.throws(
+    () => validateExporterCompose(missingRedisNetwork),
+    /Redis network/,
+  );
+
+  const missingBudget = validExporterCompose();
+  delete missingBudget.services['cadvisor'].mem_limit;
+  assert.throws(() => validateExporterCompose(missingBudget), /memory limit/);
+
+  const unboundedPrometheusStorage = validExporterCompose();
+  unboundedPrometheusStorage.services['prometheus-aihub'].command =
+    unboundedPrometheusStorage.services['prometheus-aihub'].command.filter(
+      (argument) => !argument.startsWith('--storage.tsdb.retention.size='),
+    );
+  assert.throws(
+    () => validateExporterCompose(unboundedPrometheusStorage),
+    /cap TSDB retention/,
   );
 });
 
