@@ -4,6 +4,7 @@ import { Value } from '@sinclair/typebox/value';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { AppError } from '@/common/errors/app-error';
+import { containsNulCharacter } from '@/common/http/nul-character';
 import {
   type SpeakingGradeInput,
   SpeakingGradeRequestSchema,
@@ -123,9 +124,12 @@ async function readAudio(
 function parseFields(
   fields: ReadonlyMap<string, string>,
 ): Omit<SpeakingGradeInput, 'audio'> {
-  for (const field of fields.keys()) {
+  for (const [field, value] of fields) {
     if (!ALLOWED_FIELDS.has(field)) {
       throw invalidRequest(`Unknown field ${field}`);
+    }
+    if (containsNulCharacter(value)) {
+      throw invalidRequest();
     }
   }
 

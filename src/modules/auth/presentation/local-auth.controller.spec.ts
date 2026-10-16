@@ -899,6 +899,26 @@ describe('local auth HTTP boundary', () => {
     expect(state.emailDeliveryRequests).toHaveLength(0);
   });
 
+  it.each(['/v1/auth/register', '/v1/auth/login'])(
+    'refuses a NUL character in %s as invalid input, not a server error',
+    async (url) => {
+      const response = await app.inject({
+        method: 'POST',
+        url,
+        headers: { 'content-type': 'application/json' },
+        payload: JSON.stringify({
+          email: 'a\u0000b@example.com',
+          username: 'nul_probe',
+          password: 'correct horse battery staple',
+        }),
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toMatchObject({ code: 'INVALID_REQUEST' });
+      expect(state.accounts.size).toBe(0);
+    },
+  );
+
   it('returns the generic invalid-token error over HTTP', async () => {
     const response = await app.inject({
       method: 'POST',

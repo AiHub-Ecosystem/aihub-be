@@ -136,6 +136,19 @@ describe('FastifySpeakingMultipartParser rejection branches', () => {
     ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   });
 
+  it('refuses a field carrying a NUL character', async () => {
+    await expect(
+      parser().parse(
+        sourceOf([
+          fieldPart('part', '1'),
+          fieldPart('question_id', 'q_\u00001'),
+          audioPart(),
+        ]),
+        neverAborted(),
+      ),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  });
+
   it('refuses the same field twice rather than letting the last one win', async () => {
     await expect(
       parser().parse(

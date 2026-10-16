@@ -20,6 +20,19 @@ describe('parseRequestBody', () => {
     });
   });
 
+  it.each([
+    ['a top-level string', { name: 'a\u0000b' }],
+    ['a nested string', { name: 'ok', extra: { deep: ['x', 'y\u0000'] } }],
+    ['an object key', { name: 'ok', ['k\u0000']: 1 }],
+  ])(
+    'rejects a NUL character in %s, which PostgreSQL cannot store',
+    (_where, body) => {
+      expect(() =>
+        parseRequestBody(Type.Object({ name: Type.String() }), body),
+      ).toThrow(AppError);
+    },
+  );
+
   it('rejects a wrong-typed field instead of coercing it', () => {
     // Value.Parse alone would convert this to { name: '1' } and pass.
     expect(() => parseRequestBody(Schema, { name: 1 })).toThrow(AppError);

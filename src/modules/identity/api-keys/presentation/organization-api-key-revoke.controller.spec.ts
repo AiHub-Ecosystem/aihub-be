@@ -338,6 +338,16 @@ describe('Organization API key revocation HTTP flow', () => {
     expect(apiKeys.revokeApiKey.mock.calls).toHaveLength(0);
   });
 
+  it('refuses a path segment carrying a NUL character before any lookup', async () => {
+    // PostgreSQL cannot store or compare a NUL in text (SQLSTATE 22021), so
+    // letting one through turns a caller's input into a 500.
+    const response = await revoke(undefined, `${REVOKE_URL}%00`);
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expect(apiKeys.revokeApiKey.mock.calls).toHaveLength(0);
+  });
+
   it('reports an unknown key as not found', async () => {
     apiKeys.revokeApiKey.mockResolvedValue({ kind: 'key_not_found' });
 
