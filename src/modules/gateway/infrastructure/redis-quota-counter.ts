@@ -4,6 +4,7 @@ import type {
   QuotaCounterPort,
   QuotaCounterRequest,
 } from '@/modules/gateway/application/quota-counter.port';
+import { quotaPeriod } from '@/modules/gateway/application/quota-period';
 import type { RedisGatewayClient } from './redis-gateway.client';
 
 export const QUOTA_TTL_SECONDS = 40 * 24 * 60 * 60;
@@ -26,10 +27,7 @@ export function quotaKeyForMonth(
 }
 
 function monthKey(organizationId: string, now: Date): string {
-  const month = `${String(now.getUTCFullYear()).padStart(4, '0')}-${String(
-    now.getUTCMonth() + 1,
-  ).padStart(2, '0')}`;
-  return quotaKeyForMonth(organizationId, month);
+  return quotaKeyForMonth(organizationId, quotaPeriod(now).key);
 }
 
 function validCount(value: number): boolean {

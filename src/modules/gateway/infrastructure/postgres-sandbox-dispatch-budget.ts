@@ -1,3 +1,4 @@
+import { quotaPeriod } from '@/modules/gateway/application/quota-period';
 import type {
   SandboxAllowanceSnapshot,
   SandboxDispatchBudgetPort,
@@ -14,13 +15,6 @@ type AllowanceReader = Pick<
   PrismaClient,
   'sandboxAllowanceOverride' | 'sandboxAllowanceDefault'
 >;
-
-function utcMonth(now: Date): { month: number; monthStart: Date } {
-  return {
-    month: now.getUTCFullYear() * 100 + now.getUTCMonth() + 1,
-    monthStart: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
-  };
-}
 
 /**
  * A month-specific override replaces the persisted default for that month; a
@@ -63,7 +57,7 @@ export class PostgresSandboxDispatchBudget
 
   async reserve(input: SandboxDispatchReservation): Promise<boolean> {
     const now = this.now();
-    const { month, monthStart } = utcMonth(now);
+    const { monthNumber, start: monthStart } = quotaPeriod(now);
 
     return this.client.$transaction(async (transaction) => {
       // ponytail: one lock per UTC month serializes the 500/month admission check; split by Organization if dispatch volume makes this a bottleneck.
@@ -71,7 +65,7 @@ export class PostgresSandboxDispatchBudget
       await transaction.$executeRawUnsafe(
         'SELECT pg_advisory_xact_lock($1, $2)',
         182,
-        month,
+        monthNumber,
       );
 
       // Runbook policy edits take this same lock, so a lowering override cannot
@@ -123,7 +117,7 @@ export class PostgresSandboxDispatchBudget
   async allowanceFor(
     organizationId: string,
   ): Promise<SandboxAllowanceSnapshot | null> {
-    const { monthStart } = utcMonth(this.now());
+    const { start: monthStart } = quotaPeriod(this.now());
     try {
       const monthlyLimit = await effectiveAllowance(
         this.client,
