@@ -77,6 +77,7 @@ services:
   postgres-exporter:
     image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
     profiles: [production]
+    user: ${AIHUB_PRODUCTION_UID_GID:?set the Production host UID:GID}
     network_mode: host
     command:
       - --web.listen-address=${AIHUB_METRICS_BIND_IP:-127.0.0.1}:9187
@@ -100,6 +101,7 @@ services:
   redis-exporter:
     image: ghcr.io/oliver006/redis_exporter:v1.93.0-alpine
     profiles: [monitoring]
+    user: ${AIHUB_MONITORING_UID_GID:?set the monitoring host UID:GID}
     command:
       - --web.listen-address=:9121
       - --config-command=-

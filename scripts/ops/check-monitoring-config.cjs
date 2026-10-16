@@ -67,6 +67,14 @@ function validateExporterCompose(compose) {
   if (Object.keys(services).some((name) => !EXPORTER_SERVICES.includes(name))) {
     throw new Error('monitoring Compose contains an unchecked service');
   }
+  for (const name of ['postgres-exporter', 'redis-exporter', 'ssh-tunnel']) {
+    if (!/^[1-9]\d*:[1-9]\d*$/.test(String(services[name]?.user ?? ''))) {
+      throw new Error(`${name} must run as a numeric non-root user`);
+    }
+  }
+  if (services['redis-exporter'].user !== services['ssh-tunnel'].user) {
+    throw new Error('redis-exporter must use the monitoring host account');
+  }
 
   for (const name of EXPORTER_SERVICES) {
     const service = services[name];
@@ -92,12 +100,6 @@ function validateExporterCompose(compose) {
       }
     } else if (Array.isArray(service.ports) && service.ports.length > 0) {
       throw new Error(`${name} must not publish ports`);
-    }
-    if (
-      name === 'ssh-tunnel' &&
-      !/^[1-9]\d*:[1-9]\d*$/.test(String(service.user ?? ''))
-    ) {
-      throw new Error('ssh-tunnel must run as a non-root host-matched user');
     }
     if (service.read_only !== true) {
       throw new Error(`${name} must use a read-only root filesystem`);

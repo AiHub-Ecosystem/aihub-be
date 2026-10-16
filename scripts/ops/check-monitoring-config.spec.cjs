@@ -46,12 +46,14 @@ function validExporterCompose() {
     'postgres-exporter': {
       command: ['--web.listen-address=127.0.0.1:9187'],
       network_mode: 'host',
+      user: '1000:1000',
       mem_limit: '96m',
       cpus: 0.1,
     },
     'redis-exporter': {
       command: ['--web.listen-address=:9121', '--config-command=-'],
       networks: { monitoring: {}, redis: {} },
+      user: '1004:1004',
       environment: { REDIS_ADDR: 'redis://redis:6379' },
       mem_limit: '64m',
       cpus: 0.1,
@@ -182,12 +184,26 @@ void test('accepts loopback or private exporter listeners without published port
   ]);
 });
 
-void test('requires the SSH tunnel to run as a non-root host-matched user', () => {
+void test('requires secret-reading services to use non-root host accounts', () => {
   const compose = validExporterCompose();
   compose.services['ssh-tunnel'].user = '0:0';
   assert.throws(
     () => validateExporterCompose(compose),
-    /non-root host-matched user/,
+    /ssh-tunnel must run as a numeric non-root user/,
+  );
+
+  const rootPostgres = validExporterCompose();
+  rootPostgres.services['postgres-exporter'].user = '0:0';
+  assert.throws(
+    () => validateExporterCompose(rootPostgres),
+    /postgres-exporter must run as a numeric non-root user/,
+  );
+
+  const mismatchedRedis = validExporterCompose();
+  mismatchedRedis.services['redis-exporter'].user = '1005:1005';
+  assert.throws(
+    () => validateExporterCompose(mismatchedRedis),
+    /redis-exporter must use the monitoring host account/,
   );
 });
 
