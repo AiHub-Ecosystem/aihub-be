@@ -5,6 +5,11 @@
 > below no longer exist; git history retains the tool. Keep this document for the
 > reasoning and the shape of the export, dispositions, and evidence files — not
 > as something to re-run.
+>
+> The Google OIDC half of prerequisite 1 below was dropped: the Customer Web
+> left Clerk with local email/password only, and Clerk is retired. Google
+> sign-in (#93) is follow-up work, not a cutover gate (ADR-0046, recorded
+> conflict of 2026-10-17).
 
 Cutover moves the Customer Web sandbox from Clerk to AIHUB auth in one flip.
 Rollback is a redeploy of the previous Customer Web image tag — not a

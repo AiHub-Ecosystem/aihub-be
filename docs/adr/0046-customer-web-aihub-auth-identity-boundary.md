@@ -11,6 +11,8 @@ AIHUB becomes the source of truth for User Accounts, Auth Identities, invitation
 
 Preparation is phased but the flip is singular: email/password and BFF work may be built early, yet cutover happens only once both login paths — local credentials and the Google OIDC path from #93 — are available. No dual-auth window exists; at the flip every Clerk session is invalidated and users re-login fail-closed against AIHUB auth. Session state is never migrated.
 
+**Recorded conflict (2026-10-17):** the Customer Web left Clerk without waiting for the Google OIDC path. #94 was closed as retired with Google split out as follow-up work, and the Customer Web no longer depends on Clerk in any path. #93 therefore no longer gates a cutover; it is ordinary follow-up work, and the "Google login handoff" section below, as amended by ADR-0081, still states its contract.
+
 Rollback is a redeploy of the previous image tag, not a dual-auth flag, so the post-flip image contains no Clerk SDK, API call, secret, cookie, webhook, or environment reference — the deployed path is the code path, verified against the build artifact. Deployment configuration may retain unread Clerk environment variables for the 14-day rollback window; they are removed at the +30-day mark when Clerk data becomes read-only behind a cold-storage export, and the Clerk directory is deleted at +90 days. Rollback never deletes AIHUB accounts or memberships created during a flipped window: newer data is preserved, and re-flipping is safe because migration is idempotent.
 
 ## Session and authorization boundary
