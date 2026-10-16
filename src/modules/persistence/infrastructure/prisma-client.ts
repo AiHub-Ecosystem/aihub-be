@@ -59,6 +59,10 @@ export function createPrismaClient(
     ? []
     : [role],
 ): PrismaClientHolder {
+  if (databaseUrl.trim().length === 0) {
+    return unconfiguredPrismaClient();
+  }
+
   const connections =
     roles.length === 0
       ? POOL_CONNECTIONS[role]

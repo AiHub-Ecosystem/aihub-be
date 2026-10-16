@@ -1,4 +1,4 @@
-import { createSharedPrismaClients } from './prisma-client';
+import { createPrismaClient, createSharedPrismaClients } from './prisma-client';
 
 describe('createSharedPrismaClients', () => {
   const equal = 'postgres://shared';
@@ -107,5 +107,17 @@ describe('createSharedPrismaClients', () => {
     );
 
     await clients.close();
+  });
+});
+
+describe('createPrismaClient', () => {
+  it('does not create a pool for a blank database URL', async () => {
+    const client = createPrismaClient('control-plane', '');
+
+    try {
+      expect(() => client.pool).toThrow('PostgreSQL is not configured');
+    } finally {
+      await client.close();
+    }
   });
 });

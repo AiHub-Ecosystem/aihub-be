@@ -93,7 +93,6 @@ describe('database validation lane runner', () => {
       '--config',
       expect.stringContaining('jest.config.db.cjs'),
       '--runInBand',
-      '--forceExit',
     ]);
     expect(isEnded()).toBe(true);
   });

@@ -113,13 +113,11 @@ async function runDatabaseLane(lane, options = {}) {
     ]);
     if (generateExitCode !== 0) return generateExitCode;
 
-    // shortcut: no specific leaked Jest handle reproduced; use explicit cleanup if --detectOpenHandles identifies one.
     return run(process.execPath, [
       require.resolve('jest/bin/jest'),
       '--config',
       config,
       '--runInBand',
-      '--forceExit',
     ]);
   });
 }
