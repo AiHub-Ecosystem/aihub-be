@@ -28,8 +28,8 @@
     "vault:provision": "node ops/vault/provision-runtime-secrets.mjs",
     "vault:smoke": "node scripts/ops/vault-smoke.mjs",
     "test": "node scripts/generate/generate-prisma-client.mjs --runtime && jest",
-    "test:db": "node scripts/generate/generate-prisma-client.mjs --runtime && jest --config jest.config.db.cjs --runInBand",
-    "test:tenant-isolation": "node scripts/generate/generate-prisma-client.mjs --runtime && jest --config jest.config.tenant-isolation.cjs --runInBand",
+    "test:db": "node scripts/generate/generate-prisma-client.mjs --runtime --timings && jest --config jest.config.db.cjs --runInBand",
+    "test:tenant-isolation": "node scripts/generate/generate-prisma-client.mjs --runtime --timings && jest --config jest.config.tenant-isolation.cjs --runInBand",
     "test:watch": "node scripts/generate/generate-prisma-client.mjs --runtime && jest --watch",
     "type-check": "node scripts/generate/generate-prisma-client.mjs && tsc --noEmit",
     "type-check:tsgo": "node scripts/generate/generate-prisma-client.mjs && tsgo --noEmit",
@@ -79,6 +79,7 @@
     "pg": "^8.23.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "sharp": "0.35.5",
     "ulid": "^3.0.2",
     "undici": "^8.11.2"
   },

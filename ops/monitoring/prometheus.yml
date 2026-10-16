@@ -3,46 +3,51 @@ global:
   evaluation_interval: 30s
 
 rule_files:
-  - alert.rules.yml
+  - /etc/prometheus/alert.rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: [alertmanager:9093]
 
 scrape_configs:
-  # These targets are reached through a host-gateway mapping in the existing
-  # Prometheus Compose service. Production ports are local SSH forwards only.
+  # Production listeners are local SSH forwards on the monitoring bridge gateway.
   - job_name: aihub-production-node
     static_configs:
-      - targets: [host.docker.internal:19100]
+      - targets: [172.27.0.1:19100]
         labels: { host: production }
 
   - job_name: aihub-production-containers
     static_configs:
-      - targets: [host.docker.internal:19101]
+      - targets: [172.27.0.1:19101]
         labels: { host: production }
     metric_relabel_configs:
       - source_labels: [name]
-        regex: "/aihub.*"
+        regex: "aihub.*"
         action: keep
 
   - job_name: aihub-postgres
     static_configs:
-      - targets: [host.docker.internal:19102]
+      - targets: [172.27.0.1:19102]
         labels: { host: production, database_cluster: shared }
 
   - job_name: aihub-monitoring-node
     static_configs:
-      - targets: [host.docker.internal:9100]
+      - targets: [172.27.0.1:9100]
         labels: { host: monitoring }
 
   - job_name: aihub-redis
     static_configs:
-      - targets: [host.docker.internal:9121]
+      - targets: [aihub-redis-exporter:9121]
         labels: { host: monitoring, redis: aihub }
 
   - job_name: aihub-blackbox
     static_configs:
-      - targets: [host.docker.internal:9115]
+      - targets: [aihub-blackbox-exporter:9115]
         labels: { host: monitoring }
 
   - job_name: aihub-certificate-expiry
+    scrape_interval: 1h
     metrics_path: /probe
     params:
       module: [tcp_tls]
@@ -50,6 +55,8 @@ scrape_configs:
       - targets:
           - api.aihubproduction.com:443
           - sandbox.aihubproduction.com:443
+          - aihubproduction.com:443
+          - www.aihubproduction.com:443
           - s3.wispace.app:443
     relabel_configs:
       - source_labels: [__address__]
@@ -57,4 +64,4 @@ scrape_configs:
       - source_labels: [__param_target]
         target_label: instance
       - target_label: __address__
-        replacement: host.docker.internal:9115
+        replacement: aihub-blackbox-exporter:9115

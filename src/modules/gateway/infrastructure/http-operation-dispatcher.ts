@@ -17,6 +17,7 @@ import type {
   RequestFor,
   ResponseFor,
 } from '@/modules/gateway/application/operation-dispatcher.port';
+import { quotaExceededError } from '@/modules/gateway/application/quota-period';
 import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import type {
   DispatchAttemptOutcome,
@@ -115,18 +116,6 @@ function downstreamFailureMessage(
     case 'AI_SERVICE_CONTRACT_VIOLATION':
       return 'downstream response failed contract validation';
   }
-}
-
-function quotaExceeded(now: Date): AppError {
-  const nextMonth = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
-  );
-  return new AppError({
-    code: 'QUOTA_EXCEEDED',
-    message: 'Monthly request quota exceeded',
-    retryable: true,
-    retryAfterMs: Math.max(0, nextMonth.getTime() - now.getTime()),
-  });
 }
 
 function sandboxBudgetUnavailable(): AppError {
@@ -232,7 +221,7 @@ export class HttpOperationDispatcher implements OperationDispatcherPort {
         throw dispatchTimedOut();
       }
       if (!admitted) {
-        throw quotaExceeded(new Date());
+        throw quotaExceededError(new Date());
       }
     }
     const startedAt = performance.now();

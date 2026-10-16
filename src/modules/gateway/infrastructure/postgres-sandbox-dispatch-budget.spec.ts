@@ -24,6 +24,8 @@ interface FakePolicy {
 class FakeClient {
   readonly created: { organizationId: string; requestId: string }[] = [];
   readonly released: string[] = [];
+  readonly locks: (string | number)[][] = [];
+  readonly storedMonthStarts: Date[] = [];
 
   constructor(private readonly policy: FakePolicy = {}) {}
 
@@ -31,7 +33,8 @@ class FakeClient {
     return work(this);
   }
 
-  async $executeRawUnsafe(): Promise<number> {
+  async $executeRawUnsafe(...parameters: (string | number)[]): Promise<number> {
+    this.locks.push(parameters);
     return 0;
   }
 
@@ -101,7 +104,7 @@ class FakeClient {
       create: async ({
         data,
       }: {
-        data: { organizationId: string; requestId: string };
+        data: { organizationId: string; requestId: string; monthStart: Date };
       }) => {
         if (this.policy.failReads === true)
           throw new Error('connection terminated');
@@ -109,6 +112,7 @@ class FakeClient {
           organizationId: data.organizationId,
           requestId: data.requestId,
         });
+        this.storedMonthStarts.push(data.monthStart);
         return data;
       },
       updateMany: async ({ where }: { where: { requestId: string } }) => {
@@ -127,6 +131,26 @@ function asBudgetClient(client: FakeClient): BudgetClient {
 }
 
 describe('PostgresSandboxDispatchBudget allowance policy', () => {
+  // Two values cross a process boundary here: the `YYYYMM` advisory-lock id,
+  // and the `monthStart` date stored on the reservation. Renumbering or
+  // shifting either splits one month's reservations across two locks, so both
+  // are pinned for a fixed instant.
+  it('locks and stores the month the quota period names', async () => {
+    const client = new FakeClient({
+      defaults: [{ monthStart: OCTOBER_START, allowance: 5 }],
+    });
+
+    await new PostgresSandboxDispatchBudget(
+      asBudgetClient(client),
+      () => OCTOBER,
+    ).reserve({ organizationId: 'org_acme', requestId: 'req_1' });
+
+    expect(client.locks).toEqual([
+      ['SELECT pg_advisory_xact_lock($1, $2)', 182, 202610],
+    ]);
+    expect(client.storedMonthStarts).toEqual([OCTOBER_START]);
+  });
+
   it('admits against the persisted default when the Organization has no override', async () => {
     const client = new FakeClient({
       defaults: [{ monthStart: OCTOBER_START, allowance: 5 }],

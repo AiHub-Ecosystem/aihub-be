@@ -4,6 +4,9 @@ groups:
       - alert: AIHUBHostDiskAbove80Percent
         expr: 100 * (1 - node_filesystem_avail_bytes{job=~"aihub-(production|monitoring)-node",fstype!~"tmpfs|overlay|squashfs|ramfs"} / node_filesystem_size_bytes{job=~"aihub-(production|monitoring)-node",fstype!~"tmpfs|overlay|squashfs|ramfs"}) > 80
         for: 5m
+        labels:
+          severity: warning
+          owner: aihub-operations
         annotations:
           summary: "AIHUB host disk use is above 80%"
           description: "{{ $labels.host }} filesystem {{ $labels.mountpoint }} is above the 80% disk threshold."
@@ -12,22 +15,31 @@ groups:
       - alert: AIHUBHostMemoryPressure
         expr: node_memory_MemAvailable_bytes{job=~"aihub-(production|monitoring)-node"} / node_memory_MemTotal_bytes{job=~"aihub-(production|monitoring)-node"} < 0.10
         for: 5m
+        labels:
+          severity: warning
+          owner: aihub-operations
         annotations:
           summary: "AIHUB host has less than 10% memory available"
           description: "{{ $labels.host }} has less than 10% memory available for five minutes. Threshold is proposed pending #412 review."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#host-memory
 
       - alert: AIHUBContainerOOM
-        expr: increase(container_oom_events_total{job=~"aihub-(production|monitoring)-containers",name=~"/aihub.*"}[10m]) > 0
+        expr: increase(container_oom_events_total{job=~"aihub-(production|monitoring)-containers",name=~"aihub.*"}[10m]) > 0
         for: 0m
+        labels:
+          severity: critical
+          owner: aihub-operations
         annotations:
           summary: "An AIHUB container reported an OOM event"
           description: "cAdvisor reports an OOM event for {{ $labels.name }}. Stopped-container history is not covered."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#containers
 
       - alert: AIHUBContainerRestartLoop
-        expr: changes(container_start_time_seconds{job=~"aihub-(production|monitoring)-containers",name=~"/aihub.*"}[10m]) > 2
+        expr: changes(container_start_time_seconds{job=~"aihub-(production|monitoring)-containers",name=~"aihub.*"}[10m]) > 2
         for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
         annotations:
           summary: "An AIHUB container restarted more than twice in ten minutes"
           description: "Candidate rule: verify the deployed cAdvisor labels and restart behavior before enabling."
@@ -36,24 +48,33 @@ groups:
   - name: aihub-postgres-and-redis
     rules:
       - alert: AIHUBPostgresConnectionsAboveBudget
-        expr: sum by (instance) (pg_stat_activity_count{job="aihub-postgres"}) / max by (instance) (pg_settings_max_connections{job="aihub-postgres"}) >= 0.80
+        expr: aihub_postgres_snapshot_value{job="aihub-postgres",metric="connections_total"} / on (instance, job) aihub_postgres_snapshot_value{job="aihub-postgres",metric="max_connections"} >= 0.80
         for: 5m
+        labels:
+          severity: warning
+          owner: aihub-operations
         annotations:
           summary: "Shared PostgreSQL connections reached 80% of max_connections"
           description: "Connection usage is at least 80% of max_connections, the threshold recorded in ADR-0103."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#postgresql
 
       - alert: AIHUBRedisMemoryAboveBound
-        expr: redis_memory_max_bytes{job="aihub-redis"} > 0 and redis_memory_used_bytes{job="aihub-redis"} / redis_memory_max_bytes{job="aihub-redis"} > 0.80
+        expr: redis_memory_used_bytes{job="aihub-redis"} > 214748365
         for: 5m
+        labels:
+          severity: warning
+          owner: aihub-operations
         annotations:
           summary: "AIHUB Redis used more than 80% of configured maxmemory"
-          description: "This candidate alert has no signal when Redis maxmemory is zero; the shared Redis owner must approve a bound."
+          description: "Redis memory is above 80% of the observed 256 MiB maxmemory setting. Recheck the configured bound after Redis changes."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#redis
 
       - alert: AIHUBRedisCommandLatencyAboveBound
         expr: sum by (instance) (rate(redis_commands_duration_seconds_total{job="aihub-redis"}[5m])) / sum by (instance) (rate(redis_commands_total{job="aihub-redis"}[5m])) > 0.1
         for: 5m
+        labels:
+          severity: warning
+          owner: aihub-operations
         annotations:
           summary: "AIHUB Redis mean command latency exceeded 100 ms"
           description: "Candidate threshold pending Redis owner and #412 approval."
@@ -61,18 +82,46 @@ groups:
 
   - name: aihub-certificates-and-clock
     rules:
+      - alert: AIHUBHostClockUnsynchronizedOrOffsetAboveBound
+        expr: abs(node_timex_offset_seconds{job=~"aihub-(production|monitoring)-node"}) > 5 or node_timex_sync_status{job=~"aihub-(production|monitoring)-node"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "AIHUB host clock is unsynchronized or offset by more than five seconds"
+          description: "{{ $labels.host }} reports an unsynchronized time service or an offset above five seconds. This proposed bound is below the 30-second TOTP step and 60-second JWT/assertion skew allowance."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#host-clock
+
+      - alert: AIHUBMonitoringTargetDown
+        expr: up{job=~"aihub-.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          owner: aihub-operations
+        annotations:
+          summary: "An AIHUB observability target is unavailable"
+          description: "Prometheus cannot scrape {{ $labels.job }} at {{ $labels.instance }}."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#target-health
+
+      - alert: AIHUBCertificateProbeFailed
+        expr: probe_success{job="aihub-certificate-expiry"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "An AIHUB TLS certificate probe failed"
+          description: "The scheduled TLS probe failed for {{ $labels.instance }}."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#certificates
+
       - alert: AIHUBCertificateExpiresWithin14Days
         expr: probe_ssl_earliest_cert_expiry{job="aihub-certificate-expiry"} - time() < 14 * 24 * 60 * 60
         for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
         annotations:
           summary: "An AIHUB or asset TLS certificate expires within 14 days"
           description: "Certificate expiry probe target {{ $labels.instance }} is within 14 days."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#certificates
-
-      - alert: AIHUBHostClockOffset
-        expr: abs(node_timex_offset_seconds{job=~"aihub-(production|monitoring)-node"}) > 5
-        for: 5m
-        annotations:
-          summary: "AIHUB host clock offset exceeded five seconds"
-          description: "Candidate rule; the timex collector is not enabled because it may require CAP_SYS_TIME."
-          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#clock

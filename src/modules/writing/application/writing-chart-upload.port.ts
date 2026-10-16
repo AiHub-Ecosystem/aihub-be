@@ -71,9 +71,7 @@ export interface WritingChartUploadStoragePort {
     | {
         readonly contentType: string | undefined;
         readonly byteSize: number | undefined;
-        readonly etag: string;
-        readonly prefix: Uint8Array;
-        readonly suffix: Uint8Array;
+        readonly bytes: Uint8Array;
       }
     | undefined
   >;
@@ -82,7 +80,7 @@ export interface WritingChartUploadStoragePort {
     readonly stagingKey: string;
     readonly publishedKey: string;
     readonly contentType: WritingChartContentType;
-    readonly etag: string;
+    readonly bytes: Uint8Array;
   }): Promise<void>;
   publicUrl(input: {
     readonly environment: WritingChartEnvironment;

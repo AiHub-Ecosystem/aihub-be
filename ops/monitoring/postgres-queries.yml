@@ -1,0 +1,13 @@
+# shortcut: relies on postgres_exporter v0.20.1's deprecated query extension; replace before upgrading past support.
+aihub_postgres_snapshot:
+  query: SELECT metric, database_name, value FROM aihub_monitoring.snapshot()
+  metrics:
+    - metric:
+        usage: LABEL
+        description: Name of the aggregate PostgreSQL measurement
+    - database_name:
+        usage: LABEL
+        description: AIHUB database name, empty for cluster-wide measurements
+    - value:
+        usage: GAUGE
+        description: Aggregate PostgreSQL measurement value

@@ -1761,8 +1761,9 @@ function sandboxDemoKeyValidationPathItem(
       operationId: id,
       summary: 'Validate a demo key for the selected environment',
       description: [
-        'Customer Web BFF only. Checks that the active API key is bound to the selected environment, has the requested Writing or Speaking grading scope, and belongs to an Organization without active Identity Configuration.',
-        'This route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and advisory; each grading operation authenticates the key again.',
+        'Customer Web BFF only. Checks that the active API key is bound to the selected environment and carries the requested Writing or Speaking grading scope, then reports which user-identity input the demo collects next.',
+        '`user_identity_mode` is `signed_assertion` when the Organization has an active Identity Configuration and `declared_id` otherwise. It selects the browser input only and exposes no Identity Configuration detail.',
+        'This route does not dispatch to an AI service and does not consume grading quota. It is rate-limited and advisory; each upload and grading operation authenticates the key again and enforces the Organization identity policy. Active Identity Configuration requires a valid Signed User Assertion; otherwise, the Declared User ID flow applies.',
       ].join('\n\n'),
       ...routeIdentityScopeOf(id),
       ...routeSecurityOf(id),
@@ -2138,7 +2139,7 @@ function writingChartUploadPathItems(): Record<
         operationId: complete,
         summary: 'Verify and publish a Writing Task 1 chart',
         description: [
-          'Checks the stored bytes using bounded ranged reads, verifies JPEG, PNG, or WebP headers and image dimensions, then copies the verified object from private staging into the environment-specific public chart bucket.',
+          'Downloads the complete staged object (up to 10 MiB), decodes and verifies the JPEG, PNG, or WebP image, applies EXIF orientation, strips source metadata, and re-encodes it before publishing the sanitized bytes. Completion returns 413 and rejects the intent if the sanitized output exceeds 10 MiB; malformed or mismatched images are rejected with 400.',
           'The returned `image_url` is anonymously readable and shareable until it expires 24 hours after publication. Anyone who learns the URL can read and reuse it. Only the same Organization, End User, and environment can complete the upload.',
         ].join('\n\n'),
         ...routeIdentityScopeOf(complete),

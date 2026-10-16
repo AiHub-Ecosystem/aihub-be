@@ -6,13 +6,21 @@ function parseActiveRevisions(status) {
   const seen = new Set();
 
   for (const line of status.split(/\r?\n/)) {
+    if (
+      (line.startsWith('caller_ip_gate=') &&
+        line !== 'caller_ip_gate=production') ||
+      (line.startsWith('pending=') && line !== 'pending=none')
+    ) {
+      throw new Error(
+        `refusing deployment with unresolved host state: ${line}`,
+      );
+    }
+    if (line === 'sandbox enabled but not routed') {
+      throw new Error('refusing deployment with unresolved Sandbox routing');
+    }
     const tier = /^(production|sandbox)\b/.exec(line)?.[1];
     if (!tier) continue;
-    if (
-      tier === 'sandbox' &&
-      /^sandbox (?:disabled|enabled but not routed)$/.test(line)
-    )
-      continue;
+    if (tier === 'sandbox' && /^sandbox disabled$/.test(line)) continue;
     if (seen.has(tier))
       throw new Error(`duplicate ${tier} revision in host status`);
     seen.add(tier);
@@ -60,6 +68,7 @@ function validateDeployTarget({ targetSha, mainSha, activeShas, cwd }) {
         `refusing to deploy: active revision ${activeSha} is unavailable in the checked-out Git history`,
       );
     }
+    if (targetSha === activeSha) continue;
     const result = spawnSync(
       'git',
       ['merge-base', '--is-ancestor', targetSha, activeSha],
@@ -96,7 +105,7 @@ if (require.main === module) {
       cwd: process.cwd(),
     });
     process.stdout.write(
-      `deployment target ${targetSha} is current and advances every active tier\n`,
+      `deployment target ${targetSha} is current and does not roll back any active tier\n`,
     );
   } catch (error) {
     process.stderr.write(

@@ -86,12 +86,49 @@ restore_suspended_crontab() {
   fi
 }
 
+drain_host_jobs() {
+  command -v pgrep >/dev/null || {
+    printf 'pgrep is required to drain scheduled host jobs before deployment\n' >&2
+    return 1
+  }
+  local app_dir_pattern="${APP_DIR//./\\.}"
+  local job_pattern="$app_dir_pattern/scripts/ops/host-scheduled-job\\.sh|(^|/)aihub-ops-job\\.sh([[:space:]]|$)|(^|/)aihub-avatar-sweep\\.sh([[:space:]]|$)"
+  local drain_deadline=$((SECONDS + 900))
+  while pgrep -f "$job_pattern" >/dev/null; do
+    if ((SECONDS >= drain_deadline)); then
+      printf 'scheduled host jobs did not drain within 15 minutes\n' >&2
+      return 1
+    fi
+    sleep 1
+  done
+}
+
 case "$command" in
   suspend)
-    [[ ! -e "$state_dir" ]] || {
-      printf 'a previous AIHUB host-job suspension still needs recovery\n' >&2
-      exit 1
-    }
+    if [[ -e "$state_dir" ]]; then
+      [[ -d "$state_dir" && ! -L "$state_dir" && -f "$state_dir/crontab" && ! -L "$state_dir/crontab" ]] || {
+        printf 'saved AIHUB host-job suspension state is invalid\n' >&2
+        exit 1
+      }
+      if [[ -e "$state_dir/crontab-present" ]]; then
+        [[ -f "$state_dir/crontab-present" && ! -L "$state_dir/crontab-present" && ! -s "$state_dir/crontab-present" ]] || {
+          printf 'saved AIHUB host-job suspension state is invalid\n' >&2
+          exit 1
+        }
+      elif [[ -s "$state_dir/crontab" ]]; then
+        printf 'saved AIHUB host-job suspension state is invalid\n' >&2
+        exit 1
+      fi
+      read_crontab
+      filter_managed_crontab "$current" "$filtered"
+      if ! cmp -s "$current" "$filtered"; then
+        printf 'AIHUB host-job suspension backup exists but managed jobs remain in the crontab\n' >&2
+        exit 1
+      fi
+      drain_host_jobs || exit 1
+      printf 'AIHUB host jobs are already suspended and drained\n'
+      exit 0
+    fi
     read_crontab
     filter_managed_crontab "$current" "$filtered"
     : >"$next"
@@ -114,22 +151,10 @@ case "$command" in
       printf 'could not suspend AIHUB host jobs\n' >&2
       exit 1
     fi
-    command -v pgrep >/dev/null || {
-      printf 'pgrep is required to drain scheduled host jobs before deployment\n' >&2
+    if ! drain_host_jobs; then
       if restore_suspended_crontab; then rm -rf -- "$state_dir"; fi
       exit 1
-    }
-    app_dir_pattern="${APP_DIR//./\\.}"
-    job_pattern="$app_dir_pattern/scripts/ops/host-scheduled-job\\.sh|(^|/)aihub-ops-job\\.sh([[:space:]]|$)|(^|/)aihub-avatar-sweep\\.sh([[:space:]]|$)"
-    drain_deadline=$((SECONDS + 900))
-    while pgrep -f "$job_pattern" >/dev/null; do
-      if ((SECONDS >= drain_deadline)); then
-        printf 'scheduled host jobs did not drain within 15 minutes\n' >&2
-        if restore_suspended_crontab; then rm -rf -- "$state_dir"; fi
-        exit 1
-      fi
-      sleep 1
-    done
+    fi
     printf 'suspended and drained AIHUB host jobs\n'
     exit 0
     ;;

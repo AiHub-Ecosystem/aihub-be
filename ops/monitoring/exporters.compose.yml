@@ -1,6 +1,35 @@
 name: aihub-monitoring-exporters
 
 services:
+  prometheus-aihub:
+    image: prom/prometheus:v3.13.4
+    profiles: [monitoring]
+    user: "65534:65534"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=14d
+      - --storage.tsdb.retention.size=512MB
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+      - aihub_prometheus_data:/prometheus
+    ports:
+      - 127.0.0.1:9094:9090
+    networks:
+      monitoring:
+        aliases: [aihub-prometheus]
+        ipv4_address: 172.27.0.12
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 0.35
+    restart: unless-stopped
+
   node-exporter:
     image: quay.io/prometheus/node-exporter:v1.12.1
     profiles: [production, monitoring]
@@ -19,10 +48,12 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 64
+    mem_limit: 96m
+    cpus: 0.10
     restart: unless-stopped
 
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.60.6
+    image: ghcr.io/google/cadvisor:v0.60.6
     profiles: [container-metrics]
     network_mode: host
     pid: host
@@ -36,15 +67,19 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker:/var/lib/docker:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /run/containerd/containerd.sock:/run/containerd/containerd.sock:ro
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 128
+    mem_limit: 192m
+    cpus: 0.25
     restart: unless-stopped
 
   postgres-exporter:
     image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
     profiles: [production]
+    user: ${AIHUB_PRODUCTION_UID_GID:?set the Production host UID:GID}
     network_mode: host
     command:
       - --web.listen-address=${AIHUB_METRICS_BIND_IP:-127.0.0.1}:9187
@@ -52,42 +87,116 @@ services:
       DATA_SOURCE_URI: ${AIHUB_POSTGRES_EXPORTER_URI:?set the approved PostgreSQL monitoring URI}
       DATA_SOURCE_USER: ${AIHUB_POSTGRES_EXPORTER_USER:?set the approved PostgreSQL monitoring role}
       DATA_SOURCE_PASS_FILE: /run/secrets/postgres-exporter-password
+      PG_EXPORTER_DISABLE_DEFAULT_METRICS: "true"
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres/queries.yml
     volumes:
       - ${AIHUB_POSTGRES_EXPORTER_PASSWORD_FILE:?set the secret file path}:/run/secrets/postgres-exporter-password:ro
+      - ./postgres-queries.yml:/etc/postgres/queries.yml:ro
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 64
+    mem_limit: 96m
+    cpus: 0.10
     restart: unless-stopped
 
   redis-exporter:
     image: ghcr.io/oliver006/redis_exporter:v1.93.0-alpine
     profiles: [monitoring]
-    network_mode: host
+    user: ${AIHUB_MONITORING_UID_GID:?set the monitoring host UID:GID}
     command:
-      - --web.listen-address=${AIHUB_METRICS_BIND_IP:-127.0.0.1}:9121
+      - --web.listen-address=:9121
+      - --config-command=-
     environment:
       REDIS_ADDR: ${AIHUB_REDIS_EXPORTER_ADDRESS:?set the observed AIHUB Redis endpoint}
+      REDIS_USER: ${AIHUB_REDIS_EXPORTER_USER:?set the dedicated Redis exporter user}
       REDIS_PASSWORD_FILE: /run/secrets/redis-exporter-password
     volumes:
       - ${AIHUB_REDIS_EXPORTER_PASSWORD_FILE:?set the secret file path}:/run/secrets/redis-exporter-password:ro
+    networks:
+      monitoring:
+        aliases: [aihub-redis-exporter]
+      redis:
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 64
+    mem_limit: 64m
+    cpus: 0.10
     restart: unless-stopped
 
   blackbox-exporter:
     image: quay.io/prometheus/blackbox-exporter:v0.28.0
     profiles: [monitoring]
-    network_mode: host
     command:
       - --config.file=/etc/blackbox/blackbox.yml
-      - --web.listen-address=${AIHUB_METRICS_BIND_IP:-127.0.0.1}:9115
+      - --web.listen-address=:9115
     volumes:
       - ./blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks:
+      monitoring:
+        aliases: [aihub-blackbox-exporter]
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 64
+    mem_limit: 64m
+    cpus: 0.10
     restart: unless-stopped
+
+  ssh-tunnel:
+    build:
+      context: .
+      dockerfile: ssh-tunnel.Dockerfile
+      args:
+        AIHUB_MONITORING_UID_GID: ${AIHUB_MONITORING_UID_GID:?set the monitoring host UID:GID}
+    profiles: [monitoring]
+    user: ${AIHUB_MONITORING_UID_GID:?set the monitoring host UID:GID}
+    network_mode: host
+    entrypoint: [ssh]
+    command:
+      - -N
+      - -o
+      - BatchMode=yes
+      - -o
+      - ExitOnForwardFailure=yes
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - UserKnownHostsFile=/run/secrets/known_hosts
+      - -o
+      - IdentitiesOnly=yes
+      - -o
+      - IdentityFile=/run/secrets/id_ed25519
+      - -o
+      - ServerAliveInterval=30
+      - -o
+      - ServerAliveCountMax=3
+      - -L
+      - ${AIHUB_MONITORING_GATEWAY:?set the observed monitoring Docker gateway}:19100:127.0.0.1:9100
+      - -L
+      - ${AIHUB_MONITORING_GATEWAY:?set the observed monitoring Docker gateway}:19101:127.0.0.1:19101
+      - -L
+      - ${AIHUB_MONITORING_GATEWAY:?set the observed monitoring Docker gateway}:19102:127.0.0.1:9187
+      - ${AIHUB_TUNNEL_USER:?set the restricted tunnel user}@${AIHUB_PRODUCTION_HOST:?set the Production host}
+    volumes:
+      - ${AIHUB_MONITORING_SSH_KEY_FILE:?set the restricted tunnel key}:/run/secrets/id_ed25519:ro
+      - ${AIHUB_MONITORING_KNOWN_HOSTS_FILE:?set the pinned host key}:/run/secrets/known_hosts:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 32
+    mem_limit: 32m
+    cpus: 0.05
+    restart: unless-stopped
+
+networks:
+  monitoring:
+    external: true
+    name: monitoring
+  redis:
+    external: true
+    name: redis_default
+
+volumes:
+  aihub_prometheus_data:

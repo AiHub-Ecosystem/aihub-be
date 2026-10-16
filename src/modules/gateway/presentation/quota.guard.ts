@@ -6,32 +6,16 @@ import {
   Optional,
 } from '@nestjs/common';
 
-import { AppError } from '@/common/errors/app-error';
 import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
 } from '@/modules/gateway/application/quota-counter.port';
+import { quotaExceededError } from '@/modules/gateway/application/quota-period';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
 } from '@/modules/identity/shared/presentation/authenticated-request';
 import { addMeteringEvidence } from '@/modules/metering/application/metering-evidence';
-
-function nextMonthRetryAfterMs(now: Date): number {
-  const nextMonth = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
-  );
-  return Math.max(0, nextMonth.getTime() - now.getTime());
-}
-
-function quotaExceeded(now: Date): AppError {
-  return new AppError({
-    code: 'QUOTA_EXCEEDED',
-    message: 'Monthly request quota exceeded',
-    retryable: true,
-    retryAfterMs: nextMonthRetryAfterMs(now),
-  });
-}
 
 function validCount(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0;
@@ -71,7 +55,7 @@ export class QuotaGuard implements CanActivate {
       }
     } catch {
       if (authenticated.hardStopOnQuota) {
-        throw quotaExceeded(this.now());
+        throw quotaExceededError(this.now());
       }
 
       addMeteringEvidence(request, { quotaUnverified: true });
@@ -79,7 +63,7 @@ export class QuotaGuard implements CanActivate {
     }
 
     if (count >= quota) {
-      throw quotaExceeded(this.now());
+      throw quotaExceededError(this.now());
     }
 
     return true;

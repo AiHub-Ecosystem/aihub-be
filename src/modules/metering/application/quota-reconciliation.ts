@@ -1,3 +1,4 @@
+import { quotaMonth, quotaPeriod } from '@/modules/gateway/public/quota-period';
 import type {
   QuotaCounterOverwritePort,
   QuotaOrganizationSnapshot,
@@ -89,26 +90,6 @@ function invalidMonth(): never {
   throw new InvalidQuotaReconciliationMonthError();
 }
 
-function formatMonth(year: number, monthIndex: number): string {
-  return `${String(year).padStart(4, '0')}-${String(monthIndex + 1).padStart(2, '0')}`;
-}
-
-function monthWindow(
-  year: number,
-  monthIndex: number,
-): {
-  readonly from: Date;
-  readonly to: Date;
-} {
-  const from = new Date(0);
-  from.setUTCFullYear(year, monthIndex, 1);
-  from.setUTCHours(0, 0, 0, 0);
-
-  const to = new Date(from);
-  to.setUTCMonth(to.getUTCMonth() + 1);
-  return { from, to };
-}
-
 export function parseTargetMonth(
   raw: string | undefined,
   now: Date = new Date(),
@@ -120,23 +101,20 @@ export function parseTargetMonth(
     );
   }
 
-  const currentYear = now.getUTCFullYear();
-  const currentMonthIndex = now.getUTCMonth();
-  const value =
-    raw === undefined ? formatMonth(currentYear, currentMonthIndex) : raw;
+  const current = quotaPeriod(now);
+  const value = raw === undefined ? current.key : raw;
   const match =
     typeof value === 'string' ? /^(\d{4})-(\d{2})$/.exec(value) : null;
   if (match === null) {
     return invalidMonth();
   }
 
-  const year = Number(match[1]);
-  const monthIndex = Number(match[2]) - 1;
-  const currentIndex = currentYear * 12 + currentMonthIndex;
-  const targetIndex = year * 12 + monthIndex;
+  const target = quotaMonth(Number(match[1]), Number(match[2]) - 1);
+  const currentIndex = current.year * 12 + current.monthIndex;
+  const targetIndex = target.year * 12 + target.monthIndex;
   if (
-    monthIndex < 0 ||
-    monthIndex > 11 ||
+    target.monthIndex < 0 ||
+    target.monthIndex > 11 ||
     targetIndex > currentIndex ||
     targetIndex < currentIndex - QUOTA_HISTORY_MONTHS
   ) {
@@ -144,8 +122,9 @@ export function parseTargetMonth(
   }
 
   return {
-    month: formatMonth(year, monthIndex),
-    ...monthWindow(year, monthIndex),
+    month: target.key,
+    from: target.start,
+    to: target.end,
   };
 }
 

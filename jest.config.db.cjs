@@ -12,6 +12,7 @@ module.exports = {
     '<rootDir>/test/silence-nest-logger.ts',
   ],
   globalSetup: '<rootDir>/test/db/global-setup.ts',
+  globalTeardown: '<rootDir>/test/db/global-teardown.ts',
   transform: {
     '^.+.(t|j)s?$': ['@swc/jest'],
   },

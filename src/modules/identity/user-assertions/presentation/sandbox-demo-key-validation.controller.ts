@@ -69,6 +69,7 @@ export class SandboxDemoKeyValidationController {
         valid: true,
         environment: eligibility.environment,
         scope: eligibility.scope,
+        user_identity_mode: eligibility.userIdentityMode,
         allowance:
           eligibility.allowance === null
             ? null

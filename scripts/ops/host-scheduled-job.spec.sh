@@ -368,6 +368,33 @@ cmp -s "$test_root/crontab.before-suspend" "$app_dir/.aihub-host-jobs-state/cron
 [[ "$(cat "$FAKE_PGREP_REMAINING_FILE")" == 0 ]]
 assert_contains "$FAKE_PGREP_PATTERN_FILE" '(^|/)aihub-ops-job\.sh'
 assert_contains "$FAKE_PGREP_PATTERN_FILE" '(^|/)aihub-avatar-sweep\.sh'
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" suspend \
+  >"$test_root/suspend-retry.out"
+assert_contains "$test_root/suspend-retry.out" 'already suspended and drained'
+cmp -s "$test_root/crontab.before-suspend" "$app_dir/.aihub-host-jobs-state/crontab"
+
+printf '0 2 * * * /home/ngoc_anh/aihub-ops-job.sh quota\n' >"$FAKE_CRONTAB_FILE"
+set +e
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" suspend \
+  >"$test_root/suspend-legacy-retry.out" 2>&1
+suspend_status=$?
+set -e
+[[ "$suspend_status" == 1 ]]
+assert_contains "$test_root/suspend-legacy-retry.out" 'managed jobs remain in the crontab'
+
+cat >"$FAKE_CRONTAB_FILE" <<'CRON'
+# BEGIN AIHUB MANAGED JOBS
+0 3 * * * /tmp/host-scheduled-job.sh quota
+# END AIHUB MANAGED JOBS
+CRON
+set +e
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" suspend \
+  >"$test_root/suspend-unsafe-retry.out" 2>&1
+suspend_status=$?
+set -e
+[[ "$suspend_status" == 1 ]]
+assert_contains "$test_root/suspend-unsafe-retry.out" 'managed jobs remain in the crontab'
+assert_contains "$FAKE_CRONTAB_FILE" '# BEGIN AIHUB MANAGED JOBS'
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" restore
 cmp -s "$test_root/crontab.before-suspend" "$FAKE_CRONTAB_FILE"
 [[ ! -e "$app_dir/.aihub-host-jobs-state" ]]

@@ -16,38 +16,41 @@
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { performance } from 'node:perf_hooks';
 
 const GENERATED = join('dist', 'generated', 'prisma');
 const STAGING = join('dist', 'generated', '.staging');
+const reportTimings = process.argv.includes('--timings');
 
-function run(command, args) {
+function run(command, args, phase) {
+  const startedAt = performance.now();
   const result = spawnSync(command, args, {
     stdio: 'inherit',
     shell: process.platform === 'win32',
   });
+  if (reportTimings) {
+    console.info(
+      `[db-lane] ${phase}: ${((performance.now() - startedAt) / 1_000).toFixed(2)}s`,
+    );
+  }
 
   if (result.status !== 0) {
-    console.error(
-      `Prisma client generation failed: ${command} ${args.join(' ')}`,
-    );
+    console.error(`${phase} failed: ${command} ${args.join(' ')}`);
     process.exit(result.status ?? 1);
   }
 }
 
 const prisma = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 rmSync(GENERATED, { force: true, recursive: true });
-run(prisma, ['prisma', 'generate']);
+run(prisma, ['prisma', 'generate'], 'Prisma client generation');
 
 if (process.argv.includes('--runtime')) {
   rmSync(STAGING, { force: true, recursive: true });
-  run(prisma, [
-    'swc',
-    GENERATED,
-    '--out-dir',
-    STAGING,
-    '-C',
-    'module.type=commonjs',
-  ]);
+  run(
+    prisma,
+    ['swc', GENERATED, '--out-dir', STAGING, '-C', 'module.type=commonjs'],
+    'Prisma runtime compilation',
+  );
 
   for (const entry of ['internal', 'models']) {
     const compiled = join(STAGING, 'dist', 'generated', 'prisma', entry);

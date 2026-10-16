@@ -6,6 +6,7 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import sharp from 'sharp';
 import { MockAgent } from 'undici';
 
 import { AppModule } from '@/app.module';
@@ -26,7 +27,7 @@ import {
 } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
-import { WRITING_CHART_RANGE_BYTES } from '@/modules/writing/application/writing-chart-upload.policy';
+import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/application/writing-chart-upload.policy';
 import {
   WRITING_CHART_UPLOAD_CLOCK,
   WRITING_CHART_UPLOAD_REPOSITORY,
@@ -56,6 +57,20 @@ function chartBytes() {
     bytes: new Uint8Array(VALID_CHART_PNG),
     byteSize: VALID_CHART_PNG.length,
   };
+}
+
+async function compressedWebpWithOversizedSanitizedOutput() {
+  const width = 2_200;
+  const height = 2_200;
+  const pixels = Buffer.alloc(width * height * 3);
+  let state = 123_456_789;
+  for (let index = 0; index < pixels.length; index += 1) {
+    state = (1_664_525 * state + 1_013_904_223) >>> 0;
+    pixels[index] = state >>> 24;
+  }
+  return sharp(pixels, { raw: { width, height, channels: 3 } })
+    .webp({ quality: 15, effort: 0 })
+    .toBuffer();
 }
 
 class FakeRepository implements WritingChartUploadRepositoryPort {
@@ -176,14 +191,15 @@ class FakeStorage implements WritingChartUploadStoragePort {
   readonly published: string[] = [];
   readonly deletedStaging: string[] = [];
   readonly deletedPublished: string[] = [];
+  activeInspections = 0;
+  maxConcurrentInspections = 0;
+  inspectionDelayMs = 0;
   readonly objects = new Map<
     string,
     {
       readonly contentType: string;
       readonly byteSize: number;
-      readonly etag: string;
-      readonly prefix: Uint8Array;
-      readonly suffix: Uint8Array;
+      readonly bytes: Uint8Array;
     }
   >();
 
@@ -200,13 +216,35 @@ class FakeStorage implements WritingChartUploadStoragePort {
     };
   }
 
-  async inspectObject(input: { readonly stagingKey: string }) {
-    return this.objects.get(input.stagingKey);
+  async inspectObject(input: { readonly stagingKey: string }): ReturnType<
+    WritingChartUploadStoragePort['inspectObject']
+  > {
+    this.activeInspections += 1;
+    this.maxConcurrentInspections = Math.max(
+      this.maxConcurrentInspections,
+      this.activeInspections,
+    );
+    try {
+      if (this.inspectionDelayMs > 0) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, this.inspectionDelayMs),
+        );
+      }
+      return this.objects.get(input.stagingKey);
+    } finally {
+      this.activeInspections -= 1;
+    }
   }
 
-  async publishObject(input: { readonly publishedKey: string }) {
+  async publishObject(input: {
+    readonly publishedKey: string;
+    readonly bytes: Uint8Array;
+  }): Promise<void> {
     this.published.push(input.publishedKey);
+    this.publishedObjects.set(input.publishedKey, input.bytes);
   }
+
+  readonly publishedObjects = new Map<string, Uint8Array>();
 
   publicUrl(input: { readonly publishedKey: string }) {
     return `https://charts.example.net/${input.publishedKey}`;
@@ -224,15 +262,12 @@ class FakeStorage implements WritingChartUploadStoragePort {
   upload(
     stagingKey: string,
     input: ReturnType<typeof chartBytes> = chartBytes(),
+    contentType: WritingChartContentType = 'image/png',
   ) {
     this.objects.set(stagingKey, {
-      contentType: 'image/png',
+      contentType,
       byteSize: input.byteSize,
-      etag: '"verified-etag"',
-      prefix: input.bytes.subarray(0, WRITING_CHART_RANGE_BYTES),
-      suffix: input.bytes.subarray(
-        Math.max(0, input.byteSize - WRITING_CHART_RANGE_BYTES),
-      ),
+      bytes: input.bytes,
     });
   }
 }
@@ -331,6 +366,9 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
     storage.published.length = 0;
     storage.deletedStaging.length = 0;
     storage.objects.clear();
+    storage.publishedObjects.clear();
+    storage.maxConcurrentInspections = 0;
+    storage.inspectionDelayMs = 0;
   });
 
   const headers = (identity = 'learner-42', key = 'valid-key') => ({
@@ -408,6 +446,9 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
     expect(imageUrl).toBe(`https://charts.example.net/${intent.publishedKey}`);
     expect(complete.json().data.expires_at).toBe('2026-10-15T00:00:00.000Z');
     expect(storage.published).toEqual([intent.publishedKey]);
+    expect(storage.publishedObjects.get(intent.publishedKey)).not.toEqual(
+      chartBytes().bytes,
+    );
     expect(storage.deletedStaging).toEqual([intent.stagingKey]);
 
     const pool = mockAgent.get('https://ai-writing.test');
@@ -471,6 +512,35 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
     expect(repository.rows.get(assetId)?.status).toBe('rejected');
   });
 
+  it('returns 413 and rejects the intent when sanitized output exceeds 10 MiB', async () => {
+    const source = await compressedWebpWithOversizedSanitizedOutput();
+    expect(source.byteLength).toBeLessThanOrEqual(WRITING_CHART_MAX_BYTES);
+    const create = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/chart-uploads',
+      headers: headers(),
+      payload: { content_type: 'image/webp', byte_size: source.byteLength },
+    });
+    const assetId = create.json().data.asset_id as string;
+    const intent = repository.rows.get(assetId) as WritingChartUploadIntent;
+    storage.upload(
+      intent.stagingKey,
+      { bytes: source, byteSize: source.byteLength },
+      'image/webp',
+    );
+
+    const complete = await app.inject({
+      method: 'POST',
+      url: `/v1/ielts/writing/task1/chart-uploads/${assetId}/complete`,
+      headers: headers(),
+    });
+
+    expect(complete.statusCode).toBe(413);
+    expect(storage.published).toEqual([]);
+    expect(storage.deletedStaging).toContain(intent.stagingKey);
+    expect(repository.rows.get(assetId)?.status).toBe('rejected');
+  });
+
   it('rejects unsupported and oversized declarations before storing an intent', async () => {
     const unsupported = await app.inject({
       method: 'POST',
@@ -487,5 +557,66 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
     expect(unsupported.statusCode).toBe(400);
     expect(oversized.statusCode).toBe(413);
     expect(repository.rows.size).toBe(0);
+  });
+
+  it('publishes one asset only when completion is requested concurrently', async () => {
+    const create = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/chart-uploads',
+      headers: headers(),
+      payload: {
+        content_type: 'image/png',
+        byte_size: chartBytes().byteSize,
+      },
+    });
+    const assetId = create.json().data.asset_id as string;
+    const intent = repository.rows.get(assetId) as WritingChartUploadIntent;
+    storage.upload(intent.stagingKey);
+
+    const complete = () =>
+      app.inject({
+        method: 'POST',
+        url: `/v1/ielts/writing/task1/chart-uploads/${assetId}/complete`,
+        headers: headers(),
+      });
+    const responses = await Promise.all([complete(), complete()]);
+
+    expect(responses.map(({ statusCode }) => statusCode)).toEqual([200, 200]);
+    expect(responses[0]?.json().data).toEqual(responses[1]?.json().data);
+    expect(storage.published).toEqual([intent.publishedKey]);
+  });
+
+  it('allows concurrent storage reads while processing images one at a time', async () => {
+    storage.inspectionDelayMs = 20;
+    const intents = await Promise.all(
+      [1, 2].map(async () => {
+        const create = await app.inject({
+          method: 'POST',
+          url: '/v1/ielts/writing/task1/chart-uploads',
+          headers: headers(),
+          payload: {
+            content_type: 'image/png',
+            byte_size: chartBytes().byteSize,
+          },
+        });
+        const assetId = create.json().data.asset_id as string;
+        const intent = repository.rows.get(assetId) as WritingChartUploadIntent;
+        storage.upload(intent.stagingKey);
+        return assetId;
+      }),
+    );
+
+    await Promise.all(
+      intents.map((assetId) =>
+        app.inject({
+          method: 'POST',
+          url: `/v1/ielts/writing/task1/chart-uploads/${assetId}/complete`,
+          headers: headers(),
+        }),
+      ),
+    );
+
+    expect(storage.maxConcurrentInspections).toBe(2);
+    expect(storage.published).toHaveLength(2);
   });
 });

@@ -339,6 +339,8 @@ jobs:
           ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           image_arg="$(printf '%q' "$AIHUB_IMAGE")"
+          target_sha="${AIHUB_IMAGE##*:}"
+          tier_deployed=false
           rollback_tier() {
             local tier_arg
             tier_arg="$(printf '%q' "$1")"
@@ -369,20 +371,43 @@ jobs:
             printf 'FAIL\n'
             return 1
           }
-          if ! ssh "${ssh_opts[@]}" "$target" \
-            "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
+          state="$(ssh "${ssh_opts[@]}" "$target" \
+            "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/blue-green-host.sh status
+          REMOTE
+          )"
+          caller_ip_gate="$(sed -n 's/^caller_ip_gate=//p' <<<"$state")"
+          if [[ -n "$caller_ip_gate" && "$caller_ip_gate" != production ]] || \
+            grep -Eq '^pending=|^sandbox enabled but not routed$' <<<"$state"; then
+            printf 'deployment state is unresolved; refusing to roll out production\n' >&2
+            exit 1
+          fi
+          active_sha="$(awk '$1 == "production" { for (i = 1; i <= NF; i++) if ($i ~ /^sha=/) { sub(/^sha=/, "", $i); print $i; exit } }' <<<"$state")"
+          if [[ ! "$active_sha" =~ ^[a-f0-9]{40}$ ]]; then
+            printf 'active Production revision is missing or invalid\n' >&2
+            exit 1
+          fi
+          if [[ "$active_sha" == "$target_sha" ]]; then
+            printf 'Production already runs target; skipping cutover\n'
+          else
+            if ! ssh "${ssh_opts[@]}" "$target" \
+              "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
           ./scripts/ops/blue-green-host.sh deploy production
           REMOTE
-          then
-            ssh "${ssh_opts[@]}" "$target" \
-              "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE' || true
+            then
+              ssh "${ssh_opts[@]}" "$target" \
+                "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE' || true
           set -euo pipefail
           cd "$APP_DIR"
           ./scripts/ops/blue-green-host.sh recover-gate
           REMOTE
-            exit 1
+              exit 1
+            fi
+            tier_deployed=true
           fi
 
           if ! public_host="$(ssh "${ssh_opts[@]}" "$target" \
@@ -393,16 +418,16 @@ jobs:
           REMOTE
           )" 2>/dev/null; then
             printf 'FAIL\n'
-            rollback_tier production
+            if [[ "$tier_deployed" == true ]]; then rollback_tier production; fi
             exit 1
           fi
           if ! request_id="$(node scripts/ops/probe-public-edge.cjs request-id "$public_host")"; then
             printf 'FAIL\n'
-            rollback_tier production
+            if [[ "$tier_deployed" == true ]]; then rollback_tier production; fi
             exit 1
           fi
           if ! verify_request_id "$request_id"; then
-            rollback_tier production
+            if [[ "$tier_deployed" == true ]]; then rollback_tier production; fi
             exit 1
           fi
           sandbox_enabled="$(ssh "${ssh_opts[@]}" "$target" \
@@ -424,6 +449,8 @@ jobs:
           ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           image_arg="$(printf '%q' "$AIHUB_IMAGE")"
+          target_sha="${AIHUB_IMAGE##*:}"
+          tier_deployed=false
           rollback_tier() {
             local tier_arg
             tier_arg="$(printf '%q' "$1")"
@@ -454,20 +481,43 @@ jobs:
             printf 'FAIL\n'
             return 1
           }
-          if ! ssh "${ssh_opts[@]}" "$target" \
-            "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
+          state="$(ssh "${ssh_opts[@]}" "$target" \
+            "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/blue-green-host.sh status
+          REMOTE
+          )"
+          caller_ip_gate="$(sed -n 's/^caller_ip_gate=//p' <<<"$state")"
+          if [[ -n "$caller_ip_gate" && "$caller_ip_gate" != production ]] || \
+            grep -Eq '^pending=|^sandbox enabled but not routed$' <<<"$state"; then
+            printf 'deployment state is unresolved; refusing to roll out Sandbox\n' >&2
+            exit 1
+          fi
+          active_sha="$(awk '$1 == "sandbox" { for (i = 1; i <= NF; i++) if ($i ~ /^sha=/) { sub(/^sha=/, "", $i); print $i; exit } }' <<<"$state")"
+          if [[ ! "$active_sha" =~ ^[a-f0-9]{40}$ ]]; then
+            printf 'active Sandbox revision is missing or invalid\n' >&2
+            exit 1
+          fi
+          if [[ "$active_sha" == "$target_sha" ]]; then
+            printf 'Sandbox already runs target; skipping cutover\n'
+          else
+            if ! ssh "${ssh_opts[@]}" "$target" \
+              "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
           ./scripts/ops/blue-green-host.sh deploy sandbox
           REMOTE
-          then
-            ssh "${ssh_opts[@]}" "$target" \
-              "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE' || true
+            then
+              ssh "${ssh_opts[@]}" "$target" \
+                "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE' || true
           set -euo pipefail
           cd "$APP_DIR"
           ./scripts/ops/blue-green-host.sh recover-gate
           REMOTE
-            exit 1
+              exit 1
+            fi
+            tier_deployed=true
           fi
 
           if ! public_host="$(ssh "${ssh_opts[@]}" "$target" \
@@ -478,16 +528,16 @@ jobs:
           REMOTE
           )" 2>/dev/null; then
             printf 'FAIL\n'
-            rollback_tier sandbox
+            if [[ "$tier_deployed" == true ]]; then rollback_tier sandbox; fi
             exit 1
           fi
           if ! request_id="$(node scripts/ops/probe-public-edge.cjs request-id "$public_host")"; then
             printf 'FAIL\n'
-            rollback_tier sandbox
+            if [[ "$tier_deployed" == true ]]; then rollback_tier sandbox; fi
             exit 1
           fi
           if ! verify_request_id "$request_id"; then
-            rollback_tier sandbox
+            if [[ "$tier_deployed" == true ]]; then rollback_tier sandbox; fi
             exit 1
           fi
 
