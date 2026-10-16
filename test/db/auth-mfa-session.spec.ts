@@ -14,7 +14,7 @@ import {
   createPostgresAuthClient,
 } from '@/modules/auth/infrastructure/postgres-auth.client';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
-import { PostgresLocalAuthRepository } from '@/modules/auth/infrastructure/postgres-local-auth.repository';
+import { PostgresRefreshSessionRepository } from '@/modules/auth/infrastructure/postgres-refresh-session.repository';
 import { PostgresWebSessionRepository } from '@/modules/auth/infrastructure/postgres-web-session.repository';
 
 import {
@@ -38,14 +38,14 @@ class FailingEmailRequests extends PostgresEmailDeliveryRequestRepository {
 
 let pool: Pool;
 let client: PostgresAuthClient;
-let refreshSessions: PostgresLocalAuthRepository;
+let refreshSessions: PostgresRefreshSessionRepository;
 let webSessions: PostgresWebSessionRepository;
 let mfa: PostgresAuthMfaRepository;
 
 beforeAll(() => {
   pool = createTestPool();
   client = createPostgresAuthClient(testDatabaseUrl());
-  refreshSessions = new PostgresLocalAuthRepository(client);
+  refreshSessions = new PostgresRefreshSessionRepository(client);
   webSessions = new PostgresWebSessionRepository(client);
   mfa = new PostgresAuthMfaRepository(client);
 });

@@ -29,7 +29,10 @@ import {
   createPostgresAuthClient,
 } from '@/modules/auth/infrastructure/postgres-auth.client';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/infrastructure/postgres-email-delivery-request.repository';
-import { PostgresLocalAuthRepository } from '@/modules/auth/infrastructure/postgres-local-auth.repository';
+import { PostgresPasswordResetTokenRepository } from '@/modules/auth/infrastructure/postgres-password-reset-token.repository';
+import { PostgresRefreshSessionRepository } from '@/modules/auth/infrastructure/postgres-refresh-session.repository';
+import { PostgresUserAccountRepository } from '@/modules/auth/infrastructure/postgres-user-account.repository';
+import { PostgresVerificationTokenRepository } from '@/modules/auth/infrastructure/postgres-verification-token.repository';
 
 import {
   createTestPool,
@@ -73,21 +76,28 @@ beforeAll(async () => {
   authClient = createPostgresAuthClient(testDatabaseUrl());
   const emailOutbox =
     createCliRuntimeSecretProvider().getSnapshot().emailOutbox;
-  const repository = new PostgresLocalAuthRepository(
+  const emailRequests = new PostgresEmailDeliveryRequestRepository(emailOutbox);
+  const accounts = new PostgresUserAccountRepository(authClient, emailRequests);
+  const verification = new PostgresVerificationTokenRepository(
     authClient,
-    new PostgresEmailDeliveryRequestRepository(emailOutbox),
+    emailRequests,
   );
+  const resets = new PostgresPasswordResetTokenRepository(
+    authClient,
+    emailRequests,
+  );
+  const refresh = new PostgresRefreshSessionRepository(authClient);
   const cipher = createEmailPayloadCipher(emailOutbox);
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(USER_ACCOUNT_REPOSITORY)
-    .useValue(repository)
+    .useValue(accounts)
     .overrideProvider(VERIFICATION_TOKEN_REPOSITORY)
-    .useValue(repository)
+    .useValue(verification)
     .overrideProvider(PASSWORD_RESET_TOKEN_REPOSITORY)
-    .useValue(repository)
+    .useValue(resets)
     .overrideProvider(REFRESH_SESSION_REPOSITORY)
-    .useValue(repository)
+    .useValue(refresh)
     .overrideProvider(EMAIL_SENDER)
     .useValue(new DiscardingSender())
     .overrideProvider(EMAIL_PAYLOAD_CIPHER)

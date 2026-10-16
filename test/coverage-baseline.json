@@ -1,8 +1,9 @@
 {
-  "lines": 81.89179241810821,
-  "branches": 67.82048701952102,
-  "statements": 80.94242661789043,
-  "functions": 80.06932409012131,
+  "lines": 88.6530082506721,
+  "branches": 77.03612982241273,
+  "statements": 87.59355463590737,
+  "functions": 86.8664609960335,
   "marginPoints": 0.5,
-  "recordedLanes": ["unit", "db", "tenant-isolation"]
+  "recordedLanes": ["unit", "db"],
+  "recordedFrom": "CI run 38925164229, merge of the unit and database lanes on main"
 }

@@ -6,7 +6,9 @@ import { ulid } from 'ulid';
 import type { IssuedRefreshToken } from '@/modules/auth/application/refresh-token.port';
 import { Argon2PasswordHasher } from '@/modules/auth/infrastructure/argon2-password.hasher';
 import { createPostgresAuthClient } from '@/modules/auth/infrastructure/postgres-auth.client';
-import { PostgresLocalAuthRepository } from '@/modules/auth/infrastructure/postgres-local-auth.repository';
+import { PostgresPasswordResetTokenRepository } from '@/modules/auth/infrastructure/postgres-password-reset-token.repository';
+import { PostgresUserAccountRepository } from '@/modules/auth/infrastructure/postgres-user-account.repository';
+import { PostgresVerificationTokenRepository } from '@/modules/auth/infrastructure/postgres-verification-token.repository';
 
 import {
   createTestPool,
@@ -21,7 +23,9 @@ const EMAIL = 'verify@example.com';
 
 let pool: Pool;
 let client: ReturnType<typeof createPostgresAuthClient>;
-let repository: PostgresLocalAuthRepository;
+let accounts: PostgresUserAccountRepository;
+let verificationTokens: PostgresVerificationTokenRepository;
+let resets: PostgresPasswordResetTokenRepository;
 
 function tokenHash(): string {
   return createHash('sha256')
@@ -84,7 +88,7 @@ async function insertToken(options: {
 }
 
 async function verify(hash: string, now = NOW): Promise<boolean> {
-  const outcome = await repository.consumeVerificationToken({
+  const outcome = await verificationTokens.consumeVerificationToken({
     tokenHash: hash,
     signInSession: signInSession(tokenHash()),
     now,
@@ -124,7 +128,9 @@ async function beginLockHolderTransaction() {
 beforeAll(() => {
   pool = createTestPool();
   client = createPostgresAuthClient(testDatabaseUrl());
-  repository = new PostgresLocalAuthRepository(client);
+  accounts = new PostgresUserAccountRepository(client);
+  verificationTokens = new PostgresVerificationTokenRepository(client);
+  resets = new PostgresPasswordResetTokenRepository(client);
 });
 
 afterAll(async () => {
@@ -170,7 +176,7 @@ describe('local email verification against PostgreSQL', () => {
 
     const replacementHash = tokenHash();
     await expect(
-      repository.rotateVerificationToken({
+      verificationTokens.rotateVerificationToken({
         email: EMAIL,
         tokenId: `evt_${ulid()}`,
         tokenHash: replacementHash,
@@ -307,7 +313,7 @@ describe('local email verification against PostgreSQL', () => {
 
       verification = verify(hash);
       const verificationPid = await waitForBlockedBy(pool, holderPid);
-      resend = repository.rotateVerificationToken({
+      resend = verificationTokens.rotateVerificationToken({
         email: EMAIL,
         tokenId: `evt_${ulid()}`,
         tokenHash: tokenHash(),
@@ -348,7 +354,7 @@ describe('local email verification against PostgreSQL', () => {
         [oldHash],
       );
 
-      resend = repository.rotateVerificationToken({
+      resend = verificationTokens.rotateVerificationToken({
         email: EMAIL,
         tokenId: `evt_${ulid()}`,
         tokenHash: replacementHash,
@@ -387,7 +393,7 @@ describe('local email verification against PostgreSQL', () => {
   describe('Verification Sign-in', () => {
     it('stores the binding hash on register and resend tokens', async () => {
       const registerBinding = tokenHash();
-      await repository.register({
+      await accounts.register({
         email: 'bound@example.com',
         username: 'bound_01',
         passwordHash: '$argon2id$v=19$m=65536,t=3,p=1$c2FsdHNhbHQ$aGFzaA',
@@ -398,7 +404,7 @@ describe('local email verification against PostgreSQL', () => {
         now: NOW,
       });
       const resendBinding = tokenHash();
-      await repository.rotateVerificationToken({
+      await verificationTokens.rotateVerificationToken({
         email: 'bound@example.com',
         tokenId: `evt_${ulid()}`,
         tokenHash: tokenHash(),
@@ -431,7 +437,7 @@ describe('local email verification against PostgreSQL', () => {
       // Another browser presents the link, so it verifies without a binding
       // that could claim the sign-in.
       await expect(
-        repository.consumeVerificationToken({
+        verificationTokens.consumeVerificationToken({
           tokenHash: hash,
           browserBindingHash: tokenHash(),
           signInSession: signInSession(tokenHash()),
@@ -453,14 +459,14 @@ describe('local email verification against PostgreSQL', () => {
       await insertToken({ userId, hash, bindingHash: binding });
 
       await expect(
-        repository.consumeVerificationToken({
+        verificationTokens.consumeVerificationToken({
           tokenHash: hash,
           signInSession: signInSession(tokenHash()),
           now: NOW,
         }),
       ).resolves.toEqual({ kind: 'verified' });
       await expect(
-        repository.consumeVerificationToken({
+        verificationTokens.consumeVerificationToken({
           tokenHash: hash,
           browserBindingHash: tokenHash(),
           signInSession: signInSession(tokenHash()),
@@ -468,7 +474,7 @@ describe('local email verification against PostgreSQL', () => {
         }),
       ).resolves.toEqual({ kind: 'verified' });
       await expect(
-        repository.consumeVerificationToken({
+        verificationTokens.consumeVerificationToken({
           tokenHash: hash,
           browserBindingHash: binding,
           signInSession: signInSession(tokenHash()),
@@ -476,7 +482,7 @@ describe('local email verification against PostgreSQL', () => {
         }),
       ).resolves.toEqual({ kind: 'signed_in', userId });
       await expect(
-        repository.consumeVerificationToken({
+        verificationTokens.consumeVerificationToken({
           tokenHash: hash,
           browserBindingHash: binding,
           signInSession: signInSession(tokenHash()),
@@ -507,7 +513,7 @@ describe('local email verification against PostgreSQL', () => {
       );
 
       await expect(
-        repository.consumeVerificationToken({
+        verificationTokens.consumeVerificationToken({
           tokenHash: hash,
           browserBindingHash: binding,
           signInSession: signInSession(blocked),
@@ -539,7 +545,7 @@ describe('local email verification against PostgreSQL', () => {
       });
 
       await expect(
-        repository.consumeVerificationToken({
+        verificationTokens.consumeVerificationToken({
           tokenHash: hash,
           browserBindingHash: binding,
           signInSession: signInSession(tokenHash()),
@@ -561,13 +567,13 @@ describe('local email verification against PostgreSQL', () => {
       await insertToken({ userId, hash, bindingHash: binding });
 
       const outcomes = await Promise.all([
-        repository.consumeVerificationToken({
+        verificationTokens.consumeVerificationToken({
           tokenHash: hash,
           browserBindingHash: binding,
           signInSession: signInSession(tokenHash()),
           now: NOW,
         }),
-        repository.consumeVerificationToken({
+        verificationTokens.consumeVerificationToken({
           tokenHash: hash,
           browserBindingHash: binding,
           signInSession: signInSession(tokenHash()),
@@ -594,7 +600,7 @@ describe('local email verification against PostgreSQL', () => {
         hash: oldHash,
         bindingHash: binding,
       });
-      await repository.rotateVerificationToken({
+      await verificationTokens.rotateVerificationToken({
         email: 'a@example.com',
         tokenId: `evt_${ulid()}`,
         tokenHash: tokenHash(),
@@ -602,7 +608,7 @@ describe('local email verification against PostgreSQL', () => {
         now: new Date(NOW.getTime() + 1_000),
       });
       await expect(
-        repository.consumeVerificationToken({
+        verificationTokens.consumeVerificationToken({
           tokenHash: oldHash,
           browserBindingHash: binding,
           signInSession: signInSession(tokenHash()),
@@ -621,7 +627,7 @@ describe('local email verification against PostgreSQL', () => {
         bindingHash: binding,
       });
       await expect(
-        repository.consumeVerificationToken({
+        verificationTokens.consumeVerificationToken({
           tokenHash: expiredHash,
           browserBindingHash: binding,
           signInSession: signInSession(tokenHash()),
@@ -636,7 +642,7 @@ describe('local email verification against PostgreSQL', () => {
       const unboundHash = tokenHash();
       await insertToken({ userId: unbound, hash: unboundHash });
       await expect(
-        repository.consumeVerificationToken({
+        verificationTokens.consumeVerificationToken({
           tokenHash: unboundHash,
           browserBindingHash: binding,
           signInSession: signInSession(tokenHash()),
@@ -652,7 +658,7 @@ describe('local email verification against PostgreSQL', () => {
         bindingHash: binding,
       });
       await expect(
-        repository.consumeVerificationToken({
+        verificationTokens.consumeVerificationToken({
           tokenHash: disabledHash,
           browserBindingHash: binding,
           signInSession: signInSession(tokenHash()),
@@ -671,7 +677,7 @@ describe('password hashes from the installed argon2 against PostgreSQL', () => {
   it('registers an account with a real password hash', async () => {
     const passwordHash = await hasher.hash('correct horse battery staple');
 
-    await repository.register({
+    await accounts.register({
       email: 'real-hash@example.com',
       username: 'real_hash_01',
       passwordHash,
@@ -701,7 +707,7 @@ describe('password hashes from the installed argon2 against PostgreSQL', () => {
     const resetTokenHash = createHash('sha256')
       .update(rawToken, 'utf8')
       .digest('hex');
-    await repository.issuePasswordResetToken({
+    await resets.issuePasswordResetToken({
       email: 'reset-real@example.com',
       tokenId: `prt_${ulid()}`,
       tokenHash: resetTokenHash,
@@ -709,7 +715,7 @@ describe('password hashes from the installed argon2 against PostgreSQL', () => {
       now: NOW,
     });
 
-    const result = await repository.consumePasswordReset({
+    const result = await resets.consumePasswordReset({
       tokenHash: resetTokenHash,
       passwordHash: await hasher.hash('a new passphrase'),
       now: new Date(NOW.getTime() + 1_000),

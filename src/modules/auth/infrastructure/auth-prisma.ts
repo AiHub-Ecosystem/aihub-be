@@ -33,6 +33,18 @@ export function authQueryRows<T extends object = Record<string, unknown>>(
   return translated;
 }
 
+/**
+ * A duplicate key from either path: the SQLSTATE a raw statement reports, or
+ * the code Prisma gives a model operation for the same violation.
+ */
+export function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return false;
+  }
+  const { code } = error as { code?: unknown };
+  return code === '23505' || code === 'P2002';
+}
+
 export function authTransaction<T>(
   client: AuthRepositoryClient,
   callback: (transaction: AuthTransactionClient) => Promise<T>,

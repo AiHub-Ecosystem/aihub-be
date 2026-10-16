@@ -8,7 +8,7 @@ import {
   type PostgresAuthClient,
   createPostgresAuthClient,
 } from '@/modules/auth/infrastructure/postgres-auth.client';
-import { PostgresLocalAuthRepository } from '@/modules/auth/infrastructure/postgres-local-auth.repository';
+import { PostgresPasswordResetTokenRepository } from '@/modules/auth/infrastructure/postgres-password-reset-token.repository';
 import { PostgresWebSessionRepository } from '@/modules/auth/infrastructure/postgres-web-session.repository';
 import { interceptStatements } from '@/modules/persistence/testing/query-fake-client';
 
@@ -36,14 +36,14 @@ const STORED_PASSWORD_HASH =
 let pool: Pool;
 let client: PostgresAuthClient;
 let webSessions: PostgresWebSessionRepository;
-let localAuth: PostgresLocalAuthRepository;
+let passwordResets: PostgresPasswordResetTokenRepository;
 let resetPasswordHash: string;
 
 beforeAll(async () => {
   pool = createTestPool();
   client = createPostgresAuthClient(testDatabaseUrl());
   webSessions = new PostgresWebSessionRepository(client);
-  localAuth = new PostgresLocalAuthRepository(client);
+  passwordResets = new PostgresPasswordResetTokenRepository(client);
   resetPasswordHash = await new Argon2PasswordHasher().hash('a new passphrase');
 });
 
@@ -459,7 +459,7 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
     const resetHash = createHash('sha256')
       .update(rawToken, 'utf8')
       .digest('hex');
-    await localAuth.issuePasswordResetToken({
+    await passwordResets.issuePasswordResetToken({
       email: EMAIL,
       tokenId: `prt_${ulid()}`,
       tokenHash: resetHash,
@@ -568,7 +568,7 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
           },
           now: RESET_AT,
         });
-      const reset = (repository: PostgresLocalAuthRepository) =>
+      const reset = (repository: PostgresPasswordResetTokenRepository) =>
         repository.consumePasswordReset({
           tokenHash: resetHash,
           passwordHash: resetPasswordHash,
@@ -576,7 +576,7 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
         });
       const first =
         firstOperation === 'reset'
-          ? reset(new PostgresLocalAuthRepository(paused.client))
+          ? reset(new PostgresPasswordResetTokenRepository(paused.client))
           : create(new PostgresWebSessionRepository(paused.client));
       let second: Promise<unknown> | undefined;
       try {
@@ -587,7 +587,9 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
           }),
         ]);
         second =
-          firstOperation === 'reset' ? create(webSessions) : reset(localAuth);
+          firstOperation === 'reset'
+            ? create(webSessions)
+            : reset(passwordResets);
         await waitForBlockedBy(pool, pid);
         paused.release();
         const results = await Promise.all([first, second]);
@@ -620,7 +622,7 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
     const { userId, resetHash } = await seedResetTarget();
 
     await expect(
-      localAuth.consumePasswordReset({
+      passwordResets.consumePasswordReset({
         tokenHash: resetHash,
         passwordHash: resetPasswordHash,
         now: RESET_AT,
@@ -652,7 +654,7 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
     const failing = failingWebSessionRevocation();
 
     await expect(
-      new PostgresLocalAuthRepository(failing).consumePasswordReset({
+      new PostgresPasswordResetTokenRepository(failing).consumePasswordReset({
         tokenHash: resetHash,
         passwordHash: resetPasswordHash,
         now: RESET_AT,

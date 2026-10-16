@@ -107,7 +107,10 @@ import {
   PostgresEmailDispatchStore,
   pruneExpiredAuthEmailRecipientLimits,
 } from './infrastructure/postgres-email-delivery-request.repository';
-import { PostgresLocalAuthRepository } from './infrastructure/postgres-local-auth.repository';
+import { PostgresPasswordResetTokenRepository } from './infrastructure/postgres-password-reset-token.repository';
+import { PostgresRefreshSessionRepository } from './infrastructure/postgres-refresh-session.repository';
+import { PostgresUserAccountRepository } from './infrastructure/postgres-user-account.repository';
+import { PostgresVerificationTokenRepository } from './infrastructure/postgres-verification-token.repository';
 import { PostgresWebSessionRepository } from './infrastructure/postgres-web-session.repository';
 import { RedisAuthRateLimiter } from './infrastructure/redis-auth-rate-limiter';
 import { ResendEmailSender } from './infrastructure/resend-email.sender';
@@ -134,14 +137,45 @@ import {
         check: (timeoutMs) => runtime.checkConnection(timeoutMs),
       }),
     },
+    // One adapter per aggregate, all four over the shared runtime client: the
+    // SQL and the transaction rules of one aggregate read in one file, so a
+    // change to refresh-family revocation is no longer reviewed beside a change
+    // to registration. The operations that cross aggregates still run one
+    // transaction by writing the other tables through the shared statements.
     {
-      provide: PostgresLocalAuthRepository,
+      provide: PostgresUserAccountRepository,
       inject: [RUNTIME_PRISMA_CLIENT, EMAIL_DELIVERY_REQUEST_WRITER],
       useFactory: (
         runtime: PrismaClientHolder,
         emailRequests: EmailDeliveryRequestWriterPort,
-      ): PostgresLocalAuthRepository =>
-        new PostgresLocalAuthRepository(runtime.prisma, emailRequests),
+      ): PostgresUserAccountRepository =>
+        new PostgresUserAccountRepository(runtime.prisma, emailRequests),
+    },
+    {
+      provide: PostgresVerificationTokenRepository,
+      inject: [RUNTIME_PRISMA_CLIENT, EMAIL_DELIVERY_REQUEST_WRITER],
+      useFactory: (
+        runtime: PrismaClientHolder,
+        emailRequests: EmailDeliveryRequestWriterPort,
+      ): PostgresVerificationTokenRepository =>
+        new PostgresVerificationTokenRepository(runtime.prisma, emailRequests),
+    },
+    {
+      provide: PostgresPasswordResetTokenRepository,
+      inject: [RUNTIME_PRISMA_CLIENT, EMAIL_DELIVERY_REQUEST_WRITER],
+      useFactory: (
+        runtime: PrismaClientHolder,
+        emailRequests: EmailDeliveryRequestWriterPort,
+      ): PostgresPasswordResetTokenRepository =>
+        new PostgresPasswordResetTokenRepository(runtime.prisma, emailRequests),
+    },
+    {
+      provide: PostgresRefreshSessionRepository,
+      inject: [RUNTIME_PRISMA_CLIENT],
+      useFactory: (
+        runtime: PrismaClientHolder,
+      ): PostgresRefreshSessionRepository =>
+        new PostgresRefreshSessionRepository(runtime.prisma),
     },
     {
       provide: AUTH_MFA_REPOSITORY,
@@ -176,22 +210,21 @@ import {
         AUTH_CLOCK,
       ],
     },
-    // One Prisma adapter backs all Auth repositories through the shared runtime client.
     {
       provide: USER_ACCOUNT_REPOSITORY,
-      useExisting: PostgresLocalAuthRepository,
+      useExisting: PostgresUserAccountRepository,
     },
     {
       provide: VERIFICATION_TOKEN_REPOSITORY,
-      useExisting: PostgresLocalAuthRepository,
+      useExisting: PostgresVerificationTokenRepository,
     },
     {
       provide: PASSWORD_RESET_TOKEN_REPOSITORY,
-      useExisting: PostgresLocalAuthRepository,
+      useExisting: PostgresPasswordResetTokenRepository,
     },
     {
       provide: REFRESH_SESSION_REPOSITORY,
-      useExisting: PostgresLocalAuthRepository,
+      useExisting: PostgresRefreshSessionRepository,
     },
     {
       // Web Sessions live in their own table beside the four refresh tables, so

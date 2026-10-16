@@ -1,4 +1,11 @@
 import { AppError } from '@/common/errors/app-error';
+import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
+
+const ACCOUNT_STATUSES = [
+  'pending_verification',
+  'active',
+  'disabled',
+] as const satisfies readonly LocalAccountStatus[];
 
 /**
  * Shared row readers for the auth repositories, mirroring the identity
@@ -89,4 +96,13 @@ export function nullableOneOf<T extends string>(
   vocabulary: readonly T[],
 ): T | null | undefined {
   return record[key] === null ? null : oneOf(record, key, vocabulary);
+}
+
+/**
+ * The User Account status a row reports, read against the one vocabulary the
+ * domain declares. A projection carrying anything else fails here instead of
+ * widening into an unchecked cast.
+ */
+export function isAccountStatus(status: unknown): status is LocalAccountStatus {
+  return ACCOUNT_STATUSES.some((entry) => entry === status);
 }
