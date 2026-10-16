@@ -145,6 +145,7 @@ services:
       context: .
       dockerfile: ssh-tunnel.Dockerfile
     profiles: [monitoring]
+    user: ${AIHUB_MONITORING_UID_GID:?set the monitoring host UID:GID}
     network_mode: host
     entrypoint: [ssh]
     command:

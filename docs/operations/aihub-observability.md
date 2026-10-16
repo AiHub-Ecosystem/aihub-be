@@ -34,6 +34,8 @@ On Production, node_exporter listens on `127.0.0.1:9100`, cAdvisor on `127.0.0.1
 
 On the monitoring host, node_exporter listens on `172.27.0.1:9100`. Redis exporter and blackbox exporter have no published ports and join only their required private Docker networks. The certificate job probes `api.aihubproduction.com`, `sandbox.aihubproduction.com`, `aihubproduction.com`, `www.aihubproduction.com`, and `s3.wispace.app` once per hour.
 
+Run the SSH tunnel as the monitoring host's unprivileged account. Set `AIHUB_MONITORING_UID_GID` to that account's numeric `id -u:id -g` values so it can read the mode-0600 mounted private key without running as root.
+
 ## Resource ceilings
 
 | Host       | Services                                                                 | Memory ceiling | CPU ceiling |                             Persistent metrics |

@@ -93,6 +93,12 @@ function validateExporterCompose(compose) {
     } else if (Array.isArray(service.ports) && service.ports.length > 0) {
       throw new Error(`${name} must not publish ports`);
     }
+    if (
+      name === 'ssh-tunnel' &&
+      !/^[1-9]\d*:[1-9]\d*$/.test(String(service.user ?? ''))
+    ) {
+      throw new Error('ssh-tunnel must run as a non-root host-matched user');
+    }
     if (service.read_only !== true) {
       throw new Error(`${name} must use a read-only root filesystem`);
     }

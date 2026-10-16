@@ -64,6 +64,7 @@ function validExporterCompose() {
     },
     'ssh-tunnel': {
       network_mode: 'host',
+      user: '1004:1004',
       mem_limit: '32m',
       cpus: 0.05,
     },
@@ -179,6 +180,15 @@ void test('accepts loopback or private exporter listeners without published port
     'blackbox-exporter',
     'ssh-tunnel',
   ]);
+});
+
+void test('requires the SSH tunnel to run as a non-root host-matched user', () => {
+  const compose = validExporterCompose();
+  compose.services['ssh-tunnel'].user = '0:0';
+  assert.throws(
+    () => validateExporterCompose(compose),
+    /non-root host-matched user/,
+  );
 });
 
 void test('rejects a public listener, published port, or weakened container boundary', () => {
