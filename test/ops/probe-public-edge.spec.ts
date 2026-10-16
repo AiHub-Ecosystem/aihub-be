@@ -46,6 +46,18 @@ describe('public edge health probe', () => {
       resolve(__dirname, '../../scripts/ops/blue-green-host.sh'),
       'utf8',
     );
+    const productionDeploy = workflow.slice(
+      workflow.indexOf('      - name: Deploy Production and verify caller IP'),
+      workflow.indexOf(
+        '      - name: Deploy Sandbox release and verify caller IP',
+      ),
+    );
+    const sandboxDeploy = workflow.slice(
+      workflow.indexOf(
+        '      - name: Deploy Sandbox release and verify caller IP',
+      ),
+      workflow.indexOf('      - name: Final public health window'),
+    );
 
     expect(workflow).toContain('./scripts/ops/blue-green-host.sh deploy');
     expect(workflow).toContain(
@@ -55,6 +67,12 @@ describe('public edge health probe', () => {
       './scripts/ops/blue-green-host.sh deploy sandbox',
     );
     expect(workflow).toContain('already runs target; skipping cutover');
+    expect(productionDeploy).toContain('"$caller_ip_gate" != production');
+    expect(sandboxDeploy).toContain('"$caller_ip_gate" != production');
+    expect(sandboxDeploy).toContain(
+      "grep -Eq '^pending=|^sandbox enabled but not routed$'",
+    );
+    expect(sandboxDeploy).not.toContain('^(caller_ip_gate=|pending=)');
     expect(workflow).toContain('request-log-lookup.sh verify');
     expect(
       workflow.indexOf('      - name: Deploy Production and verify caller IP'),

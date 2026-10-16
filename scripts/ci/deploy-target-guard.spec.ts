@@ -120,6 +120,18 @@ describe('CD deployment target guard', () => {
     ).toEqual([oldSha, mainSha]);
   });
 
+  it('allows a Production caller-IP gate while resuming the Sandbox rollout', () => {
+    expect(
+      parseActiveRevisions(
+        [
+          `production active_slot=a sha=${oldSha} service=app`,
+          `sandbox active_slot=b sha=${mainSha} service=app-sandbox`,
+          'caller_ip_gate=production',
+        ].join('\n'),
+      ),
+    ).toEqual([oldSha, mainSha]);
+  });
+
   it('requires a readable Production revision before allowing deployment', () => {
     expect(() => parseActiveRevisions('sandbox disabled')).toThrow(
       /Production revision is missing/,
@@ -128,6 +140,7 @@ describe('CD deployment target guard', () => {
 
   it.each([
     'caller_ip_gate=sandbox',
+    'caller_ip_gate=unknown',
     'pending=2026-10-16 sandbox a old b main',
     'sandbox enabled but not routed',
   ])('refuses to deploy with unresolved host state: %s', (state) => {

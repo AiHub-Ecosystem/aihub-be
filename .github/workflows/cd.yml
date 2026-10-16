@@ -378,7 +378,9 @@ jobs:
           ./scripts/ops/blue-green-host.sh status
           REMOTE
           )"
-          if grep -Eq '^(caller_ip_gate=|pending=)|^sandbox enabled but not routed$' <<<"$state"; then
+          caller_ip_gate="$(sed -n 's/^caller_ip_gate=//p' <<<"$state")"
+          if [[ -n "$caller_ip_gate" && "$caller_ip_gate" != production ]] || \
+            grep -Eq '^pending=|^sandbox enabled but not routed$' <<<"$state"; then
             printf 'deployment state is unresolved; refusing to roll out production\n' >&2
             exit 1
           fi
@@ -486,7 +488,9 @@ jobs:
           ./scripts/ops/blue-green-host.sh status
           REMOTE
           )"
-          if grep -Eq '^(caller_ip_gate=|pending=)|^sandbox enabled but not routed$' <<<"$state"; then
+          caller_ip_gate="$(sed -n 's/^caller_ip_gate=//p' <<<"$state")"
+          if [[ -n "$caller_ip_gate" && "$caller_ip_gate" != production ]] || \
+            grep -Eq '^pending=|^sandbox enabled but not routed$' <<<"$state"; then
             printf 'deployment state is unresolved; refusing to roll out Sandbox\n' >&2
             exit 1
           fi

@@ -7,7 +7,8 @@ function parseActiveRevisions(status) {
 
   for (const line of status.split(/\r?\n/)) {
     if (
-      line.startsWith('caller_ip_gate=') ||
+      (line.startsWith('caller_ip_gate=') &&
+        line !== 'caller_ip_gate=production') ||
       (line.startsWith('pending=') && line !== 'pending=none')
     ) {
       throw new Error(
