@@ -6,6 +6,7 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import sharp from 'sharp';
 import { MockAgent } from 'undici';
 
 import { AppModule } from '@/app.module';
@@ -26,6 +27,7 @@ import {
 } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
+import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/application/writing-chart-upload.policy';
 import {
   WRITING_CHART_UPLOAD_CLOCK,
   WRITING_CHART_UPLOAD_REPOSITORY,
@@ -55,6 +57,20 @@ function chartBytes() {
     bytes: new Uint8Array(VALID_CHART_PNG),
     byteSize: VALID_CHART_PNG.length,
   };
+}
+
+async function compressedWebpWithOversizedSanitizedOutput() {
+  const width = 2_200;
+  const height = 2_200;
+  const pixels = Buffer.alloc(width * height * 3);
+  let state = 123_456_789;
+  for (let index = 0; index < pixels.length; index += 1) {
+    state = (1_664_525 * state + 1_013_904_223) >>> 0;
+    pixels[index] = state >>> 24;
+  }
+  return sharp(pixels, { raw: { width, height, channels: 3 } })
+    .webp({ quality: 15, effort: 0 })
+    .toBuffer();
 }
 
 class FakeRepository implements WritingChartUploadRepositoryPort {
@@ -246,9 +262,10 @@ class FakeStorage implements WritingChartUploadStoragePort {
   upload(
     stagingKey: string,
     input: ReturnType<typeof chartBytes> = chartBytes(),
+    contentType: WritingChartContentType = 'image/png',
   ) {
     this.objects.set(stagingKey, {
-      contentType: 'image/png',
+      contentType,
       byteSize: input.byteSize,
       bytes: input.bytes,
     });
@@ -490,6 +507,35 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
       headers: headers(),
     });
     expect(complete.statusCode).toBe(400);
+    expect(storage.published).toEqual([]);
+    expect(storage.deletedStaging).toContain(intent.stagingKey);
+    expect(repository.rows.get(assetId)?.status).toBe('rejected');
+  });
+
+  it('returns 413 and rejects the intent when sanitized output exceeds 10 MiB', async () => {
+    const source = await compressedWebpWithOversizedSanitizedOutput();
+    expect(source.byteLength).toBeLessThanOrEqual(WRITING_CHART_MAX_BYTES);
+    const create = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/chart-uploads',
+      headers: headers(),
+      payload: { content_type: 'image/webp', byte_size: source.byteLength },
+    });
+    const assetId = create.json().data.asset_id as string;
+    const intent = repository.rows.get(assetId) as WritingChartUploadIntent;
+    storage.upload(
+      intent.stagingKey,
+      { bytes: source, byteSize: source.byteLength },
+      'image/webp',
+    );
+
+    const complete = await app.inject({
+      method: 'POST',
+      url: `/v1/ielts/writing/task1/chart-uploads/${assetId}/complete`,
+      headers: headers(),
+    });
+
+    expect(complete.statusCode).toBe(413);
     expect(storage.published).toEqual([]);
     expect(storage.deletedStaging).toContain(intent.stagingKey);
     expect(repository.rows.get(assetId)?.status).toBe('rejected');

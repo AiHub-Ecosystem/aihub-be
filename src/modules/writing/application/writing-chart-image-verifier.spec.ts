@@ -78,8 +78,10 @@ describe('sanitizeWritingChartImage', () => {
         bytes: source,
       });
 
-      expect(sanitized).toBeDefined();
-      await expect(sharp(sanitized).metadata()).resolves.toMatchObject({
+      expect(sanitized).toMatchObject({ kind: 'sanitized' });
+      if (sanitized?.kind !== 'sanitized')
+        throw new Error('Image not sanitized');
+      await expect(sharp(sanitized.bytes).metadata()).resolves.toMatchObject({
         format,
         width: 2,
         height: 2,
@@ -140,8 +142,9 @@ describe('sanitizeWritingChartImage', () => {
       bytes: withMetadata,
     });
 
-    expect(sanitized).toBeDefined();
-    const metadata = await sharp(sanitized).metadata();
+    expect(sanitized).toMatchObject({ kind: 'sanitized' });
+    if (sanitized?.kind !== 'sanitized') throw new Error('Image not sanitized');
+    const metadata = await sharp(sanitized.bytes).metadata();
     expect(metadata.exif).toBeUndefined();
     expect(metadata.icc).toBeUndefined();
   });
@@ -154,10 +157,11 @@ describe('sanitizeWritingChartImage', () => {
       bytes: uploaded,
     });
 
-    expect(sanitized).toBeDefined();
-    expect(sanitized?.subarray(-2).equals(Buffer.from([0xde, 0xad]))).toBe(
-      false,
-    );
+    expect(sanitized).toMatchObject({ kind: 'sanitized' });
+    expect(
+      sanitized?.kind === 'sanitized' &&
+        sanitized.bytes.subarray(-2).equals(Buffer.from([0xde, 0xad])),
+    ).toBe(false);
   });
 
   it('keeps the event loop responsive for a 20-megapixel image', async () => {
@@ -170,7 +174,7 @@ describe('sanitizeWritingChartImage', () => {
       contentType: 'image/jpeg',
       bytes: source,
     });
-    expect(sanitized).toBeDefined();
+    expect(sanitized).toMatchObject({ kind: 'sanitized' });
 
     await new Promise((resolve) => setTimeout(resolve, 25));
     const metrics = await getMetrics();

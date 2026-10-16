@@ -73,7 +73,11 @@ function hasCompleteContainer(
 export async function sanitizeWritingChartImage(input: {
   readonly contentType: WritingChartContentType;
   readonly bytes: Uint8Array;
-}): Promise<Buffer | undefined> {
+}): Promise<
+  | { readonly kind: 'sanitized'; readonly bytes: Buffer }
+  | { readonly kind: 'too_large' }
+  | undefined
+> {
   if (
     input.bytes.byteLength < 1 ||
     input.bytes.byteLength > WRITING_CHART_MAX_BYTES ||
@@ -117,15 +121,17 @@ export async function sanitizeWritingChartImage(input: {
     }
 
     const { data, info } = await output.toBuffer({ resolveWithObject: true });
+    if (data.byteLength > WRITING_CHART_MAX_BYTES) {
+      return { kind: 'too_large' };
+    }
     if (
-      data.byteLength > WRITING_CHART_MAX_BYTES ||
       info.format !== expectedFormat ||
       (info.pages ?? 1) !== 1 ||
       !withinPixelLimit(info.width, info.height)
     ) {
       return undefined;
     }
-    return data;
+    return { kind: 'sanitized', bytes: data };
   } catch {
     return undefined;
   }

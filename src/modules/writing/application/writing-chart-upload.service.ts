@@ -53,7 +53,8 @@ function rateLimited(): AppError {
 function payloadTooLarge(): AppError {
   return new AppError({
     code: 'PAYLOAD_TOO_LARGE',
-    message: 'Writing chart must be 10 MiB or smaller',
+    message:
+      'Writing chart upload or sanitized output must be 10 MiB or smaller',
     retryable: false,
   });
 }
@@ -255,7 +256,9 @@ export class WritingChartUploadService
               }),
             )
           : undefined;
-      if (refusal !== undefined || sanitized === undefined) {
+      const sanitizedBytes =
+        sanitized?.kind === 'sanitized' ? sanitized.bytes : undefined;
+      if (refusal !== undefined || sanitizedBytes === undefined) {
         await this.repository.rejectIntent(owner, this.now());
         try {
           await this.storage.deleteStagingObject({
@@ -265,7 +268,12 @@ export class WritingChartUploadService
         } catch {
           // The expiration sweep retries a failed staging deletion.
         }
-        throw refusal ?? invalidRequest();
+        throw (
+          refusal ??
+          (sanitized?.kind === 'too_large'
+            ? payloadTooLarge()
+            : invalidRequest())
+        );
       }
 
       const imageUrl = this.storage.publicUrl({
@@ -290,7 +298,7 @@ export class WritingChartUploadService
           stagingKey: found.intent.stagingKey,
           publishedKey: found.intent.publishedKey,
           contentType: found.intent.contentType,
-          bytes: sanitized,
+          bytes: sanitizedBytes,
         });
       } catch (error) {
         await this.repository.releasePublication(owner);

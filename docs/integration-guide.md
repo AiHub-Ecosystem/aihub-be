@@ -546,8 +546,12 @@ bytes directly to the signed `POST` URL as `multipart/form-data`, including
 every returned `fields` entry and the file under the `file` field, then call
 `POST /v1/ielts/writing/task1/chart-uploads/{asset_id}/complete`. An expired
 five-minute URL can be refreshed while the one-hour intent is open; refresh
-does not extend the intent. Completion checks bounded ranges of the stored
-object before publishing it.
+does not extend the intent. Completion downloads the complete staged object,
+decodes and verifies the image, applies EXIF orientation, strips source
+metadata, and re-encodes it before publishing. The sanitized output is also
+limited to 10 MiB; completion returns `413 PAYLOAD_TOO_LARGE` and rejects the
+intent if re-encoding exceeds that limit. Malformed or mismatched images are
+rejected with `400`.
 
 Put the completion response's `image_url` into the existing Task 1
 `image_url` grading field. A completed image is publicly readable by anyone
