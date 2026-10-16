@@ -192,7 +192,9 @@ jobs:
   database:
     name: Database lane
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Also runs the unit lane with coverage and judges the merged figure, so this
+    # is longer than the lane it is named after.
+    timeout-minutes: 25
     env:
       REDIS_URL: redis://localhost:6379/14
 
@@ -251,8 +253,28 @@ jobs:
       # No DB_LANE_ADMIN_URL: the service credentials above deliberately match
       # the lane's default in test/db/database.ts, so CI exercises the same path
       # a developer does and a broken default fails here too.
+      #
+      # `coverage:db` is this same lane plus a coverage report, not a second
+      # run: the assertions and the lock are identical, and the report is what
+      # lets this job judge merged coverage below.
       - name: Run the database-backed lane
-        run: pnpm test:db
+        run: pnpm coverage:db
+
+      # The unit lane runs here rather than being uploaded from the `test` job:
+      # merging needs both reports in one workspace, and an artifact hop needs
+      # action pins this repository does not carry yet. It is the cheapest
+      # honest place to put it, and the extra cost is one unit-lane run.
+      - name: Run the unit lane with coverage
+        run: pnpm coverage:unit
+
+      # One figure for every pull request, and a failure when it falls. The
+      # margin and its reason live beside the constant in the script; the
+      # baseline is committed so a drop is measured against main, not against
+      # whatever the previous run happened to produce.
+      - name: Report merged coverage and fail on a drop past the agreed margin
+        run: |
+          set -o pipefail
+          pnpm coverage:merged -- --check | tee -a "$GITHUB_STEP_SUMMARY"
 
       # `schema.prisma` and the migration history describe the same schema. This
       # builds one from the migrations in a scratch database and fails when

@@ -18,10 +18,10 @@ const {
   readFileSync,
   writeFileSync,
 } = require('node:fs');
-const { join, relative } = require('node:path');
+const path = require('node:path');
 const process = require('node:process');
 
-const { createCoverageMap } = require('istanbul-lib-coverage');
+const coverageLibrary = require('istanbul-lib-coverage');
 
 /**
  * The agreed margin, in percentage points, and why it is that number.
@@ -67,13 +67,13 @@ function isProductionCode(relativePath) {
 
 function productionOnly(map, root) {
   const entries = {};
-  for (const path of map.files()) {
-    const relativePath = relative(root, path).replaceAll('\\', '/');
+  for (const filePath of map.files()) {
+    const relativePath = path.relative(root, filePath).replaceAll('\\', '/');
     if (isProductionCode(relativePath)) {
-      entries[path] = map.fileCoverageFor(path).toJSON();
+      entries[filePath] = map.fileCoverageFor(filePath).toJSON();
     }
   }
-  return createCoverageMap(entries);
+  return coverageLibrary.createCoverageMap(entries);
 }
 
 function branchPercent(summary) {
@@ -126,15 +126,19 @@ function compareCoverage(
 }
 
 function loadLane(root, lane) {
-  const path = join(root, lane.report);
-  if (!existsSync(path)) {
+  const reportPath = path.join(root, lane.report);
+  if (!existsSync(reportPath)) {
     return { ...lane, missing: true };
   }
-  const parsed = JSON.parse(readFileSync(path, 'utf8'));
+  const parsed = JSON.parse(readFileSync(reportPath, 'utf8'));
   if (Object.keys(parsed).length === 0) {
     return { ...lane, missing: true };
   }
-  return { ...lane, missing: false, map: createCoverageMap(parsed) };
+  return {
+    ...lane,
+    missing: false,
+    map: coverageLibrary.createCoverageMap(parsed),
+  };
 }
 
 function formatPercent(value) {
@@ -144,9 +148,9 @@ function formatPercent(value) {
 function branchGaps(root, map, limit) {
   return map
     .files()
-    .map((path) => {
-      const summary = map.fileCoverageFor(path).toSummary();
-      const relativePath = relative(root, path).replaceAll('\\', '/');
+    .map((filePath) => {
+      const summary = map.fileCoverageFor(filePath).toSummary();
+      const relativePath = path.relative(root, filePath).replaceAll('\\', '/');
       return {
         file: relativePath,
         branchTotal: summary.branches.total,
@@ -173,8 +177,10 @@ function branchGaps(root, map, limit) {
 }
 
 function readBaseline(root) {
-  const path = join(root, BASELINE_PATH);
-  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : undefined;
+  const baselinePath = path.join(root, BASELINE_PATH);
+  return existsSync(baselinePath)
+    ? JSON.parse(readFileSync(baselinePath, 'utf8'))
+    : undefined;
 }
 
 function mergedPercentages(totals) {
@@ -249,10 +255,10 @@ function main(argv = process.argv.slice(2), root = process.cwd()) {
     );
   }
 
-  const outputDirectory = join(root, 'coverage/merged');
+  const outputDirectory = path.join(root, 'coverage/merged');
   mkdirSync(outputDirectory, { recursive: true });
   writeFileSync(
-    join(outputDirectory, 'coverage-summary.json'),
+    path.join(outputDirectory, 'coverage-summary.json'),
     `${JSON.stringify(totals, null, 2)}\n`,
     'utf8',
   );
@@ -260,7 +266,7 @@ function main(argv = process.argv.slice(2), root = process.cwd()) {
 
   if (shouldWriteBaseline) {
     writeFileSync(
-      join(root, BASELINE_PATH),
+      path.join(root, BASELINE_PATH),
       `${JSON.stringify(
         {
           ...report,
