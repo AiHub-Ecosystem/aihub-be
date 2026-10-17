@@ -84,6 +84,7 @@ afterAll(async () => {
 });
 
 describe('tenant isolation for identity boundaries', () => {
+  // Presence-shaped: A's key resolves to A, and B's cache key is absent.
   it('keeps API-key ownership, entitlements, and cache state with its Organization', async () => {
     const first = await authenticator.authenticate({
       value: fixture.organizationA.apiKey.raw,
@@ -115,6 +116,7 @@ describe('tenant isolation for identity boundaries', () => {
     ).resolves.toBeNull();
   });
 
+  // Refusal-shaped: B's assertion is rejected for A's Organization.
   it('does not resolve another Organization configuration after authenticating this API key', async () => {
     const authenticated = await authenticator.authenticate({
       value: fixture.organizationA.apiKey.raw,
@@ -142,6 +144,7 @@ describe('tenant isolation for identity boundaries', () => {
     ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
   });
 
+  // Refusal-shaped: A's declared mode applies to A, B's rejects the same subject.
   it('treats a disabled identity configuration as declared mode for that Organization only', async () => {
     await pool.query(
       `UPDATE organization_identity_configs
@@ -178,6 +181,7 @@ describe('tenant isolation for identity boundaries', () => {
     ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
   });
 
+  // Presence-shaped: both JWKS caches populate, and neither contains the other's keys.
   it('keeps colliding assertion subjects in their Organization JWKS cache namespace', async () => {
     await pool.query(
       `UPDATE organization_identity_configs

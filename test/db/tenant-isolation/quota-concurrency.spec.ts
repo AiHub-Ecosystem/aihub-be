@@ -64,6 +64,7 @@ afterAll(async () => {
 });
 
 describe('tenant isolation for Redis counters', () => {
+  // Presence-shaped: the counts on each Organization's own counter.
   it('keeps quota consumption and allowance state separate for the same month', async () => {
     const counter = new RedisQuotaCounter(
       redisClients.gateway,
@@ -73,6 +74,14 @@ describe('tenant isolation for Redis counters', () => {
 
     await counter.increment({ organizationId: ORGANIZATION_A });
     await counter.increment({ organizationId: ORGANIZATION_A });
+
+    // Absence: A's two increments must not have touched B's counter, so an
+    // unscoped read that shared one key for both Organizations would not leave
+    // B at zero.
+    await expect(
+      redisClients.raw.get(quotaKeyForMonth(ORGANIZATION_B, SHARED_MONTH)),
+    ).resolves.toBeNull();
+
     await counter.increment({ organizationId: ORGANIZATION_B });
 
     await expect(
@@ -89,6 +98,7 @@ describe('tenant isolation for Redis counters', () => {
     ).resolves.toBe('1');
   });
 
+  // Refusal-shaped: an exhausted Organization refuses, a different one is admitted.
   it('does not use one Organization exhaustion to block another Organization admission', async () => {
     const counter = new RedisQuotaCounter(
       redisClients.gateway,
@@ -106,6 +116,7 @@ describe('tenant isolation for Redis counters', () => {
     );
   });
 
+  // Refusal-shaped: a second lease for A is refused while B still holds one.
   it('does not let one Organization consume another Organization concurrency lease', async () => {
     const limiter = new RedisConcurrencyLimiter(
       redisClients.gateway,

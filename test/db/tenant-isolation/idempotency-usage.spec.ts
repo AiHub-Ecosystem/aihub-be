@@ -118,6 +118,7 @@ afterAll(async () => {
 });
 
 describe('tenant isolation for durable records', () => {
+  // Refusal-shaped: A's replay carries A's response, never B's.
   it('does not replay a foreign Organization response for the same idempotency key', async () => {
     const b = idempotencyInput(ORGANIZATION_B, 'req_tenant_b');
     await expect(idempotency.reserve(b)).resolves.toEqual({
@@ -152,6 +153,7 @@ describe('tenant isolation for durable records', () => {
     expect(JSON.stringify(replay)).not.toContain(B_RESPONSE.marker);
   });
 
+  // Presence-shaped: each Organization's usage returns only its own rows.
   it('keeps billing statement evidence inside the requested Organization', async () => {
     await usageRecord(
       ORGANIZATION_A,
