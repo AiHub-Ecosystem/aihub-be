@@ -1,4 +1,40 @@
-import { auditFilterHash } from './audit-cursor';
+import {
+  auditFilterHash,
+  decodeAuditCursor,
+  encodeAuditCursor,
+} from './audit-cursor';
+
+describe('decodeAuditCursor', () => {
+  const position = {
+    occurredAt: new Date('2026-01-01T00:00:00.000Z'),
+    id: 'oae_01J00000000000000000000000',
+  };
+
+  function forged(id: string): string {
+    return Buffer.from(
+      JSON.stringify({
+        v: 1,
+        occurredAt: position.occurredAt.toISOString(),
+        id,
+        f: auditFilterHash({}),
+      }),
+      'utf8',
+    ).toString('base64url');
+  }
+
+  it('reads back the position it encoded', () => {
+    expect(decodeAuditCursor(encodeAuditCursor(position, {}), {})).toEqual(
+      position,
+    );
+  });
+
+  it.each(['', 'oae_01J0000000000000000000000\u0000', "x' OR 1=1", 'oae_'])(
+    'refuses a cursor whose id %j is not an event id',
+    (id) => {
+      expect(decodeAuditCursor(forged(id), {})).toBeUndefined();
+    },
+  );
+});
 
 describe('audit cursor filter hash', () => {
   // A cursor already in a client's hands carries this hash. If a literal here

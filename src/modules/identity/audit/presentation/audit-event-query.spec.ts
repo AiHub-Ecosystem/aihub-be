@@ -50,7 +50,10 @@ describe('parseOrganizationAuditQuery', () => {
   it('accepts a cursor that matches the filter', () => {
     const filter = { outcome: 'applied' as const };
     const cursor = encodeAuditCursor(
-      { occurredAt: new Date('2026-01-15T00:00:00.000Z'), id: 'evt_1' },
+      {
+        occurredAt: new Date('2026-01-15T00:00:00.000Z'),
+        id: 'oae_01J00000000000000000000001',
+      },
       filter,
     );
 
@@ -58,7 +61,7 @@ describe('parseOrganizationAuditQuery', () => {
 
     expect(result.after).toEqual({
       occurredAt: new Date('2026-01-15T00:00:00.000Z'),
-      id: 'evt_1',
+      id: 'oae_01J00000000000000000000001',
     });
   });
 
@@ -163,7 +166,10 @@ describe('parseOrganizationAuditQuery', () => {
     // eslint-disable-next-line jest/expect-expect
     it('refuses a cursor minted against a different filter', () => {
       const cursor = encodeAuditCursor(
-        { occurredAt: new Date('2026-01-15T00:00:00.000Z'), id: 'evt_1' },
+        {
+          occurredAt: new Date('2026-01-15T00:00:00.000Z'),
+          id: 'oae_01J00000000000000000000001',
+        },
         {},
       );
       expectRefused({ outcome: 'success', cursor });

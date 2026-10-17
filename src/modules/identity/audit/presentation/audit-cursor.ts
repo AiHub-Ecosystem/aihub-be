@@ -19,6 +19,9 @@ const CURSOR_VERSION = 1;
  */
 const FILTER_HASH_LENGTH = 16;
 
+/** The shape migration 0011 constrains `organization_audit_events.id` to. */
+const AUDIT_EVENT_ID = /^oae_[0-9A-HJKMNP-TV-Z]{26}$/;
+
 interface CursorPayload {
   readonly v: number;
   readonly occurredAt: string;
@@ -86,10 +89,13 @@ export function decodeAuditCursor(
   }
 
   const { v, occurredAt, id, f } = parsed;
+  // The id reaches SQL; a value that is not an event id must stop here, not as
+  // a database error.
   if (
     v !== CURSOR_VERSION ||
     typeof occurredAt !== 'string' ||
     typeof id !== 'string' ||
+    !AUDIT_EVENT_ID.test(id) ||
     typeof f !== 'string'
   ) {
     return undefined;
