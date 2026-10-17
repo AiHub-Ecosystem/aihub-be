@@ -10,7 +10,11 @@ services:
     volumes:
       - aihub-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aihub -d aihub"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U aihub -d aihub && psql -U aihub -d aihub -q -v ON_ERROR_STOP=1 -c 'ALTER DATABASE aihub SET aihub.test_lane_marker TO aihub_db_lane_v1' >/dev/null",
+        ]
       interval: 2s
       timeout: 2s
       retries: 20
@@ -20,7 +24,11 @@ services:
     ports:
       - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        [
+          "CMD-SHELL",
+          "redis-cli SET aihub:test-lane:owner aihub-db-lane-v1 >/dev/null && redis-cli ping",
+        ]
       interval: 2s
       timeout: 2s
       retries: 20

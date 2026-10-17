@@ -219,7 +219,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U aihub -d aihub"
+          --health-cmd "pg_isready -U aihub -d aihub && psql -U aihub -d aihub -q -v ON_ERROR_STOP=1 -c 'ALTER DATABASE aihub SET aihub.test_lane_marker TO aihub_db_lane_v1' >/dev/null"
           --health-interval 2s
           --health-timeout 2s
           --health-retries 20
@@ -228,7 +228,7 @@ jobs:
         ports:
           - 6379:6379
         options: >-
-          --health-cmd "redis-cli ping"
+          --health-cmd "redis-cli SET aihub:test-lane:owner aihub-db-lane-v1 >/dev/null && redis-cli ping"
           --health-interval 2s
           --health-timeout 2s
           --health-retries 20
@@ -310,7 +310,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U aihub -d aihub"
+          --health-cmd "pg_isready -U aihub -d aihub && psql -U aihub -d aihub -q -v ON_ERROR_STOP=1 -c 'ALTER DATABASE aihub SET aihub.test_lane_marker TO aihub_db_lane_v1' >/dev/null"
           --health-interval 2s
           --health-timeout 2s
           --health-retries 20
@@ -319,7 +319,7 @@ jobs:
         ports:
           - 6379:6379
         options: >-
-          --health-cmd "redis-cli ping"
+          --health-cmd "redis-cli SET aihub:test-lane:owner aihub-db-lane-v1 >/dev/null && redis-cli ping"
           --health-interval 2s
           --health-timeout 2s
           --health-retries 20

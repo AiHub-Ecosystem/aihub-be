@@ -1,6 +1,7 @@
 import { Client } from 'pg';
 
 import { databaseUrlsForLane } from '../../scripts/checks/db-lane/database-targets';
+import { withOwnedPostgresDatabase } from '../../scripts/checks/db-lane/ownership';
 import {
   DATABASE_LANE_POSTGRES_TIMEOUTS,
   TEST_DATABASE_NAME,
@@ -32,12 +33,18 @@ export default async function globalTeardown(): Promise<void> {
     await timeDatabasePhase('PostgreSQL admin connection', () =>
       admin.connect(),
     );
-    for (const url of databaseUrls()) {
-      const name = databaseName(url);
-      await timeDatabasePhase(`test database cleanup (${name})`, () =>
-        admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`),
-      );
-    }
+    await withOwnedPostgresDatabase(
+      admin,
+      new URL(adminDatabaseUrl()).pathname.slice(1),
+      async () => {
+        for (const url of databaseUrls()) {
+          const name = databaseName(url);
+          await timeDatabasePhase(`test database cleanup (${name})`, () =>
+            admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`),
+          );
+        }
+      },
+    );
   } finally {
     await admin.end().catch(() => undefined);
   }

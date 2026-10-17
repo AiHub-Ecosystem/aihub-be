@@ -27,6 +27,7 @@ import { userAccountStatus } from '@/modules/auth/testing/user-account-status.st
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
 import { generateApiKey } from '@/modules/identity/domain/api-key';
 import { RUNTIME_CONNECTION_CONFIGURATION } from '@/modules/secrets/application/runtime-connection-configuration.port';
+import { flushOwnedRedisDatabase } from '../../scripts/checks/db-lane/ownership';
 import {
   createSandboxTestPool,
   createSandboxTestRedis,
@@ -138,7 +139,11 @@ beforeAll(async () => {
       redis.once('error', reject);
     });
   }
-  await redis.flushdb();
+  await flushOwnedRedisDatabase(
+    redis.duplicate({ db: 0, enableOfflineQueue: true }),
+    () => redis.flushdb(),
+    'SANDBOX_TEST_REDIS_URL',
+  );
   await sandbox.query(
     `TRUNCATE organization_audit_events, organization_identity_configs,
        api_keys, organization_invitations, organization_members,
@@ -343,7 +348,11 @@ function createConnectionConfiguration(
 
 beforeEach(async () => {
   downstreamCalls = 0;
-  await redis.flushdb();
+  await flushOwnedRedisDatabase(
+    redis.duplicate({ db: 0, enableOfflineQueue: true }),
+    () => redis.flushdb(),
+    'SANDBOX_TEST_REDIS_URL',
+  );
   await sandbox.query(
     'TRUNCATE sandbox_dispatch_reservations, idempotency_records, dispatch_attempts, usage_records',
   );

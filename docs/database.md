@@ -17,6 +17,30 @@ and migration container. `@prisma/client` lists the CLI as an optional peer, so
 `.pnpmfile.cjs` drops that peer; `pnpm why prisma --prod` prints nothing, and a
 dependency bump that changes the answer shows up in `pnpm-lock.yaml`.
 
+## Database test lane ownership
+
+`pnpm test:db` and `pnpm test:tenant-isolation` use the local services from
+`docker-compose.yml` by default: PostgreSQL at
+`postgres://aihub:change-me@localhost:5432/aihub`, Redis database 14 at
+`redis://127.0.0.1:6379/14`, and Redis database 15 at
+`redis://127.0.0.1:6379/15`. Start them and wait for their ownership
+healthchecks with `docker compose up -d --wait postgres redis`.
+
+The PostgreSQL healthcheck marks the default admin database (`aihub`) with
+`aihub.test_lane_marker=aihub_db_lane_v1`; lane setup and teardown check that
+marker on the database named in `DB_LANE_ADMIN_URL` before creating or dropping
+any lane database. The Redis healthcheck writes
+`aihub:test-lane:owner=aihub-db-lane-v1` to database 0; each test-suite
+`FLUSHDB` checks it first. The marker stays outside Redis databases 14 and 15.
+Missing or unreadable markers make the lane stop and name the URL setting that
+needs correction.
+
+`DB_LANE_ADMIN_URL`, `SANDBOX_TEST_REDIS_URL`, and
+`TENANT_ISOLATION_REDIS_URL` can point to another dedicated throwaway service.
+The PostgreSQL marker belongs on the database named in `DB_LANE_ADMIN_URL`; the
+Redis marker belongs in database 0. Only add them after confirming each server
+is dedicated to this lane; do not mark a shared service.
+
 ## Changing the schema
 
 1. Edit `prisma/schema.prisma`. Model and field names are the TypeScript names

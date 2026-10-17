@@ -13,6 +13,7 @@ import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '@/modules/idempotency/
 import type { GeneratedApiKey } from '@/modules/identity/domain/api-key';
 import type { PublicJsonWebKeySet } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import type { RedisIdentityClient } from '@/modules/identity/shared/infrastructure/redis-identity.store';
+import { flushOwnedRedisDatabase } from '../../../scripts/checks/db-lane/ownership';
 
 export const TEST_NOW = new Date('2026-09-15T12:00:00.000Z');
 export const ORGANIZATION_A = 'org_tenant_a';
@@ -160,6 +161,11 @@ export async function resetTenantIsolation(
   pool: { query(text: string): Promise<unknown> },
   redis: Redis,
 ): Promise<void> {
+  await flushOwnedRedisDatabase(
+    redis.duplicate({ db: 0, enableOfflineQueue: true }),
+    () => redis.flushdb(),
+    'TENANT_ISOLATION_REDIS_URL',
+  );
   await pool.query(`
     TRUNCATE TABLE
       organization_identity_configs,
@@ -174,7 +180,6 @@ export async function resetTenantIsolation(
       organizations
     RESTART IDENTITY CASCADE
   `);
-  await redis.flushdb();
 }
 
 export async function seedTenantIsolation(
