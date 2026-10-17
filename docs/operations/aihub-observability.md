@@ -48,7 +48,7 @@ Memory/CPU are hard container ceilings approved for this rollout. TSDB retention
 
 ## Secrets and data boundaries
 
-Store monitoring credentials in Vault and provision host-side files under `/home/ngoc_anh/aihub-monitoring/secrets`, outside the checkout, with owner-only directory access. Compose files contain file paths only.
+Store monitoring credentials in Vault and provision host-side files under `~/aihub-monitoring/secrets` of the operator account, outside the checkout, with owner-only directory access. Compose files contain file paths only.
 
 PostgreSQL uses a dedicated `aihub_monitoring` login that can execute one fixed `SECURITY DEFINER` function owned by `aihub_admin`. That function returns aggregate connection and lock counts plus `aihub`/`aihub_sandbox` sizes and transaction durations. It exports no SQL text or per-role activity and grants neither `pg_monitor` nor `pg_read_all_stats`. The postgres_exporter `v0.20.1` query extension is deprecated upstream; keep the image pinned and replace this compatibility path before upgrading past its support.
 
@@ -56,7 +56,7 @@ Redis uses a dedicated ACL user with only `PING`, aggregate `INFO`, `CLIENT SETN
 
 ## Deploy and validate
 
-Keep the Compose file, Prometheus config/rules, blackbox config, PostgreSQL aggregate query/function, and statement installer/report under `/home/ngoc_anh/aihub-monitoring` on each host. Keep `.env` and secret files outside that directory's tracked source if it is a checkout; set directory/file permissions before starting containers.
+Keep the Compose file, Prometheus config/rules, blackbox config, PostgreSQL aggregate query/function, and statement installer/report under `~/aihub-monitoring` of the operator account on each host. Keep `.env` and secret files outside that directory's tracked source if it is a checkout; set directory/file permissions before starting containers.
 
 On Production, set `AIHUB_METRICS_BIND_IP=127.0.0.1`, `AIHUB_POSTGRES_EXPORTER_URI=127.0.0.1:5433/aihub?sslmode=disable`, and the secret-file path. Enable `production` and `container-metrics` profiles. On the monitoring host, set `AIHUB_METRICS_BIND_IP=172.27.0.1`, the observed Redis address `redis://redis:6379`, the restricted SSH identity, and its pinned host key; enable the `monitoring` profile. The `.env` file on each host must satisfy Compose interpolation for the complete file, including fields for inactive profiles.
 

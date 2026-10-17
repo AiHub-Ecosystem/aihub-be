@@ -4,7 +4,7 @@ set -euo pipefail
 
 user_id=${1:-${AIHUB_TEST_USER_ID:-student_456}}
 app_container=${AIHUB_APP_CONTAINER:-aihub-production-app-1}
-private_key_file=${AIHUB_ASSERTION_PRIVATE_KEY_FILE:-/home/ngoc_anh/speaking-gateway-test-private.pem}
+private_key_file=${AIHUB_ASSERTION_PRIVATE_KEY_FILE:-$HOME/speaking-gateway-test-private.pem}
 issuer=${AIHUB_ASSERTION_ISSUER:-https://wispace.aihubproduction.com}
 kid=${AIHUB_ASSERTION_KID:-wispace-speaking-test-2026-09}
 

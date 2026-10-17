@@ -344,9 +344,9 @@ export FAKE_CRONTAB_FILE="$test_root/crontab"
 export FAKE_PGREP_REMAINING_FILE="$test_root/pgrep-remaining"
 export FAKE_PGREP_PATTERN_FILE="$test_root/pgrep-pattern"
 cat >"$FAKE_CRONTAB_FILE" <<'CRON'
-0 3 * * * /home/ngoc_anh/wispace-vault/snapshot.sh
-0 2 * * * /home/ngoc_anh/aihub-ops-job.sh quota
-30 3 * * * /home/ngoc_anh/aihub-avatar-sweep.sh
+0 3 * * * /home/operator/wispace-vault/snapshot.sh
+0 2 * * * /home/operator/aihub-ops-job.sh quota
+30 3 * * * /home/operator/aihub-avatar-sweep.sh
 CRON
 cp "$FAKE_CRONTAB_FILE" "$test_root/crontab.before"
 cat >"$app_dir/ops/host-jobs/aihub.crontab" <<'CRON'
@@ -399,7 +399,7 @@ FAKE_EXPECT_SUSPENDED_CRON=true APP_DIR="$app_dir" bash "$app_dir/scripts/ops/in
 assert_contains "$app_dir/scripts/ops/host-scheduled-job.sh" 'CONTAINER_CLI'
 assert_contains "$app_dir/ops/host-jobs/aihub.crontab" 'BEGIN AIHUB MANAGED JOBS'
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh"
-assert_contains "$FAKE_CRONTAB_FILE" '/home/ngoc_anh/wispace-vault/snapshot.sh'
+assert_contains "$FAKE_CRONTAB_FILE" '/home/operator/wispace-vault/snapshot.sh'
 assert_contains "$FAKE_CRONTAB_FILE" "host-scheduled-job.sh' avatar-sweep"
 assert_contains "$FAKE_CRONTAB_FILE" "host-scheduled-job.sh' chart-upload-sweep"
 assert_not_contains "$FAKE_CRONTAB_FILE" 'aihub-ops-job.sh'
@@ -410,7 +410,7 @@ assert_not_contains "$FAKE_CRONTAB_FILE" 'aihub-avatar-sweep.sh'
 cp "$FAKE_CRONTAB_FILE" "$test_root/crontab.before-suspend"
 printf '1\n' >"$FAKE_PGREP_REMAINING_FILE"
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" suspend
-assert_contains "$FAKE_CRONTAB_FILE" '/home/ngoc_anh/wispace-vault/snapshot.sh'
+assert_contains "$FAKE_CRONTAB_FILE" '/home/operator/wispace-vault/snapshot.sh'
 assert_not_contains "$FAKE_CRONTAB_FILE" 'host-scheduled-job.sh'
 cmp -s "$test_root/crontab.before-suspend" "$app_dir/.aihub-host-jobs-state/crontab"
 [[ "$(cat "$FAKE_PGREP_REMAINING_FILE")" == 0 ]]
@@ -421,7 +421,7 @@ APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" suspend \
 assert_contains "$test_root/suspend-retry.out" 'already suspended and drained'
 cmp -s "$test_root/crontab.before-suspend" "$app_dir/.aihub-host-jobs-state/crontab"
 
-printf '0 2 * * * /home/ngoc_anh/aihub-ops-job.sh quota\n' >"$FAKE_CRONTAB_FILE"
+printf '0 2 * * * /home/operator/aihub-ops-job.sh quota\n' >"$FAKE_CRONTAB_FILE"
 set +e
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" suspend \
   >"$test_root/suspend-legacy-retry.out" 2>&1

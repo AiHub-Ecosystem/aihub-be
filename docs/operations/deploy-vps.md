@@ -1130,8 +1130,8 @@ key copy on exit:
 
 ```sh
 AIHUB_API_KEY_FILE=/path/to/production-scoped-api-key \
-  bash /home/ngoc_anh/speaking-gateway-smoke.sh \
-  /home/ngoc_anh/aihub-speaking-contract-probe.wav
+  bash ~/speaking-gateway-smoke.sh \
+  ~/aihub-speaking-contract-probe.wav
 ```
 
 Expected output is `HTTP_STATUS=200`. The request is sent to
