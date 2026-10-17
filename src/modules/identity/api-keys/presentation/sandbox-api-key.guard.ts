@@ -6,18 +6,25 @@ import {
 } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
-import { appConfig } from '@/config/runtime-configuration';
+import {
+  type RuntimeConfiguration,
+  appConfig,
+} from '@/config/runtime-configuration';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
-import type { RequestEnvironmentConfig } from '@/modules/identity/shared/presentation/request-environment';
+import {
+  type RequestEnvironmentConfig,
+  resolveAihubEnvironment,
+} from '@/modules/identity/shared/presentation/request-environment';
 import {
   SANDBOX_ASSERTION_POLICY,
   type SandboxAssertionPolicyPort,
 } from '@/modules/identity/user-assertions/application/sandbox-assertion-policy.port';
 import { authenticateApiKey, forbidden } from './authenticate-api-key';
+import { SANDBOX_API_KEY_RATE_LIMIT_RPM } from './sandbox-api-key-rate-limit';
 
 function notFound(): AppError {
   return new AppError({
@@ -26,6 +33,9 @@ function notFound(): AppError {
     retryable: false,
   });
 }
+
+type SandboxApiKeyGuardConfig = RequestEnvironmentConfig &
+  Pick<RuntimeConfiguration, 'AIHUB_RUNTIME_DATABASE_SCOPE'>;
 
 /**
  * Authenticates a sandbox mint request.
@@ -56,7 +66,7 @@ export class SandboxApiKeyGuard implements CanActivate {
     @Inject(SANDBOX_ASSERTION_POLICY)
     private readonly policy: SandboxAssertionPolicyPort,
     @Inject(appConfig.KEY)
-    private readonly configuration: RequestEnvironmentConfig,
+    private readonly configuration: SandboxApiKeyGuardConfig,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -65,7 +75,11 @@ export class SandboxApiKeyGuard implements CanActivate {
     // No sandbox configured means this route does not exist for this
     // deployment. Answering 404 keeps its absence indistinguishable from a
     // build that never had the route.
-    if (!this.policy.isEnabled()) {
+    if (
+      this.configuration.AIHUB_RUNTIME_DATABASE_SCOPE !== 'sandbox' ||
+      !this.policy.isEnabled() ||
+      resolveAihubEnvironment(request, this.configuration) !== 'sandbox'
+    ) {
       throw notFound();
     }
 
@@ -78,6 +92,14 @@ export class SandboxApiKeyGuard implements CanActivate {
     if (!this.policy.allows(authenticated.organizationId)) {
       throw forbidden();
     }
+
+    request.aihubAuth = {
+      ...authenticated,
+      rateLimitRpm: Math.min(
+        authenticated.rateLimitRpm,
+        SANDBOX_API_KEY_RATE_LIMIT_RPM,
+      ),
+    };
 
     return true;
   }

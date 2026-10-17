@@ -328,6 +328,7 @@ function createAppConfiguration(): MutableAppConfiguration {
     AIHUB_STAGING_HOST: 'api.staging.test',
     AIHUB_DEVELOPMENT_HOST: 'api.development.test',
     AIHUB_SANDBOX_HOST: 'api.sandbox.test',
+    AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
     AIHUB_SANDBOX_ORG_IDS: undefined,
   };
 }

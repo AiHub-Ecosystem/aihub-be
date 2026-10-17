@@ -14,6 +14,7 @@ import {
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import type { RequestEnvironmentConfig } from '@/modules/identity/shared/presentation/request-environment';
 import { authenticateApiKey, forwardedVisitorIp } from './authenticate-api-key';
+import { SANDBOX_API_KEY_RATE_LIMIT_RPM } from './sandbox-api-key-rate-limit';
 
 /**
  * Authenticates demo key checks without entering the metered grading chain.
@@ -51,7 +52,10 @@ export class SandboxDemoKeyValidationGuard implements CanActivate {
 
     request.aihubAuth = {
       ...authenticated,
-      rateLimitRpm: Math.min(authenticated.rateLimitRpm, 5),
+      rateLimitRpm: Math.min(
+        authenticated.rateLimitRpm,
+        SANDBOX_API_KEY_RATE_LIMIT_RPM,
+      ),
     };
     return true;
   }

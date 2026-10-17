@@ -6,6 +6,7 @@ import {
 } from '@/modules/identity/domain/organization-identity-config';
 import type { OrganizationIdentityConfig } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import type { JwksKeyProviderPort } from './jwks-key-provider.port';
+import { SANDBOX_ASSERTION_AUDIENCE } from './sandbox-assertion-signer.port';
 import type {
   UserAssertionCryptoPort,
   UserAssertionProtectedHeader,
@@ -139,10 +140,12 @@ function validateClaims(
   payload: Readonly<Record<string, unknown>>,
   config: OrganizationIdentityConfig,
   nowSeconds: number,
+  allowSandboxAudience: boolean,
 ): { userId: string } {
   if (
     payload.iss !== config.issuer ||
-    payload.aud !== 'aihub' ||
+    (payload.aud !== 'aihub' &&
+      !(allowSandboxAudience && payload.aud === SANDBOX_ASSERTION_AUDIENCE)) ||
     !isEndUserId(payload.sub) ||
     !isBoundedString(payload.jti) ||
     !isIntegerSeconds(payload.iat) ||
@@ -163,6 +166,7 @@ export class UserAssertionVerifier {
     private readonly keyProvider: JwksKeyProviderPort,
     private readonly crypto: UserAssertionCryptoPort,
     private readonly now: () => number = () => Math.floor(Date.now() / 1_000),
+    private readonly runtimeScope: 'production' | 'sandbox' = 'production',
   ) {}
 
   async verify(input: SignedUserAssertionInput): Promise<ResolvedUserIdentity> {
@@ -204,7 +208,12 @@ export class UserAssertionVerifier {
       throw invalidSignedUserAssertion(error);
     }
 
-    const claims = validateClaims(verified, config, nowSeconds);
+    const claims = validateClaims(
+      verified,
+      config,
+      nowSeconds,
+      this.runtimeScope === 'sandbox',
+    );
     return {
       userId: claims.userId,
       organizationId: input.organizationId,

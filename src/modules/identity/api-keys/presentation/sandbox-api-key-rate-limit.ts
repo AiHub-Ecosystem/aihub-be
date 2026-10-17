@@ -1,0 +1,1 @@
+export const SANDBOX_API_KEY_RATE_LIMIT_RPM = 5;

@@ -22,10 +22,12 @@ function document(): string {
 }
 
 describe('loadRuntimeConnectionEnvironment', () => {
-  it('loads production connections and sandbox signing material', () => {
+  it('loads production connections without sandbox signing material', () => {
     const env: NodeJS.ProcessEnv = {
       AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connections.json',
       AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
+      AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY: 'stale-key',
+      AIHUB_SANDBOX_ASSERTION_KID: 'stale-id',
     };
 
     loadRuntimeConnectionEnvironment({
@@ -36,8 +38,8 @@ describe('loadRuntimeConnectionEnvironment', () => {
     expect(env.DATABASE_URL).toBe('postgresql://production');
     expect(env.CONTROL_PLANE_READ_DATABASE_URL).toBe('postgresql://production');
     expect(env.REDIS_URL).toBe('redis://production/0');
-    expect(env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY).toBe('private-key');
-    expect(env.AIHUB_SANDBOX_ASSERTION_KID).toBe('sandbox-key');
+    expect(env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY).toBeUndefined();
+    expect(env.AIHUB_SANDBOX_ASSERTION_KID).toBeUndefined();
   });
 
   it('selects sandbox connections for the sandbox container', () => {
@@ -56,6 +58,8 @@ describe('loadRuntimeConnectionEnvironment', () => {
       'postgresql://sandbox-control-read',
     );
     expect(env.REDIS_URL).toBe('redis://sandbox/1');
+    expect(env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY).toBe('private-key');
+    expect(env.AIHUB_SANDBOX_ASSERTION_KID).toBe('sandbox-key');
   });
 
   it('leaves an explicit local environment untouched without a connection file', () => {

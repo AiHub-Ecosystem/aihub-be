@@ -12,7 +12,10 @@ import type {
   MintedSandboxAssertion,
   SandboxAssertionMinterPort,
 } from './sandbox-assertion-minter.port';
-import type { SandboxAssertionSignerPort } from './sandbox-assertion-signer.port';
+import {
+  SANDBOX_ASSERTION_AUDIENCE,
+  type SandboxAssertionSignerPort,
+} from './sandbox-assertion-signer.port';
 import { identityProviderUnavailable } from './user-identity-errors';
 
 function configurationError(cause?: unknown): AppError {
@@ -81,7 +84,7 @@ export class MintSandboxAssertion implements SandboxAssertionMinterPort {
     const jti = this.newJti();
     const assertion = await this.signer.sign({
       iss: config.issuer,
-      aud: 'aihub',
+      aud: SANDBOX_ASSERTION_AUDIENCE,
       sub: userId,
       jti,
       iat: issuedAt,

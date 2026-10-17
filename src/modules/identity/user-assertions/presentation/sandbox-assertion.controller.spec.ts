@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { Logger } from '@nestjs/common';
 import {
   FastifyAdapter,
@@ -38,6 +40,7 @@ const identityConfig: OrganizationIdentityConfig = {
 
 let authenticatedApiKey: AuthenticatedApiKey;
 let authenticationError: AppError | undefined;
+let sandboxApiKeyId: string;
 type TestRuntimeConfiguration = {
   -readonly [Key in keyof ReturnType<typeof appConfig>]: ReturnType<
     typeof appConfig
@@ -56,6 +59,9 @@ describe('Sandbox assertion HTTP flow', () => {
       ...appConfig(),
       NODE_ENV: 'test',
       AIHUB_ALLOW_UNAUTHENTICATED_DEV: false,
+      AIHUB_PRODUCTION_HOST: 'api.aihub.test',
+      AIHUB_SANDBOX_HOST: 'sandbox.aihub.test',
+      AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
       AIHUB_SANDBOX_ORG_IDS: SANDBOX_ORG,
     };
     const runtimeConnection = {
@@ -99,10 +105,12 @@ describe('Sandbox assertion HTTP flow', () => {
   beforeEach(() => {
     jest.restoreAllMocks();
     authenticationError = undefined;
+    sandboxApiKeyId = `ak_sandbox_${randomUUID()}`;
+    runtimeConfiguration.AIHUB_RUNTIME_DATABASE_SCOPE = 'sandbox';
     runtimeConfiguration.AIHUB_SANDBOX_ORG_IDS = SANDBOX_ORG;
     authenticatedApiKey = {
       organizationId: SANDBOX_ORG,
-      apiKeyId: 'ak_sandbox',
+      apiKeyId: sandboxApiKeyId,
       environment: 'development',
       scopes: ['speaking.grade'],
       rateLimitRpm: 60,
@@ -113,11 +121,14 @@ describe('Sandbox assertion HTTP flow', () => {
     };
   });
 
-  function mint(payload: Readonly<Record<string, unknown>>) {
+  function mint(
+    payload: Readonly<Record<string, unknown>>,
+    host = 'sandbox.aihub.test',
+  ) {
     return app.inject({
       method: 'POST',
       url: '/v1/sandbox/assertions',
-      headers: { host: 'localhost', 'x-api-key': 'test-api-key' },
+      headers: { host, 'x-api-key': 'test-api-key' },
       payload,
     });
   }
@@ -147,7 +158,7 @@ describe('Sandbox assertion HTTP flow', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/v1/sandbox/assertions',
-      headers: { host: 'localhost' },
+      headers: { host: 'sandbox.aihub.test' },
       payload: { user_id: 'student_456' },
     });
 
@@ -176,7 +187,7 @@ describe('Sandbox assertion HTTP flow', () => {
       event: 'sandbox_assertion_minted',
       requestId: expect.stringMatching(/^req_/),
       organizationId: SANDBOX_ORG,
-      apiKeyId: 'ak_sandbox',
+      apiKeyId: sandboxApiKeyId,
       userId: 'student_456',
       jti: expect.any(String),
     });
@@ -221,6 +232,28 @@ describe('Sandbox assertion HTTP flow', () => {
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ error: { code: 'NOT_FOUND' } });
   });
+
+  it.each([
+    ['the production host', 'sandbox', 'api.aihub.test'],
+    ['a production process', 'production', 'sandbox.aihub.test'],
+  ] as const)(
+    'answers 404 before authenticating when the mint route is reached from %s',
+    async (_label, scope, host) => {
+      runtimeConfiguration.AIHUB_RUNTIME_DATABASE_SCOPE = scope;
+      authenticationError = new AppError({
+        code: 'UNAUTHORIZED',
+        message: 'API key is invalid',
+        retryable: false,
+      });
+
+      const response = await mint({ user_id: 'student_456' }, host);
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toMatchObject({
+        error: { code: 'NOT_FOUND' },
+      });
+    },
+  );
 
   it('never returns the signing key or the caller api key', async () => {
     const response = await mint({ user_id: 'student_456' });

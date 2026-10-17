@@ -103,9 +103,7 @@ describe('CI boot configuration', () => {
     expect(() => loadRuntimeConfiguration(env)).not.toThrow();
     expect(env.DATABASE_URL).toMatch(/^postgres:\/\//);
     expect(env.REDIS_URL).toMatch(/^redis:\/\//);
-    expect(env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY).toContain(
-      'BEGIN PRIVATE KEY',
-    );
+    expect(env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY).toBeUndefined();
   });
 
   it('writes a separate MFA keyring the auth cipher accepts', () => {
@@ -179,8 +177,8 @@ describe('CI boot configuration', () => {
     );
   });
 
-  // Set on the production app, it enables the Sandbox assertion mint route
-  // there, and Production accepts what it mints (#442).
+  // Keep the Sandbox mint allowlist off Production; the guard also checks the
+  // process scope and resolved request host before authentication.
   it('gives the sandbox organization allowlist to the sandbox app only', () => {
     const compose = readFileSync('docker-compose.production.yml', 'utf8');
     const sandboxIndex = compose.indexOf('  app-sandbox:');

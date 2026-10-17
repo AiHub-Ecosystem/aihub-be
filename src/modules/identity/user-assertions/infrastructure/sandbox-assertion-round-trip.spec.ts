@@ -92,6 +92,7 @@ describe('sandbox assertion round trip', () => {
   let organizations: Map<string, Organization>;
   let minter: MintSandboxAssertion;
   let verifier: UserIdentityResolver;
+  let productionVerifier: UserIdentityResolver;
 
   beforeAll(async () => {
     const sandbox = await organization(SANDBOX_ORG, SANDBOX_ISSUER, KEY_ID);
@@ -112,6 +113,15 @@ describe('sandbox assertion round trip', () => {
     );
 
     verifier = new UserIdentityResolver(
+      repository(organizations),
+      new UserAssertionVerifier(
+        keyProvider(organizations),
+        new JoseUserAssertionCrypto(),
+        undefined,
+        'sandbox',
+      ),
+    );
+    productionVerifier = new UserIdentityResolver(
       repository(organizations),
       new UserAssertionVerifier(
         keyProvider(organizations),
@@ -147,6 +157,13 @@ describe('sandbox assertion round trip', () => {
       organizationId: SANDBOX_ORG,
       scopes: [],
     });
+
+    await expect(
+      productionVerifier.resolve({
+        value: minted.assertion,
+        organizationId: SANDBOX_ORG,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
   });
 
   it('rejects that same assertion under another organization', async () => {

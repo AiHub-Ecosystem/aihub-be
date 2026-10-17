@@ -496,15 +496,22 @@ type IdentityTransactionClient = ReturnType<
         repository: OrganizationIdentityConfigRepositoryPort,
         keyProvider: JwksKeyProviderPort,
         crypto: UserAssertionCryptoPort,
+        configuration: ConfigType<typeof appConfig>,
       ) =>
         new UserIdentityResolver(
           repository,
-          new UserAssertionVerifier(keyProvider, crypto),
+          new UserAssertionVerifier(
+            keyProvider,
+            crypto,
+            undefined,
+            configuration.AIHUB_RUNTIME_DATABASE_SCOPE,
+          ),
         ),
       inject: [
         ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
         JWKS_KEY_PROVIDER,
         USER_ASSERTION_CRYPTO,
+        appConfig.KEY,
       ],
     },
     {

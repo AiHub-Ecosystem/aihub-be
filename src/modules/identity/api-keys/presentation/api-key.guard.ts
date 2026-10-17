@@ -38,6 +38,7 @@ import {
   forbidden,
   forwardedVisitorIp,
 } from './authenticate-api-key';
+import { SANDBOX_API_KEY_RATE_LIMIT_RPM } from './sandbox-api-key-rate-limit';
 
 function configurationError(diagnostic?: string): AppError {
   return new AppError({
@@ -164,7 +165,10 @@ export class ApiKeyGuard implements CanActivate {
         environment === 'sandbox'
           ? {
               ...authenticated,
-              rateLimitRpm: Math.min(authenticated.rateLimitRpm, 5),
+              rateLimitRpm: Math.min(
+                authenticated.rateLimitRpm,
+                SANDBOX_API_KEY_RATE_LIMIT_RPM,
+              ),
             }
           : authenticated;
       request.aihubAuth = authorized;

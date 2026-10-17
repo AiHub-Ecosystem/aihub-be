@@ -78,7 +78,7 @@ describe('MintSandboxAssertion', () => {
 
     expect((signer as RecordingSigner).claims).toEqual({
       iss: CONFIG.issuer,
-      aud: 'aihub',
+      aud: 'aihub:sandbox',
       sub: 'student_456',
       jti: 'jti_fixed',
       iat: 1_800_000_000,

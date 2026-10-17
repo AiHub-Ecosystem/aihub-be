@@ -198,8 +198,8 @@ services:
       <<: *app-environment
       AIHUB_RUNTIME_DATABASE_SCOPE: sandbox
       AIHUB_LISTEN_SOCKET: ${AIHUB_SOCKET_DIR:+/run/aihub-sock/app-sandbox.sock}
-      # Sandbox only: set on the production app, it enables the assertion mint
-      # route there, and Production accepts what it mints (#442).
+      # Sandbox only: the route is available only on the Sandbox host and
+      # runtime; its assertions are rejected by Production.
       AIHUB_SANDBOX_ORG_IDS: ${AIHUB_SANDBOX_ORG_IDS:-}
       CUSTOMER_WEB_BASE_URL: ${CUSTOMER_WEB_SANDBOX_BASE_URL:-}
       # Its own Avatar bucket: the records live in the Sandbox database, so a

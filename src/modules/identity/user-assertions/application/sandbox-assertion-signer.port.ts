@@ -1,5 +1,7 @@
 import type { IdentityConfigAlgorithm } from '@/modules/identity/domain/organization-identity-config';
 
+export const SANDBOX_ASSERTION_AUDIENCE = 'aihub:sandbox';
+
 /**
  * The claim set of a sandbox assertion, already assembled and validated by the
  * application layer. The signer adds the protected header and nothing else —
@@ -8,7 +10,7 @@ import type { IdentityConfigAlgorithm } from '@/modules/identity/domain/organiza
  */
 export interface SandboxAssertionClaims {
   readonly iss: string;
-  readonly aud: 'aihub';
+  readonly aud: typeof SANDBOX_ASSERTION_AUDIENCE;
   readonly sub: string;
   readonly jti: string;
   readonly iat: number;

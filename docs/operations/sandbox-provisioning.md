@@ -239,15 +239,30 @@ The issuer is a URL, not a fetched endpoint: registering the key set inline mean
 
 ## 4. Configure the gateway
 
-In the deployment's environment file:
+Configure the dedicated demo organization allowlist on the Sandbox app only;
+the production Compose file supplies it to `app-sandbox` and its standby slot.
+The private signing key and key id are under `sandbox-assertion` in the shared
+runtime connection file. The loader maps these fields only when
+`AIHUB_RUNTIME_DATABASE_SCOPE=sandbox`; in Production it clears directly
+supplied signing variables and does not assign the bundle fields to the process
+environment. It still parses the shared JSON, including the private key. This
+process-level check does not isolate the secret: the current Vault Agent renders
+the shared file for both deployments. Separate Sandbox policy, Agent, rendered
+directory, and mount remain part of the Vault cutover in #351.
 
-```
-AIHUB_SANDBOX_ORG_IDS=org_...
-AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY=<contents of sandbox-private.pem>
-AIHUB_SANDBOX_ASSERTION_KID=<the kid printed in step 1>
-```
+The allowlist and signing bundle are both required. An allowlist without a key
+would accept a request and then fail to sign it, so the route stays closed until
+the set is complete. The mint route is available only through the Sandbox host
+on a Sandbox runtime, and the API key is capped at 5 requests per minute.
 
-All three are required. An allowlist without a key would accept a request and then fail to sign it, so the route stays closed until the set is complete. Escaped newlines in the PEM are restored on read, so a single-line value works.
+For the audience cutover, keep the demo API key Sandbox-only. Deploy the new
+Sandbox code and drain old Sandbox instances before serving mint or grading
+traffic; old verifiers accept only the `aihub` audience and fail closed on the
+new `aihub:sandbox` audience. After the last old Sandbox instance stops, wait
+61 minutes (the 1-hour assertion lifetime plus 60 seconds of verifier clock
+skew) before deploying the new verifier to Production. That lets legacy
+Sandbox assertions using `aihub` expire before the Production verifier relies
+on the audience boundary while continuing to accept customer assertions.
 
 Restart, then confirm:
 
@@ -296,7 +311,8 @@ Sandbox rotation is self-contained: it touches no production signing material an
 
 1. Generate a new pair (step 1) with a new `kid`.
 2. Write a key set containing **both** the old and new public keys, and `identity:set` it.
-3. Switch `AIHUB_SANDBOX_ASSERTION_KID` and `AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY` to the new pair, and restart.
+3. Switch the Sandbox Vault Agent `sandbox-assertion` bundle to the new key and
+   id, and restart the Sandbox app.
 4. Wait out the assertion lifetime configured in step 3 so tokens signed with the old key have expired.
 5. `identity:set` again with only the new public key.
 

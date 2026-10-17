@@ -401,10 +401,12 @@ this route. This route is for the dedicated demo Organization and its
 server-held Sandbox API key. Customer Sandbox API keys use their own
 Organization Identity Configuration and cannot call this mint route.
 
-It runs on the sandbox hostname with a dedicated demo Organization and key. A
-sandbox key is refused on the production hostname and a production key is
-refused on the sandbox hostname, both with
-`ENVIRONMENT_NOT_ALLOWED`.
+It runs only on the sandbox hostname when the application process also has
+Sandbox runtime scope. Requests to the production hostname and requests handled
+by a Production process return `404` before API-key authentication. The mint
+route is limited to 5 requests per minute per key. Its assertions use the
+`aihub:sandbox` audience, which the identity verifier accepts only in Sandbox;
+customer assertions continue to use the `aihub` audience.
 
 ### Minting
 
@@ -425,9 +427,10 @@ curl -sS -X POST 'https://sandbox.aihubproduction.com/v1/sandbox/assertions'   -
 
 `user_id` is the only thing you choose. Issuer, audience, algorithm, key id,
 organization, and lifetime are all decided server-side — a sandbox assertion
-cannot be aimed at an organization you do not own. `expires_at` is seconds since
-the epoch; sandbox assertions last an hour rather than the five minutes a
-production tenant is capped at.
+cannot be aimed at an organization you do not own, and Production will reject
+it even if it is presented there. `expires_at` is seconds since the epoch;
+sandbox assertions last an hour rather than the five minutes a production
+tenant is capped at.
 
 Only API keys belonging to the sandbox organization may mint. Every other key is
 refused, and a deployment with no sandbox configured answers `404`.

@@ -1,5 +1,6 @@
 import type { ExecutionContext } from '@nestjs/common';
 
+import type { RuntimeConfiguration } from '@/config/runtime-configuration';
 import type {
   ApiKeyAuthenticatorPort,
   AuthenticatedApiKey,
@@ -61,7 +62,9 @@ function guard(
       AIHUB_STAGING_HOST: undefined,
       AIHUB_DEVELOPMENT_HOST: undefined,
       AIHUB_SANDBOX_HOST: 'sandbox.aihub.test',
-    } satisfies RequestEnvironmentConfig,
+      AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
+    } satisfies RequestEnvironmentConfig &
+      Pick<RuntimeConfiguration, 'AIHUB_RUNTIME_DATABASE_SCOPE'>,
   );
 }
 
@@ -70,7 +73,9 @@ describe('SandboxApiKeyGuard', () => {
     const value = request();
 
     await expect(guard().canActivate(context(value))).resolves.toBe(true);
-    expect(value).toMatchObject({ aihubAuth: authenticated });
+    expect(value).toMatchObject({
+      aihubAuth: { ...authenticated, rateLimitRpm: 5 },
+    });
   });
 
   // A deployment without a sandbox should look like a build that never had

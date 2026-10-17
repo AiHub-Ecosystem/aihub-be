@@ -29,6 +29,12 @@ export function loadRuntimeConnectionEnvironment(
   options: RuntimeConnectionEnvironmentOptions,
 ): void {
   const env = options.env;
+  const scope = resolveScope(env.AIHUB_RUNTIME_DATABASE_SCOPE);
+  if (scope === 'production') {
+    delete env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY;
+    delete env.AIHUB_SANDBOX_ASSERTION_KID;
+  }
+
   const path = env.AIHUB_RUNTIME_CONNECTION_SECRETS_FILE?.trim();
   if (path === undefined || path.length === 0) {
     return;
@@ -57,7 +63,6 @@ export function loadRuntimeConnectionEnvironment(
     'runtime connection secret document',
   );
 
-  const scope = resolveScope(env.AIHUB_RUNTIME_DATABASE_SCOPE);
   const database = asRecord(root.database, 'database runtime secret bundle');
   const redis = asRecord(root.redis, 'Redis runtime secret bundle');
   assertAllowedKeys(
@@ -89,6 +94,9 @@ export function loadRuntimeConnectionEnvironment(
     scope === 'sandbox' ? 'sandbox_url' : 'url',
     scope === 'sandbox' ? 'sandbox Redis URL' : 'Redis URL',
   );
+
+  // shortcut: the shared JSON is parsed; upgrade once #351 splits Vault mounts.
+  if (scope !== 'sandbox') return;
 
   const sandboxAssertion = root['sandbox-assertion'];
   if (sandboxAssertion === undefined) {
