@@ -5,7 +5,7 @@ import type {
   PasswordResetTokenCheckResult,
   PasswordResetTokenInvalidReason,
   PasswordResetTokenRepositoryPort,
-} from '@/modules/auth/application/password-reset-token-repository.port';
+} from '@/modules/auth/password-reset/application/password-reset-token-repository.port';
 import type { InMemoryAuthState } from './in-memory-auth.state';
 
 type Inspection =

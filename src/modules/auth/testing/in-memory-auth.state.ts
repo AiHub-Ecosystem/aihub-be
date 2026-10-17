@@ -1,6 +1,6 @@
-import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/application/email-delivery-request.port';
-import type { RefreshTokenRecord } from '@/modules/auth/application/refresh-session-repository.port';
 import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
+import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { RefreshTokenRecord } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
 
 export interface InMemoryAccount {
   readonly userId: string;

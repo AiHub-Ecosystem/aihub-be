@@ -7,25 +7,18 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { Value } from '@sinclair/typebox/value';
-import { AUTH_MFA_REPOSITORY } from './application/auth-mfa-repository.port';
+import { USER_ACCOUNT_REPOSITORY } from './accounts/application/user-account.port';
+import { AUTH_CLOCK } from './local-credentials/application/local-auth.service';
+import { PASSWORD_HASHER } from './local-credentials/application/password-hasher.port';
+import { AUTH_MFA_REPOSITORY } from './mfa/application/auth-mfa-repository.port';
 import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
-} from './application/auth-rate-limiter.port';
-import { AUTH_CLOCK } from './application/local-auth.service';
-import { PASSWORD_HASHER } from './application/password-hasher.port';
-import { USER_ACCOUNT_REPOSITORY } from './application/user-account.port';
-import { VERIFICATION_TOKEN_REPOSITORY } from './application/verification-token-repository.port';
-import {
-  VERIFICATION_TOKEN,
-  type VerificationTokenPort,
-} from './application/verification-token.port';
-import { WEB_SESSION_CLIENT_SECRET } from './application/web-session-client-secret.port';
-import { WEB_SESSION_REPOSITORY } from './application/web-session-repository.port';
+} from './rate-limit/application/auth-rate-limiter.port';
 import {
   type AuthRedisClient,
   RedisAuthRateLimiter,
-} from './infrastructure/redis-auth-rate-limiter';
+} from './rate-limit/infrastructure/redis-auth-rate-limiter';
 import { InMemoryAuthMfaAdapter } from './testing/in-memory-auth-mfa.adapter';
 import {
   createInMemoryAuthState,
@@ -34,6 +27,13 @@ import {
 import { InMemoryUserAccountAdapter } from './testing/in-memory-user-account.adapter';
 import { InMemoryVerificationTokenAdapter } from './testing/in-memory-verification-token.adapter';
 import { InMemoryWebSessionAdapter } from './testing/in-memory-web-session.adapter';
+import { VERIFICATION_TOKEN_REPOSITORY } from './verification/application/verification-token-repository.port';
+import {
+  VERIFICATION_TOKEN,
+  type VerificationTokenPort,
+} from './verification/application/verification-token.port';
+import { WEB_SESSION_CLIENT_SECRET } from './web-sessions/application/web-session-client-secret.port';
+import { WEB_SESSION_REPOSITORY } from './web-sessions/application/web-session-repository.port';
 
 const BASE = '/v1/auth/web-sessions';
 const SECRET = 'fake-bff-secret';

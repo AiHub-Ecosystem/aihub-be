@@ -10,48 +10,30 @@ import { createAppFastifyProxyOptions } from '@/app-fastify-proxy-options';
 import { AppModule } from '@/app.module';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { ReadCurrentUserResponseSchema } from '@/contracts/auth/local-auth';
-import {
-  AUTH_MFA_SERVICE,
-  type AuthMfaServicePort,
-} from '@/modules/auth/application/auth-mfa-repository.port';
-import {
-  AUTH_RATE_LIMITER,
-  type AuthRateLimiterPort,
-} from '@/modules/auth/application/auth-rate-limiter.port';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import {
   EMAIL_PAYLOAD_CIPHER,
   type EmailDeliveryPayload,
   type EmailPayloadCipherPort,
-} from '@/modules/auth/application/email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
-} from '@/modules/auth/application/password-hasher.port';
-import { PASSWORD_RESET_TOKEN_REPOSITORY } from '@/modules/auth/application/password-reset-token-repository.port';
+} from '@/modules/auth/local-credentials/application/password-hasher.port';
+import {
+  AUTH_MFA_SERVICE,
+  type AuthMfaServicePort,
+} from '@/modules/auth/mfa/application/auth-mfa-repository.port';
+import { PASSWORD_RESET_TOKEN_REPOSITORY } from '@/modules/auth/password-reset/application/password-reset-token-repository.port';
 import {
   type IssuedPasswordResetToken,
   PASSWORD_RESET_TOKEN,
   type PasswordResetTokenPort,
-} from '@/modules/auth/application/password-reset-token.port';
-import { REFRESH_SESSION_REPOSITORY } from '@/modules/auth/application/refresh-session-repository.port';
+} from '@/modules/auth/password-reset/application/password-reset-token.port';
 import {
-  type IssuedRefreshToken,
-  REFRESH_TOKEN_ISSUER,
-  type RefreshTokenIssuerPort,
-} from '@/modules/auth/application/refresh-token.port';
-import {
-  USER_ACCESS_TOKEN_ISSUER,
-  USER_ACCESS_TOKEN_VERIFIER,
-  type UserAccessTokenIssuerPort,
-  type UserAccessTokenVerifierPort,
-} from '@/modules/auth/application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
-import { VERIFICATION_TOKEN_REPOSITORY } from '@/modules/auth/application/verification-token-repository.port';
-import {
-  type IssuedVerificationToken,
-  VERIFICATION_TOKEN,
-  type VerificationTokenPort,
-} from '@/modules/auth/application/verification-token.port';
+  AUTH_RATE_LIMITER,
+  type AuthRateLimiterPort,
+} from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import {
   type InMemoryAccount,
   type InMemoryAuthState,
@@ -62,6 +44,24 @@ import { InMemoryPasswordResetTokenAdapter } from '@/modules/auth/testing/in-mem
 import { InMemoryRefreshSessionAdapter } from '@/modules/auth/testing/in-memory-refresh-session.adapter';
 import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
 import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
+import { VERIFICATION_TOKEN_REPOSITORY } from '@/modules/auth/verification/application/verification-token-repository.port';
+import {
+  type IssuedVerificationToken,
+  VERIFICATION_TOKEN,
+  type VerificationTokenPort,
+} from '@/modules/auth/verification/application/verification-token.port';
+import { REFRESH_SESSION_REPOSITORY } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
+import {
+  type IssuedRefreshToken,
+  REFRESH_TOKEN_ISSUER,
+  type RefreshTokenIssuerPort,
+} from '@/modules/auth/web-sessions/application/refresh-token.port';
+import {
+  USER_ACCESS_TOKEN_ISSUER,
+  USER_ACCESS_TOKEN_VERIFIER,
+  type UserAccessTokenIssuerPort,
+  type UserAccessTokenVerifierPort,
+} from '@/modules/auth/web-sessions/application/user-access-token.port';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const EMAIL = 'person@example.com';

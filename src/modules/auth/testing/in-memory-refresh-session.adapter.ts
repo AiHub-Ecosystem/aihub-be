@@ -4,7 +4,7 @@ import type {
   RefreshTokenRecord,
   RefreshTokenRotationResult,
   RotateRefreshTokenInput,
-} from '@/modules/auth/application/refresh-session-repository.port';
+} from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
 import type { InMemoryAuthState } from './in-memory-auth.state';
 
 export class InMemoryRefreshSessionAdapter

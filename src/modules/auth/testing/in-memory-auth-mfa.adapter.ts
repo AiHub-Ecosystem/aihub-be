@@ -1,8 +1,8 @@
+import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type {
   AuthMfaFactorRecord,
   AuthMfaRepositoryPort,
-} from '@/modules/auth/application/auth-mfa-repository.port';
-import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/application/email-delivery-request.port';
+} from '@/modules/auth/mfa/application/auth-mfa-repository.port';
 import type { InMemoryAuthState } from './in-memory-auth.state';
 
 export class InMemoryAuthMfaAdapter implements AuthMfaRepositoryPort {

@@ -1,4 +1,4 @@
-import type { UserAccountRepositoryPort } from '@/modules/auth/application/user-account.port';
+import type { UserAccountRepositoryPort } from '@/modules/auth/accounts/application/user-account.port';
 import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 
 /**

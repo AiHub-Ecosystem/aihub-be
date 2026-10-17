@@ -3,7 +3,7 @@ import type {
   EmailDeliveryRequestWriterPort,
   EmailDeliveryTransaction,
   EmailPayloadCipherPort,
-} from '@/modules/auth/application/email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type { OrganizationAuditDraft } from '@/modules/identity/domain/organization-audit-event';
 import type {
   AcceptOrganizationInvitationInput,

@@ -15,7 +15,7 @@ import { UserIdentityResolver } from '@/modules/identity/user-assertions/applica
 import { JoseUserAssertionCrypto } from '@/modules/identity/user-assertions/infrastructure/jose-user-assertion-crypto';
 import { JwksKeyProvider } from '@/modules/identity/user-assertions/infrastructure/jwks-key-provider';
 
-import { createTestPool, testDatabaseUrl } from '../database';
+import { createTestPool, testDatabaseUrl } from '../shared/database';
 
 import {
   ORGANIZATION_A,

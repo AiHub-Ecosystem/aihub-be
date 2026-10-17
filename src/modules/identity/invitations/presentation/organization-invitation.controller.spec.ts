@@ -6,10 +6,7 @@ import { Test } from '@nestjs/testing';
 
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
-import {
-  AUTH_RATE_LIMITER,
-  type AuthRateLimiterPort,
-} from '@/modules/auth/application/auth-rate-limiter.port';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
@@ -17,15 +14,18 @@ import {
   type OrganizationInviteEmailInput,
   type PasswordResetEmailInput,
   type VerificationEmailInput,
-} from '@/modules/auth/application/email-sender.port';
+} from '@/modules/auth/email-delivery/application/email-sender.port';
+import {
+  AUTH_RATE_LIMITER,
+  type AuthRateLimiterPort,
+} from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
   USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenIssuerPort,
   type UserAccessTokenVerifierPort,
-} from '@/modules/auth/application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
-import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
+} from '@/modules/auth/web-sessions/application/user-access-token.port';
 import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyExecutionInput,

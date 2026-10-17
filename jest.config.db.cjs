@@ -11,8 +11,8 @@ module.exports = {
     '<rootDir>/test/runtime-secret-env.ts',
     '<rootDir>/test/silence-nest-logger.ts',
   ],
-  globalSetup: '<rootDir>/test/db/global-setup.ts',
-  globalTeardown: '<rootDir>/test/db/global-teardown.ts',
+  globalSetup: '<rootDir>/test/db/shared/global-setup.ts',
+  globalTeardown: '<rootDir>/test/db/shared/global-teardown.ts',
   transform: {
     '^.+.(t|j)s?$': ['@swc/jest'],
   },

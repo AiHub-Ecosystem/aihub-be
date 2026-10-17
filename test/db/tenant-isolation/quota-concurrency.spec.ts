@@ -8,7 +8,7 @@ import {
 import { QuotaGuard } from '@/modules/gateway/presentation/quota.guard';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 
-import { createTestPool } from '../database';
+import { createTestPool } from '../shared/database';
 
 import {
   ORGANIZATION_A,

@@ -7,14 +7,14 @@ import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
 import { ListOrganizationAuditEventsResponseSchema } from '@/contracts/organization/audit-event';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
+import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
   USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenIssuerPort,
   type UserAccessTokenVerifierPort,
-} from '@/modules/auth/application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
-import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
+} from '@/modules/auth/web-sessions/application/user-access-token.port';
 import {
   type ListOrganizationAuditEventsInput,
   ORGANIZATION_AUDIT_EVENT_READ,

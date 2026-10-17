@@ -1,11 +1,11 @@
-import { AuthIdentityConflictError } from '@/modules/auth/application/auth-identity-conflict.error';
+import { AuthIdentityConflictError } from '@/modules/auth/shared/application/auth-identity-conflict.error';
 import type {
   ConsumeVerificationTokenInput,
   ResendVerificationTarget,
   RotateVerificationTokenInput,
   VerificationOutcome,
   VerificationTokenRepositoryPort,
-} from '@/modules/auth/application/verification-token-repository.port';
+} from '@/modules/auth/verification/application/verification-token-repository.port';
 import type {
   InMemoryAuthState,
   InMemoryVerificationToken,

@@ -8,15 +8,15 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { AppError } from '@/common/errors/app-error';
 import {
+  USER_ACCOUNT_REPOSITORY,
+  type UserAccountRepositoryPort,
+} from '@/modules/auth/accounts/application/user-account.port';
+import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
+import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
   type VerifiedUserAccessToken,
-} from '@/modules/auth/application/user-access-token.port';
-import {
-  USER_ACCOUNT_REPOSITORY,
-  type UserAccountRepositoryPort,
-} from '@/modules/auth/application/user-account.port';
-import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
+} from '@/modules/auth/web-sessions/application/user-access-token.port';
 
 declare module 'fastify' {
   interface FastifyRequest {

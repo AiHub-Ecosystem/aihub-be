@@ -6,12 +6,12 @@ import {
 import { Test } from '@nestjs/testing';
 
 import { AppModule } from '@/app.module';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
+import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
-} from '@/modules/auth/application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
-import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
+} from '@/modules/auth/web-sessions/application/user-access-token.port';
 import {
   ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL,
   ORGANIZATION_MEMBERSHIP_TARGET_REFUSAL,

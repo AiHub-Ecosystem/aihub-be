@@ -38,16 +38,16 @@ import {
   RemoveMfaFactorRequestSchema,
 } from '@/contracts/auth/mfa';
 import {
-  AUTH_MFA_SERVICE,
-  type AuthMfaServicePort,
-} from '@/modules/auth/application/auth-mfa-repository.port';
-import {
   type IssuedSession,
   LOCAL_AUTH_SERVICE,
   type LocalAuthServicePort,
   RefreshRotationCommittedError,
-} from '@/modules/auth/application/local-auth-service.port';
-import { webSessionUnavailable } from '@/modules/auth/application/web-session-errors';
+} from '@/modules/auth/local-credentials/application/local-auth-service.port';
+import {
+  AUTH_MFA_SERVICE,
+  type AuthMfaServicePort,
+} from '@/modules/auth/mfa/application/auth-mfa-repository.port';
+import { webSessionUnavailable } from '@/modules/auth/web-sessions/application/web-session-errors';
 import { accessTokenEnvelope } from './access-token-envelope';
 import { requestIp } from './auth-request';
 import {

@@ -1,3 +1,4 @@
+import type { InMemoryAuthState } from '@/modules/auth/testing/in-memory-auth.state';
 import type {
   CreateWebSessionInput,
   ExchangeableWebSession,
@@ -5,8 +6,7 @@ import type {
   RenewWebSessionInput,
   RevokeWebSessionInput,
   WebSessionRepositoryPort,
-} from '@/modules/auth/application/web-session-repository.port';
-import type { InMemoryAuthState } from '@/modules/auth/testing/in-memory-auth.state';
+} from '@/modules/auth/web-sessions/application/web-session-repository.port';
 
 /**
  * The in-memory Web Session store, and the durable guarantees it has to hold

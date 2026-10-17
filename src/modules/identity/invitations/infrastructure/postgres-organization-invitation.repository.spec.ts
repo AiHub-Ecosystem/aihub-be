@@ -3,7 +3,7 @@ import { createRequestContext } from '@/common/request-context/request-context.f
 import type {
   EmailDeliveryRequestWriterPort,
   EmailPayloadCipherPort,
-} from '@/modules/auth/application/email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
 import { PostgresOrganizationInvitationRepository } from './postgres-organization-invitation.repository';
 

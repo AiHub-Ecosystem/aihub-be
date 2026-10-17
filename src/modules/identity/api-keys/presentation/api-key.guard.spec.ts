@@ -2,7 +2,7 @@ import type { ExecutionContext } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
 
 import { AppError } from '@/common/errors/app-error';
-import type { WebSessionClientSecretPort } from '@/modules/auth/application/web-session-client-secret.port';
+import type { WebSessionClientSecretPort } from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
 import type {
   ApiKeyAuthenticatorPort,
   AuthenticatedApiKey,

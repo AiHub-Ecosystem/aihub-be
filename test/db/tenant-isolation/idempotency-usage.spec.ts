@@ -8,7 +8,7 @@ import { PostgresBillingStatementRepository } from '@/modules/metering/infrastru
 import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/postgres-usage.repository';
 import { PostgresUsageRepository } from '@/modules/metering/infrastructure/postgres-usage.repository';
 
-import { createTestPool, testDatabaseUrl } from '../database';
+import { createTestPool, testDatabaseUrl } from '../shared/database';
 
 import {
   ORGANIZATION_A,

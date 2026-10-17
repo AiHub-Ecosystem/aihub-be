@@ -2,7 +2,7 @@ import { createSocket } from 'node:dgram';
 import { Resolver } from 'node:dns/promises';
 import { createServer, get as httpGet } from 'node:http';
 
-import { Argon2PasswordHasher } from '@/modules/auth/infrastructure/argon2-password.hasher';
+import { Argon2PasswordHasher } from '@/modules/auth/local-credentials/infrastructure/argon2-password.hasher';
 import type {
   JwksCachePort,
   JwksCacheSnapshot,

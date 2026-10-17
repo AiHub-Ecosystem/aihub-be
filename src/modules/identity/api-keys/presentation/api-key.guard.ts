@@ -18,7 +18,7 @@ import { appConfig } from '@/config/runtime-configuration';
 import {
   WEB_SESSION_CLIENT_SECRET,
   type WebSessionClientSecretPort,
-} from '@/modules/auth/application/web-session-client-secret.port';
+} from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,

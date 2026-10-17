@@ -4,7 +4,7 @@ import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   AuthRateLimitScope,
   AuthRateLimiterPort,
-} from '@/modules/auth/application/auth-rate-limiter.port';
+} from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '@/modules/idempotency/application/idempotency-operation';
 import type {
   CompleteIdempotencyInput,

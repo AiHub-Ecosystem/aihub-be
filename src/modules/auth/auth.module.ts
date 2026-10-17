@@ -12,7 +12,7 @@ import {
   getRuntimeSecretEnvironment,
 } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
-import { EmailDeliveryPoller } from '@/modules/auth/application/email-delivery-poller';
+import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/email-delivery-poller';
 import {
   PersistenceModule,
   type PrismaClientHolder,
@@ -27,93 +27,56 @@ import {
   type RuntimeSecretProvider,
 } from '@/modules/secrets/application/runtime-secret-provider.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
-import {
-  AUTH_MFA_CIPHER,
-  AUTH_MFA_ID,
-  AUTH_MFA_REPOSITORY,
-  AUTH_MFA_SERVICE,
-} from './application/auth-mfa-repository.port';
-import { AuthMfaService } from './application/auth-mfa.service';
-import {
-  AUTH_RATE_LIMITER,
-  type AuthRateLimiterPort,
-} from './application/auth-rate-limiter.port';
+import { USER_ACCOUNT_REPOSITORY } from './accounts/application/user-account.port';
+import { PostgresUserAccountRepository } from './accounts/infrastructure/postgres-user-account.repository';
 import {
   EMAIL_DELIVERY_ID,
   EMAIL_DELIVERY_REQUEST_WRITER,
   EMAIL_PAYLOAD_CIPHER,
   type EmailDeliveryRequestWriterPort,
   type EmailPayloadCipherPort,
-} from './application/email-delivery-request.port';
+} from './email-delivery/application/email-delivery-request.port';
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
-} from './application/email-sender.port';
-import { LOCAL_AUTH_SERVICE } from './application/local-auth-service.port';
-import {
-  AUTH_CLOCK,
-  type LocalAuthServiceClock,
-} from './application/local-auth.service';
-import { LocalAuthService } from './application/local-auth.service';
-import { PASSWORD_HASHER } from './application/password-hasher.port';
-import { PASSWORD_RESET_TOKEN_REPOSITORY } from './application/password-reset-token-repository.port';
-import {
-  PASSWORD_RESET_TOKEN,
-  type PasswordResetTokenPort,
-} from './application/password-reset-token.port';
-import { REFRESH_SESSION_REPOSITORY } from './application/refresh-session-repository.port';
-import { REFRESH_TOKEN_ISSUER } from './application/refresh-token.port';
-import {
-  USER_ACCESS_TOKEN_ISSUER,
-  USER_ACCESS_TOKEN_VERIFIER,
-} from './application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from './application/user-account.port';
-import { VERIFICATION_TOKEN_REPOSITORY } from './application/verification-token-repository.port';
-import {
-  VERIFICATION_TOKEN,
-  type VerificationTokenPort,
-} from './application/verification-token.port';
-import {
-  WEB_SESSION_CLIENT_SECRET,
-  type WebSessionClientSecretPort,
-} from './application/web-session-client-secret.port';
-import { WEB_SESSION_ID } from './application/web-session-id.port';
-import { WEB_SESSION_POLICY } from './application/web-session-policy';
-import { WEB_SESSION_REPOSITORY } from './application/web-session-repository.port';
-import { WEB_SESSION_SERVICE } from './application/web-session-service.port';
-import {
-  WEB_SESSION_TOKEN_ISSUER,
-  type WebSessionTokenIssuerPort,
-} from './application/web-session-token.port';
-import { WebSessionService } from './application/web-session.service';
-import { Argon2PasswordHasher } from './infrastructure/argon2-password.hasher';
-import { createAuthMfaCipher } from './infrastructure/auth-mfa-secret.cipher';
-import { CryptoRefreshToken } from './infrastructure/crypto-refresh-token';
+} from './email-delivery/application/email-sender.port';
 import {
   EMAIL_OUTBOX_POLL_INTERVAL_MS,
   EmailOutboxPollerScheduler,
   emailOutboxLeaseOwner,
   reportTerminalEmailDeliveryFailure,
-} from './infrastructure/email-outbox-poller.scheduler';
-import { createEmailPayloadCipher } from './infrastructure/email-payload-cipher';
-import {
-  JoseUserAccessTokenService,
-  USER_ACCESS_TOKEN_CRYPTO,
-} from './infrastructure/jose-user-access-token.service';
-import { PostgresAuthMfaRepository } from './infrastructure/postgres-auth-mfa.repository';
-import { PostgresEmailCredentialRepository } from './infrastructure/postgres-email-credential.repository';
+} from './email-delivery/infrastructure/email-outbox-poller.scheduler';
+import { createEmailPayloadCipher } from './email-delivery/infrastructure/email-payload-cipher';
 import {
   PostgresEmailDeliveryRequestRepository,
   PostgresEmailDispatchStore,
   pruneExpiredAuthEmailRecipientLimits,
-} from './infrastructure/postgres-email-delivery-request.repository';
-import { PostgresPasswordResetTokenRepository } from './infrastructure/postgres-password-reset-token.repository';
-import { PostgresRefreshSessionRepository } from './infrastructure/postgres-refresh-session.repository';
-import { PostgresUserAccountRepository } from './infrastructure/postgres-user-account.repository';
-import { PostgresVerificationTokenRepository } from './infrastructure/postgres-verification-token.repository';
-import { PostgresWebSessionRepository } from './infrastructure/postgres-web-session.repository';
-import { RedisAuthRateLimiter } from './infrastructure/redis-auth-rate-limiter';
-import { ResendEmailSender } from './infrastructure/resend-email.sender';
+} from './email-delivery/infrastructure/postgres-email-delivery-request.repository';
+import { ResendEmailSender } from './email-delivery/infrastructure/resend-email.sender';
+import { LOCAL_AUTH_SERVICE } from './local-credentials/application/local-auth-service.port';
+import {
+  AUTH_CLOCK,
+  type LocalAuthServiceClock,
+} from './local-credentials/application/local-auth.service';
+import { LocalAuthService } from './local-credentials/application/local-auth.service';
+import { PASSWORD_HASHER } from './local-credentials/application/password-hasher.port';
+import { Argon2PasswordHasher } from './local-credentials/infrastructure/argon2-password.hasher';
+import { PostgresEmailCredentialRepository } from './local-credentials/infrastructure/postgres-email-credential.repository';
+import {
+  AUTH_MFA_CIPHER,
+  AUTH_MFA_ID,
+  AUTH_MFA_REPOSITORY,
+  AUTH_MFA_SERVICE,
+} from './mfa/application/auth-mfa-repository.port';
+import { AuthMfaService } from './mfa/application/auth-mfa.service';
+import { createAuthMfaCipher } from './mfa/infrastructure/auth-mfa-secret.cipher';
+import { PostgresAuthMfaRepository } from './mfa/infrastructure/postgres-auth-mfa.repository';
+import { PASSWORD_RESET_TOKEN_REPOSITORY } from './password-reset/application/password-reset-token-repository.port';
+import {
+  PASSWORD_RESET_TOKEN,
+  type PasswordResetTokenPort,
+} from './password-reset/application/password-reset-token.port';
+import { PostgresPasswordResetTokenRepository } from './password-reset/infrastructure/postgres-password-reset-token.repository';
 import { LocalAuthController } from './presentation/local-auth.controller';
 import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
 import {
@@ -125,6 +88,43 @@ import {
   AUTH_POSTGRES_READINESS,
   type AuthPostgresReadiness,
 } from './public/postgres-readiness';
+import {
+  AUTH_RATE_LIMITER,
+  type AuthRateLimiterPort,
+} from './rate-limit/application/auth-rate-limiter.port';
+import { RedisAuthRateLimiter } from './rate-limit/infrastructure/redis-auth-rate-limiter';
+import { VERIFICATION_TOKEN_REPOSITORY } from './verification/application/verification-token-repository.port';
+import {
+  VERIFICATION_TOKEN,
+  type VerificationTokenPort,
+} from './verification/application/verification-token.port';
+import { PostgresVerificationTokenRepository } from './verification/infrastructure/postgres-verification-token.repository';
+import { REFRESH_SESSION_REPOSITORY } from './web-sessions/application/refresh-session-repository.port';
+import { REFRESH_TOKEN_ISSUER } from './web-sessions/application/refresh-token.port';
+import {
+  USER_ACCESS_TOKEN_ISSUER,
+  USER_ACCESS_TOKEN_VERIFIER,
+} from './web-sessions/application/user-access-token.port';
+import {
+  WEB_SESSION_CLIENT_SECRET,
+  type WebSessionClientSecretPort,
+} from './web-sessions/application/web-session-client-secret.port';
+import { WEB_SESSION_ID } from './web-sessions/application/web-session-id.port';
+import { WEB_SESSION_POLICY } from './web-sessions/application/web-session-policy';
+import { WEB_SESSION_REPOSITORY } from './web-sessions/application/web-session-repository.port';
+import { WEB_SESSION_SERVICE } from './web-sessions/application/web-session-service.port';
+import {
+  WEB_SESSION_TOKEN_ISSUER,
+  type WebSessionTokenIssuerPort,
+} from './web-sessions/application/web-session-token.port';
+import { WebSessionService } from './web-sessions/application/web-session.service';
+import { CryptoRefreshToken } from './web-sessions/infrastructure/crypto-refresh-token';
+import {
+  JoseUserAccessTokenService,
+  USER_ACCESS_TOKEN_CRYPTO,
+} from './web-sessions/infrastructure/jose-user-access-token.service';
+import { PostgresRefreshSessionRepository } from './web-sessions/infrastructure/postgres-refresh-session.repository';
+import { PostgresWebSessionRepository } from './web-sessions/infrastructure/postgres-web-session.repository';
 
 @Module({
   imports: [RuntimeConfigurationModule, PersistenceModule, SecretsModule],
@@ -179,9 +179,12 @@ import {
     },
     {
       provide: AUTH_MFA_REPOSITORY,
-      inject: [RUNTIME_PRISMA_CLIENT],
-      useFactory: (runtime: PrismaClientHolder): PostgresAuthMfaRepository =>
-        new PostgresAuthMfaRepository(runtime.prisma),
+      inject: [RUNTIME_PRISMA_CLIENT, EMAIL_DELIVERY_REQUEST_WRITER],
+      useFactory: (
+        runtime: PrismaClientHolder,
+        emailRequests: PostgresEmailDeliveryRequestRepository,
+      ): PostgresAuthMfaRepository =>
+        new PostgresAuthMfaRepository(runtime.prisma, emailRequests),
     },
     {
       provide: AUTH_MFA_CIPHER,

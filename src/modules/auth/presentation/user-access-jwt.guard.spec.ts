@@ -1,14 +1,14 @@
 import type { ExecutionContext } from '@nestjs/common';
 
-import type {
-  UserAccessTokenVerifierPort,
-  VerifiedUserAccessToken,
-} from '@/modules/auth/application/user-access-token.port';
 import {
   createInMemoryAuthState,
   seedAccount,
 } from '@/modules/auth/testing/in-memory-auth.state';
 import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
+import type {
+  UserAccessTokenVerifierPort,
+  VerifiedUserAccessToken,
+} from '@/modules/auth/web-sessions/application/user-access-token.port';
 import { UserAccessJwtGuard } from './user-access-jwt.guard';
 
 function context(

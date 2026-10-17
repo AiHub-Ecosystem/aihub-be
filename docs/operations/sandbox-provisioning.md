@@ -241,14 +241,14 @@ The issuer is a URL, not a fetched endpoint: registering the key set inline mean
 
 Configure the dedicated demo organization allowlist on the Sandbox app only;
 the production Compose file supplies it to `app-sandbox` and its standby slot.
-The private signing key and key id are under `sandbox-assertion` in the shared
-runtime connection file. The loader maps these fields only when
-`AIHUB_RUNTIME_DATABASE_SCOPE=sandbox`; in Production it clears directly
-supplied signing variables and does not assign the bundle fields to the process
-environment. It still parses the shared JSON, including the private key. This
-process-level check does not isolate the secret: the current Vault Agent renders
-the shared file for both deployments. Separate Sandbox policy, Agent, rendered
-directory, and mount remain part of the Vault cutover in #351.
+The private signing key and key id are under `sandbox-assertion` in the
+Sandbox-only runtime connection file rendered by `vault-agent-sandbox`. The
+Production policy cannot read that Vault path, and Production's rendered
+connection file does not contain it. The Production loader also rejects an
+unexpected Sandbox bundle, so a mistakenly shared file fails closed at startup.
+The Sandbox AppRole, Agent, role ID, and rendered directory are separate from
+Production; Sandbox containers mount only that directory (see #351 and
+[the Vault cutover runbook](deploy-vps.md#cut-over-sandbox-to-its-isolated-agent)).
 
 The allowlist and signing bundle are both required. An allowlist without a key
 would accept a request and then fail to sign it, so the route stays closed until

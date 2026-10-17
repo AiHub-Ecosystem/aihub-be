@@ -26,11 +26,11 @@ import {
   type LogoutWebSessionRequest,
   LogoutWebSessionRequestSchema,
 } from '@/contracts/auth/web-session';
-import { webSessionUnavailable } from '@/modules/auth/application/web-session-errors';
+import { webSessionUnavailable } from '@/modules/auth/web-sessions/application/web-session-errors';
 import {
   WEB_SESSION_SERVICE,
   type WebSessionServicePort,
-} from '@/modules/auth/application/web-session-service.port';
+} from '@/modules/auth/web-sessions/application/web-session-service.port';
 import { accessTokenEnvelope } from './access-token-envelope';
 import { WebSessionClientGuard } from './web-session-client.guard';
 import {

@@ -7,8 +7,8 @@ import { constantTimeEquals } from '@/common/security/constant-time-equals';
 import {
   WEB_SESSION_CLIENT_SECRET,
   type WebSessionClientSecretPort,
-} from '@/modules/auth/application/web-session-client-secret.port';
-import { webSessionUnavailable } from '@/modules/auth/application/web-session-errors';
+} from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
+import { webSessionUnavailable } from '@/modules/auth/web-sessions/application/web-session-errors';
 import {
   type CanActivate,
   type ExecutionContext,

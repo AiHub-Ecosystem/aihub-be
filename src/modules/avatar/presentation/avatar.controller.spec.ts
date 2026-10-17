@@ -13,13 +13,13 @@ import {
   AvatarUploadResponseSchema,
   ReadAvatarResponseSchema,
 } from '@/contracts/avatar/avatar';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
+import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
+import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
-} from '@/modules/auth/application/user-access-token.port';
-import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/application/user-account.port';
-import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
-import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
+} from '@/modules/auth/web-sessions/application/user-access-token.port';
 import {
   AVATAR_REPOSITORY,
   type AvatarRepositoryPort,

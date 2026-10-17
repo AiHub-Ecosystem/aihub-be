@@ -8,18 +8,18 @@ import {
 } from '@/common/security/opaque-token-issuer';
 import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
-import {
-  AUTH_RATE_LIMITER,
-  type AuthRateLimiterPort,
-} from '@/modules/auth/application/auth-rate-limiter.port';
+import { AuthModule } from '@/modules/auth/auth.module';
 import {
   EMAIL_DELIVERY_ID,
   EMAIL_DELIVERY_REQUEST_WRITER,
   EMAIL_PAYLOAD_CIPHER,
   type EmailDeliveryRequestWriterPort,
   type EmailPayloadCipherPort,
-} from '@/modules/auth/application/email-delivery-request.port';
-import { AuthModule } from '@/modules/auth/auth.module';
+} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import {
+  AUTH_RATE_LIMITER,
+  type AuthRateLimiterPort,
+} from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
 import { SANDBOX_DISPATCH_BUDGET } from '@/modules/gateway/public/sandbox-dispatch-budget';
 import type { SandboxDispatchBudgetPort } from '@/modules/gateway/public/sandbox-dispatch-budget';

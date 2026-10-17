@@ -1,7 +1,14 @@
 # ADR-0017: Sandbox as a hostname-bound fourth environment
 
-- Status: Accepted; control-plane placement amended by ADR-0056
+- Status: Accepted; control-plane placement amended by ADR-0056; runtime secret boundary amended by [ADR-0105](0105-isolate-sandbox-runtime-secrets.md)
 - Related issues: #47, #50
+
+## Amendment for Sandbox runtime secrets (#351)
+
+[ADR-0105](0105-isolate-sandbox-runtime-secrets.md) replaces the original
+shared downstream runtime credential realm with tier-specific Vault policies,
+AppRoles, Agents, and rendered directories. The paragraph below records the
+initial deployment decision; use ADR-0105 for the current credential boundary.
 
 ## Amendment for #182 (ADR-0056)
 

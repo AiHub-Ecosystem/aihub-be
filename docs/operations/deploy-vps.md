@@ -26,16 +26,19 @@ each hostname to its matching loopback port. See
 - nginx uses `AIHUB_APP_PORT` (default `3021`) as its upstream.
 - An isolated sandbox needs `AIHUB_SANDBOX_ENABLED=true`,
   `AIHUB_SANDBOX_HOST`, `AIHUB_SANDBOX_ORG_IDS`, and
-  `AIHUB_SANDBOX_APP_PORT` (default `3022`). Its database and Redis URLs are
-  stored in the Vault connection bundles.
+  `AIHUB_SANDBOX_APP_PORT` (default `3022`). It also has its own Vault AppRole,
+  Agent, role ID file, and rendered directory. Its runtime policy reads only
+  `secret/data/aihub/sandbox/` paths.
 - The external Docker network `aihub-production_backend` with subnet
   `172.16.7.0/24` and gateway `172.16.7.1`.
 - The existing Docker network `aihub_aihub-network` with a healthy `aihub-db` container.
-- A production Vault AppRole whose policy can read only the exact AIHUB runtime
-  paths under `secret/data/aihub/production/`.
+- A Production Vault AppRole that can read only Production bundles, and a
+  separate Sandbox AppRole that can read only Sandbox bundles when Sandbox is
+  enabled.
 - A Vault operator session that can provision the AIHUB bundles, including the
   existing Wispace Redis credential, without using the runtime identity.
-- A CA file trusted by Vault, plus the AppRole `role_id` and one-use `secret_id`.
+- A CA file trusted by Vault and a role ID file for each Agent. The Agent
+  authenticates with its role ID; it does not use a `secret_id`.
 - A release image in the registry, or a local Docker build.
 
 Do not reuse the development AppRole or the development rendered snapshot.
@@ -111,19 +114,24 @@ both Vault Agent and the application run as that non-root identity.
 
 ```sh
 sudo install -d -o 10001 -g 10001 -m 0700 /srv/aihub/secrets/runtime
+sudo install -d -o 10001 -g 10001 -m 0700 /srv/aihub/secrets/runtime-sandbox
 sudo install -d -m 0700 /srv/aihub/secrets
 sudo install -m 0600 -o 10001 -g 10001 vault-ca.pem /srv/aihub/secrets/vault-ca.pem
 sudo install -m 0600 -o 10001 -g 10001 vault-role-id /srv/aihub/secrets/vault-role-id
+sudo install -m 0600 -o 10001 -g 10001 vault-role-id-sandbox /srv/aihub/secrets/vault-role-id-sandbox
 sudo docker network create --driver bridge --subnet 172.16.7.0/24 --gateway 172.16.7.1 aihub-production_backend
 cp .env.production.example .env.production
 chmod 600 .env.production
 ```
 
 Set hostnames, Vault address, file paths, provider URLs, and ordinary storage
-configuration in `.env.production`. Vault Agent supplies downstream credentials,
-database/Redis URLs, the User Access JWT key, SeaweedFS credentials, and sandbox
-signing material at runtime. None of those secret values belong in
-`.env.production`.
+configuration in `.env.production`. `AIHUB_RUNTIME_SECRETS_HOST_DIR` points to
+the Production rendered directory; `AIHUB_SANDBOX_RUNTIME_SECRETS_HOST_DIR` and
+`VAULT_SANDBOX_ROLE_ID_FILE` point to the Sandbox directory and role ID file.
+Production and Sandbox each receive their own downstream credentials,
+database/Redis URLs, User Access JWT key, SeaweedFS credentials, and MFA/email
+encryption keys from their matching Agent. None of those secret values belong
+in `.env.production`.
 
 Set `CUSTOMER_WEB_BASE_URL` to the production Customer Web HTTPS URL. Set the
 separate `CUSTOMER_WEB_SANDBOX_BASE_URL` only when a sandbox Customer Web is
@@ -186,17 +194,25 @@ GRANT SELECT (organization_id, issuer, jwks_url, public_keys_jwks,
 ```
 
 Set the role password interactively with `\password aihub_sandbox_reader`;
-store its URL only in the operator-managed Vault `database.json` bundle:
+store the production and Sandbox URLs in their respective credential
+directories, then provision each directory to its own Vault path:
 
 ```json
-// database.json
-{"url":"postgresql://aihub_admin:<password>@aihub-db:5432/aihub","sandbox_url":"postgresql://aihub_admin:<password>@aihub-db:5432/aihub_sandbox","sandbox_control_plane_read_url":"postgresql://aihub_sandbox_reader:<password>@aihub-db:5432/aihub"}
-// redis.json
-{"url":"redis://:<password>@redis.aihubproduction.com:6379/0","sandbox_url":"redis://:<password>@redis.aihubproduction.com:6379/1"}
+// production/database.json
+{"url":"postgresql://<production-login>:<password>@aihub-db:5432/aihub"}
+// sandbox/database.json
+{"url":"postgresql://<sandbox-only-login>:<password>@aihub-db:5432/aihub_sandbox","control_plane_read_url":"postgresql://aihub_sandbox_reader:<password>@aihub-db:5432/aihub"}
+// production/redis.json
+{"url":"redis://<production-user>:<password>@redis.aihubproduction.com:6379/0"}
+// sandbox/redis.json
+{"url":"redis://<sandbox-only-user>:<password>@redis.aihubproduction.com:6379/1"}
 ```
 
-The application reads the selected URL from Vault Agent at startup; neither
-URL is passed through Compose interpolation.
+The application reads only its tier's URLs from Vault Agent at startup; neither
+URL is passed through Compose interpolation. The Sandbox database and Redis
+credentials must be valid only for their Sandbox data stores. Redis database
+`/1` alone is not an isolation boundary; use an ACL identity limited to
+Sandbox keys and commands.
 
 Speaking sample audio is stored in SeaweedFS. Keep `SEAWEEDFS_ENDPOINT_URL`
 (`https://s3.wispace.app`), `SEAWEEDFS_BUCKET` (`aihub-speaking-samples`), and
@@ -559,11 +575,13 @@ AIHUB_VAULT_AGENT_CIDR=172.16.2.1/32 \
   node ops/vault/provision-runtime-secrets.mjs
 ```
 
-The directory contains `ai-speaking.json`, `ai-writing.json`, `resend.json`,
-`user-access-jwt.json`, `seaweedfs.json`, `database.json`, `redis.json`,
-`sandbox-assertion.json`, `email-outbox.json`, and `web-session.json`. Keep it
-mode `0700` and remove it after provisioning. The required flat bundle shapes,
-including the `client_secret` string in `web-session.json`, are documented in
+The Production directory contains `ai-speaking.json`, `ai-writing.json`,
+`resend.json`, `user-access-jwt.json`, `seaweedfs.json`, `database.json`,
+`redis.json`, `email-outbox.json`, `web-session.json`, and `auth-mfa.json`. It
+must not contain `sandbox-assertion.json`. Keep the directory mode `0700` and
+remove it after installing the helper-generated `vault-role-id` at
+`VAULT_ROLE_ID_FILE`. The required flat bundle shapes, including the
+`client_secret` string in `web-session.json`, are documented in
 [Vault bootstrap](../../ops/vault/README.md#policy-bootstrap).
 
 `AIHUB_VAULT_AGENT_CIDR` is the address Vault records as the login source, not
@@ -580,10 +598,10 @@ logins from outside the VPS but does not distinguish containers on it; the
 runtime policy is what limits what the token can read.
 
 Provisioning requires a non-root operator identity. The Agent needs no
-`secret_id`; the operator's own session does. Mint one with
-`vault write -f auth/approle/role/aihub-production-runtime/secret-id` and unset
-`VAULT_TOKEN` afterwards so the next CLI call cannot fall back to the operator
-token. Validate the policy with the smoke script before starting the application:
+`secret_id`; for smoke checks, authenticate the Vault CLI as the generated
+AppRole using its role ID and keep the returned token only in the shell
+environment. Never print it or run the smoke check with the operator or root
+token. Validate the policy before starting the application:
 
 ```sh
 AIHUB_VAULT_SMOKE_ALLOW=true \
@@ -593,7 +611,81 @@ AIHUB_VAULT_ENVIRONMENT=production \
 ```
 
 Run the smoke command from a Vault CLI session authenticated as the generated
-non-root AppRole, not as the provisioning operator or a root token.
+non-root AppRole, not as the provisioning operator or a root token. The
+Sandbox AppRole smoke check additionally verifies that every Production path
+is denied.
+
+## Provision Sandbox Vault data
+
+Use a separate credentials directory containing independent Sandbox values for
+all runtime bundles. The database and Redis bundles contain only Sandbox
+credentials; the `database.json` control-plane reader remains restricted to
+the authentication columns and `api_keys.last_used_at`. Create a Sandbox
+SeaweedFS identity restricted to Sandbox buckets and separate User Access JWT,
+email-outbox, web-session, and MFA keys. Use a separate Resend API key if the
+provider allows one. Never copy a Production provider or storage credential to
+the Sandbox directory.
+
+Provision the Sandbox policy, AppRole, and eleven bundles with a non-root
+operator session:
+
+```sh
+AIHUB_VAULT_PROVISION_ALLOW=true \
+AIHUB_VAULT_ENVIRONMENT=sandbox \
+AIHUB_VAULT_CREDENTIALS_DIR=/secure/aihub/sandbox \
+AIHUB_VAULT_AGENT_CIDR=172.16.2.1/32 \
+  node ops/vault/provision-runtime-secrets.mjs
+```
+
+The helper saves the role ID as `vault-role-id` in that private directory.
+Install it at `VAULT_SANDBOX_ROLE_ID_FILE` with owner `10001:10001` and mode
+`0600`; create `AIHUB_SANDBOX_RUNTIME_SECRETS_HOST_DIR` with the same owner and
+mode `0700`. Run `pnpm vault:smoke` as the Sandbox AppRole; it checks every
+Production secret path is denied without printing secret contents. Provision
+the Production directory with only Production `database.json` and `redis.json`
+fields; the Production policy has no access to the Sandbox assertion path.
+
+### Cut over Sandbox to its isolated Agent
+
+This is a planned Sandbox maintenance window. The first release stops the old
+Sandbox containers before replacing their shared secret mount; Production
+remains available. Prepare both Vault policies/bundle sets, the Sandbox role ID
+file, the two rendered directories, and the `.env.production` paths before
+starting:
+
+1. Set `AIHUB_SANDBOX_ENABLED=false` in `.env.production` before pushing the
+   release. After CD syncs the new host files, its
+   `prepare-sandbox-cutover` step removes the managed Sandbox nginx route,
+   stops both Sandbox slots, and recreates the Production Agent if its rendered
+   connection file still contains Sandbox fields. The active Production app
+   keeps using its already-loaded snapshot during that Agent restart. Confirm
+   `sandbox disabled` and one AIHUB application container in
+   `blue-green-host.sh status` after CD finishes.
+2. Keep Sandbox disabled while the code release runs through CI/CD. The
+   Production Agent now renders only Production database/Redis data and no
+   Sandbox signing bundle.
+3. After Production CD passes, set `AIHUB_SANDBOX_ENABLED=true`. Start
+   `vault-agent-sandbox` with Compose and wait for it to become healthy and
+   authenticate:
+
+   ```sh
+   docker compose --env-file .env.production -f docker-compose.production.yml \
+     --profile sandbox up -d vault-agent-sandbox
+   APP_DIR="$PWD" ./scripts/ops/blue-green-host.sh check-vault-agent sandbox
+   ```
+
+   Run the Sandbox `vault:smoke` check from a Vault CLI session authenticated
+   as the Sandbox AppRole before starting the app.
+
+4. Deploy the verified image to Sandbox with
+   `AIHUB_IMAGE=ghcr.io/aihub-ecosystem/aihub-be:<commit-sha> ./scripts/ops/blue-green-host.sh deploy sandbox`,
+   then run `finalize`. With no Sandbox route, the helper bootstraps one app
+   against the isolated directory and adds the managed route only after its
+   health and dependency checks pass.
+5. Run `ops/status.sh <commit-sha>` and confirm both tiers use that image and
+   pass health/readiness checks. Inspect each app's `/run/secrets/aihub` mount
+   and confirm the Production and Sandbox source directories differ. Do not
+   print or copy any rendered secret contents.
 
 ## Start the Vault-backed stack
 
@@ -606,9 +698,11 @@ docker compose --env-file .env.production \
 
 Before recreating Vault Agent, verify its operator-provisioned role ID file.
 The current AppRole uses `bind_secret_id=false`, so the Agent re-authenticates
-with that role ID and needs no one-use SecretID. CD does not provision the role
-or recreate the Agent. A rollout that changes the rendered document schema must
-follow the coordinated release sequence below before changing mounted files.
+with that role ID and needs no one-use SecretID. CD does not provision roles.
+Its #351 cutover step recreates the Production Agent only when it detects the
+old shared connection document and Sandbox is disabled. Other rollouts that
+change the rendered document schema must follow the coordinated release
+sequence below before changing mounted files.
 
 Build or pull the release, start dependencies and Vault Agent, run migrations once,
 then start the app:
@@ -652,9 +746,11 @@ additive; do not delete factor data or key versions during an image rollback.
 
 ### Release order when a rollout adds a runtime secret
 
-CD deploys `main` and never restarts `vault-agent`. The new image must have its
-required secrets at startup, but the rendered document must also remain valid
-for every image still using it. The pre-Web-Session image rejects the new
+CD deploys `main` without normally restarting `vault-agent`; the #351
+Sandbox-isolation step is a narrow exception when the Production connection
+document still has its old Sandbox fields. The new image must have its required
+secrets at startup, but the rendered document must also remain valid for every
+image still using it. The pre-Web-Session image rejects the new
 `web-session` root key, so rendering that key while an old container can restart
 is unsafe. Production and staging use the following coordinated cutover, with
 planned downtime for the application:
@@ -725,9 +821,10 @@ The command verifies that the metrics listener responds; it does not prove
 authentication. A successful `vault status` is not evidence of Agent
 authentication; it reports Vault server state. CD uses `--no-deps` for
 migrations and app startup only after its direct bundle and recent-auth checks,
-so Compose's stale health state cannot block a release. CD never recreates the
-Agent; an operator recreates it with the provisioned role ID during the
-coordinated cutover.
+so Compose's stale health state cannot block a release. The #351 preparation
+step is the exception to CD's normal behavior: it recreates the Production
+Agent only for the isolated-secret cutover, using its provisioned role ID.
+Other Agent restarts remain operator-managed.
 
 The migration container is one-shot. Do not run `docker compose down -v`; the
 Postgres and Redis data belong to the existing VPS stacks. Back up the existing
@@ -1131,10 +1228,13 @@ must both be rejected. Dropping `aihub_sandbox` is the destructive test and is
 only appropriate on a disposable rehearsal; the production backup above is the
 rollback point, not a reason to drop the live database.
 
-Back up the existing Postgres before releases and test restore separately. Rotate Vault
-`secret_id` and downstream credentials using the Vault runbook, then restart
-`vault-agent` and `app` so the startup snapshot is re-rendered. Certificates are
-renewed by certbot on the host, not by this stack.
+Back up the existing Postgres before releases and test restore separately.
+Rotate compromised downstream credentials using the Vault runbook, then
+restart the matching Agent and app so the startup snapshot is re-rendered. The
+Agents use role IDs with `bind_secret_id=false`; do not mint or rotate a
+`secret_id`. If a role ID is compromised, rotate the affected AppRole and
+install its replacement role ID in that tier's host file before restarting
+its Agent. Certificates are renewed by certbot on the host, not by this stack.
 
 ## AI Speaking Production handoff
 
