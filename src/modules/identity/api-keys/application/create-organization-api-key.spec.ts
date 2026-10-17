@@ -91,6 +91,25 @@ function create(
 }
 
 describe('CreateOrganizationApiKey', () => {
+  it.each(['   ', 'Demo\nkey', 'Demo \u202Eyek', 'Demo\u2028key'])(
+    'refuses the name %j, which is blank or does not show as written',
+    async (name) => {
+      const { useCase, apiKeys } = createUseCase();
+      const created = jest.spyOn(apiKeys, 'createApiKey');
+
+      await expect(
+        useCase.create({
+          context: CONTEXT,
+          userId: 'usr_owner',
+          organizationId: 'org_acme',
+          name,
+          scopes: ['writing.grade'],
+        }),
+      ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+      expect(created).not.toHaveBeenCalled();
+    },
+  );
+
   it('issues the credential under the prefix of the environment it is bound to', async () => {
     const { useCase } = createUseCase();
 

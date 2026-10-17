@@ -5,6 +5,7 @@ import {
   type KeyEnvironment,
   isGradingScope,
 } from '@/modules/identity/domain/api-key';
+import { isDisplayText } from '@/modules/identity/domain/display-text';
 import {
   ORGANIZATION_API_KEY_ADMISSION,
   admitOrganizationApiKey,
@@ -58,6 +59,13 @@ function entitlementOf(scope: string): string | undefined {
   return entitlement === undefined || entitlement.length === 0
     ? undefined
     : entitlement;
+}
+
+function validatedName(name: string): string {
+  if (name.trim().length === 0 || !isDisplayText(name)) {
+    throw invalidRequest();
+  }
+  return name;
 }
 
 function validatedScopes(scopes: readonly string[]): readonly string[] {
@@ -160,6 +168,7 @@ export class CreateOrganizationApiKey {
     }
 
     const now = this.now();
+    const name = validatedName(input.name);
     const scopes = validatedScopes(input.scopes);
     const allowedEnvironments = validatedEnvironments(
       input.allowedEnvironments,
@@ -187,7 +196,7 @@ export class CreateOrganizationApiKey {
       apiKeyId: generated.id,
       keyHash: generated.hash,
       keyPrefix: generated.prefix,
-      name: input.name,
+      name,
       scopes,
       allowedEnvironments,
       expiresAt,
