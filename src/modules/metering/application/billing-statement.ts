@@ -1,4 +1,4 @@
-import { quotaMonth } from '@/modules/gateway/public/quota-period';
+import { parseQuotaMonth } from '@/modules/gateway/public/quota-period';
 
 /**
  * What an Organization is billed for one UTC month (ADR-0097, #404).
@@ -36,19 +36,17 @@ export interface BillingMonth {
   readonly to: Date;
 }
 
-const MONTH_PATTERN = /^(\d{4})-(0[1-9]|1[0-2])$/;
-
 export function parseBillingMonth(raw: string): BillingMonth {
-  const match = MONTH_PATTERN.exec(raw.trim());
-  if (match === null) {
+  const label = raw.trim();
+  const month = parseQuotaMonth(label);
+  if (month === undefined) {
     throw new BillingStatementError(
       'BILLING_INVALID_MONTH',
       'billing month must be YYYY-MM',
     );
   }
-  const month = quotaMonth(Number(match[1]), Number(match[2]) - 1);
   return {
-    label: raw.trim(),
+    label,
     from: month.start,
     to: month.end,
   };

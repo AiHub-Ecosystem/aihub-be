@@ -1,5 +1,8 @@
 import { isUsableCount } from '@/common/counts/is-usable-count';
-import { quotaMonth, quotaPeriod } from '@/modules/gateway/public/quota-period';
+import {
+  parseQuotaMonth,
+  quotaPeriod,
+} from '@/modules/gateway/public/quota-period';
 import type {
   QuotaCounterOverwritePort,
   QuotaOrganizationSnapshot,
@@ -104,18 +107,13 @@ export function parseTargetMonth(
 
   const current = quotaPeriod(now);
   const value = raw === undefined ? current.key : raw;
-  const match =
-    typeof value === 'string' ? /^(\d{4})-(\d{2})$/.exec(value) : null;
-  if (match === null) {
+  const target = typeof value === 'string' ? parseQuotaMonth(value) : undefined;
+  if (target === undefined) {
     return invalidMonth();
   }
-
-  const target = quotaMonth(Number(match[1]), Number(match[2]) - 1);
   const currentIndex = current.year * 12 + current.monthIndex;
   const targetIndex = target.year * 12 + target.monthIndex;
   if (
-    target.monthIndex < 0 ||
-    target.monthIndex > 11 ||
     targetIndex > currentIndex ||
     targetIndex < currentIndex - QUOTA_HISTORY_MONTHS
   ) {

@@ -2,6 +2,7 @@ import {
   InvalidQuotaReconciliationMonthError,
   type QuotaReconciliationEvent,
   QuotaReconciliationService,
+  parseTargetMonth,
 } from './quota-reconciliation';
 import type {
   QuotaCounterOverwritePort,
@@ -42,6 +43,54 @@ class FakeCounter implements QuotaCounterOverwritePort {
     );
   }
 }
+
+describe('parseTargetMonth', () => {
+  const now = new Date('2026-09-16T12:00:00.000Z');
+
+  it('reads the current month when nothing is given', () => {
+    expect(parseTargetMonth(undefined, now)).toEqual({
+      month: '2026-09',
+      from: new Date('2026-09-01T00:00:00.000Z'),
+      to: new Date('2026-10-01T00:00:00.000Z'),
+    });
+  });
+
+  it('reads a valid label into the period it names', () => {
+    expect(parseTargetMonth('2026-07', now)).toEqual({
+      month: '2026-07',
+      from: new Date('2026-07-01T00:00:00.000Z'),
+      to: new Date('2026-08-01T00:00:00.000Z'),
+    });
+  });
+
+  it('refuses a malformed label', () => {
+    expect(() => parseTargetMonth('2026-7', now)).toThrow(
+      InvalidQuotaReconciliationMonthError,
+    );
+    expect(() => parseTargetMonth('2026-13', now)).toThrow(
+      InvalidQuotaReconciliationMonthError,
+    );
+    expect(() => parseTargetMonth('nope', now)).toThrow(
+      InvalidQuotaReconciliationMonthError,
+    );
+  });
+
+  it('refuses a future month', () => {
+    expect(() => parseTargetMonth('2026-10', now)).toThrow(
+      InvalidQuotaReconciliationMonthError,
+    );
+  });
+
+  it('refuses a month older than the twelve-month window', () => {
+    expect(() => parseTargetMonth('2025-08', now)).toThrow(
+      InvalidQuotaReconciliationMonthError,
+    );
+  });
+
+  it('accepts the oldest month inside the window', () => {
+    expect(parseTargetMonth('2025-09', now).month).toBe('2025-09');
+  });
+});
 
 describe('QuotaReconciliationService', () => {
   const currentMonth = new Date('2026-09-16T21:00:00.000Z');

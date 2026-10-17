@@ -44,6 +44,25 @@ export function quotaPeriod(now: Date): QuotaPeriodAt {
   };
 }
 
+/**
+ * Reads a `YYYY-MM` label back into the period it names. Returns `undefined`
+ * for anything that is not a valid month, so a caller can keep its own answer
+ * for a malformed label: a typed error, a usage error, or a silent skip.
+ * The 1-based month in the label becomes the 0-based index here, once.
+ */
+export function parseQuotaMonth(label: string): QuotaPeriod | undefined {
+  const match = /^(\d{4})-(\d{2})$/.exec(label);
+  if (match === null) {
+    return undefined;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) {
+    return undefined;
+  }
+  return quotaMonth(year, month - 1);
+}
+
 export function quotaExceededError(now: Date): AppError {
   return new AppError({
     code: 'QUOTA_EXCEEDED',

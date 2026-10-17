@@ -187,8 +187,6 @@ async function runUsageReport(input) {
   }
 }
 
-const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
-
 function invalidQuotaMonth(error) {
   return (
     error instanceof Error &&
@@ -197,10 +195,6 @@ function invalidQuotaMonth(error) {
 }
 
 async function parseTargetMonth(raw, now) {
-  if (raw !== undefined && !MONTH_PATTERN.test(raw)) {
-    usageError();
-  }
-
   try {
     return await runCliCommand(quotaTargetMonthDescriptor, raw, now);
   } catch (error) {

@@ -24,6 +24,10 @@ describe('parseBillingMonth', () => {
       expect.objectContaining({ code: 'BILLING_INVALID_MONTH' }),
     );
   });
+
+  it('trims its input', () => {
+    expect(parseBillingMonth('  2026-10  ').label).toBe('2026-10');
+  });
 });
 
 describe('buildBillingStatement', () => {

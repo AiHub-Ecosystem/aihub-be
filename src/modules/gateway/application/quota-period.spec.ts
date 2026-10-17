@@ -1,4 +1,4 @@
-import { quotaMonth, quotaPeriod } from './quota-period';
+import { parseQuotaMonth, quotaMonth, quotaPeriod } from './quota-period';
 
 describe('quotaPeriod', () => {
   it('answers the whole question for a mid-month instant', () => {
@@ -72,5 +72,37 @@ describe('quotaMonth', () => {
     expect(quotaMonth(2026, 11).end).toEqual(
       new Date('2027-01-01T00:00:00.000Z'),
     );
+  });
+});
+
+describe('parseQuotaMonth', () => {
+  it('reads a valid label into the period it names', () => {
+    expect(parseQuotaMonth('2026-09')).toEqual({
+      year: 2026,
+      monthIndex: 8,
+      key: '2026-09',
+      monthNumber: 202609,
+      start: new Date('2026-09-01T00:00:00.000Z'),
+      end: new Date('2026-10-01T00:00:00.000Z'),
+    });
+  });
+
+  it('reads December and carries the window into January', () => {
+    expect(parseQuotaMonth('2026-12')?.end).toEqual(
+      new Date('2027-01-01T00:00:00.000Z'),
+    );
+  });
+
+  it('returns undefined for a malformed label', () => {
+    expect(parseQuotaMonth('2026-7')).toBeUndefined();
+    expect(parseQuotaMonth('2026-13')).toBeUndefined();
+    expect(parseQuotaMonth('10-2026')).toBeUndefined();
+    expect(parseQuotaMonth('')).toBeUndefined();
+    expect(parseQuotaMonth('202609')).toBeUndefined();
+  });
+
+  it('does not trim, so the caller owns strictness', () => {
+    expect(parseQuotaMonth(' 2026-09')).toBeUndefined();
+    expect(parseQuotaMonth('2026-09 ')).toBeUndefined();
   });
 });
