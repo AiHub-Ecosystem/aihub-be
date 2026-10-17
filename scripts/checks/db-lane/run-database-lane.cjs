@@ -127,12 +127,45 @@ async function runDatabaseLane(lane, options = {}) {
   });
 }
 
-function safeErrorMessage(error) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.replace(
+function redactDatabaseUrls(text) {
+  return String(text).replace(
     /(?:postgres(?:ql)?|prisma\+postgres):\/\/[^\s"'`<>]+/gi,
     '<redacted database URL>',
   );
+}
+
+function safeErrorMessage(error) {
+  const collected = [];
+  if (error && typeof error.code === 'string' && error.code.length > 0) {
+    collected.push(`[${error.code}]`);
+  }
+  if (Array.isArray(error && error.errors)) {
+    for (const nested of error.errors) {
+      const nestedMessage = safeErrorMessage(nested);
+      if (nestedMessage.length > 0) {
+        collected.push(nestedMessage);
+      }
+    }
+  }
+  if (error && error.cause !== undefined && error.cause !== error) {
+    const causeMessage = safeErrorMessage(error.cause);
+    if (causeMessage.length > 0) {
+      collected.push(causeMessage);
+    }
+  }
+  const message =
+    error instanceof Error
+      ? error.message
+      : error === undefined || error === null
+        ? ''
+        : String(error);
+  if (typeof message === 'string' && message.trim().length > 0) {
+    collected.push(message.trim());
+  }
+  if (collected.length === 0) {
+    return 'unknown error (no message)';
+  }
+  return redactDatabaseUrls(collected.join('; '));
 }
 
 if (require.main === module) {
@@ -161,5 +194,6 @@ if (require.main === module) {
 module.exports = {
   databaseLaneLockConnectionString,
   runDatabaseLane,
+  safeErrorMessage,
   withDatabaseLaneLock,
 };
