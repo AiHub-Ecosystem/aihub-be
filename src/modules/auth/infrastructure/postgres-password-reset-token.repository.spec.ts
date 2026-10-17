@@ -1,5 +1,5 @@
+import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/application/argon2id-parameters';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
-import { ARGON2ID_DUMMY_HASH } from '../application/argon2id-parameters';
 import { PostgresPasswordResetTokenRepository } from './postgres-password-reset-token.repository';
 
 /**

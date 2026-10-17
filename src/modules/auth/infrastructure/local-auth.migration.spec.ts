@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { ARGON2ID_HASH_CONSTRAINT_PATTERN } from '../application/argon2id-parameters';
+import { ARGON2ID_HASH_CONSTRAINT_PATTERN } from '@/modules/auth/application/argon2id-parameters';
 
 describe('local auth migration', () => {
   it('keeps durable identity, hash-only token, and reservation constraints in Postgres', () => {
