@@ -320,26 +320,19 @@ settings are deployment gates; source changes do not provision them.
 `speaking:audio-upload-sweep` removes rejected uploads and incomplete intents
 whose one-hour expiry passed at least 24 hours ago. It deletes only the exact
 object key in each intent, then removes that intent. A missing object is an
-idempotent success; failed deletion keeps the intent for the next retry. Run it
-daily for Production and Sandbox after the corresponding bucket variables and
-runtime credentials are configured.
-Start with a dry run in each environment:
+idempotent success; failed deletion keeps the intent for the next retry.
+
+The managed `speaking-upload-sweep` job runs it daily at 04:20 UTC for each
+enabled deployment, with a 30-minute limit per deployment, and logs one summary
+line per deployment to `~/aihub-speaking-upload-sweep.log`. To see what a run
+would remove without removing anything, run the wrapper's dry run:
 
 ```sh
-docker compose --env-file .env.production \
-  -f docker-compose.production.yml \
-  exec -T app node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs speaking:audio-upload-sweep --dry-run true
-
-docker compose --env-file .env.production \
-  -f docker-compose.production.yml \
-  --profile sandbox exec -T app-sandbox node scripts/runtime/runtime-entrypoint.mjs scripts/cli/cli.mjs speaking:audio-upload-sweep --dry-run true
+./scripts/ops/host-scheduled-job.sh speaking-upload-sweep --dry-run true
 ```
 
-After reviewing the counts, run the same commands without `--dry-run true` and
-then add `speaking:audio-upload-sweep` to the versioned host wrapper and
-`ops/host-jobs/aihub.crontab`; CD installs both with the next release. It is not
-part of the current schedule until that review is complete. Each invocation
-uses that deployment's database and environment-specific bucket. It prints one
+Each invocation uses that deployment's database and environment-specific
+bucket. It prints one
 JSON line containing only `scanned`, `eligible`, `deleted`, `failed`, and
 `dryRun`; it never prints an object key or End-User ID. Any failed delete makes
 the command exit non-zero so the next scheduled run can retry it.
@@ -447,6 +440,29 @@ The schedule uses the VPS's UTC clock:
 - `avatar-sweep` runs `avatar:sweep` at 03:30 daily.
 - `chart-upload-sweep` runs `writing:chart-upload-sweep` at 10, 25, 40, and
   55 minutes past each hour.
+- `speaking-upload-sweep` runs `speaking:audio-upload-sweep` at 04:20 daily.
+
+`idempotency:cleanup` is the one cleanup command not scheduled yet (#272).
+`scripts/ci/cleanup-commands-scheduled.spec.ts` fails when a sweep, prune, or
+cleanup command is neither in this schedule nor listed there as manual with a
+reason, so a new one cannot be added and forgotten.
+
+To check that a job's last run succeeded, read its newest lines in its log. A
+successful run logs one line per enabled deployment with `exit=0` followed by
+the command's summary. A `skipped` or `deferred` line (which names no
+deployment), a deployment line without `exit=0`, or no line since the
+scheduled time means it did not run to completion.
+
+| Job                                     | Log file                                 |
+| --------------------------------------- | ---------------------------------------- |
+| `quota`, `prune`, `report`, `ttl-audit` | `~/aihub-ops-job.log`                    |
+| `avatar-sweep`                          | `~/aihub-avatar-sweep.log`               |
+| `chart-upload-sweep`                    | `~/aihub-writing-chart-upload-sweep.log` |
+| `speaking-upload-sweep`                 | `~/aihub-speaking-upload-sweep.log`      |
+
+```sh
+grep -E ' prune ' ~/aihub-ops-job.log | tail -n 3
+```
 
 No two jobs start in the same minute, and `host-scheduled-job.spec.sh` fails
 when a schedule change makes two start together. Two jobs started in the same
@@ -458,14 +474,15 @@ Each CLI invocation has a hard deadline per enabled deployment. Production and
 Sandbox each get the full limit; a failure or timeout in Production is logged
 and does not prevent the Sandbox invocation.
 
-| Job                  | Per-deployment limit |
-| -------------------- | -------------------: |
-| `quota`              |           15 minutes |
-| `prune`              |           30 minutes |
-| `report`             |            3 minutes |
-| `ttl-audit`          |           15 minutes |
-| `avatar-sweep`       |           30 minutes |
-| `chart-upload-sweep` |           30 minutes |
+| Job                     | Per-deployment limit |
+| ----------------------- | -------------------: |
+| `quota`                 |           15 minutes |
+| `prune`                 |           30 minutes |
+| `report`                |            3 minutes |
+| `ttl-audit`             |           15 minutes |
+| `avatar-sweep`          |           30 minutes |
+| `chart-upload-sweep`    |           30 minutes |
+| `speaking-upload-sweep` |           30 minutes |
 
 The wrapper also caps deployment-status lookup at 30 seconds. The in-container
 CLI stops at its listed deadline; if Docker exec has not returned 15 seconds

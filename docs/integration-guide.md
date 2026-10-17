@@ -851,6 +851,17 @@ body. A successful first attempt is returned as a replay.
 Client errors are not stored. If a request fails validation, you may fix the
 body and reuse the same key.
 
+An API key is checked once, when a request arrives. A request admitted before
+its key expired or was revoked runs to completion and is billed once; it is not
+cut off part way. If you lose that response and the key has since expired, a
+retry with the old key is refused with `401 UNAUTHORIZED` before AIHUB looks up
+the stored result. Retry with another active key of the same organization,
+allowed in the same environment, sending the same `Idempotency-Key`, the same
+body, and the same `X-User-Identity` user: within the 24 hours the record is
+kept, AIHUB returns the stored result as a replay without grading or billing
+again. The stored result is keyed by organization, operation, and
+`Idempotency-Key`, not by the API key that made the request.
+
 ---
 
 ## 7. Timeouts and cancellation

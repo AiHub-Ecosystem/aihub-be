@@ -282,7 +282,7 @@ if [[ -n "$REAL_FLOCK" ]]; then
   wait "$first_pid"
 fi
 
-for job_and_timeout in 'quota 900' 'prune 1800' 'report 180' 'ttl-audit 900' 'avatar-sweep 1800' 'chart-upload-sweep 1800'; do
+for job_and_timeout in 'quota 900' 'prune 1800' 'report 180' 'ttl-audit 900' 'avatar-sweep 1800' 'chart-upload-sweep 1800' 'speaking-upload-sweep 1800'; do
   read -r job expected_timeout <<<"$job_and_timeout"
   : >"$FAKE_DOCKER_CALLS"
   APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" "$job" \
@@ -298,6 +298,10 @@ assert_contains "$FAKE_DOCKER_CALLS" 'avatar:sweep --dry-run true'
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" chart-upload-sweep \
   --dry-run true >"$test_root/chart-upload-dry-run.out" 2>&1
 assert_contains "$FAKE_DOCKER_CALLS" 'writing:chart-upload-sweep --dry-run true'
+: >"$FAKE_DOCKER_CALLS"
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" speaking-upload-sweep \
+  --dry-run true >"$test_root/speaking-upload-dry-run.out" 2>&1
+assert_contains "$FAKE_DOCKER_CALLS" 'speaking:audio-upload-sweep --dry-run true'
 
 printf 'host wrapper test passed: timeouts, same-job overlap skip, bounded stderr, and continued Sandbox run\n'
 
@@ -402,10 +406,11 @@ APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh"
 assert_contains "$FAKE_CRONTAB_FILE" '/home/operator/wispace-vault/snapshot.sh'
 assert_contains "$FAKE_CRONTAB_FILE" "host-scheduled-job.sh' avatar-sweep"
 assert_contains "$FAKE_CRONTAB_FILE" "host-scheduled-job.sh' chart-upload-sweep"
+assert_contains "$FAKE_CRONTAB_FILE" "host-scheduled-job.sh' speaking-upload-sweep"
 assert_not_contains "$FAKE_CRONTAB_FILE" 'aihub-ops-job.sh'
 assert_not_contains "$FAKE_CRONTAB_FILE" 'aihub-avatar-sweep.sh'
 [[ "$(grep -c '^# BEGIN AIHUB MANAGED JOBS$' "$FAKE_CRONTAB_FILE")" == 1 ]]
-[[ "$(grep -c 'host-scheduled-job.sh' "$FAKE_CRONTAB_FILE")" == 6 ]]
+[[ "$(grep -c 'host-scheduled-job.sh' "$FAKE_CRONTAB_FILE")" == 7 ]]
 
 cp "$FAKE_CRONTAB_FILE" "$test_root/crontab.before-suspend"
 printf '1\n' >"$FAKE_PGREP_REMAINING_FILE"

@@ -13,6 +13,8 @@ if [[ ${1:-} == avatar-sweep ]]; then
   default_log="$HOME/aihub-avatar-sweep.log"
 elif [[ ${1:-} == chart-upload-sweep ]]; then
   default_log="$HOME/aihub-writing-chart-upload-sweep.log"
+elif [[ ${1:-} == speaking-upload-sweep ]]; then
+  default_log="$HOME/aihub-speaking-upload-sweep.log"
 else
   default_log="$HOME/aihub-ops-job.log"
 fi
@@ -23,6 +25,7 @@ to=
 quota_month=
 avatar_dry_run=false
 chart_dry_run=false
+speaking_dry_run=false
 report_window_provided=false
 quota_month_provided=false
 
@@ -33,12 +36,14 @@ elif (( $# == 3 )) && [[ "$JOB" == avatar-sweep && "${2:-}" == --dry-run && "${3
   avatar_dry_run=true
 elif (( $# == 3 )) && [[ "$JOB" == chart-upload-sweep && "${2:-}" == --dry-run && "${3:-}" == true ]]; then
   chart_dry_run=true
+elif (( $# == 3 )) && [[ "$JOB" == speaking-upload-sweep && "${2:-}" == --dry-run && "${3:-}" == true ]]; then
+  speaking_dry_run=true
 elif (( $# == 5 )) && [[ "$JOB" == report && "${2:-}" == --from && "${4:-}" == --to ]]; then
   from=$3
   to=$5
   report_window_provided=true
 elif (( $# != 1 )); then
-  printf 'usage: %s quota [--month YYYY-MM]|prune|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]|chart-upload-sweep [--dry-run true]\n' "$0" >&2
+  printf 'usage: %s quota [--month YYYY-MM]|prune|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]|chart-upload-sweep [--dry-run true]|speaking-upload-sweep [--dry-run true]\n' "$0" >&2
   exit 2
 fi
 case "$JOB" in
@@ -48,7 +53,8 @@ case "$JOB" in
   ttl-audit) commands=(redis:ttl-audit); timeout_seconds=900 ;;
   avatar-sweep) commands=(avatar:sweep); timeout_seconds=1800 ;;
   chart-upload-sweep) commands=(writing:chart-upload-sweep); timeout_seconds=1800 ;;
-  *) printf 'usage: %s quota [--month YYYY-MM]|prune|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]|chart-upload-sweep [--dry-run true]\n' "$0" >&2; exit 2 ;;
+  speaking-upload-sweep) commands=(speaking:audio-upload-sweep); timeout_seconds=1800 ;;
+  *) printf 'usage: %s quota [--month YYYY-MM]|prune|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]|chart-upload-sweep [--dry-run true]|speaking-upload-sweep [--dry-run true]\n' "$0" >&2; exit 2 ;;
 esac
 
 if ! cd "$APP_DIR"; then
@@ -203,6 +209,9 @@ for tier in production sandbox; do
       args+=(--dry-run true)
     fi
     if [[ "$command" == writing:chart-upload-sweep && "$chart_dry_run" == true ]]; then
+      args+=(--dry-run true)
+    fi
+    if [[ "$command" == speaking:audio-upload-sweep && "$speaking_dry_run" == true ]]; then
       args+=(--dry-run true)
     fi
     stdout_file="$tmp_dir/stdout"
