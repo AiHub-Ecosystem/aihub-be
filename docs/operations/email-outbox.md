@@ -89,12 +89,15 @@ attempt the new owner is spending or clearing the new owner's lease.
 Suggested alert condition: any increase of `aihub_email_delivery_failed_total`
 over a window long enough to cover the retry schedule (attempts run at 0, +1
 minute, and +5 minutes, so 15 minutes is a safe minimum). `kind` separates the
-three flows; a `kind`-specific rise points at that flow's recipient domain or
-its `from` address, which is the usual cause.
+five flows (`verification_email`, `password_reset_email`,
+`organization_invite_email`, `mfa_enabled_notification`,
+`mfa_removed_notification`); a `kind`-specific rise points at that flow's
+recipient domain or its `from` address, which is the usual cause.
 
-The `error=` value is one of two codes, `timeout` or `provider_rejected`.
-`timeout` means the attempt ran past the five-second provider timeout;
-`provider_rejected` means the provider declined the API request. Nothing else
+The `error=` value is one of three codes. `timeout` means the attempt ran past
+the five-second provider timeout; `provider_rejected` means the provider
+declined the API request; `outcome_unknown` means a process died after
+reserving the last attempt, so no answer was recorded (see above). Nothing else
 about the provider's answer survives to this point, by design.
 
 ## Cancellation is not an alert
@@ -212,7 +215,7 @@ of care at each call site:
 - **The event carries three fields**, and a test pins the payload whole rather
   than field by field, so an address appearing in it fails whether it came from a
   new field or an edit to the format.
-- **The counter has one bounded label**, `kind`, whose three values are fixed in
+- **The counter has one bounded label**, `kind`, whose five values are fixed in
   `src/common/observability/metrics.ts`. A recipient cannot become a series.
 - **`last_error_code` and `cancel_reason` are CHECK-constrained** to
   `^[a-z0-9_]{1,64}$` in `prisma/migrations/0027_email_delivery_requests/migration.sql`.

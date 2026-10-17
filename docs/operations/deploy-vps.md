@@ -1489,8 +1489,10 @@ Follow the CD run through the public probes and the release-history summary.
 
 ### Rollback triggers and contract migrations
 
-Start rollback when any release gate fails after deployment: a service fails
-its container health check within 90 seconds, an enabled hostname has a failed
+Start rollback when any release gate fails after deployment: a service does
+not report a healthy container health check within the helper's 120 attempts
+(`wait_service_ready` in `scripts/ops/blue-green-host.sh`, one second apart),
+an enabled hostname has a failed
 `/health` probe during the CD probe window, `/ready` reports Postgres or Redis
 down, a deployed container OOMs or its restart count increases, or the
 authenticated smoke does not return `200`. Also roll back a reproducible

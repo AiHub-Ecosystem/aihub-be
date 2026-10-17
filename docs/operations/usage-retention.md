@@ -2,8 +2,11 @@
 
 This runbook describes the nightly operator command that prunes durable
 `usage_records` evidence after the agreed 13-calendar-month retention window.
-The table remains the billing and audit source of truth inside that window;
-Redis quota counters and idempotency records are outside this command.
+The same run, with the same cutoff and batch size, also deletes
+`dispatch_attempts` rows older than the cutoff, so the counts and checks below
+apply to both tables. `usage_records` remains the billing and audit source of
+truth inside that window; Redis quota counters and idempotency records are
+outside this command.
 
 ## Schedule and scope
 
@@ -51,6 +54,10 @@ Before the first production run:
    ```sql
    SELECT count(*)
    FROM usage_records
+   WHERE created_at < :retention_cutoff;
+
+   SELECT count(*)
+   FROM dispatch_attempts
    WHERE created_at < :retention_cutoff;
    ```
 
