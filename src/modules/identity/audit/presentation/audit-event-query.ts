@@ -109,10 +109,28 @@ function parseLimit(value: unknown): number {
  * would reject all of it without a coercion layer this codebase does not have.
  * The response schema stays in the contracts module as it does everywhere.
  */
+const ALLOWED_AUDIT_QUERY_KEYS = new Set([
+  'action',
+  'outcome',
+  'from',
+  'to',
+  'limit',
+  'cursor',
+]);
+
 export function parseOrganizationAuditQuery(
   raw: unknown,
 ): OrganizationAuditQuery {
   const query = isRecord(raw) ? raw : {};
+
+  // An undeclared key is a client that is guessing the contract, not a typo in
+  // a value: refuse it rather than silently dropping it, the same way the body
+  // schema refuses an undeclared field.
+  for (const key of Object.keys(query)) {
+    if (!ALLOWED_AUDIT_QUERY_KEYS.has(key)) {
+      throw invalidRequest();
+    }
+  }
 
   const actions = parseActions(query.action);
   const outcome = parseOutcome(query.outcome);
