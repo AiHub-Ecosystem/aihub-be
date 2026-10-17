@@ -7,6 +7,7 @@ import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
+import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import {
   AvatarResponseSchema,
   AvatarUploadResponseSchema,
@@ -75,12 +76,12 @@ class FakeAvatarStorage implements AvatarStoragePort {
     return `${PUBLIC_ORIGIN}${objectKey}`;
   }
 
-  async describeObject(objectKey: string) {
+  async describeObject(objectKey: string, _signal?: AbortSignal) {
     if (this.unavailable) throw storageUnavailable();
     return this.objects.get(objectKey);
   }
 
-  async deleteObject(objectKey: string) {
+  async deleteObject(objectKey: string, _signal?: AbortSignal) {
     if (this.deleteFails) throw storageUnavailable();
     this.deleted.push(objectKey);
     this.objects.delete(objectKey);
@@ -124,6 +125,7 @@ describe('Avatar upload HTTP flow', () => {
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({ genReqId: () => REQUEST_ID }),
     );
+    registerRequestLifecycle(app.getHttpAdapter().getInstance());
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });
@@ -403,6 +405,33 @@ describe('Avatar upload HTTP flow', () => {
   });
 
   describe('the completion window', () => {
+    it('propagates the ingress deadline to storage and leaves an unfinished upload retryable', async () => {
+      const { assetId } = await uploadedAsset();
+      const timeout = jest
+        .spyOn(AbortSignal, 'timeout')
+        .mockReturnValue(
+          AbortSignal.abort(new DOMException('expired', 'TimeoutError')),
+        );
+      const describe = jest
+        .spyOn(storage, 'describeObject')
+        .mockImplementation(async (_key, signal) => {
+          if (signal?.aborted) throw storageUnavailable();
+          throw new Error('caller deadline did not reach storage');
+        });
+      try {
+        const response = await complete(assetId);
+        expect(response.statusCode).toBe(503);
+        expect(response.json().error).toMatchObject({
+          code: 'AVATAR_STORAGE_UNAVAILABLE',
+          retryable: true,
+        });
+        expect(repository.avatars.size).toBe(0);
+      } finally {
+        timeout.mockRestore();
+        describe.mockRestore();
+      }
+    });
+
     const MINUTE = 60 * 1000;
 
     it('adopts an object that is just inside the hour', async () => {
@@ -633,6 +662,34 @@ describe('Avatar upload HTTP flow', () => {
   });
 
   describe('removing an Avatar', () => {
+    it('keeps the Avatar record when the request deadline interrupts object deletion', async () => {
+      const { assetId } = await uploadedAsset();
+      await complete(assetId);
+      const timeout = jest
+        .spyOn(AbortSignal, 'timeout')
+        .mockReturnValue(
+          AbortSignal.abort(new DOMException('expired', 'TimeoutError')),
+        );
+      const remove = jest
+        .spyOn(storage, 'deleteObject')
+        .mockImplementation(async (_key, signal) => {
+          if (signal?.aborted) throw storageUnavailable();
+          throw new Error('caller deadline did not reach storage');
+        });
+      try {
+        const response = await app.inject({
+          method: 'DELETE',
+          url: '/v1/me/avatar',
+          headers: { authorization: 'Bearer valid.token.value' },
+        });
+        expect(response.statusCode).toBe(503);
+        expect(repository.avatars.get(USER_ID)?.assetId).toBe(assetId);
+      } finally {
+        timeout.mockRestore();
+        remove.mockRestore();
+      }
+    });
+
     function remove(token = 'valid.token.value') {
       return app.inject({
         method: 'DELETE',

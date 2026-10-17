@@ -526,7 +526,9 @@ only on that account; no route takes an account id.
 Every upload gets a new URL, so a cached image is never shown under the wrong
 Avatar. A removed or replaced image can remain in browser caches for up to an
 hour. `409 AVATAR_CHANGED` means another request changed the Avatar first:
-read it again before retrying. `503 AVATAR_STORAGE_UNAVAILABLE` is retryable.
+read it again before retrying. `503 AVATAR_STORAGE_UNAVAILABLE` is retryable
+and includes a short `retry_after_ms` hint. Storage calls stop at the request's
+10-second deadline; retry a timed-out completion with the same asset ID.
 
 ---
 

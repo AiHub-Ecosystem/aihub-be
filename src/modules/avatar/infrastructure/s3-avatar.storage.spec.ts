@@ -249,6 +249,21 @@ describe('S3AvatarStorage', () => {
         retryable: true,
       });
     });
+
+    it('does not report a connection reset as a request timeout', async () => {
+      const { client } = clientAnswering(async () => {
+        throw Object.assign(new Error('socket hang up'), {
+          name: 'TimeoutError',
+          code: 'ECONNRESET',
+        });
+      });
+      await expect(
+        storage({ client }).describeObject(KEY),
+      ).rejects.toMatchObject({
+        diagnostic: 'object_storage:unavailable',
+        retryable: true,
+      });
+    });
   });
 
   describe('listing objects', () => {

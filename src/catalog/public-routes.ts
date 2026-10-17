@@ -136,6 +136,8 @@ export interface PublicRouteDef {
   readonly method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   /** Nest form, so a route declaration can bind it directly. */
   readonly path: string;
+  /** Ingress-to-response deadline for non-grading work; shared by every outbound call. */
+  readonly timeoutMs?: number;
   readonly callerAuth: CallerAuth;
   readonly organizationResolution: OrganizationResolution;
   readonly successStatus: 200 | 201 | 202 | 204;
@@ -648,6 +650,7 @@ export const PUBLIC_ROUTES = {
   // path item documents.
   'me.avatar.uploads.complete': {
     method: 'POST',
+    timeoutMs: 10_000,
     path: '/v1/me/avatar/uploads/:assetId/complete',
     callerAuth: 'bearer',
     organizationResolution: 'none',
@@ -675,6 +678,7 @@ export const PUBLIC_ROUTES = {
   // was asked for.
   'me.avatar.remove': {
     method: 'DELETE',
+    timeoutMs: 10_000,
     path: '/v1/me/avatar',
     callerAuth: 'bearer',
     organizationResolution: 'none',
@@ -723,6 +727,7 @@ export const PUBLIC_ROUTES = {
   },
   'speaking.audioUploads.complete': {
     method: 'POST',
+    timeoutMs: 10_000,
     path: '/v1/speaking/audio/uploads/:assetId/complete',
     callerAuth: 'api-key',
     organizationResolution: 'caller',
@@ -759,6 +764,7 @@ export const PUBLIC_ROUTES = {
   },
   'writing.chartUploads.complete': {
     method: 'POST',
+    timeoutMs: 10_000,
     path: '/v1/ielts/writing/task1/chart-uploads/:assetId/complete',
     callerAuth: 'api-key',
     organizationResolution: 'caller',

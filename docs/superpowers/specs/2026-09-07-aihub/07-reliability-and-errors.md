@@ -126,6 +126,37 @@ Handled naturally via architecture documented in [04 — Redis](04-redis.md):
 
 ---
 
+## I.7 Object storage degraded mode
+
+This is the object-storage row of the dependency matrix tracked in
+[#372](https://github.com/AiHub-Ecosystem/aihub-be/issues/372), implemented by
+[#747](https://github.com/AiHub-Ecosystem/aihub-be/issues/747). The remaining
+dependencies and their decisions stay with #372.
+
+| Seam                                                                                                            | Down, slow, or unreachable storage                                                                                                                                                                                                   | Client answer                                                                                                                                                      | Signal and rationale                                                                                                                                                                                                                 |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Avatar completion/replacement/removal; Speaking Audio completion; Writing chart inspection/publication/deletion | Give up on connection establishment after 1 s and waiting for response headers after 5 s. Every network call and streamed body read also receives the same request signal, ending at the 10 s ingress deadline or caller disconnect. | `503 AVATAR_STORAGE_UNAVAILABLE`, `SPEAKING_AUDIO_STORAGE_UNAVAILABLE`, or `WRITING_CHART_STORAGE_UNAVAILABLE`, with `retryable: true` and `retry_after_ms: 1000`. | `aihub_object_storage_failures_total{reason}` records `connection_timeout`, `request_timeout`, `connection_refused`, `deadline`, `cancelled`, or `unavailable`. A stalled dependency cannot hold the caller and socket indefinitely. |
+| Operator Avatar, Speaking Audio, and Writing chart sweeps                                                       | Separate client budget: 3 s connection establishment, 30 s response-header timeout, and a 30 s signal per storage operation/page, including body reads.                                                                              | Command fails or reports a failed cleanup according to its existing sweep policy; durable cleanup state is kept for retry.                                         | The same failure counter; longer limits permit background cleanup without borrowing an HTTP caller's budget.                                                                                                                         |
+| Upload/playback URL signing                                                                                     | Local signing; no storage call is made.                                                                                                                                                                                              | Existing configuration/signing failures remain; producing a URL does not prove storage is healthy.                                                                 | No network timeout applies.                                                                                                                                                                                                          |
+
+Both client profiles explicitly use one SDK attempt (`maxAttempts: 1`): callers
+retry the existing idempotent completion or cleanup flow, and SDK backoff cannot
+extend the budget. A per-process pool of 16 sockets per origin limits load on the
+shared store. `aihub_object_storage_queued_requests` exposes calls waiting for a
+socket; queue time consumes the call's connection/request deadline. Review this
+gauge before increasing the pool size. Neither metric carries object keys,
+signed URLs, credentials, or caller identifiers. Raw SDK errors stay in the
+unlogged error cause; only a bounded failure reason is recorded.
+
+The body signal is necessary because the Node HTTP handler clears its request
+timer when response headers arrive. Client configuration follows the
+[AWS timeout documentation](https://github.com/aws/aws-sdk-js-v3/blob/main/UPGRADING.md)
+and [socket-pool guidance](https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/node-configuring-maxsockets.html);
+`throwOnRequestTimeout: true` makes the configured request timeout reject rather
+than merely warn.
+
+---
+
 # J. Unified Error Model
 
 ## J.1 Error Response Envelope

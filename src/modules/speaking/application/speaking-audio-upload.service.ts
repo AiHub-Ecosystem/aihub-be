@@ -239,10 +239,13 @@ export class SpeakingAudioUploadService
       throw uploadNotFound();
     }
 
-    const stored = await this.storage.describeObject({
-      environment: found.intent.environment,
-      objectKey: found.intent.objectKey,
-    });
+    const stored = await this.storage.describeObject(
+      {
+        environment: found.intent.environment,
+        objectKey: found.intent.objectKey,
+      },
+      input.context.signal,
+    );
     if (stored === undefined) {
       throw uploadNotFound();
     }
@@ -264,10 +267,13 @@ export class SpeakingAudioUploadService
         }
       } else {
         try {
-          await this.storage.deleteObject({
-            environment: found.intent.environment,
-            objectKey: found.intent.objectKey,
-          });
+          await this.storage.deleteObject(
+            {
+              environment: found.intent.environment,
+              objectKey: found.intent.objectKey,
+            },
+            input.context.signal,
+          );
           await this.repository.removeRejectedIntent(owner);
         } catch {
           // The rejected intent remains durable so a later sweep can retry.

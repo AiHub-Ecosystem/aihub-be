@@ -1,6 +1,7 @@
 import { Transform } from 'node:stream';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { AppError } from '@/common/errors/app-error';
 import {
   type DisconnectableRequest,
@@ -16,7 +17,20 @@ const OPERATION_TIMEOUT_BY_PATH: ReadonlyMap<string, number> = new Map(
 );
 const JSON_PATH = OPERATION_CATALOG['speaking.grading-json'].path;
 
+const TIMED_ROUTES = Object.values(PUBLIC_ROUTES).flatMap((route) =>
+  'timeoutMs' in route
+    ? [
+        {
+          method: route.method,
+          path: new RegExp(`^${route.path.replace(/:[^/]+/g, '[^/]+')}$`),
+          timeoutMs: route.timeoutMs,
+        },
+      ]
+    : [],
+);
+
 interface LifecycleRequest {
+  readonly method: string;
   readonly url: string;
   readonly raw: DisconnectableRequest;
 }
@@ -154,7 +168,12 @@ export function registerRequestLifecycle(
   Reflect.apply(instance.addHook.bind(instance), instance, [
     'onRequest',
     (request: LifecycleRequest, _reply: unknown, done: () => void): void => {
-      const timeoutMs = OPERATION_TIMEOUT_BY_PATH.get(pathnameOf(request.url));
+      const path = pathnameOf(request.url);
+      const timeoutMs =
+        OPERATION_TIMEOUT_BY_PATH.get(path) ??
+        TIMED_ROUTES.find(
+          (route) => route.method === request.method && route.path.test(path),
+        )?.timeoutMs;
       if (timeoutMs === undefined || !isObject(request.raw)) {
         done();
         return;

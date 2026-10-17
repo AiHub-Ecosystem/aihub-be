@@ -48,6 +48,7 @@ export async function runSpeakingAudioUploadSweepCommand(
     const bucket = process.env.SEAWEEDFS_AUDIO_ASSET_BUCKET;
     storage = new S3SpeakingAudioAssetStorage(
       createSeaweedFsS3Client({
+        workload: 'operator',
         endpoint: process.env.SEAWEEDFS_ENDPOINT_URL,
         region: process.env.SEAWEEDFS_REGION,
         credentials: secretProvider.getSnapshot().seaweedfs,

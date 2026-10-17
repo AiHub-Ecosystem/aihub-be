@@ -55,20 +55,26 @@ export interface SpeakingAudioAssetStoragePort {
     readonly contentType: SpeakingAudioContentType;
     readonly byteSize: number;
   }): Promise<{ readonly url: string; readonly expiresAt: Date }>;
-  describeObject(input: {
-    readonly environment: SpeakingAudioEnvironment;
-    readonly objectKey: string;
-  }): Promise<
+  describeObject(
+    input: {
+      readonly environment: SpeakingAudioEnvironment;
+      readonly objectKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<
     | {
         readonly contentType: string | undefined;
         readonly byteSize: number | undefined;
       }
     | undefined
   >;
-  deleteObject(input: {
-    readonly environment: SpeakingAudioEnvironment;
-    readonly objectKey: string;
-  }): Promise<void>;
+  deleteObject(
+    input: {
+      readonly environment: SpeakingAudioEnvironment;
+      readonly objectKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<void>;
 }
 
 /**

@@ -7,6 +7,7 @@ import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
+import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { SpeakingAudioUploadUrlResponseSchema } from '@/contracts/speaking/audio-upload';
 import { SpeakingAudioAssetResponseSchema } from '@/contracts/speaking/audio-upload';
 import { RATE_LIMITER } from '@/modules/gateway/application/rate-limiter.port';
@@ -211,10 +212,13 @@ class FakeAudioAssetStorage implements SpeakingAudioAssetStoragePort {
     };
   }
 
-  async describeObject(input: {
-    readonly environment: 'production' | 'sandbox';
-    readonly objectKey: string;
-  }) {
+  async describeObject(
+    input: {
+      readonly environment: 'production' | 'sandbox';
+      readonly objectKey: string;
+    },
+    _signal?: AbortSignal,
+  ) {
     this.described.push(input.objectKey);
     if (this.unavailable) {
       throw new AppError({
@@ -290,6 +294,7 @@ describe('Speaking Audio upload HTTP flow', () => {
         genReqId: () => 'req_01J00000000000000000000000',
       }),
     );
+    registerRequestLifecycle(app.getHttpAdapter().getInstance());
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });
@@ -501,6 +506,50 @@ describe('Speaking Audio upload HTTP flow', () => {
     expect(storage.described).toEqual([]);
     expect(repository.intents.get(assetId)?.status).toBe('open');
     expect(repository.assets.has(assetId)).toBe(false);
+  });
+
+  it('keeps the intent open when the request deadline interrupts storage verification', async () => {
+    const headers = {
+      host: 'sandbox.test',
+      'x-api-key': 'aihub_sk_audio_upload_test',
+      'x-user-identity': 'student-123',
+    };
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/speaking/audio/uploads',
+      headers,
+      payload: { content_type: 'audio/wav', byte_size: 1_024 },
+    });
+    const assetId = String(created.json().data.asset_id);
+    const timeout = jest
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(
+        AbortSignal.abort(new DOMException('expired', 'TimeoutError')),
+      );
+    const describe = jest
+      .spyOn(storage, 'describeObject')
+      .mockImplementation(async (_input, signal) => {
+        if (signal?.aborted)
+          throw new AppError({
+            code: 'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+            message: 'Storage unavailable',
+            retryable: true,
+          });
+        throw new Error('caller deadline did not reach storage');
+      });
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/v1/speaking/audio/uploads/${assetId}/complete`,
+        headers,
+      });
+      expect(response.statusCode).toBe(503);
+      expect(repository.intents.get(assetId)?.status).toBe('open');
+      expect(repository.assets.size).toBe(0);
+    } finally {
+      timeout.mockRestore();
+      describe.mockRestore();
+    }
   });
 
   it('records only a verified object and makes successful completion idempotent', async () => {

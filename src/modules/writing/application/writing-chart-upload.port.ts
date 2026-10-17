@@ -63,11 +63,14 @@ export interface WritingChartUploadStoragePort {
     readonly fields: Readonly<Record<string, string>>;
     readonly expiresAt: Date;
   }>;
-  inspectObject(input: {
-    readonly environment: WritingChartEnvironment;
-    readonly stagingKey: string;
-    readonly byteSize: number;
-  }): Promise<
+  inspectObject(
+    input: {
+      readonly environment: WritingChartEnvironment;
+      readonly stagingKey: string;
+      readonly byteSize: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<
     | {
         readonly contentType: string | undefined;
         readonly byteSize: number | undefined;
@@ -75,25 +78,34 @@ export interface WritingChartUploadStoragePort {
       }
     | undefined
   >;
-  publishObject(input: {
-    readonly environment: WritingChartEnvironment;
-    readonly stagingKey: string;
-    readonly publishedKey: string;
-    readonly contentType: WritingChartContentType;
-    readonly bytes: Uint8Array;
-  }): Promise<void>;
+  publishObject(
+    input: {
+      readonly environment: WritingChartEnvironment;
+      readonly stagingKey: string;
+      readonly publishedKey: string;
+      readonly contentType: WritingChartContentType;
+      readonly bytes: Uint8Array;
+    },
+    signal?: AbortSignal,
+  ): Promise<void>;
   publicUrl(input: {
     readonly environment: WritingChartEnvironment;
     readonly publishedKey: string;
   }): string;
-  deleteStagingObject(input: {
-    readonly environment: WritingChartEnvironment;
-    readonly stagingKey: string;
-  }): Promise<void>;
-  deletePublishedObject(input: {
-    readonly environment: WritingChartEnvironment;
-    readonly publishedKey: string;
-  }): Promise<void>;
+  deleteStagingObject(
+    input: {
+      readonly environment: WritingChartEnvironment;
+      readonly stagingKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<void>;
+  deletePublishedObject(
+    input: {
+      readonly environment: WritingChartEnvironment;
+      readonly publishedKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<void>;
 }
 
 export interface WritingChartUploadGrant {

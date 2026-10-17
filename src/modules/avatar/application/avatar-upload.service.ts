@@ -113,6 +113,7 @@ export class AvatarUploadService {
   async completeUpload(input: {
     readonly userId: string;
     readonly assetId: string;
+    readonly signal?: AbortSignal;
   }): Promise<CompletedAvatar> {
     const completed = await this.recordUpload(input);
     return { ...this.published(completed.avatar), created: completed.created };
@@ -121,6 +122,7 @@ export class AvatarUploadService {
   private async recordUpload(input: {
     readonly userId: string;
     readonly assetId: string;
+    readonly signal?: AbortSignal;
   }): Promise<{ readonly avatar: Avatar; readonly created: boolean }> {
     if (!isAvatarAssetId(input.assetId)) {
       throw invalidRequest();
@@ -131,12 +133,16 @@ export class AvatarUploadService {
       return { avatar: previous, created: false };
     }
 
-    const avatar = await this.verifiedUpload(input.userId, input.assetId);
+    const avatar = await this.verifiedUpload(
+      input.userId,
+      input.assetId,
+      input.signal,
+    );
 
     if (previous === undefined) {
       const result = await this.avatars.record(avatar);
       if (result.kind === 'exists') {
-        await this.discard(avatar.objectKey);
+        await this.discard(avatar.objectKey, input.signal);
         throw avatarChanged();
       }
       return { avatar: result.avatar, created: result.kind === 'recorded' };
@@ -144,7 +150,7 @@ export class AvatarUploadService {
 
     // Deleted before the record stops naming it: if this fails, nothing has
     // changed, and retrying the completion retries the delete.
-    await this.storage.deleteObject(previous.objectKey);
+    await this.storage.deleteObject(previous.objectKey, input.signal);
     if (await this.avatars.replace(previous.assetId, avatar)) {
       return { avatar, created: true };
     }
@@ -155,18 +161,18 @@ export class AvatarUploadService {
     if (current?.assetId === input.assetId) {
       return { avatar: current, created: false };
     }
-    await this.discard(avatar.objectKey);
+    await this.discard(avatar.objectKey, input.signal);
     throw avatarChanged();
   }
 
-  async removeAvatar(userId: string): Promise<void> {
+  async removeAvatar(userId: string, signal?: AbortSignal): Promise<void> {
     const current = await this.avatars.findByUser(userId);
     if (current === undefined) {
       return;
     }
 
     // The object goes first: a failed delete leaves the Avatar as it was.
-    await this.storage.deleteObject(current.objectKey);
+    await this.storage.deleteObject(current.objectKey, signal);
     if (await this.avatars.remove(userId, current.assetId)) {
       return;
     }
@@ -186,9 +192,10 @@ export class AvatarUploadService {
   private async verifiedUpload(
     userId: string,
     assetId: string,
+    signal?: AbortSignal,
   ): Promise<Avatar> {
     const objectKey = avatarObjectKey(userId, assetId);
-    const stored = await this.storage.describeObject(objectKey);
+    const stored = await this.storage.describeObject(objectKey, signal);
     if (stored === undefined) {
       throw uploadNotFound();
     }
@@ -201,7 +208,7 @@ export class AvatarUploadService {
         ? undefined
         : this.now().getTime() - stored.lastModified.getTime();
     if (age === undefined || age > AVATAR_COMPLETION_WINDOW_MS) {
-      await this.discard(objectKey);
+      await this.discard(objectKey, signal);
       throw uploadNotFound();
     }
 
@@ -209,7 +216,7 @@ export class AvatarUploadService {
     // enforce the signed headers, and this is the check that holds either way.
     const { contentType, byteSize } = stored;
     if (byteSize !== undefined && byteSize > AVATAR_MAX_BYTES) {
-      await this.discard(objectKey);
+      await this.discard(objectKey, signal);
       throw payloadTooLarge();
     }
     if (
@@ -217,7 +224,7 @@ export class AvatarUploadService {
       byteSize === undefined ||
       byteSize < 1
     ) {
-      await this.discard(objectKey);
+      await this.discard(objectKey, signal);
       throw invalidRequest();
     }
 
@@ -232,7 +239,10 @@ export class AvatarUploadService {
   }
 
   /** Best-effort: a failed delete never changes why the upload was refused. */
-  private async discard(objectKey: string): Promise<void> {
-    await this.storage.deleteObject(objectKey).catch(() => undefined);
+  private async discard(
+    objectKey: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.storage.deleteObject(objectKey, signal).catch(() => undefined);
   }
 }

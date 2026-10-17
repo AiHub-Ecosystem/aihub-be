@@ -47,6 +47,7 @@ export async function runAvatarSweepCommand(
     const secretProvider = createCliRuntimeSecretProvider();
     storage = new S3AvatarStorage(
       createSeaweedFsS3Client({
+        workload: 'operator',
         endpoint: process.env.SEAWEEDFS_ENDPOINT_URL,
         region: process.env.SEAWEEDFS_REGION,
         credentials: secretProvider.getSnapshot().seaweedfs,

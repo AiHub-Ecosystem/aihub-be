@@ -240,11 +240,14 @@ export class WritingChartUploadService
         throw uploadNotFound();
       }
 
-      const stored = await this.storage.inspectObject({
-        environment: found.intent.environment,
-        stagingKey: found.intent.stagingKey,
-        byteSize: found.intent.byteSize,
-      });
+      const stored = await this.storage.inspectObject(
+        {
+          environment: found.intent.environment,
+          stagingKey: found.intent.stagingKey,
+          byteSize: found.intent.byteSize,
+        },
+        input.context.signal,
+      );
       if (stored === undefined) throw uploadNotFound();
       const refusal = invalidStoredObject(stored, found.intent);
       const sanitized =
@@ -261,10 +264,13 @@ export class WritingChartUploadService
       if (refusal !== undefined || sanitizedBytes === undefined) {
         await this.repository.rejectIntent(owner, this.now());
         try {
-          await this.storage.deleteStagingObject({
-            environment: found.intent.environment,
-            stagingKey: found.intent.stagingKey,
-          });
+          await this.storage.deleteStagingObject(
+            {
+              environment: found.intent.environment,
+              stagingKey: found.intent.stagingKey,
+            },
+            input.context.signal,
+          );
         } catch {
           // The expiration sweep retries a failed staging deletion.
         }
@@ -293,13 +299,16 @@ export class WritingChartUploadService
       if (reservation !== 'started') throw uploadNotFound();
 
       try {
-        await this.storage.publishObject({
-          environment: found.intent.environment,
-          stagingKey: found.intent.stagingKey,
-          publishedKey: found.intent.publishedKey,
-          contentType: found.intent.contentType,
-          bytes: sanitizedBytes,
-        });
+        await this.storage.publishObject(
+          {
+            environment: found.intent.environment,
+            stagingKey: found.intent.stagingKey,
+            publishedKey: found.intent.publishedKey,
+            contentType: found.intent.contentType,
+            bytes: sanitizedBytes,
+          },
+          input.context.signal,
+        );
       } catch (error) {
         await this.repository.releasePublication(owner);
         throw error;
@@ -312,10 +321,13 @@ export class WritingChartUploadService
       });
       if (asset === undefined) throw storageUnavailable();
       try {
-        await this.storage.deleteStagingObject({
-          environment: found.intent.environment,
-          stagingKey: found.intent.stagingKey,
-        });
+        await this.storage.deleteStagingObject(
+          {
+            environment: found.intent.environment,
+            stagingKey: found.intent.stagingKey,
+          },
+          input.context.signal,
+        );
       } catch {
         // The retention sweep retries staging deletion while the public asset lives.
       }

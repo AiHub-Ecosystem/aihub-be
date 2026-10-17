@@ -14,6 +14,42 @@ export const METRICS_ROUTE_PATH = '/metrics';
 
 const registry = new Registry();
 
+let objectStorageQueueSource: (() => number) | undefined;
+
+const objectStorageFailures = new Counter({
+  name: 'aihub_object_storage_failures_total',
+  help: 'S3 call failures by bounded failure reason, without object or credential labels.',
+  labelNames: ['reason'],
+  registers: [registry],
+});
+
+export type ObjectStorageFailureReason =
+  | 'deadline'
+  | 'cancelled'
+  | 'connection_refused'
+  | 'connection_timeout'
+  | 'request_timeout'
+  | 'unavailable';
+
+export function recordObjectStorageFailure(
+  reason: ObjectStorageFailureReason,
+): void {
+  objectStorageFailures.inc({ reason });
+}
+
+new Gauge({
+  name: 'aihub_object_storage_queued_requests',
+  help: 'S3 requests waiting for a socket in this process.',
+  registers: [registry],
+  collect() {
+    this.set(objectStorageQueueSource?.() ?? 0);
+  },
+});
+
+export function setObjectStorageQueueSource(source: () => number): void {
+  objectStorageQueueSource = source;
+}
+
 const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
 eventLoopDelay.enable();
 

@@ -8,6 +8,10 @@ import {
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 
 import { AppError } from '@/common/errors/app-error';
+import {
+  objectStorageSignal,
+  objectStorageUnavailable,
+} from '@/modules/secrets/public/object-storage';
 import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/application/writing-chart-upload.policy';
 import type { WritingChartUploadStoragePort } from '@/modules/writing/application/writing-chart-upload.port';
 import {
@@ -29,13 +33,13 @@ export interface S3WritingChartUploadStorageOptions {
   readonly client?: S3ClientPort;
 }
 
-function storageUnavailable(cause?: unknown): AppError {
-  return new AppError({
-    code: 'WRITING_CHART_STORAGE_UNAVAILABLE',
-    message: 'Writing chart storage is unavailable',
-    retryable: true,
-    ...(cause === undefined ? {} : { cause }),
-  });
+function storageUnavailable(cause?: unknown, signal?: AbortSignal): AppError {
+  return objectStorageUnavailable(
+    'WRITING_CHART_STORAGE_UNAVAILABLE',
+    'Writing chart storage is unavailable',
+    cause,
+    signal,
+  );
 }
 
 function isNotFound(error: unknown): boolean {
@@ -146,11 +150,14 @@ export class S3WritingChartUploadStorage
     }
   }
 
-  async inspectObject(input: {
-    readonly environment: WritingChartEnvironment;
-    readonly stagingKey: string;
-    readonly byteSize: number;
-  }) {
+  async inspectObject(
+    input: {
+      readonly environment: WritingChartEnvironment;
+      readonly stagingKey: string;
+      readonly byteSize: number;
+    },
+    signal = objectStorageSignal(),
+  ) {
     const { client, bucket } = this.require(
       input.environment,
       input.stagingKey,
@@ -159,6 +166,7 @@ export class S3WritingChartUploadStorage
     try {
       const head = await client.send(
         new HeadObjectCommand({ Bucket: bucket, Key: input.stagingKey }),
+        { abortSignal: signal },
       );
       if (
         head.ContentLength === undefined ||
@@ -180,6 +188,7 @@ export class S3WritingChartUploadStorage
         input.stagingKey,
         size,
         head.ETag,
+        signal,
       );
       return {
         contentType: head.ContentType,
@@ -188,17 +197,20 @@ export class S3WritingChartUploadStorage
       };
     } catch (error) {
       if (isNotFound(error)) return undefined;
-      throw storageUnavailable(error);
+      throw storageUnavailable(error, signal);
     }
   }
 
-  async publishObject(input: {
-    readonly environment: WritingChartEnvironment;
-    readonly stagingKey: string;
-    readonly publishedKey: string;
-    readonly contentType: WritingChartContentType;
-    readonly bytes: Uint8Array;
-  }): Promise<void> {
+  async publishObject(
+    input: {
+      readonly environment: WritingChartEnvironment;
+      readonly stagingKey: string;
+      readonly publishedKey: string;
+      readonly contentType: WritingChartContentType;
+      readonly bytes: Uint8Array;
+    },
+    signal = objectStorageSignal(),
+  ): Promise<void> {
     this.require(input.environment, input.stagingKey, 'staging');
     const target = this.require(
       input.environment,
@@ -216,9 +228,10 @@ export class S3WritingChartUploadStorage
           ContentDisposition: 'inline',
           CacheControl: 'public, max-age=300, must-revalidate',
         }),
+        { abortSignal: signal },
       );
     } catch (error) {
-      throw storageUnavailable(error);
+      throw storageUnavailable(error, signal);
     }
   }
 
@@ -236,39 +249,48 @@ export class S3WritingChartUploadStorage
     return new URL(`${bucket}/${input.publishedKey}`, publicBaseUrl).href;
   }
 
-  async deleteStagingObject(input: {
-    readonly environment: WritingChartEnvironment;
-    readonly stagingKey: string;
-  }): Promise<void> {
+  async deleteStagingObject(
+    input: {
+      readonly environment: WritingChartEnvironment;
+      readonly stagingKey: string;
+    },
+    signal = objectStorageSignal(),
+  ): Promise<void> {
     const { client, bucket } = this.require(
       input.environment,
       input.stagingKey,
       'staging',
     );
-    await this.delete(client, bucket, input.stagingKey);
+    await this.delete(client, bucket, input.stagingKey, signal);
   }
 
-  async deletePublishedObject(input: {
-    readonly environment: WritingChartEnvironment;
-    readonly publishedKey: string;
-  }): Promise<void> {
+  async deletePublishedObject(
+    input: {
+      readonly environment: WritingChartEnvironment;
+      readonly publishedKey: string;
+    },
+    signal = objectStorageSignal(),
+  ): Promise<void> {
     const { client, bucket } = this.require(
       input.environment,
       input.publishedKey,
       'published',
     );
-    await this.delete(client, bucket, input.publishedKey);
+    await this.delete(client, bucket, input.publishedKey, signal);
   }
 
   private async delete(
     client: S3ClientPort,
     bucket: string,
     key: string,
+    signal: AbortSignal,
   ): Promise<void> {
     try {
-      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }), {
+        abortSignal: signal,
+      });
     } catch (error) {
-      if (!isNotFound(error)) throw storageUnavailable(error);
+      if (!isNotFound(error)) throw storageUnavailable(error, signal);
     }
   }
 
@@ -278,6 +300,7 @@ export class S3WritingChartUploadStorage
     key: string,
     size: number,
     etag: string,
+    signal: AbortSignal,
   ): Promise<Uint8Array> {
     const response = await client.send(
       new GetObjectCommand({
@@ -286,6 +309,7 @@ export class S3WritingChartUploadStorage
         Range: `bytes=0-${size - 1}`,
         IfMatch: etag,
       }),
+      { abortSignal: signal },
     );
     if (
       response.ContentRange !== `bytes 0-${size - 1}/${size}` ||

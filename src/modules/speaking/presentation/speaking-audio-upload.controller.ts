@@ -15,6 +15,7 @@ import type { FastifyReply } from 'fastify';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import { parseRequestBody } from '@/common/http/parse-request-body';
+import { getRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import {
   type CreateSpeakingAudioUploadRequest,
@@ -42,10 +43,12 @@ function requestContext(request: AuthenticatedRequest) {
     throw invalidRequest();
   }
 
+  const lifecycle = getRequestLifecycle(request.raw);
   return createRequestContext({
     requestId: String(request.id),
-    receivedAt: new Date(),
-    deadlineMs: 10_000,
+    receivedAt: lifecycle?.receivedAt ?? new Date(),
+    ...(lifecycle === undefined ? {} : { signal: lifecycle.signal }),
+    deadlineMs: PUBLIC_ROUTES['speaking.audioUploads.complete'].timeoutMs,
     organizationId: authenticated.organizationId,
     apiKeyId: authenticated.apiKeyId,
     environment: authenticated.environment,

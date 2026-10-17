@@ -16,6 +16,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { AppError } from '@/common/errors/app-error';
 import { parseRequestBody } from '@/common/http/parse-request-body';
+import { getRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import {
   type AvatarResponse,
   type AvatarUploadResponse,
@@ -107,7 +108,15 @@ export class AvatarController {
   ): Promise<AvatarResponse> {
     const { userId, requestId } = authenticatedUser(request);
 
-    const completed = await this.uploads.completeUpload({ userId, assetId });
+    const completed = await this.uploads.completeUpload({
+      userId,
+      assetId,
+      signal:
+        getRequestLifecycle(request.raw)?.signal ??
+        AbortSignal.timeout(
+          PUBLIC_ROUTES['me.avatar.uploads.complete'].timeoutMs,
+        ),
+    });
 
     reply.status(
       completed.created
@@ -134,6 +143,10 @@ export class AvatarController {
   @HttpCode(PUBLIC_ROUTES['me.avatar.remove'].successStatus)
   async removeAvatar(@Req() request: FastifyRequest): Promise<void> {
     const { userId } = authenticatedUser(request);
-    await this.uploads.removeAvatar(userId);
+    await this.uploads.removeAvatar(
+      userId,
+      getRequestLifecycle(request.raw)?.signal ??
+        AbortSignal.timeout(PUBLIC_ROUTES['me.avatar.remove'].timeoutMs),
+    );
   }
 }

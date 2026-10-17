@@ -21,6 +21,10 @@ import {
   AVATAR_UPLOAD_URL_TTL_SECONDS,
   type AvatarContentType,
 } from '@/modules/avatar/domain/avatar';
+import {
+  objectStorageSignal,
+  objectStorageUnavailable,
+} from '@/modules/secrets/public/object-storage';
 const DEFAULT_ORIGIN = new URL(DEFAULT_SEAWEEDFS_ENDPOINT).origin;
 
 export interface AvatarStorageOptions {
@@ -30,13 +34,13 @@ export interface AvatarStorageOptions {
   readonly client?: Pick<S3Client, 'send'>;
 }
 
-function storageUnavailable(cause?: unknown): AppError {
-  return new AppError({
-    code: 'AVATAR_STORAGE_UNAVAILABLE',
-    message: 'Avatar storage is unavailable',
-    retryable: true,
-    ...(cause === undefined ? {} : { cause }),
-  });
+function storageUnavailable(cause?: unknown, signal?: AbortSignal): AppError {
+  return objectStorageUnavailable(
+    'AVATAR_STORAGE_UNAVAILABLE',
+    'Avatar storage is unavailable',
+    cause,
+    signal,
+  );
 }
 
 function validObjectKey(objectKey: string): boolean {
@@ -139,11 +143,13 @@ export class S3AvatarStorage implements AvatarStoragePort {
 
   async describeObject(
     objectKey: string,
+    signal = objectStorageSignal(),
   ): Promise<StoredAvatarObject | undefined> {
     const { client, bucket } = this.require(objectKey);
     try {
       const head = await client.send(
         new HeadObjectCommand({ Bucket: bucket, Key: objectKey }),
+        { abortSignal: signal },
       );
       return {
         contentType: head.ContentType,
@@ -154,18 +160,22 @@ export class S3AvatarStorage implements AvatarStoragePort {
       if (isNotFound(error)) {
         return undefined;
       }
-      throw storageUnavailable(error);
+      throw storageUnavailable(error, signal);
     }
   }
 
-  async deleteObject(objectKey: string): Promise<void> {
+  async deleteObject(
+    objectKey: string,
+    signal = objectStorageSignal(),
+  ): Promise<void> {
     const { client, bucket } = this.require(objectKey);
     try {
       await client.send(
         new DeleteObjectCommand({ Bucket: bucket, Key: objectKey }),
+        { abortSignal: signal },
       );
     } catch (error) {
-      throw storageUnavailable(error);
+      throw storageUnavailable(error, signal);
     }
   }
 
@@ -177,6 +187,7 @@ export class S3AvatarStorage implements AvatarStoragePort {
 
     let continuationToken: string | undefined;
     do {
+      const signal = objectStorageSignal();
       let page: ListObjectsV2CommandOutput;
       try {
         page = await client.send(
@@ -187,9 +198,10 @@ export class S3AvatarStorage implements AvatarStoragePort {
               ? {}
               : { ContinuationToken: continuationToken }),
           }),
+          { abortSignal: signal },
         );
       } catch (error) {
-        throw storageUnavailable(error);
+        throw storageUnavailable(error, signal);
       }
       for (const object of page.Contents ?? []) {
         if (object.Key !== undefined) {

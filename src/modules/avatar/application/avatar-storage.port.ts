@@ -37,8 +37,11 @@ export interface AvatarStoragePort {
    */
   publicUrl(objectKey: string): string;
   /** `undefined` when no object exists at the key. */
-  describeObject(objectKey: string): Promise<StoredAvatarObject | undefined>;
-  deleteObject(objectKey: string): Promise<void>;
+  describeObject(
+    objectKey: string,
+    signal?: AbortSignal,
+  ): Promise<StoredAvatarObject | undefined>;
+  deleteObject(objectKey: string, signal?: AbortSignal): Promise<void>;
   /** Every object under the prefix, across however many pages storage needs. */
   listObjects(prefix: string): AsyncIterable<ListedAvatarObject>;
 }

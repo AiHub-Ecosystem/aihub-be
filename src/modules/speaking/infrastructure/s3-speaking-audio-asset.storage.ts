@@ -7,6 +7,10 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 import { AppError } from '@/common/errors/app-error';
+import {
+  objectStorageSignal,
+  objectStorageUnavailable,
+} from '@/modules/secrets/public/object-storage';
 import type { SpeakingAudioAssetStoragePort } from '@/modules/speaking/application/speaking-audio-upload.port';
 import {
   SPEAKING_AUDIO_BUCKETS,
@@ -22,13 +26,13 @@ export interface SpeakingAudioAssetStorageOptions {
   readonly client?: Pick<S3Client, 'send'>;
 }
 
-function storageUnavailable(cause?: unknown): AppError {
-  return new AppError({
-    code: 'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
-    message: 'Speaking audio storage is unavailable',
-    retryable: true,
-    ...(cause === undefined ? {} : { cause }),
-  });
+function storageUnavailable(cause?: unknown, signal?: AbortSignal): AppError {
+  return objectStorageUnavailable(
+    'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+    'Speaking audio storage is unavailable',
+    cause,
+    signal,
+  );
 }
 
 function isNotFound(error: unknown): boolean {
@@ -112,10 +116,13 @@ export class S3SpeakingAudioAssetStorage
     }
   }
 
-  async describeObject(input: {
-    readonly environment: SpeakingAudioEnvironment;
-    readonly objectKey: string;
-  }): Promise<
+  async describeObject(
+    input: {
+      readonly environment: SpeakingAudioEnvironment;
+      readonly objectKey: string;
+    },
+    signal = objectStorageSignal(),
+  ): Promise<
     | {
         readonly contentType: string | undefined;
         readonly byteSize: number | undefined;
@@ -126,6 +133,7 @@ export class S3SpeakingAudioAssetStorage
     try {
       const head = await client.send(
         new HeadObjectCommand({ Bucket: bucket, Key: input.objectKey }),
+        { abortSignal: signal },
       );
       return {
         contentType: head.ContentType,
@@ -135,24 +143,28 @@ export class S3SpeakingAudioAssetStorage
       if (isNotFound(error)) {
         return undefined;
       }
-      throw storageUnavailable(error);
+      throw storageUnavailable(error, signal);
     }
   }
 
-  async deleteObject(input: {
-    readonly environment: SpeakingAudioEnvironment;
-    readonly objectKey: string;
-  }): Promise<void> {
+  async deleteObject(
+    input: {
+      readonly environment: SpeakingAudioEnvironment;
+      readonly objectKey: string;
+    },
+    signal = objectStorageSignal(),
+  ): Promise<void> {
     const { client, bucket } = this.require(input.environment, input.objectKey);
     try {
       await client.send(
         new DeleteObjectCommand({ Bucket: bucket, Key: input.objectKey }),
+        { abortSignal: signal },
       );
     } catch (error) {
       if (isNotFound(error)) {
         return;
       }
-      throw storageUnavailable(error);
+      throw storageUnavailable(error, signal);
     }
   }
 

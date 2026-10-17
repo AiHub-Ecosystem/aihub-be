@@ -12,6 +12,7 @@ import {
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { parseRequestBody } from '@/common/http/parse-request-body';
+import { getRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import {
   type CreateWritingChartUploadRequest,
@@ -38,10 +39,12 @@ function requestContext(request: AuthenticatedRequest) {
   if (authenticated === undefined || identity === undefined) {
     throw new Error('writing chart upload identity is missing');
   }
+  const lifecycle = getRequestLifecycle(request.raw);
   return createRequestContext({
     requestId: String(request.id),
-    receivedAt: new Date(),
-    deadlineMs: 10_000,
+    receivedAt: lifecycle?.receivedAt ?? new Date(),
+    ...(lifecycle === undefined ? {} : { signal: lifecycle.signal }),
+    deadlineMs: PUBLIC_ROUTES['writing.chartUploads.complete'].timeoutMs,
     organizationId: authenticated.organizationId,
     apiKeyId: authenticated.apiKeyId,
     environment: authenticated.environment,

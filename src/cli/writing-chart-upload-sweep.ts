@@ -48,6 +48,7 @@ export async function runWritingChartUploadSweepCommand(
         : 'production';
     storage = new S3WritingChartUploadStorage(
       createSeaweedFsS3Client({
+        workload: 'operator',
         endpoint: process.env.SEAWEEDFS_ENDPOINT_URL,
         region: process.env.SEAWEEDFS_REGION,
         credentials: secretProvider.getSnapshot().seaweedfs,

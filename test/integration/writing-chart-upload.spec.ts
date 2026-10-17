@@ -10,6 +10,7 @@ import sharp from 'sharp';
 import { MockAgent } from 'undici';
 
 import { AppModule } from '@/app.module';
+import { AppError } from '@/common/errors/app-error';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { RATE_LIMITER } from '@/modules/gateway/application/rate-limiter.port';
@@ -216,9 +217,10 @@ class FakeStorage implements WritingChartUploadStoragePort {
     };
   }
 
-  async inspectObject(input: { readonly stagingKey: string }): ReturnType<
-    WritingChartUploadStoragePort['inspectObject']
-  > {
+  async inspectObject(
+    input: { readonly stagingKey: string },
+    _signal?: AbortSignal,
+  ): ReturnType<WritingChartUploadStoragePort['inspectObject']> {
     this.activeInspections += 1;
     this.maxConcurrentInspections = Math.max(
       this.maxConcurrentInspections,
@@ -401,6 +403,45 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
     expect(noIdentity.statusCode).toBe(401);
     expect(repository.rows.size).toBe(0);
     expect(storage.uploads).toEqual([]);
+  });
+
+  it('keeps the intent open when the request deadline interrupts storage verification', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/chart-uploads',
+      headers: headers(),
+      payload: { content_type: 'image/png', byte_size: chartBytes().byteSize },
+    });
+    const assetId = String(created.json().data.asset_id);
+    const timeout = jest
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(
+        AbortSignal.abort(new DOMException('expired', 'TimeoutError')),
+      );
+    const inspect = jest
+      .spyOn(storage, 'inspectObject')
+      .mockImplementation(async (_input, signal) => {
+        if (signal?.aborted)
+          throw new AppError({
+            code: 'WRITING_CHART_STORAGE_UNAVAILABLE',
+            message: 'Storage unavailable',
+            retryable: true,
+          });
+        throw new Error('caller deadline did not reach storage');
+      });
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/v1/ielts/writing/task1/chart-uploads/${assetId}/complete`,
+        headers: headers(),
+      });
+      expect(response.statusCode).toBe(503);
+      expect(repository.rows.get(assetId)?.status).toBe('open');
+      expect(storage.published).toEqual([]);
+    } finally {
+      timeout.mockRestore();
+      inspect.mockRestore();
+    }
   });
 
   it('creates, privately uploads, verifies, publishes, and grades using the returned URL', async () => {
