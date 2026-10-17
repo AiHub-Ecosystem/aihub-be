@@ -16,6 +16,8 @@ const EMAIL = 'person@example.com';
 const NOW = new Date(59_000);
 const RFC_TOTP_SECRET = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
 const FACTOR_ID = 'mfa_01J00000000000000000000000';
+const OTHER_USER_ID = 'usr_01J00000000000000000000001';
+const OTHER_EMAIL = 'other@example.com';
 
 class FakeClock {
   now(): Date {
@@ -241,5 +243,89 @@ describe('AuthMfaService', () => {
     expect(state.emailDeliveryRequests[0]?.kind).toBe(
       'mfa_removed_notification',
     );
+  });
+
+  describe('when the password proves another account', () => {
+    // The account's email is read, then the password is checked against the
+    // account that email signs in to. If the address moved to someone else in
+    // between, a correct password proves that other account, not this one.
+    function reassignedHarness() {
+      const built = harness();
+      seedAccount(built.state, {
+        userId: OTHER_USER_ID,
+        email: OTHER_EMAIL,
+        passwordHash: 'hash:other password',
+      });
+      const accounts = new InMemoryUserAccountAdapter(built.state);
+      jest.spyOn(accounts, 'findLoginIdentityByUserId').mockResolvedValue({
+        userId: USER_ID,
+        email: OTHER_EMAIL,
+        passwordHash: 'hash:correct password',
+        status: 'active',
+      });
+      const service = new AuthMfaService(
+        new InMemoryAuthMfaAdapter(built.state),
+        new FakeCipher(),
+        accounts,
+        new FakeHasher(),
+        built.limiter,
+        new FakeEmailCipher(),
+        prefixedIdGenerator('edr_'),
+        prefixedIdGenerator('mfa_'),
+        new FakeClock(),
+      );
+      return { ...built, service };
+    }
+
+    it('refuses to begin enrollment', async () => {
+      const { service, state } = reassignedHarness();
+
+      await expect(
+        service.beginEnrollment({
+          userId: USER_ID,
+          password: 'other password',
+          ip: '192.0.2.1',
+        }),
+      ).rejects.toMatchObject({ code: 'AUTH_CREDENTIALS_INVALID' });
+      expect(state.mfaFactors.size).toBe(0);
+    });
+
+    it('refuses to remove the factor', async () => {
+      const { service, state } = reassignedHarness();
+      state.mfaFactors.set(USER_ID, {
+        factorId: FACTOR_ID,
+        status: 'enabled',
+        email: EMAIL,
+        secret: new FakeCipher().encrypt(RFC_TOTP_SECRET).ciphertext,
+      });
+
+      await expect(
+        service.removeFactor({
+          userId: USER_ID,
+          proof: { password: 'other password' },
+          ip: '192.0.2.1',
+        }),
+      ).rejects.toMatchObject({ code: 'AUTH_CREDENTIALS_INVALID' });
+      expect(state.mfaFactors.has(USER_ID)).toBe(true);
+    });
+  });
+
+  it('refuses enrollment for an account that is no longer active', async () => {
+    const { service, state } = harness();
+    seedAccount(state, {
+      userId: USER_ID,
+      email: EMAIL,
+      passwordHash: 'hash:correct password',
+      status: 'disabled',
+    });
+
+    await expect(
+      service.beginEnrollment({
+        userId: USER_ID,
+        password: 'correct password',
+        ip: '192.0.2.1',
+      }),
+    ).rejects.toMatchObject({ code: 'AUTH_CREDENTIALS_INVALID' });
+    expect(state.mfaFactors.size).toBe(0);
   });
 });

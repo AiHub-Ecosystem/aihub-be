@@ -135,6 +135,13 @@ async function token(
   return builder.sign(privateKey as never);
 }
 
+/** A compact JWS whose header is checked before any key or signature is. */
+function unsignedAssertion(header: Record<string, unknown>): string {
+  const part = (value: unknown) =>
+    Buffer.from(JSON.stringify(value)).toString('base64url');
+  return `${part(header)}.${part({})}.c2ln`;
+}
+
 function verifier(
   provider: JwksKeyProviderPort,
   activeConfig: OrganizationIdentityConfig = {
@@ -295,6 +302,81 @@ describe('UserAssertionVerifier', () => {
     ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
     expect(provider.calls).toEqual([]);
   });
+
+  it.each([
+    ['an alg other than the token', { alg: 'ES256' }],
+    ['a use other than sig', { use: 'enc' }],
+    ['key_ops without verify', { key_ops: ['encrypt'] }],
+  ])(
+    'refuses a correctly signed assertion whose only key has %s',
+    async (_name, override) => {
+      const fixture = await rsaFixture();
+      const assertion = await token(fixture.privateKey, { jti: 'jti-1' });
+      const [key] = fixture.jwks.keys;
+
+      await expect(
+        verifier(
+          new FakeKeyProvider({ keys: [{ ...key, ...override }] }),
+        ).verify({ signedAssertion: assertion, organizationId: 'org_acme' }),
+      ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
+    },
+  );
+
+  it('accepts a key that names sig and verify explicitly', async () => {
+    const fixture = await rsaFixture();
+    const assertion = await token(fixture.privateKey, { jti: 'jti-1' });
+    const [key] = fixture.jwks.keys;
+
+    await expect(
+      verifier(
+        new FakeKeyProvider({
+          keys: [{ ...key, use: 'sig', key_ops: ['verify'] }],
+        }),
+      ).verify({ signedAssertion: assertion, organizationId: 'org_acme' }),
+    ).resolves.toMatchObject({ userId: 'user_123' });
+  });
+
+  it('never hands an RSA key to an ES256 verification', async () => {
+    const fixture = await rsaFixture();
+    const crypto = new TestUserAssertionCrypto();
+    const verify = jest.spyOn(crypto, 'verify');
+    const subject = new UserAssertionVerifier(
+      new FakeKeyProvider(fixture.jwks, fixture.jwks),
+      crypto,
+      () => NOW,
+    );
+
+    await expect(
+      subject.verify({
+        signedAssertion: unsignedAssertion({ alg: 'ES256', kid: 'rsa-1' }),
+        organizationId: 'org_acme',
+        config: { ...config, allowedAlgorithms: ['RS256', 'ES256'] },
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
+    expect(verify).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['an empty kid', unsignedAssertion({ alg: 'RS256', kid: '' })],
+    ['a numeric kid', unsignedAssertion({ alg: 'RS256', kid: 1 })],
+    [
+      'more than 32 KiB',
+      unsignedAssertion({ alg: 'RS256', pad: 'x'.repeat(32 * 1024) }),
+    ],
+  ])(
+    'refuses an assertion with %s before loading keys',
+    async (_name, signedAssertion) => {
+      const provider = new FakeKeyProvider({ keys: [] });
+
+      await expect(
+        verifier(provider).verify({
+          signedAssertion,
+          organizationId: 'org_acme',
+        }),
+      ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
+      expect(provider.calls).toEqual([]);
+    },
+  );
 
   it.each([
     ['an internal space', 'user 123'],

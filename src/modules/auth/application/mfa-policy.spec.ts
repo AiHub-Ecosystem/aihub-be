@@ -16,6 +16,21 @@ describe('MFA policy', () => {
     expect(generateTotpSecret()).toMatch(/^[A-Z2-7]{32}$/u);
   });
 
+  it.each([' 287082', '287082 ', '0287082', '28708'])(
+    'refuses %j, which is not exactly six digits',
+    (code) => {
+      expect(
+        verifyTotp('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', code, new Date(59_000)),
+      ).toBe(false);
+    },
+  );
+
+  it('fails loudly on a stored secret that is not base32 rather than answering false', () => {
+    expect(() =>
+      verifyTotp('gezdgnbv-not-base32', '287082', new Date(59_000)),
+    ).toThrow('TOTP secret is invalid');
+  });
+
   it('generates independent one-time recovery code values and hashes them normalized', () => {
     const codes = generateMfaRecoveryCodes();
     expect(codes).toHaveLength(8);
