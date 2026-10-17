@@ -18,10 +18,15 @@ export const CONTROL_PLANE_READ_PRISMA_CLIENT = Symbol(
 );
 
 export interface PrismaPool {
+  readonly totalCount: number;
+  readonly idleCount: number;
   readonly options: {
     readonly max?: number | null | undefined;
     readonly connectionTimeoutMillis?: number | null | undefined;
     readonly idleTimeoutMillis?: number | null | undefined;
+    readonly statement_timeout?: false | number | undefined;
+    readonly lock_timeout?: number | undefined;
+    readonly idle_in_transaction_session_timeout?: number | undefined;
   };
   query(config: {
     readonly text: string;

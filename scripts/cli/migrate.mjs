@@ -48,7 +48,14 @@ async function pendingMigrations(pool) {
   return migrations.filter(({ filename }) => !appliedNames.has(filename));
 }
 
-const pool = new Pool({ connectionString: databaseUrl });
+const pool = new Pool({
+  connectionString: databaseUrl,
+  connectionTimeoutMillis: 1_000,
+  idleTimeoutMillis: 30_000,
+  statement_timeout: 300_000,
+  lock_timeout: 30_000,
+  idle_in_transaction_session_timeout: 60_000,
+});
 
 try {
   // Bootstraps itself rather than living as migration 0001, so a fresh

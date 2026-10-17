@@ -5,7 +5,10 @@ export async function createOperatorWritingChartClient(databaseUrl: string) {
       '@/modules/writing/infrastructure/postgres-writing-chart-upload.repository'
     ),
   ]);
-  const holder = prismaModule.createPrismaClient('runtime', databaseUrl);
+  const holder = prismaModule.createOperatorPrismaClient(
+    'runtime',
+    databaseUrl,
+  );
   return Object.assign(
     new repositoryModule.PostgresWritingChartUploadRepository(holder.prisma),
     { close: () => holder.close() },

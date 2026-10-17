@@ -86,6 +86,27 @@ the server-side statement and lock timeouts #383 plans.
 its own pool against a default host, which surfaces as `ECONNREFUSED` rather
 than as a configuration error.
 
+### Request and operator timeouts (#383; 2026-10-17)
+
+The shared request pools set `statement_timeout` to 4 seconds, `lock_timeout`
+to 1 second, and `idle_in_transaction_session_timeout` to 10 seconds. The
+control-plane management context has a 5-second request deadline, and its
+interactive transaction has `maxWait: 1_000` and `timeout: 5_000`; a 4-second
+statement cap leaves one second for rollback and connection release, while the
+one-second lock cap prevents a blocked statement from consuming that budget.
+The 10-second idle-transaction cap is twice the interactive transaction limit,
+so it catches a transaction abandoned outside the normal runner without
+terminating a bounded transaction. These values are applied once by the shared
+pool factory. `#588` separately owns reserving admission capacity.
+
+Operator work uses a separate explicit profile: 5-minute statements,
+30-second lock waits, and 60-second idle transactions. The Prisma-backed
+operator factory and raw `pg` CLI and migration pools set that profile so
+cleanup, reconciliation, and migration commands do not inherit request limits.
+PostgreSQL statement and lock timeout errors map to retryable
+`DATABASE_UNAVAILABLE` responses; the structured log records only the timeout
+kind and never the SQL or its parameters.
+
 ## Benchmark
 
 Run `pnpm build`, set `DB_LANE_ADMIN_URL` to the disposable PostgreSQL admin

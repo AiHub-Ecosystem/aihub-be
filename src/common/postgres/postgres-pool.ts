@@ -13,6 +13,23 @@ const logger = new Logger('PostgresPool');
 const pools = new Map<PostgresPoolName, Set<Pool>>();
 const rolesByPool = new WeakMap<Pool, readonly PostgresConnectionRole[]>();
 
+export type PostgresTimeouts = Pick<
+  PoolConfig,
+  'statement_timeout' | 'lock_timeout' | 'idle_in_transaction_session_timeout'
+>;
+
+export const REQUEST_POSTGRES_TIMEOUTS = {
+  statement_timeout: 4_000,
+  lock_timeout: 1_000,
+  idle_in_transaction_session_timeout: 10_000,
+} as const satisfies PostgresTimeouts;
+
+export const OPERATOR_POSTGRES_TIMEOUTS = {
+  statement_timeout: 300_000,
+  lock_timeout: 30_000,
+  idle_in_transaction_session_timeout: 60_000,
+} as const satisfies PostgresTimeouts;
+
 setPostgresPoolStatsSource(() => {
   const samples: PostgresPoolStatsSample[] = [];
   for (const [name, registeredPools] of pools) {
@@ -95,12 +112,14 @@ export function createPostgresPool(
 export function postgresPoolOptions(
   databaseUrl: string,
   max: number,
+  timeouts: PostgresTimeouts = REQUEST_POSTGRES_TIMEOUTS,
 ): PoolConfig {
   return {
     connectionString: databaseUrl,
     max,
     connectionTimeoutMillis: 1_000,
     idleTimeoutMillis: 30_000,
+    ...timeouts,
   };
 }
 

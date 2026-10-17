@@ -1,4 +1,8 @@
-import { createPrismaClient, createSharedPrismaClients } from './prisma-client';
+import {
+  createOperatorPrismaClient,
+  createPrismaClient,
+  createSharedPrismaClients,
+} from './prisma-client';
 
 describe('createSharedPrismaClients', () => {
   const equal = 'postgres://shared';
@@ -65,6 +69,30 @@ describe('createSharedPrismaClients', () => {
     await clients.close();
   });
 
+  it('sets server-side timeouts on every shared pool', async () => {
+    const clients = createSharedPrismaClients({
+      databaseUrl: 'postgres://runtime',
+      controlPlaneDatabaseUrl: 'postgres://control-plane',
+      controlPlaneReadDatabaseUrl: 'postgres://control-plane-read',
+    });
+
+    try {
+      for (const holder of [
+        clients.runtime,
+        clients.controlPlane,
+        clients.controlPlaneRead,
+      ]) {
+        expect(holder.pool.options.statement_timeout).toBe(4_000);
+        expect(holder.pool.options.lock_timeout).toBe(1_000);
+        expect(holder.pool.options.idle_in_transaction_session_timeout).toBe(
+          10_000,
+        );
+      }
+    } finally {
+      await clients.close();
+    }
+  });
+
   it('checks the shared pool with the supplied timeout', async () => {
     const clients = createSharedPrismaClients({
       databaseUrl: equal,
@@ -116,6 +144,22 @@ describe('createPrismaClient', () => {
 
     try {
       expect(() => client.pool).toThrow('PostgreSQL is not configured');
+    } finally {
+      await client.close();
+    }
+  });
+});
+
+describe('createOperatorPrismaClient', () => {
+  it('uses long-running limits instead of the request-path pool limits', async () => {
+    const client = createOperatorPrismaClient('runtime', 'postgres://operator');
+
+    try {
+      expect(client.pool.options.statement_timeout).toBe(300_000);
+      expect(client.pool.options.lock_timeout).toBe(30_000);
+      expect(client.pool.options.idle_in_transaction_session_timeout).toBe(
+        60_000,
+      );
     } finally {
       await client.close();
     }

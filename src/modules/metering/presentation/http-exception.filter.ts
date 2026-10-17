@@ -4,6 +4,7 @@ import {
   type ExceptionFilter,
   HttpException,
   Inject,
+  Logger,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
@@ -19,6 +20,7 @@ import {
   markRequestAdmission,
   requestDurationMs,
 } from '@/common/http/request-timing.hook';
+import { postgresTimeoutKind } from '@/common/postgres/postgres-timeout-error';
 import { isRequestId } from '@/common/request-context/request-id';
 import { completeRequestMetering } from '@/modules/metering/application/metering-completion';
 import { getMeteringEvidence } from '@/modules/metering/application/metering-evidence';
@@ -61,6 +63,8 @@ function fromHttpException(status: number): FrameworkError {
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(HttpExceptionFilter.name);
+
   constructor(
     @Inject(METERING_FINALIZER)
     private readonly metering: MeteringFinalizerPort,
@@ -74,6 +78,21 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     // A refusal has no controller dispatch boundary; preserve an earlier mark.
     markRequestAdmission(request.raw);
+
+    const postgresTimeout = postgresTimeoutKind(exception);
+    if (postgresTimeout !== undefined) {
+      this.logger.error(
+        JSON.stringify({
+          event: 'postgres_timeout',
+          timeout: postgresTimeout,
+        }),
+      );
+      exception = new AppError({
+        code: 'DATABASE_UNAVAILABLE',
+        message: 'Database temporarily unavailable',
+        retryable: true,
+      });
+    }
 
     const { status, envelope } = this.resolve(
       exception,

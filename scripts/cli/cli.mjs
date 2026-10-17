@@ -497,7 +497,14 @@ async function databasePool({ controlPlane = false } = {}) {
     throw new Error('DATABASE_URL is required');
   }
   const { default: pg } = await import('pg');
-  return new pg.Pool({ connectionString: databaseUrl });
+  return new pg.Pool({
+    connectionString: databaseUrl,
+    connectionTimeoutMillis: 1_000,
+    idleTimeoutMillis: 30_000,
+    statement_timeout: 300_000,
+    lock_timeout: 30_000,
+    idle_in_transaction_session_timeout: 60_000,
+  });
 }
 
 async function createOrganization(options) {
@@ -683,19 +690,19 @@ async function cleanupIdempotency() {
     import(prismaClientFactoryModule),
     import(idempotencyRepositoryModule),
   ]);
-  const createPrismaClient =
-    factoryModule.createPrismaClient ??
-    factoryModule.default?.createPrismaClient;
+  const createOperatorPrismaClient =
+    factoryModule.createOperatorPrismaClient ??
+    factoryModule.default?.createOperatorPrismaClient;
   const PostgresIdempotencyRepository =
     repositoryModule.PostgresIdempotencyRepository ??
     repositoryModule.default?.PostgresIdempotencyRepository;
   if (
-    typeof createPrismaClient !== 'function' ||
+    typeof createOperatorPrismaClient !== 'function' ||
     typeof PostgresIdempotencyRepository !== 'function'
   ) {
     throw new Error('Idempotency cleanup is unavailable.');
   }
-  const client = createPrismaClient('runtime', databaseUrl);
+  const client = createOperatorPrismaClient('runtime', databaseUrl);
   try {
     const repository = new PostgresIdempotencyRepository(client.prisma);
     const deleted = await repository.cleanupExpired();

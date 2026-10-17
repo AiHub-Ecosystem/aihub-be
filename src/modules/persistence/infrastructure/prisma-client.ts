@@ -5,6 +5,8 @@ import type {
   PostgresPoolName,
 } from '@/common/observability/metrics';
 import {
+  OPERATOR_POSTGRES_TIMEOUTS,
+  type PostgresTimeouts,
   checkPostgresPoolConnection,
   createPostgresPool,
   postgresPoolOptions,
@@ -51,25 +53,28 @@ const POOL_CONNECTIONS: Readonly<Record<PostgresPoolName, number>> = {
   'integration-test': 10,
 };
 
+interface PrismaClientOptions {
+  readonly roles?: readonly PostgresConnectionRole[];
+  readonly timeouts?: PostgresTimeouts;
+}
+
 export function createPrismaClient(
   role: PostgresPoolName,
   databaseUrl: string,
-  /** Every role the pool serves, when several share it. */
-  roles: readonly PostgresConnectionRole[] = role === 'integration-test'
-    ? []
-    : [role],
+  options: PrismaClientOptions = {},
 ): PrismaClientHolder {
   if (databaseUrl.trim().length === 0) {
     return unconfiguredPrismaClient();
   }
 
+  const roles = options.roles ?? (role === 'integration-test' ? [] : [role]);
   const connections =
     roles.length === 0
       ? POOL_CONNECTIONS[role]
       : roles.reduce((sum, served) => sum + POOL_CONNECTIONS[served], 0);
   const pool = createPostgresPool(
     role,
-    postgresPoolOptions(databaseUrl, connections),
+    postgresPoolOptions(databaseUrl, connections, options.timeouts),
     roles,
   );
   const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
@@ -84,6 +89,15 @@ export function createPrismaClient(
       await pool.end();
     },
   };
+}
+
+export function createOperatorPrismaClient(
+  role: PostgresPoolName,
+  databaseUrl: string,
+): PrismaClientHolder {
+  return createPrismaClient(role, databaseUrl, {
+    timeouts: OPERATOR_POSTGRES_TIMEOUTS,
+  });
 }
 
 /**
@@ -171,11 +185,9 @@ export function createSharedPrismaClients(
       return existing;
     }
 
-    const created = createPrismaClient(
-      role,
-      databaseUrl,
-      rolesFor(databaseUrl),
-    );
+    const created = createPrismaClient(role, databaseUrl, {
+      roles: rolesFor(databaseUrl),
+    });
     pools.set(databaseUrl, created);
     return created;
   };

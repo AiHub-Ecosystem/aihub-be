@@ -1,4 +1,8 @@
-import type { ArgumentsHost, ExecutionContext } from '@nestjs/common';
+import {
+  type ArgumentsHost,
+  type ExecutionContext,
+  Logger,
+} from '@nestjs/common';
 import { firstValueFrom, of } from 'rxjs';
 
 import { AppError } from '@/common/errors/app-error';
@@ -69,6 +73,61 @@ function authenticatedRequest(
 }
 
 describe('metering request boundary', () => {
+  it.each([
+    [
+      'statement_timeout',
+      '57014',
+      'canceling statement due to statement timeout',
+    ],
+    ['lock_timeout', '55P03', 'canceling statement due to lock timeout'],
+  ])(
+    'maps a Prisma %s error to a retryable database response without logging SQL',
+    async (timeout, sqlstate, message) => {
+      const finalizer = new FakeFinalizer();
+      const request = authenticatedRequest();
+      const send = jest.fn();
+      const status = jest.fn(() => ({ send }));
+      const filter = new HttpExceptionFilter(finalizer);
+      const context = httpContextFor(request, { status });
+      const logger = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      const error = Object.assign(new Error(message), {
+        code: 'P2010',
+        meta: {
+          code: sqlstate,
+          message,
+          query: 'UPDATE organizations SET name = $1',
+          params: '["secret-sql-param"]',
+        },
+      });
+
+      try {
+        await filter.catch(error, context);
+
+        expect(status).toHaveBeenCalledWith(503);
+        expect(send).toHaveBeenCalledWith({
+          error: expect.objectContaining({
+            code: 'DATABASE_UNAVAILABLE',
+            message: 'Database temporarily unavailable',
+            retryable: true,
+          }),
+        });
+        expect(logger).toHaveBeenCalledWith(
+          JSON.stringify({
+            event: 'postgres_timeout',
+            timeout,
+          }),
+        );
+        const logged = JSON.stringify(logger.mock.calls);
+        expect(logged).not.toContain('UPDATE organizations');
+        expect(logged).not.toContain('secret-sql-param');
+      } finally {
+        logger.mockRestore();
+      }
+    },
+  );
+
   it('awaits a successful metering write before emitting the public envelope', async () => {
     const finalizer = new FakeFinalizer();
     const request = authenticatedRequest();

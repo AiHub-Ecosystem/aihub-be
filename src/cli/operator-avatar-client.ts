@@ -1,10 +1,10 @@
 export async function createOperatorAvatarClient(databaseUrl: string) {
-  const [{ createPrismaClient }, { PostgresAvatarRepository }] =
+  const [{ createOperatorPrismaClient }, { PostgresAvatarRepository }] =
     await Promise.all([
       import('@/modules/persistence/infrastructure/prisma-client'),
       import('@/modules/avatar/infrastructure/postgres-avatar.repository'),
     ]);
-  const holder = createPrismaClient('runtime', databaseUrl);
+  const holder = createOperatorPrismaClient('runtime', databaseUrl);
   return Object.assign(new PostgresAvatarRepository(holder.prisma), {
     close: () => holder.close(),
   });

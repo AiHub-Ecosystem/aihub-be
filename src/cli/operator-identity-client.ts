@@ -1,12 +1,12 @@
 export async function createOperatorIdentityClient(databaseUrl: string) {
-  const [{ createIdentityTransactionRunner }, { createPrismaClient }] =
+  const [{ createIdentityTransactionRunner }, { createOperatorPrismaClient }] =
     await Promise.all([
       import(
         '@/modules/identity/shared/infrastructure/postgres-identity.client'
       ),
       import('@/modules/persistence/infrastructure/prisma-client'),
     ]);
-  const holder = createPrismaClient('control-plane', databaseUrl);
+  const holder = createOperatorPrismaClient('control-plane', databaseUrl);
   return Object.assign(createIdentityTransactionRunner(holder.prisma), {
     close: () => holder.close(),
   });
