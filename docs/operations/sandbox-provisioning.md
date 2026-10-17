@@ -211,12 +211,12 @@ Prints the new `org_...` id. Keep it; the remaining steps need it.
 
 Quota, rate limit, and concurrency live on the **organization**, not on individual keys. That is what makes per-person keys safe to hand out: they share one budget, so ten testers cannot multiply the spend by ten.
 
-| Setting            | Value | Why                                                                                                                                                        |
-| ------------------ | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--monthly-quota`  | 500   | A month of ordinary manual testing, well under anything that would matter on an invoice. Raise deliberately, with a reason recorded here.                  |
-| `--hard-stop true` | on    | Without it the quota is advisory and traffic continues past the ceiling. A sandbox is exactly where a hard stop belongs: nothing depends on it staying up. |
-| `--rate-limit-rpm` | 60    | One request per second is beyond what hand-testing needs and low enough that a runaway script is noticed rather than absorbed.                             |
-| `--max-concurrent` | 3     | Speaking grading holds a connection for seconds at a time; three is enough to compare results side by side.                                                |
+| Setting            | Value | Why                                                                                                                                                                                                                                                                                                                |
+| ------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--monthly-quota`  | 500   | A month of ordinary manual testing, well under anything that would matter on an invoice. Raise deliberately, with a reason recorded here.                                                                                                                                                                          |
+| `--hard-stop true` | on    | The quota refuses requests past the ceiling either way. The hard stop decides what happens when the quota counter cannot be read: on, requests are refused; off, they pass and are recorded as `quota_unverified` (ADR-0018). A sandbox is exactly where failing closed belongs: nothing depends on it staying up. |
+| `--rate-limit-rpm` | 60    | One request per second is beyond what hand-testing needs and low enough that a runaway script is noticed rather than absorbed.                                                                                                                                                                                     |
+| `--max-concurrent` | 3     | Speaking grading holds a connection for seconds at a time; three is enough to compare results side by side.                                                                                                                                                                                                        |
 
 `--entitlements` must list every service testers need. A scope on a key is filtered by the organization's entitlements, so `speaking.grade` on a key of an organization without the `speaking` entitlement does nothing.
 
