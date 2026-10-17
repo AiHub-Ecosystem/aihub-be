@@ -32,12 +32,40 @@ export class LocalAuthValidationError extends Error {
   }
 }
 
+const UTF8 = new TextEncoder();
+
+function utf8Bytes(value: string): number {
+  return UTF8.encode(value).length;
+}
+
+/**
+ * Unicode stays allowed in both parts; what is refused is an address that no
+ * mail system delivers or that names a mailbox under a second spelling: a
+ * control or invisible format character, an empty or dotted-at-the-edge local
+ * part, a domain label that is not a host name label, a trailing dot, or more
+ * than the 64-byte local part and 254-byte path that SMTP carries.
+ */
 export function normalizeEmail(value: string): string {
   const normalized = value.normalize('NFC').trim().toLowerCase();
+  const at = normalized.indexOf('@');
+  const local = normalized.slice(0, at);
+  const labels = normalized.slice(at + 1).split('.');
   if (
-    normalized.length < 3 ||
-    normalized.length > 320 ||
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(normalized)
+    at < 1 ||
+    utf8Bytes(normalized) > 254 ||
+    utf8Bytes(local) > 64 ||
+    /[\s@\p{Cc}\p{Cf}]/u.test(local) ||
+    local.startsWith('.') ||
+    local.endsWith('.') ||
+    local.includes('..') ||
+    labels.length < 2 ||
+    !labels.every(
+      (label) =>
+        utf8Bytes(label) <= 63 &&
+        /^[\p{L}\p{M}\p{N}](?:[\p{L}\p{M}\p{N}-]*[\p{L}\p{M}\p{N}])?$/u.test(
+          label,
+        ),
+    )
   ) {
     throw new LocalAuthValidationError();
   }
