@@ -74,6 +74,7 @@ export class RedisAuthRateLimiter implements AuthRateLimiterPort {
       enableOfflineQueue: false,
       maxRetriesPerRequest: 1,
       connectTimeout: 1_000,
+      commandTimeout: 100,
     });
     redis.on('error', () => undefined);
     this.redis = redis;
