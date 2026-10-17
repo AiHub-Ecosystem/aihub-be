@@ -280,6 +280,15 @@ describe('Organization identity configuration HTTP flow', () => {
         public_keys_jwks: { keys: [] },
       },
     ],
+    [
+      // 2,048 characters, 6,144 UTF-8 bytes: past the 2,704-byte btree entry
+      // limit of the issuer's unique index, which answered 500.
+      'an issuer past 2,048 UTF-8 bytes',
+      {
+        issuer: '漢'.repeat(2_048),
+        jwks_url: 'https://id.acme.edu/keys',
+      },
+    ],
   ])(
     'rejects %s without touching storage or cache',
     async (_label, payload) => {

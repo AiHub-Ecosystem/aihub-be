@@ -121,7 +121,9 @@ export class SetOrganizationIdentityConfig {
 
     if (
       issuer.length === 0 ||
-      issuer.length > 2_048 ||
+      // Bytes, not characters: the issuer's unique btree index refuses an
+      // entry past 2,704 bytes, and 2,048 multibyte characters exceed it.
+      Buffer.byteLength(issuer, 'utf8') > 2_048 ||
       (jwksUrl === null) === !hasInlineSource ||
       (jwksUrl !== null && jwksUrl.length === 0) ||
       allowedAlgorithms.length === 0 ||
