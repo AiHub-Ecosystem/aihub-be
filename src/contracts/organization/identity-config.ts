@@ -1,4 +1,5 @@
 import { type Static, Type } from '@sinclair/typebox';
+import '@/contracts/date-time-format';
 
 const PRIVATE_JWK_MEMBERS = ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'];
 

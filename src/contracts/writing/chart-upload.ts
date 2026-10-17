@@ -1,4 +1,5 @@
 import { type Static, Type } from '@sinclair/typebox';
+import '@/contracts/date-time-format';
 
 const MetaSchema = Type.Object(
   { request_id: Type.String() },

@@ -1,4 +1,5 @@
 import { type Static, Type } from '@sinclair/typebox';
+import '@/contracts/date-time-format';
 
 /**
  * Mirrors the action constraint the audit table enforces, so the published

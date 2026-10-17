@@ -1,4 +1,5 @@
 import { type Static, Type } from '@sinclair/typebox';
+import '@/contracts/date-time-format';
 
 const OrganizationMembershipRoleSchema = Type.Union([
   Type.Literal('owner'),

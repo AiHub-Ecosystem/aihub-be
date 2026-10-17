@@ -1,16 +1,6 @@
-import { FormatRegistry, type Static, Type } from '@sinclair/typebox';
+import { type Static, Type } from '@sinclair/typebox';
 
-// TypeBox rejects an unregistered format outright, so `date-time` has to be
-// taught once before any boundary can validate a timestamp against it.
-if (!FormatRegistry.Has('date-time')) {
-  FormatRegistry.Set(
-    'date-time',
-    (value) =>
-      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(
-        value,
-      ) && !Number.isNaN(Date.parse(value)),
-  );
-}
+import '@/contracts/date-time-format';
 
 const AvatarAssetIdSchema = Type.String({
   pattern: '^ava_[0-9A-HJKMNP-TV-Z]{26}$',

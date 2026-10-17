@@ -1,4 +1,5 @@
 import { type Static, Type } from '@sinclair/typebox';
+import '@/contracts/date-time-format';
 
 import {
   SPEAKING_AUDIO_CONTENT_TYPES,
