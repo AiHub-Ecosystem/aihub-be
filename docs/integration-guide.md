@@ -551,7 +551,9 @@ decodes and verifies the image, applies EXIF orientation, strips source
 metadata, and re-encodes it before publishing. The sanitized output is also
 limited to 10 MiB; completion returns `413 PAYLOAD_TOO_LARGE` and rejects the
 intent if re-encoding exceeds that limit. Malformed or mismatched images are
-rejected with `400`.
+rejected with `400`. `503 WRITING_CHART_STORAGE_UNAVAILABLE` is retryable, and
+an Organization past its hourly limit receives `429 RATE_LIMITED` with
+`retry_after_ms` and a `Retry-After` header.
 
 Put the completion response's `image_url` into the existing Task 1
 `image_url` grading field. A completed image is publicly readable by anyone
@@ -580,16 +582,17 @@ JSON-by-URL use `Content-Type: application/json`; Speaking file grading uses
 | `/v1/ielts/writing/task1/grade`   | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           60s |
 | `/v1/ielts/writing/task2/grade`   | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           60s |
 | `/v1/ielts/speaking/grading`      | Required; plain ID or JWT by Organization mode | None              |   26 MiB |           60s |
-| `/v1/ielts/speaking/grading-json` | Required; plain ID or JWT by Organization mode | None              |   256 KB |           30s |
+| `/v1/ielts/speaking/grading-json` | Required; plain ID or JWT by Organization mode | None              |   256 KB |           60s |
 
-Two routes are not grading operations and appear here only so the list is
+These routes are not grading operations and appear here only so the list is
 complete:
 
-| Path                           | `X-User-Identity`                              | `Idempotency-Key` | Notes                                                         |
-| ------------------------------ | ---------------------------------------------- | ----------------- | ------------------------------------------------------------- |
-| `/v1/sandbox/assertions`       | Not used                                       | None              | Dedicated demo Organization only; see section 3a              |
-| `/v1/ielts/speaking/questions` | Not used                                       | None              | Public question catalog; no API key needed                    |
-| `/v1/speaking/audio/uploads`   | Required; plain ID or JWT by Organization mode | None              | Recording upload intent; see "Retaining a Speaking recording" |
+| Path                                    | `X-User-Identity`                              | `Idempotency-Key` | Notes                                                         |
+| --------------------------------------- | ---------------------------------------------- | ----------------- | ------------------------------------------------------------- |
+| `/v1/sandbox/assertions`                | Not used                                       | None              | Dedicated demo Organization only; see section 3a              |
+| `/v1/ielts/speaking/questions`          | Not used                                       | None              | Public question catalog; no API key needed                    |
+| `/v1/speaking/audio/uploads`            | Required; plain ID or JWT by Organization mode | None              | Recording upload intent; see "Retaining a Speaking recording" |
+| `/v1/ielts/writing/task1/chart-uploads` | Required; plain ID or JWT by Organization mode | None              | Chart upload intent; see section 3d                           |
 
 `/v1/sandbox/assertions` takes an API key and a `user_id` in its body; it does
 not take `X-User-Identity` because issuing that value is what the route does.
@@ -852,7 +855,7 @@ least 90 seconds** for Writing `/grade` calls. Speaking multipart grading also
 has a 60-second budget; use at least 90 seconds for
 `/v1/ielts/speaking/grading`. The budget includes audio upload, so large files
 on slow links need a proportionally larger client timeout. Speaking JSON-by-URL
-has a 30-second budget; use at least 60 seconds for
+also has a 60-second budget; use at least 90 seconds for
 `/v1/ielts/speaking/grading-json`. A client timeout equal to the server budget
 is unsafe because connection setup and response transfer also consume time.
 
@@ -888,8 +891,8 @@ or database messages:
 ```json
 {
   "error": {
-    "code": "AI_SERVICE_TIMEOUT",
-    "message": "AI service did not respond in time",
+    "code": "RATE_LIMITED",
+    "message": "Rate limit exceeded",
     "request_id": "req_01M23NT8MJW22AYX6FVT17F5XF",
     "retryable": true,
     "retry_after_ms": 2000
@@ -900,6 +903,13 @@ or database messages:
 **Branch on `code`, never on `message`.** Messages may be reworded; codes are
 part of the contract. `retryable` tells you whether a retry can possibly help,
 so you do not have to infer it from the status.
+
+`retry_after_ms` is present only when AIHUB knows how long to wait:
+`RATE_LIMITED` (until the minute window frees a request), `CONCURRENCY_LIMIT`
+(500 ms), and `QUOTA_EXCEEDED` (until the next UTC month starts, which can be
+weeks). Other errors, `AI_SERVICE_TIMEOUT` included, do not carry it; use your
+own backoff. A quota refusal is `retryable`, but only after that wait, so do not
+spend retry attempts on it.
 
 `retry_after_ms` is in the response body. AI grading rate limits in this guide
 do not add a `Retry-After` header. Auth login lockouts also send that header in
