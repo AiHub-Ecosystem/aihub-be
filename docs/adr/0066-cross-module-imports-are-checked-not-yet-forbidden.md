@@ -1,6 +1,6 @@
 # ADR-0066: Cross-module imports are checked, not yet forbidden
 
-- Status: Accepted
+- Status: Superseded by ADR-0106
 - Related issue: #122
 - Related: [ADR-0057](0057-graded-request-order-is-a-declared-contract.md), [ADR-0061](0061-one-module-owns-the-metering-record-and-its-completion.md), [ADR-0062](0062-speaking-sample-answer-public-copy.md)
 
