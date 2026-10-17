@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
+import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/application/argon2id-parameters';
 import type { IssuedRefreshToken } from '@/modules/auth/application/refresh-token.port';
 import { Argon2PasswordHasher } from '@/modules/auth/infrastructure/argon2-password.hasher';
 import { createPostgresAuthClient } from '@/modules/auth/infrastructure/postgres-auth.client';
@@ -51,13 +52,7 @@ async function seedAccount(
        id, user_account_id, provider, canonical_email, password_hash,
        created_at, updated_at
      ) VALUES ($1, $2, 'password', $3, $4, $5, $5)`,
-    [
-      `auth_${ulid()}`,
-      id,
-      email,
-      '$argon2id$v=19$m=65536,t=3,p=1$c2FsdHNhbHQ$aGFzaA',
-      NOW,
-    ],
+    [`auth_${ulid()}`, id, email, ARGON2ID_DUMMY_HASH, NOW],
   );
   return id;
 }
@@ -396,7 +391,7 @@ describe('local email verification against PostgreSQL', () => {
       await accounts.register({
         email: 'bound@example.com',
         username: 'bound_01',
-        passwordHash: '$argon2id$v=19$m=65536,t=3,p=1$c2FsdHNhbHQ$aGFzaA',
+        passwordHash: ARGON2ID_DUMMY_HASH,
         tokenId: `evt_${ulid()}`,
         tokenHash: tokenHash(),
         tokenExpiresAt: EXPIRES_AT,

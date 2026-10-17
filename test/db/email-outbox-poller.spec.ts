@@ -5,6 +5,7 @@ import { ulid } from 'ulid';
 
 import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { getMetrics } from '@/common/observability/metrics';
+import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/application/argon2id-parameters';
 import {
   DEFER_RETRY_MS,
   EmailDeliveryPoller,
@@ -122,13 +123,7 @@ async function seedRequest(options: SeedOptions = {}): Promise<SeededRequest> {
        id, user_account_id, provider, canonical_email, password_hash,
        created_at, updated_at
      ) VALUES ($1, $2, 'password', $3, $4, $5, $5)`,
-    [
-      `auth_${ulid()}`,
-      userId,
-      email,
-      '$argon2id$v=19$m=65536,t=3,p=1$c2FsdHNhbHQ$aGFzaA',
-      NOW,
-    ],
+    [`auth_${ulid()}`, userId, email, ARGON2ID_DUMMY_HASH, NOW],
   );
   await pool.query(
     'INSERT INTO organizations (id, name, status) VALUES ($1, $2, $3)',

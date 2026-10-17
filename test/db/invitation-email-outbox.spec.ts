@@ -11,6 +11,7 @@ import { ulid } from 'ulid';
 import { AppModule } from '@/app.module';
 import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/application/argon2id-parameters';
 import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
@@ -193,12 +194,7 @@ async function seedOwner(): Promise<void> {
        id, user_account_id, provider, canonical_email, password_hash,
        created_at, updated_at
      ) VALUES ($1, $2, 'password', $3, $4, now(), now())`,
-    [
-      `auth_${ulid()}`,
-      ownerId,
-      'owner@example.com',
-      '$argon2id$v=19$m=65536,t=3,p=1$c2FsdHNhbHQ$aGFzaA',
-    ],
+    [`auth_${ulid()}`, ownerId, 'owner@example.com', ARGON2ID_DUMMY_HASH],
   );
   await pool.query(
     `INSERT INTO organizations (id, name, status) VALUES ($1, 'Acme', 'active')`,

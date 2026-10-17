@@ -1,4 +1,5 @@
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
+import { ARGON2ID_DUMMY_HASH } from '../application/argon2id-parameters';
 import { PostgresPasswordResetTokenRepository } from './postgres-password-reset-token.repository';
 
 /**
@@ -12,7 +13,7 @@ import { PostgresPasswordResetTokenRepository } from './postgres-password-reset-
 
 const input = {
   email: 'person@example.com',
-  passwordHash: '$argon2id$v=19$m=65536,t=3,p=1$hash',
+  passwordHash: ARGON2ID_DUMMY_HASH,
   tokenId: 'prt_01J00000000000000000000000',
   tokenHash: 'a'.repeat(64),
   tokenExpiresAt: new Date('2026-09-20T00:00:00.000Z'),

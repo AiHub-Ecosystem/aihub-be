@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
+import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/application/argon2id-parameters';
 import type { MfaSessionProof } from '@/modules/auth/application/auth-mfa-repository.port';
 import type {
   EmailDeliveryTransaction,
@@ -25,7 +26,7 @@ import {
 
 const NOW = new Date('2026-10-01T00:00:00.000Z');
 const EMAIL = 'mfa@example.com';
-const PASSWORD_HASH = '$argon2id$v=19$m=65536,t=3,p=1$c2FsdHNhbHQ$aGFzaA';
+const PASSWORD_HASH = ARGON2ID_DUMMY_HASH;
 
 class FailingEmailRequests extends PostgresEmailDeliveryRequestRepository {
   async insert(

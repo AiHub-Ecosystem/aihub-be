@@ -5,6 +5,7 @@ import { ulid } from 'ulid';
 
 import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
+import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/application/argon2id-parameters';
 import type { EmailPayloadCipherPort } from '@/modules/auth/application/email-delivery-request.port';
 import { createEmailPayloadCipher } from '@/modules/auth/infrastructure/email-payload-cipher';
 import type {
@@ -86,13 +87,7 @@ async function seedAccount(options: {
          id, user_account_id, provider, canonical_email, password_hash,
          created_at, updated_at
        ) VALUES ($1, $2, 'password', $3, $4, $5, $5)`,
-      [
-        `auth_${ulid()}`,
-        id,
-        email,
-        '$argon2id$v=19$m=65536,t=3,p=1$c2FsdHNhbHQ$aGFzaA',
-        NOW,
-      ],
+      [`auth_${ulid()}`, id, email, ARGON2ID_DUMMY_HASH, NOW],
     );
   }
 

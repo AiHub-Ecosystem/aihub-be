@@ -9,6 +9,7 @@ import { ulid } from 'ulid';
 import { AppModule } from '@/app.module';
 import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/application/argon2id-parameters';
 import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
@@ -143,8 +144,7 @@ class RateLimiterFake implements AuthRateLimiterPort {
  * cost. The `auth_identities` constraint accepts this order, and the real
  * hasher is exercised in registration-password-hash.spec.ts.
  */
-const STORED_PASSWORD_HASH =
-  '$argon2id$v=19$m=65536,t=3,p=1$c2FsdHNhbHQ$aGFzaA';
+const STORED_PASSWORD_HASH = ARGON2ID_DUMMY_HASH;
 
 class PasswordHasherFake implements PasswordHasherPort {
   async hash(): Promise<string> {

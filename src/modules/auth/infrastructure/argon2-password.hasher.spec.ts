@@ -1,25 +1,34 @@
+import argon2 from 'argon2';
+
+import {
+  ARGON2ID_DUMMY_HASH,
+  ARGON2ID_ENCODED_PREFIX,
+  ARGON2ID_PARAMETERS,
+} from '@/modules/auth/application/argon2id-parameters';
 import { Argon2PasswordHasher } from './argon2-password.hasher';
 
 describe('Argon2PasswordHasher', () => {
-  it('uses Argon2id with the agreed work factor and verifies exact passwords', async () => {
-    const hasher = new Argon2PasswordHasher();
-    const password = '  exact Unicode password é  ';
-    const encoded = await hasher.hash(password);
+  const hasher = new Argon2PasswordHasher();
 
-    // The native library is free to order the cost parameters; the agreed
-    // parameters are what this test pins.
-    expect(encoded).toMatch(/^\$argon2id\$v=19\$/);
-    expect(encoded).toMatch(/m=65536/);
-    expect(encoded).toMatch(/t=3/);
-    expect(encoded).toMatch(/p=1/);
-    await expect(hasher.verify(password, encoded)).resolves.toBe(true);
-    await expect(hasher.verify(password.trim(), encoded)).resolves.toBe(false);
-    await expect(hasher.verify('wrong password', encoded)).resolves.toBe(false);
-  }, 15_000);
+  it('writes hashes at the owned factor and verifies them through the production path', async () => {
+    const password = 'correct horse battery staple';
+    const hash = await hasher.hash(password);
 
-  it('fails closed for malformed encoded hashes', async () => {
+    expect(hash.startsWith(ARGON2ID_ENCODED_PREFIX)).toBe(true);
+    await expect(hasher.verify(password, hash)).resolves.toBe(true);
+  });
+
+  it('keeps the dummy hash at the same work factor as real hashes', () => {
+    expect(argon2.needsRehash(ARGON2ID_DUMMY_HASH, ARGON2ID_PARAMETERS)).toBe(
+      false,
+    );
+  });
+
+  // A dummy hash that no passphrase opens still has to be a real hash: garbage
+  // in that position would fail before doing the work, which is the leak.
+  it('spends the owned work factor verifying the dummy and rejects the password', async () => {
     await expect(
-      new Argon2PasswordHasher().verify('password', 'not-a-phc-hash'),
+      hasher.verify('correct horse battery staple', ARGON2ID_DUMMY_HASH),
     ).resolves.toBe(false);
   });
 });

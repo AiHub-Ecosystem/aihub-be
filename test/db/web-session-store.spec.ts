@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { ulid } from 'ulid';
 
+import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/application/argon2id-parameters';
 import { Argon2PasswordHasher } from '@/modules/auth/infrastructure/argon2-password.hasher';
 import {
   type PostgresAuthClient,
@@ -30,8 +31,7 @@ const EMAIL = 'web-session@example.com';
  * keeps this lane off argon2's cost. The reset below stores a real hash, because
  * that is the credential a User actually signs in with afterwards.
  */
-const STORED_PASSWORD_HASH =
-  '$argon2id$v=19$m=65536,t=3,p=1$c2FsdHNhbHQ$aGFzaA';
+const STORED_PASSWORD_HASH = ARGON2ID_DUMMY_HASH;
 
 let pool: Pool;
 let client: PostgresAuthClient;

@@ -1,6 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import { normalizeLogin } from '@/modules/auth/domain/local-auth';
+import { ARGON2ID_DUMMY_HASH } from './argon2id-parameters';
 import { checkAuthRateLimits, enforceAuthRateLimits } from './auth-rate-limit';
 import { type AuthRateLimiterPort } from './auth-rate-limiter.port';
 import { type PasswordHasherPort } from './password-hasher.port';
@@ -22,14 +23,6 @@ export const LOGIN_RATE_LIMITS = {
     readonly windowMs: number;
   }
 >;
-
-/**
- * An Argon2id hash of a value nobody holds, at the same cost as a real one. An
- * unknown email is verified against this instead of skipping verification, so
- * a caller cannot tell an unregistered address from a wrong password by timing.
- */
-const DUMMY_PASSWORD_HASH =
-  '$argon2id$v=19$m=65536,t=3,p=1$SoHl8YUBzXgiAZ4xlgNZyg$qwZIFOa2OcIOgiHLRYImWLsza4k9/T4ZZvvhiWrD41k';
 
 /** The ports the credential check needs, passed so each service names its own. */
 export interface CredentialCheckPorts {
@@ -108,7 +101,7 @@ export async function authenticateCredentials(
   const identity = await ports.userAccounts.findLoginIdentityByEmail(
     normalized.email,
   );
-  const passwordHash = identity?.passwordHash ?? DUMMY_PASSWORD_HASH;
+  const passwordHash = identity?.passwordHash ?? ARGON2ID_DUMMY_HASH;
   const passwordMatches = await ports.passwordHasher.verify(
     normalized.password,
     passwordHash,

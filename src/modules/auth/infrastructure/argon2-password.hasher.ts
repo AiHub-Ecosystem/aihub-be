@@ -1,14 +1,11 @@
 import argon2 from 'argon2';
 
+import { ARGON2ID_PARAMETERS } from '@/modules/auth/application/argon2id-parameters';
 import type { PasswordHasherPort } from '@/modules/auth/application/password-hasher.port';
 
 export const ARGON2ID_OPTIONS = Object.freeze({
   type: argon2.argon2id,
-  memoryCost: 64 * 1024,
-  timeCost: 3,
-  parallelism: 1,
-  saltLength: 16,
-  hashLength: 32,
+  ...ARGON2ID_PARAMETERS,
 });
 
 export class Argon2PasswordHasher implements PasswordHasherPort {

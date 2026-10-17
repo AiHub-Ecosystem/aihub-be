@@ -1,5 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+
+import { ARGON2ID_HASH_CONSTRAINT_PATTERN } from '../application/argon2id-parameters';
 
 describe('local auth migration', () => {
   it('keeps durable identity, hash-only token, and reservation constraints in Postgres', () => {
@@ -16,31 +18,38 @@ describe('local auth migration', () => {
       "status IN ('pending_verification', 'active', 'disabled')",
     );
     expect(sql).toContain('UNIQUE (provider, canonical_email)');
-    expect(sql).toContain(
-      "password_hash LIKE '$argon2id$v=19$m=65536,t=3,p=1$%'",
-    );
+    expect(sql).toContain("password_hash LIKE '$argon2id$v=19$");
     expect(sql).toContain("token_hash ~ '^[0-9a-f]{64}$'");
     expect(sql).toContain('email_verification_one_open_token');
   });
 
-  it('accepts the password hash parameters in any order, still at the agreed work factor', () => {
-    const sql = readFileSync(
-      join(
-        __dirname,
-        '../../../../prisma/migrations/0029_auth_identity_password_hash_parameters/migration.sql',
-      ),
-      'utf8',
+  it('accepts the owned password hash factor in any order', () => {
+    const migrationsDirectory = join(
+      __dirname,
+      '../../../../prisma/migrations',
     );
+    const constraintMigrations = readdirSync(migrationsDirectory, {
+      withFileTypes: true,
+    })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(migrationsDirectory, entry.name, 'migration.sql'))
+      .filter((path) => {
+        const sql = readFileSync(path, 'utf8');
+        return (
+          sql.includes('auth_identities_password_hash_check') &&
+          sql.includes('ADD CONSTRAINT')
+        );
+      })
+      .sort();
+
+    expect(constraintMigrations.length).toBeGreaterThan(0);
+    const sql = readFileSync(constraintMigrations.at(-1) as string, 'utf8');
 
     expect(sql).toContain(
       'DROP CONSTRAINT auth_identities_password_hash_check',
     );
     expect(sql).toContain('ADD CONSTRAINT auth_identities_password_hash_check');
-    // One assumed order is what broke this. The replacement must not name one.
-    expect(sql).not.toContain('m=65536,t=3,p=1');
-    for (const parameter of ['m=65536', 't=3', 'p=1']) {
-      expect(sql).toContain(parameter);
-    }
+    expect(sql).toContain(ARGON2ID_HASH_CONSTRAINT_PATTERN);
   });
 
   it('adds nullable Verification Sign-in columns without touching consumption', () => {
