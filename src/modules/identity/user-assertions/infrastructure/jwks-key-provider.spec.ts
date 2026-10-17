@@ -103,10 +103,10 @@ function configWithUrl(jwksUrl: string): OrganizationIdentityConfig {
  * where the production resolver is the code under test rather than an injected
  * fake, which is why these cases pass a resolver that fails loudly if called.
  *
- * The refusal surfaces as `IDENTITY_PROVIDER_UNAVAILABLE`, not as
- * `IDENTITY_JWKS_URL_UNSAFE`: a refresh failure with no usable stale cache is
- * reported uniformly, and that includes an address rejected as private. What
- * matters here is that the fetch never happens.
+ * The refusal keeps its own code, `IDENTITY_JWKS_URL_UNSAFE`: an address that is
+ * private or reserved is a configuration decision, not a provider outage, and
+ * must not be reported as one. What matters here is that the fetch never
+ * happens.
  */
 describe('JwksKeyProvider address safety on a literal host', () => {
   it.each([
@@ -131,7 +131,7 @@ describe('JwksKeyProvider address safety on a literal host', () => {
           organizationId: 'org_acme',
           config: configWithUrl(jwksUrl),
         }),
-      ).rejects.toMatchObject({ code: 'IDENTITY_PROVIDER_UNAVAILABLE' });
+      ).rejects.toMatchObject({ code: 'IDENTITY_JWKS_URL_UNSAFE' });
       expect(fetcher).not.toHaveBeenCalled();
       expect(resolverFactory).not.toHaveBeenCalled();
     },
@@ -643,7 +643,7 @@ describe('JwksKeyProvider', () => {
     await Promise.resolve();
 
     await expect(retryResolution).rejects.toMatchObject({
-      code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+      code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
       httpStatus: 503,
     });
     finishOldFetch?.(new Response(JSON.stringify(jwks)));
@@ -823,7 +823,7 @@ describe('JwksKeyProvider', () => {
     await expect(
       provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
     ).rejects.toMatchObject({
-      code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+      code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
       httpStatus: 503,
     });
   });
@@ -846,7 +846,7 @@ describe('JwksKeyProvider', () => {
         organizationId: 'org_acme',
         config: configWithUrl(url),
       }),
-    ).rejects.toMatchObject({ code: 'IDENTITY_PROVIDER_UNAVAILABLE' });
+    ).rejects.toMatchObject({ code: 'IDENTITY_JWKS_URL_UNSAFE' });
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -1022,7 +1022,7 @@ describe('JwksKeyProvider', () => {
 
     await expect(
       provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
-    ).rejects.toMatchObject({ code: 'IDENTITY_PROVIDER_UNAVAILABLE' });
+    ).rejects.toMatchObject({ code: 'IDENTITY_JWKS_INVALID' });
     expect(cache.setCount).toBe(0);
   });
 

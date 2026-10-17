@@ -561,6 +561,18 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       if (cached !== undefined && cached.staleUntil > now) {
         return cached.jwks;
       }
+      // A typed refusal is a decision, not an outage: an unsafe address, an
+      // invalid document, or an unavailable source keeps its own code instead of
+      // being collapsed into IDENTITY_PROVIDER_UNAVAILABLE. Only an unexpected
+      // failure is reported as an outage.
+      if (
+        error instanceof AppError &&
+        (error.code === 'IDENTITY_JWKS_URL_UNSAFE' ||
+          error.code === 'IDENTITY_JWKS_INVALID' ||
+          error.code === 'IDENTITY_JWKS_SOURCE_UNAVAILABLE')
+      ) {
+        throw error;
+      }
       throw identityProviderUnavailable(error);
     }
   }
