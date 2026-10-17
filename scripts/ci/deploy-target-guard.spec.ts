@@ -4,6 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 type DeployTargetGuard = {
+  classifyDeployTarget: (input: {
+    targetSha: string;
+    mainSha: string;
+    cwd: string;
+  }) => 'deploy' | 'superseded';
   parseActiveRevisions: (status: string) => string[];
   validateDeployTarget: (input: {
     targetSha: string;
@@ -14,6 +19,7 @@ type DeployTargetGuard = {
 };
 
 const {
+  classifyDeployTarget,
   parseActiveRevisions,
   validateDeployTarget,
 }: DeployTargetGuard = require('./deploy-target-guard.cjs');
@@ -22,6 +28,7 @@ let repository: string;
 let oldSha: string;
 let mainSha: string;
 let hostAheadSha: string;
+let unrelatedSha: string;
 
 function git(...args: string[]): string {
   return execFileSync('git', args, {
@@ -46,6 +53,9 @@ beforeAll(() => {
   mainSha = commit('main');
   git('checkout', '--quiet', '-b', 'host-ahead');
   hostAheadSha = commit('host-ahead');
+  git('checkout', '--quiet', '--orphan', 'unrelated');
+  git('rm', '--quiet', '-f', 'version.txt');
+  unrelatedSha = commit('unrelated');
 });
 
 afterAll(() => {
@@ -53,6 +63,28 @@ afterAll(() => {
 });
 
 describe('CD deployment target guard', () => {
+  it('classifies the current main tip for deployment', () => {
+    expect(
+      classifyDeployTarget({ targetSha: mainSha, mainSha, cwd: repository }),
+    ).toBe('deploy');
+  });
+
+  it('classifies a target on main history as superseded', () => {
+    expect(
+      classifyDeployTarget({ targetSha: oldSha, mainSha, cwd: repository }),
+    ).toBe('superseded');
+  });
+
+  it('refuses a target that is not on main history', () => {
+    expect(() =>
+      classifyDeployTarget({
+        targetSha: unrelatedSha,
+        mainSha,
+        cwd: repository,
+      }),
+    ).toThrow(/not an ancestor of current main/);
+  });
+
   it('rejects a successful CI rerun whose commit is no longer main', () => {
     expect(() =>
       validateDeployTarget({

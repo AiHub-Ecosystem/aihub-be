@@ -35,18 +35,16 @@ function parseActiveRevisions(status) {
   return revisions;
 }
 
+const isSha = (sha) => typeof sha === 'string' && /^[a-f0-9]{40}$/.test(sha);
+
 function validateDeployTarget({ targetSha, mainSha, activeShas, cwd }) {
-  const isSha = (sha) => typeof sha === 'string' && /^[a-f0-9]{40}$/.test(sha);
-  if (!isSha(targetSha) || !isSha(mainSha)) {
-    throw new Error(
-      'deploy target and current main tip must be 40-character commit SHAs',
-    );
-  }
-  if (targetSha !== mainSha) {
+  const outcome = classifyDeployTarget({ targetSha, mainSha, cwd });
+  if (outcome === 'superseded') {
     throw new Error(
       `refusing to deploy ${targetSha}: it is not the current main tip (${mainSha})`,
     );
   }
+
   if (
     !Array.isArray(activeShas) ||
     activeShas.length === 0 ||
@@ -87,26 +85,78 @@ function validateDeployTarget({ targetSha, mainSha, activeShas, cwd }) {
   }
 }
 
-module.exports = { parseActiveRevisions, validateDeployTarget };
+function classifyDeployTarget({ targetSha, mainSha, cwd }) {
+  if (!isSha(targetSha) || !isSha(mainSha)) {
+    throw new Error(
+      'deploy target and current main tip must be 40-character commit SHAs',
+    );
+  }
+  for (const sha of [targetSha, mainSha]) {
+    try {
+      execFileSync('git', ['cat-file', '-e', `${sha}^{commit}`], {
+        cwd,
+        stdio: 'ignore',
+      });
+    } catch {
+      throw new Error(
+        `refusing to classify deploy target: revision ${sha} is unavailable in the checked-out Git history`,
+      );
+    }
+  }
+  if (targetSha === mainSha) return 'deploy';
+
+  const result = spawnSync(
+    'git',
+    ['merge-base', '--is-ancestor', targetSha, mainSha],
+    { cwd, stdio: 'ignore' },
+  );
+  if (result.error || (result.status !== 0 && result.status !== 1)) {
+    throw new Error(
+      `could not compare deploy target ${targetSha} with current main ${mainSha}`,
+    );
+  }
+  if (result.status === 0) return 'superseded';
+  throw new Error(
+    `refusing to deploy ${targetSha}: it is not an ancestor of current main (${mainSha})`,
+  );
+}
+
+module.exports = {
+  classifyDeployTarget,
+  parseActiveRevisions,
+  validateDeployTarget,
+};
 
 if (require.main === module) {
   try {
-    const [targetSha, mainSha, ...extra] = process.argv.slice(2);
-    if (!targetSha || !mainSha || extra.length) {
+    const [targetSha, mainSha, mode, ...extra] = process.argv.slice(2);
+    if (
+      !targetSha ||
+      !mainSha ||
+      extra.length ||
+      (mode && mode !== '--classify')
+    ) {
       throw new Error(
-        'usage: deploy-target-guard.cjs <target-sha> <current-main-sha>',
+        'usage: deploy-target-guard.cjs <target-sha> <current-main-sha> [--classify]',
       );
     }
-    const status = readFileSync(0, 'utf8');
-    validateDeployTarget({
-      targetSha,
-      mainSha,
-      activeShas: parseActiveRevisions(status),
-      cwd: process.cwd(),
-    });
-    process.stdout.write(
-      `deployment target ${targetSha} is current and does not roll back any active tier\n`,
-    );
+
+    if (mode === '--classify') {
+      process.stdout.write(
+        `${classifyDeployTarget({ targetSha, mainSha, cwd: process.cwd() })}\n`,
+      );
+    } else {
+      const status = readFileSync(0, 'utf8');
+      validateDeployTarget({
+        targetSha,
+        mainSha,
+        activeShas: parseActiveRevisions(status),
+        cwd: process.cwd(),
+      });
+      process.stdout.write(
+        `deployment target ${targetSha} is current and does not roll back any active tier\n`,
+      );
+    }
   } catch (error) {
     process.stderr.write(
       `${error instanceof Error ? error.message : String(error)}\n`,

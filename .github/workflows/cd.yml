@@ -102,6 +102,7 @@ jobs:
           fetch-depth: 0
 
       - name: Reject a stale CI revision before contacting the host
+        id: stale_guard
         working-directory: .cd-guard
         shell: bash
         run: |
@@ -114,13 +115,28 @@ jobs:
           fi
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           main_sha="$(git rev-parse refs/remotes/origin/main)"
-          if [ "$DEPLOY_SHA" != "$main_sha" ]; then
-            printf 'refusing to deploy %s: it is not the current main tip (%s)\n' \
-              "$DEPLOY_SHA" "$main_sha" >&2
-            exit 1
-          fi
+          outcome="$(node scripts/ci/deploy-target-guard.cjs "$DEPLOY_SHA" "$main_sha" --classify)"
+          case "$outcome" in
+            deploy)
+              printf 'outcome=deploy\n' >> "$GITHUB_OUTPUT"
+              printf 'Deploy target %s is current main.\n' "$DEPLOY_SHA"
+              ;;
+            superseded)
+              printf 'outcome=superseded\n' >> "$GITHUB_OUTPUT"
+              printf 'CI run target `%s` was superseded by current main `%s`.\n' \
+                "$DEPLOY_SHA" "$main_sha" >> "$GITHUB_STEP_SUMMARY"
+              printf 'Target %s was superseded by %s; skipping host contact.\n' \
+                "$DEPLOY_SHA" "$main_sha"
+              exit 0
+              ;;
+            *)
+              printf 'refusing to deploy: unrecognized target outcome\n' >&2
+              exit 1
+              ;;
+          esac
 
       - name: Configure SSH
+        if: ${{ steps.stale_guard.outputs.outcome == 'deploy' }}
         id: ssh
         shell: bash
         env:
@@ -130,21 +146,71 @@ jobs:
           set -eu
           test -n "$VPS_PRIVATE_KEY"
           test -n "$VPS_KNOWN_HOSTS"
-          install -m 700 -d "$HOME/.ssh"
-          printf '%s\n' "$VPS_PRIVATE_KEY" > "$HOME/.ssh/aihub-deploy"
-          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/aihub-deploy"
-          chmod 644 "$HOME/.ssh/known_hosts"
+          [[ "$VPS_HOST" =~ ^[A-Za-z0-9._:-]+$ ]] || exit 1
+          [[ "$VPS_USER" =~ ^[A-Za-z0-9._-]+$ ]] || exit 1
+          [[ "$VPS_PORT" =~ ^[0-9]{1,5}$ ]] || exit 1
+          (( 10#$VPS_PORT >= 1 && 10#$VPS_PORT <= 65535 )) || exit 1
+          ssh_dir="$RUNNER_TEMP/aihub-ssh"
+          ssh_config="$ssh_dir/config"
+          install -m 700 -d "$ssh_dir"
+          printf '%s\n' "$VPS_PRIVATE_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/key"
+          chmod 600 "$ssh_dir/known_hosts"
+          {
+            printf 'Host aihub-deploy\n'
+            printf '  HostName %s\n' "$VPS_HOST"
+            printf '  User %s\n' "$VPS_USER"
+            printf '  Port %s\n' "$VPS_PORT"
+            printf '  IdentityFile %s/key\n' "$ssh_dir"
+            printf '  UserKnownHostsFile %s/known_hosts\n' "$ssh_dir"
+            printf '  IdentitiesOnly yes\n'
+            printf '  BatchMode yes\n'
+            printf '  StrictHostKeyChecking yes\n'
+            printf '  LogLevel QUIET\n'
+            printf '  ControlMaster auto\n'
+            printf '  ControlPath %s/%%C\n' "$ssh_dir"
+            printf '  ControlPersist 60m\n'
+            printf '  ConnectTimeout 10\n'
+            printf '  ServerAliveInterval 15\n'
+            printf '  ServerAliveCountMax 3\n'
+          } > "$ssh_config"
+          chmod 600 "$ssh_config"
+          printf 'AIHUB_SSH_CONFIG=%s\n' "$ssh_config" >> "$GITHUB_ENV"
+          error_file="$ssh_dir/open.stderr"
+          for attempt in 1 2 3; do
+            if ssh -F "$ssh_config" -MNf aihub-deploy 2>"$error_file"; then
+              rm -f "$error_file"
+              printf 'Opened the authenticated shared SSH connection.\n'
+              exit 0
+            else
+              status=$?
+            fi
+            if [[ "$status" -ne 255 ]] || ! grep -Eiq '(kex|ssh)_exchange_identification:.*(connection reset|connection closed)' "$error_file"; then
+              rm -f "$error_file"
+              printf 'SSH connection setup failed before deployment commands; not retrying.\n' >&2
+              exit "$status"
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              rm -f "$error_file"
+              printf 'SSH pre-authentication connection failed after 3 attempts.\n' >&2
+              exit 255
+            fi
+            delay="$attempt"
+            printf 'SSH pre-authentication reset; retrying connection setup (%s/3).\n' "$attempt"
+            sleep "$delay"
+          done
 
       - name: Check host revisions and recheck main before writes
+        if: ${{ steps.stale_guard.outputs.outcome == 'deploy' }}
         id: target_guard
         working-directory: .cd-guard
         shell: bash
         run: |
           set -euo pipefail
           test -n "$VPS_APP_DIR"
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          target=aihub-deploy
+          ssh_opts=(-F "$AIHUB_SSH_CONFIG")
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           state="$(ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
@@ -158,13 +224,14 @@ jobs:
           printf '%s\n' "$state" | node scripts/ci/deploy-target-guard.cjs "$DEPLOY_SHA" "$main_sha"
 
       - name: Stage host job installer
+        if: ${{ steps.stale_guard.outputs.outcome == 'deploy' }}
         shell: bash
         run: |
           set -euo pipefail
           test -n "$VPS_APP_DIR"
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
-          scp_opts=(-i "$HOME/.ssh/aihub-deploy" -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          target=aihub-deploy
+          ssh_opts=(-F "$AIHUB_SSH_CONFIG")
+          scp_opts=(-F "$AIHUB_SSH_CONFIG")
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
@@ -180,6 +247,7 @@ jobs:
           REMOTE
 
       - name: Log in to GHCR on VPS
+        if: ${{ steps.stale_guard.outputs.outcome == 'deploy' }}
         id: ghcr_login
         shell: bash
         env:
@@ -189,18 +257,19 @@ jobs:
           set -eu
           test -n "$GHCR_USERNAME"
           test -n "$GHCR_PULL_TOKEN"
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          target=aihub-deploy
+          ssh_opts=(-F "$AIHUB_SSH_CONFIG")
           printf '%s' "$GHCR_PULL_TOKEN" | ssh "${ssh_opts[@]}" "$target" \
             "sudo -n docker login ghcr.io --username '$GHCR_USERNAME' --password-stdin"
 
       - name: Pause and drain AIHUB host jobs
+        if: ${{ steps.stale_guard.outputs.outcome == 'deploy' }}
         id: pause_host_jobs
         shell: bash
         run: |
           set -euo pipefail
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          target=aihub-deploy
+          ssh_opts=(-F "$AIHUB_SSH_CONFIG")
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
@@ -209,13 +278,14 @@ jobs:
           REMOTE
 
       - name: Sync deployment files to VPS
+        if: ${{ steps.stale_guard.outputs.outcome == 'deploy' }}
         id: sync
         shell: bash
         run: |
           set -euo pipefail
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
-          scp_opts=(-i "$HOME/.ssh/aihub-deploy" -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          target=aihub-deploy
+          ssh_opts=(-F "$AIHUB_SSH_CONFIG")
+          scp_opts=(-F "$AIHUB_SSH_CONFIG")
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -eu
@@ -303,12 +373,12 @@ jobs:
           REMOTE
 
       - name: Restore host files and schedule after sync failure
-        if: ${{ always() && steps.pause_host_jobs.outcome == 'success' && steps.sync.outcome != 'success' }}
+        if: ${{ always() && steps.stale_guard.outputs.outcome == 'deploy' && steps.pause_host_jobs.outcome == 'success' && steps.sync.outcome != 'success' }}
         shell: bash
         run: |
           set -euo pipefail
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          target=aihub-deploy
+          ssh_opts=(-F "$AIHUB_SSH_CONFIG")
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
@@ -331,12 +401,13 @@ jobs:
           REMOTE
 
       - name: Deploy Production and verify caller IP
+        if: ${{ steps.stale_guard.outputs.outcome == 'deploy' }}
         id: deploy_production
         shell: bash
         run: |
           set -euo pipefail
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          target=aihub-deploy
+          ssh_opts=(-F "$AIHUB_SSH_CONFIG")
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           image_arg="$(printf '%q' "$AIHUB_IMAGE")"
           target_sha="${AIHUB_IMAGE##*:}"
@@ -441,12 +512,12 @@ jobs:
 
       - name: Deploy Sandbox release and verify caller IP
         id: deploy_sandbox
-        if: ${{ steps.deploy_production.outcome == 'success' && steps.deploy_production.outputs.sandbox_enabled == 'true' }}
+        if: ${{ steps.stale_guard.outputs.outcome == 'deploy' && steps.deploy_production.outcome == 'success' && steps.deploy_production.outputs.sandbox_enabled == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          target=aihub-deploy
+          ssh_opts=(-F "$AIHUB_SSH_CONFIG")
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           image_arg="$(printf '%q' "$AIHUB_IMAGE")"
           target_sha="${AIHUB_IMAGE##*:}"
@@ -543,12 +614,12 @@ jobs:
 
       - name: Final public health window
         id: deploy
-        if: ${{ steps.deploy_production.outcome == 'success' && (steps.deploy_sandbox.outcome == 'success' || steps.deploy_sandbox.outcome == 'skipped') }}
+        if: ${{ steps.stale_guard.outputs.outcome == 'deploy' && steps.deploy_production.outcome == 'success' && (steps.deploy_sandbox.outcome == 'success' || steps.deploy_sandbox.outcome == 'skipped') }}
         shell: bash
         run: |
           set -euo pipefail
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          target=aihub-deploy
+          ssh_opts=(-F "$AIHUB_SSH_CONFIG")
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           image_arg="$(printf '%q' "$AIHUB_IMAGE")"
           ssh "${ssh_opts[@]}" "$target" \
@@ -560,12 +631,12 @@ jobs:
 
       - name: Install and smoke the scheduled host jobs
         id: host_jobs
-        if: ${{ always() && steps.sync.outcome == 'success' && steps.ssh.outcome == 'success' && steps.pause_host_jobs.outcome != 'skipped' }}
+        if: ${{ always() && steps.stale_guard.outputs.outcome == 'deploy' && steps.sync.outcome == 'success' && steps.ssh.outcome == 'success' && steps.pause_host_jobs.outcome != 'skipped' }}
         shell: bash
         run: |
           set -euo pipefail
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          target=aihub-deploy
+          ssh_opts=(-F "$AIHUB_SSH_CONFIG")
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           image_arg="$(printf '%q' "$AIHUB_IMAGE")"
           deploy_outcome="$(printf '%q' "$DEPLOY_OUTCOME")"
@@ -625,13 +696,13 @@ jobs:
           DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
 
       - name: Report active tier revisions
-        if: ${{ always() && steps.ssh.outcome == 'success' && steps.sync.outcome == 'success' }}
+        if: ${{ always() && steps.stale_guard.outputs.outcome == 'deploy' && steps.ssh.outcome == 'success' && steps.sync.outcome == 'success' }}
         continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          target=aihub-deploy
+          ssh_opts=(-F "$AIHUB_SSH_CONFIG")
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           state="$(ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
@@ -642,10 +713,18 @@ jobs:
           printf '## Active tier revisions\n\n%s\n' "$state" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Log out of GHCR on VPS
-        if: ${{ always() && steps.ghcr_login.outcome == 'success' }}
+        if: ${{ always() && steps.stale_guard.outputs.outcome == 'deploy' && steps.ghcr_login.outcome == 'success' }}
         continue-on-error: true
         shell: bash
         run: |
-          target="$VPS_USER@$VPS_HOST"
-          ssh_opts=(-i "$HOME/.ssh/aihub-deploy" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          target=aihub-deploy
+          ssh_opts=(-F "$AIHUB_SSH_CONFIG")
           ssh "${ssh_opts[@]}" "$target" "sudo -n docker logout ghcr.io"
+
+      - name: Close shared SSH connection
+        if: ${{ always() && steps.stale_guard.outputs.outcome == 'deploy' }}
+        shell: bash
+        run: |
+          if [[ -n "${AIHUB_SSH_CONFIG:-}" && -f "$AIHUB_SSH_CONFIG" ]]; then
+            ssh -F "$AIHUB_SSH_CONFIG" -O exit aihub-deploy >/dev/null 2>&1 || true
+          fi
