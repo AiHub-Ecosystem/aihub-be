@@ -33,6 +33,28 @@ describe('parseRequestBody', () => {
     },
   );
 
+  it.each([
+    ['a lone high surrogate', JSON.parse('{"name":"a\\ud800b"}')],
+    ['a lone low surrogate', JSON.parse('{"name":"a\\udc00b"}')],
+    ['a reversed pair', JSON.parse('{"name":"\\udc00\\ud800"}')],
+    ['an object key', JSON.parse('{"name":"ok","k\\ud800":1}')],
+  ])(
+    'rejects %s, which a jsonb write refuses and a text column replaces',
+    (_where, body: unknown) => {
+      expect(() =>
+        parseRequestBody(Type.Object({ name: Type.String() }), body),
+      ).toThrow(AppError);
+    },
+  );
+
+  it('accepts a character outside the Basic Multilingual Plane', () => {
+    expect(
+      parseRequestBody(Type.Object({ name: Type.String() }), {
+        name: 'Tiếng Việt 😀',
+      }),
+    ).toEqual({ name: 'Tiếng Việt 😀' });
+  });
+
   it('rejects a wrong-typed field instead of coercing it', () => {
     // Value.Parse alone would convert this to { name: '1' } and pass.
     expect(() => parseRequestBody(Schema, { name: 1 })).toThrow(AppError);

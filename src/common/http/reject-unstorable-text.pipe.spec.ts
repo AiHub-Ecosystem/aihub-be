@@ -1,13 +1,20 @@
 import { AppError } from '@/common/errors/app-error';
-import { RejectNulCharactersPipe } from './reject-nul-characters.pipe';
+import { RejectUnstorableTextPipe } from './reject-unstorable-text.pipe';
 
-describe('RejectNulCharactersPipe', () => {
-  const pipe = new RejectNulCharactersPipe();
+describe('RejectUnstorableTextPipe', () => {
+  const pipe = new RejectUnstorableTextPipe();
 
   it.each([
     ['param', 'org_\u0000acme'],
     ['query', { cursor: 'x\u0000' }],
   ] as const)('refuses a NUL character in a %s value', (type, value) => {
+    expect(() => pipe.transform(value, { type })).toThrow(AppError);
+  });
+
+  it.each([
+    ['param', 'org_\ud800acme'],
+    ['query', { cursor: 'x\udc00' }],
+  ] as const)('refuses a lone surrogate in a %s value', (type, value) => {
     expect(() => pipe.transform(value, { type })).toThrow(AppError);
   });
 

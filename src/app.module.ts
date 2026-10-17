@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_PIPE } from '@nestjs/core';
 
-import { RejectNulCharactersPipe } from './common/http/reject-nul-characters.pipe';
+import { RejectUnstorableTextPipe } from './common/http/reject-unstorable-text.pipe';
 import { RuntimeConfigurationModule } from './config/runtime-configuration.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -33,7 +33,7 @@ import { OpenApiModule } from './openapi/openapi.module';
     // Bound through APP_FILTER rather than `useGlobalFilters` in main.ts so the
     // filter is also active in tests built with Nest's testing module.
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
-    { provide: APP_PIPE, useClass: RejectNulCharactersPipe },
+    { provide: APP_PIPE, useClass: RejectUnstorableTextPipe },
   ],
 })
 export class AppModule {}

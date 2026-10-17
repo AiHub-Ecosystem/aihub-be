@@ -2,7 +2,7 @@ import { invalidRequest } from '@/common/errors/invalid-request';
 import type { StaticDecode, TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
-import { containsNulCharacter } from './nul-character';
+import { containsUnstorableText } from './unstorable-text';
 
 /**
  * The single way a presentation layer turns a raw request body into the value
@@ -27,7 +27,7 @@ export function parseRequestBody<S extends TSchema>(
 ): StaticDecode<S> {
   const candidate = body === undefined ? {} : body;
 
-  if (!Value.Check(schema, candidate) || containsNulCharacter(candidate)) {
+  if (!Value.Check(schema, candidate) || containsUnstorableText(candidate)) {
     throw invalidRequest();
   }
   try {

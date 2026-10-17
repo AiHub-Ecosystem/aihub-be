@@ -4,7 +4,7 @@ import { Value } from '@sinclair/typebox/value';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { AppError } from '@/common/errors/app-error';
-import { containsNulCharacter } from '@/common/http/nul-character';
+import { containsUnstorableText } from '@/common/http/unstorable-text';
 import {
   type SpeakingGradeInput,
   SpeakingGradeRequestSchema,
@@ -128,7 +128,7 @@ function parseFields(
     if (!ALLOWED_FIELDS.has(field)) {
       throw invalidRequest(`Unknown field ${field}`);
     }
-    if (containsNulCharacter(value)) {
+    if (containsUnstorableText(value)) {
       throw invalidRequest();
     }
   }
