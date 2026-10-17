@@ -1,60 +1,47 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { Buffer } from 'node:buffer';
 import { readFileSync } from 'node:fs';
 
 import type {
   AuthMfaCipherPort,
   AuthMfaKeyring,
 } from '@/modules/auth/application/auth-mfa-repository.port';
-
-type ReadFile = (path: string) => string;
+import { EnvelopeCipherError } from '@/modules/auth/application/email-delivery-request.port';
+import { EnvelopeCipher } from './envelope-cipher';
 
 export interface AuthMfaCipherOptions {
   readonly source: string | undefined;
   readonly secretsFile: string | undefined;
   readonly values: Readonly<Record<string, string | undefined>>;
-  readonly readFile?: ReadFile;
+  readonly readFile?: (path: string) => string;
 }
 
+const MFA_MESSAGES = {
+  keyring: 'Auth MFA keyring is invalid',
+  keyId: 'Auth MFA keyring is invalid',
+  keyMaterial: 'Auth MFA keyring is invalid',
+  currentKey: 'Auth MFA keyring is invalid',
+  missingKeys: 'Auth MFA keyring is invalid',
+  currentNotProvisioned: 'Auth MFA keyring is invalid',
+  malformed: 'Auth MFA ciphertext is invalid',
+  unknownKey: 'Auth MFA ciphertext is invalid',
+  unreadable: 'Auth MFA ciphertext is invalid',
+} as const;
+
 export class AuthMfaCipher implements AuthMfaCipherPort {
-  private readonly keys: Readonly<Record<string, Buffer>>;
-  private readonly keyId: string;
+  private readonly cipher: EnvelopeCipher;
 
   constructor(keyring: AuthMfaKeyring) {
-    const keys = Object.create(null) as Record<string, Buffer>;
-    for (const [id, encoded] of Object.entries(keyring.keys)) {
-      const key = Buffer.from(encoded, 'base64');
-      if (
-        !/^[A-Za-z0-9_-]{1,64}$/u.test(id) ||
-        key.length !== 32 ||
-        key.toString('base64') !== encoded
-      ) {
-        throw new Error('Auth MFA keyring is invalid');
-      }
-      keys[id] = key;
-    }
-    if (keys[keyring.currentKeyId] === undefined) {
-      throw new Error('Auth MFA current key is unavailable');
-    }
-    this.keys = Object.freeze(keys);
-    this.keyId = keyring.currentKeyId;
+    this.cipher = new EnvelopeCipher(keyring, 'compact', 'v1', MFA_MESSAGES);
   }
 
   encrypt(
     plaintext: string,
     binding: { readonly userId: string; readonly factorId: string },
   ): { readonly keyId: string; readonly ciphertext: string } {
-    const iv = randomBytes(12);
-    const cipher = createCipheriv('aes-256-gcm', this.keys[this.keyId]!, iv);
-    cipher.setAAD(Buffer.from(`${binding.userId}:${binding.factorId}`, 'utf8'));
-    const ciphertext = Buffer.concat([
-      cipher.update(plaintext, 'utf8'),
-      cipher.final(),
-    ]);
+    const aad = Buffer.from(`${binding.userId}:${binding.factorId}`, 'utf8');
     return {
-      keyId: this.keyId,
-      ciphertext: [iv, cipher.getAuthTag(), ciphertext]
-        .map((part) => part.toString('base64url'))
-        .join('.'),
+      keyId: this.cipher.currentKeyId,
+      ciphertext: this.cipher.seal(plaintext, aad),
     };
   }
 
@@ -63,27 +50,13 @@ export class AuthMfaCipher implements AuthMfaCipherPort {
     envelope: string,
     binding: { readonly userId: string; readonly factorId: string },
   ): string {
-    const key = this.keys[keyId];
-    const parts = envelope.split('.');
-    if (key === undefined || parts.length !== 3) {
-      throw new Error('Auth MFA ciphertext is invalid');
-    }
+    const aad = Buffer.from(`${binding.userId}:${binding.factorId}`, 'utf8');
     try {
-      const decipher = createDecipheriv(
-        'aes-256-gcm',
-        key,
-        Buffer.from(parts[0]!, 'base64url'),
-      );
-      decipher.setAAD(
-        Buffer.from(`${binding.userId}:${binding.factorId}`, 'utf8'),
-      );
-      decipher.setAuthTag(Buffer.from(parts[1]!, 'base64url'));
-      return Buffer.concat([
-        decipher.update(Buffer.from(parts[2]!, 'base64url')),
-        decipher.final(),
-      ]).toString('utf8');
-    } catch {
-      throw new Error('Auth MFA ciphertext is invalid');
+      return this.cipher.open(envelope, keyId, aad);
+    } catch (error) {
+      const kind =
+        error instanceof EnvelopeCipherError ? error.kind : 'unreadable';
+      throw new EnvelopeCipherError(kind, 'Auth MFA ciphertext is invalid');
     }
   }
 }

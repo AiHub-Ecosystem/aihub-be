@@ -12,7 +12,7 @@ import type {
   MfaSecurityNotificationPayload,
   OrganizationInviteEmailDeliveryPayload,
 } from './email-delivery-request.port';
-import { EmailPayloadUnknownKeyVersionError } from './email-delivery-request.port';
+import { EnvelopeCipherError } from './email-delivery-request.port';
 import type { EmailPayloadCipherPort } from './email-delivery-request.port';
 import { EMAIL_ATTEMPT_TIMEOUT_MS } from './email-sender.port';
 import type { EmailSenderPort } from './email-sender.port';
@@ -406,7 +406,8 @@ export class EmailDeliveryPoller {
     try {
       parsed = JSON.parse(this.cipher.decrypt(ciphertext));
     } catch (error) {
-      if (error instanceof EmailPayloadUnknownKeyVersionError) throw error;
+      if (error instanceof EnvelopeCipherError && error.kind === 'unknown-key')
+        throw error;
       return undefined;
     }
     return isPayloadFor(request.kind, parsed) ? parsed : undefined;
