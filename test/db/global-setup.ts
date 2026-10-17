@@ -12,6 +12,13 @@ import {
   sandboxTestDatabaseUrl,
   testDatabaseUrl,
 } from './database';
+import {
+  DATABASE_LANE_TEMPLATE_NAME,
+  databaseTemplateAction,
+  databaseTemplateDescription,
+  migrationFingerprint,
+} from './database-template';
+import type { MigrationFile } from './database-template';
 import { timeDatabasePhase } from './lane-timing';
 
 const MIGRATIONS_DIR = join(__dirname, '../../prisma/migrations');
@@ -28,6 +35,12 @@ function databaseName(databaseUrl: string): string {
   return new URL(databaseUrl).pathname.slice(1);
 }
 
+function templateDatabaseUrl(): string {
+  const url = new URL(adminDatabaseUrl());
+  url.pathname = `/${DATABASE_LANE_TEMPLATE_NAME}`;
+  return url.toString();
+}
+
 async function dropTestDatabases(admin: Client): Promise<void> {
   for (const url of databaseUrls()) {
     await admin.query(
@@ -37,7 +50,7 @@ async function dropTestDatabases(admin: Client): Promise<void> {
 }
 
 /**
- * Rebuilds the lane's database from the repository's own migration files.
+ * Builds the reusable migration template from the repository's migration files.
  *
  * They are applied here rather than by shelling out to `scripts/cli/migrate.mjs`:
  * that script loads the runtime connection environment when `dist/` is built,
@@ -52,6 +65,7 @@ export default async function globalSetup(): Promise<void> {
     ...DATABASE_LANE_POSTGRES_TIMEOUTS,
   });
 
+  let testDatabaseCreationStarted = false;
   try {
     await timeDatabasePhase('PostgreSQL admin connection', async () => {
       try {
@@ -68,55 +82,143 @@ export default async function globalSetup(): Promise<void> {
   }
 
   try {
+    const migrations = await timeDatabasePhase<MigrationFile[]>(
+      'migration file discovery',
+      async () => {
+        const entries = await readdir(MIGRATIONS_DIR, { withFileTypes: true });
+        return Promise.all(
+          entries
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => entry.name)
+            .sort()
+            .map(async (name) => ({
+              name,
+              sql: await readFile(
+                join(MIGRATIONS_DIR, name, 'migration.sql'),
+                'utf8',
+              ),
+            })),
+        );
+      },
+    );
+
+    const fingerprint = migrationFingerprint(migrations);
+    await timeDatabasePhase('migration template preparation', async () => {
+      const template = await admin.query<{
+        owner: string;
+        connected_role: string;
+        is_template: boolean;
+        allow_connections: boolean;
+        description: string | null;
+      }>(
+        `SELECT pg_get_userbyid(datdba) AS owner,
+                current_user AS connected_role,
+                datistemplate AS is_template,
+                datallowconn AS allow_connections,
+                shobj_description(oid, 'pg_database') AS description
+         FROM pg_database
+         WHERE datname = $1`,
+        [DATABASE_LANE_TEMPLATE_NAME],
+      );
+      const existing = template.rows[0];
+      if (existing !== undefined) {
+        const action = databaseTemplateAction(
+          existing.description,
+          fingerprint,
+        );
+        if (
+          existing.owner !== existing.connected_role ||
+          action === 'unowned'
+        ) {
+          throw new Error(
+            `Database lane template ${DATABASE_LANE_TEMPLATE_NAME} already exists but is not owned by this lane; refusing to replace it.`,
+          );
+        }
+        if (
+          action === 'reuse' &&
+          existing.is_template &&
+          !existing.allow_connections
+        ) {
+          return;
+        }
+        await admin.query(
+          `DROP DATABASE ${DATABASE_LANE_TEMPLATE_NAME} WITH (FORCE)`,
+        );
+      }
+
+      await admin.query(
+        `CREATE DATABASE ${DATABASE_LANE_TEMPLATE_NAME} WITH ALLOW_CONNECTIONS false`,
+      );
+      let created = true;
+      try {
+        await admin.query(
+          `COMMENT ON DATABASE ${DATABASE_LANE_TEMPLATE_NAME} IS '${databaseTemplateDescription(fingerprint, 'building')}'`,
+        );
+        await admin.query(
+          `REVOKE CONNECT ON DATABASE ${DATABASE_LANE_TEMPLATE_NAME} FROM PUBLIC`,
+        );
+        await admin.query(
+          `ALTER DATABASE ${DATABASE_LANE_TEMPLATE_NAME} WITH ALLOW_CONNECTIONS true`,
+        );
+
+        const target = new Client({
+          connectionString: templateDatabaseUrl(),
+          ...DATABASE_LANE_POSTGRES_TIMEOUTS,
+        });
+        await timeDatabasePhase(
+          `migration replay (${migrations.length} files)`,
+          async () => {
+            try {
+              await target.connect();
+              for (const migration of migrations) {
+                try {
+                  await target.query(migration.sql);
+                } catch {
+                  throw new Error(`Migration failed: ${migration.name}`);
+                }
+              }
+            } finally {
+              await target.end().catch(() => undefined);
+            }
+          },
+        );
+
+        await admin.query(
+          `ALTER DATABASE ${DATABASE_LANE_TEMPLATE_NAME} WITH IS_TEMPLATE true ALLOW_CONNECTIONS false`,
+        );
+        await admin.query(
+          `COMMENT ON DATABASE ${DATABASE_LANE_TEMPLATE_NAME} IS '${databaseTemplateDescription(fingerprint, 'ready')}'`,
+        );
+        created = false;
+      } catch (error) {
+        if (created) {
+          try {
+            await admin.query(
+              `DROP DATABASE ${DATABASE_LANE_TEMPLATE_NAME} WITH (FORCE)`,
+            );
+          } catch (cleanupError) {
+            throw new AggregateError(
+              [error, cleanupError],
+              'Database lane template build failed and cleanup also failed.',
+            );
+          }
+        }
+        throw error;
+      }
+    });
+
+    testDatabaseCreationStarted = true;
     await timeDatabasePhase('test database creation', async () => {
       for (const url of databaseUrls()) {
         const name = databaseName(url);
         await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
-        await admin.query(`CREATE DATABASE ${name}`);
+        await admin.query(
+          `CREATE DATABASE ${name} TEMPLATE ${DATABASE_LANE_TEMPLATE_NAME}`,
+        );
       }
     });
-
-    const migrations = await timeDatabasePhase(
-      'migration file discovery',
-      async () => {
-        const entries = await readdir(MIGRATIONS_DIR, { withFileTypes: true });
-        return entries
-          .filter((entry) => entry.isDirectory())
-          .map((entry) => entry.name)
-          .sort();
-      },
-    );
-
-    for (const url of databaseUrls()) {
-      const name = databaseName(url);
-      const target = new Client({
-        connectionString: url,
-        ...DATABASE_LANE_POSTGRES_TIMEOUTS,
-      });
-
-      await timeDatabasePhase(
-        `migration replay (${name}, ${migrations.length} files)`,
-        async () => {
-          try {
-            await target.connect();
-            for (const directory of migrations) {
-              const sql = await readFile(
-                join(MIGRATIONS_DIR, directory, 'migration.sql'),
-                'utf8',
-              );
-              try {
-                await target.query(sql);
-              } catch {
-                throw new Error(`Migration failed: ${directory}`);
-              }
-            }
-          } finally {
-            await target.end().catch(() => undefined);
-          }
-        },
-      );
-    }
   } catch (error) {
+    if (!testDatabaseCreationStarted) throw error;
     try {
       await timeDatabasePhase('test database cleanup after setup failure', () =>
         dropTestDatabases(admin),

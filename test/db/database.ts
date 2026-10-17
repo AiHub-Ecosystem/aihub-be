@@ -4,10 +4,9 @@ import { Pool } from 'pg';
 /**
  * Connection helpers for the database-backed lane.
  *
- * The lane runs against a disposable database created by its global setup, so
- * nothing here ever points at a developer's working database: the name is
- * configurable, dropped, and rebuilt from the repository's own migrations on
- * every run.
+ * The lane runs against disposable databases cloned from its migration
+ * template; its global setup drops and recreates only the fixed lane database
+ * names on every run.
  */
 
 /**
