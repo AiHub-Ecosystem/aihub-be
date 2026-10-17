@@ -445,7 +445,14 @@ The schedule uses the VPS's UTC clock:
 - `report` runs at 5 minutes past each hour for the preceding UTC hour;
 - `ttl-audit` runs at 01:45 daily;
 - `avatar-sweep` runs `avatar:sweep` at 03:30 daily.
-- `chart-upload-sweep` runs `writing:chart-upload-sweep` every 15 minutes.
+- `chart-upload-sweep` runs `writing:chart-upload-sweep` at 10, 25, 40, and
+  55 minutes past each hour.
+
+No two jobs start in the same minute, and `host-scheduled-job.spec.sh` fails
+when a schedule change makes two start together. Two jobs started in the same
+minute race for the host lock, and the loser is deferred, not retried: from
+2026-10-15 to 2026-10-17 a sweep every 15 minutes made the nightly `prune` lose
+on two nights in a row.
 
 Each CLI invocation has a hard deadline per enabled deployment. Production and
 Sandbox each get the full limit; a failure or timeout in Production is logged

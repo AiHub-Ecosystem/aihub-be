@@ -23,6 +23,54 @@ assert_not_contains() {
   fi
 }
 
+# Two jobs that start in the same minute race for the host lock, and the loser
+# is deferred rather than retried. This catches a shared start minute only; a
+# long job still defers a later one, which the runbook's overlap policy covers.
+assert_no_shared_start_minute() {
+  awk '
+    function expand(field, lo, hi, out,   parts, n, i, p, r, step, a, b, v) {
+      n = split(field, parts, ",")
+      for (i = 1; i <= n; i++) {
+        p = parts[i]; step = 1
+        if (index(p, "/")) { split(p, r, "/"); p = r[1]; step = r[2] + 0 }
+        if (p == "*") { a = lo; b = hi }
+        else if (index(p, "-")) { split(p, r, "-"); a = r[1] + 0; b = r[2] + 0 }
+        else { a = p + 0; b = step > 1 ? hi : a }
+        for (v = a; v <= b; v += step) out[v] = 1
+      }
+    }
+    /^#/ || NF == 0 { next }
+    {
+      if ($3 != "*" || $4 != "*" || $5 != "*") {
+        printf "unsupported day field in schedule: %s\n", $0 > "/dev/stderr"
+        bad = 1
+        next
+      }
+      split("", minutes); split("", hours)
+      expand($1, 0, 59, minutes)
+      expand($2, 0, 23, hours)
+      for (h in hours) for (m in minutes) {
+        key = sprintf("%02d:%02d", h, m)
+        if (key in owner) {
+          printf "%s and %s both start at %s\n", owner[key], $7, key > "/dev/stderr"
+          bad = 1
+        } else owner[key] = $7
+      }
+    }
+    END { exit bad }
+  ' "$1"
+}
+
+assert_no_shared_start_minute "$repository_root/ops/host-jobs/aihub.crontab"
+printf '30 2 * * * x prune\n*/15 * * * * x chart-upload-sweep\n' \
+  >"$test_root/colliding.crontab"
+if assert_no_shared_start_minute "$test_root/colliding.crontab" \
+  2>"$test_root/colliding.err"; then
+  printf 'expected a shared start minute to be refused\n' >&2
+  exit 1
+fi
+assert_contains "$test_root/colliding.err" 'prune and chart-upload-sweep both start at 02:30'
+
 app_dir="$test_root/app"
 bin_dir="$test_root/bin"
 home_dir="$test_root/home"
