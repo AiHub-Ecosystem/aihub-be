@@ -4,7 +4,7 @@ delete databaseConfig.globalTeardown;
 
 module.exports = {
   ...databaseConfig,
-  testMatch: ['<rootDir>/test/db/dispatch-attempt-crash.worker.spec.ts'],
+  testMatch: ['<rootDir>/test/db/**/*.worker.spec.ts'],
   testPathIgnorePatterns: ['/node_modules/'],
   testTimeout: 60_000,
 };

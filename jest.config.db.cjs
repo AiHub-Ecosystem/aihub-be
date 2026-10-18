@@ -20,7 +20,8 @@ module.exports = {
   testPathIgnorePatterns: [
     '/node_modules/',
     '<rootDir>/test/db/tenant-isolation/',
-    '<rootDir>/test/db/dispatch-attempt-crash.worker.spec.ts',
+    // Crash workers run only as children of the spec that kills them.
+    '\\.worker\\.spec\\.ts$',
   ],
   // Same reason as the unit lane: NestJS 12 is ESM only (ADR-0047).
   transformIgnorePatterns: [
