@@ -22,7 +22,7 @@ import {
 import type { MigrationFile } from './database-template';
 import { timeDatabasePhase } from './lane-timing';
 
-const MIGRATIONS_DIR = join(__dirname, '../../prisma/migrations');
+const MIGRATIONS_DIR = join(__dirname, '../../../prisma/migrations');
 
 function databaseUrls(): string[] {
   return databaseUrlsForLane(

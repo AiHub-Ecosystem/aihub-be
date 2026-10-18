@@ -7,7 +7,7 @@ import {
   loadRuntimeConfiguration,
   runtimeEnvironmentMetadata,
 } from '@/config/runtime-configuration';
-import { createAuthMfaCipher } from '@/modules/auth/infrastructure/auth-mfa-secret.cipher';
+import { createAuthMfaCipher } from '@/modules/auth/mfa/infrastructure/auth-mfa-secret.cipher';
 import { ConfiguredRuntimeSecretProvider } from '@/modules/secrets/infrastructure/configured-runtime-secret.provider';
 import { loadRuntimeConnectionEnvironment } from '@/modules/secrets/infrastructure/runtime-connection.environment';
 import { writeBootConfig } from './ci-boot-config.cjs';

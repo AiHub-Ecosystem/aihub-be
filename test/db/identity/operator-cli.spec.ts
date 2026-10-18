@@ -13,7 +13,7 @@ import {
   testDatabaseUrl,
 } from '../shared/database';
 
-const ROOT = join(__dirname, '../..');
+const ROOT = join(__dirname, '../../..');
 
 // `scripts/cli/cli.mjs` loads its API-key generator and command runners from the
 // build, and runs `main()` the moment it is imported, so nothing but a real

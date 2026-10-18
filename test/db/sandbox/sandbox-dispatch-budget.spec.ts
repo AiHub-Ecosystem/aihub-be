@@ -185,7 +185,7 @@ describe('migration 0037 deployment-month seed', () => {
   const MIGRATION = readFileSync(
     join(
       __dirname,
-      '../../prisma/migrations/0037_sandbox_allowance_policy/migration.sql',
+      '../../../prisma/migrations/0037_sandbox_allowance_policy/migration.sql',
     ),
     'utf8',
   );
