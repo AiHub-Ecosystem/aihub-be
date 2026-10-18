@@ -153,9 +153,10 @@ const bundles = [
 
 for (const [fileName, keys, bundleName] of bundles) {
   const path = readBundle(fileName, keys);
+  const bundle = /** @type {string} */ (bundleName);
   runVault(
-    ['kv', 'put', `secret/aihub/${environment}/${bundleName}`, `@${path}`],
-    `KV bundle write (${bundleName})`,
+    ['kv', 'put', `secret/aihub/${environment}/${bundle}`, `@${path}`],
+    `KV bundle write (${bundle})`,
   );
 }
 
