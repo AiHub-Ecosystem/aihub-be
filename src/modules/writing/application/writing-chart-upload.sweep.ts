@@ -1,3 +1,4 @@
+// ponytail: nested batch loop exceeds depth ceiling; refactor when sweep is touched.
 import { WRITING_CHART_ORPHAN_GRACE_MS } from './writing-chart-upload.policy';
 import type {
   WritingChartUploadRepositoryPort,

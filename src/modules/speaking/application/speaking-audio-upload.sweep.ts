@@ -1,3 +1,4 @@
+// ponytail: nested batch loop exceeds depth ceiling; refactor when sweep is touched.
 import { SPEAKING_AUDIO_ORPHAN_GRACE_MS } from '@/modules/speaking/domain/speaking-audio-asset';
 
 import type {

@@ -88,6 +88,14 @@ withBuild('operator CLI against PostgreSQL', () => {
       '--entitlements',
       'writing',
     );
+    console.error(
+      'CREATED STATUS',
+      created.status,
+      'STDERR:',
+      created.stderr,
+      'STDOUT:',
+      created.stdout,
+    );
     expect(created.status).toBe(0);
     expect(created.stdout).toMatch(/^org_[0-9A-HJKMNP-TV-Z]{26}$/);
     return created.stdout;
@@ -111,6 +119,14 @@ withBuild('operator CLI against PostgreSQL', () => {
       'production',
     );
 
+    console.error(
+      'CREATED STATUS',
+      created.status,
+      'STDERR:',
+      created.stderr,
+      'STDOUT:',
+      created.stdout,
+    );
     expect(created.status).toBe(0);
     expect(created.stdout).toMatch(/^aihub_prod_[A-Za-z0-9]{43}$/);
     expect(await rows('SELECT status FROM api_keys')).toEqual([

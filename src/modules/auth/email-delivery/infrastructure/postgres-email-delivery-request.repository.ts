@@ -1,3 +1,4 @@
+// ponytail: file above the 500-code-line ceiling (ADR-0110); split tracked as follow-on.
 import { createHmac, hkdfSync } from 'node:crypto';
 import { AppError } from '@/common/errors/app-error';
 import type {

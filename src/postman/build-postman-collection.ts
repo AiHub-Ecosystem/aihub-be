@@ -1,3 +1,4 @@
+// ponytail: file above the 500-code-line ceiling (ADR-0110); split tracked as follow-on.
 import { convert } from 'openapi-to-postmanv2';
 
 import { TASK1_SAMPLE_IMAGE_URL } from '@/catalog/operation-catalog';

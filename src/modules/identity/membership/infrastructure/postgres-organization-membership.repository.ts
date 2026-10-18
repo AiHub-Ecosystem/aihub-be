@@ -1,3 +1,4 @@
+// ponytail: file above the 500-code-line ceiling (ADR-0110); split tracked as follow-on.
 import { AppError } from '@/common/errors/app-error';
 import type { OrganizationStatus } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import type {

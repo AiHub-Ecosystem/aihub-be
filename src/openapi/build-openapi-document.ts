@@ -1,3 +1,4 @@
+// ponytail: file above the 500-code-line ceiling (ADR-0110); split tracked as follow-on.
 import { type TObject, type TSchema, Type } from '@sinclair/typebox';
 
 import type {

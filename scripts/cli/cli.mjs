@@ -8,7 +8,7 @@ import { ulid } from 'ulid';
 // The credential format is owned by the identity domain so that this CLI and
 // the self-service endpoint cannot drift apart in prefix, entropy, or hashing.
 const apiKeyModule = new URL(
-  '../../dist/modules/identity/domain/api-key.js',
+  '../../dist/modules/identity/api-keys/application/organization-api-key-generator.js',
   import.meta.url,
 );
 
