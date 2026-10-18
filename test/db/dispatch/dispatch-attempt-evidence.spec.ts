@@ -7,7 +7,7 @@ import { createInterface } from 'node:readline';
 
 import { ulid } from 'ulid';
 
-import { generateApiKey } from '@/modules/identity/domain/api-key';
+import { generateApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { calculateUsageRetentionCutoff } from '@/modules/metering/application/usage-retention';
 import { PostgresDispatchAttemptRepository } from '@/modules/metering/infrastructure/postgres-dispatch-attempt.repository';
 import { PostgresUsageRetentionRepository } from '@/modules/metering/infrastructure/postgres-usage-retention.repository';

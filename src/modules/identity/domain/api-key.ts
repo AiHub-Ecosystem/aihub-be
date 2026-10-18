@@ -1,5 +1,3 @@
-import { createHash, randomBytes } from 'node:crypto';
-
 /** The shared prefix every key issued before ADR-0095 carries. */
 export const API_KEY_PREFIX = 'aihub_sk_';
 
@@ -24,8 +22,6 @@ const KNOWN_PREFIXES: readonly string[] = [
 
 /** base62 over 32 bytes of CSPRNG output, left-padded to a fixed width. */
 const API_KEY_SECRET_LENGTH = 43;
-const BASE62 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-
 /** Six characters beyond the prefix: enough to recognise a key, useless to replay. */
 const DISPLAY_PREFIX_LENGTH = 6;
 
@@ -85,48 +81,11 @@ export function isApiKeyFormat(value: string): boolean {
   return API_KEY_FORMATS.some((format) => new RegExp(format).test(value));
 }
 
-export function hashApiKey(value: string): string {
-  return createHash('sha256').update(value, 'utf8').digest('hex');
-}
-
 export function apiKeyDisplayPrefix(rawKey: string): string {
   const prefix =
     KNOWN_PREFIXES.find((candidate) => rawKey.startsWith(candidate)) ??
     API_KEY_PREFIX;
   return rawKey.slice(0, prefix.length + DISPLAY_PREFIX_LENGTH);
-}
-
-/**
- * Builds API-key secret material around an ID minted by the application.
- *
- * The environment is the one the key is bound to; omit it for a credential that
- * spans more than one environment, which can only be the shared prefix.
- */
-export function generateApiKey(
-  id: string,
-  environment?: string,
-): GeneratedApiKey {
-  let value = BigInt(`0x${randomBytes(32).toString('hex')}`);
-  let secret = '';
-  while (value > 0n) {
-    const character = BASE62[Number(value % 62n)];
-    if (character === undefined) {
-      throw new Error('API key alphabet is misconfigured');
-    }
-    secret = character + secret;
-    value /= 62n;
-  }
-
-  const raw = `${apiKeyPrefixForEnvironment(environment)}${secret.padStart(
-    API_KEY_SECRET_LENGTH,
-    '0',
-  )}`;
-  return {
-    id,
-    raw,
-    hash: hashApiKey(raw),
-    prefix: apiKeyDisplayPrefix(raw),
-  };
 }
 
 /** The lifecycle AIHUB publishes for a key, wider than the durable column. */

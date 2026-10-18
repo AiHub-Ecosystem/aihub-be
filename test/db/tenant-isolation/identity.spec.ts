@@ -2,8 +2,8 @@ import { Response } from 'undici';
 
 import { ApiKeyAuthenticator } from '@/modules/identity/api-keys/application/api-key-authenticator';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
+import { hashApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { PostgresApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
-import { hashApiKey } from '@/modules/identity/domain/api-key';
 import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/organization-identity-configuration/infrastructure/postgres-organization-identity-config.repository';
 import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import {

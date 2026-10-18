@@ -53,3 +53,7 @@ This record is Accepted because the layering was implemented and enforced before
 ## Update: mappers-not-casts convention is now checked (#673)
 
 `scripts/checks/check-architecture.mjs` now fails when an `src/modules/**/infrastructure/**` file contains `as unknown as <Type>` where `<Type>` is declared under an `application/` path. The eight former cast sites at the Prisma-to-application-port seam were replaced by a thin `EmailDeliveryTransactionAdapter` (in `auth/email-delivery/infrastructure/`) plus a single cast to that infrastructure type; the application port stays free of Prisma-shaped concepts.
+
+## Update: domain framework-free rule now covers Node core modules (#668)
+
+`domain-no-framework-or-io` in `.dependency-cruiser.cjs` now rejects `^node:` (and `src/downstream/`, `src/common/`, `src/config/`) targets from any `**/domain/` file. The `node:crypto` case in `identity/domain/api-key.ts` was resolved by moving `generateApiKey` (entropy) to `identity/api-keys/application/organization-api-key-generator.ts`; `hashApiKey` moved with it. No domain file imports a Node builtin.

@@ -324,7 +324,15 @@ module.exports = {
       severity: 'error',
       comment: 'Domain code is framework-free and side-effect-free.',
       from: { path: '^src/.*/domain/' },
-      to: { path: 'node_modules' },
+      to: {
+        path: [
+          'node_modules',
+          '^node:',
+          '^src/downstream/',
+          '^src/common/',
+          '^src/config/',
+        ],
+      },
     },
     {
       name: 'application-no-outer-layers',

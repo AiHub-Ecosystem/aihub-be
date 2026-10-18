@@ -1,5 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
-import { hashApiKey, isApiKeyFormat } from '@/modules/identity/domain/api-key';
+import { isApiKeyFormat } from '@/modules/identity/domain/api-key';
+import { hashApiKey } from './organization-api-key-generator';
 
 import type {
   ApiKeyAuthenticatorPort,
@@ -89,9 +90,9 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       // Postgres lookup, rather than at the top of the method: it exists to
       // protect Postgres from an IP grinding through fresh random guesses
       // (always a cache miss), not to block every request from that IP. A
-      // well-formed key that is already cached — the common case for a real
+      // well-formed key that is already cached â€” the common case for a real
       // customer, including a valid request sharing a NAT'd IP with someone
-      // else's failed attempts — never pays this round trip and is never
+      // else's failed attempts â€” never pays this round trip and is never
       // gated by it, matching the "a legitimate request never touches this
       // counter" contract in the auth design.
       const currentFailures = await this.getFailureCount(credentials.clientIp);
