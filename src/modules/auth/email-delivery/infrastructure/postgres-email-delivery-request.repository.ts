@@ -19,6 +19,7 @@ import {
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type { EmailOutboxRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';
 import { Logger } from '@nestjs/common';
+import { EmailDeliveryTransactionAdapter } from './email-delivery-transaction.adapter';
 
 import {
   type AuthSqlClient,
@@ -396,7 +397,7 @@ export class PostgresEmailDeliveryRequestRepository
     transaction: EmailDeliveryTransaction,
     input: { readonly email: string; readonly now: Date },
   ): Promise<boolean> {
-    const client = transaction as unknown as AuthSqlClient;
+    const client = (transaction as EmailDeliveryTransactionAdapter).client;
     const fingerprints = fingerprintEmailRecipients(
       input.email,
       this.emailOutboxSecrets,
@@ -506,7 +507,7 @@ export class PostgresEmailDeliveryRequestRepository
     transaction: EmailDeliveryTransaction,
     input: InsertEmailDeliveryRequestInput,
   ): Promise<void> {
-    const client = transaction as unknown as AuthSqlClient;
+    const client = (transaction as EmailDeliveryTransactionAdapter).client;
     await client.emailDeliveryRequest.create({
       data: {
         id: input.id,

@@ -1,7 +1,8 @@
 import { AppError } from '@/common/errors/app-error';
+import type { EmailDeliveryTransaction } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { emailDeliveryTransactionBrand } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type {
   EmailDeliveryRequestWriterPort,
-  EmailDeliveryTransaction,
   EmailPayloadCipherPort,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type { OrganizationAuditDraft } from '@/modules/identity/domain/organization-audit-event';
@@ -266,7 +267,10 @@ export class PostgresOrganizationInvitationRepository
         // transaction, and queued here so the invitation and the request that
         // emails its credential commit or roll back together (ADR-0074).
         await this.emailRequests.insert(
-          transaction as unknown as EmailDeliveryTransaction,
+          {
+            [emailDeliveryTransactionBrand]: undefined,
+            client: transaction,
+          } as EmailDeliveryTransaction,
           {
             id: input.emailDelivery.id,
             kind: 'organization_invite_email',

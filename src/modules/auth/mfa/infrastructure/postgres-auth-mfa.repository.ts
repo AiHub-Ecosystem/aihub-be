@@ -1,7 +1,5 @@
-import type {
-  EmailDeliveryTransaction,
-  InsertEmailDeliveryRequestInput,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import type {
   AuthMfaFactorRecord,
@@ -243,7 +241,7 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     input: InsertEmailDeliveryRequestInput,
   ): Promise<void> {
     await this.emailRequests.insert(
-      transaction as unknown as EmailDeliveryTransaction,
+      new EmailDeliveryTransactionAdapter(transaction),
       input,
     );
   }

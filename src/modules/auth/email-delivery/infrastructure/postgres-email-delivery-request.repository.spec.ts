@@ -1,9 +1,7 @@
 import { Logger } from '@nestjs/common';
+import { EmailDeliveryTransactionAdapter } from './email-delivery-transaction.adapter';
 
-import type {
-  EmailDeliveryTransaction,
-  InsertEmailDeliveryRequestInput,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import {
   type QueryFake,
   ScriptedPrisma,
@@ -49,7 +47,7 @@ function claim(row: Record<string, unknown>) {
 describe('PostgresEmailDeliveryRequestRepository', () => {
   it('inserts the outbox row through the caller Prisma transaction', async () => {
     const script = new ScriptedPrisma();
-    const transaction = script.client() as unknown as EmailDeliveryTransaction;
+    const transaction = new EmailDeliveryTransactionAdapter(script.client());
     const input: InsertEmailDeliveryRequestInput = {
       id: ROW_ID,
       kind: 'verification_email',

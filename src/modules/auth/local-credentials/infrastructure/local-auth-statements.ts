@@ -1,8 +1,8 @@
 import type {
   EmailDeliveryRequestWriterPort,
-  EmailDeliveryTransaction,
   InsertEmailDeliveryRequestInput,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
 import type {
   AuthSqlClient,
   AuthTransactionClient,
@@ -44,7 +44,7 @@ export async function insertEmailDelivery(
 ): Promise<void> {
   if (emailDelivery !== undefined) {
     await emailDeliveryRequests.insert(
-      transaction as unknown as EmailDeliveryTransaction,
+      new EmailDeliveryTransactionAdapter(transaction),
       emailDelivery,
     );
   }

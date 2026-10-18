@@ -1,3 +1,4 @@
+import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
 import { ulid } from 'ulid';
 
 import type {
@@ -6,10 +7,7 @@ import type {
   UserAccountRepositoryPort,
 } from '@/modules/auth/accounts/application/user-account.port';
 import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
-import type {
-  EmailDeliveryRequestWriterPort,
-  EmailDeliveryTransaction,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { EmailDeliveryRequestWriterPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import { insertEmailDelivery } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
 import { AuthIdentityConflictError } from '@/modules/auth/shared/application/auth-identity-conflict.error';
@@ -46,7 +44,7 @@ export class PostgresUserAccountRepository
         const recipientAllowed =
           input.emailDelivery === undefined ||
           (await this.emailDeliveryRequests.reserveAuthenticationEmailRecipient(
-            transaction as unknown as EmailDeliveryTransaction,
+            new EmailDeliveryTransactionAdapter(transaction),
             { email: input.email, now: input.now },
           ));
         const userId = `usr_${ulid()}`;

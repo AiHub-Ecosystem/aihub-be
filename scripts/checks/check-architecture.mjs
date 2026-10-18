@@ -221,6 +221,38 @@ for (const layer of ['application', 'domain']) {
   }
 }
 
+// ADR-0090 / #673: no `as unknown as <application-declared type>` cast in
+// infrastructure. Application ports stay free of Prisma-shaped concepts; a
+// transaction or client crosses the seam through a thin infrastructure adapter
+// instead of a compiler-forcing cast. Justified exceptions carry a comment and
+// are listed in CAST_ALLOWLIST below.
+const CAST_ALLOWLIST = new Set([]);
+
+const applicationTypeNames = new Set();
+for (const file of collectTypeScriptFiles(srcDirectory)) {
+  const relativePath = relative(root, file).replace(/\\/g, '/');
+  if (!relativePath.includes('/application/')) continue;
+  const source = readFileSync(file, 'utf8');
+  for (const match of source.matchAll(/export\s+(?:type|interface)\s+(\w+)/g)) {
+    applicationTypeNames.add(match[1]);
+  }
+}
+
+for (const file of collectTypeScriptFiles(srcDirectory)) {
+  const relativePath = relative(root, file).replace(/\\/g, '/');
+  if (!relativePath.includes('/infrastructure/')) continue;
+  if (file.endsWith('.spec.ts')) continue;
+  const source = readFileSync(file, 'utf8');
+  for (const match of source.matchAll(/as\s+unknown\s+as\s+(\w+)/g)) {
+    const typeName = match[1];
+    if (!applicationTypeNames.has(typeName)) continue;
+    if (CAST_ALLOWLIST.has(`${relativePath}::${typeName}`)) continue;
+    fail(
+      `${relativePath}: \`as unknown as ${typeName}\` casts an application-declared type in infrastructure; introduce a thin adapter instead.`,
+    );
+  }
+}
+
 const result = spawnSync(
   command,
   [

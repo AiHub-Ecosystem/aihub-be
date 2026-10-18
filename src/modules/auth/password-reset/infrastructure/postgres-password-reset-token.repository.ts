@@ -1,7 +1,5 @@
-import type {
-  EmailDeliveryRequestWriterPort,
-  EmailDeliveryTransaction,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { EmailDeliveryRequestWriterPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import {
   LOCK_PASSWORD_IDENTITY_SQL,
@@ -119,7 +117,7 @@ export class PostgresPasswordResetTokenRepository
       if (
         input.emailDelivery !== undefined &&
         !(await this.emailDeliveryRequests.reserveAuthenticationEmailRecipient(
-          transaction as unknown as EmailDeliveryTransaction,
+          new EmailDeliveryTransactionAdapter(transaction),
           { email: input.email, now: input.now },
         ))
       ) {

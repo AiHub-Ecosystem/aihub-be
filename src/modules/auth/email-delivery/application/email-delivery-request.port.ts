@@ -47,11 +47,11 @@ export type EmailDeliveryPayload =
   | OrganizationInviteEmailDeliveryPayload
   | MfaSecurityNotificationPayload;
 
-declare const emailDeliveryTransactionBrand: unique symbol;
+export declare const emailDeliveryTransactionBrand: unique symbol;
 
 /** Opaque capability for the caller-owned PostgreSQL transaction. */
 export interface EmailDeliveryTransaction {
-  readonly [emailDeliveryTransactionBrand]: never;
+  readonly [emailDeliveryTransactionBrand]?: unknown;
 }
 
 /**
