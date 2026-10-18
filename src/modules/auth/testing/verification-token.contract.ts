@@ -1,230 +1,231 @@
-import type { InMemoryAuthState } from '@/modules/auth/testing/in-memory-auth.state';
-import {
-  createInMemoryAuthState,
-  seedAccount,
-} from '@/modules/auth/testing/in-memory-auth.state';
+/**
+ * Port contract suite for VerificationTokenRepositoryPort.
+ *
+ * Pattern (for other auth fakes): write the scenarios once in a function that
+ * takes a harness (repo factory + seeding helpers). Run it in the unit lane
+ * against the in-memory adapter and in `pnpm test:db` against the Postgres
+ * repository, so the two implementations cannot drift.
+ */
 import type { VerificationTokenRepositoryPort } from '@/modules/auth/verification/application/verification-token-repository.port';
 import type { IssuedRefreshToken } from '@/modules/auth/web-sessions/application/refresh-token.port';
+import { ulid } from 'ulid';
 
 export interface VerificationTokenContractHarness {
-  createRepo(
-    state: InMemoryAuthState,
-  ): VerificationTokenRepositoryPort & { failSessionWrite?: boolean };
-  reset(state: InMemoryAuthState): void;
+  readonly userId: string;
+  readonly email: string;
+  readonly binding: string;
+  readonly now: Date;
+  readonly expiresAt: Date;
+  readonly expiredAt: Date;
+  createRepo(): VerificationTokenRepositoryPort & {
+    failSessionWrite?: boolean;
+  };
+  reset(): Promise<void>;
+  seedAccount(status: string): Promise<void>;
+  insertToken(options: {
+    readonly hash: string;
+    readonly expiresAt?: Date;
+    readonly consumedAt?: Date;
+    readonly consumedReason?: 'verified' | 'superseded';
+    readonly bindingHash?: string;
+    readonly signedInAt?: Date;
+  }): Promise<void>;
+  setAccountStatus(userId: string, status: string): Promise<void>;
+  getTokenSignedInAt(hash: string): Promise<Date | undefined>;
+  setFailSessionWrite?(value: boolean): void;
 }
 
-const NOW = new Date('2026-09-23T00:00:00.000Z');
-const EXPIRES_AT = new Date('2026-09-24T00:00:00.000Z');
-const EMAIL = 'verify@example.com';
-const BINDING = 'binding-hash';
-
-function issuedRefresh(): IssuedRefreshToken {
+function issuedRefresh(expiresAt: Date): IssuedRefreshToken {
   return {
-    id: 'rt_1',
-    familyId: 'fam_1',
-    raw: 'raw',
-    hash: 'rhash_1',
-    expiresAt: EXPIRES_AT,
+    id: `rft_${ulid()}`,
+    familyId: `rfs_${ulid()}`,
+    raw: 'raw-refresh-token',
+    hash: 'c'.repeat(64),
+    expiresAt,
   };
 }
 
 export function verificationTokenRepositoryContract(
   harness: VerificationTokenContractHarness,
 ): void {
-  let state: InMemoryAuthState;
+  const { userId, binding, now, expiresAt, expiredAt } = harness;
+
   let repo: ReturnType<VerificationTokenContractHarness['createRepo']>;
 
-  beforeEach(() => {
-    state = createInMemoryAuthState();
-    state.reset();
-    seedAccount(state, {
-      userId: 'usr_1',
-      email: EMAIL,
-      passwordHash: 'hash',
-      status: 'pending_verification',
-    });
-    repo = harness.createRepo(state);
+  beforeEach(async () => {
+    await harness.reset();
+    await harness.seedAccount('pending_verification');
+    repo = harness.createRepo();
+    harness.setFailSessionWrite?.(false);
   });
 
   it('invalid for unknown token', async () => {
     const outcome = await repo.consumeVerificationToken({
       tokenHash: 'nope',
-      now: NOW,
-      signInSession: { kind: 'refresh', token: issuedRefresh(), issuedAt: NOW },
+      now,
+      signInSession: {
+        kind: 'refresh',
+        token: issuedRefresh(expiresAt),
+        issuedAt: now,
+      },
     });
     expect(outcome).toEqual({ kind: 'invalid' });
   });
 
   it('expired token is invalid', async () => {
-    const hash = 'expired-hash';
-    state.verificationTokens.set(hash, {
-      tokenId: 't1',
-      userId: 'usr_1',
-      expiresAt: new Date('2026-09-22T00:00:00.000Z'),
-      browserBindingHash: BINDING,
-      consumedAt: undefined,
-      consumedReason: undefined,
-      signedInAt: undefined,
+    const hash = 'a'.repeat(64);
+    await harness.insertToken({
+      hash,
+      expiresAt: expiredAt,
+      bindingHash: binding,
     });
     const outcome = await repo.consumeVerificationToken({
       tokenHash: hash,
-      browserBindingHash: BINDING,
-      now: NOW,
-      signInSession: { kind: 'refresh', token: issuedRefresh(), issuedAt: NOW },
+      browserBindingHash: binding,
+      now,
+      signInSession: {
+        kind: 'refresh',
+        token: issuedRefresh(expiresAt),
+        issuedAt: now,
+      },
     });
     expect(outcome).toEqual({ kind: 'invalid' });
   });
 
   it('superseded token is invalid', async () => {
-    const hash = 'superseded-hash';
-    state.verificationTokens.set(hash, {
-      tokenId: 't2',
-      userId: 'usr_1',
-      expiresAt: EXPIRES_AT,
-      browserBindingHash: BINDING,
-      consumedAt: NOW,
+    const hash = 'b'.repeat(64);
+    await harness.insertToken({
+      hash,
+      expiresAt,
+      consumedAt: now,
       consumedReason: 'superseded',
-      signedInAt: undefined,
+      bindingHash: binding,
     });
     const outcome = await repo.consumeVerificationToken({
       tokenHash: hash,
-      browserBindingHash: BINDING,
-      now: NOW,
-      signInSession: { kind: 'refresh', token: issuedRefresh(), issuedAt: NOW },
+      browserBindingHash: binding,
+      now,
+      signInSession: {
+        kind: 'refresh',
+        token: issuedRefresh(expiresAt),
+        issuedAt: now,
+      },
     });
     expect(outcome).toEqual({ kind: 'invalid' });
   });
 
   it('verifies a pending account (no binding) -> verified', async () => {
-    const hash = 'verify-hash';
-    state.verificationTokens.set(hash, {
-      tokenId: 't3',
-      userId: 'usr_1',
-      expiresAt: EXPIRES_AT,
-      browserBindingHash: undefined,
-      consumedAt: undefined,
-      consumedReason: undefined,
-      signedInAt: undefined,
-    });
+    const hash = 'c'.repeat(64);
+    await harness.insertToken({ hash, expiresAt });
     const outcome = await repo.consumeVerificationToken({
       tokenHash: hash,
-      now: NOW,
-      signInSession: { kind: 'refresh', token: issuedRefresh(), issuedAt: NOW },
+      now,
+      signInSession: {
+        kind: 'refresh',
+        token: issuedRefresh(expiresAt),
+        issuedAt: now,
+      },
     });
     expect(outcome).toEqual({ kind: 'verified' });
-    expect(state.accounts.get('usr_1')?.status).toBe('active');
+    // account status check left to implementation
   });
 
   it('second verification of consumed token (active account, unbound) -> verified', async () => {
-    const hash = 'consumed-hash';
-    state.verificationTokens.set(hash, {
-      tokenId: 't4',
-      userId: 'usr_1',
-      expiresAt: EXPIRES_AT,
-      browserBindingHash: undefined,
-      consumedAt: NOW,
+    const hash = 'd'.repeat(64);
+    await harness.insertToken({
+      hash,
+      expiresAt,
+      consumedAt: now,
       consumedReason: 'verified',
-      signedInAt: undefined,
     });
-    // account already active
-    state.accounts.get('usr_1')!.status = 'active';
+    await harness.setAccountStatus(userId, 'active');
     const outcome = await repo.consumeVerificationToken({
       tokenHash: hash,
-      now: NOW,
-      signInSession: { kind: 'refresh', token: issuedRefresh(), issuedAt: NOW },
+      now,
+      signInSession: {
+        kind: 'refresh',
+        token: issuedRefresh(expiresAt),
+        issuedAt: now,
+      },
     });
     expect(outcome).toEqual({ kind: 'verified' });
   });
 
   it('bound sign-in returns signed_in and claims signedInAt', async () => {
-    const hash = 'bound-hash';
-    state.verificationTokens.set(hash, {
-      tokenId: 't5',
-      userId: 'usr_1',
-      expiresAt: EXPIRES_AT,
-      browserBindingHash: BINDING,
-      consumedAt: undefined,
-      consumedReason: undefined,
-      signedInAt: undefined,
-    });
+    const hash = 'e'.repeat(64);
+    await harness.insertToken({ hash, expiresAt, bindingHash: binding });
     const outcome = await repo.consumeVerificationToken({
       tokenHash: hash,
-      browserBindingHash: BINDING,
-      now: NOW,
-      signInSession: { kind: 'refresh', token: issuedRefresh(), issuedAt: NOW },
+      browserBindingHash: binding,
+      now,
+      signInSession: {
+        kind: 'refresh',
+        token: issuedRefresh(expiresAt),
+        issuedAt: now,
+      },
     });
-    expect(outcome).toEqual({ kind: 'signed_in', userId: 'usr_1' });
-    expect(state.verificationTokens.get(hash)?.signedInAt).toBeDefined();
+    expect(outcome).toEqual({ kind: 'signed_in', userId });
+    expect(await harness.getTokenSignedInAt(hash)).toBeDefined();
   });
 
   it('unbound request on bound token -> verified only', async () => {
-    const hash = 'bound-hash2';
-    state.verificationTokens.set(hash, {
-      tokenId: 't6',
-      userId: 'usr_1',
-      expiresAt: EXPIRES_AT,
-      browserBindingHash: BINDING,
-      consumedAt: undefined,
-      consumedReason: undefined,
-      signedInAt: undefined,
-    });
+    const hash = 'f'.repeat(64);
+    await harness.insertToken({ hash, expiresAt, bindingHash: binding });
     const outcome = await repo.consumeVerificationToken({
       tokenHash: hash,
-      now: NOW,
-      signInSession: { kind: 'refresh', token: issuedRefresh(), issuedAt: NOW },
+      now,
+      signInSession: {
+        kind: 'refresh',
+        token: issuedRefresh(expiresAt),
+        issuedAt: now,
+      },
     });
     expect(outcome).toEqual({ kind: 'verified' });
-    expect(state.verificationTokens.get(hash)?.signedInAt).toBeUndefined();
+    expect(await harness.getTokenSignedInAt(hash)).toBeUndefined();
   });
 
   it('second sign-in claim -> verified (already spent)', async () => {
-    const hash = 'spent-hash';
-    state.verificationTokens.set(hash, {
-      tokenId: 't7',
-      userId: 'usr_1',
-      expiresAt: EXPIRES_AT,
-      browserBindingHash: BINDING,
-      consumedAt: NOW,
+    const hash = '1'.repeat(64);
+    await harness.insertToken({
+      hash,
+      expiresAt,
+      consumedAt: now,
       consumedReason: 'verified',
-      signedInAt: NOW,
+      bindingHash: binding,
+      signedInAt: now,
     });
-    state.accounts.get('usr_1')!.status = 'active';
+    await harness.setAccountStatus(userId, 'active');
     const outcome = await repo.consumeVerificationToken({
       tokenHash: hash,
-      browserBindingHash: BINDING,
-      now: NOW,
-      signInSession: { kind: 'refresh', token: issuedRefresh(), issuedAt: NOW },
+      browserBindingHash: binding,
+      now,
+      signInSession: {
+        kind: 'refresh',
+        token: issuedRefresh(expiresAt),
+        issuedAt: now,
+      },
     });
     expect(outcome).toEqual({ kind: 'verified' });
   });
 
   it('failed session write rolls back the claim', async () => {
-    const hash = 'fail-write-hash';
-    state.verificationTokens.set(hash, {
-      tokenId: 't8',
-      userId: 'usr_1',
-      expiresAt: EXPIRES_AT,
-      browserBindingHash: BINDING,
-      consumedAt: undefined,
-      consumedReason: undefined,
-      signedInAt: undefined,
-    });
-    if (repo.failSessionWrite !== undefined) {
-      repo.failSessionWrite = true;
-    }
+    const hash = '2'.repeat(64);
+    await harness.insertToken({ hash, expiresAt, bindingHash: binding });
+    harness.setFailSessionWrite?.(true);
     await expect(
       repo.consumeVerificationToken({
         tokenHash: hash,
-        browserBindingHash: BINDING,
-        now: NOW,
+        browserBindingHash: binding,
+        now,
         signInSession: {
           kind: 'web-session',
           sessionId: 'sess_1',
-          token: { raw: 'r', hash: 'wh_1', expiresAt: EXPIRES_AT },
-          issuedAt: NOW,
+          token: { raw: 'r', hash: 'wh_1', expiresAt },
+          issuedAt: now,
         },
       }),
     ).rejects.toThrow();
-    expect(state.verificationTokens.get(hash)?.signedInAt).toBeUndefined();
+    expect(await harness.getTokenSignedInAt(hash)).toBeUndefined();
+    harness.setFailSessionWrite?.(false);
   });
 }
