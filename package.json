@@ -50,8 +50,10 @@
     "knip": "pnpm generate:prisma-client && node scripts/checks/knip.mjs",
     "verify:summary": "node scripts/checks/verify-summary.cjs",
     "provider:refresh": "node scripts/generate/refresh-provider-contract.mjs",
-    "verify": "pnpm knip && pnpm lint && pnpm format:check && pnpm type-check && pnpm arch-check && pnpm check:imports && pnpm check:migrations && pnpm validate:openapi && pnpm test && pnpm test:capacity-benchmark && pnpm test:monitoring-config && pnpm build && pnpm check:imports:dist",
-    "prepare": "husky"
+    "verify": "pnpm knip && pnpm lint && pnpm format:check && pnpm type-check && pnpm arch-check && pnpm check:imports && pnpm check:migrations && pnpm check:data-dictionary && pnpm validate:openapi && pnpm test && pnpm test:capacity-benchmark && pnpm test:monitoring-config && pnpm build && pnpm check:imports:dist",
+    "prepare": "husky",
+    "generate:data-dictionary": "tsx scripts/generate/generate-data-dictionary.ts",
+    "check:data-dictionary": "node scripts/checks/check-data-dictionary.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1149.0",

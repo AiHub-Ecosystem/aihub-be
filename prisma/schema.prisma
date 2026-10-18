@@ -42,6 +42,7 @@ generator client {
 ///
 /// `CHECK` constraints `api_keys_key_hash_check` and `api_keys_status_check`
 /// are owned by migration 0001.
+/// @owner identity
 model ApiKey {
   id                   String       @id
   organizationId       String       @map("organization_id")
@@ -67,6 +68,7 @@ model ApiKey {
 ///
 /// `CHECK` constraints are owned by migrations 0006 (id, provider,
 /// canonical_email) and 0029 (password_hash parameters).
+/// @owner auth
 model AuthIdentity {
   id              String      @id
   userAccountId   String      @map("user_account_id")
@@ -88,6 +90,7 @@ model AuthIdentity {
 /// error codes, payload and completion states), 0028 (lease owner), 0030 and
 /// 0031 (failure notification), and 0035 (MFA delivery kinds). Two fields carry
 /// database comments that this schema language does not yet read.
+/// @owner auth
 model EmailDeliveryRequest {
   id                              String   @id
   kind                            String
@@ -110,6 +113,7 @@ model EmailDeliveryRequest {
 
 /// A short-lived keyed fingerprint budget for authentication email recipients.
 /// The retained keyring lets writers find an active window after rotation.
+/// @owner auth
 model AuthEmailRecipientRateLimit {
   keyVersion      String   @map("key_version")
   addressHmac     String   @map("address_hmac")
@@ -128,6 +132,7 @@ model AuthEmailRecipientRateLimit {
 /// per account) is owned by migration 0006. `CHECK` constraints are owned by
 /// migrations 0006 (id, token hash), 0018 (consumption reason) and 0022
 /// (browser binding and sign-in).
+/// @owner auth
 model EmailVerificationToken {
   id                 String      @id
   userAccountId      String      @unique(map: "email_verification_one_open_token", where: raw("(consumed_at IS NULL)")) @map("user_account_id")
@@ -153,6 +158,7 @@ model EmailVerificationToken {
 /// `CHECK` constraints are owned by migrations 0004 (idempotency key,
 /// fingerprint, state) and the primary key added by 0013; the scope key unique
 /// constraint is added by 0014.
+/// @owner idempotency
 model IdempotencyRecord {
   organizationId     String? @map("organization_id")
   operation          String
@@ -179,6 +185,7 @@ model IdempotencyRecord {
 /// `CHECK` constraints on `action` and `target_type` were extended by
 /// migrations 0012, 0014, 0015, 0016, 0017, 0019 and 0021; migration 0011 owns
 /// the rest.
+/// @owner identity
 model OrganizationAuditEvent {
   id                String       @id
   organizationId    String       @map("organization_id")
@@ -204,6 +211,7 @@ model OrganizationAuditEvent {
 /// Trigger `organization_identity_configs_set_updated_at` is owned by
 /// migration 0003, which also owns its `CHECK` constraints; migration 0020 adds
 /// `organization_identity_configs_jwks_cache_version_check`.
+/// @owner identity
 model OrganizationIdentityConfig {
   organizationId        String       @id @map("organization_id")
   issuer                String       @unique(map: "oic_issuer_uq")
@@ -225,6 +233,7 @@ model OrganizationIdentityConfig {
 /// The partial unique index `organization_invitations_one_open` (one open
 /// invitation per Organization and email) is owned by migration 0010, which
 /// also owns this table's `CHECK` constraints.
+/// @owner identity
 model OrganizationInvitation {
   id             String       @id
   organizationId String       @map("organization_id")
@@ -248,6 +257,7 @@ model OrganizationInvitation {
 ///
 /// Trigger `organization_members_set_updated_at` is owned by migration 0009,
 /// which also owns this table's `CHECK` constraints.
+/// @owner identity
 model OrganizationMembership {
   organizationId String       @map("organization_id")
   userAccountId  String       @map("user_account_id")
@@ -269,6 +279,7 @@ model OrganizationMembership {
 /// constraints are owned by migration 0001 (status, rate limit, concurrency,
 /// quota), with status extended by 0016 (suspension). The partial index
 /// `organizations_created_by_idx` is owned by migration 0014.
+/// @owner identity
 model Organization {
   id                         String                      @id
   name                       String
@@ -298,6 +309,7 @@ model Organization {
 ///
 /// The partial unique index `password_reset_one_open_token` is owned by
 /// migration 0008, which also owns this table's `CHECK` constraints.
+/// @owner auth
 model PasswordResetToken {
   id            String      @id
   userAccountId String      @unique(map: "password_reset_one_open_token", where: raw("(consumed_at IS NULL)")) @map("user_account_id")
@@ -314,6 +326,7 @@ model PasswordResetToken {
 /// A refresh-token family member, rotated on every use.
 ///
 /// `CHECK` constraints are owned by migration 0007.
+/// @owner auth
 model RefreshToken {
   id            String      @id
   familyId      String      @map("family_id")
@@ -335,6 +348,7 @@ model RefreshToken {
 ///
 /// The partial index `sandbox_dispatch_reservations_month_idx` and this table's
 /// `CHECK` constraints are owned by migration 0023.
+/// @owner gateway
 model SandboxDispatchReservation {
   requestId      String   @id @map("request_id")
   organizationId String   @map("organization_id")
@@ -353,6 +367,7 @@ model SandboxDispatchReservation {
 /// change while the deployment month keeps the allowance already in effect.
 ///
 /// The `CHECK` constraints are owned by migration 0037.
+/// @owner gateway
 model SandboxAllowanceDefault {
   monthStart DateTime @id @map("month_start") @db.Date
   allowance  Int      @map("allowance")
@@ -365,6 +380,7 @@ model SandboxAllowanceDefault {
 /// to it, and it expires with the month.
 ///
 /// The `CHECK` constraints are owned by migration 0037.
+/// @owner gateway
 model SandboxAllowanceOverride {
   organizationId String   @map("organization_id")
   monthStart     DateTime @map("month_start") @db.Date
@@ -377,6 +393,7 @@ model SandboxAllowanceOverride {
 /// Dispatch evidence retained for ambiguous downstream outcomes.
 ///
 /// The `CHECK` constraints and partial index are owned by migration 0036.
+/// @owner metering
 model DispatchAttempt {
   attemptId      String    @id @map("attempt_id") @db.Uuid
   requestId      String    @map("request_id")
@@ -394,6 +411,7 @@ model DispatchAttempt {
 /// An accepted Speaking audio upload.
 ///
 /// `CHECK` constraints are owned by migration 0025.
+/// @owner speaking
 model SpeakingAudioAsset {
   id                   String   @id
   organizationId       String   @map("organization_id")
@@ -414,6 +432,7 @@ model SpeakingAudioAsset {
 /// The partial indexes `speaking_audio_upload_intents_expiry_idx` and
 /// `speaking_audio_upload_intents_rejected_idx`, and this table's `CHECK`
 /// constraints, are owned by migration 0025.
+/// @owner speaking
 model SpeakingAudioUploadIntent {
   id             String   @id
   organizationId String   @map("organization_id")
@@ -434,6 +453,7 @@ model SpeakingAudioUploadIntent {
 /// An owner-bound Writing Task 1 chart upload and its published URL.
 ///
 /// Status and image constraints are owned by migration 0040.
+/// @owner writing
 model WritingChartUpload {
   id                String    @id
   organizationId    String    @map("organization_id")
@@ -462,6 +482,7 @@ model WritingChartUpload {
 /// `CHECK` constraints are owned by migration 0005. The BRIN index
 /// `usage_created_brin` is declared below under Prisma's `Brin` type; it was
 /// created by that same migration.
+/// @owner metering
 model UsageRecord {
   requestId        String   @id @map("request_id")
   organizationId   String   @map("organization_id")
@@ -494,6 +515,7 @@ model UsageRecord {
 /// A person. Every identity record is scoped by its id.
 ///
 /// `CHECK` constraints on id, username, and status are owned by migration 0006.
+/// @owner auth
 model UserAccount {
   id                String                      @id
   username          String                      @unique(map: "user_accounts_username_key")
@@ -519,6 +541,7 @@ model UserAccount {
 /// A stored Avatar, one per account.
 ///
 /// `CHECK` constraints are owned by migration 0024.
+/// @owner avatar
 model UserAvatar {
   id            String      @id
   userAccountId String      @unique(map: "user_avatars_one_per_account") @map("user_account_id")
@@ -534,6 +557,7 @@ model UserAvatar {
 /// A TOTP second factor.
 ///
 /// `CHECK` constraints are owned by migration 0034.
+/// @owner auth
 model UserMfaFactor {
   factorId         String      @id @map("factor_id")
   userAccountId    String      @unique(map: "user_mfa_factors_user_account_id_key") @map("user_account_id")
@@ -550,6 +574,7 @@ model UserMfaFactor {
 /// A single-use MFA recovery code.
 ///
 /// `CHECK` constraints are owned by migration 0034.
+/// @owner auth
 model UserMfaRecoveryCode {
   userAccountId String      @map("user_account_id")
   codeHash      String      @map("code_hash")
@@ -564,6 +589,7 @@ model UserMfaRecoveryCode {
 /// A browser session cookie's server-side record.
 ///
 /// `CHECK` constraints are owned by migration 0033.
+/// @owner auth
 model WebSession {
   id            String      @id
   userAccountId String      @map("user_account_id")
@@ -582,6 +608,7 @@ model WebSession {
 ///
 /// Its `CHECK` constraints and the append-only trigger
 /// `billing_adjustments_append_only` are owned by migration 0039.
+/// @owner metering
 model BillingAdjustment {
   id             String       @id
   organizationId String       @map("organization_id")
@@ -602,6 +629,7 @@ model BillingAdjustment {
 ///
 /// Its `CHECK` constraints and the append-only trigger
 /// `billing_month_closures_append_only` are owned by migration 0039.
+/// @owner metering
 model BillingMonthClosure {
   organizationId     String       @map("organization_id")
   billingMonth       DateTime     @map("billing_month") @db.Date
