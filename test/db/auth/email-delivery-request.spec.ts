@@ -3,6 +3,7 @@ import { ulid } from 'ulid';
 import type { Pool } from 'pg';
 
 import type { EmailDeliveryTransaction } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import { createPostgresAuthClient } from '@/modules/auth/shared/infrastructure/postgres-auth.client';
 
@@ -33,7 +34,7 @@ function insertInput(id: string) {
 }
 
 function emailDeliveryTransaction(client: object): EmailDeliveryTransaction {
-  return client as unknown as EmailDeliveryTransaction;
+  return new EmailDeliveryTransactionAdapter(client as never);
 }
 
 beforeAll(() => {
