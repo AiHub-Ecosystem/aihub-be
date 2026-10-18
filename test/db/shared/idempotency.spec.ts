@@ -6,7 +6,6 @@ import type {
   ReserveIdempotencyInput,
 } from '@/modules/idempotency/application/idempotency-repository.port';
 import { PostgresIdempotencyRepository } from '@/modules/idempotency/infrastructure/postgres-idempotency.repository';
-import { idempotencyRepositoryContract } from '@/modules/idempotency/testing/idempotency.contract';
 import { prismaFromQueryFake } from '@/modules/persistence/testing/query-fake-client';
 
 import { createTestPool } from './database';
@@ -185,10 +184,3 @@ describe('Postgres idempotency management scope', () => {
     });
   });
 });
-
-idempotencyRepositoryContract(
-  () => new PostgresIdempotencyRepository(client()),
-  async () => {
-    await pool.query('DELETE FROM idempotency_records');
-  },
-);

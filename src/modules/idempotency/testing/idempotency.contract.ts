@@ -26,7 +26,7 @@ export function idempotencyRepositoryContract(
     operation: ORGANIZATION_CREATE_OPERATION,
     actorScope: '',
     idempotencyKey: 'key-1',
-    fingerprintHex: 'aa'.repeat(16),
+    fingerprintHex: 'a'.repeat(64),
     requestId: 'req_1',
     expiresAt: new Date(Date.now() + 60_000),
     ...overrides,
@@ -45,9 +45,7 @@ export function idempotencyRepositoryContract(
 
   it('conflicts on fingerprint mismatch', async () => {
     await repo.reserve(baseInput());
-    const r = await repo.reserve(
-      baseInput({ fingerprintHex: 'bb'.repeat(16) }),
-    );
+    const r = await repo.reserve(baseInput({ fingerprintHex: 'b'.repeat(64) }));
     expect(r).toEqual({ kind: 'conflict', reason: 'fingerprint' });
   });
 
