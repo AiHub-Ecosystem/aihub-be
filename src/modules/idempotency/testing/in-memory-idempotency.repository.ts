@@ -11,6 +11,8 @@ interface StoredIdempotencyRecord {
   requestId: string;
   state: 'pending' | 'completed' | 'failed';
   responseBody?: unknown;
+  expiresAt: Date;
+  responseStatus?: number;
 }
 
 /**
@@ -25,12 +27,24 @@ export class InMemoryIdempotencyRepository
   reserve(input: ReserveIdempotencyInput): Promise<IdempotencyReservation> {
     const key = `${input.organizationId}:${input.operation}:${input.idempotencyKey}`;
     const existing = this.records.get(key);
+    const now = new Date();
     if (existing === undefined) {
       this.records.set(key, {
         fingerprintHex: input.fingerprintHex,
         requestId: input.requestId,
         state: 'pending',
+        expiresAt: input.expiresAt,
       });
+      return Promise.resolve({ kind: 'claimed', requestId: input.requestId });
+    }
+    if (existing.expiresAt.getTime() <= now.getTime()) {
+      // Reclaim expired record.
+      existing.fingerprintHex = input.fingerprintHex;
+      existing.requestId = input.requestId;
+      existing.state = 'pending';
+      existing.responseBody = undefined;
+      delete existing.responseStatus;
+      existing.expiresAt = input.expiresAt;
       return Promise.resolve({ kind: 'claimed', requestId: input.requestId });
     }
     if (existing.fingerprintHex !== input.fingerprintHex) {
@@ -43,11 +57,13 @@ export class InMemoryIdempotencyRepository
       existing.state = 'pending';
       existing.requestId = input.requestId;
       existing.responseBody = undefined;
+      delete existing.responseStatus;
+      existing.expiresAt = input.expiresAt;
       return Promise.resolve({ kind: 'claimed', requestId: input.requestId });
     }
     return Promise.resolve({
       kind: 'replay',
-      responseStatus: 200,
+      responseStatus: existing.responseStatus ?? 200,
       responseBody: existing.responseBody,
     });
   }
@@ -61,6 +77,7 @@ export class InMemoryIdempotencyRepository
     ) {
       existing.state = 'completed';
       existing.responseBody = input.responseBody;
+      existing.responseStatus = input.responseStatus;
     }
     return Promise.resolve();
   }
@@ -90,6 +107,14 @@ export class InMemoryIdempotencyRepository
   }
 
   cleanupExpired(): Promise<number> {
-    return Promise.resolve(0);
+    const now = new Date();
+    let count = 0;
+    for (const [key, record] of this.records) {
+      if (record.expiresAt.getTime() <= now.getTime()) {
+        this.records.delete(key);
+        count += 1;
+      }
+    }
+    return Promise.resolve(count);
   }
 }
