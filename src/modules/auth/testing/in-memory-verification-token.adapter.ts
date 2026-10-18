@@ -75,12 +75,13 @@ export class InMemoryVerificationTokenAdapter
     }
 
     if (account.status === 'active') {
-      return token.consumedReason === 'verified'
+      return token.consumedAt !== undefined &&
+        token.consumedReason === 'verified'
         ? this.signInIfBound(token, input)
         : INVALID;
     }
 
-    if (token.consumedAt !== undefined) {
+    if (token.consumedAt !== undefined || token.consumedReason !== undefined) {
       return INVALID;
     }
     token.consumedAt = input.now;
