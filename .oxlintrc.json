@@ -65,6 +65,33 @@
     "typescript/no-misused-spread": "off",
     "typescript/require-array-sort-compare": "off"
   },
+  "overrides": [
+    {
+      "files": ["src/**/*.ts"],
+      "rules": {
+        "complexity": ["error", 64],
+        "max-depth": ["error", 4]
+      }
+    },
+    {
+      "files": ["src/**/*.spec.ts", "src/**/testing/**"],
+      "rules": {
+        "complexity": "off",
+        "max-depth": "off"
+      }
+    },
+    {
+      "files": [
+        "src/modules/identity/user-assertions/infrastructure/jwks-key-provider.ts",
+        "src/modules/speaking/application/speaking-audio-upload.sweep.ts",
+        "src/modules/writing/application/writing-chart-upload.sweep.ts"
+      ],
+      "rules": {
+        "complexity": "off",
+        "max-depth": "off"
+      }
+    }
+  ],
   // Mirrors `files.ignore` in biome.json. `test/fixtures` holds captured
   // downstream responses, which are data rather than source.
   "ignorePatterns": ["dist", "coverage", "node_modules", "test/fixtures"]
