@@ -43,7 +43,7 @@
     "arch-check": "node scripts/checks/check-architecture.mjs",
     "check:imports": "tsx scripts/checks/check-import-style.ts",
     "check:imports:dist": "tsx scripts/checks/check-import-style.ts --dist",
-    "check:migrations": "node scripts/checks/check-migrations.mjs",
+    "check:migrations": "squawk --no-error-on-unmatched-pattern \"prisma/migrations/*/migration.sql\"",
     "check:prisma-drift": "node scripts/checks/prisma-drift/check-prisma-drift.mjs",
     "check:issue-triage": "node scripts/checks/check-issue-triage.mjs",
     "test:issue-triage": "node --test scripts/checks/check-issue-triage.spec.mjs",
@@ -123,6 +123,7 @@
     "postman-collection": "^5.3.1",
     "prettier": "^3.9.10",
     "prisma": "7.10.0",
+    "squawk-cli": "2.69.0",
     "tsx": "^4.23.15",
     "typescript": "^5.7.3"
   }

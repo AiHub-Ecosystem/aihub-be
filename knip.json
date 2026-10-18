@@ -55,8 +55,6 @@
     // and cli.mjs reach the .cjs through TypeScript, so without this knip
     // reports a live file as unused.
     "scripts/cli/cli-options.d.cts",
-    // Hand-written types for scripts/checks/check-migrations.cjs — same reason.
-    "scripts/checks/check-migrations.d.cts",
     // Hand-written types for scripts/checks/prisma-drift/prisma-drift.cjs — same reason.
     "scripts/checks/prisma-drift/prisma-drift.d.cts",
     // Hand-written types for scripts/ci/ci-boot-config.cjs — same reason.
@@ -70,12 +68,16 @@
   ],
   "ignoreBinaries": [
     // HashiCorp Vault CLI — operator workstation/image binary, not an npm package.
-    "vault"
+    "vault",
+    // Squawk CLI binary used by the check:migrations package script.
+    "squawk"
   ],
   "ignoreDependencies": [
     // Invoked as the `depcruise` binary from the architecture-check script
     // (spawned, not imported); knip cannot follow that edge from package scripts.
     "dependency-cruiser",
+    // Provides the `squawk` binary called by the check:migrations package script.
+    "squawk-cli",
     // Referenced by nest-cli.json `collection`; shipped for Nest schematics,
     // not imported by application code.
     "@nestjs/schematics",

@@ -1,72 +1,166 @@
-import { checkSql } from './check-migrations.cjs';
+import { spawnSync } from 'node:child_process';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join, relative, sep } from 'node:path';
 
-describe('checkSql expand-only contract', () => {
-  it('passes CREATE TABLE', () => {
-    const sql = 'CREATE TABLE foo (id text PRIMARY KEY);';
-    expect(checkSql(sql, '0001.sql')).toEqual([]);
+const repositoryRoot = process.cwd();
+const temporaryRoot = join(repositoryRoot, 'temp');
+const squawkCli = join(
+  repositoryRoot,
+  'node_modules',
+  'squawk-cli',
+  'js',
+  'bin',
+  'squawk',
+);
+
+function runSquawk(migrations: Record<string, string>): {
+  status: number | null;
+  output: string;
+} {
+  const temporaryRootExisted = existsSync(temporaryRoot);
+  mkdirSync(temporaryRoot, { recursive: true });
+  const fixtureDirectory = mkdtempSync(join(temporaryRoot, 'squawk-'));
+
+  try {
+    const migrationFiles = Object.entries(migrations).map(([name, sql]) => {
+      const migrationFile = join(fixtureDirectory, name);
+      mkdirSync(dirname(migrationFile), { recursive: true });
+      writeFileSync(migrationFile, sql);
+      return relative(repositoryRoot, migrationFile).split(sep).join('/');
+    });
+    const result = spawnSync(
+      process.execPath,
+      [
+        squawkCli,
+        '--config',
+        join(repositoryRoot, '.squawk.toml'),
+        ...migrationFiles,
+      ],
+      {
+        cwd: repositoryRoot,
+        encoding: 'utf8',
+        timeout: 10_000,
+        windowsHide: true,
+      },
+    );
+
+    if (result.error) throw result.error;
+    return {
+      status: result.status,
+      output: `${result.stdout ?? ''}${result.stderr ?? ''}`,
+    };
+  } finally {
+    rmSync(fixtureDirectory, { recursive: true, force: true });
+    if (!temporaryRootExisted && readdirSync(temporaryRoot).length === 0) {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  }
+}
+
+describe('Squawk migration policy', () => {
+  it('rejects destructive and write-blocking migration statements in a new migration path', () => {
+    const result = runSquawk({
+      '0041_future_migration/migration.sql': [
+        'ALTER TABLE organizations DROP COLUMN legacy_status;',
+        'ALTER TABLE organizations RENAME COLUMN status TO current_status;',
+        'ALTER TABLE organizations ADD COLUMN required_name TEXT NOT NULL;',
+        "ALTER TABLE organizations ADD CONSTRAINT organizations_status_check CHECK (status IN ('active', 'suspended'));",
+      ].join('\n'),
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain('ban-drop-column');
+    expect(result.output).toContain('renaming-column');
+    expect(result.output).toContain('adding-required-field');
+    expect(result.output).toContain('constraint-missing-not-valid');
   });
 
-  it('passes ADD nullable column', () => {
-    const sql = 'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bar text;';
-    expect(checkSql(sql, '0002.sql')).toEqual([]);
+  it('limits a rule-specific ignore to its statement and keeps other findings visible', () => {
+    const result = runSquawk({
+      '0041_narrow_ignore/migration.sql': [
+        '-- squawk-ignore ban-drop-column -- reason: follows the reviewed expand-contract plan; #693',
+        'ALTER TABLE organizations DROP COLUMN legacy_status;',
+        "ALTER TABLE organizations ADD CONSTRAINT organizations_status_check CHECK (status IN ('active', 'suspended'));",
+      ].join('\n'),
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).not.toContain('ban-drop-column');
+    expect(result.output).toContain('constraint-missing-not-valid');
   });
 
-  it('passes ADD NOT NULL with DEFAULT', () => {
-    const sql =
-      "ALTER TABLE idempotency_records ADD COLUMN IF NOT EXISTS actor_scope text NOT NULL DEFAULT '';";
-    expect(checkSql(sql, '0013.sql')).toEqual([]);
+  it('atomically replaces a CHECK as NOT VALID and validates it in the following migration', () => {
+    const result = runSquawk({
+      '0041_add_check/migration.sql': [
+        '-- squawk-ignore ban-drop-constraint -- reason: atomically replace the value-list CHECK; #693',
+        'ALTER TABLE organizations DROP CONSTRAINT organizations_status_check;',
+        "ALTER TABLE organizations ADD CONSTRAINT organizations_status_check CHECK (status IN ('active', 'suspended', 'pending')) NOT VALID;",
+      ].join('\n'),
+      '0042_validate_check/migration.sql':
+        'ALTER TABLE organizations VALIDATE CONSTRAINT organizations_status_check;',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.output).not.toContain('constraint-missing-not-valid');
   });
 
-  it('fails DROP COLUMN and names file, statement, alternative', () => {
-    const sql = 'ALTER TABLE foo DROP COLUMN bar;';
-    const violations = checkSql(sql, '0002_drop.sql');
-    expect(violations).toHaveLength(1);
-    expect(violations[0]!.file).toBe('0002_drop.sql');
-    expect(violations[0]!.statement).toMatch(/DROP COLUMN/i);
-    expect(violations[0]!.kind).toMatch(/drop-column/i);
-    expect(violations[0]!.alternative).toMatch(/expand\/contract/i);
-    expect(violations[0]!.line).toBeGreaterThan(0);
+  it('requires concurrent creation for an existing table but allows a local new-table exception', () => {
+    const result = runSquawk({
+      '0041_indexes/migration.sql': [
+        'CREATE TABLE new_table (id BIGINT, name TEXT);',
+        '-- squawk-ignore require-concurrent-index-creation -- reason: table is created in this migration; #693',
+        'CREATE INDEX new_table_name_idx ON new_table (name);',
+        'CREATE INDEX organizations_name_idx ON organizations (name);',
+      ].join('\n'),
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain('organizations_name_idx');
+    expect(result.output).not.toContain('new_table_name_idx');
   });
 
-  it('fails RENAME COLUMN', () => {
-    const sql = 'ALTER TABLE foo RENAME COLUMN a TO b;';
-    expect(checkSql(sql, '0003_rename.sql')).toHaveLength(1);
+  it('keeps bigint guidance enabled unless one INTEGER statement has a narrow exception', () => {
+    const result = runSquawk({
+      '0041_integer_exception/migration.sql': [
+        '-- squawk-ignore prefer-bigint-over-int -- reason: bounded status code; #693',
+        'CREATE TABLE status_codes (value INTEGER);',
+        'CREATE TABLE external_accounts (id INTEGER);',
+        "ALTER TABLE organizations ADD CONSTRAINT organizations_status_check CHECK (status IN ('active', 'suspended'));",
+      ].join('\n'),
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain('external_accounts');
+    expect(result.output).not.toContain('status_codes');
+    expect(result.output).toContain('constraint-missing-not-valid');
   });
 
-  it('fails ADD NOT NULL without DEFAULT', () => {
-    const sql = 'ALTER TABLE foo ADD COLUMN bar TEXT NOT NULL;';
-    expect(checkSql(sql, '0004_notnull.sql')).toHaveLength(1);
-  });
+  it('keeps only the 40 applied migration files on the explicit exclusion list', () => {
+    const config = readFileSync(join(repositoryRoot, '.squawk.toml'), 'utf8');
+    const excludedPaths =
+      config.match(/^  "prisma\/migrations\/[^"*]+"[,]?$/gm) ?? [];
+    const excludedRules = config
+      .match(/excluded_rules = \[([\s\S]*?)\]/)?.[1]
+      ?.match(/"[^"]+"/g);
 
-  it('is case-insensitive and handles quoted identifiers', () => {
-    const sql = 'alter table "Foo" add column "Bar" text not null;';
-    expect(checkSql(sql, '0005.sql')).toHaveLength(1);
-  });
-
-  it('allows DROP COLUMN with hatch marker', () => {
-    const sql =
-      '-- expand-contract: allow-drop-column — reason: backfill done — approved: #123\nALTER TABLE foo DROP COLUMN bar;';
-    expect(checkSql(sql, '0006_contract.sql')).toEqual([]);
-  });
-
-  it('still fails DROP COLUMN when hatch kind does not match', () => {
-    const sql =
-      '-- expand-contract: allow-rename-column — reason: ... — approved: #123\nALTER TABLE foo DROP COLUMN bar;';
-    expect(checkSql(sql, '0007.sql')).toHaveLength(1);
-  });
-
-  it('passes existing 0013 migration (has DEFAULT)', () => {
-    const sql =
-      "ALTER TABLE idempotency_records\n  ADD COLUMN IF NOT EXISTS actor_scope text NOT NULL DEFAULT '';";
-    expect(checkSql(sql, '0013_idempotency_management_scope.sql')).toEqual([]);
-  });
-
-  it('passes with DEFAULT in same statement among multiple statements', () => {
-    const sql =
-      'ALTER TABLE a ADD COLUMN x text NOT NULL DEFAULT 0; ALTER TABLE b DROP COLUMN y;';
-    // first statement passes (has DEFAULT), second fails even without hatch
-    const v = checkSql(sql, 'multi.sql');
-    expect(v).toHaveLength(1);
-    expect(v[0]!.statement).toMatch(/DROP COLUMN/i);
+    expect(excludedPaths).toHaveLength(40);
+    expect(excludedRules).toEqual([
+      '"require-lock-timeout"',
+      '"require-statement-timeout"',
+    ]);
+    expect(config).toContain('pg_version = "16"');
+    expect(config).toContain('assume_in_transaction = true');
+    expect(config).toContain('lock_timeout=30s');
+    expect(config).toContain('statement_timeout=300s');
+    expect(config).not.toMatch(/prisma\/migrations\/[^"\r\n]*\*/);
+    expect(config).not.toContain('0041_future_migration');
   });
 });

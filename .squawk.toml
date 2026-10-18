@@ -1,0 +1,54 @@
+pg_version = "16"
+assume_in_transaction = true
+
+# The migration runner sets these on its PostgreSQL connection: lock_timeout=30s
+# and statement_timeout=300s. Keep timeout ownership in the runner.
+excluded_rules = [
+  "require-lock-timeout",
+  "require-statement-timeout",
+]
+
+# These 40 migrations are already applied in Production and Sandbox. Keep their
+# history out of linting by exact path; add no broad pattern here.
+excluded_paths = [
+  "prisma/migrations/0001_control_plane/migration.sql",
+  "prisma/migrations/0002_organizations_updated_at_trigger/migration.sql",
+  "prisma/migrations/0003_organization_identity_configs/migration.sql",
+  "prisma/migrations/0004_idempotency_records/migration.sql",
+  "prisma/migrations/0005_usage_records/migration.sql",
+  "prisma/migrations/0006_local_auth/migration.sql",
+  "prisma/migrations/0007_refresh_tokens/migration.sql",
+  "prisma/migrations/0008_password_reset_tokens/migration.sql",
+  "prisma/migrations/0009_organization_members/migration.sql",
+  "prisma/migrations/0010_organization_invitations/migration.sql",
+  "prisma/migrations/0011_organization_audit_events/migration.sql",
+  "prisma/migrations/0012_organization_invitation_revocation/migration.sql",
+  "prisma/migrations/0013_idempotency_management_scope/migration.sql",
+  "prisma/migrations/0014_self_serve_organization_creation/migration.sql",
+  "prisma/migrations/0015_organization_rename/migration.sql",
+  "prisma/migrations/0016_organization_suspension/migration.sql",
+  "prisma/migrations/0017_first_owner_attachment/migration.sql",
+  "prisma/migrations/0018_email_verification_consumed_reason/migration.sql",
+  "prisma/migrations/0019_organization_identity_config_audit/migration.sql",
+  "prisma/migrations/0020_organization_identity_jwks_cache_version/migration.sql",
+  "prisma/migrations/0021_organization_entitlement_grant/migration.sql",
+  "prisma/migrations/0022_email_verification_sign_in/migration.sql",
+  "prisma/migrations/0023_customer_sandbox_test_tier/migration.sql",
+  "prisma/migrations/0024_user_avatars/migration.sql",
+  "prisma/migrations/0025_speaking_audio_assets/migration.sql",
+  "prisma/migrations/0026_sandbox_speaking_audio_org_reference/migration.sql",
+  "prisma/migrations/0027_email_delivery_requests/migration.sql",
+  "prisma/migrations/0028_email_delivery_request_lease/migration.sql",
+  "prisma/migrations/0029_auth_identity_password_hash_parameters/migration.sql",
+  "prisma/migrations/0030_email_delivery_request_failure_notification/migration.sql",
+  "prisma/migrations/0031_email_delivery_request_notification_lease/migration.sql",
+  "prisma/migrations/0032_user_account_foreign_key_indexes/migration.sql",
+  "prisma/migrations/0033_web_sessions/migration.sql",
+  "prisma/migrations/0034_auth_mfa/migration.sql",
+  "prisma/migrations/0035_mfa_email_delivery_kinds/migration.sql",
+  "prisma/migrations/0036_dispatch_attempts/migration.sql",
+  "prisma/migrations/0037_sandbox_allowance_policy/migration.sql",
+  "prisma/migrations/0038_auth_email_recipient_rate_limits/migration.sql",
+  "prisma/migrations/0039_billing_statements/migration.sql",
+  "prisma/migrations/0040_writing_chart_uploads/migration.sql",
+]
