@@ -23,7 +23,7 @@ The architecture check will reject controller access through `request.query` or 
 ## Verification seams
 
 - Helper unit tests cover valid decoded values, uniform errors, unknown names, and an empty schema that rejects every parameter.
-- The audit, Speaking, and Organization membership HTTP flow specs cover unknown and misspelled names, existing valid forms, repeated `action`, and refusal of repeated single-valued parameters.
+- The audit and Speaking HTTP flow specs cover unknown and misspelled names, valid filters, repeated `action`, and refusal of repeated single-valued parameters. The Organization membership HTTP spec confirms its existing closed `status` schema refuses an undeclared name after helper adoption.
 - The architecture-check spec creates an offending controller fixture and proves the check rejects unvalidated query access while honoring the escape marker.
 - Run focused Jest specs, `pnpm type-check`, `pnpm arch-check`, and `pnpm verify`.
 
