@@ -12,15 +12,29 @@
  * `@swc/cli` cannot write beside its own input, so it compiles into a staging
  * directory that is then moved into place. It runs after `nest build` because
  * that builder deletes `dist/`.
+ *
+ * Fast path: when the inputs (schema, pinned prisma/@prisma/client versions,
+ * and the --runtime mode) are unchanged and the expected outputs exist, skip
+ * regeneration. The stamp lives inside the generated directory so that a
+ * `pnpm build` (which deletes `dist/`) naturally invalidates it.
  */
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  cpSync,
+  existsSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
 const GENERATED = join('dist', 'generated', 'prisma');
 const STAGING = join('dist', 'generated', '.staging');
+const STAMP = join(GENERATED, '.stamp');
 const reportTimings = process.argv.includes('--timings');
+const runtime = process.argv.includes('--runtime');
 
 function run(command, args, phase) {
   const startedAt = performance.now();
@@ -40,11 +54,44 @@ function run(command, args, phase) {
   }
 }
 
+function computeStamp() {
+  const schema = readFileSync('prisma/schema.prisma');
+  const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+  const prismaVersion =
+    pkg.dependencies?.prisma ?? pkg.devDependencies?.prisma ?? '';
+  const clientVersion =
+    pkg.dependencies?.['@prisma/client'] ??
+    pkg.devDependencies?.['@prisma/client'] ??
+    '';
+  return createHash('sha256')
+    .update(schema)
+    .update(prismaVersion)
+    .update(clientVersion)
+    .update(runtime ? 'runtime' : 'plain')
+    .digest('hex');
+}
+
+function expectedOutputsExist() {
+  if (!existsSync(join(GENERATED, 'client.ts'))) return false;
+  if (runtime && !existsSync(join(GENERATED, 'client.js'))) return false;
+  return true;
+}
+
+const stamp = computeStamp();
+if (
+  existsSync(STAMP) &&
+  readFileSync(STAMP, 'utf8').trim() === stamp &&
+  expectedOutputsExist()
+) {
+  console.log('[prisma-generate] inputs unchanged; skipping regeneration.');
+  process.exit(0);
+}
+
 const prisma = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 rmSync(GENERATED, { force: true, recursive: true });
 run(prisma, ['prisma', 'generate'], 'Prisma client generation');
 
-if (process.argv.includes('--runtime')) {
+if (runtime) {
   rmSync(STAGING, { force: true, recursive: true });
   run(
     prisma,
@@ -73,3 +120,5 @@ if (process.argv.includes('--runtime')) {
 
   rmSync(STAGING, { force: true, recursive: true });
 }
+
+writeFileSync(STAMP, stamp + '\n');
