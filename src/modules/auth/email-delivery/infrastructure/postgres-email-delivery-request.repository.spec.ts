@@ -55,6 +55,10 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
       createdAt: NOW,
     };
 
+    console.log(
+      'DEBUG client emailDeliveryRequest:',
+      typeof (transaction as any).client?.emailDeliveryRequest,
+    );
     await new PostgresEmailDeliveryRequestRepository().insert(
       transaction,
       input,

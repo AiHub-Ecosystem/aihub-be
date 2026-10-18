@@ -776,7 +776,7 @@ export class PostgresEmailDeliveryRequestRepository
 
 /**
  * The same statements, reached through the pool instead of a caller's open
- * transaction. The poller owns its own transactions — it claims in one
+ * transaction. The poller owns its own transactions â€” it claims in one
  * statement and dispatches outside any transaction, so nothing holds a
  * connection while a provider call is in flight.
  */
