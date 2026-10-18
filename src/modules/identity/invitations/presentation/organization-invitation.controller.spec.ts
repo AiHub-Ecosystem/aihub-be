@@ -370,7 +370,7 @@ describe('Organization invitation HTTP flow', () => {
     // written before this deploy carries no delivery status at all.
     idempotency.execute.mockImplementationOnce(
       async (
-        input: IdempotencyExecutionInput,
+        _input: IdempotencyExecutionInput,
         _work: IdempotencyWork<unknown>,
         decodeReplay: IdempotencyReplayDecoder<unknown>,
       ) => ({
@@ -411,7 +411,7 @@ describe('Organization invitation HTTP flow', () => {
   it('still refuses a stored record that carries a status it cannot report', async () => {
     idempotency.execute.mockImplementationOnce(
       async (
-        input: IdempotencyExecutionInput,
+        _input: IdempotencyExecutionInput,
         _work: IdempotencyWork<unknown>,
         decodeReplay: IdempotencyReplayDecoder<unknown>,
       ) => ({

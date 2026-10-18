@@ -1,6 +1,6 @@
 import { createEmailPayloadCipher } from './email-payload-cipher';
 
-function keyId(id: string, seed = 0): string {
+function keyId(_id: string, seed = 0): string {
   return Buffer.alloc(32, seed).toString('base64');
 }
 
@@ -76,7 +76,7 @@ describe('createEmailPayloadCipher', () => {
 
   it('rejects a key id that would split the envelope at startup', () => {
     // A delimiter in the key id produces a sixth segment, which decrypt refuses
-    // as malformed — so the application's own envelope would never open again.
+    // as malformed â€” so the application's own envelope would never open again.
     expect(() =>
       createEmailPayloadCipher({
         currentKeyId: '2026.10',
