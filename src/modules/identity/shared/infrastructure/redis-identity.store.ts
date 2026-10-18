@@ -1,3 +1,4 @@
+import { apiKeyRecordFromRow } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
 import { Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 
@@ -102,142 +103,6 @@ function connect(url: string): RedisIdentityClient | undefined {
   return new IoredisIdentityClient(client);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function stringValue(
-  record: Record<string, unknown>,
-  key: string,
-): string | undefined {
-  const value = record[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function stringArrayValue(
-  record: Record<string, unknown>,
-  key: string,
-): readonly string[] | undefined {
-  const value = record[key];
-  return Array.isArray(value) && value.every((item) => typeof item === 'string')
-    ? value
-    : undefined;
-}
-
-function dateValue(
-  record: Record<string, unknown>,
-  key: string,
-): Date | null | undefined {
-  const value = record[key];
-  if (value === null) {
-    return null;
-  }
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
-}
-
-function positiveIntegerValue(
-  record: Record<string, unknown>,
-  key: string,
-): number | undefined {
-  const value = record[key];
-  return typeof value === 'number' && Number.isInteger(value) && value > 0
-    ? value
-    : undefined;
-}
-
-function quotaValue(
-  record: Record<string, unknown>,
-  key: string,
-): number | null | undefined {
-  const value = record[key];
-  if (value === null) {
-    return null;
-  }
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0
-    ? value
-    : undefined;
-}
-
-function statusValue(
-  record: Record<string, unknown>,
-  key: string,
-): 'active' | 'revoked' | 'suspended' | undefined {
-  const value = record[key];
-  return value === 'active' || value === 'revoked' || value === 'suspended'
-    ? value
-    : undefined;
-}
-
-function booleanValue(
-  record: Record<string, unknown>,
-  key: string,
-): boolean | undefined {
-  const value = record[key];
-  return typeof value === 'boolean' ? value : undefined;
-}
-
-function parseCachedRecord(serialized: string): ApiKeyRecord | undefined {
-  let value: unknown;
-  try {
-    value = JSON.parse(serialized);
-  } catch {
-    return undefined;
-  }
-
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
-  const organizationId = stringValue(value, 'organizationId');
-  const apiKeyId = stringValue(value, 'apiKeyId');
-  const organizationStatus = statusValue(value, 'organizationStatus');
-  const status = statusValue(value, 'status');
-  const scopes = stringArrayValue(value, 'scopes');
-  const entitlements = stringArrayValue(value, 'entitlements');
-  const allowedEnvironments = stringArrayValue(value, 'allowedEnvironments');
-  const expiresAt = dateValue(value, 'expiresAt');
-  const rateLimitRpm = positiveIntegerValue(value, 'rateLimitRpm');
-  const maxConcurrent = positiveIntegerValue(value, 'maxConcurrent');
-  const monthlyRequestQuota = quotaValue(value, 'monthlyRequestQuota');
-  const hardStopOnQuota = booleanValue(value, 'hardStopOnQuota');
-
-  if (
-    organizationId === undefined ||
-    apiKeyId === undefined ||
-    (organizationStatus !== 'active' && organizationStatus !== 'suspended') ||
-    (status !== 'active' && status !== 'revoked') ||
-    scopes === undefined ||
-    entitlements === undefined ||
-    allowedEnvironments === undefined ||
-    expiresAt === undefined ||
-    rateLimitRpm === undefined ||
-    maxConcurrent === undefined ||
-    monthlyRequestQuota === undefined ||
-    hardStopOnQuota === undefined
-  ) {
-    return undefined;
-  }
-
-  return {
-    organizationId,
-    apiKeyId,
-    organizationStatus,
-    status,
-    scopes,
-    entitlements,
-    allowedEnvironments,
-    expiresAt,
-    rateLimitRpm,
-    maxConcurrent,
-    monthlyRequestQuota,
-    hardStopOnQuota,
-  };
-}
-
 function jwksKey(
   organizationId: string,
   configVersion: string,
@@ -299,7 +164,14 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
     try {
       const serialized = await this.client.get(apiKeyCacheKey(hashHex));
       if (serialized !== null) {
-        const record = parseCachedRecord(serialized);
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(serialized);
+        } catch {
+          parsed = undefined;
+        }
+        const record =
+          parsed === undefined ? undefined : apiKeyRecordFromRow(parsed);
         if (record !== undefined) {
           return record;
         }

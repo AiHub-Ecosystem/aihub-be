@@ -117,6 +117,31 @@ describe('RedisIdentityStore', () => {
     expect(redis.expirations.get(`aihub:v1:key:${'a'.repeat(64)}`)).toBe(60);
   });
 
+  it('stores and reads a positive API-key cache entry with an expiry date', async () => {
+    const redis = new FakeRedis();
+    const store = new RedisIdentityStore('', redis);
+    const dated = {
+      ...record,
+      expiresAt: new Date('2026-10-01T00:00:00.000Z'),
+    };
+
+    await store.set('c'.repeat(64), dated);
+
+    await expect(store.get('c'.repeat(64))).resolves.toEqual(dated);
+  });
+
+  it('treats a cached entry with a malformed field as a cache miss', async () => {
+    const redis = new FakeRedis();
+    const store = new RedisIdentityStore('', redis);
+    redis.values.set(
+      `aihub:v1:key:${'d'.repeat(64)}`,
+      JSON.stringify({ ...record, monthlyRequestQuota: 'nope' }),
+    );
+
+    await expect(store.get('d'.repeat(64))).resolves.toBeUndefined();
+    expect(redis.values.has(`aihub:v1:key:${'d'.repeat(64)}`)).toBe(false);
+  });
+
   it('stores and reads a negative API-key cache entry with a 30-second TTL', async () => {
     const redis = new FakeRedis();
     const store = new RedisIdentityStore('', redis);
