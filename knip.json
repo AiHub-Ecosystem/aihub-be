@@ -68,16 +68,12 @@
   ],
   "ignoreBinaries": [
     // HashiCorp Vault CLI — operator workstation/image binary, not an npm package.
-    "vault",
-    // Squawk CLI binary used by the check:migrations package script.
-    "squawk"
+    "vault"
   ],
   "ignoreDependencies": [
     // Invoked as the `depcruise` binary from the architecture-check script
     // (spawned, not imported); knip cannot follow that edge from package scripts.
     "dependency-cruiser",
-    // Provides the `squawk` binary called by the check:migrations package script.
-    "squawk-cli",
     // Referenced by nest-cli.json `collection`; shipped for Nest schematics,
     // not imported by application code.
     "@nestjs/schematics",

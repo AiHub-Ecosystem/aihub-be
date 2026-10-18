@@ -4,8 +4,8 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  readdirSync,
   rmSync,
+  rmdirSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
@@ -20,6 +20,27 @@ const squawkCli = join(
   'bin',
   'squawk',
 );
+
+function removeTemporaryRootIfCreated(
+  directory: string,
+  createdByThisRun: boolean,
+): void {
+  if (!createdByThisRun) return;
+
+  try {
+    rmdirSync(directory);
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error.code === 'ENOENT' || error.code === 'ENOTEMPTY')
+    ) {
+      return;
+    }
+    throw error;
+  }
+}
 
 function runSquawk(migrations: Record<string, string>): {
   status: number | null;
@@ -59,11 +80,25 @@ function runSquawk(migrations: Record<string, string>): {
     };
   } finally {
     rmSync(fixtureDirectory, { recursive: true, force: true });
-    if (!temporaryRootExisted && readdirSync(temporaryRoot).length === 0) {
-      rmSync(temporaryRoot, { recursive: true, force: true });
-    }
+    removeTemporaryRootIfCreated(temporaryRoot, !temporaryRootExisted);
   }
 }
+
+describe('migration fixture cleanup', () => {
+  it('leaves the temporary root when another fixture is still present', () => {
+    const temporaryRootExisted = existsSync(temporaryRoot);
+    mkdirSync(temporaryRoot, { recursive: true });
+    const otherFixture = mkdtempSync(join(temporaryRoot, 'squawk-'));
+
+    try {
+      removeTemporaryRootIfCreated(temporaryRoot, !temporaryRootExisted);
+      expect(existsSync(otherFixture)).toBe(true);
+    } finally {
+      rmSync(otherFixture, { recursive: true, force: true });
+      removeTemporaryRootIfCreated(temporaryRoot, !temporaryRootExisted);
+    }
+  });
+});
 
 describe('Squawk migration policy', () => {
   it('rejects destructive and write-blocking migration statements in a new migration path', () => {

@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 
 const schemaPath = resolve(process.cwd(), 'prisma/schema.prisma');
@@ -94,8 +95,12 @@ for (const m of models) {
 // ... after writeFileSync
 writeFileSync(outPath, out.join('\n'));
 execFileSync(
-  process.platform === 'win32' ? 'npx.cmd' : 'npx',
-  ['prettier', '--write', outPath],
-  { stdio: 'inherit', shell: process.platform === 'win32' },
+  process.execPath,
+  [
+    createRequire(import.meta.url).resolve('prettier/bin/prettier.cjs'),
+    '--write',
+    outPath,
+  ],
+  { stdio: 'inherit' },
 );
 console.log(`wrote ${outPath} (${models.length} models)`);
