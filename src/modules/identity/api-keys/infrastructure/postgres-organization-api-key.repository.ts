@@ -235,15 +235,15 @@ export class PostgresOrganizationApiKeyRepository
           name === undefined ||
           scopes === undefined ||
           allowedEnvironments === undefined ||
-          expiresAt === null
+          // `undefined` is an unreadable value; `null` is a key with no expiry.
+          expiresAt === undefined
         ) {
           throw identityStoreError('Identity data is invalid');
         }
 
         if (
           key.status !== 'active' ||
-          (expiresAt !== undefined &&
-            expiresAt.getTime() <= input.now.getTime())
+          (expiresAt !== null && expiresAt.getTime() <= input.now.getTime())
         ) {
           return { kind: 'key_not_rotatable' as const };
         }
