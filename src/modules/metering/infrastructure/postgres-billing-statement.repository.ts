@@ -80,6 +80,24 @@ function count(value: unknown, field: string): number {
   return parsed;
 }
 
+/**
+ * An adjustment, and the closure totals it feeds, may be negative: a credit
+ * removes billed requests (migration 0039 only refuses zero). So these fields
+ * take any safe integer instead of the non-negative count decode.
+ */
+function signedCount(value: unknown, field: string): number {
+  const parsed =
+    typeof value === 'bigint'
+      ? Number(value)
+      : typeof value === 'number'
+        ? value
+        : Number.NaN;
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error(`billing field ${field} is invalid`);
+  }
+  return parsed;
+}
+
 function text(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`billing field ${field} is invalid`);
@@ -163,7 +181,7 @@ export class PostgresBillingStatementRepository
       id: text(row.id, 'id'),
       organizationId: text(row.organization_id, 'organization_id'),
       operation: text(row.operation, 'operation'),
-      requests: count(row.requests, 'requests'),
+      requests: signedCount(row.requests, 'requests'),
       reason: text(row.reason, 'reason'),
       corrects: target(row.corrects),
       actor: text(row.actor, 'actor'),
@@ -182,8 +200,11 @@ export class PostgresBillingStatementRepository
       organizationId: text(row.organization_id, 'organization_id'),
       operation: text(row.operation, 'operation'),
       billableRequests: count(row.billable_requests, 'billable_requests'),
-      adjustmentRequests: count(row.adjustment_requests, 'adjustment_requests'),
-      totalRequests: count(row.total_requests, 'total_requests'),
+      adjustmentRequests: signedCount(
+        row.adjustment_requests,
+        'adjustment_requests',
+      ),
+      totalRequests: signedCount(row.total_requests, 'total_requests'),
       closedBy: text(row.closed_by, 'closed_by'),
       closedAt: date(row.closed_at, 'closed_at'),
     }));
