@@ -273,6 +273,10 @@ function sharedPrimitivePaths() {
         entry.isFile() &&
         entry.name.endsWith('.ts') &&
         !entry.name.endsWith('.spec.ts') &&
+        path
+          .relative(process.cwd(), path.join(entry.parentPath, entry.name))
+          .split(/[\\/]/)
+          .includes('presentation') &&
         isSharedPrimitive(path.join(entry.parentPath, entry.name)),
     )
     .map(

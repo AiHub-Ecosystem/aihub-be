@@ -31,7 +31,7 @@ export interface MeteringEvidence {
    * because the record's status is not decided in one place: the finalizer can
    * still overwrite `missing_usage` with `quota_unverified` when the quota
    * counter rejects. A reader that recomputed the status would report the
-   * intent rather than the persisted truth — the same distinction ADR-0026
+   * intent rather than the persisted truth â€” the same distinction ADR-0026
    * draws when it says the completeness report trusts the finalized status
    * instead of recomputing token validity.
    */
@@ -62,12 +62,6 @@ export type MeteringGatheredEvidence = Omit<
   // claim to know it. The finalizer stamps it directly on the evidence.
   | 'meteringStatus'
 >;
-
-declare module 'fastify' {
-  interface FastifyRequest {
-    aihubMetering?: MeteringEvidence;
-  }
-}
 
 export function getMeteringEvidence(
   request: unknown,

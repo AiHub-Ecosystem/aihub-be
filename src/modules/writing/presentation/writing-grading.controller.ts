@@ -28,19 +28,19 @@ import {
   getAuthenticatedApiKey,
 } from '@/modules/identity/shared/presentation/authenticated-request';
 import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
-import { getMeteringEvidence } from '@/modules/metering/application/metering-evidence';
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
 } from '@/modules/metering/application/metering-finalizer.port';
 import { billBackgroundCompletion } from '@/modules/metering/public/background-completion-billing';
+import { getMeteringEvidence } from '@/modules/metering/public/metering-evidence';
 import { isAllowedTask1ImageUrl } from '@/modules/writing/application/task1-image-url.policy';
 
 const TASK1_OPERATION = 'writing.task1.grade' as const;
 const TASK2_OPERATION = 'writing.task2.grade' as const;
 
 // Body size is enforced earlier, before parsing, by the `onRequest` hook
-// registered in main.ts (see `registerBodySizeGuard`) — a body that reaches
+// registered in main.ts (see `registerBodySizeGuard`) â€” a body that reaches
 // here has already passed that check.
 function requireUserId(request: AuthenticatedRequest): string {
   const userId = request.aihubIdentity?.userId;

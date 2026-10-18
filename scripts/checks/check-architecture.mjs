@@ -204,6 +204,23 @@ if (process.exitCode !== undefined) {
 }
 
 const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+// ADR-0066 / #674: an inner layer must not augment the web framework's
+// request type. dependency-cruiser cannot see `declare module`, so check the
+// source text directly.
+for (const layer of ['application', 'domain']) {
+  for (const file of collectTypeScriptFiles(srcDirectory)) {
+    if (file.endsWith('.spec.ts')) continue;
+    const relativePath = relative(root, file).replace(/\\/g, '/');
+    if (!relativePath.includes(`/${layer}/`)) continue;
+    const source = readFileSync(file, 'utf8');
+    if (/declare\s+module\s+['"]fastify['"]/.test(source)) {
+      fail(
+        `${relativePath} declares module 'fastify' from the ${layer} layer; move the augmentation to presentation/`,
+      );
+    }
+  }
+}
+
 const result = spawnSync(
   command,
   [

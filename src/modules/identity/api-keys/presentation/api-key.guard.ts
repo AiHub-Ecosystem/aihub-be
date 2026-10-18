@@ -32,7 +32,7 @@ import {
   resolveAihubEnvironment,
 } from '@/modules/identity/shared/presentation/request-environment';
 import { REQUIRED_OPERATION_METADATA } from '@/modules/identity/shared/presentation/require-operation.decorator';
-import { openMeteringEvidence } from '@/modules/metering/application/metering-evidence';
+import { openMeteringEvidence } from '@/modules/metering/public/metering-evidence';
 import {
   authenticateApiKey,
   forbidden,

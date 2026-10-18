@@ -16,7 +16,7 @@ import {
   USER_IDENTITY_RESOLVER,
   type UserIdentityResolverPort,
 } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
-import { addMeteringEvidence } from '@/modules/metering/application/metering-evidence';
+import { addMeteringEvidence } from '@/modules/metering/public/metering-evidence';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,

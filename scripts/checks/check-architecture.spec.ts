@@ -96,6 +96,11 @@ describe('cross-module import rules', () => {
         'src/modules/identity/audit/presentation/audit-cursor.ts',
       ),
     ).toBe(false);
+    // #674: an application file no longer counts as a shared seam, even if it
+    // declares module 'fastify'.
+    expect(
+      matches(pathNot, 'src/modules/metering/application/metering-evidence.ts'),
+    ).toBe(false);
   });
 
   it('excludes spec files from the importing side', () => {

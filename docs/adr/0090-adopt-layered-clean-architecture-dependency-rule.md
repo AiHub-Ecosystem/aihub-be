@@ -45,3 +45,7 @@ The remaining AIHUB-specific rules in the spec's §4 — normalizing organizatio
 ## Recording note
 
 This record is Accepted because the layering was implemented and enforced before it was written down: acceptance is a statement about the present state rather than an authorisation for future change. The repository owner accepted it on 2026-10-09. No related issue exists for this record. If the rule is later changed, amend or supersede this record by number rather than editing the layering in place, and keep `.dependency-cruiser.cjs` and the spec in step with whatever this record says.
+
+## Update: shared request primitive exemption narrowed (#674)
+
+`sharedPrimitivePaths()` in `.dependency-cruiser.cjs` now exempts only files under a `presentation/` folder. An `application/` or `domain/` file containing `declare module 'fastify'` fails `pnpm arch-check` via a text check in `scripts/checks/check-architecture.mjs`. Metering evidence's Fastify augmentation moved to `src/modules/metering/presentation/metering-evidence.ts`; the callable functions are published through `src/modules/metering/public/metering-evidence.ts`.

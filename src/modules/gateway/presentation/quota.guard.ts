@@ -15,7 +15,7 @@ import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
 } from '@/modules/identity/shared/presentation/authenticated-request';
-import { addMeteringEvidence } from '@/modules/metering/application/metering-evidence';
+import { addMeteringEvidence } from '@/modules/metering/public/metering-evidence';
 
 @Injectable()
 export class QuotaGuard implements CanActivate {
