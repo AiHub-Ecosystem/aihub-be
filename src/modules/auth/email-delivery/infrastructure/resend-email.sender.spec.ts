@@ -24,12 +24,12 @@ describe('ResendEmailSender', () => {
       authorization: 'Bearer resend-secret',
       'content-type': 'application/json',
     });
-    expect(JSON.parse(String(calls[0]?.init?.body))).toMatchObject({
+    expect(JSON.parse(String(calls[0]?.init?.body as string))).toMatchObject({
       from: 'AIHUB <no-reply@example.com>',
       to: ['person@example.com'],
       subject: 'Xác minh địa chỉ email AIHUB',
     });
-    const body = String(calls[0]?.init?.body);
+    const body = String(calls[0]?.init?.body as string);
     expect(body).toContain('opaque-token');
     expect(body).toContain('lúc 07:00 20 tháng 9, 2026 (giờ Việt Nam)');
     expect(body).not.toContain('2026-09-20T00:00:00.000Z');
@@ -69,7 +69,7 @@ describe('ResendEmailSender', () => {
       expiresAt: new Date('2026-09-20T01:00:00.000Z'),
     });
 
-    const body = String(calls[0]?.init?.body);
+    const body = String(calls[0]?.init?.body as string);
     expect(JSON.parse(body)).toMatchObject({
       subject: 'Reset your AIHUB password',
       to: ['person@example.com'],
@@ -98,7 +98,7 @@ describe('ResendEmailSender', () => {
       expiresAt: new Date('2026-09-21T00:00:00.000Z'),
     });
 
-    const body = String(calls[0]?.init?.body);
+    const body = String(calls[0]?.init?.body as string);
     expect(JSON.parse(body)).toMatchObject({
       subject: 'You are invited to Acme on AIHUB',
       to: ['invitee@example.com'],
@@ -144,7 +144,7 @@ describe('ResendEmailSender', () => {
       { idempotencyKey: 'edr_test' },
     );
 
-    const body = String(calls[0]?.init?.body);
+    const body = String(calls[0]?.init?.body as string);
     expect(JSON.parse(body)).toMatchObject({
       to: ['person@example.com'],
       subject: 'AIHUB two-factor authentication removed',
@@ -189,7 +189,7 @@ describe('ResendEmailSender', () => {
         expiresAt: new Date('2026-09-20T00:00:00.000Z'),
       });
 
-      const body = String(calls[0]?.init?.body);
+      const body = String(calls[0]?.init?.body as string);
       const payload = JSON.parse(body) as { html?: string; text?: string };
       const link =
         'https://customer.example.com/web&more/verify-email?token=a%2Bb%2Fc%3Dd';
@@ -224,7 +224,7 @@ describe('ResendEmailSender', () => {
         expiresAt: new Date('2026-09-20T01:00:00.000Z'),
       });
 
-      const body = String(calls[0]?.init?.body);
+      const body = String(calls[0]?.init?.body as string);
       expect(body).toContain('reset-token');
       expect(body).toContain(
         'https://customer.example.com/reset-password?token=reset-token',
@@ -242,7 +242,7 @@ describe('ResendEmailSender', () => {
         expiresAt: new Date('2026-09-21T00:00:00.000Z'),
       });
 
-      const body = String(calls[0]?.init?.body);
+      const body = String(calls[0]?.init?.body as string);
       expect(body).toContain('invite-token');
       expect(body).toContain(
         'https://customer.example.com/invite?token=invite-token',
@@ -258,7 +258,7 @@ describe('ResendEmailSender', () => {
         expiresAt: new Date('2026-09-20T01:00:00.000Z'),
       });
 
-      const body = String(calls[0]?.init?.body);
+      const body = String(calls[0]?.init?.body as string);
       expect(body).toContain('token=a%2Bb%2Fc%3Dd');
       expect(body).not.toContain('token=a+b/c=d');
     });
@@ -272,7 +272,7 @@ describe('ResendEmailSender', () => {
         expiresAt: new Date('2026-09-20T01:00:00.000Z'),
       });
 
-      const body = String(calls[0]?.init?.body);
+      const body = String(calls[0]?.init?.body as string);
       expect(body).toContain('reset-token');
       expect(body).not.toContain('http');
     });
@@ -310,7 +310,7 @@ describe('ResendEmailSender', () => {
         expiresAt: new Date('2026-09-20T01:00:00.000Z'),
       });
 
-      const body = String(calls[0]?.init?.body);
+      const body = String(calls[0]?.init?.body as string);
       expect(body).toContain('sandbox-token');
       expect(body).not.toContain('http');
       expect(() =>

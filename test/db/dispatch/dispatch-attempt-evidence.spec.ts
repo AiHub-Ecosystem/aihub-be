@@ -525,7 +525,9 @@ describe('durable dispatch-attempt evidence', () => {
       [requestIds],
     );
     expect(remaining.rows.map((row) => row.attempt_id)).toEqual(
-      [attemptIds[1], attemptIds[2]].sort(),
+      [attemptIds[1], attemptIds[2]].sort((a, b) =>
+        String(a).localeCompare(String(b)),
+      ),
     );
     await repository.close();
   });

@@ -521,7 +521,8 @@ describe('local auth HTTP boundary', () => {
     if (setCookie === undefined) {
       throw new Error('the response set no refresh cookie');
     }
-    return String(setCookie).split(';', 1)[0] ?? '';
+    const cookie = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+    return (cookie ?? '').split(';', 1)[0] ?? '';
   }
 
   /** What the worker would read back out of the ciphertext once it claims a row. */
@@ -1268,7 +1269,9 @@ describe('local auth HTTP boundary', () => {
       }),
     ]);
 
-    expect([first.statusCode, second.statusCode].sort()).toEqual([200, 401]);
+    expect([first.statusCode, second.statusCode].sort((a, b) => a - b)).toEqual(
+      [200, 401],
+    );
   });
 
   it('rejects an expired or disabled refresh session over HTTP', async () => {

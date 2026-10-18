@@ -165,7 +165,9 @@ describe('layer rules on feature-first Identity paths', () => {
         );
 
         expect(result.status).not.toBe(0);
-        expect(`${result.stdout}\n${result.stderr}`).toContain(rule);
+        expect(
+          `${result.stdout.toString()}\n${result.stderr.toString()}`,
+        ).toContain(rule);
       } finally {
         rmSync(fixtureRoot, { recursive: true, force: true });
       }
@@ -669,9 +671,9 @@ describe('request bodies reach their contract through parseRequestBody', () => {
       );
 
       expect(result.status).not.toBe(0);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(
-        'route a request body through parseRequestBody',
-      );
+      expect(
+        `${result.stdout.toString()}\n${result.stderr.toString()}`,
+      ).toContain('route a request body through parseRequestBody');
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });
     }
@@ -719,9 +721,9 @@ describe('query parameters reach parseRequestQuery at the controller boundary', 
       `export class ProbeController {\n  list(request: { query: unknown }) {\n    return request.query;\n  }\n}\n`,
       (result) => {
         expect(result.status).not.toBe(0);
-        expect(`${result.stdout}\n${result.stderr}`).toContain(
-          'parseRequestQuery',
-        );
+        expect(
+          `${result.stdout.toString()}\n${result.stderr.toString()}`,
+        ).toContain('parseRequestQuery');
       },
     );
   });
@@ -731,9 +733,9 @@ describe('query parameters reach parseRequestQuery at the controller boundary', 
       `export class ProbeController {\n  list(@Query('part') part: unknown) {\n    return part;\n  }\n}\n`,
       (result) => {
         expect(result.status).not.toBe(0);
-        expect(`${result.stdout}\n${result.stderr}`).toContain(
-          'parseRequestQuery',
-        );
+        expect(
+          `${result.stdout.toString()}\n${result.stderr.toString()}`,
+        ).toContain('parseRequestQuery');
       },
     );
   });

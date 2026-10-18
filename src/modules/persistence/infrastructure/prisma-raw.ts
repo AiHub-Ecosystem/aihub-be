@@ -111,7 +111,13 @@ export function postgresError(error: unknown): unknown {
       ? Reflect.get(cause, 'originalMessage')
       : undefined;
   return Object.assign(
-    new Error(typeof message === 'string' ? message : String(error)),
+    new Error(
+      typeof message === 'string'
+        ? message
+        : error instanceof Error
+          ? error.message
+          : (JSON.stringify(error) ?? ''),
+    ),
     { code, cause: error },
   );
 }

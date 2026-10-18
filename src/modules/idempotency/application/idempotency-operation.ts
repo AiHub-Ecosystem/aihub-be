@@ -28,5 +28,5 @@ export function idempotencyMode(
     return 'optional';
   }
 
-  throw new Error(`Unknown idempotency operation: ${operation}`);
+  throw new Error('Unknown idempotency operation');
 }

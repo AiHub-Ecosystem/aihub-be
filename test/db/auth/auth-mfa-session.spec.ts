@@ -148,7 +148,10 @@ describe('MFA session persistence on PostgreSQL', () => {
       createWebSession(userId, recoveryProof(codeHash)),
     ]);
 
-    expect(outcomes.sort()).toEqual([false, true]);
+    expect(outcomes.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))).toEqual([
+      false,
+      true,
+    ]);
     const rows = await pool.query(
       'SELECT id FROM web_sessions WHERE user_account_id = $1',
       [userId],
@@ -187,7 +190,10 @@ describe('MFA session persistence on PostgreSQL', () => {
       ),
     );
 
-    expect(outcomes.sort()).toEqual([false, true]);
+    expect(outcomes.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))).toEqual([
+      false,
+      true,
+    ]);
     const rows = await pool.query(
       'SELECT id FROM refresh_tokens WHERE user_account_id = $1',
       [userId],

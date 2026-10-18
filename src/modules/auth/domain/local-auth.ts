@@ -81,7 +81,7 @@ export function normalizeUsername(value: string): string {
 }
 
 export function isValidPassword(value: string): boolean {
-  const length = [...value].length;
+  const length = Array.from(value).length;
   return (
     length >= PASSWORD_MIN_CODE_POINTS && length <= PASSWORD_MAX_CODE_POINTS
   );
