@@ -562,6 +562,62 @@ copies only the required password into the AIHUB `redis` bundle. Redis `/1` is n
 durable isolation boundary: it keeps sandbox counters/cache keys out of the
 production logical database, while Postgres remains the durable boundary.
 
+### Postgres backups
+
+`scripts/ops/backup-postgres.sh` runs from the CD-managed crontab at minute 47
+of every hour (#281, spec 10 §N.4). For `aihub` and `aihub_sandbox` it runs
+`pg_dump -Fc` inside `aihub-db`, encrypts the dump on the host with `age` to a
+public key, and copies it to the Cloudflare R2 bucket with a pinned `rclone`
+image. It writes one line per database to `~/aihub-postgres-backup.log` and
+exits non-zero when any database fails. It takes its own lock, not the
+host-wide job lock, so a long sweep cannot make it skip an hour.
+
+| Bucket prefix   | Written by               | Kept (R2 lifecycle rule) |
+| --------------- | ------------------------ | ------------------------ |
+| `hourly/<db>/`  | every run                | 2 days (48 dumps)        |
+| `daily/<db>/`   | the 00 UTC run           | 30 days                  |
+| `monthly/<db>/` | the 00 UTC run on day 01 | 365 days                 |
+
+Retention is enforced by the three lifecycle rules on the bucket, not by the
+script. The **RPO is about one hour**.
+
+Host setup, once:
+
+- `~/.aihub-backup.env`, mode `0600`, holds `R2_ACCOUNT_ID`,
+  `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (an R2 token limited to Object
+  Read & Write on the bucket), `R2_BUCKET`, and `AGE_RECIPIENT` (the public
+  key). The script refuses to run with any other file mode.
+- The script downloads the `age` release on its first run into
+  `~/.aihub-backup-tools/` and refuses it unless the tarball's SHA-256 matches
+  the one pinned in the script.
+
+The **age private key never goes on the host**. It lives in the operator's
+password manager; without it no backup can be read. Losing it makes every
+backup useless, the same failure that cost the shared Vault on 2026-10-18.
+
+#### Restore rehearsal and restore
+
+The rehearsal restores the newest hourly dump into a disposable Postgres
+container with no network and compares per-table row counts with the live
+database. The private key travels on stdin and is held only in memory:
+
+```sh
+ssh <user>@<host> '~/aihub-be/scripts/ops/restore-postgres-rehearsal.sh aihub' \
+  < AIHUB-BACKUP-AGE-KEY.txt
+```
+
+It appends `result=ok|mismatch`, the table count, the rows each table is behind
+the live database (the backup is up to an hour old), and the elapsed seconds
+to `~/aihub-postgres-restore-rehearsal.log`. The elapsed time is the measured
+restore time for that database. Run it for both databases at least monthly and
+after any change to the backup job.
+
+A real restore follows the same steps by hand: download the chosen object with
+`rclone`, decrypt it with `age -d -i <key>`, and `pg_restore` it into the target
+database during a maintenance window. Restore over a live database only after
+taking a fresh dump of it, and run `quota:reconcile` afterwards so Redis
+counters match the restored `usage_records`.
+
 ## Provision production Vault data
 
 Use the repository helper with the production operator workflow. It writes the

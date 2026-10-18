@@ -319,6 +319,10 @@ jobs:
             scripts/ops/logs/request-log-lookup.sh \
             "$target:$VPS_APP_DIR/scripts/ops/logs/"
           scp "${scp_opts[@]}" \
+            scripts/ops/backup-postgres.sh \
+            scripts/ops/restore-postgres-rehearsal.sh \
+            "$target:$VPS_APP_DIR/scripts/ops/"
+          scp "${scp_opts[@]}" \
             scripts/ops/host-scheduled-job.sh \
             ops/host-jobs/aihub.crontab \
             "$target:$VPS_APP_DIR/.aihub-host-jobs-candidate/"
@@ -340,7 +344,10 @@ jobs:
           set -eu
           chmod 755 "$APP_DIR/scripts/ops/blue-green-host.sh"
           chmod 755 "$APP_DIR/scripts/ops/logs/request-log-lookup.sh"
+          chmod 755 "$APP_DIR/scripts/ops/backup-postgres.sh" \
+            "$APP_DIR/scripts/ops/restore-postgres-rehearsal.sh"
           test -s "$APP_DIR/docker-compose.production.yml"
+          test -s "$APP_DIR/scripts/ops/backup-postgres.sh"
           test -s "$APP_DIR/scripts/ops/blue-green-host.sh"
           test -s "$APP_DIR/scripts/ops/logs/request-log-lookup.sh"
           test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/install-host-jobs.sh"
