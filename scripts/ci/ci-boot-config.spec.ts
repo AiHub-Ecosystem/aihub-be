@@ -29,9 +29,7 @@ const PRODUCTION_DEPLOYMENT_ONLY_VARIABLES = new Set([
   'VAULT_ADDR',
   'VAULT_CA_CERT_FILE',
   'VAULT_ROLE_ID_FILE',
-  'VAULT_SANDBOX_ROLE_ID_FILE',
   'AIHUB_RUNTIME_SECRETS_HOST_DIR',
-  'AIHUB_SANDBOX_RUNTIME_SECRETS_HOST_DIR',
 ]);
 
 function readBootEnv(directory: string): NodeJS.Dict<string> {
@@ -194,8 +192,8 @@ describe('CI boot configuration', () => {
     );
   });
 
-  it('mints fresh secret keys but keeps the Production connection shape', () => {
-    const keys = (): [string, string, string] => [
+  it('mints fresh keys on every run, so none is ever committed', () => {
+    const keys = (): string[] => [
       readFileSync(join(directory, 'runtime-secrets.json'), 'utf8'),
       readFileSync(join(directory, 'connection-secrets.json'), 'utf8'),
       readFileSync(join(directory, 'auth-mfa-secrets.json'), 'utf8'),
@@ -206,11 +204,7 @@ describe('CI boot configuration', () => {
     const [secondRuntime, secondConnection, secondMfa] = keys();
 
     expect(secondRuntime).not.toBe(firstRuntime);
-    expect(secondConnection).toBe(firstConnection);
-    expect(Object.keys(JSON.parse(secondConnection))).toEqual([
-      'database',
-      'redis',
-    ]);
+    expect(secondConnection).not.toBe(firstConnection);
     expect(secondMfa).not.toBe(firstMfa);
   });
 });

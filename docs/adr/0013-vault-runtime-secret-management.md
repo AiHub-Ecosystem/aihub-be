@@ -1,17 +1,8 @@
 # ADR-0013: Vault-backed runtime secret management
 
-- Status: Accepted and implemented; Sandbox isolation amended by [ADR-0105](0105-isolate-sandbox-runtime-secrets.md)
+- Status: Accepted and implemented
 - Date: 2026-09-12; production cutover 2026-09-20
 - Related issue: [#30](https://github.com/AiHub-Ecosystem/aihub-be/issues/30)
-
-## Amendment for Sandbox isolation (#351)
-
-[ADR-0105](0105-isolate-sandbox-runtime-secrets.md) replaces the original
-environment-scoped `sandbox-assertion` path with `secret/aihub/sandbox/` and
-gives Sandbox its own AppRole, Agent, and rendered directory. Production keeps
-its own credential bundles and cannot read or render the Sandbox assertion
-key. The original decision below records the initial rollout; use ADR-0105 for
-the current Sandbox secret boundary.
 
 ## Context
 

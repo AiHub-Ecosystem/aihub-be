@@ -27,6 +27,10 @@ path "secret/data/aihub/staging/redis" {
   capabilities = ["read"]
 }
 
+path "secret/data/aihub/staging/sandbox-assertion" {
+  capabilities = ["read"]
+}
+
 path "secret/data/aihub/staging/email-outbox" {
   capabilities = ["read"]
 }

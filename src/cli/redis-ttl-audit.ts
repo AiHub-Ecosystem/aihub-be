@@ -1,7 +1,5 @@
 import Redis from 'ioredis';
 
-import { createConfiguredRedisClient } from '@/common/redis/redis-client.factory';
-
 const AIHUB_KEY_SCAN_COUNT = 250;
 const JWKS_GENERATION_PREFIX = 'aihub:v1:jwks-generation:';
 
@@ -24,7 +22,7 @@ interface RedisTtlAuditInput {
 }
 
 async function connectRedis(url: string): Promise<RedisTtlAuditClient> {
-  const redis = createConfiguredRedisClient(url, {
+  const redis = new Redis(url, {
     commandTimeout: 5_000,
     connectTimeout: 5_000,
     maxRetriesPerRequest: 1,
@@ -40,28 +38,9 @@ async function connectRedis(url: string): Promise<RedisTtlAuditClient> {
     throw error;
   }
 
-  return adaptRedisTtlAuditClient(redis);
-}
-
-export function adaptRedisTtlAuditClient(redis: Redis): RedisTtlAuditClient {
-  const keyPrefix = redis.options.keyPrefix ?? '';
-
   return {
-    scan: async (cursor) => {
-      const [nextCursor, keys] = await redis.scan(
-        cursor,
-        'MATCH',
-        `${keyPrefix}aihub:*`,
-        'COUNT',
-        AIHUB_KEY_SCAN_COUNT,
-      );
-      if (keys.some((key) => !key.startsWith(keyPrefix))) {
-        throw new Error(
-          'Redis TTL audit returned a key outside its configured namespace',
-        );
-      }
-      return [nextCursor, keys.map((key) => key.slice(keyPrefix.length))];
-    },
+    scan: (cursor) =>
+      redis.scan(cursor, 'MATCH', 'aihub:*', 'COUNT', AIHUB_KEY_SCAN_COUNT),
     getTtls: async (keys) => {
       if (keys.length === 0) {
         return [];

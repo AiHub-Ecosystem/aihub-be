@@ -2,12 +2,7 @@ import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 
 const environment = process.env.AIHUB_VAULT_ENVIRONMENT;
-const allowedEnvironments = new Set([
-  'development',
-  'staging',
-  'production',
-  'sandbox',
-]);
+const allowedEnvironments = new Set(['development', 'staging', 'production']);
 
 function fail(message) {
   console.error(`Vault smoke test failed: ${message}`);
@@ -23,9 +18,7 @@ if (process.env.AIHUB_VAULT_SMOKE_AUTH_METHOD !== 'approle') {
 }
 
 if (environment === undefined || !allowedEnvironments.has(environment)) {
-  fail(
-    'AIHUB_VAULT_ENVIRONMENT must be development, staging, production, or sandbox',
-  );
+  fail('AIHUB_VAULT_ENVIRONMENT must be development, staging, or production');
 }
 
 function runVault(args) {
@@ -62,13 +55,9 @@ const requiredPaths = [
   `secret/aihub/${environment}/seaweedfs`,
   `secret/aihub/${environment}/database`,
   `secret/aihub/${environment}/redis`,
-  `secret/aihub/${environment}/email-outbox`,
-  `secret/aihub/${environment}/web-session`,
+  `secret/aihub/${environment}/sandbox-assertion`,
   `secret/aihub/${environment}/auth-mfa`,
 ];
-if (environment === 'sandbox') {
-  requiredPaths.push(`secret/aihub/${environment}/sandbox-assertion`);
-}
 
 for (const path of requiredPaths) {
   const result = runVault(['kv', 'get', '-format=json', path]);
@@ -127,34 +116,6 @@ if (
   unrelatedMetadataCapabilities.stdout.trim().toLowerCase() !== 'deny'
 ) {
   fail('the runtime identity can access unrelated KV metadata');
-}
-
-const forbiddenPaths =
-  environment === 'sandbox'
-    ? [
-        'ai-speaking',
-        'ai-writing',
-        'resend',
-        'user-access-jwt',
-        'seaweedfs',
-        'database',
-        'redis',
-        'sandbox-assertion',
-        'email-outbox',
-        'web-session',
-        'auth-mfa',
-      ].map((bundle) => `secret/data/aihub/production/${bundle}`)
-    : environment === 'production'
-      ? ['secret/data/aihub/production/sandbox-assertion']
-      : [];
-for (const path of forbiddenPaths) {
-  const capabilities = runVault(['token', 'capabilities', path]);
-  if (
-    capabilities.status !== 0 ||
-    capabilities.stdout.trim().toLowerCase() !== 'deny'
-  ) {
-    fail(`the runtime identity can access a forbidden tier path: ${path}`);
-  }
 }
 
 console.log(

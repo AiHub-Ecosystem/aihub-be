@@ -16,7 +16,7 @@ secret/aihub/{environment}/resend
 secret/aihub/{environment}/user-access-jwt
 secret/aihub/{environment}/database
 secret/aihub/{environment}/redis
-secret/aihub/sandbox/sandbox-assertion
+secret/aihub/{environment}/sandbox-assertion
 secret/aihub/{environment}/email-outbox
 secret/aihub/{environment}/web-session
 secret/aihub/{environment}/auth-mfa
@@ -44,11 +44,10 @@ never with the application machine identity:
 vault policy write aihub-development-runtime ops/vault/policies/aihub-development-runtime.hcl
 vault policy write aihub-staging-runtime ops/vault/policies/aihub-staging-runtime.hcl
 vault policy write aihub-production-runtime ops/vault/policies/aihub-production-runtime.hcl
-vault policy write aihub-sandbox-runtime ops/vault/policies/aihub-sandbox-runtime.hcl
 ```
 
 The repository also includes an explicit operator-only provisioning helper. It
-expects a private directory with `ai-speaking.json`, `ai-writing.json`,
+expects a mode-700 directory with `ai-speaking.json`, `ai-writing.json`,
 `seaweedfs.json`, `resend.json`, `user-access-jwt.json`, `email-outbox.json`,
 `web-session.json`, and `auth-mfa.json` containing only the flat bundle keys. It passes file paths
 to the Vault CLI, never secret values:
@@ -113,42 +112,16 @@ or a revoked token. `bound_cidr_list` is the constraint Vault requires when
 `bind_secret_id` is off.
 
 The helper writes the selected policy, creates an AppRole with a short token
-TTL and bounded maximum TTL, and writes that tier's KV bundles. It refuses a
-Vault `root` token, stores the generated role ID as `vault-role-id` in the
-credentials directory with mode `0600`, and never prints secret values or the
-role ID. Protect the directory with a private ACL on Windows or mode `0700` on
-Unix; deliver the role ID to that tier's Agent through the deployment secret
-channel. There is no Agent `secret_id` to rotate.
-
-Before writing the policy or bundles, the helper validates that Production's
-database URL targets `aihub`, Sandbox's runtime URL targets `aihub_sandbox`,
-and Sandbox's control-plane reader targets `aihub` with a different login. It
-also requires Sandbox Redis database `/1` and a dedicated non-default ACL
-username; verify that user's actual key and command restrictions on Redis.
-
-Install the role ID at that tier's host path before deleting the local
-credentials directory. Production has ten input bundles and Sandbox has eleven;
-the generated `vault-role-id` file is additional to those bundle files.
-
-Production and Sandbox each have their own credential directory and Vault
-policy. Production `database.json` and `redis.json` contain only `url`. The
-Sandbox versions contain its own `url`; `database.json` also contains
-`control_plane_read_url`, the least-privilege Postgres login that can select
-only the Organization, API-key, and identity-configuration columns used for
-request authentication and update only `api_keys.last_used_at`. Only the
-Sandbox directory contains `sandbox-assertion.json`. Do not copy Production
-provider, JWT, Resend, SeaweedFS, email-outbox, web-session, or MFA credentials
-into it; create separate Sandbox credentials. Use a separate Resend key where
-the provider supports it.
-The Sandbox Redis URL must use a dedicated ACL user, database `/1`, and
-`?keyPrefix=aihub-sandbox%3A`. The shared Redis client factory applies that
-prefix to key commands, and the Redis ACL limits this user to
-`aihub-sandbox:*`, which keeps Production keys inaccessible before the client
-selects database `/1`.
-
-Run the helper once for each tier, changing `AIHUB_VAULT_ENVIRONMENT` and the
-credentials directory to `production` or `sandbox`. Sandbox provisioning writes
-eleven bundles; Production writes ten and cannot read the Sandbox signing key.
+TTL and bounded maximum TTL, and writes all eleven KV bundles. The credential
+directory must also contain `database.json`, `redis.json`, and
+`sandbox-assertion.json` with the flat keys used by the connection template.
+`database.json` contains `url`, `sandbox_url`, and
+`sandbox_control_plane_read_url`. The last value is a separate least-privilege
+Postgres login for the sandbox process: it can select the Organization,
+API-key, and identity-configuration columns used for request authentication,
+and update only `api_keys.last_used_at`. It cannot change control-plane data.
+Deliver the Role ID to Vault Agent through the deployment secret channel; never
+commit or paste it into an issue. There is no Agent `secret_id` to rotate.
 
 The AppRole policy must be read-only and must not receive `root`, `sys`, auth
 management, write, delete, or broad-list capabilities. Revoke bootstrap/root
@@ -160,11 +133,9 @@ smoke test.
 `templates/runtime-secrets.json.ctmpl` renders the JSON shape consumed by the
 AIHUB runtime-secret provider. `templates/auth-mfa-secrets.json.ctmpl` renders
 the separate MFA keyring. `templates/connection-secrets.json.ctmpl` renders
-database, Redis, and Sandbox-only assertion signing material. Set
-`AIHUB_VAULT_ENVIRONMENT` independently on both Agents; each renders the same
-three filenames under its own directory. The Sandbox policy reads only
-`secret/aihub/sandbox/*`; Production, staging, and development cannot read a
-`sandbox-assertion` path.
+database, Redis, and sandbox bootstrap material. Set
+`AIHUB_VAULT_ENVIRONMENT` in the Agent process; all three files are rendered under
+the shared runtime directory.
 
 The rendered file must be readable only by the AIHUB service account. Its
 directory must not be world-readable, and the file must not be copied into
@@ -174,26 +145,8 @@ application logs, images, backups, or source control.
 
 Use the repository's opt-in `pnpm vault:smoke` command only with a dedicated,
 non-root AppRole identity. It reports path access and policy failures without
-printing Vault responses or secret values. The Sandbox check also confirms
-every Production path is denied; the Production check confirms the Sandbox
-signing path is denied. It is not part of CI or the default verification loop.
-Set `AIHUB_VAULT_SMOKE_AUTH_METHOD=approle` as proof that the operator
-authenticated through the intended machine-identity flow. The check uses
-capability reads for unrelated and cross-tier paths rather than performing a
+printing Vault responses or secret values. It is not part of CI or the default
+verification loop. Set `AIHUB_VAULT_SMOKE_AUTH_METHOD=approle` as proof that
+the operator authenticated through the intended machine-identity flow. The
+check uses Vault capability reads for unrelated paths rather than performing a
 write/delete probe.
-
-For a manual smoke check, capture the AppRole login token into the shell
-environment so it is not printed or stored in the CLI token helper:
-
-```powershell
-$env:VAULT_TOKEN = vault write -field=token auth/approle/login `
-  'role_id=@C:\secure\aihub\sandbox\vault-role-id'
-$env:AIHUB_VAULT_SMOKE_ALLOW = 'true'
-$env:AIHUB_VAULT_SMOKE_AUTH_METHOD = 'approle'
-$env:AIHUB_VAULT_ENVIRONMENT = 'sandbox'
-pnpm vault:smoke
-Remove-Item Env:VAULT_TOKEN
-```
-
-Use the matching Production role ID and environment for the Production smoke
-check. Keep shell tracing disabled while capturing the token.

@@ -1,8 +1,5 @@
-import type Redis from 'ioredis';
-
 import {
   type RedisTtlAuditClient,
-  adaptRedisTtlAuditClient,
   runRedisTtlAuditCommand,
 } from '@/cli/redis-ttl-audit';
 
@@ -80,59 +77,6 @@ describe('runRedisTtlAuditCommand', () => {
   it('requires a Redis URL', async () => {
     await expect(runRedisTtlAuditCommand({ redisUrl: '' })).rejects.toThrow(
       'REDIS_URL is required',
-    );
-  });
-});
-
-describe('adaptRedisTtlAuditClient', () => {
-  it('scans namespaced keys and avoids prefixing TTL keys twice', async () => {
-    const pipeline = {
-      ttl: jest.fn().mockReturnThis(),
-      exec: jest.fn().mockResolvedValue([[null, 60]]),
-    };
-    const scan = jest
-      .fn()
-      .mockResolvedValue([
-        '0',
-        ['aihub-sandbox:aihub:v1:quota:org_acme:2026-10'],
-      ]);
-    const redis = {
-      options: { keyPrefix: 'aihub-sandbox:' },
-      scan,
-      pipeline: jest.fn().mockReturnValue(pipeline),
-      quit: jest.fn().mockResolvedValue('OK'),
-      disconnect: jest.fn(),
-    } as unknown as Redis;
-    const client = adaptRedisTtlAuditClient(redis);
-
-    await expect(client.scan('0')).resolves.toEqual([
-      '0',
-      ['aihub:v1:quota:org_acme:2026-10'],
-    ]);
-    expect(scan).toHaveBeenCalledWith(
-      '0',
-      'MATCH',
-      'aihub-sandbox:aihub:*',
-      'COUNT',
-      250,
-    );
-
-    await expect(
-      client.getTtls(['aihub:v1:quota:org_acme:2026-10']),
-    ).resolves.toEqual([60]);
-    expect(pipeline.ttl).toHaveBeenCalledWith(
-      'aihub:v1:quota:org_acme:2026-10',
-    );
-  });
-
-  it('rejects scanned keys outside the configured namespace', async () => {
-    const redis = {
-      options: { keyPrefix: 'aihub-sandbox:' },
-      scan: jest.fn().mockResolvedValue(['0', ['aihub:v1:production-key']]),
-    } as unknown as Redis;
-
-    await expect(adaptRedisTtlAuditClient(redis).scan('0')).rejects.toThrow(
-      'Redis TTL audit returned a key outside its configured namespace',
     );
   });
 });
