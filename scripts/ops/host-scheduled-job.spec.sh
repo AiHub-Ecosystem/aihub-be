@@ -411,12 +411,15 @@ assert_not_contains "$FAKE_CRONTAB_FILE" 'aihub-ops-job.sh'
 assert_not_contains "$FAKE_CRONTAB_FILE" 'aihub-avatar-sweep.sh'
 [[ "$(grep -c '^# BEGIN AIHUB MANAGED JOBS$' "$FAKE_CRONTAB_FILE")" == 1 ]]
 [[ "$(grep -c 'host-scheduled-job.sh' "$FAKE_CRONTAB_FILE")" == 7 ]]
+# A second install keeps one separator line instead of adding another.
+[[ "$(grep -c '^$' "$FAKE_CRONTAB_FILE")" == 1 ]]
 
 cp "$FAKE_CRONTAB_FILE" "$test_root/crontab.before-suspend"
 printf '1\n' >"$FAKE_PGREP_REMAINING_FILE"
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" suspend
 assert_contains "$FAKE_CRONTAB_FILE" '/home/operator/wispace-vault/snapshot.sh'
 assert_not_contains "$FAKE_CRONTAB_FILE" 'host-scheduled-job.sh'
+[[ "$(grep -c '^$' "$FAKE_CRONTAB_FILE")" == 1 ]]
 cmp -s "$test_root/crontab.before-suspend" "$app_dir/.aihub-host-jobs-state/crontab"
 [[ "$(cat "$FAKE_PGREP_REMAINING_FILE")" == 0 ]]
 assert_contains "$FAKE_PGREP_PATTERN_FILE" '(^|/)aihub-ops-job\.sh'

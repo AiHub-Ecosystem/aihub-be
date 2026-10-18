@@ -62,6 +62,17 @@ filter_managed_crontab() {
   }
 }
 
+# Writes the lines kept from the existing crontab, then one separator line.
+# Trailing blank lines are dropped first; otherwise every suspend and every
+# install would add one more.
+write_kept_lines() {
+  awk 'NF { while (blanks > 0) { print ""; blanks-- } print; next } { blanks++ }' \
+    "$filtered" >"$next"
+  if [[ -s "$next" ]]; then
+    printf '\n' >>"$next"
+  fi
+}
+
 verify_crontab() {
   crontab -l >"$readback" || return 1
   cmp -s "$1" "$readback"
@@ -131,11 +142,7 @@ case "$command" in
     fi
     read_crontab
     filter_managed_crontab "$current" "$filtered"
-    : >"$next"
-    if [[ -s "$filtered" ]]; then
-      cat "$filtered" >"$next"
-      printf '\n' >>"$next"
-    fi
+    write_kept_lines
     mkdir "$state_dir"
     install -m 600 "$current" "$state_dir/crontab"
     if [[ "$had_crontab" == true ]]; then
@@ -235,10 +242,7 @@ trap cleanup EXIT
 read_crontab || exit $?
 filter_managed_crontab "$current" "$filtered"
 
-if [[ -s "$filtered" ]]; then
-  cat "$filtered" >"$next"
-  printf '\n' >>"$next"
-fi
+write_kept_lines
 awk -v app_dir="$APP_DIR" '
   {
     if ($0 ~ /@AIHUB_APP_DIR@/) {
