@@ -5,6 +5,21 @@ import {
   recordObjectStorageFailure,
 } from '@/common/observability/metrics';
 
+export function objectStorageNotFound(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const { name, $metadata } = error as {
+    name?: unknown;
+    $metadata?: { httpStatusCode?: unknown };
+  };
+  return (
+    name === 'NotFound' ||
+    (typeof $metadata === 'object' &&
+      $metadata !== null &&
+      'httpStatusCode' in $metadata &&
+      ($metadata as { httpStatusCode?: unknown }).httpStatusCode === 404)
+  );
+}
+
 /** Request callers supply their shared deadline; sweeps allow 30s per operation, including body reads. */
 export function objectStorageSignal(): AbortSignal {
   return AbortSignal.timeout(30_000);

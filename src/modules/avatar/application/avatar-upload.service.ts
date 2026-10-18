@@ -1,5 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
+import { payloadTooLarge, uploadNotFound } from '@/common/errors/upload-errors';
 import type { IdMinter } from '@/common/ids/prefixed-id';
 import {
   AVATAR_COMPLETION_WINDOW_MS,
@@ -33,26 +34,10 @@ export interface CompletedAvatar extends PublishedAvatar {
   readonly created: boolean;
 }
 
-function payloadTooLarge(): AppError {
-  return new AppError({
-    code: 'PAYLOAD_TOO_LARGE',
-    message: 'Avatar image is larger than 2 MiB',
-    retryable: false,
-  });
-}
-
 function avatarChanged(): AppError {
   return new AppError({
     code: 'AVATAR_CHANGED',
     message: 'The Avatar was changed by another request',
-    retryable: false,
-  });
-}
-
-function uploadNotFound(): AppError {
-  return new AppError({
-    code: 'NOT_FOUND',
-    message: 'Avatar upload was not found',
     retryable: false,
   });
 }
@@ -84,7 +69,10 @@ export class AvatarUploadService {
       throw invalidRequest();
     }
     if (byteSize > AVATAR_MAX_BYTES) {
-      throw payloadTooLarge();
+      throw payloadTooLarge(
+        'PAYLOAD_TOO_LARGE',
+        'Avatar image is larger than 2 MiB',
+      );
     }
 
     const assetId = this.newAssetId(this.now());
@@ -197,7 +185,7 @@ export class AvatarUploadService {
     const objectKey = avatarObjectKey(userId, assetId);
     const stored = await this.storage.describeObject(objectKey, signal);
     if (stored === undefined) {
-      throw uploadNotFound();
+      throw uploadNotFound('NOT_FOUND', 'Avatar upload was not found');
     }
 
     // Older than the window, or of an age storage will not state: the sweep may
@@ -209,7 +197,7 @@ export class AvatarUploadService {
         : this.now().getTime() - stored.lastModified.getTime();
     if (age === undefined || age > AVATAR_COMPLETION_WINDOW_MS) {
       await this.discard(objectKey, signal);
-      throw uploadNotFound();
+      throw uploadNotFound('NOT_FOUND', 'Avatar upload was not found');
     }
 
     // Checked against what landed, not what was declared: storage may not
@@ -217,7 +205,10 @@ export class AvatarUploadService {
     const { contentType, byteSize } = stored;
     if (byteSize !== undefined && byteSize > AVATAR_MAX_BYTES) {
       await this.discard(objectKey, signal);
-      throw payloadTooLarge();
+      throw payloadTooLarge(
+        'PAYLOAD_TOO_LARGE',
+        'Avatar image is larger than 2 MiB',
+      );
     }
     if (
       !isAvatarContentType(contentType) ||

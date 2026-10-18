@@ -6,8 +6,8 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-import { AppError } from '@/common/errors/app-error';
 import {
+  objectStorageNotFound,
   objectStorageSignal,
   objectStorageUnavailable,
 } from '@/modules/secrets/public/object-storage';
@@ -24,26 +24,6 @@ export interface SpeakingAudioAssetStorageOptions {
   readonly sandboxBucket?: string;
   readonly now?: () => Date;
   readonly client?: Pick<S3Client, 'send'>;
-}
-
-function storageUnavailable(cause?: unknown, signal?: AbortSignal): AppError {
-  return objectStorageUnavailable(
-    'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
-    'Speaking audio storage is unavailable',
-    cause,
-    signal,
-  );
-}
-
-function isNotFound(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-  const { name, $metadata } = error as {
-    name?: unknown;
-    $metadata?: { httpStatusCode?: unknown };
-  };
-  return name === 'NotFound' || $metadata?.httpStatusCode === 404;
 }
 
 interface ConfiguredStorage {
@@ -112,7 +92,11 @@ export class S3SpeakingAudioAssetStorage
       );
       return { url, expiresAt };
     } catch (error) {
-      throw storageUnavailable(error);
+      throw objectStorageUnavailable(
+        'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+        'Speaking audio storage is unavailable',
+        error,
+      );
     }
   }
 
@@ -140,10 +124,15 @@ export class S3SpeakingAudioAssetStorage
         byteSize: head.ContentLength,
       };
     } catch (error) {
-      if (isNotFound(error)) {
+      if (objectStorageNotFound(error)) {
         return undefined;
       }
-      throw storageUnavailable(error, signal);
+      throw objectStorageUnavailable(
+        'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+        'Speaking audio storage is unavailable',
+        error,
+        signal,
+      );
     }
   }
 
@@ -161,10 +150,15 @@ export class S3SpeakingAudioAssetStorage
         { abortSignal: signal },
       );
     } catch (error) {
-      if (isNotFound(error)) {
+      if (objectStorageNotFound(error)) {
         return;
       }
-      throw storageUnavailable(error, signal);
+      throw objectStorageUnavailable(
+        'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+        'Speaking audio storage is unavailable',
+        error,
+        signal,
+      );
     }
   }
 
@@ -177,10 +171,16 @@ export class S3SpeakingAudioAssetStorage
     readonly bucket: string;
   } {
     if (this.configured === undefined) {
-      throw storageUnavailable();
+      throw objectStorageUnavailable(
+        'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+        'Speaking audio storage is unavailable',
+      );
     }
     if (!isSpeakingAudioObjectKey(objectKey)) {
-      throw storageUnavailable();
+      throw objectStorageUnavailable(
+        'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+        'Speaking audio storage is unavailable',
+      );
     }
 
     const bucket =
@@ -188,7 +188,10 @@ export class S3SpeakingAudioAssetStorage
         ? this.configured.productionBucket
         : this.configured.sandboxBucket;
     if (bucket === undefined) {
-      throw storageUnavailable();
+      throw objectStorageUnavailable(
+        'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+        'Speaking audio storage is unavailable',
+      );
     }
     return {
       signer: this.configured.signer,

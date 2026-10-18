@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { storeUnavailable } from '@/common/errors/upload-errors';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import type {
   SpeakingAudioUploadLookup,
@@ -20,18 +21,14 @@ import type {
 
 export { createSpeakingAudioQueryClient } from './postgres-speaking-audio-upload.fixture-client';
 
-function storeUnavailable(cause?: unknown): AppError {
-  return new AppError({
-    code: 'INTERNAL_ERROR',
-    message: 'Speaking Audio store is unavailable',
-    retryable: false,
-    ...(cause === undefined ? {} : { cause }),
-  });
-}
-
 function requiredEnvironment(value: string): SpeakingAudioEnvironment {
   if (value !== 'production' && value !== 'sandbox') {
-    throw storeUnavailable(new Error('Speaking Audio environment is invalid'));
+    throw storeUnavailable(
+      'INTERNAL_ERROR',
+      'Speaking Audio store is unavailable',
+      false,
+      new Error('Speaking Audio environment is invalid'),
+    );
   }
   return value;
 }
@@ -46,7 +43,12 @@ function mapIntent(
     !isSpeakingAudioContentType(row.contentType) ||
     (row.status !== 'open' && row.status !== 'rejected')
   ) {
-    throw storeUnavailable(new Error('Speaking Audio intent is invalid'));
+    throw storeUnavailable(
+      'INTERNAL_ERROR',
+      'Speaking Audio store is unavailable',
+      false,
+      new Error('Speaking Audio intent is invalid'),
+    );
   }
   return {
     assetId: row.id,
@@ -67,7 +69,12 @@ function mapAsset(row: AssetModel | undefined): SpeakingAudioAsset | undefined {
     return undefined;
   }
   if (!isSpeakingAudioContentType(row.contentType)) {
-    throw storeUnavailable(new Error('Speaking Audio asset is invalid'));
+    throw storeUnavailable(
+      'INTERNAL_ERROR',
+      'Speaking Audio store is unavailable',
+      false,
+      new Error('Speaking Audio asset is invalid'),
+    );
   }
   return {
     assetId: row.id,
@@ -233,7 +240,12 @@ export class PostgresSpeakingAudioUploadRepository
         input.asset.contentType !== intent.contentType ||
         input.asset.byteSize !== intent.byteSize
       ) {
-        throw storeUnavailable(new Error('Speaking Audio intent changed'));
+        throw storeUnavailable(
+          'INTERNAL_ERROR',
+          'Speaking Audio store is unavailable',
+          false,
+          new Error('Speaking Audio intent changed'),
+        );
       }
 
       await client.speakingAudioAsset.create({
@@ -253,7 +265,12 @@ export class PostgresSpeakingAudioUploadRepository
         where: { ...ownerWhere(input.owner), status: 'open' },
       });
       if (removed.count !== 1) {
-        throw storeUnavailable(new Error('Speaking Audio intent changed'));
+        throw storeUnavailable(
+          'INTERNAL_ERROR',
+          'Speaking Audio store is unavailable',
+          false,
+          new Error('Speaking Audio intent changed'),
+        );
       }
       return 'created';
     });
@@ -348,7 +365,12 @@ export class PostgresSpeakingAudioUploadRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw storeUnavailable(error);
+      throw storeUnavailable(
+        'INTERNAL_ERROR',
+        'Speaking Audio store is unavailable',
+        false,
+        error,
+      );
     }
   }
 
@@ -359,7 +381,12 @@ export class PostgresSpeakingAudioUploadRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw storeUnavailable(error);
+      throw storeUnavailable(
+        'INTERNAL_ERROR',
+        'Speaking Audio store is unavailable',
+        false,
+        error,
+      );
     }
   }
 }

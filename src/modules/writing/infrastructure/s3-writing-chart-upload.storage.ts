@@ -7,8 +7,8 @@ import {
 } from '@aws-sdk/client-s3';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 
-import { AppError } from '@/common/errors/app-error';
 import {
+  objectStorageNotFound,
   objectStorageSignal,
   objectStorageUnavailable,
 } from '@/modules/secrets/public/object-storage';
@@ -31,28 +31,6 @@ export interface S3WritingChartUploadStorageOptions {
   readonly publicBucket?: string;
   readonly publicBaseUrl?: string;
   readonly client?: S3ClientPort;
-}
-
-function storageUnavailable(cause?: unknown, signal?: AbortSignal): AppError {
-  return objectStorageUnavailable(
-    'WRITING_CHART_STORAGE_UNAVAILABLE',
-    'Writing chart storage is unavailable',
-    cause,
-    signal,
-  );
-}
-
-function isNotFound(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  if (!('name' in error) || !('$metadata' in error)) return false;
-  const metadata = error.$metadata;
-  return (
-    error.name === 'NotFound' ||
-    (typeof metadata === 'object' &&
-      metadata !== null &&
-      'httpStatusCode' in metadata &&
-      metadata.httpStatusCode === 404)
-  );
 }
 
 function validBaseUrl(value: string | undefined): URL | undefined {
@@ -130,9 +108,16 @@ export class S3WritingChartUploadStorage
       true,
     );
     if (this.publicBucket === undefined || this.publicBaseUrl === undefined) {
-      throw storageUnavailable();
+      throw objectStorageUnavailable(
+        'WRITING_CHART_STORAGE_UNAVAILABLE',
+        'Writing chart storage is unavailable',
+      );
     }
-    if (signer === undefined) throw storageUnavailable();
+    if (signer === undefined)
+      throw objectStorageUnavailable(
+        'WRITING_CHART_STORAGE_UNAVAILABLE',
+        'Writing chart storage is unavailable',
+      );
     const expiresAt = new Date(
       Date.now() + WRITING_CHART_UPLOAD_URL_TTL_SECONDS * 1_000,
     );
@@ -146,7 +131,11 @@ export class S3WritingChartUploadStorage
       });
       return { url, fields, expiresAt };
     } catch (error) {
-      throw storageUnavailable(error);
+      throw objectStorageUnavailable(
+        'WRITING_CHART_STORAGE_UNAVAILABLE',
+        'Writing chart storage is unavailable',
+        error,
+      );
     }
   }
 
@@ -196,8 +185,13 @@ export class S3WritingChartUploadStorage
         bytes,
       };
     } catch (error) {
-      if (isNotFound(error)) return undefined;
-      throw storageUnavailable(error, signal);
+      if (objectStorageNotFound(error)) return undefined;
+      throw objectStorageUnavailable(
+        'WRITING_CHART_STORAGE_UNAVAILABLE',
+        'Writing chart storage is unavailable',
+        error,
+        signal,
+      );
     }
   }
 
@@ -231,7 +225,12 @@ export class S3WritingChartUploadStorage
         { abortSignal: signal },
       );
     } catch (error) {
-      throw storageUnavailable(error, signal);
+      throw objectStorageUnavailable(
+        'WRITING_CHART_STORAGE_UNAVAILABLE',
+        'Writing chart storage is unavailable',
+        error,
+        signal,
+      );
     }
   }
 
@@ -245,7 +244,11 @@ export class S3WritingChartUploadStorage
       'published',
       true,
     );
-    if (publicBaseUrl === undefined) throw storageUnavailable();
+    if (publicBaseUrl === undefined)
+      throw objectStorageUnavailable(
+        'WRITING_CHART_STORAGE_UNAVAILABLE',
+        'Writing chart storage is unavailable',
+      );
     return new URL(`${bucket}/${input.publishedKey}`, publicBaseUrl).href;
   }
 
@@ -290,7 +293,13 @@ export class S3WritingChartUploadStorage
         abortSignal: signal,
       });
     } catch (error) {
-      if (!isNotFound(error)) throw storageUnavailable(error, signal);
+      if (!objectStorageNotFound(error))
+        throw objectStorageUnavailable(
+          'WRITING_CHART_STORAGE_UNAVAILABLE',
+          'Writing chart storage is unavailable',
+          error,
+          signal,
+        );
     }
   }
 
@@ -317,14 +326,20 @@ export class S3WritingChartUploadStorage
       response.ETag !== etag ||
       response.Body === undefined
     ) {
-      throw storageUnavailable();
+      throw objectStorageUnavailable(
+        'WRITING_CHART_STORAGE_UNAVAILABLE',
+        'Writing chart storage is unavailable',
+      );
     }
     const bytes = await response.Body.transformToByteArray();
     if (
       bytes.byteLength !== size ||
       bytes.byteLength > WRITING_CHART_MAX_BYTES
     ) {
-      throw storageUnavailable();
+      throw objectStorageUnavailable(
+        'WRITING_CHART_STORAGE_UNAVAILABLE',
+        'Writing chart storage is unavailable',
+      );
     }
     return bytes;
   }
@@ -351,7 +366,10 @@ export class S3WritingChartUploadStorage
       (requirePublicUrl && this.publicBaseUrl === undefined) ||
       bucket === undefined
     )
-      throw storageUnavailable();
+      throw objectStorageUnavailable(
+        'WRITING_CHART_STORAGE_UNAVAILABLE',
+        'Writing chart storage is unavailable',
+      );
     return {
       signer: this.signer,
       client,

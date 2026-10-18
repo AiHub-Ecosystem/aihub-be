@@ -1,5 +1,10 @@
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
+import {
+  payloadTooLarge,
+  storageUnavailable,
+  uploadNotFound,
+} from '@/common/errors/upload-errors';
 import type { IdMinter } from '@/common/ids/prefixed-id';
 import type { RequestContext } from '@/common/request-context/request-context';
 import {
@@ -23,23 +28,6 @@ import type {
   WritingChartUploadStoragePort,
 } from './writing-chart-upload.port';
 
-function storageUnavailable(cause?: unknown): AppError {
-  return new AppError({
-    code: 'WRITING_CHART_STORAGE_UNAVAILABLE',
-    message: 'Writing chart storage is unavailable',
-    retryable: true,
-    ...(cause === undefined ? {} : { cause }),
-  });
-}
-
-function uploadNotFound(): AppError {
-  return new AppError({
-    code: 'NOT_FOUND',
-    message: 'Writing chart upload was not found',
-    retryable: false,
-  });
-}
-
 function rateLimited(): AppError {
   return new AppError({
     code: 'RATE_LIMITED',
@@ -47,15 +35,6 @@ function rateLimited(): AppError {
     retryable: true,
     retryAfterMs: WRITING_CHART_RATE_WINDOW_MS,
     retryAfterHeader: true,
-  });
-}
-
-function payloadTooLarge(): AppError {
-  return new AppError({
-    code: 'PAYLOAD_TOO_LARGE',
-    message:
-      'Writing chart upload or sanitized output must be 10 MiB or smaller',
-    retryable: false,
   });
 }
 
@@ -69,7 +48,10 @@ function ownerFromContext(
     userId === undefined ||
     (environment !== 'production' && environment !== 'sandbox')
   ) {
-    throw storageUnavailable();
+    throw storageUnavailable(
+      'WRITING_CHART_STORAGE_UNAVAILABLE',
+      'Writing chart storage is unavailable',
+    );
   }
   return {
     assetId,
@@ -87,7 +69,10 @@ function invalidStoredObject(
     stored?.byteSize !== undefined &&
     stored.byteSize > WRITING_CHART_MAX_BYTES
   ) {
-    return payloadTooLarge();
+    return payloadTooLarge(
+      'PAYLOAD_TOO_LARGE',
+      'Writing chart image is larger than 2 MiB',
+    );
   }
   if (
     stored === undefined ||
@@ -141,7 +126,11 @@ export class WritingChartUploadService
     if (!Number.isInteger(input.byteSize) || input.byteSize < 1) {
       throw invalidRequest();
     }
-    if (input.byteSize > WRITING_CHART_MAX_BYTES) throw payloadTooLarge();
+    if (input.byteSize > WRITING_CHART_MAX_BYTES)
+      throw payloadTooLarge(
+        'PAYLOAD_TOO_LARGE',
+        'Writing chart image is larger than 2 MiB',
+      );
 
     const createdAt = this.now();
     const assetId = this.newAssetId(createdAt);
@@ -191,7 +180,7 @@ export class WritingChartUploadService
       found.intent.status !== 'open' ||
       found.intent.expiresAt.getTime() <= now.getTime()
     ) {
-      throw uploadNotFound();
+      throw uploadNotFound('NOT_FOUND', 'Writing chart upload was not found');
     }
 
     const signed = await this.storage.createUploadUrl({
@@ -208,7 +197,7 @@ export class WritingChartUploadService
       stillOpen.intent.status !== 'open' ||
       stillOpen.intent.expiresAt.getTime() <= this.now().getTime()
     ) {
-      throw uploadNotFound();
+      throw uploadNotFound('NOT_FOUND', 'Writing chart upload was not found');
     }
     return {
       assetId: found.intent.assetId,
@@ -237,7 +226,7 @@ export class WritingChartUploadService
           found.intent.status !== 'publishing') ||
         found.intent.expiresAt.getTime() <= now.getTime()
       ) {
-        throw uploadNotFound();
+        throw uploadNotFound('NOT_FOUND', 'Writing chart upload was not found');
       }
 
       const stored = await this.storage.inspectObject(
@@ -248,7 +237,8 @@ export class WritingChartUploadService
         },
         input.context.signal,
       );
-      if (stored === undefined) throw uploadNotFound();
+      if (stored === undefined)
+        throw uploadNotFound('NOT_FOUND', 'Writing chart upload was not found');
       const refusal = invalidStoredObject(stored, found.intent);
       const sanitized =
         refusal === undefined
@@ -277,7 +267,10 @@ export class WritingChartUploadService
         throw (
           refusal ??
           (sanitized?.kind === 'too_large'
-            ? payloadTooLarge()
+            ? payloadTooLarge(
+                'PAYLOAD_TOO_LARGE',
+                'Writing chart image is larger than 2 MiB',
+              )
             : invalidRequest())
         );
       }
@@ -293,10 +286,11 @@ export class WritingChartUploadService
       if (reservation === 'published') {
         const current = await this.repository.findUpload(owner);
         if (current.kind === 'asset') return current.asset;
-        throw uploadNotFound();
+        throw uploadNotFound('NOT_FOUND', 'Writing chart upload was not found');
       }
       if (reservation === 'limited') throw rateLimited();
-      if (reservation !== 'started') throw uploadNotFound();
+      if (reservation !== 'started')
+        throw uploadNotFound('NOT_FOUND', 'Writing chart upload was not found');
 
       try {
         await this.storage.publishObject(
@@ -319,7 +313,11 @@ export class WritingChartUploadService
         now: this.now(),
         imageUrl,
       });
-      if (asset === undefined) throw storageUnavailable();
+      if (asset === undefined)
+        throw storageUnavailable(
+          'WRITING_CHART_STORAGE_UNAVAILABLE',
+          'Writing chart storage is unavailable',
+        );
       try {
         await this.storage.deleteStagingObject(
           {

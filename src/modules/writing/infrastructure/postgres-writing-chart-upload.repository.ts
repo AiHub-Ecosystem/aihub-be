@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { storeUnavailable } from '@/common/errors/upload-errors';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import {
   WRITING_CHART_ORG_HOURLY_LIMIT,
@@ -24,22 +25,18 @@ import type {
   WritingChartUpload as WritingChartUploadModel,
 } from '@prisma-client/client';
 
-function storeUnavailable(cause?: unknown): AppError {
-  return new AppError({
-    code: 'INTERNAL_ERROR',
-    message: 'Writing chart store is unavailable',
-    retryable: false,
-    ...(cause === undefined ? {} : { cause }),
-  });
-}
-
 function mapIntent(row: WritingChartUploadModel): WritingChartUploadIntent {
   if (
     !isWritingChartContentType(row.contentType) ||
     !isWritingChartUploadStatus(row.status) ||
     !isWritingChartEnvironment(row.environment)
   ) {
-    throw storeUnavailable(new Error('Writing chart upload intent is invalid'));
+    throw storeUnavailable(
+      'INTERNAL_ERROR',
+      'Writing chart store is unavailable',
+      false,
+      new Error('Writing chart upload intent is invalid'),
+    );
   }
   return {
     assetId: row.id,
@@ -66,7 +63,12 @@ function mapAsset(row: WritingChartUploadModel): WritingChartAsset | undefined {
     row.retentionExpiresAt === null ||
     row.imageUrl === null
   ) {
-    throw storeUnavailable(new Error('Writing chart asset is invalid'));
+    throw storeUnavailable(
+      'INTERNAL_ERROR',
+      'Writing chart store is unavailable',
+      false,
+      new Error('Writing chart asset is invalid'),
+    );
   }
   return {
     ...mapIntent({ ...row, status: 'open' }),
@@ -278,6 +280,9 @@ export class PostgresWritingChartUploadRepository
     return rows.map((row) => {
       if (!isWritingChartEnvironment(row.environment))
         throw storeUnavailable(
+          'INTERNAL_ERROR',
+          'Writing chart store is unavailable',
+          false,
           new Error('Writing chart environment is invalid'),
         );
       return {
@@ -330,7 +335,12 @@ export class PostgresWritingChartUploadRepository
       );
     } catch (error) {
       if (error instanceof AppError) throw error;
-      throw storeUnavailable(error);
+      throw storeUnavailable(
+        'INTERNAL_ERROR',
+        'Writing chart store is unavailable',
+        false,
+        error,
+      );
     }
   }
 
@@ -339,7 +349,12 @@ export class PostgresWritingChartUploadRepository
       return await operation();
     } catch (error) {
       if (error instanceof AppError) throw error;
-      throw storeUnavailable(error);
+      throw storeUnavailable(
+        'INTERNAL_ERROR',
+        'Writing chart store is unavailable',
+        false,
+        error,
+      );
     }
   }
 }

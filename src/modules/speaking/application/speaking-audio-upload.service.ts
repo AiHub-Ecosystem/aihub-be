@@ -1,5 +1,10 @@
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
+import {
+  payloadTooLarge,
+  storageUnavailable,
+  uploadNotFound,
+} from '@/common/errors/upload-errors';
 import type { IdMinter } from '@/common/ids/prefixed-id';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type {
@@ -25,32 +30,6 @@ import type {
   SpeakingAudioUploadServicePort,
 } from './speaking-audio-upload.port';
 
-const STORAGE_ERROR = 'SPEAKING_AUDIO_STORAGE_UNAVAILABLE' as const;
-
-function storageUnavailable(): AppError {
-  return new AppError({
-    code: STORAGE_ERROR,
-    message: 'Speaking audio storage is unavailable',
-    retryable: true,
-  });
-}
-
-function uploadNotFound(): AppError {
-  return new AppError({
-    code: 'NOT_FOUND',
-    message: 'Speaking audio upload was not found',
-    retryable: true,
-  });
-}
-
-function payloadTooLarge(): AppError {
-  return new AppError({
-    code: 'PAYLOAD_TOO_LARGE',
-    message: 'Speaking audio recording is larger than 25 MiB',
-    retryable: false,
-  });
-}
-
 function ownerFromContext(
   context: RequestContext,
   assetId: string,
@@ -71,7 +50,10 @@ function uploadContextOwner(context: RequestContext): {
     context.userId === undefined ||
     (context.environment !== 'production' && context.environment !== 'sandbox')
   ) {
-    throw storageUnavailable();
+    throw storageUnavailable(
+      'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+      'Speaking audio storage is unavailable',
+    );
   }
 
   return {
@@ -91,7 +73,10 @@ function invalidStoredObject(
     Number.isInteger(byteSize) &&
     byteSize > SPEAKING_AUDIO_MAX_BYTES
   ) {
-    return payloadTooLarge();
+    return payloadTooLarge(
+      'PAYLOAD_TOO_LARGE',
+      'Speaking audio recording is larger than 25 MiB',
+    );
   }
 
   if (
@@ -131,7 +116,10 @@ export class SpeakingAudioUploadService
       throw invalidRequest();
     }
     if (input.byteSize > SPEAKING_AUDIO_MAX_BYTES) {
-      throw payloadTooLarge();
+      throw payloadTooLarge(
+        'PAYLOAD_TOO_LARGE',
+        'Speaking audio recording is larger than 25 MiB',
+      );
     }
 
     const owner = uploadContextOwner(input.context);
@@ -185,7 +173,7 @@ export class SpeakingAudioUploadService
       found.intent.status !== 'open' ||
       found.intent.expiresAt.getTime() <= this.now().getTime()
     ) {
-      throw uploadNotFound();
+      throw uploadNotFound('NOT_FOUND', 'Speaking audio upload was not found');
     }
 
     const signed = await this.storage.createUploadUrl({
@@ -201,7 +189,7 @@ export class SpeakingAudioUploadService
         now: refreshedAt,
       }))
     ) {
-      throw uploadNotFound();
+      throw uploadNotFound('NOT_FOUND', 'Speaking audio upload was not found');
     }
 
     return {
@@ -236,7 +224,7 @@ export class SpeakingAudioUploadService
       found.intent.status !== 'open' ||
       found.intent.expiresAt.getTime() <= this.now().getTime()
     ) {
-      throw uploadNotFound();
+      throw uploadNotFound('NOT_FOUND', 'Speaking audio upload was not found');
     }
 
     const stored = await this.storage.describeObject(
@@ -247,7 +235,7 @@ export class SpeakingAudioUploadService
       input.context.signal,
     );
     if (stored === undefined) {
-      throw uploadNotFound();
+      throw uploadNotFound('NOT_FOUND', 'Speaking audio upload was not found');
     }
 
     const refusal = invalidStoredObject(
@@ -306,7 +294,7 @@ export class SpeakingAudioUploadService
       if (current.kind === 'asset') {
         return { asset: current.asset, created: false };
       }
-      throw uploadNotFound();
+      throw uploadNotFound('NOT_FOUND', 'Speaking audio upload was not found');
     }
 
     return {

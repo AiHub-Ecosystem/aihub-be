@@ -22,6 +22,7 @@ import {
   type AvatarContentType,
 } from '@/modules/avatar/domain/avatar';
 import {
+  objectStorageNotFound,
   objectStorageSignal,
   objectStorageUnavailable,
 } from '@/modules/secrets/public/object-storage';
@@ -34,15 +35,6 @@ export interface AvatarStorageOptions {
   readonly client?: Pick<S3Client, 'send'>;
 }
 
-function storageUnavailable(cause?: unknown, signal?: AbortSignal): AppError {
-  return objectStorageUnavailable(
-    'AVATAR_STORAGE_UNAVAILABLE',
-    'Avatar storage is unavailable',
-    cause,
-    signal,
-  );
-}
-
 function validObjectKey(objectKey: string): boolean {
   return (
     objectKey.startsWith('users/') &&
@@ -50,17 +42,6 @@ function validObjectKey(objectKey: string): boolean {
     !objectKey.includes('..') &&
     !/[\s?#]/.test(objectKey)
   );
-}
-
-function isNotFound(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-  const { name, $metadata } = error as {
-    name?: unknown;
-    $metadata?: { httpStatusCode?: unknown };
-  };
-  return name === 'NotFound' || $metadata?.httpStatusCode === 404;
 }
 
 interface Configured {
@@ -107,7 +88,10 @@ export class S3AvatarStorage implements AvatarStoragePort {
   }): Promise<AvatarUploadUrl> {
     const { signer, bucket } = this.require(input.objectKey);
     if (signer === undefined) {
-      throw storageUnavailable();
+      throw objectStorageUnavailable(
+        'AVATAR_STORAGE_UNAVAILABLE',
+        'Avatar storage is unavailable',
+      );
     }
     const expiresAt = new Date(
       this.now().getTime() + AVATAR_UPLOAD_URL_TTL_SECONDS * 1_000,
@@ -129,7 +113,11 @@ export class S3AvatarStorage implements AvatarStoragePort {
       );
       return { url, expiresAt };
     } catch (error) {
-      throw storageUnavailable(error);
+      throw objectStorageUnavailable(
+        'AVATAR_STORAGE_UNAVAILABLE',
+        'Avatar storage is unavailable',
+        error,
+      );
     }
   }
 
@@ -157,10 +145,15 @@ export class S3AvatarStorage implements AvatarStoragePort {
         lastModified: head.LastModified,
       };
     } catch (error) {
-      if (isNotFound(error)) {
+      if (objectStorageNotFound(error)) {
         return undefined;
       }
-      throw storageUnavailable(error, signal);
+      throw objectStorageUnavailable(
+        'AVATAR_STORAGE_UNAVAILABLE',
+        'Avatar storage is unavailable',
+        error,
+        signal,
+      );
     }
   }
 
@@ -175,13 +168,21 @@ export class S3AvatarStorage implements AvatarStoragePort {
         { abortSignal: signal },
       );
     } catch (error) {
-      throw storageUnavailable(error, signal);
+      throw objectStorageUnavailable(
+        'AVATAR_STORAGE_UNAVAILABLE',
+        'Avatar storage is unavailable',
+        error,
+        signal,
+      );
     }
   }
 
   async *listObjects(prefix: string): AsyncIterable<ListedAvatarObject> {
     if (this.configured === undefined) {
-      throw storageUnavailable();
+      throw objectStorageUnavailable(
+        'AVATAR_STORAGE_UNAVAILABLE',
+        'Avatar storage is unavailable',
+      );
     }
     const { client, bucket } = this.configured;
 
@@ -201,7 +202,12 @@ export class S3AvatarStorage implements AvatarStoragePort {
           { abortSignal: signal },
         );
       } catch (error) {
-        throw storageUnavailable(error, signal);
+        throw objectStorageUnavailable(
+          'AVATAR_STORAGE_UNAVAILABLE',
+          'Avatar storage is unavailable',
+          error,
+          signal,
+        );
       }
       for (const object of page.Contents ?? []) {
         if (object.Key !== undefined) {
@@ -216,7 +222,10 @@ export class S3AvatarStorage implements AvatarStoragePort {
 
   private require(objectKey: string): Configured {
     if (this.configured === undefined) {
-      throw storageUnavailable();
+      throw objectStorageUnavailable(
+        'AVATAR_STORAGE_UNAVAILABLE',
+        'Avatar storage is unavailable',
+      );
     }
     if (!validObjectKey(objectKey)) {
       throw new AppError({
