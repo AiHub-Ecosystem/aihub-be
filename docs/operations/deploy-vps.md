@@ -617,6 +617,14 @@ is denied.
 
 ## Provision Sandbox Vault data
 
+> **Not in effect yet (2026-10-18).** This section and the cutover below describe
+> the Sandbox isolation of ADR-0105, which was reverted in `57afc075` because the
+> rebuilt Vault has no Sandbox tier. Until #351 is provisioned and the revert is
+> undone, Sandbox and Production share one Vault Agent, one rendered directory,
+> and one set of runtime credentials. The Production policy includes the
+> `sandbox-assertion` path. Do not treat the statements below as the current
+> state.
+
 Use a separate credentials directory containing independent Sandbox values for
 all runtime bundles. The database and Redis bundles contain only Sandbox
 credentials; the `database.json` control-plane reader remains restricted to
