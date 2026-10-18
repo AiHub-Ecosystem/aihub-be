@@ -1,53 +1,50 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+const script = join(
+  process.cwd(),
+  'scripts',
+  'checks',
+  'check-tenant-global.mjs',
+);
+
+function runCheck(cwd: string) {
+  return spawnSync(process.execPath, [script], { cwd, encoding: 'utf8' });
+}
+
 describe('tenant-global check', () => {
-  const scratchDir = join(
-    process.cwd(),
-    'src',
-    'modules',
-    '__tenant_global_check__',
-  );
-  const scratchFile = join(scratchDir, 'application', 'leak.ts');
-
-  afterEach(() => {
-    rmSync(scratchDir, { recursive: true, force: true });
-  });
-
+  // The failing case builds its own tree: a scratch file inside the real `src/`
+  // races the other checks that scan it from parallel Jest workers.
   it('fails when a module declares a top-level tenant/org variable', () => {
-    mkdirSync(join(scratchDir, 'application'), { recursive: true });
-    writeFileSync(
-      scratchFile,
-      'let organizationId = "org_1";\nexport const x = 1;\n',
-    );
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'aihub-tenant-global-'));
+    try {
+      const moduleDir = join(
+        fixtureRoot,
+        'src',
+        'modules',
+        'leaky',
+        'application',
+      );
+      mkdirSync(moduleDir, { recursive: true });
+      writeFileSync(
+        join(moduleDir, 'leak.ts'),
+        'let organizationId = "org_1";\nexport const x = 1;\n',
+      );
 
-    const result = spawnSync(
-      process.platform === 'win32' ? 'node.exe' : 'node',
-      ['scripts/checks/check-tenant-global.mjs'],
-      {
-        cwd: process.cwd(),
-        encoding: 'utf8',
-        shell: process.platform === 'win32',
-      },
-    );
+      const result = runCheck(fixtureRoot);
 
-    expect(result.status).not.toBe(0);
-    expect(result.stderr + result.stdout).toMatch(
-      /module-level mutable tenant state/,
-    );
+      expect(result.status).not.toBe(0);
+      expect(result.stderr + result.stdout).toMatch(
+        /module-level mutable tenant state/,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
   });
 
   it('passes on the real tree', () => {
-    const result = spawnSync(
-      process.platform === 'win32' ? 'node.exe' : 'node',
-      ['scripts/checks/check-tenant-global.mjs'],
-      {
-        cwd: process.cwd(),
-        encoding: 'utf8',
-        shell: process.platform === 'win32',
-      },
-    );
-    expect(result.status).toBe(0);
+    expect(runCheck(process.cwd()).status).toBe(0);
   });
 });

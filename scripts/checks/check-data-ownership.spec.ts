@@ -1,52 +1,59 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+const script = join(
+  process.cwd(),
+  'scripts',
+  'checks',
+  'check-data-ownership.mjs',
+);
+
+function runCheck(cwd: string) {
+  return spawnSync(process.execPath, [script], { cwd, encoding: 'utf8' });
+}
+
 describe('data-ownership check', () => {
-  const scratchDir = join(
-    process.cwd(),
-    'src',
-    'modules',
-    '__data_ownership_check__',
-    'infrastructure',
-  );
-  const scratchFile = join(scratchDir, 'leak.ts');
-
-  afterEach(() => {
-    rmSync(join(process.cwd(), 'src', 'modules', '__data_ownership_check__'), {
-      recursive: true,
-      force: true,
-    });
-  });
-
+  // The failing case builds its own tree: a scratch file inside the real `src/`
+  // races the other checks that scan it from parallel Jest workers.
   it('fails when a module queries a table it does not own without allowlist', () => {
-    mkdirSync(scratchDir, { recursive: true });
-    writeFileSync(scratchFile, 'const x = `SELECT * FROM user_accounts`;\n');
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'aihub-data-ownership-'));
+    try {
+      mkdirSync(join(fixtureRoot, 'prisma'));
+      copyFileSync(
+        join(process.cwd(), 'prisma', 'schema.prisma'),
+        join(fixtureRoot, 'prisma', 'schema.prisma'),
+      );
+      const moduleDir = join(
+        fixtureRoot,
+        'src',
+        'modules',
+        'leaky',
+        'infrastructure',
+      );
+      mkdirSync(moduleDir, { recursive: true });
+      writeFileSync(
+        join(moduleDir, 'leak.ts'),
+        'const x = `SELECT * FROM user_accounts`;\n',
+      );
 
-    const result = spawnSync(
-      process.platform === 'win32' ? 'node.exe' : 'node',
-      ['scripts/checks/check-data-ownership.mjs'],
-      {
-        cwd: process.cwd(),
-        encoding: 'utf8',
-        shell: process.platform === 'win32',
-      },
-    );
+      const result = runCheck(fixtureRoot);
 
-    expect(result.status).not.toBe(0);
-    expect(result.stderr + result.stdout).toMatch(/user_accounts/);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr + result.stdout).toMatch(/user_accounts/);
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
   });
 
   it('passes on the real tree', () => {
-    const result = spawnSync(
-      process.platform === 'win32' ? 'node.exe' : 'node',
-      ['scripts/checks/check-data-ownership.mjs'],
-      {
-        cwd: process.cwd(),
-        encoding: 'utf8',
-        shell: process.platform === 'win32',
-      },
-    );
-    expect(result.status).toBe(0);
+    expect(runCheck(process.cwd()).status).toBe(0);
   });
 });
