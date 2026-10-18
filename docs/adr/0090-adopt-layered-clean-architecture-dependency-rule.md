@@ -57,3 +57,7 @@ This record is Accepted because the layering was implemented and enforced before
 ## Update: domain framework-free rule now covers Node core modules (#668)
 
 `domain-no-framework-or-io` in `.dependency-cruiser.cjs` now rejects `^node:` (and `src/downstream/`, `src/common/`, `src/config/`) targets from any `**/domain/` file. The `node:crypto` case in `identity/domain/api-key.ts` was resolved by moving `generateApiKey` (entropy) to `identity/api-keys/application/organization-api-key-generator.ts`; `hashApiKey` moved with it. No domain file imports a Node builtin.
+
+## Update: domain bare globals are now checked (#807)
+
+`scripts/checks/check-domain-globals.mjs` (wired into `pnpm verify`) refuses `Date.now()`, `new Date()` without an argument, `Math.random()`, `fetch`, `crypto.randomUUID()`, and `process.*` in any `src/**/domain/**` file. The dependency-cruiser rule cannot see bare globals, so this text check closes the gap #668 left open.
