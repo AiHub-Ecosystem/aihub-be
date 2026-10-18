@@ -7,7 +7,7 @@ timeouts, and errors.
 
 The endpoint reference lives at `GET /docs`, generated from the same schemas
 the server validates against. This guide is the surrounding context.
-
+\nAIHUB sets a baseline Content-Security-Policy, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, and Referrer-Policy: no-referrer on every response.\n
 Every grading request needs an `X-User-Identity` value, but a JWKS is optional.
 Choose the identity mode saved for your Organization:
 

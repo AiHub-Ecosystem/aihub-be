@@ -44,7 +44,9 @@ describe('OpenApiController', () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['referrer-policy']).toBe('no-referrer');
-    expect(response.headers['content-security-policy']).toBeUndefined();
+    expect(response.headers['content-security-policy']).toBe(
+      "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+    );
     // Built from the same package.json this test process runs against, so
     // the version is whatever it is right now rather than a fixed literal.
     // Round-tripped through JSON on the expected side too: TypeBox schemas
