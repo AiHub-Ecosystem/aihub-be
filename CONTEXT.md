@@ -339,6 +339,7 @@ Demo key validation requires the server-to-server Customer Web BFF secret; the B
 - [ADR-0023: Thirteen-month usage retention](docs/adr/0023-thirteen-month-usage-retention.md)
 - [ADR-0092: Persist evidence for each AI Service dispatch attempt](docs/adr/0092-persist-dispatch-attempt-evidence.md)
 - [ADR-0103: Budget PostgreSQL connections on the shared cluster](docs/adr/0103-budget-postgresql-connections-on-shared-cluster.md)
+- [ADR-0109: Adopt PostgreSQL row-level security as a tenant-isolation backstop](docs/adr/0109-adopt-postgres-row-level-security-as-tenant-backstop.md) — implementation (#80) blocked by #298
 - [Usage completeness report runbook](docs/operations/usage-completeness.md)
 - [ADR-0020: Invite-only customer-web identity boundary for sandbox MVP](docs/adr/0020-customer-web-identity-boundary.md) — superseded by ADR-0046 at the #94 cutover
 - [ADR-0046: Customer Web identity boundary on AIHUB auth and Organization Membership](docs/adr/0046-customer-web-aihub-auth-identity-boundary.md)
