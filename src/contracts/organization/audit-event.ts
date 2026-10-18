@@ -46,6 +46,27 @@ const OrganizationAuditOutcomeSchema = Type.Union(
   ORGANIZATION_AUDIT_OUTCOMES.map((outcome) => Type.Literal(outcome)),
 );
 
+export const OrganizationAuditEventQuerySchema = Type.Object(
+  {
+    action: Type.Optional(
+      Type.Union([
+        OrganizationAuditActionSchema,
+        Type.Array(OrganizationAuditActionSchema),
+      ]),
+    ),
+    outcome: Type.Optional(OrganizationAuditOutcomeSchema),
+    from: Type.Optional(Type.String()),
+    to: Type.Optional(Type.String()),
+    limit: Type.Optional(Type.String()),
+    cursor: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
+export type OrganizationAuditEventQuery = Static<
+  typeof OrganizationAuditEventQuerySchema
+>;
+
 const OrganizationAuditTargetTypeSchema = Type.Union([
   Type.Literal('organization'),
   Type.Literal('membership'),

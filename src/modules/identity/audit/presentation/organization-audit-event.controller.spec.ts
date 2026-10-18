@@ -384,6 +384,27 @@ describe('Organization audit trail HTTP flow', () => {
       });
     });
 
+    it('refuses a misspelled filter name rather than returning an unfiltered page', async () => {
+      const response = await read(`${AUDIT_URL}?actoin=member.removed`);
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toMatchObject({
+        code: 'INVALID_REQUEST',
+        message: 'Request failed validation',
+        retryable: false,
+      });
+      expect(response.body).not.toContain('actoin');
+      expect(auditEvents.listAuditEvents.mock.calls).toHaveLength(0);
+    });
+
+    it('refuses an undeclared parameter', async () => {
+      const response = await read(`${AUDIT_URL}?unexpected=value`);
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expect(auditEvents.listAuditEvents.mock.calls).toHaveLength(0);
+    });
+
     it('refuses an action it does not name rather than returning an empty page', async () => {
       const response = await read(`${AUDIT_URL}?action=api_key.exploded`);
 
@@ -545,6 +566,13 @@ describe('Organization audit trail HTTP flow', () => {
       ).toString('base64url');
 
       expect((await read(`${AUDIT_URL}?cursor=${stale}`)).statusCode).toBe(400);
+    });
+
+    it('refuses a repeated single-valued page size', async () => {
+      const response = await read(`${AUDIT_URL}?limit=10&limit=20`);
+
+      expect(response.statusCode).toBe(400);
+      expect(auditEvents.listAuditEvents.mock.calls).toHaveLength(0);
     });
 
     it('refuses a page size outside the range rather than clamping it', async () => {

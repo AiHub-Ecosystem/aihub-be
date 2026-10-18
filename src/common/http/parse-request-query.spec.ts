@@ -57,6 +57,10 @@ describe('parseRequestQuery', () => {
     );
   });
 
+  it('rejects null instead of treating it as a missing query', () => {
+    expect(() => parseRequestQuery(QuerySchema, null)).toThrow(AppError);
+  });
+
   it('rejects all parameters against an empty closed schema', () => {
     expect(() =>
       parseRequestQuery(Type.Object({}, { additionalProperties: false }), {

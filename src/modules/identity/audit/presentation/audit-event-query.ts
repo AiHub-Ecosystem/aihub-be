@@ -5,6 +5,7 @@ import {
   MAX_ORGANIZATION_AUDIT_PAGE_SIZE,
   ORGANIZATION_AUDIT_ACTIONS,
   ORGANIZATION_AUDIT_OUTCOMES,
+  type OrganizationAuditEventQuery,
 } from '@/contracts/organization/audit-event';
 import type {
   OrganizationAuditEventFilter,
@@ -19,17 +20,13 @@ export interface OrganizationAuditQuery {
   readonly limit: number;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 /**
  * A repeated key arrives as an array and a single one as a string, because the
  * default query parser reflects arity rather than declared shape. Both are the
  * same filter with one or many values.
  */
 function parseActions(
-  value: unknown,
+  value: OrganizationAuditEventQuery['action'],
 ): OrganizationAuditEventFilter['actions'] | undefined {
   if (value === undefined) {
     return undefined;
@@ -54,7 +51,7 @@ function parseActions(
 }
 
 function parseOutcome(
-  value: unknown,
+  value: OrganizationAuditEventQuery['outcome'],
 ): OrganizationAuditEventFilter['outcome'] | undefined {
   if (value === undefined) {
     return undefined;
@@ -67,7 +64,9 @@ function parseOutcome(
   return outcome;
 }
 
-function parseBound(value: unknown): Date | undefined {
+function parseBound(
+  value: OrganizationAuditEventQuery['from'],
+): Date | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -87,7 +86,7 @@ function parseBound(value: unknown): Date | undefined {
  * indistinguishable from the end of the trail, which is the one thing an audit
  * read must never blur.
  */
-function parseLimit(value: unknown): number {
+function parseLimit(value: OrganizationAuditEventQuery['limit']): number {
   if (value === undefined) {
     return DEFAULT_ORGANIZATION_AUDIT_PAGE_SIZE;
   }
@@ -102,36 +101,9 @@ function parseLimit(value: unknown): number {
   return limit;
 }
 
-/**
- * Parsed by hand rather than by the canonical TypeBox schema the mutation
- * bodies use: a query string is stringly-typed, so a page size arrives as text
- * and an action arrives as a string or an array, and a schema check alone
- * would reject all of it without a coercion layer this codebase does not have.
- * The response schema stays in the contracts module as it does everywhere.
- */
-const ALLOWED_AUDIT_QUERY_KEYS = new Set([
-  'action',
-  'outcome',
-  'from',
-  'to',
-  'limit',
-  'cursor',
-]);
-
 export function parseOrganizationAuditQuery(
-  raw: unknown,
+  query: OrganizationAuditEventQuery,
 ): OrganizationAuditQuery {
-  const query = isRecord(raw) ? raw : {};
-
-  // An undeclared key is a client that is guessing the contract, not a typo in
-  // a value: refuse it rather than silently dropping it, the same way the body
-  // schema refuses an undeclared field.
-  for (const key of Object.keys(query)) {
-    if (!ALLOWED_AUDIT_QUERY_KEYS.has(key)) {
-      throw invalidRequest();
-    }
-  }
-
   const actions = parseActions(query.action);
   const outcome = parseOutcome(query.outcome);
   const from = parseBound(query.from);

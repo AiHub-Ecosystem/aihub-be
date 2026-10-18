@@ -1,16 +1,20 @@
 import { invalidRequest } from '@/common/errors/invalid-request';
+import { parseRequestQuery } from '@/common/http/parse-request-query';
+import { OrganizationAuditEventQuerySchema } from '@/contracts/organization/audit-event';
 import { encodeAuditCursor } from './audit-cursor';
-import { parseOrganizationAuditQuery } from './audit-event-query';
+import { parseOrganizationAuditQuery as parseValidatedOrganizationAuditQuery } from './audit-event-query';
 
 const VALID_ACTIONS = ['organization.created', 'organization.renamed'];
+
+function parseOrganizationAuditQuery(raw: unknown) {
+  return parseValidatedOrganizationAuditQuery(
+    parseRequestQuery(OrganizationAuditEventQuerySchema, raw),
+  );
+}
 
 describe('parseOrganizationAuditQuery', () => {
   it('accepts an empty query with the default page size', () => {
     expect(parseOrganizationAuditQuery(undefined)).toEqual({
-      filter: {},
-      limit: 50,
-    });
-    expect(parseOrganizationAuditQuery(null)).toEqual({
       filter: {},
       limit: 50,
     });

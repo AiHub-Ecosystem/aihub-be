@@ -10,7 +10,11 @@ import {
 import type { FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import type { ListOrganizationAuditEventsResponse } from '@/contracts/organization/audit-event';
+import { parseRequestQuery } from '@/common/http/parse-request-query';
+import {
+  type ListOrganizationAuditEventsResponse,
+  OrganizationAuditEventQuerySchema,
+} from '@/contracts/organization/audit-event';
 import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
 import {
   READ_ORGANIZATION_AUDIT_EVENTS,
@@ -40,7 +44,11 @@ export class OrganizationAuditEventController {
       organizationId,
     );
 
-    const { filter, after, limit } = parseOrganizationAuditQuery(request.query);
+    const query = parseRequestQuery(
+      OrganizationAuditEventQuerySchema,
+      request.query,
+    );
+    const { filter, after, limit } = parseOrganizationAuditQuery(query);
 
     const page = await this.auditEvents.read({
       context,
