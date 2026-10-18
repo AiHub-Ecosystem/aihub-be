@@ -79,6 +79,8 @@ Use the narrowest check while iterating, then run the full loop before handoff:
 
 ```text
 pnpm test -- focused-file.spec.ts
+pnpm test:related <file>
+pnpm check:changed
 pnpm type-check
 pnpm arch-check
 pnpm verify

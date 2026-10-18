@@ -134,8 +134,14 @@ jobs:
       - name: Test monitoring config checker
         run: pnpm test:monitoring-config
 
+      - name: Test the changed-file gate map
+        run: pnpm test:check-changed
+
       - name: Exercise scheduled host job wrappers with stubs
         run: bash scripts/ops/host-scheduled-job.spec.sh
+
+      - name: Exercise the Postgres backup job with stubs
+        run: bash scripts/ops/backup-postgres.spec.sh
 
       - name: Exercise request log lookup with fixtures and stubs
         run: bash test/cli/request-log-lookup.spec.sh

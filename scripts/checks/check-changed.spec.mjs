@@ -1,0 +1,204 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+
+import {
+  GATE_COMMANDS,
+  isEntryPoint,
+  planChangedFiles,
+  resolveChangedFiles,
+  runCheckChanged,
+} from './check-changed.mjs';
+
+const pathCases = [
+  {
+    path: 'src/modules/example/domain/policy.ts',
+    gates: [
+      'arch-check',
+      'build',
+      'check:data-ownership',
+      'check:deprecation',
+      'check:domain-globals',
+      'check:file-size',
+      'check:imports',
+      'check:imports:dist',
+      'check:tenant-global',
+      'knip',
+      'lint',
+      'test:related',
+      'type-check',
+    ],
+  },
+  {
+    path: 'src/modules/example/application/use-case.ts',
+    gates: [
+      'arch-check',
+      'build',
+      'check:data-ownership',
+      'check:deprecation',
+      'check:file-size',
+      'check:imports',
+      'check:imports:dist',
+      'check:tenant-global',
+      'knip',
+      'lint',
+      'test:related',
+      'type-check',
+    ],
+  },
+  {
+    path: 'scripts/checks/check-changed.spec.mjs',
+    gates: ['lint', 'test:check-changed'],
+  },
+  {
+    path: 'scripts/ops/capacity-benchmark.mjs',
+    gates: ['lint', 'test:capacity-benchmark'],
+  },
+  {
+    path: 'scripts/ops/check-monitoring-config.cjs',
+    gates: ['lint', 'test:monitoring-config'],
+  },
+  {
+    path: 'prisma/schema.prisma',
+    gates: [
+      'build',
+      'check:data-dictionary',
+      'check:imports:dist',
+      'check:migrations',
+      'knip',
+      'lint',
+      'test',
+      'type-check',
+    ],
+  },
+  { path: 'docs/guide.md', gates: ['format:check'] },
+  { path: '.github/workflows/ci.yml', gates: ['format:check'] },
+  { path: 'ops/nginx/site.conf', gates: ['check:nginx-headers', 'lint'] },
+  {
+    path: 'src/contracts/date-time-format.ts',
+    gates: [
+      'arch-check',
+      'build',
+      'check:data-ownership',
+      'check:deprecation',
+      'check:file-size',
+      'check:imports',
+      'check:imports:dist',
+      'check:tenant-global',
+      'knip',
+      'lint',
+      'test:related',
+      'type-check',
+      'validate:openapi',
+    ],
+  },
+  { path: 'openapi.json', gates: ['lint', 'validate:openapi'] },
+  { path: 'jest.config.cjs', gates: ['lint', 'test'] },
+];
+
+for (const { path, gates } of pathCases) {
+  await test(`${path} maps to its exact gates`, () => {
+    assert.deepEqual(planChangedFiles([path]).gates, gates);
+  });
+}
+
+await test('a domain source file still runs type-check and related specs', () => {
+  const { gates } = planChangedFiles(['src/modules/example/domain/policy.ts']);
+  assert.ok(gates.includes('type-check'));
+  assert.ok(gates.includes('test:related'));
+  assert.ok(gates.includes('check:domain-globals'));
+});
+
+await test('unknown paths force full verification, including mixed changes', () => {
+  assert.deepEqual(planChangedFiles(['new-file.bin']), {
+    fullVerify: true,
+    reason: 'unclassified path: new-file.bin',
+  });
+  assert.equal(
+    planChangedFiles(['src/modules/example/domain/policy.ts', 'new-file.bin'])
+      .fullVerify,
+    true,
+  );
+});
+
+await test('empty changed set forces full verification rather than doing nothing', () => {
+  assert.equal(planChangedFiles([]).fullVerify, true);
+});
+
+await test('changed files union committed, staged, unstaged, and untracked paths', () => {
+  const outputs = new Map([
+    ['merge-base HEAD origin/main', 'merge-base-sha'],
+    ['diff --name-only merge-base-sha HEAD', 'committed.ts'],
+    ['diff --name-only', 'unstaged.ts'],
+    ['diff --cached --name-only', 'staged.ts'],
+    ['ls-files --others --exclude-standard', 'new.ts'],
+  ]);
+  assert.deepEqual(
+    resolveChangedFiles((args) => outputs.get(args.join(' '))),
+    ['committed.ts', 'unstaged.ts', 'staged.ts', 'new.ts'],
+  );
+});
+
+await test('unresolvable git state falls back to full verify and runs no reduced gate', () => {
+  let fallbackCalls = 0;
+  const gateCalls = [];
+  const result = runCheckChanged({
+    resolveFiles: () => {
+      throw new Error('origin/main is missing');
+    },
+    runFullVerify: () => {
+      fallbackCalls += 1;
+    },
+    runGate: (name) => gateCalls.push(name),
+  });
+  assert.equal(result, 'full-verify');
+  assert.equal(fallbackCalls, 1);
+  assert.deepEqual(gateCalls, []);
+});
+
+await test('the entry-point comparison holds on both path shapes', () => {
+  assert.equal(
+    isEntryPoint(
+      'file:///D:/repo/scripts/checks/check-changed.mjs',
+      String.raw`D:\repo\scripts\checks\check-changed.mjs`,
+    ),
+    true,
+    'a Windows argv path must match, or the script exits 0 having run nothing',
+  );
+  assert.equal(
+    isEntryPoint(
+      'file:///repo/scripts/checks/check-changed.mjs',
+      '/repo/scripts/checks/other.mjs',
+    ),
+    false,
+  );
+  assert.equal(
+    isEntryPoint('file:///repo/check-changed.mjs', undefined),
+    false,
+  );
+});
+
+await test('all gates in pnpm verify have commands and a tested path mapping', () => {
+  const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
+  const invoked = [
+    ...packageJson.scripts.verify.matchAll(/\bpnpm\s+([\w:-]+)/g),
+  ].map((match) => match[1]);
+  const mapped = new Set(pathCases.flatMap(({ gates }) => gates));
+  for (const gate of invoked) {
+    assert.ok(
+      Object.hasOwn(GATE_COMMANDS, gate),
+      `missing command for verify gate ${gate}`,
+    );
+    assert.ok(
+      mapped.has(gate),
+      `verify gate ${gate} has no tested path mapping`,
+    );
+  }
+});
+
+await test('check:changed stays out of verify and CI', () => {
+  const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
+  const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
+  assert.ok(!packageJson.scripts.verify.includes('check:changed'));
+  assert.ok(!workflow.includes('check:changed'));
+});
