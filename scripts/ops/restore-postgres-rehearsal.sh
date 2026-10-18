@@ -67,10 +67,18 @@ unset identity
 sudo -n docker run -d --name "$container" --network none \
   -e POSTGRES_PASSWORD=rehearsal -e POSTGRES_DB=rehearsal \
   -v "$tmp_dir/backup.dump:/backup.dump:ro" "$POSTGRES_IMAGE" >/dev/null || fail container_start
-for _ in $(seq 1 60); do
-  sudo -n docker exec "$container" pg_isready -U postgres -d rehearsal >/dev/null 2>&1 && break
+# The image's entrypoint runs initdb behind a temporary server that already
+# answers pg_isready, then restarts it. Wait for the init to finish first.
+ready=false
+for _ in $(seq 1 90); do
+  if sudo -n docker logs "$container" 2>&1 | grep -q 'PostgreSQL init process complete' &&
+    sudo -n docker exec "$container" pg_isready -U postgres -d rehearsal >/dev/null 2>&1; then
+    ready=true
+    break
+  fi
   sleep 1
 done
+[[ "$ready" == true ]] || fail container_not_ready
 sudo -n docker exec "$container" pg_restore -U postgres -d rehearsal --no-owner --no-privileges \
   /backup.dump 2>"$tmp_dir/restore.err" || fail "restore_$(tail -n 1 "$tmp_dir/restore.err" | tr -cd '[:alnum:]_ ' | tr ' ' '_' | cut -c1-120)"
 
