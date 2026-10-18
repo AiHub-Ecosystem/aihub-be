@@ -9,7 +9,7 @@ import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { OPERATION_IDS } from '@/catalog/operation-id';
 import type { OperationId } from '@/catalog/operation-id';
 import type { PublicRouteId } from '@/catalog/public-routes';
-import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { PUBLIC_ROUTES, type PublicRouteDef } from '@/catalog/public-routes';
 import { ERROR_CODES, type ErrorCode } from '@/common/errors/error-code';
 import {
   type HttpStatus,
@@ -2279,6 +2279,14 @@ export function buildOpenApiDocument(version: string): unknown {
       },
     },
   };
+
+  for (const route of Object.values(PUBLIC_ROUTES) as PublicRouteDef[]) {
+    if (route.sunset === undefined) continue;
+    const item = paths[route.path] as Record<string, unknown> | undefined;
+    if (item !== undefined) {
+      item['x-deprecated-sunset'] = route.sunset;
+    }
+  }
 
   return {
     openapi: OPENAPI_VERSION,

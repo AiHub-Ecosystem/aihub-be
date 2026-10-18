@@ -1049,3 +1049,7 @@ involved. Without it, a report is hard to trace.
 
 Essay text, API keys, and assertions never appear in AIHUB logs, so a
 `request_id` is the only handle we have.
+
+## Deprecation headers
+
+A route slated to retire publishes `Deprecation`, `Sunset`, and a `Link: rel="successor-version"` header. A client that sees them should migrate to the successor before the sunset date; after that date the route may stop responding.

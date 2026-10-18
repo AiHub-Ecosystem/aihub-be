@@ -50,14 +50,15 @@
     "knip": "pnpm generate:prisma-client && node scripts/checks/knip.mjs",
     "verify:summary": "node scripts/checks/verify-summary.cjs",
     "provider:refresh": "node scripts/generate/refresh-provider-contract.mjs",
-    "verify": "pnpm knip && pnpm lint && pnpm format:check && pnpm type-check && pnpm arch-check && pnpm check:imports && pnpm check:migrations && pnpm check:data-dictionary && pnpm check:file-size && pnpm check:nginx-headers && pnpm check:tenant-global && pnpm check:data-ownership && pnpm validate:openapi && pnpm test && pnpm test:capacity-benchmark && pnpm test:monitoring-config && pnpm build && pnpm check:imports:dist",
+    "verify": "pnpm knip && pnpm lint && pnpm format:check && pnpm type-check && pnpm arch-check && pnpm check:imports && pnpm check:migrations && pnpm check:data-dictionary && pnpm check:file-size && pnpm check:nginx-headers && pnpm check:deprecation && pnpm check:tenant-global && pnpm check:data-ownership && pnpm validate:openapi && pnpm test && pnpm test:capacity-benchmark && pnpm test:monitoring-config && pnpm build && pnpm check:imports:dist",
     "prepare": "husky",
     "generate:data-dictionary": "tsx scripts/generate/generate-data-dictionary.ts",
     "check:data-dictionary": "node scripts/checks/check-data-dictionary.mjs",
     "check:tenant-global": "node scripts/checks/check-tenant-global.mjs",
     "check:data-ownership": "node scripts/checks/check-data-ownership.mjs",
     "check:file-size": "node scripts/checks/check-file-size.mjs",
-    "check:nginx-headers": "node scripts/checks/check-nginx-headers.mjs"
+    "check:nginx-headers": "node scripts/checks/check-nginx-headers.mjs",
+    "check:deprecation": "tsx scripts/checks/check-deprecation.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1149.0",

@@ -1,4 +1,5 @@
 import type { TSchema } from '@sinclair/typebox';
+import type { OperationId } from './operation-id';
 
 import type { HttpStatus } from '@/common/errors/error-registry';
 import {
@@ -142,6 +143,11 @@ export interface PublicRouteDef {
   readonly organizationResolution: OrganizationResolution;
   readonly successStatus: 200 | 201 | 202 | 204;
   readonly alternateSuccessStatuses?: readonly (200 | 201 | 202 | 204)[];
+  readonly sunset?: {
+    readonly sunsetAt: string;
+    readonly successorRouteId?: PublicRouteId | OperationId;
+    readonly rationale: string;
+  };
   /**
    * What the document publishes as `x-identity-scope`, or `null` when the
    * document omits the extension.
