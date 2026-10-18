@@ -98,7 +98,7 @@ class SwitchableEmailDeliveryRequests extends PostgresEmailDeliveryRequestReposi
     ).reserveAuthenticationEmailRecipient(...args);
   }
 
-  async insert(
+  override async insert(
     client: Parameters<PostgresEmailDeliveryRequestRepository['insert']>[0],
     input: Parameters<PostgresEmailDeliveryRequestRepository['insert']>[1],
   ): Promise<void> {

@@ -29,7 +29,7 @@ const EMAIL = 'mfa@example.com';
 const PASSWORD_HASH = ARGON2ID_DUMMY_HASH;
 
 class FailingEmailRequests extends PostgresEmailDeliveryRequestRepository {
-  async insert(
+  override async insert(
     _transaction: EmailDeliveryTransaction,
     _input: InsertEmailDeliveryRequestInput,
   ): Promise<void> {

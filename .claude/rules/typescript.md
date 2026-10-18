@@ -6,7 +6,7 @@ paths:
 
 # TypeScript rules
 
-- Keep `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noUnusedLocals`, and `noUnusedParameters` green. The last two are a second defense layer beside oxlint `no-unused-vars`, so nobody removes them as redundant.
+- Keep `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `noImplicitOverride`, `allowUnreachableCode` (false), and `allowUnusedLabels` (false) green. The unused/import flags are a second defense layer beside oxlint `no-unused-vars`, so nobody removes them as redundant.
 - Do not use `any`, broad `as` casts, non-null assertions, or `@ts-ignore` to bypass a boundary.
 - Use named exports and explicit return types on exported functions, ports, and public methods.
 - Use the `node:` protocol for Node built-ins.
