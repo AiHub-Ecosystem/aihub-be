@@ -13,7 +13,9 @@ AIHUB supports two explicit sources:
   Resend, JWT, and SeaweedFS credentials.
 - `AIHUB_RUNTIME_CONNECTION_SECRETS_FILE=<agent-rendered JSON path>` —
   database, Redis, and sandbox signing material. The process bootstrap selects
-  the production or sandbox connection before Nest wiring.
+  the production or sandbox connection before Nest wiring. Production and
+  Sandbox use separate AppRoles, Agents, rendered directories, and Vault paths;
+  only the Sandbox document includes assertion signing material.
 - `AIHUB_AUTH_MFA_SECRETS_FILE=<agent-rendered JSON path>` — the separately
   rendered TOTP secret keyring. It stays outside the existing strict runtime
   JSON document so an N-1 image can keep reading its unchanged schema.
@@ -26,13 +28,16 @@ during a temporary Vault/Agent outage; it does not read Vault per request.
 
 1. Apply the matching policy from `ops/vault/policies/` with an operator
    session. Never use the AIHUB runtime identity for policy administration.
-2. Create the KV v2 bundles: `ai-speaking`, `ai-writing`, `seaweedfs`,
-   `resend`, `user-access-jwt`, `database`, `redis`, and `sandbox-assertion`.
+2. Create the KV v2 bundles for the selected tier: `ai-speaking`, `ai-writing`,
+   `seaweedfs`, `resend`, `user-access-jwt`, `database`, and `redis`. Only
+   Sandbox has `sandbox-assertion`; Production cannot read that path.
    Before deploying an MFA writer, also provision `email-outbox`, `web-session`,
    and `auth-mfa`; the latter contains `current_key_id` and a JSON string of
    key IDs mapped to 32-byte base64 keys.
-3. Provision the environment AppRole and configure Vault Agent to render all
-   three files under the AIHUB service account.
+3. Provision the tier's AppRole and configure its Vault Agent to render all
+   three files under the AIHUB service account. Sandbox must use credentials
+   scoped to `aihub_sandbox` and Sandbox-only downstream/storage resources; a
+   Redis logical database number alone does not isolate credentials or keys.
 4. Set the rendered-file paths in the deployment config channel. Do not put
    runtime credential values in `.env.production`.
 5. Start one instance and run the opt-in AppRole smoke test. Verify health,

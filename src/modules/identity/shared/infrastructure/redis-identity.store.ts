@@ -1,6 +1,8 @@
 import { Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 
+import { createConfiguredRedisClient } from '@/common/redis/redis-client.factory';
+
 import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
 import type {
   ApiKeyCachePort,
@@ -93,7 +95,7 @@ function connect(url: string): RedisIdentityClient | undefined {
     return undefined;
   }
 
-  const client = new Redis(url, {
+  const client = createConfiguredRedisClient(url, {
     commandTimeout: 100,
     maxRetriesPerRequest: 1,
     enableOfflineQueue: false,

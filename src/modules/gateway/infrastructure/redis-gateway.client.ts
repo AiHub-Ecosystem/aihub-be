@@ -1,5 +1,7 @@
 import Redis from 'ioredis';
 
+import { createConfiguredRedisClient } from '@/common/redis/redis-client.factory';
+
 export interface RedisGatewayClient {
   ping(): Promise<string>;
   get(key: string): Promise<string | null>;
@@ -79,7 +81,7 @@ export function createRedisGatewayClient(
     return undefined;
   }
 
-  const client = new Redis(url, {
+  const client = createConfiguredRedisClient(url, {
     commandTimeout: 100,
     maxRetriesPerRequest: 1,
   });

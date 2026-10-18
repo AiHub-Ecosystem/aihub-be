@@ -27,10 +27,6 @@ path "secret/data/aihub/production/redis" {
   capabilities = ["read"]
 }
 
-path "secret/data/aihub/production/sandbox-assertion" {
-  capabilities = ["read"]
-}
-
 path "secret/data/aihub/production/email-outbox" {
   capabilities = ["read"]
 }

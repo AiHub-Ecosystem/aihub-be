@@ -54,18 +54,10 @@ function connectionSecrets() {
   // Unresolvable on purpose: the boot opens no connection, and a check that
   // needed one would stop answering only "does this artifact start".
   const database = 'postgres://ci-boot:ci-boot@database.invalid:5432/aihub';
-  const redis = 'redis://cache.invalid:6379';
+  const redis = 'redis://cache.invalid:6379/0';
   return {
-    database: {
-      url: database,
-      sandbox_url: database,
-      sandbox_control_plane_read_url: database,
-    },
-    redis: { url: redis, sandbox_url: redis },
-    'sandbox-assertion': {
-      private_key_pem: privateKeyPem('ec', { namedCurve: 'P-256' }),
-      key_id: FAKE,
-    },
+    database: { url: database },
+    redis: { url: redis },
   };
 }
 

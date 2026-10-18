@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 
+import { SANDBOX_REDIS_KEY_PREFIX } from '@/common/redis/redis-client.factory';
+
 type RuntimeConnectionScope = 'production' | 'sandbox';
 type RuntimeConnectionDocument = Readonly<Record<string, unknown>>;
 type ReadFile = (path: string) => string;
@@ -59,7 +61,9 @@ export function loadRuntimeConnectionEnvironment(
   const root = asRecord(parsed, 'runtime connection secret document');
   assertAllowedKeys(
     root,
-    ['database', 'redis', 'sandbox-assertion'],
+    scope === 'sandbox'
+      ? ['database', 'redis', 'sandbox-assertion']
+      : ['database', 'redis'],
     'runtime connection secret document',
   );
 
@@ -67,12 +71,14 @@ export function loadRuntimeConnectionEnvironment(
   const redis = asRecord(root.redis, 'Redis runtime secret bundle');
   assertAllowedKeys(
     database,
-    ['url', 'sandbox_url', 'sandbox_control_plane_read_url'],
+    scope === 'sandbox'
+      ? ['sandbox_url', 'sandbox_control_plane_read_url']
+      : ['url'],
     'database runtime secret bundle',
   );
   assertAllowedKeys(
     redis,
-    ['url', 'sandbox_url'],
+    scope === 'sandbox' ? ['sandbox_url'] : ['url'],
     'Redis runtime secret bundle',
   );
 
@@ -89,22 +95,20 @@ export function loadRuntimeConnectionEnvironment(
           'sandbox control-plane read URL',
         )
       : (env.CONTROL_PLANE_DATABASE_URL ?? env.DATABASE_URL);
-  env.REDIS_URL = requiredRecordString(
+  const redisUrl = requiredRecordString(
     redis,
     scope === 'sandbox' ? 'sandbox_url' : 'url',
     scope === 'sandbox' ? 'sandbox Redis URL' : 'Redis URL',
   );
+  if (scope === 'sandbox') {
+    assertSandboxRedisUrl(redisUrl);
+  }
+  env.REDIS_URL = redisUrl;
 
-  // shortcut: the shared JSON is parsed; upgrade once #351 splits Vault mounts.
   if (scope !== 'sandbox') return;
 
-  const sandboxAssertion = root['sandbox-assertion'];
-  if (sandboxAssertion === undefined) {
-    return;
-  }
-
   const assertion = asRecord(
-    sandboxAssertion,
+    root['sandbox-assertion'],
     'sandbox assertion runtime secret bundle',
   );
   assertAllowedKeys(
@@ -122,6 +126,28 @@ export function loadRuntimeConnectionEnvironment(
     'key_id',
     'sandbox assertion key id',
   );
+}
+
+function assertSandboxRedisUrl(value: string): void {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw configurationError('sandbox Redis URL is invalid');
+  }
+
+  const keyPrefixes = url.searchParams.getAll('keyPrefix');
+  if (
+    url.pathname !== '/1' ||
+    url.username.length === 0 ||
+    url.username === 'default' ||
+    keyPrefixes.length !== 1 ||
+    keyPrefixes[0] !== SANDBOX_REDIS_KEY_PREFIX
+  ) {
+    throw configurationError(
+      'sandbox Redis URL must use a dedicated user, database /1, and the Sandbox key namespace',
+    );
+  }
 }
 
 function resolveScope(value: string | undefined): RuntimeConnectionScope {

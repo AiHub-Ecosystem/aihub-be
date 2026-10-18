@@ -400,6 +400,21 @@ jobs:
           "$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh" restore
           REMOTE
 
+      - name: Prepare Sandbox Vault secret cutover
+        if: ${{ steps.stale_guard.outputs.outcome == 'deploy' && steps.sync.outcome == 'success' }}
+        id: prepare_sandbox_cutover
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=aihub-deploy
+          ssh_opts=(-F "$AIHUB_SSH_CONFIG")
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/blue-green-host.sh prepare-sandbox-cutover
+          REMOTE
+
       - name: Deploy Production and verify caller IP
         if: ${{ steps.stale_guard.outputs.outcome == 'deploy' }}
         id: deploy_production

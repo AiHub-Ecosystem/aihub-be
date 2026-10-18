@@ -205,7 +205,7 @@ directories, then provision each directory to its own Vault path:
 // production/redis.json
 {"url":"redis://<production-user>:<password>@redis.aihubproduction.com:6379/0"}
 // sandbox/redis.json
-{"url":"redis://<sandbox-only-user>:<password>@redis.aihubproduction.com:6379/1"}
+{"url":"redis://<sandbox-only-user>:<password>@redis.aihubproduction.com:6379/1?keyPrefix=aihub-sandbox%3A"}
 ```
 
 The application reads only its tier's URLs from Vault Agent at startup; neither

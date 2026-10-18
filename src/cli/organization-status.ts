@@ -1,5 +1,4 @@
-import Redis from 'ioredis';
-
+import { createConfiguredRedisClient } from '@/common/redis/redis-client.factory';
 import {
   type OrganizationStatus,
   apiKeyCacheKey,
@@ -42,7 +41,7 @@ export async function purgeApiKeyCache(
   if (keyHashes.length === 0) {
     return;
   }
-  const redis = new Redis(redisUrl, {
+  const redis = createConfiguredRedisClient(redisUrl, {
     commandTimeout: 5_000,
     connectTimeout: 5_000,
     maxRetriesPerRequest: 1,

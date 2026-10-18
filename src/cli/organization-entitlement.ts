@@ -1,4 +1,5 @@
 import { publishedEntitlements } from '@/catalog/operation-catalog';
+import { createConfiguredRedisClient } from '@/common/redis/redis-client.factory';
 import {
   apiKeyCacheKey,
   apiKeyCacheMissKey,
@@ -8,7 +9,6 @@ import type {
   OrganizationEntitlementPort,
 } from '@/modules/identity/organizations/application/organization-entitlement.port';
 import { PostgresOrganizationEntitlementRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-entitlement.repository';
-import Redis from 'ioredis';
 import { runOperatorCommand } from './operator-command-context';
 import { createOperatorIdentityClient } from './operator-identity-client';
 
@@ -33,7 +33,7 @@ async function purgeApiKeyCache(
   hashes: readonly string[],
 ): Promise<void> {
   if (hashes.length === 0) return;
-  const redis = new Redis(redisUrl, {
+  const redis = createConfiguredRedisClient(redisUrl, {
     commandTimeout: 5_000,
     connectTimeout: 5_000,
     maxRetriesPerRequest: 1,

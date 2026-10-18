@@ -944,7 +944,10 @@ preflight() {
   check_backend_network || return 1
   check_socket_dir || return 1
   "${compose[@]}" config --quiet
-  check_vault_agent
+  check_vault_agent production
+  if [[ "$sandbox_enabled" == true ]]; then
+    check_vault_agent sandbox
+  fi
   local expected_count=2
   [[ "$sandbox_routed" == false ]] && expected_count=1
   assert_container_count "$expected_count"
@@ -971,15 +974,79 @@ preflight() {
 }
 
 check_vault_agent() {
-  local id running logs
-  id="$(container_id vault-agent)"
+  local tier="${1:-production}" service role_id_variable secrets_variable expected_environment
+  local role_id_path secrets_path production_role_id_path production_secrets_path id running health mounts environment logs
+  case "$tier" in
+    production)
+      service=vault-agent
+      role_id_variable=VAULT_ROLE_ID_FILE
+      secrets_variable=AIHUB_RUNTIME_SECRETS_HOST_DIR
+      expected_environment=production
+      ;;
+    sandbox)
+      service=vault-agent-sandbox
+      role_id_variable=VAULT_SANDBOX_ROLE_ID_FILE
+      secrets_variable=AIHUB_SANDBOX_RUNTIME_SECRETS_HOST_DIR
+      expected_environment=sandbox
+      ;;
+    *)
+      printf 'Vault Agent tier must be production or sandbox\n' >&2
+      return 2
+      ;;
+  esac
+  role_id_path="$(read_env "$role_id_variable")"
+  secrets_path="$(read_env "$secrets_variable")"
+  if [[ ! -s "$role_id_path" || ! -d "$secrets_path" ]]; then
+    printf '%s Vault Agent role ID file or rendered directory is missing\n' "$tier" >&2
+    return 1
+  fi
+  if [[ "$(stat -c '%a:%u:%g' "$role_id_path")" != 600:10001:10001 || \
+    "$(stat -c '%a:%u:%g' "$secrets_path")" != 700:10001:10001 ]]; then
+    printf '%s Vault Agent role ID or rendered directory has unexpected ownership or permissions\n' "$tier" >&2
+    return 1
+  fi
+  role_id_path="$(realpath -e "$role_id_path")"
+  secrets_path="$(realpath -e "$secrets_path")"
+  if [[ "$tier" == sandbox ]]; then
+    production_role_id_path="$(read_env VAULT_ROLE_ID_FILE)"
+    production_secrets_path="$(read_env AIHUB_RUNTIME_SECRETS_HOST_DIR)"
+    [[ -s "$production_role_id_path" && -d "$production_secrets_path" ]] || {
+      printf 'Production Vault Agent role ID or rendered directory is missing\n' >&2
+      return 1
+    }
+    production_role_id_path="$(realpath -e "$production_role_id_path")"
+    production_secrets_path="$(realpath -e "$production_secrets_path")"
+    if [[ "$secrets_path" == "$production_secrets_path" || \
+      "$role_id_path" == "$production_role_id_path" ]]; then
+      printf 'Sandbox Vault Agent must use directories and role ID separate from Production\n' >&2
+      return 1
+    fi
+  fi
+
+  id="$(container_id "$service")"
   if [[ -z "$id" ]]; then
-    printf 'vault-agent container is missing\n' >&2
+    printf '%s Vault Agent container is missing\n' "$tier" >&2
     return 1
   fi
   running="$(sudo -n docker inspect --format '{{.State.Running}}' "$id" 2>/dev/null || true)"
   if [[ "$running" != true ]]; then
-    printf 'vault-agent is not running\n' >&2
+    printf '%s Vault Agent is not running\n' "$tier" >&2
+    return 1
+  fi
+  health="$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$id" 2>/dev/null || true)"
+  if [[ "$health" != healthy ]]; then
+    printf '%s Vault Agent is not healthy\n' "$tier" >&2
+    return 1
+  fi
+  environment="$(sudo -n docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$id" 2>/dev/null || true)"
+  if ! grep -Fxq "AIHUB_VAULT_ENVIRONMENT=$expected_environment" <<<"$environment"; then
+    printf '%s Vault Agent has the wrong Vault environment\n' "$tier" >&2
+    return 1
+  fi
+  mounts="$(sudo -n docker inspect --format '{{range .Mounts}}{{println .Source .Destination}}{{end}}' "$id" 2>/dev/null || true)"
+  if ! grep -Fxq "$role_id_path /run/secrets/vault/role_id" <<<"$mounts" || \
+    ! grep -Fxq "$secrets_path /run/secrets/aihub" <<<"$mounts"; then
+    printf '%s Vault Agent does not mount its tier-specific role ID and rendered directory\n' "$tier" >&2
     return 1
   fi
   if ! sudo -n docker exec "$id" sh -ec '
@@ -988,18 +1055,86 @@ check_vault_agent() {
     test -s /run/secrets/aihub/connection-secrets.json
     wget -q -T 2 -O /dev/null "http://127.0.0.1:8220/agent/v1/metrics?format=prometheus"
   '; then
-    printf 'vault-agent bundles or metrics endpoint failed checks\n' >&2
+    printf '%s Vault Agent bundles or metrics endpoint failed checks\n' "$tier" >&2
     return 1
   fi
-  logs="$("${compose[@]}" logs --no-color --since 1h vault-agent 2>&1 || true)"
+  if [[ "$tier" == production ]]; then
+    if ! sudo -n docker exec "$id" sh -ec "
+      ! grep -Fq '\"sandbox_url\":' /run/secrets/aihub/connection-secrets.json
+      ! grep -Fq '\"sandbox_control_plane_read_url\":' /run/secrets/aihub/connection-secrets.json
+      ! grep -Fq '\"sandbox-assertion\":' /run/secrets/aihub/connection-secrets.json
+    "; then
+      printf 'Production Vault Agent connection file contains Sandbox fields\n' >&2
+      return 1
+    fi
+  elif ! sudo -n docker exec "$id" sh -ec "
+    grep -Fq '\"sandbox-assertion\":' /run/secrets/aihub/connection-secrets.json
+    ! grep -Fq '\"url\":' /run/secrets/aihub/connection-secrets.json
+  "; then
+    printf 'Sandbox Vault Agent connection file contains an invalid tier shape\n' >&2
+    return 1
+  fi
+  logs="$("${compose[@]}" logs --no-color --since 1h "$service" 2>&1 || true)"
   case "$logs" in
     *"authentication successful"* | *"renewed auth token"*) ;;
     *)
-      printf 'vault-agent has not authenticated in the last hour\n' >&2
-      printf '%s\n' "$logs" | tail -100 >&2
+      printf '%s Vault Agent has not authenticated in the last hour\n' "$tier" >&2
       return 1
       ;;
   esac
+}
+
+prepare_sandbox_secret_cutover() {
+  local id legacy api_slot service app_id health attempt
+  id="$(container_id vault-agent)"
+  [[ -n "$id" ]] || { printf 'Production Vault Agent container is missing\n' >&2; return 1; }
+  if sudo -n docker exec "$id" sh -ec "
+    grep -Fq '\"sandbox_url\":' /run/secrets/aihub/connection-secrets.json ||
+      grep -Fq '\"sandbox_control_plane_read_url\":' /run/secrets/aihub/connection-secrets.json ||
+      grep -Fq '\"sandbox-assertion\":' /run/secrets/aihub/connection-secrets.json
+  " >/dev/null 2>&1; then
+    legacy=true
+  else
+    legacy=false
+  fi
+  if [[ "$legacy" != true ]]; then
+    check_vault_agent production
+    printf 'Production Vault Agent already renders the isolated connection document\n'
+    return 0
+  fi
+  if [[ "$sandbox_enabled" != false ]]; then
+    printf 'disable Sandbox in .env.production before the first isolated Vault template rollout\n' >&2
+    return 1
+  fi
+
+  api_slot="$(active_slot production "$API_CONFIG")" || return 1
+  service="$(service_for_slot production "$api_slot")" || return 1
+  app_id="$(container_id "$service")" || return 1
+  health="$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$app_id")" || return 1
+  container_ready "$app_id" "$health" || {
+    printf 'active Production app is not ready before the Vault Agent restart\n' >&2
+    return 1
+  }
+  reconcile_sandbox_configuration || return 1
+
+  "${compose[@]}" up -d --force-recreate vault-agent || return 1
+  for ((attempt = 0; attempt < 90; attempt += 1)); do
+    id="$(container_id vault-agent)"
+    [[ -n "$id" ]] || { sleep 1; continue; }
+    health="$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$id" 2>/dev/null || true)"
+    [[ "$health" == healthy ]] && break
+    [[ "$(sudo -n docker inspect --format '{{.State.Running}}' "$id" 2>/dev/null || true)" == true ]] || {
+      printf 'Production Vault Agent stopped during the isolated-template restart\n' >&2
+      return 1
+    }
+    sleep 1
+  done
+  [[ "$health" == healthy ]] || {
+    printf 'Production Vault Agent did not become healthy after the isolated-template restart\n' >&2
+    return 1
+  }
+  check_vault_agent production || return 1
+  printf 'Production Vault Agent now renders the isolated connection document; Sandbox remains disabled\n'
 }
 
 failed_edge_tiers() {
@@ -1061,7 +1196,9 @@ assert_gate_transition() {
   if [[ -z "$gate" ]]; then
     case "$COMMAND:$TIER" in
       deploy: | deploy:production | deploy:all | rollback:production | rollback:sandbox | \
-        public-host:production | public-host:sandbox | sandbox-enabled: | status: | rehearse:sandbox)
+        public-host:production | public-host:sandbox | sandbox-enabled: | status: | \
+        check-vault-agent:production | check-vault-agent:sandbox | \
+        prepare-sandbox-cutover: | rehearse:sandbox)
         return 0
         ;;
     esac
@@ -1213,7 +1350,7 @@ rollback() {
   [[ -s "$HISTORY_FILE" ]] || { printf 'no release history exists\n' >&2; return 1; }
   line="$(awk -F '\t' -v tier="$tier" '$2 == "deploy" && $3 == tier { line=$0 } END { print line }' "$HISTORY_FILE")"
   [[ -n "$line" ]] || { printf 'no successful release history for %s\n' "$tier" >&2; return 1; }
-  check_vault_agent
+  check_vault_agent "$tier"
   IFS=$'\t' read -r _ _ _ old_slot old_sha new_slot new_sha <<<"$line"
   if [[ "$tier" == sandbox && "$old_slot" == disabled ]]; then
     rollback_sandbox_to_disabled "$new_slot" "$new_sha"
@@ -1399,6 +1536,15 @@ case "$COMMAND" in
     assert_gate_transition || exit 1
     printf '%s\n' "$sandbox_enabled"
     ;;
+  check-vault-agent)
+    assert_gate_transition || exit 1
+    check_vault_agent "$TIER" || exit $?
+    printf '%s Vault Agent isolation and health checks passed\n' "$TIER"
+    ;;
+  prepare-sandbox-cutover)
+    assert_gate_transition || exit 1
+    prepare_sandbox_secret_cutover || exit $?
+    ;;
   finalize)
     assert_gate_transition || exit 1
     reconcile_sandbox_configuration || exit 1
@@ -1455,7 +1601,7 @@ case "$COMMAND" in
     deploy_tier sandbox true
     ;;
   *)
-    printf 'usage: %s deploy [production|sandbox|all] | rollback <production|sandbox> | rehearse sandbox | status | public-host <production|sandbox> | sandbox-enabled | finalize | recover-gate\n' "$0" >&2
+    printf 'usage: %s deploy [production|sandbox|all] | rollback <production|sandbox> | rehearse sandbox | status | public-host <production|sandbox> | sandbox-enabled | check-vault-agent <production|sandbox> | prepare-sandbox-cutover | finalize | recover-gate\n' "$0" >&2
     exit 2
     ;;
 esac

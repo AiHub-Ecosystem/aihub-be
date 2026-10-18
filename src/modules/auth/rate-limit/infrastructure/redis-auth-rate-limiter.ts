@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import Redis from 'ioredis';
-
+import { createConfiguredRedisClient } from '@/common/redis/redis-client.factory';
 import type {
   AuthRateLimitScope,
   AuthRateLimiterPort,
@@ -69,7 +68,7 @@ export class RedisAuthRateLimiter implements AuthRateLimiterPort {
     if (redisUrl.trim().length === 0) {
       return;
     }
-    const redis = new Redis(redisUrl, {
+    const redis = createConfiguredRedisClient(redisUrl, {
       lazyConnect: true,
       enableOfflineQueue: false,
       maxRetriesPerRequest: 1,

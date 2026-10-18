@@ -1,11 +1,16 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import process from 'node:process';
 
 const environment = process.env.AIHUB_VAULT_ENVIRONMENT;
 const credentialsDirectory = process.env.AIHUB_VAULT_CREDENTIALS_DIR;
-const allowedEnvironments = new Set(['development', 'staging', 'production']);
+const allowedEnvironments = new Set([
+  'development',
+  'staging',
+  'production',
+  'sandbox',
+]);
 
 function fail(message) {
   console.error(`Vault provisioning failed: ${message}`);
@@ -19,7 +24,9 @@ if (process.env.AIHUB_VAULT_PROVISION_ALLOW !== 'true') {
 }
 
 if (environment === undefined || !allowedEnvironments.has(environment)) {
-  fail('AIHUB_VAULT_ENVIRONMENT must be development, staging, or production');
+  fail(
+    'AIHUB_VAULT_ENVIRONMENT must be development, staging, production, or sandbox',
+  );
 }
 
 if (
@@ -79,7 +86,124 @@ function readBundle(fileName, keys) {
     fail(`credential bundle has an invalid schema: ${fileName}`);
   }
 
-  return path;
+  return { path, value };
+}
+
+const bundles = [
+  ['ai-speaking.json', ['client_id', 'secret_key'], 'ai-speaking'],
+  ['ai-writing.json', ['token'], 'ai-writing'],
+  ['resend.json', ['api_key'], 'resend'],
+  ['user-access-jwt.json', ['private_key_pem', 'key_id'], 'user-access-jwt'],
+  ['seaweedfs.json', ['access_key_id', 'secret_access_key'], 'seaweedfs'],
+  [
+    'database.json',
+    environment === 'sandbox' ? ['url', 'control_plane_read_url'] : ['url'],
+    'database',
+  ],
+  ['redis.json', ['url'], 'redis'],
+  ['email-outbox.json', ['current_key_id', 'keys'], 'email-outbox'],
+  ['web-session.json', ['client_secret'], 'web-session'],
+  ['auth-mfa.json', ['current_key_id', 'keys'], 'auth-mfa'],
+];
+if (environment === 'sandbox') {
+  bundles.push([
+    'sandbox-assertion.json',
+    ['private_key_pem', 'key_id'],
+    'sandbox-assertion',
+  ]);
+}
+
+let tokenLookup;
+try {
+  tokenLookup = JSON.parse(
+    runVault(['token', 'lookup', '-format=json'], 'token lookup'),
+  );
+} catch {
+  fail('Vault token lookup did not return JSON');
+}
+if (tokenLookup.data?.policies?.includes('root')) {
+  fail('use a non-root Vault operator token for provisioning');
+}
+if (tokenLookup.data?.ttl === 0) {
+  fail('use an expiring non-root Vault operator token for provisioning');
+}
+
+const credentialBundles = bundles.map(([fileName, keys, bundleName]) => ({
+  bundleName,
+  ...readBundle(fileName, keys),
+}));
+
+function connectionUrl(value, label, protocols) {
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    fail(`${label} must be a valid URL`);
+  }
+  if (!protocols.includes(parsed.protocol)) {
+    fail(`${label} has an unsupported URL scheme`);
+  }
+  return parsed;
+}
+
+function databaseName(url, label) {
+  try {
+    return decodeURIComponent(url.pathname.slice(1));
+  } catch {
+    fail(`${label} has an invalid database path`);
+  }
+}
+
+if (environment === 'production' || environment === 'sandbox') {
+  const database = credentialBundles.find(
+    ({ bundleName }) => bundleName === 'database',
+  ).value;
+  const redis = credentialBundles.find(
+    ({ bundleName }) => bundleName === 'redis',
+  ).value;
+  const databaseUrl = connectionUrl(database.url, 'database.json url', [
+    'postgres:',
+    'postgresql:',
+  ]);
+  const redisUrl = connectionUrl(redis.url, 'redis.json url', [
+    'redis:',
+    'rediss:',
+  ]);
+  const expectedDatabase =
+    environment === 'sandbox' ? 'aihub_sandbox' : 'aihub';
+  if (databaseName(databaseUrl, 'database.json url') !== expectedDatabase) {
+    fail(`database.json url must target ${expectedDatabase}`);
+  }
+  if (environment === 'sandbox') {
+    const redisKeyPrefixes = redisUrl.searchParams.getAll('keyPrefix');
+    const controlPlaneUrl = connectionUrl(
+      database.control_plane_read_url,
+      'database.json control_plane_read_url',
+      ['postgres:', 'postgresql:'],
+    );
+    if (
+      databaseName(controlPlaneUrl, 'database.json control_plane_read_url') !==
+        'aihub' ||
+      databaseUrl.username.length === 0 ||
+      controlPlaneUrl.username.length === 0 ||
+      controlPlaneUrl.username === databaseUrl.username
+    ) {
+      fail(
+        'Sandbox control_plane_read_url must use a distinct restricted Production reader',
+      );
+    }
+    if (
+      redisUrl.pathname !== '/1' ||
+      redisUrl.username.length === 0 ||
+      redisUrl.username === 'default' ||
+      redisKeyPrefixes.length !== 1 ||
+      redisKeyPrefixes[0] !== 'aihub-sandbox:'
+    ) {
+      fail(
+        'Sandbox redis.json url must use database /1, a dedicated ACL username, and the aihub-sandbox key namespace',
+      );
+    }
+  }
 }
 
 const mounts = runVault(['auth', 'list', '-format=json'], 'auth list');
@@ -119,40 +243,27 @@ runVault(
     'token_max_ttl=24h',
     // bind_secret_id=false is what makes the Agent durable: without a
     // secret_id there is nothing to expire or burn, so the token renews until
-    // it is revoked instead of dying at token_max_ttl. The operator still
-    // mints a short-lived one-use secret_id for hands-on sessions. Vault
-    // requires a constraint when bind_secret_id is off, so the deployment
-    // network is bound at login time instead.
+    // it is revoked instead of dying at token_max_ttl. Vault requires a
+    // constraint when bind_secret_id is off, so the deployment network is
+    // bound at login time instead.
     'bind_secret_id=false',
     `bound_cidr_list=${agentCidr}`,
   ],
   'AppRole provision',
 );
 
-const bundles = [
-  ['ai-speaking.json', ['client_id', 'secret_key'], 'ai-speaking'],
-  ['ai-writing.json', ['token'], 'ai-writing'],
-  ['resend.json', ['api_key'], 'resend'],
-  ['user-access-jwt.json', ['private_key_pem', 'key_id'], 'user-access-jwt'],
-  ['seaweedfs.json', ['access_key_id', 'secret_access_key'], 'seaweedfs'],
-  [
-    'database.json',
-    ['url', 'sandbox_url', 'sandbox_control_plane_read_url'],
-    'database',
-  ],
-  ['redis.json', ['url', 'sandbox_url'], 'redis'],
-  [
-    'sandbox-assertion.json',
-    ['private_key_pem', 'key_id'],
-    'sandbox-assertion',
-  ],
-  ['email-outbox.json', ['current_key_id', 'keys'], 'email-outbox'],
-  ['web-session.json', ['client_secret'], 'web-session'],
-  ['auth-mfa.json', ['current_key_id', 'keys'], 'auth-mfa'],
-];
+const roleId = runVault(
+  ['read', '-field=role_id', `auth/approle/role/${policyName}/role-id`],
+  'AppRole role ID read',
+).trim();
+if (roleId.length === 0) {
+  fail('Vault returned an empty AppRole role ID');
+}
+const roleIdPath = join(credentialsDirectory, 'vault-role-id');
+writeFileSync(roleIdPath, `${roleId}\n`, { mode: 0o600 });
+chmodSync(roleIdPath, 0o600);
 
-for (const [fileName, keys, bundleName] of bundles) {
-  const path = readBundle(fileName, keys);
+for (const { path, bundleName } of credentialBundles) {
   runVault(
     ['kv', 'put', `secret/aihub/${environment}/${bundleName}`, `@${path}`],
     `KV bundle write (${bundleName})`,
@@ -160,5 +271,5 @@ for (const [fileName, keys, bundleName] of bundles) {
 }
 
 console.log(
-  `Vault provisioning completed for ${environment}: policy, AppRole, and eleven KV bundles updated`,
+  `Vault provisioning completed for ${environment}: policy, AppRole, role ID file, and ${bundles.length} KV bundles updated`,
 );

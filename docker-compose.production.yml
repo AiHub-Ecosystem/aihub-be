@@ -91,31 +91,50 @@ x-app-service: &app-service
     start_period: 20s
     retries: 12
 
+x-vault-agent-common: &vault-agent-common
+  image: ${VAULT_IMAGE:-hashicorp/vault:1.21.4}
+  logging: *container-logging
+  restart: unless-stopped
+  command:
+    - agent
+    - -config=/etc/aihub/vault/agent.hcl
+    - -log-level=info
+  user: "10001:10001"
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 50
+  mem_limit: 256m
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=32m
+  environment: &vault-agent-environment
+    VAULT_ADDR: ${VAULT_ADDR:?VAULT_ADDR is required}
+    VAULT_CACERT: /etc/aihub/vault/ca.pem
+    SKIP_CHOWN: "true"
+    SKIP_SETCAP: "true"
+  networks:
+    - backend
+  healthcheck: &vault-agent-healthcheck
+    test:
+      - CMD-SHELL
+      - |-
+        test -s /run/secrets/aihub/runtime-secrets.json || { echo 'vault-agent unhealthy: runtime-secrets.json is missing or empty'; exit 1; }
+        test -s /run/secrets/aihub/auth-mfa-secrets.json || { echo 'vault-agent unhealthy: auth-mfa-secrets.json is missing or empty'; exit 1; }
+        test -s /run/secrets/aihub/connection-secrets.json || { echo 'vault-agent unhealthy: connection-secrets.json is missing or empty'; exit 1; }
+        wget -q -T 2 -O /dev/null 'http://127.0.0.1:8220/agent/v1/metrics?format=prometheus' || { echo 'vault-agent unhealthy: metrics endpoint unavailable'; exit 1; }
+    interval: 5s
+    timeout: 3s
+    start_period: 30s
+    retries: 3
+
 services:
   vault-agent:
-    image: ${VAULT_IMAGE:-hashicorp/vault:1.21.4}
-    logging: *container-logging
-    restart: unless-stopped
-    command:
-      - agent
-      - -config=/etc/aihub/vault/agent.hcl
-      - -log-level=info
-    user: "10001:10001"
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 50
-    mem_limit: 256m
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=32m
+    <<: *vault-agent-common
     environment:
+      <<: *vault-agent-environment
       AIHUB_VAULT_ENVIRONMENT: production
-      VAULT_ADDR: ${VAULT_ADDR:?VAULT_ADDR is required}
-      VAULT_CACERT: /etc/aihub/vault/ca.pem
-      SKIP_CHOWN: "true"
-      SKIP_SETCAP: "true"
     volumes:
       - ${VAULT_ROLE_ID_FILE:?VAULT_ROLE_ID_FILE is required}:/run/secrets/vault/role_id:ro
       - ${VAULT_CA_CERT_FILE:?VAULT_CA_CERT_FILE is required}:/etc/aihub/vault/ca.pem:ro
@@ -124,20 +143,22 @@ services:
       - ./ops/vault/templates/auth-mfa-secrets.json.ctmpl:/etc/aihub/vault/auth-mfa-secrets.json.ctmpl:ro
       - ./ops/vault/templates/connection-secrets.json.ctmpl:/etc/aihub/vault/connection-secrets.json.ctmpl:ro
       - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub
-    networks:
-      - backend
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - |-
-          test -s /run/secrets/aihub/runtime-secrets.json || { echo 'vault-agent unhealthy: runtime-secrets.json is missing or empty'; exit 1; }
-          test -s /run/secrets/aihub/auth-mfa-secrets.json || { echo 'vault-agent unhealthy: auth-mfa-secrets.json is missing or empty'; exit 1; }
-          test -s /run/secrets/aihub/connection-secrets.json || { echo 'vault-agent unhealthy: connection-secrets.json is missing or empty'; exit 1; }
-          wget -q -T 2 -O /dev/null 'http://127.0.0.1:8220/agent/v1/metrics?format=prometheus' || { echo 'vault-agent unhealthy: metrics endpoint unavailable'; exit 1; }
-      interval: 5s
-      timeout: 3s
-      start_period: 30s
-      retries: 3
+
+  vault-agent-sandbox:
+    <<: *vault-agent-common
+    profiles:
+      - sandbox
+    environment:
+      <<: *vault-agent-environment
+      AIHUB_VAULT_ENVIRONMENT: sandbox
+    volumes:
+      - ${VAULT_SANDBOX_ROLE_ID_FILE:?VAULT_SANDBOX_ROLE_ID_FILE is required}:/run/secrets/vault/role_id:ro
+      - ${VAULT_CA_CERT_FILE:?VAULT_CA_CERT_FILE is required}:/etc/aihub/vault/ca.pem:ro
+      - ./ops/vault/agent/aihub-runtime.hcl:/etc/aihub/vault/agent.hcl:ro
+      - ./ops/vault/templates/runtime-secrets.json.ctmpl:/etc/aihub/vault/runtime-secrets.json.ctmpl:ro
+      - ./ops/vault/templates/auth-mfa-secrets.json.ctmpl:/etc/aihub/vault/auth-mfa-secrets.json.ctmpl:ro
+      - ./ops/vault/templates/connection-secrets.json.ctmpl:/etc/aihub/vault/connection-secrets.json.ctmpl:ro
+      - ${AIHUB_SANDBOX_RUNTIME_SECRETS_HOST_DIR:?AIHUB_SANDBOX_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub
 
   migrate:
     <<: *app-common
@@ -166,9 +187,9 @@ services:
       AIHUB_RUNTIME_DATABASE_SCOPE: sandbox
     networks: *app-database-networks
     volumes:
-      - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro
+      - ${AIHUB_SANDBOX_RUNTIME_SECRETS_HOST_DIR:?AIHUB_SANDBOX_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro
     depends_on:
-      vault-agent:
+      vault-agent-sandbox:
         condition: service_healthy
     restart: "no"
 
@@ -211,6 +232,12 @@ services:
       SEAWEEDFS_CHART_STAGING_BUCKET: ${SEAWEEDFS_SANDBOX_CHART_STAGING_BUCKET:-}
       SEAWEEDFS_CHART_PUBLIC_BUCKET: ${SEAWEEDFS_SANDBOX_CHART_PUBLIC_BUCKET:-}
       AIHUB_CHART_PUBLIC_BASE_URL: ${AIHUB_SANDBOX_CHART_PUBLIC_BASE_URL:-}
+    volumes:
+      - ${AIHUB_SANDBOX_RUNTIME_SECRETS_HOST_DIR:?AIHUB_SANDBOX_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro
+      - ${AIHUB_SOCKET_DIR:-./.aihub-socket}:/run/aihub-sock
+    depends_on:
+      vault-agent-sandbox:
+        condition: service_healthy
     ports:
       - "127.0.0.1:${AIHUB_SANDBOX_APP_PORT:-3022}:3000"
 
@@ -230,6 +257,12 @@ services:
       SEAWEEDFS_CHART_STAGING_BUCKET: ${SEAWEEDFS_SANDBOX_CHART_STAGING_BUCKET:-}
       SEAWEEDFS_CHART_PUBLIC_BUCKET: ${SEAWEEDFS_SANDBOX_CHART_PUBLIC_BUCKET:-}
       AIHUB_CHART_PUBLIC_BASE_URL: ${AIHUB_SANDBOX_CHART_PUBLIC_BASE_URL:-}
+    volumes:
+      - ${AIHUB_SANDBOX_RUNTIME_SECRETS_HOST_DIR:?AIHUB_SANDBOX_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro
+      - ${AIHUB_SOCKET_DIR:-./.aihub-socket}:/run/aihub-sock
+    depends_on:
+      vault-agent-sandbox:
+        condition: service_healthy
     ports:
       - "127.0.0.1:3024:3000"
 
