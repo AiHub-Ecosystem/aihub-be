@@ -26,9 +26,11 @@ import {
 
 const ORGANIZATION_ROSTER_PATH =
   PUBLIC_ROUTES['organizations.me.members.list'].path;
-
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
+const ORGANIZATION_MEMBERS_PATH = PUBLIC_ROUTES[
+  'organizations.members.list'
+].path.replace(':organizationId', ORGANIZATION_ID);
 const MUTATION_URL = `/v1/organizations/${ORGANIZATION_ID}/members/bob`;
 
 const roster: readonly OrganizationRosterOrganization[] = [
@@ -251,6 +253,21 @@ describe('Organization membership HTTP flow', () => {
     expect(response.json()).toEqual({
       data: { organizations: [] },
       meta: { request_id: 'req_01J00000000000000000000000' },
+    });
+  });
+
+  it('refuses an undeclared organization member-list query parameter', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `${ORGANIZATION_MEMBERS_PATH}?unexpected=value`,
+      headers: { authorization: 'Bearer valid.token.value' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toMatchObject({
+      code: 'INVALID_REQUEST',
+      message: 'Request failed validation',
+      retryable: false,
     });
   });
 

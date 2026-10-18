@@ -11,15 +11,13 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { Value } from '@sinclair/typebox/value';
 import type { FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { invalidRequest } from '@/common/errors/invalid-request';
 import { parseRequestBody } from '@/common/http/parse-request-body';
+import { parseRequestQuery } from '@/common/http/parse-request-query';
 import {
   EmptyOrganizationMembershipMutationRequestSchema,
-  type OrganizationMembershipListQuery,
   OrganizationMembershipListQuerySchema,
   type OrganizationMembershipListResponse,
   type OrganizationMembershipMutationRequest,
@@ -61,13 +59,10 @@ export class OrganizationMembershipController {
       request,
       organizationId,
     );
-    const rawQuery: unknown = request.query;
-    if (!Value.Check(OrganizationMembershipListQuerySchema, rawQuery)) {
-      // arch-check: validates a query, not a body
-      throw invalidRequest();
-    }
-
-    const query: OrganizationMembershipListQuery = rawQuery;
+    const query = parseRequestQuery(
+      OrganizationMembershipListQuerySchema,
+      request.query,
+    );
     const members = await this.membershipList.list({
       context,
       userId,

@@ -577,9 +577,7 @@ describe('cross-module table access', () => {
 describe('request bodies reach their contract through parseRequestBody', () => {
   const PRESENTATION_ALLOWLIST = [
     'modules/auth/presentation/access-token-envelope.ts',
-    'modules/identity/membership/presentation/organization-membership.controller.ts',
     'modules/identity/organization-identity-configuration/presentation/organization-identity-config.controller.ts',
-    'modules/speaking/presentation/speaking-questions.controller.ts',
   ];
 
   const srcRoot = join(__dirname, '..', '..', 'src');
@@ -677,6 +675,76 @@ describe('request bodies reach their contract through parseRequestBody', () => {
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });
     }
+  });
+});
+
+describe('query parameters reach parseRequestQuery at the controller boundary', () => {
+  const srcRoot = join(__dirname, '..', '..', 'src');
+
+  function withControllerFixture(
+    source: string,
+    assertion: (result: ReturnType<typeof spawnSync>) => void,
+  ): void {
+    const fixtureRoot = mkdtempSync(
+      join(srcRoot, 'modules', 'identity', '.tmp-query-validation-'),
+    );
+    const controller = join(fixtureRoot, 'presentation', 'probe.controller.ts');
+
+    try {
+      mkdirSync(join(fixtureRoot, 'presentation'), { recursive: true });
+      writeFileSync(controller, source);
+      writeFileSync(
+        join(fixtureRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+      );
+
+      const result = spawnSync(
+        process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+        ['arch-check'],
+        {
+          cwd: process.cwd(),
+          encoding: 'utf8',
+          shell: process.platform === 'win32',
+        },
+      );
+
+      assertion(result);
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  }
+
+  it('fails a controller that reads request.query outside the helper', () => {
+    withControllerFixture(
+      `export class ProbeController {\n  list(request: { query: unknown }) {\n    return request.query;\n  }\n}\n`,
+      (result) => {
+        expect(result.status).not.toBe(0);
+        expect(`${result.stdout}\n${result.stderr}`).toContain(
+          'parseRequestQuery',
+        );
+      },
+    );
+  });
+
+  it('fails a controller that reads a named @Query parameter', () => {
+    withControllerFixture(
+      `export class ProbeController {\n  list(@Query('part') part: unknown) {\n    return part;\n  }\n}\n`,
+      (result) => {
+        expect(result.status).not.toBe(0);
+        expect(`${result.stdout}\n${result.stderr}`).toContain(
+          'parseRequestQuery',
+        );
+      },
+    );
+  });
+
+  it('allows whole-query validation and an explicit per-access reason', () => {
+    withControllerFixture(
+      `export class ProbeController {\n  list(request: { query: unknown }) {\n    return parseRequestQuery(schema, request.query);\n  }\n\n  injected(@Query() query: unknown) {\n    return parseRequestQuery(schema, query);\n  }\n\n  named(@Query('part') part: unknown) { // arch-check: upstream validates this single field\n    return part;\n  }\n}\n`,
+      (result) => {
+        expect(result.status).toBe(0);
+      },
+    );
   });
 });
 

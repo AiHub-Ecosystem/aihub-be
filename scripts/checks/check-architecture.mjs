@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import process from 'node:process';
+import ts from 'typescript';
 
 const root = process.cwd();
 
@@ -197,6 +198,149 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
       `${relative(root, file)}:${index + 1} calls TypeBox directly; route a request body through parseRequestBody, or, if this call is not body validation, mark it with "${BODY_VALIDATION_MARKER} <reason>"`,
     );
   }
+}
+
+const QUERY_VALIDATION_MARKER = 'arch-check:';
+
+function hasQueryValidationMarker(sourceFile, node, lines) {
+  const line = sourceFile.getLineAndCharacterOfPosition(
+    node.getStart(sourceFile),
+  ).line;
+  return `${lines[line] ?? ''}\n${lines[line + 1] ?? ''}`.includes(
+    QUERY_VALIDATION_MARKER,
+  );
+}
+
+function isParseRequestQueryCall(node) {
+  return (
+    ts.isCallExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === 'parseRequestQuery'
+  );
+}
+
+function isDirectlyPassedToQueryHelper(node) {
+  let argument = node;
+  while (ts.isParenthesizedExpression(argument.parent)) {
+    argument = argument.parent;
+  }
+
+  const call = argument.parent;
+  return isParseRequestQueryCall(call) && call.arguments[1] === argument;
+}
+
+function queryDecorator(parameter) {
+  const decorators = ts.canHaveDecorators(parameter)
+    ? (ts.getDecorators(parameter) ?? [])
+    : [];
+
+  for (const decorator of decorators) {
+    const expression = decorator.expression;
+    if (
+      ts.isCallExpression(expression) &&
+      ts.isIdentifier(expression.expression) &&
+      expression.expression.text === 'Query'
+    ) {
+      return {
+        decorator,
+        isWholeQuery: expression.arguments.length === 0,
+      };
+    }
+    if (ts.isIdentifier(expression) && expression.text === 'Query') {
+      return { decorator, isWholeQuery: false };
+    }
+  }
+
+  return undefined;
+}
+
+function queryParameterIsValidated(parameter) {
+  if (!ts.isIdentifier(parameter.name)) {
+    return false;
+  }
+
+  let owner = parameter.parent;
+  while (owner !== undefined && !ts.isFunctionLike(owner)) {
+    owner = owner.parent;
+  }
+  if (owner?.body === undefined) {
+    return false;
+  }
+
+  let isValidated = false;
+  function visit(node) {
+    if (node !== owner.body && ts.isFunctionLike(node)) {
+      return;
+    }
+    if (
+      isParseRequestQueryCall(node) &&
+      node.arguments[1] !== undefined &&
+      ts.isIdentifier(node.arguments[1]) &&
+      node.arguments[1].text === parameter.name.text
+    ) {
+      isValidated = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(owner.body);
+  return isValidated;
+}
+
+for (const file of collectTypeScriptFiles(srcDirectory)) {
+  if (file.endsWith('.spec.ts') || !file.endsWith('.controller.ts')) {
+    continue;
+  }
+
+  const source = readFileSync(file, 'utf8');
+  const sourceFile = ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const lines = source.split(/\r?\n/);
+
+  function visit(node) {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      node.name.text === 'query' &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'request' &&
+      !isDirectlyPassedToQueryHelper(node) &&
+      !hasQueryValidationMarker(sourceFile, node, lines)
+    ) {
+      const line =
+        sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
+          .line + 1;
+      fail(
+        `${relative(root, file)}:${line} reads request.query outside parseRequestQuery; pass it as the raw argument or mark it with "${QUERY_VALIDATION_MARKER} <reason>"`,
+      );
+    }
+
+    if (node.kind === ts.SyntaxKind.Parameter) {
+      const query = queryDecorator(node);
+      const isValidated =
+        query?.isWholeQuery === true && queryParameterIsValidated(node);
+      if (
+        query !== undefined &&
+        !isValidated &&
+        !hasQueryValidationMarker(sourceFile, query.decorator, lines)
+      ) {
+        const line =
+          sourceFile.getLineAndCharacterOfPosition(
+            query.decorator.getStart(sourceFile),
+          ).line + 1;
+        fail(
+          `${relative(root, file)}:${line} uses @Query without validating the whole query through parseRequestQuery; use @Query() with the helper or mark it with "${QUERY_VALIDATION_MARKER} <reason>"`,
+        );
+      }
+    }
+
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
 }
 
 if (process.exitCode !== undefined) {
