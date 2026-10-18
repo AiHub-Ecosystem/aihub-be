@@ -76,6 +76,7 @@ export class AvatarController {
     const uploadRequest = parseRequestBody(
       CreateAvatarUploadRequestSchema,
       body,
+      request,
     );
 
     const upload = await this.uploads.requestUpload({

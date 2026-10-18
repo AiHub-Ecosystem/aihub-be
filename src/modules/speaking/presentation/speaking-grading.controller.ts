@@ -36,8 +36,12 @@ import { createFastifySpeakingMultipartSource } from './fastify-speaking-multipa
 const OPERATION = 'speaking.grading' as const;
 const JSON_OPERATION = 'speaking.grading-json' as const;
 
-function parseJsonBody(body: unknown): SpeakingGradeJsonInput {
-  const parsed = parseRequestBody(SpeakingGradeJsonRequestSchema, body);
+function parseJsonBody(body: unknown, request?: any): SpeakingGradeJsonInput {
+  const parsed = parseRequestBody(
+    SpeakingGradeJsonRequestSchema,
+    body,
+    request,
+  );
   if (!isApprovedSpeakingAudioUrl(parsed.audio_url)) {
     throw invalidRequest();
   }
@@ -138,7 +142,7 @@ export class SpeakingGradingController {
   ): Promise<DispatchResult<SpeakingGradeResponse>> {
     const lifecycle = requestLifecycle(request);
     try {
-      const input = parseJsonBody(body);
+      const input = parseJsonBody(body, request);
       const metadata = requestMetadata(request, lifecycle);
 
       return await this.orchestrator.execute({

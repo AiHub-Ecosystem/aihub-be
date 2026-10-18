@@ -118,6 +118,7 @@ export class OrganizationIdentityConfigController {
     const requested: SetOrganizationIdentityConfigRequest = parseRequestBody(
       SetOrganizationIdentityConfigRequestSchema,
       body,
+      request,
     );
     const config = await this.setIdentityConfig.set({
       context,

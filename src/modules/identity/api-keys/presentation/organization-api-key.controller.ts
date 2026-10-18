@@ -184,6 +184,7 @@ export class OrganizationApiKeyController {
     const requested: CreateOrganizationApiKeyRequest = parseRequestBody(
       CreateOrganizationApiKeyRequestSchema,
       body,
+      request,
     );
 
     const created = await this.apiKeys.create({

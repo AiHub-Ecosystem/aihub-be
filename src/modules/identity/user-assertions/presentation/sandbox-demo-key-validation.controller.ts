@@ -50,6 +50,7 @@ export class SandboxDemoKeyValidationController {
     const input: SandboxDemoKeyValidationRequest = parseRequestBody(
       SandboxDemoKeyValidationRequestSchema,
       body,
+      request,
     );
     const authenticated = getAuthenticatedApiKey(request);
 

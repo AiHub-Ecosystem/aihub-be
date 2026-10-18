@@ -70,6 +70,7 @@ export class SandboxAssertionController {
     const parsed: MintSandboxAssertionRequest = parseRequestBody(
       MintSandboxAssertionRequestSchema,
       body,
+      request,
     );
     const authenticated = getAuthenticatedApiKey(request);
     const requestId = isRequestId(request.id) ? request.id : String(request.id);

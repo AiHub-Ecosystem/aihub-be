@@ -133,6 +133,7 @@ export class OrganizationInvitationController {
     const accepted: AcceptOrganizationInvitationRequest = parseRequestBody(
       AcceptOrganizationInvitationRequestSchema,
       body,
+      request,
     );
 
     const membership = await this.acceptInvitation.accept({
@@ -167,6 +168,7 @@ export class OrganizationInvitationController {
     const invitation: CreateOrganizationInvitationRequest = parseRequestBody(
       CreateOrganizationInvitationRequestSchema,
       body,
+      request,
     );
     let email: string;
     try {

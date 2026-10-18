@@ -76,8 +76,8 @@ interface ForgotPasswordEnvelope {
   readonly meta: { readonly request_id: string };
 }
 
-function parseEmptyBody(body: unknown): void {
-  parseRequestBody(EmptyAuthRequestSchema, body);
+function parseEmptyBody(body: unknown, request?: any): void {
+  parseRequestBody(EmptyAuthRequestSchema, body, request);
 }
 
 function authenticatedUserId(request: FastifyRequest): string {
@@ -164,7 +164,7 @@ export class LocalAuthController {
     @Req() request: FastifyRequest,
     @Body() body: unknown,
   ): Promise<RegisterEnvelope> {
-    const input = parseRequestBody(RegisterRequestSchema, body);
+    const input = parseRequestBody(RegisterRequestSchema, body, request);
     const result = await this.service.register(
       input,
       requestIp(request),
@@ -189,7 +189,7 @@ export class LocalAuthController {
     @Body() body: unknown,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<LoginResultResponse> {
-    const input = parseRequestBody(LoginRequestSchema, body);
+    const input = parseRequestBody(LoginRequestSchema, body, request);
     const result = await this.service.login(input, requestIp(request));
     if (result.kind === 'mfa-required') {
       reply.status(202);
@@ -209,7 +209,11 @@ export class LocalAuthController {
     @Req() request: FastifyRequest,
     @Body() body: unknown,
   ): Promise<BeginMfaEnrollmentResponse> {
-    const input = parseRequestBody(BeginMfaEnrollmentRequestSchema, body);
+    const input = parseRequestBody(
+      BeginMfaEnrollmentRequestSchema,
+      body,
+      request,
+    );
     const enrollment = await this.mfa.beginEnrollment({
       userId: authenticatedUserId(request),
       password: input.password,
@@ -229,7 +233,11 @@ export class LocalAuthController {
     @Req() request: FastifyRequest,
     @Body() body: unknown,
   ): Promise<ConfirmMfaEnrollmentResponse> {
-    const input = parseRequestBody(ConfirmMfaEnrollmentRequestSchema, body);
+    const input = parseRequestBody(
+      ConfirmMfaEnrollmentRequestSchema,
+      body,
+      request,
+    );
     const recoveryCodes = await this.mfa.confirmEnrollment({
       userId: authenticatedUserId(request),
       code: input.code,
@@ -249,7 +257,7 @@ export class LocalAuthController {
     @Req() request: FastifyRequest,
     @Body() body: unknown,
   ): Promise<void> {
-    const proof = parseRequestBody(RemoveMfaFactorRequestSchema, body);
+    const proof = parseRequestBody(RemoveMfaFactorRequestSchema, body, request);
     await this.mfa.removeFactor({
       userId: authenticatedUserId(request),
       proof,
@@ -265,7 +273,7 @@ export class LocalAuthController {
     @Body() body: unknown,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<LoginResponse> {
-    parseEmptyBody(body);
+    parseEmptyBody(body, request);
     const rawToken = hasAlternateRefreshSource(request)
       ? undefined
       : refreshCookieFrom(request);
@@ -292,7 +300,7 @@ export class LocalAuthController {
     @Body() body: unknown,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
-    parseEmptyBody(body);
+    parseEmptyBody(body, request);
     const rawToken = hasAlternateRefreshSource(request)
       ? undefined
       : refreshCookieFrom(request);
@@ -313,6 +321,7 @@ export class LocalAuthController {
     const input: VerifyEmailRequest = parseRequestBody(
       VerifyEmailRequestSchema,
       body,
+      request,
     );
     const session = await this.service.verify(
       input.token,
@@ -338,6 +347,7 @@ export class LocalAuthController {
     const input: ResendVerificationRequest = parseRequestBody(
       ResendVerificationRequestSchema,
       body,
+      request,
     );
     await this.service.resend(
       input.email,
@@ -352,7 +362,7 @@ export class LocalAuthController {
     @Req() request: FastifyRequest,
     @Body() body: unknown,
   ): Promise<ForgotPasswordEnvelope> {
-    const input = parseRequestBody(ForgotPasswordRequestSchema, body);
+    const input = parseRequestBody(ForgotPasswordRequestSchema, body, request);
     const result = await this.service.forgotPassword(input, requestIp(request));
     return {
       data: result,
@@ -368,7 +378,7 @@ export class LocalAuthController {
     @Body() body: unknown,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
-    const input = parseRequestBody(ResetPasswordRequestSchema, body);
+    const input = parseRequestBody(ResetPasswordRequestSchema, body, request);
     await this.service.resetPassword(input, requestIp(request));
     clearRefreshCookie(reply);
   }

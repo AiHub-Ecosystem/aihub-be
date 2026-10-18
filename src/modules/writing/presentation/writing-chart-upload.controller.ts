@@ -106,6 +106,7 @@ export class WritingChartUploadController {
     const parsed: CreateWritingChartUploadRequest = parseRequestBody(
       CreateWritingChartUploadRequestSchema,
       body,
+      request,
     );
     return uploadResponse(
       String(request.id),

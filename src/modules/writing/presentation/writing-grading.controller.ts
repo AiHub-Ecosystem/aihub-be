@@ -120,7 +120,7 @@ export class WritingGradingController {
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
   ): Promise<DispatchResult<GradeResponse>> {
-    const input = parseRequestBody(GradeTask1RequestSchema, body);
+    const input = parseRequestBody(GradeTask1RequestSchema, body, request);
     if (!isAllowedTask1ImageUrl(input.image_url)) {
       throw invalidRequest();
     }
@@ -156,7 +156,7 @@ export class WritingGradingController {
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
   ): Promise<DispatchResult<GradeResponse>> {
-    const input = parseRequestBody(GradeTask2RequestSchema, body);
+    const input = parseRequestBody(GradeTask2RequestSchema, body, request);
     const idempotencyKey = resolveIdempotencyKey(
       TASK2_OPERATION,
       request.headers['idempotency-key'],

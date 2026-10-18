@@ -111,6 +111,7 @@ export class SpeakingAudioUploadController {
     const parsed: CreateSpeakingAudioUploadRequest = parseRequestBody(
       CreateSpeakingAudioUploadRequestSchema,
       body,
+      request,
     );
 
     const upload = await this.uploads.requestUpload({

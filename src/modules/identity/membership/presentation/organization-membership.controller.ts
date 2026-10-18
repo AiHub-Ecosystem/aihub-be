@@ -130,6 +130,7 @@ export class OrganizationMembershipController {
     const mutation: OrganizationMembershipMutationRequest = parseRequestBody(
       OrganizationMembershipMutationRequestSchema,
       body,
+      request,
     );
     const result = await this.mutation.changeRole({
       context,
@@ -154,7 +155,11 @@ export class OrganizationMembershipController {
       request,
       organizationId,
     );
-    parseRequestBody(EmptyOrganizationMembershipMutationRequestSchema, body);
+    parseRequestBody(
+      EmptyOrganizationMembershipMutationRequestSchema,
+      body,
+      request,
+    );
 
     const result = await this.mutation.disable({
       context,
@@ -178,7 +183,11 @@ export class OrganizationMembershipController {
       request,
       organizationId,
     );
-    parseRequestBody(EmptyOrganizationMembershipMutationRequestSchema, body);
+    parseRequestBody(
+      EmptyOrganizationMembershipMutationRequestSchema,
+      body,
+      request,
+    );
 
     const result = await this.mutation.transfer({
       context,

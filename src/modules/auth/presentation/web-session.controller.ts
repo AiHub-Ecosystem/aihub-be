@@ -80,6 +80,7 @@ export class WebSessionController {
     const input: CreateWebSessionRequest = parseRequestBody(
       CreateWebSessionRequestSchema,
       body,
+      request,
     );
     const endUserIp = endUserIpFrom(request);
     if (endUserIp === undefined) {
@@ -114,6 +115,7 @@ export class WebSessionController {
     const input: CreateWebSessionFromVerificationRequest = parseRequestBody(
       CreateWebSessionFromVerificationRequestSchema,
       body,
+      request,
     );
 
     const created = await this.service.createWebSessionFromVerification({
@@ -142,6 +144,7 @@ export class WebSessionController {
     const input: ExchangeWebSessionRequest = parseRequestBody(
       ExchangeWebSessionRequestSchema,
       body,
+      request,
     );
 
     const exchanged = await this.service.exchangeWebSession(
@@ -186,6 +189,7 @@ export class WebSessionController {
     const input: LogoutWebSessionRequest = parseRequestBody(
       LogoutWebSessionRequestSchema,
       body,
+      request,
     );
 
     await this.service.revokeWebSession(

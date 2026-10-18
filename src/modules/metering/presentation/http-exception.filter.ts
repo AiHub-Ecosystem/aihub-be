@@ -115,6 +115,19 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // the status after the fact.
     recordRequestFailure(request, envelope.error.code);
 
+    if (envelope.error.code === 'INVALID_REQUEST') {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'invalid_request',
+          request_id: requestId,
+          ...(exception instanceof AppError &&
+          exception.diagnostic !== undefined
+            ? { diagnostic: exception.diagnostic }
+            : {}),
+        }),
+      );
+    }
+
     // A request whose id never validated cannot be identified, so there is
     // nothing to write a record against.
     if (requestId !== undefined) {

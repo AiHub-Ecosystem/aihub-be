@@ -85,6 +85,7 @@ export class OrganizationController {
     const requested: CreateOrganizationRequest = parseRequestBody(
       CreateOrganizationRequestSchema,
       body,
+      request,
     );
     const name = requested.name.trim();
 
@@ -157,6 +158,7 @@ export class OrganizationController {
     const requested: RenameOrganizationRequest = parseRequestBody(
       RenameOrganizationRequestSchema,
       body,
+      request,
     );
     const renamed = await this.renameOrganization.rename({
       context,
