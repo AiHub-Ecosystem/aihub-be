@@ -18,6 +18,7 @@ import { parseRequestBody } from '@/common/http/parse-request-body';
 import { parseRequestQuery } from '@/common/http/parse-request-query';
 import {
   EmptyOrganizationMembershipMutationRequestSchema,
+  type OrganizationMembershipListQuery,
   OrganizationMembershipListQuerySchema,
   type OrganizationMembershipListResponse,
   type OrganizationMembershipMutationRequest,
@@ -59,7 +60,7 @@ export class OrganizationMembershipController {
       request,
       organizationId,
     );
-    const query = parseRequestQuery(
+    const query: OrganizationMembershipListQuery = parseRequestQuery(
       OrganizationMembershipListQuerySchema,
       request.query,
     );
