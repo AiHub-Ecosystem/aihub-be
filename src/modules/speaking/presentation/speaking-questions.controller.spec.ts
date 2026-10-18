@@ -20,10 +20,10 @@ describe('SpeakingQuestionsController', () => {
   it('returns a filtered public catalog with presigned audio URLs', async () => {
     const { controller: subject, getReadUrl } = controller();
 
-    const response = await subject.list(
-      { id: 'req_questions' } as unknown as FastifyRequest,
-      '3',
-    );
+    const response = await subject.list({
+      id: 'req_questions',
+      query: { part: '3' },
+    } as unknown as FastifyRequest);
 
     expect(response.data.part).toBe(3);
     expect(response.data.questions).toHaveLength(4);
@@ -38,11 +38,50 @@ describe('SpeakingQuestionsController', () => {
     expect(getReadUrl.mock.calls).toHaveLength(4);
   });
 
+  it('rejects an undeclared query parameter before touching storage', async () => {
+    const { controller: subject, getReadUrl } = controller();
+
+    await expect(
+      subject.list({
+        id: 'req_questions',
+        query: { unexpected: 'value' },
+      } as unknown as FastifyRequest),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    expect(getReadUrl.mock.calls).toHaveLength(0);
+  });
+
+  it('rejects a misspelled part name before touching storage', async () => {
+    const { controller: subject, getReadUrl } = controller();
+
+    await expect(
+      subject.list({
+        id: 'req_questions',
+        query: { par: '3' },
+      } as unknown as FastifyRequest),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    expect(getReadUrl.mock.calls).toHaveLength(0);
+  });
+
+  it('rejects repeated part values before touching storage', async () => {
+    const { controller: subject, getReadUrl } = controller();
+
+    await expect(
+      subject.list({
+        id: 'req_questions',
+        query: { part: ['1', '2'] },
+      } as unknown as FastifyRequest),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    expect(getReadUrl.mock.calls).toHaveLength(0);
+  });
+
   it('rejects an invalid part before touching storage', async () => {
     const { controller: subject, getReadUrl } = controller();
 
     await expect(
-      subject.list({ id: 'req_questions' } as unknown as FastifyRequest, '4'),
+      subject.list({
+        id: 'req_questions',
+        query: { part: '4' },
+      } as unknown as FastifyRequest),
     ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
     expect(getReadUrl.mock.calls).toHaveLength(0);
   });

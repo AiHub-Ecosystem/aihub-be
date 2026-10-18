@@ -1,8 +1,10 @@
-import { Controller, Get, Header, Inject, Query, Req } from '@nestjs/common';
+import { Controller, Get, Header, Inject, Req } from '@nestjs/common';
+import type { Static } from '@sinclair/typebox';
 import type { FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { invalidRequest } from '@/common/errors/invalid-request';
+import { parseRequestQuery } from '@/common/http/parse-request-query';
 import {
   type SpeakingPart,
   SpeakingQuestionsQuerySchema,
@@ -13,17 +15,14 @@ import {
   type SpeakingAudioStoragePort,
 } from '@/modules/speaking/application/speaking-audio-storage.port';
 import { listSpeakingQuestions } from '@/modules/speaking/application/speaking-question-catalog';
-import { Value } from '@sinclair/typebox/value';
 
-function parsePart(value: unknown): SpeakingPart | undefined {
+type SpeakingPartQueryValue = Static<
+  typeof SpeakingQuestionsQuerySchema
+>['part'];
+
+function parsePart(value: SpeakingPartQueryValue): SpeakingPart | undefined {
   if (value === undefined) {
     return undefined;
-  }
-
-  const query = { part: value };
-  if (!Value.Check(SpeakingQuestionsQuerySchema, query)) {
-    // arch-check: validates a query, not a body
-    throw invalidRequest();
   }
 
   switch (value) {
@@ -49,9 +48,12 @@ export class SpeakingQuestionsController {
   @Header('Cache-Control', 'no-store')
   async list(
     @Req() request: FastifyRequest,
-    @Query('part') partValue?: unknown,
   ): Promise<SpeakingQuestionsResponse> {
-    const part = parsePart(partValue);
+    const query = parseRequestQuery(
+      SpeakingQuestionsQuerySchema,
+      request.query,
+    );
+    const part = parsePart(query.part);
     const questions = await listSpeakingQuestions(this.storage, part);
 
     return {
