@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import Redis from 'ioredis';
 import {
   type CryptoKey,
@@ -161,6 +162,10 @@ export async function resetTenantIsolation(
   pool: { query(text: string): Promise<unknown> },
   redis: Redis,
 ): Promise<void> {
+  // The client has no offline queue, so a command sent before it connects fails.
+  if (redis.status !== 'ready') {
+    await once(redis, 'ready');
+  }
   await flushOwnedRedisDatabase(
     redis.duplicate({ db: 0, enableOfflineQueue: true }),
     () => redis.flushdb(),
