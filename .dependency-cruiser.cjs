@@ -343,7 +343,10 @@ module.exports = {
       severity: 'error',
       comment:
         'Controllers and presentation code call application ports, not adapters.',
-      from: { path: '^src/.*[.]controller[.]ts$|^src/.*/presentation/' },
+      from: {
+        path: '^src/.*[.]controller[.]ts$|^src/.*/presentation/',
+        pathNot: '[.]spec[.]ts$',
+      },
       to: { path: '^src/.*/infrastructure/|^src/downstream/' },
     },
     {
@@ -351,7 +354,7 @@ module.exports = {
       severity: 'error',
       comment:
         'Infrastructure implements application ports and points inward, not at presentation code.',
-      from: { path: '^src/.*/infrastructure/' },
+      from: { path: '^src/.*/infrastructure/', pathNot: '[.]spec[.]ts$' },
       to: { path: '^src/.*/presentation/' },
     },
     {

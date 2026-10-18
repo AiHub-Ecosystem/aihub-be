@@ -16,7 +16,7 @@ import { IDEMPOTENCY_REPOSITORY } from '@/modules/idempotency/application/idempo
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 
-const FIXTURES = join(__dirname, '../../../test/fixtures/ai-writing');
+const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-writing');
 
 function fixture(name: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(FIXTURES, name), 'utf8')) as Record<

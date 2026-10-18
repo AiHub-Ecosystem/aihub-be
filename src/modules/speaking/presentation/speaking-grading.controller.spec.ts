@@ -26,14 +26,14 @@ import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-disp
 import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,
-} from './application/speaking-multipart-parser.port';
+} from '@/modules/speaking/application/speaking-multipart-parser.port';
 import {
   SPEAKING_AUDIO_MAX_BYTES,
   registerSpeakingMultipartParser,
-} from './infrastructure/fastify-speaking-multipart.parser';
-import { registerSpeakingGradingHeaders } from './presentation/speaking-grading-headers.hook';
+} from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
+import { registerSpeakingGradingHeaders } from './speaking-grading-headers.hook';
 
-const FIXTURES = join(__dirname, '../../../test/fixtures/ai-speaking');
+const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-speaking');
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
