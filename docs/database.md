@@ -70,13 +70,16 @@ is dedicated to this lane; do not mark a shared service.
 
    ```bash
    pnpm migrate
-   pnpm check:migrations      # expand-only contract, unchanged by this workflow
+   pnpm check:migrations      # Squawk migration policy
    pnpm check:prisma-drift    # the schema and the history still agree
    ```
 
-`pnpm check:migrations` enforces the expand-only rules, so a generated file that
-drops or renames a column still fails. Use its documented hatch only for a
-genuine contract migration.
+`pnpm check:migrations` remains the contributor-facing command and is part of
+`pnpm verify`. Under #693, it will invoke the pinned Squawk linter; the custom
+three-pattern checker will be removed. A migration that drops or renames a
+column, or adds a required column without a default, must still fail. Use a
+rule-specific `squawk-ignore` only for a reviewed exception, with its reason and
+approving issue on the same SQL comment.
 
 The runner records migration keys as `<directory name>.sql` to preserve the
 existing `schema_migrations` rows. Keep a migration directory's name stable
@@ -91,38 +94,65 @@ and the application build need no database.
 
 The runner applies `prisma/migrations/<name>/migration.sql` in directory-name
 order. During rolling deploys, two application versions can use the same
-schema, so `pnpm check:migrations` enforces this contract in `pnpm verify` and
-CI:
+schema, so #693 keeps this contract in `pnpm verify` and CI, with Squawk as the
+guard:
 
 ```text
-PERMITTED:  CREATE TABLE, ADD nullable column, CREATE INDEX CONCURRENTLY
+PERMITTED:  CREATE TABLE, ADD nullable column, ADD ... NOT NULL DEFAULT
 FORBIDDEN:  DROP COLUMN, RENAME COLUMN, ADD ... NOT NULL without DEFAULT
 ```
 
 `ADD COLUMN ... NOT NULL DEFAULT` is permitted because PostgreSQL backfills the
 existing rows in the same statement.
 
-The check strips SQL comments and splits semicolon-terminated statements. It
-reports a `directory/migration.sql:line`, the statement, the violation kind,
-and the expand/contract alternative. It checks only three patterns, not all
-possible destructive changes.
+The Squawk configuration targets PostgreSQL 16 and assumes each migration runs
+inside a transaction, matching `scripts/cli/migrate.mjs`. Its `excluded_paths`
+must list the 40 already-applied migration files explicitly; do not use a broad
+glob that could hide future files. New migration files remain checked.
+
+The migration runner sets PostgreSQL `lock_timeout` to 30 seconds and
+`statement_timeout` to 300 seconds on its connection. #693 therefore excludes
+Squawk's `require-lock-timeout` and `require-statement-timeout` rules with that
+reason; the runner remains the single owner of these settings. Keep
+`prefer-robust-stmts`, `prefer-bigint-over-int`, and
+`require-concurrent-index-creation` enabled. If an INTEGER is intentional, or a
+regular index is safe because its table is created in the same migration, use a
+per-statement ignore with a reason and approving issue. Existing-table indexes
+remain subject to the concurrent-index rule. The current runner wraps every
+file in a transaction, so support for `CREATE INDEX CONCURRENTLY` in a
+non-transactional migration belongs to #283.
+
+When #283 adds a non-transactional migration, mark only that file with
+`squawk-disable-assume-in-transaction`; this lets Squawk check retry-safe
+statements there while retaining the transaction assumption for other files.
+
+For example, an intentional 32-bit value can use this narrow exception:
+
+```sql
+CREATE TABLE bounded_retry_state (retry_count INTEGER NOT NULL CHECK (retry_count BETWEEN 0 AND 1000)); -- squawk-ignore prefer-bigint-over-int -- retry_count is bounded; approved: #693
+```
+
+When adding a value to an existing value-list `CHECK`, replace the constraint
+in one migration file with the expanded constraint marked `NOT VALID`. Validate
+it in the next migration file, after the first file has committed. `NOT VALID`
+avoids scanning every existing row while installing the new rule, and the new
+constraint still governs rows written after it commits. Validation then checks
+the old rows under the lighter lock used by `VALIDATE CONSTRAINT`. If the change
+removes an allowed value, first remove or update rows that still use it before
+validating.
 
 For a genuine contract migration, first ship the additive replacement and
 backfill, switch readers, then deploy the destructive cleanup separately days
-later. Add a matching marker at the top of that migration, with its reason and
-approving issue:
+later. Put a rule-specific ignore on the affected statement with its reason and
+approving issue, using the rule identifier Squawk reports:
 
 ```sql
--- expand-contract: allow-drop-column — reason: old field fully replaced — approved: #123
--- expand-contract: allow-rename-column — reason: ... — approved: #123
--- expand-contract: allow-add-not-null — reason: ... — approved: #123
+ALTER TABLE example DROP COLUMN old_field; -- squawk-ignore <rule> -- reason: old field fully replaced; approved: #123
 ```
 
-The marker must match the violation kind; there is no blanket file suppression.
-The check does not catch every schema change: review `ALTER TYPE`, table or
-constraint drops, type changes, indexes created without `CONCURRENTLY`, views,
-triggers, extensions, and `SET NOT NULL` separately. All 36 existing migrations
-are checked with no ignore list.
+The rule identifier must match the finding; do not suppress a whole file or
+rule globally to permit one exception. Review schema changes that Squawk does
+not cover, including views, triggers, extensions, and `SET NOT NULL`, separately.
 
 ## Regenerating the client
 

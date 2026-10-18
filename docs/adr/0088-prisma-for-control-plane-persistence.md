@@ -4,7 +4,7 @@
 - Date: 2026-10-10
 - Supersedes: [ADR-0071](0071-drizzle-for-control-plane-persistence.md)
 - Amends: [ADR-0083](0083-email-delivery-transaction-handle-lifetime.md) (the lifetime guard now also covers the Auth transaction runner)
-- Related issues: [#395](https://github.com/AiHub-Ecosystem/aihub-be/issues/395), [#246](https://github.com/AiHub-Ecosystem/aihub-be/issues/246), [#39](https://github.com/AiHub-Ecosystem/aihub-be/issues/39), [#40](https://github.com/AiHub-Ecosystem/aihub-be/issues/40), [#81](https://github.com/AiHub-Ecosystem/aihub-be/issues/81), [#383](https://github.com/AiHub-Ecosystem/aihub-be/issues/383), [#227](https://github.com/AiHub-Ecosystem/aihub-be/issues/227), [#588](https://github.com/AiHub-Ecosystem/aihub-be/issues/588), [#560](https://github.com/AiHub-Ecosystem/aihub-be/issues/560)
+- Related issues: [#395](https://github.com/AiHub-Ecosystem/aihub-be/issues/395), [#246](https://github.com/AiHub-Ecosystem/aihub-be/issues/246), [#39](https://github.com/AiHub-Ecosystem/aihub-be/issues/39), [#40](https://github.com/AiHub-Ecosystem/aihub-be/issues/40), [#81](https://github.com/AiHub-Ecosystem/aihub-be/issues/81), [#383](https://github.com/AiHub-Ecosystem/aihub-be/issues/383), [#227](https://github.com/AiHub-Ecosystem/aihub-be/issues/227), [#588](https://github.com/AiHub-Ecosystem/aihub-be/issues/588), [#560](https://github.com/AiHub-Ecosystem/aihub-be/issues/560), [#693](https://github.com/AiHub-Ecosystem/aihub-be/issues/693)
 
 ## Context
 
@@ -52,11 +52,38 @@ row type, retaining the existing conflict target and `DO NOTHING` behavior.
 
 **Test-only compatibility exceptions.** Production module wiring injects Prisma directly, and a repository takes the Prisma client only: there is no query-shaped branch in Identity, Auth, or Idempotency. The database-lane fixtures (`createPostgresIdentityClient`, `createPostgresAuthClient`, `createPostgresIdempotencyClient`) are Prisma clients that add `query` and `transaction` helpers for assertions, and no production module may construct them. A spec that scripts statements or injects a failure by SQL text adapts a fake with `prismaFromQueryFake`, or puts a hook in front of the real client with `interceptStatements`; both live under `src/modules/persistence/testing/`, which production code cannot import. Four more factories remain because the unchanged database-lane specs call them by name, each built by `createFixturePrismaClient` in the persistence module: `createAvatarQueryClient` (`test/db/avatar.spec.ts`), `createPostgresMeteringClient` (`dispatch-attempt-evidence.spec.ts` and the tenant-isolation Idempotency spec), `createSpeakingAudioQueryClient` (`speaking-audio-upload.spec.ts`), and the `string` form of the `PostgresSandboxDispatchBudget` constructor (`sandbox-dispatch-budget.spec.ts`, which also calls `onModuleDestroy`). Production wiring passes the shared client and never takes these paths. `integration-test` is the pool label they use. `src/common/postgres/postgres-pool.ts` is the only runtime source file that imports `pg`; it is the shared instrumented pool factory used by the shared Prisma client factory, and the database-lane specs keep their own `pg.Pool` for assertions and resets.
 
-**Schema and migrations.** `schema.prisma` is created by `prisma db pull` against a database built from all existing migrations, then renamed to match the current TypeScript names. Partial indexes use Prisma 7's `partialIndexes` preview feature and BRIN uses the native `Brin` type. Objects the schema cannot declare (triggers and `CHECK` constraints) live only in SQL, each with a `///` comment in the schema naming its migration. Migrations use Prisma's standard `prisma/migrations/<name>/migration.sql` layout and `prisma.config.ts` declares the path. Prisma generates new SQL (`prisma migrate diff … --script`) there, where it is reviewed and hand-edited as needed. The existing runner (`scripts/cli/migrate.mjs`, `schema_migrations`) keeps applying migrations; it maps each directory name to the existing `<name>.sql` history key, so Production and Sandbox need no baseline and the runtime image gains no Prisma CLI. `scripts/checks/check-migrations.mjs` keeps enforcing expand-only. CI replays every migration into a disposable shadow database, then requires an empty `migrate diff` against `schema.prisma`.
+**Schema and migrations.** `schema.prisma` is created by `prisma db pull` against a database built from all existing migrations, then renamed to match the current TypeScript names. Partial indexes use Prisma 7's `partialIndexes` preview feature and BRIN uses the native `Brin` type. Objects the schema cannot declare (triggers and `CHECK` constraints) live only in SQL, each with a `///` comment in the schema naming its migration. Migrations use Prisma's standard `prisma/migrations/<name>/migration.sql` layout and `prisma.config.ts` declares the path. Prisma generates new SQL (`prisma migrate diff … --script`) there, where it is reviewed and hand-edited as needed. The existing runner (`scripts/cli/migrate.mjs`, `schema_migrations`) keeps applying migrations; it maps each directory name to the existing `<name>.sql` history key, so Production and Sandbox need no baseline and the runtime image gains no Prisma CLI. The #693 migration-lint follow-up below keeps the expand-only contract and selects Squawk as its guard. CI replays every migration into a disposable shadow database, then requires an empty `migrate diff` against `schema.prisma`.
 
 ### Migration layout follow-up (2026-10-12)
 
 The migration files moved from flat `database/migrations/*.sql` files into Prisma's standard directory layout. The custom runner and `schema_migrations` remain the deployment mechanism; existing history keys are unchanged, and `prisma migrate deploy` is still not used. This adopts Prisma's file convention without baselining or replaying Production and Sandbox history.
+
+### Migration linting follow-up (2026-10-18; #693)
+
+The expand-only migration contract remains. #693 replaces the bespoke
+three-pattern checker with pinned Squawk, invoked through the existing public
+`pnpm check:migrations` command and `pnpm verify`. The 40 already-applied
+migration files are excluded by explicit paths so their SQL and Production /
+Sandbox history remain untouched; newly added files stay in scope.
+
+Squawk targets PostgreSQL 16 and assumes transactional migrations, matching the
+runner. The runner owns `lock_timeout` (30 seconds) and `statement_timeout`
+(300 seconds), so only Squawk's two corresponding timeout rules are excluded,
+with that reason. `prefer-robust-stmts`, `prefer-bigint-over-int`, and
+`require-concurrent-index-creation` remain enabled. Intentional INTEGER columns
+and ordinary indexes on tables created in the same migration use a
+rule-specific, per-statement ignore with a reason and issue. The concurrent
+index rule remains active for existing tables; #283 owns adding runner support
+for non-transactional migrations. Such a file disables Squawk's transaction
+assumption with `squawk-disable-assume-in-transaction`, keeping retry-safety
+checks active.
+
+For a value-list `CHECK` change, replace the existing constraint atomically
+with the expanded constraint marked `NOT VALID`, then validate it in the next
+migration file after the first has committed. This avoids scanning all rows
+while installing the new constraint and gives validation its own migration.
+The command name and expand-only policy remain stable for contributors; only
+the linter implementation changes.
 
 **Build and boundaries.** The generated client is written outside `src/`, ignored by Git, and generated before `type-check` and the SWC build. `prisma` is a development dependency used only in the build stage. `@prisma/client` declares the CLI as an optional peer, which pnpm would resolve to that dev dependency and keep in the production tree, so `.pnpmfile.cjs` drops the peer and the Dockerfile copies it with the lockfile; `pnpm why prisma --prod` prints nothing. Only `**/infrastructure/**` may import the generated client, and `pnpm arch-check` enforces it for static imports, re-exports, `import()`, and `require()`, including the persistence module's own application and public folders. Other modules reach the persistence seam through `persistence.module.ts`, the module file the cross-module rule already allows. Infrastructure maps rows to application port types; Prisma types never reach application or domain code.
 
