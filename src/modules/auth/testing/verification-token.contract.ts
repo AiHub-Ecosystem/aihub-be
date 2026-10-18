@@ -220,7 +220,7 @@ export function verificationTokenRepositoryContract(
         signInSession: {
           kind: 'web-session',
           sessionId: 'sess_1',
-          token: { id: 'wt_1', raw: 'r', hash: 'wh_1', expiresAt: EXPIRES_AT },
+          token: { raw: 'r', hash: 'wh_1', expiresAt: EXPIRES_AT },
           issuedAt: NOW,
         },
       }),
