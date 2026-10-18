@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import process from 'node:process';
 import { test } from 'node:test';
 
 import {
@@ -157,13 +158,22 @@ await test('unresolvable git state falls back to full verify and runs no reduced
 });
 
 await test('the entry-point comparison holds on both path shapes', () => {
+  // pathToFileURL reads a path in the running platform's syntax, so each
+  // platform checks its own argv shape: a Windows path is relative on Linux.
+  const [moduleUrl, argv1] =
+    process.platform === 'win32'
+      ? [
+          'file:///D:/repo/scripts/checks/check-changed.mjs',
+          String.raw`D:\repo\scripts\checks\check-changed.mjs`,
+        ]
+      : [
+          'file:///repo/scripts/checks/check-changed.mjs',
+          '/repo/scripts/checks/check-changed.mjs',
+        ];
   assert.equal(
-    isEntryPoint(
-      'file:///D:/repo/scripts/checks/check-changed.mjs',
-      String.raw`D:\repo\scripts\checks\check-changed.mjs`,
-    ),
+    isEntryPoint(moduleUrl, argv1),
     true,
-    'a Windows argv path must match, or the script exits 0 having run nothing',
+    'the argv path must match, or the script exits 0 having run nothing',
   );
   assert.equal(
     isEntryPoint(
