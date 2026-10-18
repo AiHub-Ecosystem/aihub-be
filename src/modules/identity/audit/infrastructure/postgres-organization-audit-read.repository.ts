@@ -14,6 +14,7 @@ import type {
 } from '@/modules/identity/domain/organization-audit-event';
 
 import {
+  dateValue,
   identityStoreError,
   isRecord,
   stringValue,
@@ -97,21 +98,6 @@ function targetTypeValue(
   return TARGET_TYPES.find((targetType) => targetType === value);
 }
 
-function dateValue(
-  record: Record<string, unknown>,
-  key: string,
-): Date | undefined {
-  const value = record[key];
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return new Date(value.getTime());
-  }
-  if (typeof value === 'string') {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
-  }
-  return undefined;
-}
-
 function mapAuditEvent(
   value: unknown,
 ): OrganizationAuditEventRecord | undefined {
@@ -134,7 +120,7 @@ function mapAuditEvent(
     targetType === undefined ||
     actorUsername === undefined ||
     requestId === undefined ||
-    occurredAt === undefined
+    occurredAt == null
   ) {
     return undefined;
   }

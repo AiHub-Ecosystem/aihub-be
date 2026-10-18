@@ -26,6 +26,7 @@ import {
   recordOrganizationAuditEvent,
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
 import {
+  dateValue,
   identityStoreError,
   isRecord,
   membershipRoleValue,
@@ -120,21 +121,6 @@ function organizationName(value: unknown): string | undefined {
   return isRecord(value) ? stringValue(value, 'name') : undefined;
 }
 
-function dateValue(
-  record: Record<string, unknown>,
-  key: string,
-): Date | undefined {
-  const value = record[key];
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return new Date(value.getTime());
-  }
-  if (typeof value === 'string') {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
-  }
-  return undefined;
-}
-
 function mapOpenInvitation(
   value: unknown,
 ): OpenOrganizationInvitationRecord | undefined {
@@ -154,8 +140,8 @@ function mapOpenInvitation(
     email === undefined ||
     role === undefined ||
     invitedByUsername === undefined ||
-    createdAt === undefined ||
-    expiresAt === undefined
+    createdAt == null ||
+    expiresAt == null
   ) {
     return undefined;
   }
@@ -449,7 +435,7 @@ export class PostgresOrganizationInvitationRepository
           invitationOrganizationId !== input.organizationId ||
           email === undefined ||
           role === undefined ||
-          expiresAt === undefined ||
+          expiresAt == null ||
           (invitation.consumed_at !== null && consumedAt === undefined)
         ) {
           throw identityStoreError('Identity data is invalid');

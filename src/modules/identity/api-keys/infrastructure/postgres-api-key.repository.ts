@@ -6,6 +6,7 @@ import type {
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 
 import {
+  dateValue,
   identityStoreError,
   isRecord,
   stringValue,
@@ -57,24 +58,6 @@ function statusValue<T extends string>(
   return typeof value === 'string'
     ? allowed.find((candidate) => candidate === value)
     : undefined;
-}
-
-function dateValue(
-  record: Record<string, unknown>,
-  key: string,
-): Date | null | undefined {
-  const value = record[key];
-  if (value === null) {
-    return null;
-  }
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return new Date(value.getTime());
-  }
-  if (typeof value === 'string') {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
-  }
-  return undefined;
 }
 
 function positiveIntegerValue(
@@ -170,7 +153,7 @@ export function apiKeyRecordFromRow(value: unknown): ApiKeyRecord | undefined {
     scopes,
     entitlements,
     allowedEnvironments,
-    expiresAt,
+    expiresAt: expiresAt ?? null,
     rateLimitRpm,
     maxConcurrent,
     monthlyRequestQuota,

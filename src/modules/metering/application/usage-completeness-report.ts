@@ -112,7 +112,7 @@ function orderedOperations(
     if (
       typeof operation.operation !== 'string' ||
       operation.operation.length === 0 ||
-      !['ai-writing', 'ai-speaking'].includes(operation.downstream) ||
+      !Object.keys(DOWNSTREAM_USAGE_REPORTING).includes(operation.downstream) ||
       seen.has(operation.operation)
     ) {
       throw new UsageReportSnapshotError();

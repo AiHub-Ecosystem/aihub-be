@@ -9,6 +9,7 @@ import type {
   NewBillingAdjustment,
 } from '@/modules/metering/application/billing-statement';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
+import { safeNonNegativeCount } from './metering-row';
 import type { PrismaMeteringClient } from './prisma-metering.client';
 
 // Both month bounds, and every reason a request is not billed counted beside
@@ -72,13 +73,8 @@ const CLOSURES_SQL = `
 `;
 
 function count(value: unknown, field: string): number {
-  const parsed =
-    typeof value === 'bigint'
-      ? Number(value)
-      : typeof value === 'number'
-        ? value
-        : Number.NaN;
-  if (!Number.isSafeInteger(parsed)) {
+  const parsed = safeNonNegativeCount(value);
+  if (parsed === undefined) {
     throw new Error(`billing field ${field} is invalid`);
   }
   return parsed;

@@ -18,6 +18,7 @@ import {
   recordOrganizationAuditEvent,
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
 import {
+  dateValue,
   identityStoreError,
   isRecord,
   membershipRoleValue,
@@ -154,16 +155,6 @@ function statusValue(
   return value === 'active' || value === 'disabled' ? value : undefined;
 }
 
-function dateValue(
-  record: Record<string, unknown>,
-  key: string,
-): Date | undefined {
-  const value = record[key];
-  return value instanceof Date && !Number.isNaN(value.getTime())
-    ? value
-    : undefined;
-}
-
 function positiveTtlValue(
   record: Record<string, unknown>,
   key: string,
@@ -247,7 +238,7 @@ export function storedIdentityConfigFromRow(
 
   const config = identityConfigFromRow(value);
   const updatedAt = dateValue(value, 'updatedAt');
-  return config === undefined || updatedAt === undefined
+  return config === undefined || updatedAt == null
     ? undefined
     : { ...config, updatedAt };
 }

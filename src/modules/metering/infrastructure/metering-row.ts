@@ -7,14 +7,5 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
  * non-negative integer. Prisma's raw path returns `bigint` where `pg` returned a
  * decimal string, and both are accepted.
  */
-export function safeNonNegativeCount(value: unknown): number | undefined {
-  const parsed =
-    typeof value === 'bigint'
-      ? Number(value)
-      : typeof value === 'number'
-        ? value
-        : typeof value === 'string' && /^(?:0|[1-9]\d*)$/.test(value)
-          ? Number(value)
-          : Number.NaN;
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
-}
+
+export { safeNonNegativeCount } from '@/modules/metering/application/metering-count';

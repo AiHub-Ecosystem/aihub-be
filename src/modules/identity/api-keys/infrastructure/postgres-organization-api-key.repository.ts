@@ -10,6 +10,7 @@ import type {
   RotateOrganizationApiKeyRecordInput,
   RotateOrganizationApiKeyRecordResult,
 } from '@/modules/identity/api-keys/application/organization-api-key.port';
+import { dateValue } from '@/modules/identity/shared/infrastructure/identity-row';
 
 import {
   auditStamp,
@@ -125,24 +126,6 @@ function stringValue(
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-function dateValue(
-  record: Record<string, unknown>,
-  key: string,
-): Date | null | undefined {
-  const value = record[key];
-  if (value === null) {
-    return null;
-  }
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return new Date(value.getTime());
-  }
-  if (typeof value === 'string') {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
-  }
-  return undefined;
-}
-
 function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -187,7 +170,7 @@ function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
     scopes,
     allowedEnvironments,
     status,
-    expiresAt,
+    expiresAt: expiresAt ?? null,
     lastUsedAt,
     createdAt,
   };
@@ -252,14 +235,15 @@ export class PostgresOrganizationApiKeyRepository
           name === undefined ||
           scopes === undefined ||
           allowedEnvironments === undefined ||
-          expiresAt === undefined
+          expiresAt === null
         ) {
           throw identityStoreError('Identity data is invalid');
         }
 
         if (
           key.status !== 'active' ||
-          (expiresAt !== null && expiresAt.getTime() <= input.now.getTime())
+          (expiresAt !== undefined &&
+            expiresAt.getTime() <= input.now.getTime())
         ) {
           return { kind: 'key_not_rotatable' as const };
         }
@@ -289,7 +273,7 @@ export class PostgresOrganizationApiKeyRepository
             name,
             scopes: [...scopes],
             allowedEnvironments: [...input.replacementAllowedEnvironments],
-            expiresAt,
+            expiresAt: expiresAt ?? null,
           },
           select: { createdAt: true },
         });
@@ -315,7 +299,7 @@ export class PostgresOrganizationApiKeyRepository
           name,
           scopes,
           allowedEnvironments: [...input.replacementAllowedEnvironments],
-          expiresAt,
+          expiresAt: expiresAt ?? null,
           createdAt,
         };
       });

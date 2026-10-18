@@ -6,6 +6,7 @@ import type {
   QuotaCounterRequest,
 } from '@/modules/gateway/application/quota-counter.port';
 import { quotaPeriod } from '@/modules/gateway/application/quota-period';
+import { safeNonNegativeCount } from '@/modules/metering/public/count-decode';
 import type { RedisGatewayClient } from './redis-gateway.client';
 
 export const QUOTA_TTL_SECONDS = 40 * 24 * 60 * 60;
@@ -32,12 +33,8 @@ function monthKey(organizationId: string, now: Date): string {
 }
 
 function parseCount(value: string): number {
-  if (!/^(?:0|[1-9]\d*)$/.test(value)) {
-    throw new Error('Redis quota counter value is invalid');
-  }
-
-  const count = Number(value);
-  if (!isUsableCount(count)) {
+  const count = safeNonNegativeCount(value);
+  if (count === undefined || !isUsableCount(count)) {
     throw new Error('Redis quota counter value is invalid');
   }
   return count;

@@ -53,3 +53,21 @@ export function organizationStatusValue(
   const value = record[key];
   return value === 'active' || value === 'suspended' ? value : undefined;
 }
+
+export function dateValue(
+  record: Record<string, unknown>,
+  key: string,
+): Date | null | undefined {
+  const value = record[key];
+  if (value === null) {
+    return null;
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(value.getTime());
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+  return undefined;
+}
