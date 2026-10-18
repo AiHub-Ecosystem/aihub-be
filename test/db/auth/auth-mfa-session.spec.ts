@@ -11,12 +11,12 @@ import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-del
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import type { MfaSessionProof } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
 import { PostgresAuthMfaRepository } from '@/modules/auth/mfa/infrastructure/postgres-auth-mfa.repository';
+import { PostgresRefreshSessionRepository } from '@/modules/auth/web-sessions/infrastructure/postgres-refresh-session.repository';
+import { PostgresWebSessionRepository } from '@/modules/auth/web-sessions/infrastructure/postgres-web-session.repository';
 import {
   type PostgresAuthClient,
   createPostgresAuthClient,
-} from '@/modules/auth/shared/infrastructure/postgres-auth.client';
-import { PostgresRefreshSessionRepository } from '@/modules/auth/web-sessions/infrastructure/postgres-refresh-session.repository';
-import { PostgresWebSessionRepository } from '@/modules/auth/web-sessions/infrastructure/postgres-web-session.repository';
+} from './postgres-auth.client';
 
 import {
   createTestPool,

@@ -27,7 +27,7 @@ import { PostgresEmailCredentialRepository } from '@/modules/auth/local-credenti
 import {
   type PostgresAuthClient,
   createPostgresAuthClient,
-} from '@/modules/auth/shared/infrastructure/postgres-auth.client';
+} from './postgres-auth.client';
 
 import {
   createTestPool,

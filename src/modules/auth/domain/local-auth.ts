@@ -110,7 +110,3 @@ export function normalizeLogin(input: LoginInput): NormalizedLogin {
     password: validatePassword(input.password),
   };
 }
-
-export function canTransitionToActive(status: LocalAccountStatus): boolean {
-  return status === 'pending_verification';
-}

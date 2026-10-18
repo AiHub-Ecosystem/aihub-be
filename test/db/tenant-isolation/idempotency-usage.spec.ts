@@ -1,12 +1,12 @@
 import type { Pool } from 'pg';
 
-import { createPostgresIdempotencyClient } from '@/modules/idempotency/infrastructure/postgres-idempotency.client';
 import { PostgresIdempotencyRepository } from '@/modules/idempotency/infrastructure/postgres-idempotency.repository';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { parseBillingMonth } from '@/modules/metering/application/billing-statement';
 import { PostgresBillingStatementRepository } from '@/modules/metering/infrastructure/postgres-billing-statement.repository';
 import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/postgres-usage.repository';
 import { PostgresUsageRepository } from '@/modules/metering/infrastructure/postgres-usage.repository';
+import { createFixturePrismaClient } from '@/modules/persistence/persistence.module';
 
 import { createTestPool, testDatabaseUrl } from '../shared/database';
 
@@ -32,7 +32,7 @@ let pool: Pool;
 let redisClients: TenantIsolationRedisClients;
 let fixture: TenantIsolationFixture;
 let idempotency: PostgresIdempotencyRepository;
-let idempotencyClient: ReturnType<typeof createPostgresIdempotencyClient>;
+let idempotencyClient: ReturnType<typeof createFixturePrismaClient>;
 let meteringClient: ReturnType<typeof createPostgresMeteringClient>;
 let usage: PostgresUsageRepository;
 let billingStatement: PostgresBillingStatementRepository;
@@ -84,7 +84,7 @@ async function usageRecord(
 beforeAll(async () => {
   pool = createTestPool();
   redisClients = createTenantIsolationRedisClients();
-  idempotencyClient = createPostgresIdempotencyClient(testDatabaseUrl());
+  idempotencyClient = createFixturePrismaClient(testDatabaseUrl());
   idempotency = new PostgresIdempotencyRepository(idempotencyClient);
   meteringClient = createPostgresMeteringClient(testDatabaseUrl());
   usage = new PostgresUsageRepository(meteringClient);

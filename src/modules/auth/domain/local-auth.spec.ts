@@ -2,7 +2,6 @@ import {
   LocalAuthValidationError,
   PASSWORD_MAX_CODE_POINTS,
   PASSWORD_MIN_CODE_POINTS,
-  canTransitionToActive,
   normalizeEmail,
   normalizeRegistration,
   normalizeUsername,
@@ -99,11 +98,5 @@ describe('local auth domain', () => {
       username: 'user_01',
       password: 'correct horse battery',
     });
-  });
-
-  it('only permits pending accounts to become active', () => {
-    expect(canTransitionToActive('pending_verification')).toBe(true);
-    expect(canTransitionToActive('active')).toBe(false);
-    expect(canTransitionToActive('disabled')).toBe(false);
   });
 });

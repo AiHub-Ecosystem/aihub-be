@@ -1,6 +1,9 @@
+import {
+  authQueryRows,
+  authTransaction,
+} from '@/modules/auth/shared/infrastructure/auth-prisma';
 import { createPrismaClient } from '@/modules/persistence/persistence.module';
 import type { Prisma, PrismaClient } from '@prisma-client/client';
-import { authQueryRows, authTransaction } from './auth-prisma';
 
 /** Query API a database-lane fixture adds to its Prisma client for assertions. */
 export interface PostgresAuthQueryClient {

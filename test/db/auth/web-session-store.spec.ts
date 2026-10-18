@@ -6,12 +6,12 @@ import { ulid } from 'ulid';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { Argon2PasswordHasher } from '@/modules/auth/local-credentials/infrastructure/argon2-password.hasher';
 import { PostgresPasswordResetTokenRepository } from '@/modules/auth/password-reset/infrastructure/postgres-password-reset-token.repository';
+import { PostgresWebSessionRepository } from '@/modules/auth/web-sessions/infrastructure/postgres-web-session.repository';
+import { interceptStatements } from '@/modules/persistence/testing/query-fake-client';
 import {
   type PostgresAuthClient,
   createPostgresAuthClient,
-} from '@/modules/auth/shared/infrastructure/postgres-auth.client';
-import { PostgresWebSessionRepository } from '@/modules/auth/web-sessions/infrastructure/postgres-web-session.repository';
-import { interceptStatements } from '@/modules/persistence/testing/query-fake-client';
+} from './postgres-auth.client';
 
 import {
   createTestPool,

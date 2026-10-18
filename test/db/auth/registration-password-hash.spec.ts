@@ -25,14 +25,14 @@ import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
-import {
-  type PostgresAuthClient,
-  createPostgresAuthClient,
-} from '@/modules/auth/shared/infrastructure/postgres-auth.client';
 import { VERIFICATION_TOKEN_REPOSITORY } from '@/modules/auth/verification/application/verification-token-repository.port';
 import { PostgresVerificationTokenRepository } from '@/modules/auth/verification/infrastructure/postgres-verification-token.repository';
 import { REFRESH_SESSION_REPOSITORY } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
 import { PostgresRefreshSessionRepository } from '@/modules/auth/web-sessions/infrastructure/postgres-refresh-session.repository';
+import {
+  type PostgresAuthClient,
+  createPostgresAuthClient,
+} from './postgres-auth.client';
 
 import {
   createTestPool,

@@ -7,9 +7,9 @@ import { PostgresUserAccountRepository } from '@/modules/auth/accounts/infrastru
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { Argon2PasswordHasher } from '@/modules/auth/local-credentials/infrastructure/argon2-password.hasher';
 import { PostgresPasswordResetTokenRepository } from '@/modules/auth/password-reset/infrastructure/postgres-password-reset-token.repository';
-import { createPostgresAuthClient } from '@/modules/auth/shared/infrastructure/postgres-auth.client';
 import { PostgresVerificationTokenRepository } from '@/modules/auth/verification/infrastructure/postgres-verification-token.repository';
 import type { IssuedRefreshToken } from '@/modules/auth/web-sessions/application/refresh-token.port';
+import { createPostgresAuthClient } from './postgres-auth.client';
 
 import {
   createTestPool,

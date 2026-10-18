@@ -2,9 +2,9 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
-import { createPostgresAuthClient } from '@/modules/auth/shared/infrastructure/postgres-auth.client';
 import { verificationTokenRepositoryContract } from '@/modules/auth/testing/verification-token.contract';
 import { PostgresVerificationTokenRepository } from '@/modules/auth/verification/infrastructure/postgres-verification-token.repository';
+import { createPostgresAuthClient } from './postgres-auth.client';
 
 import {
   createTestPool,

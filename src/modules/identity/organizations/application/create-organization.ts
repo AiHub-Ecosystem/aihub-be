@@ -24,48 +24,10 @@ export interface CreatedOrganization {
 /**
  * Self-serve Organizations start with every currently available capability;
  * the hard-stopped quota still caps usage under the default commercial terms.
+ * The quota is deployment configuration (`AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA`):
+ * the configuration schema refuses zero and non-integers at boot, so a mistyped
+ * value cannot create an Organization unable to answer a single request.
  */
-export const DEFAULT_MONTHLY_REQUEST_QUOTA = 100;
-
-export class SelfServeTermsConfigurationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'SelfServeTermsConfigurationError';
-  }
-}
-
-/**
- * The default monthly request quota is deployment configuration, not a
- * business constant: a test environment raises it without a code change.
- *
- * Zero is refused on purpose. `organizations.monthly_request_quota` accepts
- * zero for an operator who deliberately wants an Organization that cannot
- * bill anything, but a Self-serve Organization created from a mistyped
- * variable would be born unable to answer a single request, and "no limit"
- * already has its own value: NULL. A mistyped quota should stop the process
- * at boot rather than hand a customer a dead Organization.
- */
-export function selfServeMonthlyRequestQuota(
-  value: string | undefined,
-): number {
-  const raw = value?.trim();
-  if (raw === undefined || raw.length === 0) {
-    return DEFAULT_MONTHLY_REQUEST_QUOTA;
-  }
-  if (!/^[1-9]\d*$/.test(raw)) {
-    throw new SelfServeTermsConfigurationError(
-      'AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA must be a positive integer',
-    );
-  }
-  const parsed = Number(raw);
-  if (!Number.isSafeInteger(parsed)) {
-    throw new SelfServeTermsConfigurationError(
-      'AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA is out of range',
-    );
-  }
-  return parsed;
-}
-
 export function selfServeOrganizationTerms(
   monthlyRequestQuota: number,
 ): SelfServeOrganizationTerms {
