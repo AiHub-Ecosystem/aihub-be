@@ -1,0 +1,76 @@
+{
+  "status": "success",
+  "data": {
+    "session_id": "00000000-0000-4000-8000-000000000000",
+    "test_id": "00000000-0000-4000-8000-000000000000",
+    "test_type": "Practice",
+    "user_id": "aihub-capture-247",
+    "question_id": "p1_hometown",
+    "scorability": {
+      "is_scorable": false,
+      "confidence": "high",
+      "display_band": true,
+      "message_vi": "[redacted]"
+    },
+    "estimated_band": {
+      "overall": 0.0,
+      "fluency_coherence": 0.0,
+      "lexical_resource": 0.0,
+      "grammatical_range_accuracy": 0.0,
+      "pronunciation": 0.0
+    },
+    "transcript": {
+      "text": "[redacted]",
+      "word_count": 1,
+      "duration_seconds": 5.0
+    },
+    "relevance": {
+      "on_topic": false,
+      "score": 0.0,
+      "feedback_vi": "[redacted]"
+    },
+    "fluency_metrics": {
+      "speech_rate_wpm": null,
+      "pause_count": null,
+      "mean_length_run_words": null
+    },
+    "pronunciation_detail": {
+      "summary": {
+        "good_count": 0,
+        "fair_count": 0,
+        "poor_count": 0
+      },
+      "words": []
+    },
+    "language_analysis": {
+      "grammar_errors": [],
+      "vocabulary_upgrades": []
+    },
+    "feedback": {
+      "summary_vi": "[redacted]",
+      "strong_point_vi": "[redacted]",
+      "action_plan_vi": "[redacted]"
+    },
+    "performance_timing": {
+      "total_seconds": 0.93,
+      "acoustic_processing_seconds": 0.93,
+      "language_processing_seconds": 0.0,
+      "stt_seconds": 0.38,
+      "storage_seconds": 0.0,
+      "db_seconds": 0.0,
+      "speechace_seconds": 0.93,
+      "openrouter_seconds": 0.0,
+      "deepseek_seconds": 0.0,
+      "llm_seconds": 0.0
+    }
+  },
+  "usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "cost": 0.0
+  },
+  "metrics": {
+    "ai_processing_ms": 932
+  }
+}
