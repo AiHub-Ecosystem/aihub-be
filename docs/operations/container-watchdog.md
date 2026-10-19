@@ -129,7 +129,9 @@ Each run of the watchdog checks two conditions inside the `vault-agent`
 container:
 
 - `vault status` reports Vault unsealed.
-- The Agent logged no `[ERROR]` line since the previous run.
+- The Agent logged no `[ERROR]` line in the last 10 minutes. The window is
+  longer than the Agent's 5-minute maximum retry backoff, so a failure that
+  keeps retrying is not read as healthy between two retries.
 
 When both hold, the run counts as healthy and moves
 `aihub_secret_delivery_last_healthy_timestamp_seconds` forward. Otherwise the

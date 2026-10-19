@@ -170,6 +170,9 @@ assert_contains "$prom" 'aihub_runtime_secrets_modified_timestamp_seconds 1000'
 assert_contains "$prom" "aihub_runtime_secrets_restart_required{name=\"aihub-production-app-sandbox-1\",revision=\"$rev\"} 0"
 assert_not_contains "$prom" 'restart_required{name="aihub-production-vault-agent-1"'
 healthy_at=$(cat "$state/secret-delivery-healthy")
+# Agent errors are read over the last 10 minutes, not since the last run.
+read -r _ _ log_since _ log_until _ < <(grep '^logs ' "$FAKE_DOCKER_CALLS" | tail -n 1)
+(( log_until - log_since == 600 )) || { echo "agent log window is $((log_until - log_since)) s" >&2; exit 1; }
 assert_contains "$prom" "aihub_secret_delivery_last_healthy_timestamp_seconds $healthy_at"
 sleep 1
 FAKE_VAULT_STATUS=2 bash "$script" || true

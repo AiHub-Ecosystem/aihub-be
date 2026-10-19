@@ -22,6 +22,9 @@ readonly MAX_AGE_SECONDS=300
 # An event series is dropped this long after its last event, so the state
 # does not grow with every deployed revision.
 readonly EVENT_RETENTION_SECONDS=604800
+# Longer than the Agent's 5-minute maximum auth and render retry backoff, so a
+# failure that keeps retrying is never read as healthy between two retries.
+readonly AGENT_ERROR_WINDOW_SECONDS=600
 # vault-agent is watched but never restarted: Agent restarts stay
 # operator-managed (deploy-vps.md), so it reaches the still-unhealthy alert.
 readonly WATCHED_SERVICES=' app app-slot-b app-sandbox app-sandbox-slot-b vault-agent '
@@ -137,8 +140,9 @@ fi
 # Vault Agent rewrites a file only when its content changes, so a file's age
 # does not show whether rendering still works, and the Agent's own metrics are
 # kept for one minute. This records the last run at which rendering could
-# succeed: Vault answered unsealed and the Agent logged no error since the
-# previous run. It also flags an app started before the bundle last changed.
+# succeed: Vault answered unsealed and the Agent logged no error in the last
+# AGENT_ERROR_WINDOW_SECONDS. It also flags an app started before the bundle
+# last changed.
 secret_lines=
 if [[ -n "$agent" ]]; then
   reason=ok
@@ -149,7 +153,7 @@ if [[ -n "$agent" ]]; then
     2) reason=vault_sealed ;;
     *) reason=vault_unreachable ;;
   esac
-  if ! agent_log=$("${docker[@]}" logs --since "$since" --until "$now" "$agent" 2>&1); then
+  if ! agent_log=$("${docker[@]}" logs --since "$((now - AGENT_ERROR_WINDOW_SECONDS))" --until "$now" "$agent" 2>&1); then
     reason=agent_unavailable
   elif [[ "$reason" == ok ]] && grep -q '\[ERROR\]' <<<"$agent_log"; then
     reason=agent_error
