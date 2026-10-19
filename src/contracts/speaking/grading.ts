@@ -1,5 +1,6 @@
 import type { Blob } from 'node:buffer';
 
+import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
 import { FormatRegistry, type Static, Type } from '@sinclair/typebox';
 
 if (!FormatRegistry.Has('binary')) {
@@ -8,7 +9,10 @@ if (!FormatRegistry.Has('binary')) {
 
 export const SpeakingGradeRequestSchema = Type.Object(
   {
-    audio: Type.String({ format: 'binary' }),
+    audio: Type.String({
+      format: 'binary',
+      'x-max-bytes': SPEAKING_AUDIO_MAX_BYTES,
+    }),
     part: Type.Integer({ minimum: 1, maximum: 3 }),
     question_id: Type.String({ minLength: 1 }),
     prompt_text: Type.Optional(

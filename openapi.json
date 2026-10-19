@@ -1525,6 +1525,7 @@
                 "properties": {
                   "audio": {
                     "format": "binary",
+                    "x-max-bytes": 26214400,
                     "type": "string"
                   },
                   "part": {

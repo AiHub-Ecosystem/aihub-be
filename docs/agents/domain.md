@@ -61,3 +61,16 @@ Expand-only migrations preserve the schema shape across adjacent releases; they 
 - Ship a new persisted enum/value in two releases. Release N-1 first learns to read or safely skip the value without writing it; a later release starts writing it only after that reader is deployed.
 - Add environment variables and Vault template keys without renaming or removing existing keys in the same release. Remove an old key only in a later release after no deployed image reads it. Where a strict Vault bundle reader rejects an added key, follow the coordinated cutover and rollback sequence in `docs/operations/deploy-vps.md` and the applicable ADR.
 - For every PR that changes persisted values or runtime configuration, name the old-reader behavior and the release that starts writing/removing the value or key. Keep unknown-value telemetry bounded and free of payloads or secret values.
+
+## Finding Customer Web AIHUB consumers
+
+Start at AIHUB's `src/catalog/operation-catalog.ts` and `src/contracts/` to identify the public operation and its generated OpenAPI response. Follow its controller under `src/modules/**/presentation/` to the runtime route. In the Customer Web checkout, search callers and the E2E mock from its repository root; do not keep an endpoint/file inventory here:
+
+```sh
+rg -n '"/v1/|`/v1/|/v1/' app/api lib app/demo
+rg -n 'pathname === "/v1/|pathname\.match|/v1/' tests/e2e/mock-aihub-server.mjs
+```
+
+The BFF routes live under `app/api/**/route.ts`, shared callers under `lib/`, browser demos under `app/demo/`, and mock responses under `tests/e2e/mock-aihub-server.mjs`. The mock's HTTP response boundary checks every represented AIHUB route against the pinned OpenAPI contract.
+
+When an AIHUB response change needs Customer Web work, link its issue or pull request in the AIHUB pull request summary. Keep independently deployed releases compatible in both directions: add new response fields or error codes first, deploy consumers that understand them, then remove deprecated behavior in a later release. A linked Customer Web pull request is checked alongside `dev`; it does not replace the deployed `dev` baseline.

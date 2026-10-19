@@ -87,6 +87,33 @@ describe('committed openapi.json', () => {
     );
   });
 
+  it('publishes the Speaking grading upload byte limit on the request file', () => {
+    const document = committedDocument() as {
+      paths: Record<string, unknown>;
+    };
+    const operation = document.paths['/v1/ielts/speaking/grading'] as {
+      post?: {
+        requestBody?: {
+          content?: {
+            'multipart/form-data'?: {
+              schema?: {
+                properties?: { audio?: Record<string, unknown> };
+              };
+            };
+          };
+        };
+      };
+    };
+
+    expect(
+      operation.post?.requestBody?.content?.['multipart/form-data']?.schema
+        ?.properties?.audio,
+    ).toMatchObject({
+      format: 'binary',
+      'x-max-bytes': 25 * 1024 * 1024,
+    });
+  });
+
   it('publishes the roster saved-state boolean without identity configuration material', () => {
     const document = committedDocument() as {
       paths: Record<string, unknown>;

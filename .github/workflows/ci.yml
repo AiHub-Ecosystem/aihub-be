@@ -192,6 +192,100 @@ jobs:
       - name: Check build output imports
         run: pnpm check:imports:dist
 
+  customer-web-contract:
+    name: Customer Web contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Check out AIHUB candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Find a linked Customer Web pull request
+        id: customer-web-pr
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const matches = [...(process.env.PR_BODY ?? '').matchAll(
+            /https:\/\/github\.com\/AiHub-Ecosystem\/AiHub-Frontend\/pull\/(\d+)/g,
+          )];
+          const numbers = [...new Set(matches.map((match) => match[1]))];
+          if (numbers.length > 1) throw new Error('Link only one Customer Web pull request.');
+          const found = numbers.length === 1;
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `found=${found}\n`);
+          if (found) fs.appendFileSync(process.env.GITHUB_OUTPUT, `number=${numbers[0]}\n`);
+          NODE
+
+      - name: Check out Customer Web dev
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: AiHub-Ecosystem/AiHub-Frontend
+          ref: dev
+          path: customer-web
+          persist-credentials: false
+
+      - name: Check out linked Customer Web pull request
+        if: steps.customer-web-pr.outputs.found == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: AiHub-Ecosystem/AiHub-Frontend
+          ref: refs/pull/${{ steps.customer-web-pr.outputs.number }}/head
+          path: customer-web-linked
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20
+
+      - name: Install Customer Web dependencies
+        working-directory: customer-web
+        run: npm ci --ignore-scripts
+
+      - name: Install the browser used by Customer Web E2E
+        working-directory: customer-web
+        run: npx playwright install --with-deps chromium
+
+      - name: Check candidate error codes against Customer Web dev
+        working-directory: customer-web
+        env:
+          AIHUB_OPENAPI_CANDIDATE: ${{ github.workspace }}/openapi.json
+        run: npm run check:aihub-contract
+
+      - name: Check candidate responses against Customer Web dev
+        working-directory: customer-web
+        env:
+          AIHUB_OPENAPI_PATH: ${{ github.workspace }}/openapi.json
+        run: npm run test:e2e
+
+      - name: Install linked Customer Web dependencies
+        if: steps.customer-web-pr.outputs.found == 'true'
+        working-directory: customer-web-linked
+        run: npm ci --ignore-scripts
+
+      - name: Check candidate error codes against linked Customer Web pull request
+        if: steps.customer-web-pr.outputs.found == 'true'
+        working-directory: customer-web-linked
+        env:
+          AIHUB_OPENAPI_CANDIDATE: ${{ github.workspace }}/openapi.json
+        run: npm run check:aihub-contract
+
+      - name: Check candidate responses against linked Customer Web pull request
+        if: steps.customer-web-pr.outputs.found == 'true'
+        working-directory: customer-web-linked
+        env:
+          AIHUB_OPENAPI_PATH: ${{ github.workspace }}/openapi.json
+        run: npm run test:e2e
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
@@ -582,6 +676,7 @@ jobs:
       - test
       - build
       - audit
+      - customer-web-contract
       - database
       - tenant-isolation
       - coverage
@@ -597,6 +692,7 @@ jobs:
           TEST_RESULT: ${{ needs.test.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           AUDIT_RESULT: ${{ needs.audit.result }}
+          CUSTOMER_WEB_CONTRACT_RESULT: ${{ needs.customer-web-contract.result }}
           DATABASE_RESULT: ${{ needs.database.result }}
           TENANT_ISOLATION_RESULT: ${{ needs.tenant-isolation.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
@@ -609,6 +705,7 @@ jobs:
           test "$TEST_RESULT" = success
           test "$BUILD_RESULT" = success
           test "$AUDIT_RESULT" = success
+          test "$CUSTOMER_WEB_CONTRACT_RESULT" = success
           test "$DATABASE_RESULT" = success
           test "$TENANT_ISOLATION_RESULT" = success
           test "$COVERAGE_RESULT" = success
