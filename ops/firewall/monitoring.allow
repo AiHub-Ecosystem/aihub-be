@@ -3,6 +3,7 @@
 # One entry per line: <proto>/<port> [from=<cidr>] <owner>: <reason>
 # See production.allow for how the probe and the guard read this file.
 tcp/22   AIHUB operator: sshd
+tcp/8443 AIHUB operator: second sshd port, for GitHub Actions deploys (sshd_config.d/99-github-actions.conf)
 tcp/80   AIHUB operator: host nginx, redirects to HTTPS
 tcp/443  AIHUB operator: host nginx, AI Writing and the other hostnames it serves
 tcp/25   Mail server: SMTP
