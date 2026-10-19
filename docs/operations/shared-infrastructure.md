@@ -3,6 +3,9 @@
 This register is partial; #362 remains open until the other dependencies and
 their notification agreements are recorded.
 
+Ports each host may serve to the internet, with their owners, are in
+`ops/firewall/<host>.allow`; see [Public ports](public-ports.md) (#464).
+
 | Dependency                                                          | Operator / patch owner | Contact            | Change notice                                                                                                                                                                                                                   | AIHUB impact when unavailable                                               | Recovery owner | Patch review                                                                                                               |
 | ------------------------------------------------------------------- | ---------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Prometheus, Grafana, Alertmanager, and Tempo on the monitoring host | AIHUB operator         | `@lengocanh2005it` | Record stack restarts, upgrades, and configuration changes in the relevant GitHub issue before applying them. The notification agreement for shared-host OS and network maintenance is unconfirmed and remains tracked by #362. | Metrics dashboards, trace queries, and alert notifications are unavailable. | AIHUB operator | Check upstream support status and security releases monthly; prioritize security fixes after validating the configuration. |

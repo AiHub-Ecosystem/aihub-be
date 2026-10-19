@@ -1,0 +1,16 @@
+# Ports the monitoring host may serve to the internet (#464).
+#
+# One entry per line: <proto>/<port> [from=<cidr>] <owner>: <reason>
+# See production.allow for how the probe and the guard read this file.
+tcp/22   AIHUB operator: sshd
+tcp/80   AIHUB operator: host nginx, redirects to HTTPS
+tcp/443  AIHUB operator: host nginx, AI Writing and the other hostnames it serves
+tcp/25   Mail server: SMTP
+tcp/465  Mail server: SMTP submission over TLS
+tcp/587  Mail server: SMTP submission
+tcp/110  Mail server: POP3
+tcp/995  Mail server: POP3 over TLS
+tcp/143  Mail server: IMAP
+tcp/993  Mail server: IMAP over TLS
+tcp/4190 Mail server: ManageSieve
+tcp/6379 from=76.13.218.96/32 AIHUB operator: Redis for AIHUB Production only (#348)

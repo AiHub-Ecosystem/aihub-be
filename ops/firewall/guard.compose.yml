@@ -1,0 +1,26 @@
+# Default-deny for published container ports (#464). Copy this file,
+# guard.Dockerfile, scripts/ops/firewall/docker-user-guard.sh, and the host's
+# allowlist (as public.allow) into one directory on the host; see
+# docs/operations/public-ports.md before starting it.
+name: aihub-firewall
+
+services:
+  public-ingress-guard:
+    build:
+      context: .
+      dockerfile: guard.Dockerfile
+    image: aihub-public-ingress-guard:local
+    command: ["watch", "/etc/aihub/public.allow"]
+    network_mode: host
+    cap_add: [NET_ADMIN, NET_RAW]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/run]
+    restart: unless-stopped
+    mem_limit: 32m
+    cpus: 0.05
+    pids_limit: 20
+    environment:
+      AIHUB_PUBLIC_INTERFACE: ${AIHUB_PUBLIC_INTERFACE:-eth0}
+    volumes:
+      - ./public.allow:/etc/aihub/public.allow:ro

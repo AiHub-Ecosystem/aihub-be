@@ -1,0 +1,11 @@
+# Ports the Production host may serve to the internet (#464).
+#
+# One entry per line: <proto>/<port> [from=<cidr>] <owner>: <reason>
+# The external probe (scripts/ops/monitoring/probe-public-ports.sh) alerts on
+# any other open port, and the guard (scripts/ops/firewall/docker-user-guard.sh)
+# drops any published container port not listed here. A port another project
+# wants public is added here with that project as its owner, in a reviewed
+# change, before the guard runs.
+tcp/22   AIHUB operator: sshd, key-only (#570)
+tcp/80   AIHUB operator: host nginx, redirects to HTTPS
+tcp/443  AIHUB operator: host nginx, the public AIHUB and Customer Web hostnames
