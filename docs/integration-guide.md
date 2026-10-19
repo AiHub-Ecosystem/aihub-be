@@ -1056,6 +1056,12 @@ involved. Without it, a report is hard to trace.
 Essay text, API keys, and assertions never appear in AIHUB logs, so a
 `request_id` is the only handle we have.
 
+AIHUB support is staffed Monday to Friday, 09:00 to 18:00 Vietnam time (UTC+7),
+excluding Vietnamese public holidays. Outside those hours, response is best
+effort. During an incident that affects your Organization, AIHUB emails your
+Organization owner contact when the incident is confirmed, as it progresses,
+and when it is resolved. AIHUB has no public status page.
+
 ## Deprecation headers
 
 A route slated to retire publishes `Deprecation`, `Sunset`, and a `Link: rel="successor-version"` header. A client that sees them should migrate to the successor before the sunset date; after that date the route may stop responding.

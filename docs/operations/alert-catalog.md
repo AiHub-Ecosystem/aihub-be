@@ -4,7 +4,7 @@ This is the host/dependency slice contributed by [#474](https://github.com/AiHub
 
 The configured owner label is `aihub-operations`. Routes below were observed in the existing Alertmanager: `warning` goes to `discord-warning`; `critical` goes to `discord-critical`, Pushover, and Telegram. The route is current runtime configuration, not a substitute for #412's severity/notification policy decision. Runbook links point to [AIHUB observability](aihub-observability.md).
 
-The responder for every alert in this catalog is the repository maintainer, @lengocanh2005it (#291), until #293 sets an on-call rotation.
+The responder for every alert in this catalog is the repository maintainer, @lengocanh2005it (#291). Hours, severity, and what to do after an alert fires are in [Incident response](incident-response.md).
 
 | Alert                                            | Condition                                                                                                                              | Configured severity and route                       | Owner              | Runbook                                                    |
 | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------ | ---------------------------------------------------------- |
