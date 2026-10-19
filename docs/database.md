@@ -75,11 +75,11 @@ is dedicated to this lane; do not mark a shared service.
    ```
 
 `pnpm check:migrations` remains the contributor-facing command and is part of
-`pnpm verify`. Under #693, it will invoke the pinned Squawk linter; the custom
-three-pattern checker will be removed. A migration that drops or renames a
-column, or adds a required column without a default, must still fail. Use a
-rule-specific `squawk-ignore` only for a reviewed exception, with its reason and
-approving issue on the same SQL comment.
+`pnpm verify`. It invokes the pinned Squawk linter; the custom three-pattern
+checker has been removed. A migration that drops or renames a column, or adds a
+required column without a default, must still fail. Use a rule-specific
+`squawk-ignore` only for a reviewed exception, with its reason and approving
+issue on the same SQL comment.
 
 The runner records migration keys as `<directory name>.sql` to preserve the
 existing `schema_migrations` rows. Keep a migration directory's name stable
@@ -132,9 +132,19 @@ For example, an intentional 32-bit value can use this narrow exception:
 CREATE TABLE bounded_retry_state (retry_count INTEGER NOT NULL CHECK (retry_count BETWEEN 0 AND 1000)); -- squawk-ignore prefer-bigint-over-int -- retry_count is bounded; approved: #693
 ```
 
-When adding a value to an existing value-list `CHECK`, replace the constraint
-in one migration file with the expanded constraint marked `NOT VALID`. Validate
-it in the next migration file, after the first file has committed. `NOT VALID`
+When adding a value to an existing value-list `CHECK`, drop the old constraint
+and add the expanded constraint marked `NOT VALID` in one migration file. Squawk
+requires a narrow ignore for the drop because this is the reviewed atomic
+replacement:
+
+```sql
+-- squawk-ignore ban-drop-constraint -- reason: atomically replace the value-list CHECK; approved: #693
+ALTER TABLE organizations DROP CONSTRAINT organizations_status_check;
+ALTER TABLE organizations ADD CONSTRAINT organizations_status_check CHECK (status IN ('active', 'suspended', 'pending')) NOT VALID;
+```
+
+Validate it in the next migration file, after the first file has committed.
+`NOT VALID`
 avoids scanning every existing row while installing the new rule, and the new
 constraint still governs rows written after it commits. Validation then checks
 the old rows under the lighter lock used by `VALIDATE CONSTRAINT`. If the change

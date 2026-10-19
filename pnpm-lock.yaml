@@ -185,6 +185,9 @@ importers:
       prisma:
         specifier: 7.10.0
         version: 7.10.0(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@5.9.3)
+      squawk-cli:
+        specifier: 2.69.0
+        version: 2.69.0
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
@@ -2273,6 +2276,45 @@ packages:
   '@smithy/types@4.19.0':
     resolution: {integrity: sha512-r7jh49VJxGerfAcTQA6gXcKc+98zOp/tqRwzYjgOE+iSQsP6cEU1hq2QzbuipmP68QtYdY9wKEhiCQZIzHgZ4Q==}
     engines: {node: '>=18.0.0'}
+
+  '@squawk-cli/darwin-arm64@2.69.0':
+    resolution: {integrity: sha512-vunxbKnxm8DtDL7Zsk5ZN790MhcNCq6NRI3e8yPa2TszO/hACS4kI5AIrxkUengMoCABP1OomYsLIon/RtajiA==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@squawk-cli/darwin-x64@2.69.0':
+    resolution: {integrity: sha512-Z7AGY+Xux4+jTW4tNe+CwFcD/3aCdzI+/C6ogsYLihwIZ9C0M9pNHgONNw3APQw7JrgKX/+pksJgXAAcm2I+kg==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@squawk-cli/linux-arm64-musl@2.69.0':
+    resolution: {integrity: sha512-uJI5hRK08syYJwltu6E2J2BDOdNf5WA0wxaZrkYNYrpIwumJC7k8b73FlgBYGZCUINjxTYd8kF+7KhRDlZTR4g==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@squawk-cli/linux-arm64@2.69.0':
+    resolution: {integrity: sha512-dTwEUpIEz7hl9wVvS+4z55jCrFTbecCDd4SDyn7LB7SB5AUTYbh5f4J3cAPUV0eefrOpbi728vg58K8C6mu/eA==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@squawk-cli/linux-x64-musl@2.69.0':
+    resolution: {integrity: sha512-aPIjas3eBFpAKYufAdfKs17d65xEefWgDDxb1+dwPZ4BgW9IUy0UXgPtHyFM4ouJMS68vqj8ugAAgNp3LkO4iw==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@squawk-cli/linux-x64@2.69.0':
+    resolution: {integrity: sha512-V0QYZBqWzVfQWo0ie3gOKZPdpQkNiRUnEWi0KdIAk+HdY6x343VAq+M4yViZTWO8GZ2FxwFllKnAmY8afMUYpA==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@squawk-cli/win32-x64@2.69.0':
+    resolution: {integrity: sha512-v5/vSp7qid+z1lqZV/RMQRF+08mfZGImJY8WK7lOk7JqxxVxMYHrbSDkEf77rM4E7gs1GSkA8l4Ic38XemdRpw==}
+    cpu: [x64]
+    os: [win32]
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -4794,6 +4836,10 @@ packages:
     resolution: {integrity: sha512-qC9iz2FlN7DQl3+wjwn3802RTyjCx7sDvfQEXchwa6CWOx07/WVfh91gBmQ9fahw8snwGEWU3xGzOt4tFyHLxg==}
     engines: {node: '>= 0.6'}
 
+  squawk-cli@2.69.0:
+    resolution: {integrity: sha512-RnL0FH5RhMl+kH+l4iAfMXioapF0a8V6Vzcre8XJkJiI3+BnK/ZgXIVmdqnkClTug9dbAia12l+59mS/PJpJSQ==}
+    hasBin: true
+
   stack-utils@2.0.6:
     resolution: {integrity: sha512-XlkWvfIm6RmsWtNJx+uqtKLS8eqFbxUg0ZzLXqY0caEy9l7hruX8IpiDnjsLavoBgqCCR71TqWO8MaXYheJ3RQ==}
     engines: {node: '>=10'}
@@ -7207,6 +7253,27 @@ snapshots:
   '@smithy/types@4.19.0':
     dependencies:
       tslib: 2.8.1
+
+  '@squawk-cli/darwin-arm64@2.69.0':
+    optional: true
+
+  '@squawk-cli/darwin-x64@2.69.0':
+    optional: true
+
+  '@squawk-cli/linux-arm64-musl@2.69.0':
+    optional: true
+
+  '@squawk-cli/linux-arm64@2.69.0':
+    optional: true
+
+  '@squawk-cli/linux-x64-musl@2.69.0':
+    optional: true
+
+  '@squawk-cli/linux-x64@2.69.0':
+    optional: true
+
+  '@squawk-cli/win32-x64@2.69.0':
+    optional: true
 
   '@standard-schema/spec@1.1.0': {}
 
@@ -10101,6 +10168,16 @@ snapshots:
   sprintf-js@1.0.3: {}
 
   sqlstring@2.3.3: {}
+
+  squawk-cli@2.69.0:
+    optionalDependencies:
+      '@squawk-cli/darwin-arm64': 2.69.0
+      '@squawk-cli/darwin-x64': 2.69.0
+      '@squawk-cli/linux-arm64': 2.69.0
+      '@squawk-cli/linux-arm64-musl': 2.69.0
+      '@squawk-cli/linux-x64': 2.69.0
+      '@squawk-cli/linux-x64-musl': 2.69.0
+      '@squawk-cli/win32-x64': 2.69.0
 
   stack-utils@2.0.6:
     dependencies:
