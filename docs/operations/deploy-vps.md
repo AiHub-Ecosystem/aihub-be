@@ -767,9 +767,13 @@ Make any change to the sshd configuration in this order:
    answers `Permission denied (publickey)`.
 5. Confirm that `sshd -T` shows the new values.
 
-**If no key works,** sshd cannot get you back in. Log in through the VPS
-provider's web console, which does not go through sshd. Remove the drop-in
-file there, then run `systemctl reload ssh`.
+**If no key works,** sshd cannot get you back in. The way back is the VPS
+provider's web console, which does not go through sshd. The AIHUB maintainer
+has no provider account: the team behind the `VietHXQ` account rents the VPS
+and holds it. Ask them to open the console, remove the drop-in file, and run
+`systemctl reload ssh`. Before that is needed, check whether another key
+still works: the maintainer account has more than one key, and any account
+that can run `sudo -n docker` can remove the file with the command above.
 
 To give someone access, add their public key to `~/.ssh/authorized_keys` of
 their account. A new account needs its key before its first login, because
