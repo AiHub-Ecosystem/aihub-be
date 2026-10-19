@@ -90,6 +90,12 @@
       }
     },
     {
+      "files": ["src/**/*.spec.ts", "src/**/*.spec-support.ts"],
+      "rules": {
+        "no-unused-vars": "off"
+      }
+    },
+    {
       "files": ["src/**/*.spec.ts", "src/**/testing/**"],
       "rules": {
         "complexity": "off",
