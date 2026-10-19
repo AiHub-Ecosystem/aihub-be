@@ -34,6 +34,18 @@
       "error",
       { "assertFunctionNames": ["expect", "expectRefused"] }
     ],
+    // Ban `@ts-ignore`/`@ts-nocheck` and bare `@ts-expect-error`: the only
+    // legal directive is a description-bearing `@ts-expect-error` (issue #811).
+    "typescript/ban-ts-comment": [
+      "error",
+      {
+        "ts-expect-error": "allow-with-description",
+        "ts-ignore": true,
+        "ts-nocheck": true,
+        "ts-check": false,
+        "minimumDescriptionLength": 3
+      }
+    ],
     // Both rules below belong to `suspicious`. That category measures 69
     // findings here, of which only these two are real: 10 are NestJS `@Module()`
     // classes, 24 are `.sort()` calls on freshly built arrays, and the rest are
