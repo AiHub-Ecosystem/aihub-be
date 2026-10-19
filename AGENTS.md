@@ -4,6 +4,10 @@
 
 Issues and specs live in GitHub Issues; use the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
+### GitHub language
+
+All content pushed to GitHub — commit messages, issue/PR titles and bodies, comments, reviews — must be written in English. Local chat may stay in the user's language.
+
 ### Triage labels
 
 Use the five canonical labels documented in `docs/agents/triage-labels.md`.
