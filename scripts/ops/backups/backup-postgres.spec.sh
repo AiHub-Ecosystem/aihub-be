@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Exercises scripts/ops/backup-postgres.sh with stubbed sudo, docker, age, and
+# Exercises scripts/ops/backups/backup-postgres.sh with stubbed sudo, docker, age, and
 # flock: prefixes by UTC hour and day, one log line per database, a failed
 # dump that fails the run, a missing configuration, no secret in the log, and
 # the success and failure files Prometheus reads.
 set -euo pipefail
 
 repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-script="$repository_root/scripts/ops/backup-postgres.sh"
+script="$repository_root/scripts/ops/backups/backup-postgres.sh"
 test_root="$(mktemp -d)"
 trap 'rm -rf -- "$test_root"' EXIT
 

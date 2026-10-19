@@ -2,7 +2,7 @@
 # Restore rehearsal for the hourly Postgres backup (#281). Run by an operator;
 # it changes nothing outside a disposable container.
 #
-#   ssh <user>@<host> '<app-dir>/scripts/ops/restore-postgres-rehearsal.sh aihub' \
+#   ssh <user>@<host> '<app-dir>/scripts/ops/backups/restore-postgres-rehearsal.sh aihub' \
 #     < AIHUB-BACKUP-AGE-KEY.txt
 #
 # The age identity arrives on stdin and is only ever held in memory: it is

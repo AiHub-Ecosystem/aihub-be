@@ -165,7 +165,7 @@ log_stderr_tail() {
 }
 
 if deployment_status="$(timeout --signal=TERM --kill-after=5s "${STATUS_TIMEOUT_SECONDS}s" \
-  "$APP_DIR/scripts/ops/blue-green-host.sh" status 2>"$tmp_dir/status.err")"; then
+  "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh" status 2>"$tmp_dir/status.err")"; then
   :
 else
   code=$?

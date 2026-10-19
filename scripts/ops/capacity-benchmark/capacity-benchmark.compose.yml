@@ -120,7 +120,8 @@ services:
       context: ../..
       dockerfile: Dockerfile
       target: build
-    command: ["node", "scripts/ops/capacity-benchmark-seed.mjs"]
+    command:
+      ["node", "scripts/ops/capacity-benchmark/capacity-benchmark-seed.mjs"]
     environment:
       DATABASE_URL: postgresql://aihub_benchmark:benchmark-local-only@postgres:5432/aihub_benchmark
       BENCHMARK_DATA_DIR: /data

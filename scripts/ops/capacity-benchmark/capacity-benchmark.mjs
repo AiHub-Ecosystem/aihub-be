@@ -22,7 +22,7 @@ const scriptPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(scriptPath), '../..');
 const composeFile = path.join(
   repositoryRoot,
-  'scripts/ops/capacity-benchmark.compose.yml',
+  'scripts/ops/capacity-benchmark/capacity-benchmark.compose.yml',
 );
 const stageRates = positiveIntegerList(
   process.env.BENCHMARK_STAGE_RATES_RPS ?? '4,8,16,32',
@@ -89,11 +89,17 @@ const utilsScriptSnapshot = path.join(
 );
 await Promise.all([
   copyFile(
-    path.join(repositoryRoot, 'scripts/ops/capacity-benchmark-k6.js'),
+    path.join(
+      repositoryRoot,
+      'scripts/ops/capacity-benchmark/capacity-benchmark-k6.js',
+    ),
     k6ScriptSnapshot,
   ),
   copyFile(
-    path.join(repositoryRoot, 'scripts/ops/capacity-benchmark-utils.mjs'),
+    path.join(
+      repositoryRoot,
+      'scripts/ops/capacity-benchmark/capacity-benchmark-utils.mjs',
+    ),
     utilsScriptSnapshot,
   ),
 ]);
@@ -598,7 +604,7 @@ async function runK6({
       '--no-deps',
       'seed',
       'node',
-      'scripts/ops/capacity-benchmark-reset-refresh-tokens.mjs',
+      'scripts/ops/capacity-benchmark/capacity-benchmark-reset-refresh-tokens.mjs',
     ]);
   }
   const restartCountBefore = await dockerRestartCount(appContainerId);
@@ -1062,7 +1068,7 @@ async function runJobContention({ appContainerId, rate, routeNames }) {
       deferPolicyRequired: !Object.values(thresholdResults).every(Boolean),
     },
     hostWideLockDefersCompetingJobs:
-      'validated by scripts/ops/host-scheduled-job.spec.sh',
+      'validated by scripts/ops/host-jobs/host-scheduled-job.spec.sh',
     load,
   };
 }

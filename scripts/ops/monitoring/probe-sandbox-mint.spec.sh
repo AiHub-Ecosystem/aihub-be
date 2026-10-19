@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Exercises scripts/ops/probe-sandbox-mint.sh with a stubbed curl: a minted
+# Exercises scripts/ops/monitoring/probe-sandbox-mint.sh with a stubbed curl: a minted
 # assertion records success, a refusal after one retry records failure and
 # logs only the error code, the key never reaches argv or the log, and a key
 # file with the wrong mode is refused.
 set -euo pipefail
 
 repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-script="$repository_root/scripts/ops/probe-sandbox-mint.sh"
+script="$repository_root/scripts/ops/monitoring/probe-sandbox-mint.sh"
 test_root="$(mktemp -d)"
 trap 'rm -rf -- "$test_root"' EXIT
 

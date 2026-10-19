@@ -304,7 +304,7 @@ container_ready() {
   local id="$1" status="$2"
   [[ "$status" == healthy ]] || return 1
   sudo -n docker exec "$id" node -e '
-    require("/app/scripts/ops/probe-runtime-dependencies.cjs").probeReadiness()
+    require("/app/scripts/ops/monitoring/probe-runtime-dependencies.cjs").probeReadiness()
       .then((result) => {
         console.log(result.name + ": " + (result.ok ? "PASS" : "FAIL") + " (" + result.result + ")");
         process.exitCode = result.ok ? 0 : 1;
@@ -399,7 +399,7 @@ app_containers_safe() {
 }
 
 probe_container_dependencies() {
-  sudo -n docker exec "$1" node scripts/ops/probe-runtime-dependencies.cjs
+  sudo -n docker exec "$1" node scripts/ops/monitoring/probe-runtime-dependencies.cjs
 }
 
 probe_host() {

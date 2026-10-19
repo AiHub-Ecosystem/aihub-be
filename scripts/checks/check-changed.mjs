@@ -120,11 +120,11 @@ export function classifyPath(p) {
     return ['format:check'];
   }
 
-  if (/(^|\/)scripts\/ops\/capacity-benchmark\./.test(path)) {
+  if (/(^|\/)scripts\/ops\/capacity-benchmark\//.test(path)) {
     return ['lint', 'test:capacity-benchmark'];
   }
 
-  if (/(^|\/)scripts\/ops\/check-monitoring-config\./.test(path)) {
+  if (/(^|\/)scripts\/ops\/monitoring\/check-monitoring-config\./.test(path)) {
     return ['lint', 'test:monitoring-config'];
   }
 

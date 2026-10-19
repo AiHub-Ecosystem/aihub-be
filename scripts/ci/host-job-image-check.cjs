@@ -11,7 +11,7 @@ function requiredConstant(source, name) {
 function collectHostJobImagePaths(repositoryRoot) {
   const wrapperPath = path.join(
     repositoryRoot,
-    'scripts/ops/host-scheduled-job.sh',
+    'scripts/ops/host-jobs/host-scheduled-job.sh',
   );
   const wrapper = readFileSync(wrapperPath, 'utf8');
   const crontab = readFileSync(

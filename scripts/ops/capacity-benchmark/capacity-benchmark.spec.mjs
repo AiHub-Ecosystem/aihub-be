@@ -121,7 +121,7 @@ await test('maps the Task 1 provider fixture to the public API request shape', (
   const fixture = JSON.parse(
     readFileSync(
       new URL(
-        '../../test/fixtures/ai-writing/grade-task1.request.json',
+        '../../../test/fixtures/ai-writing/grade-task1.request.json',
         import.meta.url,
       ),
       'utf8',

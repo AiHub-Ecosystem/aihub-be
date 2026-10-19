@@ -43,11 +43,11 @@
     "scripts/runtime/runtime-entrypoint.mjs",
     // Compose invokes these through bind mounts and a separate k6 container,
     // so their runtime edges are outside Knip's JavaScript import graph.
-    "scripts/ops/capacity-benchmark-k6.js",
-    "scripts/ops/capacity-benchmark-seed.mjs",
-    "scripts/ops/capacity-benchmark-reset-refresh-tokens.mjs",
-    "scripts/ops/capacity-benchmark-start-app.mjs",
-    "scripts/ops/capacity-benchmark-support.mjs",
+    "scripts/ops/capacity-benchmark/capacity-benchmark-k6.js",
+    "scripts/ops/capacity-benchmark/capacity-benchmark-seed.mjs",
+    "scripts/ops/capacity-benchmark/capacity-benchmark-reset-refresh-tokens.mjs",
+    "scripts/ops/capacity-benchmark/capacity-benchmark-start-app.mjs",
+    "scripts/ops/capacity-benchmark/capacity-benchmark-support.mjs",
     // Operator CLI invoked by a documented host path (docs/operations), not by
     // package scripts, tests, or the container image; live runbook command.
     "scripts/cli/upload-speaking-audio.mjs",

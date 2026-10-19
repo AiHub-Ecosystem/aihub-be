@@ -52,11 +52,11 @@ const pathCases = [
     gates: ['lint', 'test:check-changed'],
   },
   {
-    path: 'scripts/ops/capacity-benchmark.mjs',
+    path: 'scripts/ops/capacity-benchmark/capacity-benchmark.mjs',
     gates: ['lint', 'test:capacity-benchmark'],
   },
   {
-    path: 'scripts/ops/check-monitoring-config.cjs',
+    path: 'scripts/ops/monitoring/check-monitoring-config.cjs',
     gates: ['lint', 'test:monitoring-config'],
   },
   {

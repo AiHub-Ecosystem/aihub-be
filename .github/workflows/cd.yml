@@ -215,7 +215,7 @@ jobs:
           state="$(ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green-host.sh status
+          ./scripts/ops/blue-green/blue-green-host.sh status
           REMOTE
           )"
           printf 'Host revisions before deployment:\n%s\n' "$state"
@@ -238,7 +238,7 @@ jobs:
           mkdir -p "$APP_DIR/.aihub-host-jobs-candidate"
           REMOTE
           scp "${scp_opts[@]}" \
-            scripts/ops/install-host-jobs.sh \
+            scripts/ops/host-jobs/install-host-jobs.sh \
             "$target:$VPS_APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh"
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
@@ -298,7 +298,7 @@ jobs:
             "$sync_backup/blue-green-host.sh" \
             "$sync_backup/docker-compose.production.yml" \
             "$sync_backup/ready"
-          cp -p -- "$APP_DIR/scripts/ops/blue-green-host.sh" "$sync_backup/blue-green-host.sh"
+          cp -p -- "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh" "$sync_backup/blue-green-host.sh"
           cp -p -- "$APP_DIR/docker-compose.production.yml" "$sync_backup/docker-compose.production.yml"
           : >"$sync_backup/ready"
           chmod 600 "$sync_backup/ready"
@@ -310,20 +310,20 @@ jobs:
             docker-compose.production.yml \
             "$target:$VPS_APP_DIR/.aihub-host-jobs-sync-candidate/"
           scp "${scp_opts[@]}" \
-            scripts/ops/install-host-jobs.sh \
+            scripts/ops/host-jobs/install-host-jobs.sh \
             "$target:$VPS_APP_DIR/.aihub-host-jobs-sync-candidate/"
           scp "${scp_opts[@]}" \
-            scripts/ops/blue-green-host.sh \
+            scripts/ops/blue-green/blue-green-host.sh \
             "$target:$VPS_APP_DIR/.aihub-host-jobs-sync-candidate/"
           scp "${scp_opts[@]}" \
             scripts/ops/logs/request-log-lookup.sh \
             "$target:$VPS_APP_DIR/scripts/ops/logs/"
           scp "${scp_opts[@]}" \
-            scripts/ops/backup-postgres.sh \
-            scripts/ops/restore-postgres-rehearsal.sh \
+            scripts/ops/backups/backup-postgres.sh \
+            scripts/ops/backups/restore-postgres-rehearsal.sh \
             "$target:$VPS_APP_DIR/scripts/ops/"
           scp "${scp_opts[@]}" \
-            scripts/ops/host-scheduled-job.sh \
+            scripts/ops/host-jobs/host-scheduled-job.sh \
             ops/host-jobs/aihub.crontab \
             "$target:$VPS_APP_DIR/.aihub-host-jobs-candidate/"
           scp "${scp_opts[@]}" \
@@ -342,13 +342,13 @@ jobs:
             "$target:$VPS_APP_DIR/ops/vault/templates/"
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -eu
-          chmod 755 "$APP_DIR/scripts/ops/blue-green-host.sh"
+          chmod 755 "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"
           chmod 755 "$APP_DIR/scripts/ops/logs/request-log-lookup.sh"
-          chmod 755 "$APP_DIR/scripts/ops/backup-postgres.sh" \
-            "$APP_DIR/scripts/ops/restore-postgres-rehearsal.sh"
+          chmod 755 "$APP_DIR/scripts/ops/backups/backup-postgres.sh" \
+            "$APP_DIR/scripts/ops/backups/restore-postgres-rehearsal.sh"
           test -s "$APP_DIR/docker-compose.production.yml"
-          test -s "$APP_DIR/scripts/ops/backup-postgres.sh"
-          test -s "$APP_DIR/scripts/ops/blue-green-host.sh"
+          test -s "$APP_DIR/scripts/ops/backups/backup-postgres.sh"
+          test -s "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"
           test -s "$APP_DIR/scripts/ops/logs/request-log-lookup.sh"
           test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/install-host-jobs.sh"
           test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/docker-compose.production.yml"
@@ -369,14 +369,14 @@ jobs:
           install -m 644 "$APP_DIR/.aihub-host-jobs-sync-candidate/docker-compose.production.yml" "$compose_next"
           install -m 755 "$APP_DIR/.aihub-host-jobs-sync-candidate/blue-green-host.sh" "$helper_next"
           install -m 755 "$APP_DIR/.aihub-host-jobs-sync-candidate/install-host-jobs.sh" "$installer_next"
-          mv -f -- "$installer_next" "$APP_DIR/scripts/ops/install-host-jobs.sh"
+          mv -f -- "$installer_next" "$APP_DIR/scripts/ops/host-jobs/install-host-jobs.sh"
           mv -f -- "$compose_next" "$APP_DIR/docker-compose.production.yml"
-          mv -f -- "$helper_next" "$APP_DIR/scripts/ops/blue-green-host.sh"
-          test -s "$APP_DIR/scripts/ops/install-host-jobs.sh"
+          mv -f -- "$helper_next" "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"
+          test -s "$APP_DIR/scripts/ops/host-jobs/install-host-jobs.sh"
           cmp -s "$APP_DIR/.aihub-host-jobs-sync-candidate/docker-compose.production.yml" \
             "$APP_DIR/docker-compose.production.yml"
           cmp -s "$APP_DIR/.aihub-host-jobs-sync-candidate/blue-green-host.sh" \
-            "$APP_DIR/scripts/ops/blue-green-host.sh"
+            "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"
           REMOTE
 
       - name: Restore host files and schedule after sync failure
@@ -396,9 +396,9 @@ jobs:
             install -m 644 "$backup/docker-compose.production.yml" "$compose_next"
             install -m 755 "$backup/blue-green-host.sh" "$helper_next"
             mv -f -- "$compose_next" "$APP_DIR/docker-compose.production.yml"
-            mv -f -- "$helper_next" "$APP_DIR/scripts/ops/blue-green-host.sh"
+            mv -f -- "$helper_next" "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"
             cmp -s "$backup/docker-compose.production.yml" "$APP_DIR/docker-compose.production.yml"
-            cmp -s "$backup/blue-green-host.sh" "$APP_DIR/scripts/ops/blue-green-host.sh"
+            cmp -s "$backup/blue-green-host.sh" "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"
           fi
           rm -f -- "$APP_DIR/.aihub-host-jobs-sync-candidate/blue-green-host.sh" \
             "$APP_DIR/.aihub-host-jobs-sync-candidate/docker-compose.production.yml" \
@@ -426,7 +426,7 @@ jobs:
               "APP_DIR=$app_dir_arg TIER=$tier_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green-host.sh rollback "$TIER"
+          ./scripts/ops/blue-green/blue-green-host.sh rollback "$TIER"
           REMOTE
           }
           verify_request_id() {
@@ -453,7 +453,7 @@ jobs:
             "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green-host.sh status
+          ./scripts/ops/blue-green/blue-green-host.sh status
           REMOTE
           )"
           caller_ip_gate="$(sed -n 's/^caller_ip_gate=//p' <<<"$state")"
@@ -474,14 +474,14 @@ jobs:
               "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green-host.sh deploy production
+          ./scripts/ops/blue-green/blue-green-host.sh deploy production
           REMOTE
             then
               ssh "${ssh_opts[@]}" "$target" \
                 "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE' || true
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green-host.sh recover-gate
+          ./scripts/ops/blue-green/blue-green-host.sh recover-gate
           REMOTE
               exit 1
             fi
@@ -492,14 +492,14 @@ jobs:
             "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green-host.sh public-host production
+          ./scripts/ops/blue-green/blue-green-host.sh public-host production
           REMOTE
           )" 2>/dev/null; then
             printf 'FAIL\n'
             if [[ "$tier_deployed" == true ]]; then rollback_tier production; fi
             exit 1
           fi
-          if ! request_id="$(node scripts/ops/probe-public-edge.cjs request-id "$public_host")"; then
+          if ! request_id="$(node scripts/ops/monitoring/probe-public-edge.cjs request-id "$public_host")"; then
             printf 'FAIL\n'
             if [[ "$tier_deployed" == true ]]; then rollback_tier production; fi
             exit 1
@@ -512,7 +512,7 @@ jobs:
             "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green-host.sh sandbox-enabled
+          ./scripts/ops/blue-green/blue-green-host.sh sandbox-enabled
           REMOTE
           )"
           printf 'sandbox_enabled=%s\n' "$sandbox_enabled" >> "$GITHUB_OUTPUT"
@@ -536,7 +536,7 @@ jobs:
               "APP_DIR=$app_dir_arg TIER=$tier_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green-host.sh rollback "$TIER"
+          ./scripts/ops/blue-green/blue-green-host.sh rollback "$TIER"
           REMOTE
           }
           verify_request_id() {
@@ -563,7 +563,7 @@ jobs:
             "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green-host.sh status
+          ./scripts/ops/blue-green/blue-green-host.sh status
           REMOTE
           )"
           caller_ip_gate="$(sed -n 's/^caller_ip_gate=//p' <<<"$state")"
@@ -584,14 +584,14 @@ jobs:
               "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green-host.sh deploy sandbox
+          ./scripts/ops/blue-green/blue-green-host.sh deploy sandbox
           REMOTE
             then
               ssh "${ssh_opts[@]}" "$target" \
                 "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE' || true
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green-host.sh recover-gate
+          ./scripts/ops/blue-green/blue-green-host.sh recover-gate
           REMOTE
               exit 1
             fi
@@ -602,14 +602,14 @@ jobs:
             "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green-host.sh public-host sandbox
+          ./scripts/ops/blue-green/blue-green-host.sh public-host sandbox
           REMOTE
           )" 2>/dev/null; then
             printf 'FAIL\n'
             if [[ "$tier_deployed" == true ]]; then rollback_tier sandbox; fi
             exit 1
           fi
-          if ! request_id="$(node scripts/ops/probe-public-edge.cjs request-id "$public_host")"; then
+          if ! request_id="$(node scripts/ops/monitoring/probe-public-edge.cjs request-id "$public_host")"; then
             printf 'FAIL\n'
             if [[ "$tier_deployed" == true ]]; then rollback_tier sandbox; fi
             exit 1
@@ -633,7 +633,7 @@ jobs:
             "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green-host.sh finalize
+          ./scripts/ops/blue-green/blue-green-host.sh finalize
           REMOTE
 
       - name: Install and smoke the scheduled host jobs
@@ -651,7 +651,7 @@ jobs:
             "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg DEPLOY_OUTCOME=$deploy_outcome bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          state="$(./scripts/ops/blue-green-host.sh status)"
+          state="$(./scripts/ops/blue-green/blue-green-host.sh status)"
           target_sha="${AIHUB_IMAGE##*:}"
           if grep -Eq '^pending=' <<<"$state" || grep -Fxq 'sandbox enabled but not routed' <<<"$state"; then
             printf 'deployment state is unresolved; AIHUB host jobs remain suspended\n' >&2
@@ -691,12 +691,12 @@ jobs:
             fi
           done
           if [[ "${active_shas[0]}" == "$target_sha" ]]; then
-            ./scripts/ops/install-host-jobs.sh install
+            ./scripts/ops/host-jobs/install-host-jobs.sh install
           elif [[ "$DEPLOY_OUTCOME" == success ]]; then
             printf 'successful deployment does not expose the target revision; AIHUB host jobs remain suspended\n' >&2
             exit 1
           else
-            ./scripts/ops/install-host-jobs.sh restore
+            ./scripts/ops/host-jobs/install-host-jobs.sh restore
           fi
           REMOTE
         env:
@@ -714,7 +714,7 @@ jobs:
           state="$(ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green-host.sh status
+          ./scripts/ops/blue-green/blue-green-host.sh status
           REMOTE
           )"
           printf '## Active tier revisions\n\n%s\n' "$state" >> "$GITHUB_STEP_SUMMARY"

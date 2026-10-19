@@ -18,7 +18,10 @@ function cliCommands(): string[] {
 }
 
 function wrapperCommandsByJob(): Map<string, string[]> {
-  const source = readFileSync('scripts/ops/host-scheduled-job.sh', 'utf8');
+  const source = readFileSync(
+    'scripts/ops/host-jobs/host-scheduled-job.sh',
+    'utf8',
+  );
   const jobs = new Map<string, string[]>();
   for (const match of source.matchAll(
     /^\s+([a-z-]+)\) commands=\(([^)]*)\);/gm,

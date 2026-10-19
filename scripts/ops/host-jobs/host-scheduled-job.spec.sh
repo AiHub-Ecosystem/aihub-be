@@ -76,20 +76,20 @@ bin_dir="$test_root/bin"
 home_dir="$test_root/home"
 mkdir -p "$app_dir/scripts/ops" "$app_dir/ops/host-jobs" \
   "$app_dir/.aihub-host-jobs-candidate" "$bin_dir" "$home_dir"
-cp "$repository_root/scripts/ops/host-scheduled-job.sh" \
+cp "$repository_root/scripts/ops/host-jobs/host-scheduled-job.sh" \
   "$app_dir/.aihub-host-jobs-candidate/host-scheduled-job.sh"
-cp "$repository_root/scripts/ops/host-scheduled-job.sh" "$app_dir/scripts/ops/"
-cp "$repository_root/scripts/ops/install-host-jobs.sh" "$app_dir/scripts/ops/"
+cp "$repository_root/scripts/ops/host-jobs/host-scheduled-job.sh" "$app_dir/scripts/ops/"
+cp "$repository_root/scripts/ops/host-jobs/install-host-jobs.sh" "$app_dir/scripts/ops/"
 cp "$repository_root/ops/host-jobs/aihub.crontab" \
   "$app_dir/.aihub-host-jobs-candidate/aihub.crontab"
-chmod 755 "$app_dir/scripts/ops/host-scheduled-job.sh" "$app_dir/scripts/ops/install-host-jobs.sh"
+chmod 755 "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh"
 
-cat >"$app_dir/scripts/ops/blue-green-host.sh" <<'STUB'
+cat >"$app_dir/scripts/ops/blue-green/blue-green-host.sh" <<'STUB'
 #!/usr/bin/env bash
 printf 'production active_slot=b sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa service=app-slot-b\n'
 printf 'sandbox active_slot=a sha=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb service=app-sandbox\n'
 STUB
-chmod 755 "$app_dir/scripts/ops/blue-green-host.sh"
+chmod 755 "$app_dir/scripts/ops/blue-green/blue-green-host.sh"
 
 cat >"$bin_dir/sudo" <<'STUB'
 #!/usr/bin/env bash
@@ -184,7 +184,7 @@ export REAL_TIMEOUT="$real_timeout"
 
 set +e
 FAKE_DOCKER_FAIL_SERVICE=app-slot-b bash \
-  "$app_dir/scripts/ops/host-scheduled-job.sh" quota \
+  "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" quota \
   >"$test_root/run.out" 2>&1
 run_status=$?
 set -e
@@ -205,7 +205,7 @@ assert_contains "$AIHUB_HOST_JOB_LOG" 'quota sandbox service=app-sandbox exit=0 
 : >"$AIHUB_HOST_JOB_LOG"
 set +e
 FAKE_CLAMP_TIMEOUTS=true FAKE_DOCKER_HANG_SERVICE=app-slot-b bash \
-  "$app_dir/scripts/ops/host-scheduled-job.sh" quota \
+  "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" quota \
   >"$test_root/timeout.out" 2>&1
 run_status=$?
 set -e
@@ -220,7 +220,7 @@ assert_contains "$AIHUB_HOST_JOB_LOG" 'quota sandbox service=app-sandbox exit=0 
 # A manual rerun of an older window says nothing about the schedule.
 rm -f "$home_dir/.aihub-host-job-metrics"/report-*.prom
 : >"$FAKE_DOCKER_CALLS"
-APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" report \
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" report \
   --from 2026-09-20T12:00:00.000Z --to 2026-09-20T13:00:00.000Z \
   >"$test_root/report.out" 2>&1
 assert_contains "$FAKE_DOCKER_CALLS" \
@@ -228,14 +228,14 @@ assert_contains "$FAKE_DOCKER_CALLS" \
 [[ ! -e "$home_dir/.aihub-host-job-metrics/report-success.prom" ]]
 
 : >"$FAKE_DOCKER_CALLS"
-APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" quota \
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" quota \
   --month 2026-09 >"$test_root/quota-month.out" 2>&1
 assert_contains "$FAKE_DOCKER_CALLS" 'quota:reconcile --month 2026-09'
 
 : >"$FAKE_DOCKER_CALLS"
 : >"$AIHUB_HOST_JOB_LOG"
 set +e
-FAKE_FLOCK_BUSY=true bash "$app_dir/scripts/ops/host-scheduled-job.sh" quota \
+FAKE_FLOCK_BUSY=true bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" quota \
   >"$test_root/overlap.out" 2>&1
 run_status=$?
 set -e
@@ -245,7 +245,7 @@ assert_contains "$AIHUB_HOST_JOB_LOG" 'quota skipped reason=already_running'
 [[ -e "$home_dir/.aihub-host-job-locks/quota.lock" ]]
 
 set +e
-FAKE_HOST_FLOCK_BUSY=true bash "$app_dir/scripts/ops/host-scheduled-job.sh" prune \
+FAKE_HOST_FLOCK_BUSY=true bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" prune \
   >"$test_root/cross-job-overlap.out" 2>&1
 run_status=$?
 set -e
@@ -263,7 +263,7 @@ if [[ -n "$REAL_FLOCK" ]]; then
   FAKE_DOCKER_BLOCK_SERVICE=app-slot-b \
     FAKE_DOCKER_BLOCK_STARTED="$block_started" \
     FAKE_DOCKER_BLOCK_RELEASE="$block_release" \
-    APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" quota \
+    APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" quota \
     >"$test_root/first-overlap.out" 2>&1 &
   first_pid=$!
   for ((attempt = 0; attempt < 100; attempt += 1)); do
@@ -273,13 +273,13 @@ if [[ -n "$REAL_FLOCK" ]]; then
   [[ -e "$block_started" ]]
   calls_before_second="$(wc -l <"$FAKE_DOCKER_CALLS")"
   APP_DIR="$app_dir" timeout --signal=TERM --kill-after=1s 2s \
-    bash "$app_dir/scripts/ops/host-scheduled-job.sh" quota \
+    bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" quota \
     >"$test_root/second-overlap.out" 2>&1
   [[ "$(wc -l <"$FAKE_DOCKER_CALLS")" == "$calls_before_second" ]]
   assert_contains "$AIHUB_HOST_JOB_LOG" 'quota skipped reason=already_running'
 
   set +e
-  APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" prune \
+  APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" prune \
     >"$test_root/second-cross-job.out" 2>&1
   run_status=$?
   set -e
@@ -293,7 +293,7 @@ fi
 for job_and_limits in 'quota 900 90000' 'prune 1800 90000' 'report 180 8400' 'ttl-audit 900 90000' 'avatar-sweep 1800 90000' 'chart-upload-sweep 1800 3000' 'speaking-upload-sweep 1800 90000'; do
   read -r job expected_timeout expected_max_age <<<"$job_and_limits"
   : >"$FAKE_DOCKER_CALLS"
-  APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" "$job" \
+  APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" "$job" \
     >"$test_root/$job.out" 2>&1
   assert_contains "$FAKE_DOCKER_CALLS" "app-slot-b timeout=$expected_timeout"
   assert_contains "$FAKE_DOCKER_CALLS" "app-sandbox timeout=$expected_timeout"
@@ -304,25 +304,25 @@ for job_and_limits in 'quota 900 90000' 'prune 1800 90000' 'report 180 8400' 'tt
 done
 [[ "$(stat -c %a "$home_dir/.aihub-host-job-metrics")" == 755 ]]
 : >"$FAKE_DOCKER_CALLS"
-APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" avatar-sweep \
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" avatar-sweep \
   --dry-run true >"$test_root/avatar-dry-run.out" 2>&1
 assert_contains "$FAKE_DOCKER_CALLS" 'avatar:sweep --dry-run true'
 : >"$FAKE_DOCKER_CALLS"
-APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" chart-upload-sweep \
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" chart-upload-sweep \
   --dry-run true >"$test_root/chart-upload-dry-run.out" 2>&1
 assert_contains "$FAKE_DOCKER_CALLS" 'writing:chart-upload-sweep --dry-run true'
 : >"$FAKE_DOCKER_CALLS"
-APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" speaking-upload-sweep \
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" speaking-upload-sweep \
   --dry-run true >"$test_root/speaking-upload-dry-run.out" 2>&1
 assert_contains "$FAKE_DOCKER_CALLS" 'speaking:audio-upload-sweep --dry-run true'
 
 printf 'host wrapper test passed: timeouts, same-job overlap skip, bounded stderr, continued Sandbox run, and job metrics\n'
 
-cat >"$app_dir/scripts/ops/host-scheduled-job.sh" <<'STUB'
+cat >"$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" <<'STUB'
 #!/usr/bin/env bash
 printf 'old wrapper must remain active until promotion\n'
 STUB
-chmod 755 "$app_dir/scripts/ops/host-scheduled-job.sh"
+chmod 755 "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh"
 
 cat >"$bin_dir/crontab" <<'STUB'
 #!/usr/bin/env bash
@@ -370,14 +370,14 @@ cat >"$app_dir/ops/host-jobs/aihub.crontab" <<'CRON'
 old template must be restored after failed smoke
 CRON
 
-assert_contains "$app_dir/scripts/ops/host-scheduled-job.sh" 'old wrapper must remain active'
+assert_contains "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" 'old wrapper must remain active'
 set +e
 FAKE_DOCKER_FAIL_SERVICE=app-slot-b APP_DIR="$app_dir" \
-  bash "$app_dir/scripts/ops/install-host-jobs.sh" >"$test_root/install-failed.out" 2>&1
+  bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" >"$test_root/install-failed.out" 2>&1
 install_status=$?
 set -e
 [[ "$install_status" == 1 ]]
-assert_contains "$app_dir/scripts/ops/host-scheduled-job.sh" 'old wrapper must remain active'
+assert_contains "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" 'old wrapper must remain active'
 assert_contains "$app_dir/ops/host-jobs/aihub.crontab" 'old template must be restored'
 cmp -s "$test_root/crontab.before" "$FAKE_CRONTAB_FILE"
 assert_contains "$test_root/install-failed.out" 'candidate scheduled-job smoke failed before wrapper promotion'
@@ -387,12 +387,12 @@ docker_call_count="$(wc -l <"$FAKE_DOCKER_CALLS")"
 fail_after_calls=$((docker_call_count + 2))
 set +e
 FAKE_EXPECT_SUSPENDED_CRON=true FAKE_DOCKER_FAIL_AFTER_CALLS="$fail_after_calls" APP_DIR="$app_dir" \
-  bash "$app_dir/scripts/ops/install-host-jobs.sh" \
+  bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" \
   >"$test_root/install-smoke-failed.out" 2>&1
 install_status=$?
 set -e
 [[ "$install_status" == 1 ]]
-assert_contains "$app_dir/scripts/ops/host-scheduled-job.sh" 'old wrapper must remain active'
+assert_contains "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" 'old wrapper must remain active'
 assert_contains "$app_dir/ops/host-jobs/aihub.crontab" 'old template must be restored'
 cmp -s "$test_root/crontab.before" "$FAKE_CRONTAB_FILE"
 assert_contains "$test_root/install-smoke-failed.out" 'installed scheduled-job smoke failed'
@@ -401,21 +401,21 @@ assert_not_contains "$test_root/install-smoke-failed.out" 'managed AIHUB schedul
 
 set +e
 FAKE_CRONTAB_FAIL_ONCE=true FAKE_CRONTAB_FAIL_FILE="$test_root/crontab-fail-once" \
-  APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" \
+  APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" \
   >"$test_root/install-crontab-failed.out" 2>&1
 install_status=$?
 set -e
 [[ "$install_status" == 7 ]]
-assert_contains "$app_dir/scripts/ops/host-scheduled-job.sh" 'old wrapper must remain active'
+assert_contains "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" 'old wrapper must remain active'
 assert_contains "$app_dir/ops/host-jobs/aihub.crontab" 'old template must be restored'
 cmp -s "$test_root/crontab.before" "$FAKE_CRONTAB_FILE"
 assert_contains "$test_root/install-crontab-failed.out" 'scheduled host job activation failed; restoring the suspended state'
 assert_not_contains "$test_root/install-crontab-failed.out" 'scheduled host job rollback failed'
 
-FAKE_EXPECT_SUSPENDED_CRON=true APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh"
-assert_contains "$app_dir/scripts/ops/host-scheduled-job.sh" 'CONTAINER_CLI'
+FAKE_EXPECT_SUSPENDED_CRON=true APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh"
+assert_contains "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" 'CONTAINER_CLI'
 assert_contains "$app_dir/ops/host-jobs/aihub.crontab" 'BEGIN AIHUB MANAGED JOBS'
-APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh"
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh"
 assert_contains "$FAKE_CRONTAB_FILE" '/home/operator/wispace-vault/snapshot.sh'
 assert_contains "$FAKE_CRONTAB_FILE" "host-scheduled-job.sh' avatar-sweep"
 assert_contains "$FAKE_CRONTAB_FILE" "host-scheduled-job.sh' chart-upload-sweep"
@@ -429,7 +429,7 @@ assert_not_contains "$FAKE_CRONTAB_FILE" 'aihub-avatar-sweep.sh'
 
 cp "$FAKE_CRONTAB_FILE" "$test_root/crontab.before-suspend"
 printf '1\n' >"$FAKE_PGREP_REMAINING_FILE"
-APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" suspend
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" suspend
 assert_contains "$FAKE_CRONTAB_FILE" '/home/operator/wispace-vault/snapshot.sh'
 assert_not_contains "$FAKE_CRONTAB_FILE" 'host-scheduled-job.sh'
 [[ "$(grep -c '^$' "$FAKE_CRONTAB_FILE")" == 1 ]]
@@ -437,14 +437,14 @@ cmp -s "$test_root/crontab.before-suspend" "$app_dir/.aihub-host-jobs-state/cron
 [[ "$(cat "$FAKE_PGREP_REMAINING_FILE")" == 0 ]]
 assert_contains "$FAKE_PGREP_PATTERN_FILE" '(^|/)aihub-ops-job\.sh'
 assert_contains "$FAKE_PGREP_PATTERN_FILE" '(^|/)aihub-avatar-sweep\.sh'
-APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" suspend \
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" suspend \
   >"$test_root/suspend-retry.out"
 assert_contains "$test_root/suspend-retry.out" 'already suspended and drained'
 cmp -s "$test_root/crontab.before-suspend" "$app_dir/.aihub-host-jobs-state/crontab"
 
 printf '0 2 * * * /home/operator/aihub-ops-job.sh quota\n' >"$FAKE_CRONTAB_FILE"
 set +e
-APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" suspend \
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" suspend \
   >"$test_root/suspend-legacy-retry.out" 2>&1
 suspend_status=$?
 set -e
@@ -457,14 +457,14 @@ cat >"$FAKE_CRONTAB_FILE" <<'CRON'
 # END AIHUB MANAGED JOBS
 CRON
 set +e
-APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" suspend \
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" suspend \
   >"$test_root/suspend-unsafe-retry.out" 2>&1
 suspend_status=$?
 set -e
 [[ "$suspend_status" == 1 ]]
 assert_contains "$test_root/suspend-unsafe-retry.out" 'managed jobs remain in the crontab'
 assert_contains "$FAKE_CRONTAB_FILE" '# BEGIN AIHUB MANAGED JOBS'
-APP_DIR="$app_dir" bash "$app_dir/scripts/ops/install-host-jobs.sh" restore
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" restore
 cmp -s "$test_root/crontab.before-suspend" "$FAKE_CRONTAB_FILE"
 [[ ! -e "$app_dir/.aihub-host-jobs-state" ]]
 

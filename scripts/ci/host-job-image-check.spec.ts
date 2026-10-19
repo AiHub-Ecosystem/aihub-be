@@ -16,7 +16,7 @@ describe('host scheduled job image paths', () => {
 
   it('fails when a versioned crontab wrapper path is missing', () => {
     const repository = mkdtempSync(join(tmpdir(), 'aihub-host-job-paths-'));
-    const ops = join(repository, 'scripts', 'ops');
+    const ops = join(repository, 'scripts', 'ops', 'host-jobs');
     const cron = join(repository, 'ops', 'host-jobs');
     mkdirSync(ops, { recursive: true });
     mkdirSync(cron, { recursive: true });
