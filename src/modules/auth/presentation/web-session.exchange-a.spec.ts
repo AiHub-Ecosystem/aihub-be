@@ -24,10 +24,6 @@ import {
 } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
 import { PASSWORD_RESET_TOKEN_REPOSITORY } from '@/modules/auth/password-reset/application/password-reset-token-repository.port';
 import {
-  PASSWORD_RESET_TOKEN,
-  type PasswordResetTokenPort,
-} from '@/modules/auth/password-reset/application/password-reset-token.port';
-import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
@@ -47,9 +43,7 @@ import {
   type VerificationTokenPort,
 } from '@/modules/auth/verification/application/verification-token.port';
 import {
-  USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
-  type UserAccessTokenIssuerPort,
   type UserAccessTokenVerifierPort,
 } from '@/modules/auth/web-sessions/application/user-access-token.port';
 import { WEB_SESSION_CLIENT_SECRET } from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
@@ -57,11 +51,7 @@ import { WEB_SESSION_REPOSITORY } from '@/modules/auth/web-sessions/application/
 import { registerRequestCompletionLog } from '@/modules/metering/presentation/request-completion-log.hook';
 
 const URL = '/v1/auth/web-sessions';
-const VERIFICATION_URL = '/v1/auth/web-sessions/verification';
 const EXCHANGE_URL = '/v1/auth/web-sessions/exchange';
-const LOGOUT_URL = '/v1/auth/web-sessions/logout';
-const VERIFY_EMAIL_URL = '/v1/auth/verify-email';
-const RESET_PASSWORD_URL = '/v1/auth/reset-password';
 const CLIENT_SECRET = 'bff-client-secret-value-that-must-not-leak';
 const END_USER_IP = '203.0.113.10';
 const USER_ID = 'usr_01J00000000000000000000000';
@@ -73,8 +63,6 @@ const HOUR_MS = 60 * 60 * 1000;
 /** The issuer and audience this deployment publishes for User Access JWTs. */
 const ACCESS_TOKEN_ISSUER = 'https://api.test.aihub.example.com';
 const ACCESS_TOKEN_AUDIENCE = 'aihub-user-api';
-const BINDING = 'b'.repeat(43);
-const VERIFICATION_TOKEN_VALUE = 'verification-token-value-under-test';
 
 class FakeClock {
   value = new Date(NOW.getTime());
@@ -129,9 +117,6 @@ class MfaFake implements AuthMfaServicePort {
   async removeFactor(): Promise<void> {}
 }
 
-const OTHER_USER_ID = 'usr_01J00000000000000000000001';
-const OTHER_EMAIL = 'someone-else@example.com';
-
 /** Hashes reversibly, so a test can seed the hash of a binding it knows. */
 class VerificationTokenFake implements VerificationTokenPort {
   issue(now: Date): ReturnType<VerificationTokenPort['issue']> {
@@ -184,7 +169,6 @@ describe('web session HTTP boundary', () => {
   let provisioned: { secret: string | undefined };
   let verifier: UserAccessTokenVerifierPort;
   let passwordResetTokens: InMemoryPasswordResetTokenAdapter;
-  let passwordResetTokenIssuer: PasswordResetTokenPort;
   const log = new CapturedLog();
   const mfa = new MfaFake();
 
@@ -237,10 +221,6 @@ describe('web session HTTP boundary', () => {
     // JWT login issues", because it rejects any other claim set, audience,
     // issuer, or lifetime.
     verifier = app.get<UserAccessTokenVerifierPort>(USER_ACCESS_TOKEN_VERIFIER);
-    // Likewise the real reset-token issuer, so a seeded reset token is hashed
-    // the way the route hashes the one it is handed.
-    passwordResetTokenIssuer =
-      app.get<PasswordResetTokenPort>(PASSWORD_RESET_TOKEN);
   });
 
   afterAll(async () => {
@@ -272,15 +252,6 @@ describe('web session HTTP boundary', () => {
     });
   }
 
-  /** A second, unrelated account holder, so "every session" has an outside. */
-  function seedOtherActiveAccount(): void {
-    seedAccount(state, {
-      userId: OTHER_USER_ID,
-      email: OTHER_EMAIL,
-      passwordHash: '$argon2id$fake',
-    });
-  }
-
   /**
    * A real Web Session token, created through the real route, so an exchange
    * test holds a credential rather than a fixture that could drift from it.
@@ -301,12 +272,6 @@ describe('web session HTTP boundary', () => {
       throw new Error('no web session is stored');
     }
     return stored;
-  }
-
-  /** A credential placed somewhere a Web Session route refuses to read it from. */
-  interface AlternateCredential {
-    readonly url: string;
-    readonly headers: Record<string, string>;
   }
 
   /**
@@ -333,40 +298,6 @@ describe('web session HTTP boundary', () => {
       url: EXCHANGE_URL,
       headers,
       payload: { web_session_token: token },
-    });
-  }
-
-  /**
-   * A reset token the account holder received by email, opened through the
-   * same durable write forgot-password uses.
-   */
-  async function openResetToken(
-    email: string,
-    userId: string,
-  ): Promise<string> {
-    const issued = passwordResetTokenIssuer.issue(clock.now());
-    await passwordResetTokens.issuePasswordResetToken({
-      email,
-      tokenId: issued.id,
-      tokenHash: issued.hash,
-      tokenExpiresAt: issued.expiresAt,
-      now: clock.now(),
-    });
-    if (!state.passwordResetTokens.has(issued.hash)) {
-      throw new Error(`no reset token was stored for ${userId}`);
-    }
-    return issued.raw;
-  }
-
-  function resetPassword(
-    token: unknown,
-    password = 'a new password that works',
-  ): Promise<LightMyRequestResponse> {
-    return app.inject({
-      method: 'POST',
-      url: RESET_PASSWORD_URL,
-      headers: { 'content-type': 'application/json' },
-      payload: { token, password },
     });
   }
 

@@ -1,10 +1,7 @@
 import { Value } from '@sinclair/typebox/value';
 
 import { ReadCurrentUserResponseSchema } from '@/contracts/auth/local-auth';
-import {
-  type InMemoryAccount,
-  seedAccount,
-} from '@/modules/auth/testing/in-memory-auth.state';
+import { seedAccount } from '@/modules/auth/testing/in-memory-auth.state';
 import {
   EMAIL,
   type LocalAuthTestContext,
@@ -34,29 +31,12 @@ describe('local auth HTTP boundary - access, registration, and rate limits', () 
     });
   }
 
-  function account(): InMemoryAccount {
-    const stored = c.state.accounts.get(USER_ID);
-    if (stored === undefined) {
-      throw new Error('the account was never seeded');
-    }
-    return stored;
-  }
-
   function issuedVerificationToken(index = 0): string {
     const token = c.tokenIssuer.issued[index];
     if (token === undefined) {
       throw new Error(`no verification token was issued at position ${index}`);
     }
     return token.raw;
-  }
-
-  function cookieOf(response: { headers: Record<string, unknown> }): string {
-    const setCookie = response.headers['set-cookie'];
-    if (setCookie === undefined) {
-      throw new Error('the response set no refresh cookie');
-    }
-    const cookie = Array.isArray(setCookie) ? setCookie[0] : setCookie;
-    return (cookie ?? '').split(';', 1)[0] ?? '';
   }
 
   function sealed(

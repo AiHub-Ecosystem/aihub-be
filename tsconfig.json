@@ -22,8 +22,9 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "types": ["node", "jest"],
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
+    // #567's split Auth specs left TS6133 findings; keep these guards on and clear the bindings.
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,

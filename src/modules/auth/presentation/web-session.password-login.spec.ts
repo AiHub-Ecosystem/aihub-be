@@ -4,14 +4,11 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
-import { Value } from '@sinclair/typebox/value';
 import type { LightMyRequestResponse } from 'fastify';
-import { decodeJwt } from 'jose';
 
 import { AppModule } from '@/app.module';
 import { createRequestLogging } from '@/common/observability/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
-import { LoginResponseSchema } from '@/contracts/auth/local-auth';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import { AUTH_CLOCK } from '@/modules/auth/local-credentials/application/local-auth.service';
 import {
@@ -33,7 +30,6 @@ import {
 } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import {
   type InMemoryAuthState,
-  type InMemoryWebSession,
   createInMemoryAuthState,
   seedAccount,
 } from '@/modules/auth/testing/in-memory-auth.state';
@@ -46,21 +42,11 @@ import {
   VERIFICATION_TOKEN,
   type VerificationTokenPort,
 } from '@/modules/auth/verification/application/verification-token.port';
-import {
-  USER_ACCESS_TOKEN_ISSUER,
-  USER_ACCESS_TOKEN_VERIFIER,
-  type UserAccessTokenIssuerPort,
-  type UserAccessTokenVerifierPort,
-} from '@/modules/auth/web-sessions/application/user-access-token.port';
 import { WEB_SESSION_CLIENT_SECRET } from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
 import { WEB_SESSION_REPOSITORY } from '@/modules/auth/web-sessions/application/web-session-repository.port';
 import { registerRequestCompletionLog } from '@/modules/metering/presentation/request-completion-log.hook';
 
 const URL = '/v1/auth/web-sessions';
-const VERIFICATION_URL = '/v1/auth/web-sessions/verification';
-const EXCHANGE_URL = '/v1/auth/web-sessions/exchange';
-const LOGOUT_URL = '/v1/auth/web-sessions/logout';
-const VERIFY_EMAIL_URL = '/v1/auth/verify-email';
 const RESET_PASSWORD_URL = '/v1/auth/reset-password';
 const CLIENT_SECRET = 'bff-client-secret-value-that-must-not-leak';
 const END_USER_IP = '203.0.113.10';
@@ -69,12 +55,6 @@ const EMAIL = 'person@example.com';
 const PASSWORD = 'correct horse battery';
 const NOW = new Date('2026-10-08T00:00:00.000Z');
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-const HOUR_MS = 60 * 60 * 1000;
-/** The issuer and audience this deployment publishes for User Access JWTs. */
-const ACCESS_TOKEN_ISSUER = 'https://api.test.aihub.example.com';
-const ACCESS_TOKEN_AUDIENCE = 'aihub-user-api';
-const BINDING = 'b'.repeat(43);
-const VERIFICATION_TOKEN_VALUE = 'verification-token-value-under-test';
 
 class FakeClock {
   value = new Date(NOW.getTime());
@@ -129,9 +109,6 @@ class MfaFake implements AuthMfaServicePort {
   async removeFactor(): Promise<void> {}
 }
 
-const OTHER_USER_ID = 'usr_01J00000000000000000000001';
-const OTHER_EMAIL = 'someone-else@example.com';
-
 /** Hashes reversibly, so a test can seed the hash of a binding it knows. */
 class VerificationTokenFake implements VerificationTokenPort {
   issue(now: Date): ReturnType<VerificationTokenPort['issue']> {
@@ -182,7 +159,6 @@ describe('web session HTTP boundary', () => {
   let limiter: LimiterFake;
   let clock: FakeClock;
   let provisioned: { secret: string | undefined };
-  let verifier: UserAccessTokenVerifierPort;
   let passwordResetTokens: InMemoryPasswordResetTokenAdapter;
   let passwordResetTokenIssuer: PasswordResetTokenPort;
   const log = new CapturedLog();
@@ -233,10 +209,6 @@ describe('web session HTTP boundary', () => {
     registerRequestCompletionLog(fastify);
     await app.init();
     await fastify.ready();
-    // The real issuer, not a fake: the verifier is the oracle for "this is the
-    // JWT login issues", because it rejects any other claim set, audience,
-    // issuer, or lifetime.
-    verifier = app.get<UserAccessTokenVerifierPort>(USER_ACCESS_TOKEN_VERIFIER);
     // Likewise the real reset-token issuer, so a seeded reset token is hashed
     // the way the route hashes the one it is handed.
     passwordResetTokenIssuer =
@@ -269,70 +241,6 @@ describe('web session HTTP boundary', () => {
       userId: USER_ID,
       email: EMAIL,
       passwordHash: '$argon2id$fake',
-    });
-  }
-
-  /** A second, unrelated account holder, so "every session" has an outside. */
-  function seedOtherActiveAccount(): void {
-    seedAccount(state, {
-      userId: OTHER_USER_ID,
-      email: OTHER_EMAIL,
-      passwordHash: '$argon2id$fake',
-    });
-  }
-
-  /**
-   * A real Web Session token, created through the real route, so an exchange
-   * test holds a credential rather than a fixture that could drift from it.
-   */
-  async function webSessionToken(): Promise<string> {
-    const created = await create();
-    if (created.statusCode !== 201) {
-      throw new Error('the web session was never created');
-    }
-    return (created.json() as { data: { web_session_token: string } }).data
-      .web_session_token;
-  }
-
-  /** The durable row itself, which is what the renewal rules change. */
-  function storedSession(): InMemoryWebSession {
-    const [stored] = [...state.webSessions.values()];
-    if (stored === undefined) {
-      throw new Error('no web session is stored');
-    }
-    return stored;
-  }
-
-  /** A credential placed somewhere a Web Session route refuses to read it from. */
-  interface AlternateCredential {
-    readonly url: string;
-    readonly headers: Record<string, string>;
-  }
-
-  /**
-   * An exchange request whose client secret defaults to the provisioned one.
-   * Shared by every describe here: whether a session is still alive is observed
-   * by exchanging it, never by reading the row.
-   */
-  function exchange(
-    token: unknown,
-    options: {
-      readonly secret?: string | null;
-      readonly headers?: Record<string, string>;
-    } = {},
-  ): Promise<LightMyRequestResponse> {
-    const headers: Record<string, string> = {
-      'content-type': 'application/json',
-      ...options.headers,
-    };
-    if (options.secret !== null) {
-      headers['x-aihub-client-secret'] = options.secret ?? CLIENT_SECRET;
-    }
-    return app.inject({
-      method: 'POST',
-      url: EXCHANGE_URL,
-      headers,
-      payload: { web_session_token: token },
     });
   }
 
