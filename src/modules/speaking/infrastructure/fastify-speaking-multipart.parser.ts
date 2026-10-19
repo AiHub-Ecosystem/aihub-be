@@ -1,3 +1,5 @@
+import { Blob } from 'node:buffer';
+
 import multipart from '@fastify/multipart';
 import { Injectable } from '@nestjs/common';
 import { Value } from '@sinclair/typebox/value';
@@ -83,15 +85,17 @@ function isFileTooLarge(error: unknown): boolean {
   return isRecord(error) && error.code === 'FST_REQ_FILE_TOO_LARGE';
 }
 
+// The chunks are the stream's own buffers, kept by reference; building the
+// Blob is the one copy of the audio the request holds until dispatch (#270).
 async function readAudio(
   part: SpeakingMultipartFilePart,
   signal: AbortSignal,
-): Promise<Buffer> {
+): Promise<Blob> {
   if (signal.aborted) {
     throw uploadTimedOut();
   }
 
-  const chunks: Buffer[] = [];
+  const chunks: Uint8Array[] = [];
   let size = 0;
 
   try {
@@ -105,14 +109,14 @@ async function readAudio(
       if (size > SPEAKING_AUDIO_MAX_BYTES) {
         throw payloadTooLarge();
       }
-      chunks.push(Buffer.from(bytes));
+      chunks.push(bytes);
     }
 
     if (part.truncated()) {
       throw payloadTooLarge();
     }
 
-    return Buffer.concat(chunks);
+    return new Blob(chunks);
   } catch (error) {
     if (signal.aborted) {
       throw uploadTimedOut();
@@ -186,9 +190,9 @@ export class FastifySpeakingMultipartParser
             throw invalidRequest('Audio format is not supported');
           }
 
-          const bytes = await readAudio(part, signal);
+          const blob = await readAudio(part, signal);
           audio = {
-            bytes,
+            blob,
             filename: part.filename,
             contentType: part.contentType,
           };
@@ -221,7 +225,7 @@ export class FastifySpeakingMultipartParser
       signal.removeEventListener('abort', abort);
     }
 
-    if (audio === undefined || audio.bytes.length < 100) {
+    if (audio === undefined || audio.blob.size < 100) {
       throw invalidRequest('Audio must be at least 100 bytes');
     }
 

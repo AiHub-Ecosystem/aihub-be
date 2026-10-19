@@ -28,6 +28,11 @@ import {
 import { SpeakingAudioUploadService } from './application/speaking-audio-upload.service';
 import { SpeakingAudioUploadSweep } from './application/speaking-audio-upload.sweep';
 import { SPEAKING_MULTIPART_PARSER } from './application/speaking-multipart-parser.port';
+import {
+  InFlightCeiling,
+  SPEAKING_UPLOADS_IN_FLIGHT_MAX,
+  SPEAKING_UPLOAD_CEILING,
+} from './application/speaking-upload-ceiling';
 import { FastifySpeakingMultipartParser } from './infrastructure/fastify-speaking-multipart.parser';
 import { PostgresSpeakingAudioUploadRepository } from './infrastructure/postgres-speaking-audio-upload.repository';
 import { S3SpeakingAudioAssetStorage } from './infrastructure/s3-speaking-audio-asset.storage';
@@ -131,6 +136,10 @@ import { SpeakingQuestionsController } from './presentation/speaking-questions.c
     {
       provide: SPEAKING_MULTIPART_PARSER,
       useClass: FastifySpeakingMultipartParser,
+    },
+    {
+      provide: SPEAKING_UPLOAD_CEILING,
+      useValue: new InFlightCeiling(SPEAKING_UPLOADS_IN_FLIGHT_MAX),
     },
   ],
   exports: [SpeakingAudioUploadSweep],

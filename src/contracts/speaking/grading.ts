@@ -1,3 +1,5 @@
+import type { Blob } from 'node:buffer';
+
 import { FormatRegistry, type Static, Type } from '@sinclair/typebox';
 
 if (!FormatRegistry.Has('binary')) {
@@ -56,7 +58,11 @@ export const SpeakingGradeJsonRequestSchema = Type.Object(
 );
 
 export interface SpeakingAudio {
-  readonly bytes: Uint8Array;
+  /**
+   * The one buffered copy of the upload. A `Blob` so the downstream multipart
+   * body can reference it without copying it again (#270).
+   */
+  readonly blob: Blob;
   readonly filename: string;
   readonly contentType: string;
 }

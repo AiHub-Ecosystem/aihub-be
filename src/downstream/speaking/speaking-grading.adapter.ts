@@ -56,7 +56,7 @@ export const speakingGradingAdapter: DownstreamAdapter<
       fields,
       file: {
         fieldName: 'audio',
-        bytes: input.audio.bytes,
+        blob: input.audio.blob,
         filename: input.audio.filename,
         contentType: input.audio.contentType || 'application/octet-stream',
       },

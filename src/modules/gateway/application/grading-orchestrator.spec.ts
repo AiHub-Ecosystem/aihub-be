@@ -294,7 +294,7 @@ describe('GradingOrchestratorPort', () => {
     const common = metadata(lifecycle.signal);
     const multipartInput = {
       audio: {
-        bytes: Buffer.from('audio'),
+        blob: new Blob(['audio']),
         filename: 'answer.wav',
         contentType: 'audio/wav',
       },

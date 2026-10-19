@@ -28,6 +28,11 @@ import {
   type SpeakingMultipartParserPort,
 } from '@/modules/speaking/application/speaking-multipart-parser.port';
 import {
+  type InFlightCeiling,
+  SPEAKING_UPLOADS_IN_FLIGHT_MAX,
+  SPEAKING_UPLOAD_CEILING,
+} from '@/modules/speaking/application/speaking-upload-ceiling';
+import {
   SPEAKING_AUDIO_MAX_BYTES,
   registerSpeakingMultipartParser,
 } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
@@ -288,6 +293,10 @@ describe('Speaking grading HTTP flow', () => {
     expect(outboundBody?.get('prompt_text')).toBe(
       'Do you enjoy living in your hometown?',
     );
+    const audio = outboundBody?.get('audio');
+    const audioBytes =
+      audio instanceof Blob ? Buffer.from(await audio.arrayBuffer()) : audio;
+    expect(audioBytes).toEqual(Buffer.alloc(200, 1));
     expect(response.payload).not.toContain('speaking-secret');
   });
 
@@ -819,6 +828,53 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(200);
+  });
+
+  it('refuses a multipart grading over the per-process ceiling before reading its audio', async () => {
+    const ceiling = app.get<InFlightCeiling>(SPEAKING_UPLOAD_CEILING);
+    const parser = app.get<SpeakingMultipartParserPort>(
+      SPEAKING_MULTIPART_PARSER,
+    );
+    const parse = jest.spyOn(parser, 'parse');
+    const held = Array.from({ length: SPEAKING_UPLOADS_IN_FLIGHT_MAX }, () =>
+      ceiling.enter(),
+    );
+    const request = multipartPayload(
+      { part: '1', question_id: 'p1_hometown' },
+      Buffer.alloc(200, 1),
+    );
+    outboundBody = undefined;
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/speaking/grading',
+        headers: { 'content-type': request.contentType },
+        payload: request.payload,
+      });
+
+      expect(response.statusCode).toBe(429);
+      expect(response.json().error).toMatchObject({
+        code: 'CONCURRENCY_LIMIT',
+        retryable: true,
+        retry_after_ms: 1000,
+      });
+      expect(parse).not.toHaveBeenCalled();
+      expect(outboundBody).toBeUndefined();
+    } finally {
+      for (const leave of held) {
+        leave();
+      }
+      parse.mockRestore();
+    }
+
+    const retried = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/speaking/grading',
+      headers: { 'content-type': request.contentType },
+      payload: request.payload,
+    });
+    expect(retried.statusCode).toBe(200);
   });
 
   it('maps an upload deadline cancellation through the public error envelope', async () => {

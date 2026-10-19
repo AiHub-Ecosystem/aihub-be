@@ -350,7 +350,8 @@ function toRequestBody(
     const form = new UndiciFormData();
     form.set(
       value.file.fieldName,
-      new File([Buffer.from(value.file.bytes)], value.file.filename, {
+      // A File built from a Blob references its data; it does not copy it.
+      new File([value.file.blob], value.file.filename, {
         type: value.file.contentType,
       }),
       value.file.filename,

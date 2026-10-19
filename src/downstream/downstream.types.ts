@@ -1,3 +1,5 @@
+import type { Blob } from 'node:buffer';
+
 export type DownstreamId = 'ai-writing' | 'ai-speaking';
 
 export interface DownstreamMultipartBody {
@@ -5,7 +7,7 @@ export interface DownstreamMultipartBody {
   readonly fields: Readonly<Record<string, string>>;
   readonly file: {
     readonly fieldName: string;
-    readonly bytes: Uint8Array;
+    readonly blob: Blob;
     readonly filename: string;
     readonly contentType: string;
   };

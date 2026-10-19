@@ -141,7 +141,7 @@ describe('Gateway runtime-secret wiring', () => {
     };
     const speakingInput: SpeakingGradeInput = {
       audio: {
-        bytes: Buffer.from('audio fixture'),
+        blob: new Blob(['audio fixture']),
         filename: 'answer.wav',
         contentType: 'audio/wav',
       },

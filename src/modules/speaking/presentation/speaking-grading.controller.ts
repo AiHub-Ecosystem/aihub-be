@@ -31,6 +31,10 @@ import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,
 } from '@/modules/speaking/application/speaking-multipart-parser.port';
+import {
+  type InFlightCeiling,
+  SPEAKING_UPLOAD_CEILING,
+} from '@/modules/speaking/application/speaking-upload-ceiling';
 import { createFastifySpeakingMultipartSource } from './fastify-speaking-multipart.source';
 
 const OPERATION = 'speaking.grading' as const;
@@ -109,6 +113,8 @@ export class SpeakingGradingController {
     private readonly orchestrator: GradingOrchestratorPort,
     @Inject(SPEAKING_MULTIPART_PARSER)
     private readonly multipartParser: SpeakingMultipartParserPort,
+    @Inject(SPEAKING_UPLOAD_CEILING)
+    private readonly uploadCeiling: InFlightCeiling,
   ) {}
 
   @Post(OPERATION_CATALOG[OPERATION].path)
@@ -118,7 +124,10 @@ export class SpeakingGradingController {
     @Req() request: AuthenticatedRequest,
   ): Promise<DispatchResult<SpeakingGradeResponse>> {
     const lifecycle = requestLifecycle(request);
+    let leave: (() => void) | undefined;
     try {
+      // Before the body is read, so a refused request never buffers audio.
+      leave = this.uploadCeiling.enter();
       const source = createFastifySpeakingMultipartSource(request);
       const input = await this.multipartParser.parse(source, lifecycle.signal);
       const metadata = requestMetadata(request, lifecycle);
@@ -129,6 +138,7 @@ export class SpeakingGradingController {
         ...metadata,
       });
     } finally {
+      leave?.();
       lifecycle.dispose();
     }
   }

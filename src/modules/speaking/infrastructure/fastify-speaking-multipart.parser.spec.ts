@@ -86,7 +86,10 @@ describe('FastifySpeakingMultipartParser accepted body', () => {
       questionId: 'q_42',
       testType: 'Practice',
     });
-    expect(input.audio.bytes).toHaveLength(AUDIO_BYTES.length);
+    expect(input.audio.blob.size).toBe(AUDIO_BYTES.length);
+    expect(Buffer.from(await input.audio.blob.arrayBuffer())).toEqual(
+      Buffer.from(AUDIO_BYTES),
+    );
   });
 
   it('accepts the fields in any order, including after the audio file', async () => {
