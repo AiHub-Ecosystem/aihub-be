@@ -420,9 +420,12 @@ storage deletion remains retryable.
 
 ### Responding to reported Writing Task 1 charts
 
-The revocation path was verified against Production and Sandbox on 2026-10-19 under revision
-`acec82358f38168b08f0740aa45425c7e1549341`. Production and Sandbox currently run revision
-`92f5d9d5d1e42b921a4c15f51d8d24ef9973ec7e`, which contains the path and passed health/readiness checks.
+The revocation path was verified in Production and Sandbox on 2026-10-19
+under revision `acec82358f38168b08f0740aa45425c7e1549341`.
+On 2026-10-19, `ops/status.sh` reported both environments running
+revision `92f5d9d5d1e42b921a4c15f51d8d24ef9973ec7e` with healthy containers,
+`/health` and `/ready` returning 200, and zero restarts or errors.
+Use `ops/status.sh <commit-sha>` to verify the current deployed revision.
 Public chart rollout remains subject to the separate provider URL-fetch
 security gate in #376.
 
