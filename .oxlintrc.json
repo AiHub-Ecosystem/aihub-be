@@ -29,6 +29,11 @@
     "jest"
   ],
   "rules": {
+    // `expect-expect` must recognize shared helpers that contain assertions.
+    "jest/expect-expect": [
+      "error",
+      { "assertFunctionNames": ["expect", "expectRefused"] }
+    ],
     // Both rules below belong to `suspicious`. That category measures 69
     // findings here, of which only these two are real: 10 are NestJS `@Module()`
     // classes, 24 are `.sort()` calls on freshly built arrays, and the rest are
