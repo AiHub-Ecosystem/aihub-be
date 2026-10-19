@@ -10,7 +10,8 @@
 
 Published Writing charts are publicly readable until their 24-hour expiry.
 ADR-0100 requires an AIHUB-controlled abuse-report contact and a one-business-
-day response target, but the exact contact is a rollout value. The expiry
+day response target. The contact selected for #816 is
+lengocanhpyne363@gmail.com, published in the integration guide. The expiry
 sweep runs every 15 minutes and does not provide an operator action for a
 reported chart.
 
@@ -61,9 +62,9 @@ are not evidence of that bound.
 
 The one-business-day target means triage and a response to the reporter. It
 does not guarantee completed revocation within one business day or deletion of
-copies outside AIHUB's control. The real AIHUB-controlled report contact must
-be selected by the operations/support owner and published before public chart
-rollout.
+copies outside AIHUB's control. The published report contact is
+lengocanhpyne363@gmail.com; public chart rollout also remains subject to the
+provider URL-fetch security gate in #376.
 
 ## Consequences
 
@@ -72,8 +73,9 @@ rollout.
 - The request event is persisted before object deletion so a database failure
   cannot leave a successful delete with no durable evidence. A missing
   completion event means the result needs operational follow-up.
-- The actual public-cache behavior remains unverified until the two controlled
-  bucket tests complete; the rollout gate and issue must remain open until then.
+- Controlled Production and Sandbox public-edge tests completed on 2026-10-19.
+  Their measured headers, post-delete results, and escalation threshold are
+  recorded in the [Writing chart revocation runbook](../operations/deploy-vps.md#responding-to-reported-writing-task-1-charts).
 - The runbook distinguishes origin deletion from public-edge unavailability
   and from copies outside AIHUB's control.
 - The audit record contains operator identity and asset metadata. The privacy

@@ -574,6 +574,11 @@ environment-specific public bucket path. The upload service remains unavailable
 until the matching chart buckets are configured. Public rollout also waits for
 the abuse contact and the provider URL-fetch security gate tracked in #376.
 
+To report a chart hosted by AIHUB, email
+[lengocanhpyne363@gmail.com](mailto:lengocanhpyne363@gmail.com) with its public
+URL and a short description of the concern. AIHUB's target is to triage the
+report and respond within one business day.
+
 ---
 
 ## 4. Endpoints
