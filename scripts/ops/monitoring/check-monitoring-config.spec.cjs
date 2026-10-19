@@ -185,9 +185,13 @@ void test('stops at the first invalid monitoring config', () => {
     () =>
       runMonitoringChecks((command, args) => {
         executed.push([command, args]);
-        return { status: executed.length === 1 ? 1 : 0, error: null };
+        return {
+          status: executed.length === 1 ? 1 : 0,
+          error: null,
+          stderr: 'compose diagnostic from fixture',
+        };
       }, 'D:/repo'),
-    /docker compose monitoring exporters config failed/,
+    /docker compose monitoring exporters config failed: compose diagnostic from fixture/,
   );
   assert.equal(executed.length, 1);
 });
@@ -373,6 +377,14 @@ void test('runs all config checks when each succeeds', () => {
       stdout:
         executed.length === 1 ? JSON.stringify(validExporterCompose()) : '',
     };
-  }, 'D:/repo');
+  });
   assert.equal(executed.length, 5);
+  assert.equal(
+    executed[0][1][2],
+    path.resolve(__dirname, '../../../ops/monitoring/.env.example'),
+  );
+  assert.equal(
+    executed[0][1][6],
+    path.resolve(__dirname, '../../../ops/monitoring/exporters.compose.yml'),
+  );
 });

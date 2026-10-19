@@ -24,6 +24,9 @@ CREATE TABLE writing_chart_revocation_audits (
 CREATE INDEX writing_chart_revocation_audits_retention_idx
   ON writing_chart_revocation_audits (occurred_at, id);
 
+CREATE INDEX writing_chart_revocation_audits_actor_user_account_id_idx
+  ON writing_chart_revocation_audits (actor_user_account_id);
+
 CREATE FUNCTION writing_chart_revocation_audits_append_only()
 RETURNS trigger
 LANGUAGE plpgsql

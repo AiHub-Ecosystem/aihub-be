@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const { activeSlot, renderNginxConfig, renderNginxPair, slotForPort } =
-  require('../../scripts/ops/blue-green-state.cjs') as {
+  require('../../scripts/ops/blue-green/blue-green-state.cjs') as {
     activeSlot(
       this: void,
       config: string,

@@ -3,7 +3,7 @@ import { createServer } from 'node:net';
 import { resolve } from 'node:path';
 
 const { probeDependencyUrl, probeReadiness, probeRuntimeDependencies } =
-  require('../../scripts/ops/probe-runtime-dependencies.cjs') as {
+  require('../../scripts/ops/monitoring/probe-runtime-dependencies.cjs') as {
     probeDependencyUrl(
       this: void,
       value: string,
@@ -34,11 +34,11 @@ describe('runtime dependency probe', () => {
     const dockerignore = readFileSync(resolve(root, '.dockerignore'), 'utf8');
 
     expect(dockerfile).toContain(
-      '/app/scripts/ops/probe-runtime-dependencies.cjs ./scripts/ops/probe-runtime-dependencies.cjs',
+      '/app/scripts/ops/monitoring/probe-runtime-dependencies.cjs ./scripts/ops/monitoring/probe-runtime-dependencies.cjs',
     );
     expect(dockerignore).toContain('!scripts/ops/');
     expect(dockerignore).toContain(
-      '!scripts/ops/probe-runtime-dependencies.cjs',
+      '!scripts/ops/monitoring/probe-runtime-dependencies.cjs',
     );
   });
 

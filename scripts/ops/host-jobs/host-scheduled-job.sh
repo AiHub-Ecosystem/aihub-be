@@ -7,7 +7,7 @@ readonly CONTAINER_CLI='scripts/cli/cli.mjs'
 readonly STATUS_TIMEOUT_SECONDS=30
 readonly DOCKER_EXEC_GRACE_SECONDS=15
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-readonly APP_DIR="${APP_DIR:-$(cd -- "$SCRIPT_DIR/../.." && pwd -P)}"
+readonly APP_DIR="${APP_DIR:-$(cd -- "$SCRIPT_DIR/../../.." && pwd -P)}"
 export APP_DIR
 if [[ ${1:-} == avatar-sweep ]]; then
   default_log="$HOME/aihub-avatar-sweep.log"

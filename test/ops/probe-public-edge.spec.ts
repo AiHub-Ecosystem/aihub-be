@@ -6,7 +6,7 @@ const {
   requestCompletionId,
   startPublicHealthMonitor,
   validateHostname,
-} = require('../../scripts/ops/probe-public-edge.cjs') as {
+} = require('../../scripts/ops/monitoring/probe-public-edge.cjs') as {
   probeHost(
     this: void,
     hostname: string,
@@ -43,7 +43,7 @@ describe('public edge health probe', () => {
       'utf8',
     );
     const deployHelper = readFileSync(
-      resolve(__dirname, '../../scripts/ops/blue-green-host.sh'),
+      resolve(__dirname, '../../scripts/ops/blue-green/blue-green-host.sh'),
       'utf8',
     );
     const productionDeploy = workflow.slice(
@@ -59,12 +59,14 @@ describe('public edge health probe', () => {
       workflow.indexOf('      - name: Final public health window'),
     );
 
-    expect(workflow).toContain('./scripts/ops/blue-green-host.sh deploy');
     expect(workflow).toContain(
-      './scripts/ops/blue-green-host.sh deploy production',
+      './scripts/ops/blue-green/blue-green-host.sh deploy',
     );
     expect(workflow).toContain(
-      './scripts/ops/blue-green-host.sh deploy sandbox',
+      './scripts/ops/blue-green/blue-green-host.sh deploy production',
+    );
+    expect(workflow).toContain(
+      './scripts/ops/blue-green/blue-green-host.sh deploy sandbox',
     );
     expect(workflow).toContain('already runs target; skipping cutover');
     expect(productionDeploy).toContain('"$caller_ip_gate" != production');
@@ -90,7 +92,9 @@ describe('public edge health probe', () => {
     expect(workflow).toContain("steps.deploy_sandbox.outcome == 'skipped'");
     expect(workflow).toContain('rollback_tier production');
     expect(workflow).toContain('rollback_tier sandbox');
-    expect(workflow).toContain('./scripts/ops/blue-green-host.sh recover-gate');
+    expect(workflow).toContain(
+      './scripts/ops/blue-green/blue-green-host.sh recover-gate',
+    );
     expect(workflow).toContain('deadline=$((SECONDS + 10))');
     expect(workflow).toContain('$VPS_APP_DIR/.aihub-host-jobs-candidate/');
     expect(workflow).toContain(
@@ -114,6 +118,11 @@ describe('public edge health probe', () => {
       workflow.indexOf('      - name: Sync deployment files to VPS'),
     );
     expect(workflow).toContain('.aihub-host-jobs-sync-candidate');
+    expect(workflow).toContain('scripts/ops/backups/backup-postgres.sh');
+    expect(workflow).toContain(
+      'scripts/ops/backups/restore-postgres-rehearsal.sh',
+    );
+    expect(workflow).toContain('"$target:$VPS_APP_DIR/scripts/ops/backups/"');
     expect(workflow).toContain(
       'Restore host files and schedule after sync failure',
     );

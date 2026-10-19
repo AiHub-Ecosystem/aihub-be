@@ -493,6 +493,7 @@ model WritingChartRevocationAudit {
   edgeStatus         Int?        @map("edge_status")
   actor              UserAccount @relation(fields: [actorUserAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
+  @@index([actorUserAccountId], map: "writing_chart_revocation_audits_actor_user_account_id_idx")
   @@index([occurredAt, id], map: "writing_chart_revocation_audits_retention_idx")
   @@map("writing_chart_revocation_audits")
 }

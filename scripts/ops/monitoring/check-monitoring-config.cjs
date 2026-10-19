@@ -335,7 +335,7 @@ function buildMonitoringCheckCommands(repositoryRoot) {
 
 function runMonitoringChecks(
   execute = spawnSync,
-  repositoryRoot = path.resolve(__dirname, '../..'),
+  repositoryRoot = path.resolve(__dirname, '../../..'),
 ) {
   for (const step of buildMonitoringCheckCommands(repositoryRoot)) {
     const isCompose = step.label.startsWith('docker compose');
@@ -345,7 +345,9 @@ function runMonitoringChecks(
       isCompose ? { encoding: 'utf8', stdio: 'pipe' } : { stdio: 'inherit' },
     );
     if (result.error || result.status !== 0) {
-      throw new Error(`${step.label} failed`);
+      const detail =
+        result.error?.message ?? result.stderr?.trim().slice(0, 500);
+      throw new Error(`${step.label} failed${detail ? `: ${detail}` : ''}`);
     }
     if (isCompose) {
       try {

@@ -302,7 +302,7 @@ jobs:
           cp -p -- "$APP_DIR/docker-compose.production.yml" "$sync_backup/docker-compose.production.yml"
           : >"$sync_backup/ready"
           chmod 600 "$sync_backup/ready"
-          mkdir -p "$APP_DIR/scripts/ops" "$APP_DIR/scripts/ops/logs" "$APP_DIR/scripts/ops/host-jobs" "$APP_DIR/ops/nginx" \
+          mkdir -p "$APP_DIR/scripts/ops" "$APP_DIR/scripts/ops/logs" "$APP_DIR/scripts/ops/backups" "$APP_DIR/scripts/ops/host-jobs" "$APP_DIR/ops/nginx" \
             "$APP_DIR/ops/vault/agent" "$APP_DIR/ops/vault/templates" \
             "$APP_DIR/ops/host-jobs" "$APP_DIR/.aihub-host-jobs-candidate"
           REMOTE
@@ -321,7 +321,7 @@ jobs:
           scp "${scp_opts[@]}" \
             scripts/ops/backups/backup-postgres.sh \
             scripts/ops/backups/restore-postgres-rehearsal.sh \
-            "$target:$VPS_APP_DIR/scripts/ops/"
+            "$target:$VPS_APP_DIR/scripts/ops/backups/"
           scp "${scp_opts[@]}" \
             scripts/ops/host-jobs/container-watchdog.sh \
             "$target:$VPS_APP_DIR/scripts/ops/host-jobs/"

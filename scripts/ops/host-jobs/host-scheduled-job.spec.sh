@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 real_flock="$(command -v flock || true)"
 real_timeout="$(command -v timeout || true)"
 test_root="$(mktemp -d)"
@@ -76,12 +76,15 @@ assert_contains "$test_root/colliding.err" 'prune and chart-upload-sweep both st
 app_dir="$test_root/app"
 bin_dir="$test_root/bin"
 home_dir="$test_root/home"
-mkdir -p "$app_dir/scripts/ops" "$app_dir/ops/host-jobs" \
+mkdir -p "$app_dir/scripts/ops/host-jobs" "$app_dir/scripts/ops/blue-green" \
+  "$app_dir/ops/host-jobs" \
   "$app_dir/.aihub-host-jobs-candidate" "$bin_dir" "$home_dir"
 cp "$repository_root/scripts/ops/host-jobs/host-scheduled-job.sh" \
   "$app_dir/.aihub-host-jobs-candidate/host-scheduled-job.sh"
-cp "$repository_root/scripts/ops/host-jobs/host-scheduled-job.sh" "$app_dir/scripts/ops/"
-cp "$repository_root/scripts/ops/host-jobs/install-host-jobs.sh" "$app_dir/scripts/ops/"
+cp "$repository_root/scripts/ops/host-jobs/host-scheduled-job.sh" \
+  "$app_dir/scripts/ops/host-jobs/"
+cp "$repository_root/scripts/ops/host-jobs/install-host-jobs.sh" \
+  "$app_dir/scripts/ops/host-jobs/"
 cp "$repository_root/ops/host-jobs/aihub.crontab" \
   "$app_dir/.aihub-host-jobs-candidate/aihub.crontab"
 chmod 755 "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh"
@@ -439,6 +442,10 @@ cmp -s "$test_root/crontab.before-suspend" "$app_dir/.aihub-host-jobs-state/cron
 [[ "$(cat "$FAKE_PGREP_REMAINING_FILE")" == 0 ]]
 assert_contains "$FAKE_PGREP_PATTERN_FILE" '(^|/)aihub-ops-job\.sh'
 assert_contains "$FAKE_PGREP_PATTERN_FILE" '(^|/)aihub-avatar-sweep\.sh'
+assert_contains "$FAKE_PGREP_PATTERN_FILE" \
+  '/scripts/ops/host-jobs/host-scheduled-job\.sh'
+assert_not_contains "$FAKE_PGREP_PATTERN_FILE" \
+  '/scripts/ops/host-scheduled-job\.sh'
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" suspend \
   >"$test_root/suspend-retry.out"
 assert_contains "$test_root/suspend-retry.out" 'already suspended and drained'
