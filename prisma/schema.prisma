@@ -477,6 +477,26 @@ model WritingChartUpload {
   @@map("writing_chart_uploads")
 }
 
+/// Internal operator evidence for early removal of a reported public chart.
+///
+/// The append-only trigger and 24-month deletion boundary are owned by
+/// migration 0041. Report text, URLs, and image bytes are intentionally absent.
+/// @owner writing
+model WritingChartRevocationAudit {
+  id                 String      @id
+  assetId            String      @map("asset_id")
+  actorUserAccountId String      @map("actor_user_account_id")
+  occurredAt         DateTime    @map("occurred_at") @db.Timestamptz(6)
+  phase              String
+  originOutcome      String?     @map("origin_outcome")
+  edgeOutcome        String?     @map("edge_outcome")
+  edgeStatus         Int?        @map("edge_status")
+  actor              UserAccount @relation(fields: [actorUserAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([occurredAt, id], map: "writing_chart_revocation_audits_retention_idx")
+  @@map("writing_chart_revocation_audits")
+}
+
 /// The durable per-request usage record.
 ///
 /// `CHECK` constraints are owned by migration 0005. The BRIN index
@@ -534,6 +554,7 @@ model UserAccount {
   mfaFactor         UserMfaFactor?
   mfaRecoveryCodes  UserMfaRecoveryCode[]
   webSessions       WebSession[]
+  writingChartRevocationAudits WritingChartRevocationAudit[]
 
   @@map("user_accounts")
 }

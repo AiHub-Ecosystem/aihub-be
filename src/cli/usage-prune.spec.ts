@@ -191,4 +191,45 @@ describe('runUsagePruneCommand', () => {
       }),
     ]);
   });
+
+  it('runs the Writing chart audit retention step inside usage:prune', async () => {
+    const lines: string[] = [];
+    const auditRepository = {
+      findActiveOperatorAccount: jest.fn(),
+      append: jest.fn(),
+      pruneExpired: jest
+        .fn<Promise<number>, [Date, number]>()
+        .mockResolvedValueOnce(1)
+        .mockResolvedValueOnce(0),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await runUsagePruneCommand({
+      databaseUrl: 'postgres://test',
+      repository: new FakeUsageRetentionPort(),
+      writingChartAuditRepository: auditRepository,
+      now: new Date('2026-10-19T02:30:00.000Z'),
+      emit: (line) => lines.push(line),
+    });
+
+    expect(auditRepository.pruneExpired).toHaveBeenNthCalledWith(
+      1,
+      new Date('2024-10-19T02:30:00.000Z'),
+      1_000,
+    );
+    expect(auditRepository.pruneExpired).toHaveBeenNthCalledWith(
+      2,
+      new Date('2024-10-19T02:30:00.000Z'),
+      1_000,
+    );
+    expect(
+      lines
+        .map((line) => JSON.parse(line))
+        .find(
+          (event) =>
+            event.event === 'writing_chart_revocation_audit_prune_completed',
+        ),
+    ).toMatchObject({ deleted: 1, status: 'completed' });
+    expect(auditRepository.close).toHaveBeenCalledTimes(1);
+  });
 });

@@ -331,6 +331,13 @@ succeeds. Completed objects in either public bucket are intentionally readable
 by anyone with the URL; staging remains private. Bucket policies and CORS
 settings are deployment gates; source changes do not provision them.
 
+Before enabling public chart rollout, also publish the AIHUB-controlled abuse
+report contact selected by the operations/support owner. The contact is a
+business value from ADR-0100; do not invent or publish a placeholder. The
+response target is one business day for triage and a response to the reporter,
+not a promise that public access or every outside copy will be removed in that
+time.
+
 ### Sweeping Speaking Audio upload orphans
 
 `speaking:audio-upload-sweep` removes rejected uploads and incomplete intents
@@ -410,6 +417,55 @@ on the first successful sweep after the deadline. The wrapper logs per-tier
 counts to `~/aihub-writing-chart-upload-sweep.log`; alert on a non-zero exit or
 a missed run. The sweep deletes object bytes before its durable row, so failed
 storage deletion remains retryable.
+
+### Responding to reported Writing Task 1 charts
+
+This procedure becomes executable when #816 is deployed. Until then, operator
+revocation and public-edge behavior are not verified, so the public chart
+rollout gate remains open.
+
+1. Receive reports through the published AIHUB-controlled contact. Triage and
+   respond to the reporter within one business day. Keep the raw report in its
+   controlled intake channel; do not copy it or chart bytes into an operator
+   command or audit record.
+2. Identify the chart from its public URL. Accept only HTTPS URLs on
+   `s3.wispace.app` whose path names the Production
+   `aihub-writing-charts` or Sandbox `aihub-sandbox-writing-charts` bucket and
+   the exact published chart object. Refer URLs outside these AIHUB-controlled
+   buckets to the responsible party; AIHUB cannot revoke those objects. Once
+   the report is substantiated and the chart is in scope, initiate revocation
+   promptly.
+3. Run `pnpm cli writing:chart-revoke --url <public-url> --actor <active-operator-username>`
+   from that environment's operator host with its operator credentials.
+   The credentials authorize execution; `--actor` identifies the active AIHUB
+   account for audit and grants no privilege by itself.
+4. Read the result as two separate facts: whether the origin object was
+   deleted or already absent, and whether the public edge stopped serving it.
+   The edge probe checks the public GET path with a bounded one-byte Range
+   request and cancels the body after headers arrive. If the edge still returns
+   the object, the result is propagation pending; recheck and escalate if it
+   remains public beyond the measured bound. The command must work when the
+   15-minute expiry sweep has already removed the database row.
+5. The per-environment internal audit appends a request event before deletion,
+   then a completion event with the result. It records asset ID, operator
+   account, timestamp, and phase without the report, URL, or image bytes. If
+   the CLI says the outcome is unconfirmed, the request event remains; after
+   database recovery, rerun the same URL and actor because deletion is
+   idempotent. Events are immutable during the
+   24-month retention period and removed only by the existing managed
+   `usage:prune` job at 02:30 UTC after #816 extends it to prune expired
+   revocation records.
+
+Before closing #816 or enabling public rollout, create one synthetic,
+non-sensitive chart object in each public bucket. From outside the host, use
+the normal public GET path, record the real 200 response headers, delete each
+object through the operator path, and observe when each public GET stops
+serving it. Document the measured stale window and escalation threshold. The
+source `Cache-Control` setting, a HEAD response, and a 404 for a nonexistent
+object do not establish this behavior. If the measured window is not bounded or
+a deleted object remains public past it, keep the rollout gate open and
+escalate to the storage/edge owner. This test must not read or retain a
+customer chart.
 
 ### Scheduled operator jobs
 

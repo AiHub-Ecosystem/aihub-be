@@ -131,3 +131,17 @@ The `user_identity_mode` signal a successful demo key validation reports:
 `declared_id` otherwise. It selects which identity input the demo collects; it
 carries no issuer, JWKS, or key detail, and it authorizes nothing on its own.
 _Also known as_: `user_identity_mode`
+
+**Writing Task 1 chart asset**:
+An AIHUB-published chart image attached to a Writing Task 1 request. Its URL is
+publicly readable until its 24-hour expiry or earlier revocation; Organization
+and End-User ownership scope upload and completion, not public reads
+([ADR-0100](docs/adr/0100-writing-task1-chart-image-uploads.md),
+[ADR-0101](docs/adr/0101-writing-charts-use-shared-seaweedfs-host.md),
+[ADR-0111](docs/adr/0111-revoke-reported-public-writing-charts.md)).
+
+**Writing chart revocation**:
+Ending public serving of an AIHUB-published chart before its natural expiry.
+It stops access through AIHUB-controlled serving; it cannot retrieve copies
+others already downloaded or independently cached.
+_Avoid_: deletion (without qualification), which can imply every copy is gone.

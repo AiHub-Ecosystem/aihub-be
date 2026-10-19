@@ -56,6 +56,16 @@ has the URL; their deletion deadline is 24 hours after publication, handled by
 the 15-minute sweep at the first successful run after expiry. SeaweedFS bucket
 backups and cache/CDN deletion propagation have not been established.
 
+Issue #816 adds an internal, per-environment Writing-chart revocation audit.
+It appends a request event before deletion and a completion event with separate
+origin and public-edge outcomes; a request without a completion means the
+result needs follow-up. Events record the chart asset ID, operator account, and
+event time; they do not store the report, public URL, or image bytes. They follow
+the 24-month audit retention policy and are removed only by the controlled
+retention prune. The audit and its prune are implemented but not deployed.
+Public cache behavior for existing chart objects is still unverified; the
+configured `max-age=300` is not an observed stale-serving bound.
+
 ## Backup copies
 
 - A manual pg_dump -Fc is stored under ~/aihub-backups on the same VPS before

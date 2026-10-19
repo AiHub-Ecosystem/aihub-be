@@ -1,4 +1,10 @@
-import { PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
+import { createServer } from 'node:http';
+
+import {
+  PutObjectCommand,
+  S3Client,
+  type S3Client as S3ClientType,
+} from '@aws-sdk/client-s3';
 
 import { createSeaweedFsS3Client } from '@/modules/secrets/infrastructure/seaweedfs-s3-client.factory';
 import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/application/writing-chart-upload.policy';
@@ -18,7 +24,7 @@ function createStorage(send = jest.fn().mockResolvedValue({}), overrides = {}) {
       stagingBucket: 'aihub-sandbox-writing-chart-staging',
       publicBucket: 'aihub-sandbox-writing-charts',
       publicBaseUrl: 'https://s3.wispace.app',
-      client: { send } as unknown as Pick<S3Client, 'send'>,
+      client: { send } as unknown as Pick<S3ClientType, 'send'>,
       ...overrides,
     },
   );
@@ -226,6 +232,83 @@ describe('S3WritingChartUploadStorage contract', () => {
           byteSize: 100,
         }),
       ).rejects.toMatchObject({ code: 'WRITING_CHART_STORAGE_UNAVAILABLE' });
+    }
+  });
+
+  it('checks and deletes only the exact published object through the S3 HTTP boundary', async () => {
+    const requests: { method: string | undefined; path: string | undefined }[] =
+      [];
+    let present = true;
+    const server = createServer((request, response) => {
+      requests.push({ method: request.method, path: request.url });
+      if (request.method === 'HEAD') {
+        response.statusCode = present ? 200 : 404;
+        response.end();
+        return;
+      }
+      if (request.method === 'DELETE') {
+        present = false;
+        response.statusCode = 204;
+        response.end();
+        return;
+      }
+      response.statusCode = 405;
+      response.end();
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, '127.0.0.1', resolve),
+    );
+    const address = server.address();
+    if (address === null || typeof address === 'string') {
+      throw new Error('S3 HTTP stub did not bind');
+    }
+    const client = new S3Client({
+      endpoint: `http://127.0.0.1:${address.port}`,
+      forcePathStyle: true,
+      region: 'us-east-1',
+      credentials: { accessKeyId: 'access', secretAccessKey: 'secret' },
+      maxAttempts: 1,
+    });
+    const adapter = new S3WritingChartUploadStorage(client, {
+      environment: 'sandbox',
+      stagingBucket: 'aihub-sandbox-writing-chart-staging',
+      publicBucket: 'aihub-sandbox-writing-charts',
+      publicBaseUrl: 'https://s3.wispace.app',
+    });
+
+    try {
+      await expect(
+        adapter.deletePublishedObjectIfPresent({
+          environment: 'sandbox',
+          publishedKey: PUBLISHED_KEY,
+        }),
+      ).resolves.toBe('deleted');
+      await expect(
+        adapter.deletePublishedObjectIfPresent({
+          environment: 'sandbox',
+          publishedKey: PUBLISHED_KEY,
+        }),
+      ).resolves.toBe('already_absent');
+
+      expect(requests.map(({ method }) => method)).toEqual([
+        'HEAD',
+        'DELETE',
+        'HEAD',
+      ]);
+      expect(
+        requests.map(
+          ({ path }) => new URL(path ?? '/', 'http://stub').pathname,
+        ),
+      ).toEqual([
+        '/aihub-sandbox-writing-charts/writing-charts/chart_01J00000000000000000000001/published',
+        '/aihub-sandbox-writing-charts/writing-charts/chart_01J00000000000000000000001/published',
+        '/aihub-sandbox-writing-charts/writing-charts/chart_01J00000000000000000000001/published',
+      ]);
+    } finally {
+      client.destroy();
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
     }
   });
 });

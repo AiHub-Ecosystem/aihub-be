@@ -116,15 +116,20 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Speaking sample answer:** a publicly fetchable recording of a candidate's
   answer to one Speaking prompt; it is distinct from audio that reads the
   prompt and from caller-uploaded Pass-through audio.
-- **Writing Task 1 chart asset:** a planned customer image owned by one
-  Organization and End User, uploaded with an eligible API key, verified before
-  publication, publicly readable and shareable for 24 hours, and isolated on
-  the dedicated chart origin. Ownership scopes upload and completion, not
-  public reads ([ADR-0100](docs/adr/0100-writing-task1-chart-image-uploads.md)).
+- **Writing Task 1 chart asset:** an AIHUB-published chart image attached to a
+  Writing Task 1 request. It is publicly readable until its 24-hour expiry;
+  the accepted operator revocation design may stop AIHUB-controlled serving
+  earlier. Its URL uses the shared `s3.wispace.app`
+  host with separate Production and Sandbox buckets ([ADR-0100](docs/adr/0100-writing-task1-chart-image-uploads.md),
+  [ADR-0101](docs/adr/0101-writing-charts-use-shared-seaweedfs-host.md)).
+  Organization and End-User ownership scope upload and completion, not public
+  reads. The revocation design is accepted in [ADR-0111](docs/adr/0111-revoke-reported-public-writing-charts.md);
+  the CLI, audit, and prune are implemented in #816, while production release,
+  the real report contact, and public-edge verification remain gated.
 - **Published image URL:** an HTTPS reference supplied for a Writing Task 1
   chart, publicly readable without a signature or credentials. It may point to
-  a customer-hosted image or, once implemented, a completed AIHUB Writing Task
-  1 chart asset. The AIHUB sample remains on `s3.wispace.app`
+  a customer-hosted image or a completed AIHUB Writing Task 1 chart asset. The
+  AIHUB sample remains on `s3.wispace.app`
   ([ADR-0084](docs/adr/0084-writing-task1-public-image-fetch-boundary.md)); its
   sample storage remains as recorded in
   [ADR-0060](docs/adr/0060-writing-task1-sample-image-is-published-not-signed.md).

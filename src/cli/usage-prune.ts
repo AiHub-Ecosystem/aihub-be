@@ -8,6 +8,11 @@ import {
   UsageRetentionService,
   type UsageRetentionSummary,
 } from '@/modules/metering/public/usage-retention';
+import type { WritingChartRevocationAuditRepositoryPort } from '@/modules/writing/application/writing-chart-revocation.port';
+import {
+  WRITING_CHART_REVOCATION_AUDIT_BATCH_SIZE,
+  WritingChartRevocationAuditRetentionService,
+} from '@/modules/writing/public/chart-revocation';
 import { createOperatorMeteringClient } from './operator-metering-client';
 
 export interface UsagePruneCliInput {
@@ -15,6 +20,7 @@ export interface UsagePruneCliInput {
   readonly now?: Date;
   readonly clock?: () => Date;
   readonly repository?: UsageRetentionPort;
+  readonly writingChartAuditRepository?: WritingChartRevocationAuditRepositoryPort;
   readonly emit?: (line: string) => void;
 }
 
@@ -164,6 +170,64 @@ export async function runUsagePruneCommand(
     );
     emitFailure(emit, clock(), error.code, summary?.cutoff ?? null);
     throw error;
+  }
+
+  const shouldPruneWritingChartAudits =
+    input.writingChartAuditRepository !== undefined ||
+    input.repository === undefined;
+  if (shouldPruneWritingChartAudits) {
+    const startedAt = clock();
+    let auditRepository = input.writingChartAuditRepository;
+    let auditSummary:
+      | Awaited<
+          ReturnType<WritingChartRevocationAuditRetentionService['prune']>
+        >
+      | undefined;
+    let auditFailed = false;
+    try {
+      auditRepository ??= await (
+        await import('./operator-writing-chart-client')
+      ).createOperatorWritingChartRevocationAuditClient(input.databaseUrl);
+      auditSummary = await new WritingChartRevocationAuditRetentionService(
+        auditRepository,
+        clock,
+      ).prune();
+    } catch {
+      auditFailed = true;
+    } finally {
+      try {
+        await auditRepository?.close?.();
+      } catch {
+        auditFailed = true;
+      }
+    }
+
+    if (auditFailed || auditSummary === undefined) {
+      emit(
+        JSON.stringify({
+          event: 'writing_chart_revocation_audit_prune_failed',
+          failed_at: timestamp(clock()),
+          status: 'failed',
+          error_code: 'DATABASE_FAILURE',
+        }),
+      );
+      throw new UsagePruneError(
+        'DATABASE_FAILURE',
+        'Writing chart revocation audit retention failed',
+      );
+    }
+    emit(
+      JSON.stringify({
+        event: 'writing_chart_revocation_audit_prune_completed',
+        started_at: timestamp(startedAt),
+        completed_at: timestamp(clock()),
+        cutoff: timestamp(auditSummary.cutoff),
+        batch_size: WRITING_CHART_REVOCATION_AUDIT_BATCH_SIZE,
+        batches: auditSummary.batches,
+        deleted: auditSummary.deleted,
+        status: 'completed',
+      }),
+    );
   }
 
   emit(completionLine);

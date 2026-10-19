@@ -12,6 +12,7 @@ import {
   objectStorageSignal,
   objectStorageUnavailable,
 } from '@/modules/secrets/public/object-storage';
+import type { WritingChartRevocationStoragePort } from '@/modules/writing/application/writing-chart-revocation.port';
 import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/application/writing-chart-upload.policy';
 import type { WritingChartUploadStoragePort } from '@/modules/writing/application/writing-chart-upload.port';
 import {
@@ -63,7 +64,7 @@ function isChartKey(value: string, stage: 'staging' | 'published'): boolean {
 }
 
 export class S3WritingChartUploadStorage
-  implements WritingChartUploadStoragePort
+  implements WritingChartUploadStoragePort, WritingChartRevocationStoragePort
 {
   private readonly signer: S3Client | undefined;
   private readonly client: S3ClientPort | undefined;
@@ -282,24 +283,54 @@ export class S3WritingChartUploadStorage
     await this.delete(client, bucket, input.publishedKey, signal);
   }
 
+  async deletePublishedObjectIfPresent(input: {
+    readonly environment: WritingChartEnvironment;
+    readonly publishedKey: string;
+  }): Promise<'deleted' | 'already_absent'> {
+    const { client, bucket } = this.require(
+      input.environment,
+      input.publishedKey,
+      'published',
+    );
+    const signal = objectStorageSignal();
+    try {
+      await client.send(
+        new HeadObjectCommand({ Bucket: bucket, Key: input.publishedKey }),
+        { abortSignal: signal },
+      );
+    } catch (error) {
+      if (objectStorageNotFound(error)) return 'already_absent';
+      throw objectStorageUnavailable(
+        'WRITING_CHART_STORAGE_UNAVAILABLE',
+        'Writing chart storage is unavailable',
+        error,
+        signal,
+      );
+    }
+    return (await this.delete(client, bucket, input.publishedKey, signal))
+      ? 'deleted'
+      : 'already_absent';
+  }
+
   private async delete(
     client: S3ClientPort,
     bucket: string,
     key: string,
     signal: AbortSignal,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }), {
         abortSignal: signal,
       });
+      return true;
     } catch (error) {
-      if (!objectStorageNotFound(error))
-        throw objectStorageUnavailable(
-          'WRITING_CHART_STORAGE_UNAVAILABLE',
-          'Writing chart storage is unavailable',
-          error,
-          signal,
-        );
+      if (objectStorageNotFound(error)) return false;
+      throw objectStorageUnavailable(
+        'WRITING_CHART_STORAGE_UNAVAILABLE',
+        'Writing chart storage is unavailable',
+        error,
+        signal,
+      );
     }
   }
 

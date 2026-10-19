@@ -106,6 +106,11 @@ const writingChartUploadSweepDescriptor = cliRunnerDescriptor(
   'runWritingChartUploadSweepCommand',
   'Writing chart upload sweep command is unavailable',
 );
+const writingChartRevokeDescriptor = cliRunnerDescriptor(
+  'writing-chart-revoke',
+  'runWritingChartRevokeCommand',
+  'Writing chart revocation command is unavailable',
+);
 const usageReportDescriptor = cliRunnerDescriptor(
   'usage-report',
   'runUsageReportCommand',
@@ -856,6 +861,35 @@ async function sweepWritingChartUploadsCommand(options) {
   }
 }
 
+async function revokeWritingChartCommand(options) {
+  for (const name of options.keys()) {
+    if (name !== 'url' && name !== 'actor') usageError();
+  }
+  const environment =
+    process.env.AIHUB_RUNTIME_DATABASE_SCOPE?.trim() || 'production';
+  if (environment !== 'production' && environment !== 'sandbox') usageError();
+  let result;
+  try {
+    result = await runCliCommand(writingChartRevokeDescriptor, {
+      databaseUrl: process.env.DATABASE_URL ?? '',
+      environment,
+      url: requiredOption(options, 'url'),
+      actorUsername: requiredOption(options, 'actor'),
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      ['INVALID_PUBLIC_URL', 'ACTOR_INVALID'].includes(error.code)
+    ) {
+      usageError();
+    }
+    throw error;
+  }
+  if (result.origin === 'failed') {
+    throw new Error('Writing chart origin deletion failed');
+  }
+}
+
 async function pruneUsageCommand(options) {
   if (options.size > 0) {
     usageError();
@@ -1030,6 +1064,10 @@ async function main() {
     await sweepWritingChartUploadsCommand(options);
     return;
   }
+  if (command === 'writing:chart-revoke') {
+    await revokeWritingChartCommand(options);
+    return;
+  }
   if (command === 'usage:prune') {
     await pruneUsageCommand(options);
     return;
@@ -1051,6 +1089,10 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Command failed');
+  console.error(
+    error instanceof Error && error.code === 'AUDIT_COMPLETION_FAILURE'
+      ? 'Revocation outcome is unconfirmed: the request is audited, but completion could not be confirmed. After database recovery, rerun the same URL and actor; deletion is idempotent.'
+      : 'Command failed',
+  );
   process.exitCode = error instanceof CliUsageError ? 2 : 1;
 });

@@ -557,8 +557,8 @@ describe('cross-module table access', () => {
       'organization_invitations: auth + identity',
       // Metering reads the Organization an entitlement decision is about.
       'organizations: identity + metering',
-      // Both modules resolve the User Account a token belongs to.
-      'user_accounts: auth + identity',
+      // Writing records the active operator account for #816 revocations.
+      'user_accounts: auth + identity + writing',
     ]);
   });
 });

@@ -14,3 +14,21 @@ export async function createOperatorWritingChartClient(databaseUrl: string) {
     { close: () => holder.close() },
   );
 }
+
+export async function createOperatorWritingChartRevocationAuditClient(
+  databaseUrl: string,
+) {
+  const [{ createOperatorPrismaClient }, repositoryModule] = await Promise.all([
+    import('@/modules/persistence/infrastructure/prisma-client'),
+    import(
+      '@/modules/writing/infrastructure/postgres-writing-chart-revocation-audit.repository'
+    ),
+  ]);
+  const holder = createOperatorPrismaClient('runtime', databaseUrl);
+  return Object.assign(
+    new repositoryModule.PostgresWritingChartRevocationAuditRepository(
+      holder.prisma,
+    ),
+    { close: () => holder.close() },
+  );
+}

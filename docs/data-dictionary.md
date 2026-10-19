@@ -26,8 +26,9 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `pnpm generate:d
 | SpeakingAudioAsset          | speaking    | 9       |
 | SpeakingAudioUploadIntent   | speaking    | 10      |
 | WritingChartUpload          | writing     | 14      |
+| WritingChartRevocationAudit | writing     | 9       |
 | UsageRecord                 | metering    | 21      |
-| UserAccount                 | auth        | 17      |
+| UserAccount                 | auth        | 18      |
 | UserAvatar                  | avatar      | 7       |
 | UserMfaFactor               | auth        | 8       |
 | UserMfaRecoveryCode         | auth        | 5       |
@@ -367,6 +368,22 @@ Owner: `writing`
 | publishedAt        | DateTime? | @map("published_at") @db.Timestamptz(6)                                       |
 | retentionExpiresAt | DateTime? | @map("retention_expires_at") @db.Timestamptz(6)                               |
 
+## WritingChartRevocationAudit
+
+Owner: `writing`
+
+| Column             | Type        | Attributes                                                                                        |
+| ------------------ | ----------- | ------------------------------------------------------------------------------------------------- |
+| id                 | String      | @id                                                                                               |
+| assetId            | String      | @map("asset_id")                                                                                  |
+| actorUserAccountId | String      | @map("actor_user_account_id")                                                                     |
+| occurredAt         | DateTime    | @map("occurred_at") @db.Timestamptz(6)                                                            |
+| phase              | String      |                                                                                                   |
+| originOutcome      | String?     | @map("origin_outcome")                                                                            |
+| edgeOutcome        | String?     | @map("edge_outcome")                                                                              |
+| edgeStatus         | Int?        | @map("edge_status")                                                                               |
+| actor              | UserAccount | @relation(fields: [actorUserAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction) |
+
 ## UsageRecord
 
 Owner: `metering`
@@ -399,25 +416,26 @@ Owner: `metering`
 
 Owner: `auth`
 
-| Column                  | Type                     | Attributes                                 |
-| ----------------------- | ------------------------ | ------------------------------------------ |
-| id                      | String                   | @id                                        |
-| username                | String                   | @unique(map: "user_accounts_username_key") |
-| status                  | String                   |                                            |
-| createdAt               | DateTime                 | @map("created_at") @db.Timestamptz(6)      |
-| updatedAt               | DateTime                 | @map("updated_at") @db.Timestamptz(6)      |
-| authIdentities          | AuthIdentity[]           |                                            |
-| createdOrganizations    | Organization[]           | @relation("organization_created_by")       |
-| auditEvents             | OrganizationAuditEvent[] |                                            |
-| emailVerificationTokens | EmailVerificationToken?  |                                            |
-| invitations             | OrganizationInvitation[] |                                            |
-| memberships             | OrganizationMembership[] |                                            |
-| passwordResetTokens     | PasswordResetToken?      |                                            |
-| refreshTokens           | RefreshToken[]           |                                            |
-| avatar                  | UserAvatar?              |                                            |
-| mfaFactor               | UserMfaFactor?           |                                            |
-| mfaRecoveryCodes        | UserMfaRecoveryCode[]    |                                            |
-| webSessions             | WebSession[]             |                                            |
+| Column                       | Type                          | Attributes                                 |
+| ---------------------------- | ----------------------------- | ------------------------------------------ |
+| id                           | String                        | @id                                        |
+| username                     | String                        | @unique(map: "user_accounts_username_key") |
+| status                       | String                        |                                            |
+| createdAt                    | DateTime                      | @map("created_at") @db.Timestamptz(6)      |
+| updatedAt                    | DateTime                      | @map("updated_at") @db.Timestamptz(6)      |
+| authIdentities               | AuthIdentity[]                |                                            |
+| createdOrganizations         | Organization[]                | @relation("organization_created_by")       |
+| auditEvents                  | OrganizationAuditEvent[]      |                                            |
+| emailVerificationTokens      | EmailVerificationToken?       |                                            |
+| invitations                  | OrganizationInvitation[]      |                                            |
+| memberships                  | OrganizationMembership[]      |                                            |
+| passwordResetTokens          | PasswordResetToken?           |                                            |
+| refreshTokens                | RefreshToken[]                |                                            |
+| avatar                       | UserAvatar?                   |                                            |
+| mfaFactor                    | UserMfaFactor?                |                                            |
+| mfaRecoveryCodes             | UserMfaRecoveryCode[]         |                                            |
+| webSessions                  | WebSession[]                  |                                            |
+| writingChartRevocationAudits | WritingChartRevocationAudit[] |                                            |
 
 ## UserAvatar
 
