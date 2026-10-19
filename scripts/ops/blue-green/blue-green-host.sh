@@ -300,11 +300,26 @@ container_running() {
   [[ "$(sudo -n docker inspect --format '{{.State.Running}}' "$id")" == true ]]
 }
 
+container_probe_path() {
+  local id="$1" allow_legacy="${2:-false}"
+  local current=/app/scripts/ops/monitoring/probe-runtime-dependencies.cjs
+  local legacy=/app/scripts/ops/probe-runtime-dependencies.cjs
+  if sudo -n docker exec "$id" test -f "$current"; then
+    printf '%s\n' "$current"
+  elif [[ "$allow_legacy" == true ]] && sudo -n docker exec "$id" test -f "$legacy"; then
+    printf '%s\n' "$legacy"
+  else
+    printf 'runtime dependency probe is missing from container %s\n' "$id" >&2
+    return 1
+  fi
+}
+
 container_ready() {
-  local id="$1" status="$2"
+  local id="$1" status="$2" probe_path
   [[ "$status" == healthy ]] || return 1
+  probe_path="$(container_probe_path "$id" true)" || return 1
   sudo -n docker exec "$id" node -e '
-    require("/app/scripts/ops/monitoring/probe-runtime-dependencies.cjs").probeReadiness()
+    require(process.argv[1]).probeReadiness()
       .then((result) => {
         console.log(result.name + ": " + (result.ok ? "PASS" : "FAIL") + " (" + result.result + ")");
         process.exitCode = result.ok ? 0 : 1;
@@ -313,7 +328,7 @@ container_ready() {
         console.error("readiness probe failed unexpectedly");
         process.exitCode = 1;
       });
-  '
+  ' "$probe_path"
 }
 
 candidate_state_safe() {
@@ -399,7 +414,9 @@ app_containers_safe() {
 }
 
 probe_container_dependencies() {
-  sudo -n docker exec "$1" node scripts/ops/monitoring/probe-runtime-dependencies.cjs
+  local id="$1" allow_legacy="${2:-false}" probe_path
+  probe_path="$(container_probe_path "$id" "$allow_legacy")" || return 1
+  sudo -n docker exec "$id" node "$probe_path"
 }
 
 probe_host() {
@@ -765,7 +782,7 @@ rollback_current_tier() {
     return 1
   fi
   old_id="$(container_id "$old_service")"
-  if ! probe_container_dependencies "$old_id"; then
+  if ! probe_container_dependencies "$old_id" true; then
     printf 'rollback dependency smoke failed; both slots remain available\n' >&2
     return 1
   fi
@@ -1148,7 +1165,7 @@ restore_active_after_rollback_failure() {
   fi
   apply_slots "$api_slot" "$sandbox_slot" || return 1
   probe_window 10 || return 1
-  probe_container_dependencies "$id"
+  probe_container_dependencies "$id" true
 }
 
 rollback_sandbox_to_disabled() {
@@ -1272,7 +1289,7 @@ rollback() {
   fi
   failed=0
   probe_window 15 || failed=1
-  probe_container_dependencies "$candidate_id" || failed=1
+  probe_container_dependencies "$candidate_id" true || failed=1
   if ! container_ready "$candidate_id" "$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$candidate_id")"; then
     failed=1
   fi

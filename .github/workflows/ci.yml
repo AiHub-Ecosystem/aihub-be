@@ -152,6 +152,9 @@ jobs:
       - name: Exercise nginx upstream selection for port and socket slots
         run: bash test/ops/blue-green-upstream.spec.sh
 
+      - name: Exercise blue-green readiness probes across image revisions
+        run: bash test/ops/blue-green-readiness.spec.sh
+
   build:
     name: Build
     runs-on: ubuntu-latest
