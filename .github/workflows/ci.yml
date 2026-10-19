@@ -143,6 +143,9 @@ jobs:
       - name: Exercise the Postgres backup job with stubs
         run: bash scripts/ops/backup-postgres.spec.sh
 
+      - name: Exercise the authenticated Sandbox probe with stubs
+        run: bash scripts/ops/probe-sandbox-mint.spec.sh
+
       - name: Exercise request log lookup with fixtures and stubs
         run: bash test/cli/request-log-lookup.spec.sh
 

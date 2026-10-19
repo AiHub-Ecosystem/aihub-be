@@ -150,7 +150,7 @@ The `aihub-edge-health` job (#291) asks the monitoring host's blackbox exporter 
 | `https://sandbox.aihubproduction.com/health` | The same for the Sandbox tier.                                                        |
 | `https://aihubproduction.com/`               | The Customer Web is down. Replace with its health route once AiHub-Frontend#94 lands. |
 
-`AIHUBEdgeProbeFailed` fires after two minutes without a 2xx. `/health` is liveness only, so a process that answers but cannot reach Postgres or Redis still passes; an authenticated Sandbox probe for that case is still open on #291. Read `probe_http_status_code` and `probe_duration_seconds` for the instance, then check the host with `ops/status.sh` ([deploy-vps.md](deploy-vps.md#checking-deployed-state)). The probe runs on the monitoring host, so that host being down silences it; the watchdog for that is #412's.
+`AIHUBEdgeProbeFailed` fires after two minutes without a 2xx. `/health` is liveness only, so a process that answers but cannot reach Postgres or Redis still passes; the [authenticated Sandbox probe](#authenticated-sandbox-probe) covers that case. Read `probe_http_status_code` and `probe_duration_seconds` for the instance, then check the host with `ops/status.sh` ([deploy-vps.md](deploy-vps.md#checking-deployed-state)). The probe runs on the monitoring host, so that host being down silences it; the watchdog for that is #412's.
 
 ### Scheduled jobs
 
@@ -164,10 +164,24 @@ Every scheduled run of `scripts/ops/host-scheduled-job.sh` and `scripts/ops/back
 | `quota`, `prune`, `ttl-audit`, `avatar-sweep`, `speaking-upload-sweep` | 25 hours                                |
 | `report`, `postgres-backup`                                            | 2 hours 20 minutes                      |
 | `chart-upload-sweep`                                                   | 50 minutes                              |
+| `sandbox-mint-probe` (monitoring host, below)                          | 5 minutes                               |
 
 `AIHUBScheduledJobFailed` fires as soon as a run's failure is newer than its last success, and clears on the next success. `AIHUBScheduledJobMissed` fires when no success arrived inside the window, which covers a stopped cron, a schedule CD left suspended, a deferred run (`deferred reason=host_job_active` is not a failure), and a host that is down. Faster jobs get two cadences so one run skipped during a deploy does not page.
 
 Manual reruns with `--from`/`--to`, `--month`, or `--dry-run` write nothing. For either alert, read the newest lines of the job's log ([deploy-vps.md](deploy-vps.md#scheduled-operator-jobs)); the failure detail is there, never in the metric. A task that has never succeeded has no series and cannot alert as missed; after adding a job, check that its success series appears.
+
+### Authenticated Sandbox probe
+
+`scripts/ops/probe-sandbox-mint.sh` runs every minute from the monitoring host's crontab, between the `AIHUB SANDBOX PROBE` markers, and mints a Sandbox assertion through the public edge (#291). The mint looks up the API key (Redis cache or Postgres), takes a Redis rate-limit slot, and reads the Organization's identity configuration from Postgres, so it fails when the process answers `/health` but its dependencies are gone. It calls no AI service, consumes no quota, and writes only the key's throttled `last_used_at`.
+
+It reports as task `sandbox-mint-probe` in the scheduled-job format to the monitoring host's node exporter (`AIHUB_HOST_JOB_METRICS_DIR` there), so `AIHUBScheduledJobFailed` fires on a failed mint after one retry and `AIHUBScheduledJobMissed` after five minutes without a success. A failure is logged to `~/aihub-sandbox-probe.log` with the HTTP status and the API error code only.
+
+Host setup, once:
+
+- An internal key in the Sandbox allowlist Organization, issued with `key:create --scopes writing.grade --envs sandbox --internal true` ([sandbox-provisioning.md](sandbox-provisioning.md)), stored in `~/aihub-monitoring/secrets/sandbox-probe-api-key` with mode `0600`. Pipe the command's stdout straight into that file; never print the key.
+- The script copied to `~/aihub-monitoring/ops/probe-sandbox-mint.sh`, mode `0755`, and the crontab line `* * * * * $HOME/aihub-monitoring/ops/probe-sandbox-mint.sh >/dev/null 2>&1`.
+
+A `403 FORBIDDEN` means the key's Organization left `AIHUB_SANDBOX_ORG_IDS`; a `401` means the key was revoked. Issue a new key rather than widening the allowlist.
 
 ## Deployment evidence
 
