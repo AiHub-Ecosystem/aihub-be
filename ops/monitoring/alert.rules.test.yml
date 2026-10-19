@@ -209,3 +209,60 @@ tests:
               summary: "An AIHUB app runs on secrets older than the rendered bundle"
               description: "aihub-production-app-1 (revision abc) started before the rendered secret bundle last changed. It reads secrets only at start, so it needs a restart to use them."
               runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#restart-required
+
+  # #570 SSH logins: a new key at t=60 s, a password login at t=120 s, and
+  # 60 failures between 1m and 2m.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_ssh_unexpected_login_timestamp_seconds{job="aihub-production-node",user="kiet",key="abc",reason="new_key"}'
+        values: "_ 60x70"
+      - series: 'aihub_ssh_unexpected_login_timestamp_seconds{job="aihub-production-node",user="root",key="-",reason="password"}'
+        values: "_ _ 120x70"
+      - series: 'aihub_ssh_auth_failures_total{job="aihub-production-node"}'
+        values: "0 0 60 60 60 60 60 60 60 60 60 60 60 60 60"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: AIHUBSSHNewKeyLogin
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              job: aihub-production-node
+              user: kiet
+              key: abc
+              reason: new_key
+            exp_annotations:
+              summary: "A key that never logged in before was used on the production host"
+              description: "kiet logged in with key SHA256:abc..., which has not logged in before. Confirm whose key it is."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#ssh-logins
+      - eval_time: 61m
+        alertname: AIHUBSSHNewKeyLogin
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: AIHUBSSHPasswordLogin
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: aihub-operations
+              job: aihub-production-node
+              user: root
+              key: "-"
+              reason: password
+            exp_annotations:
+              summary: "The production host accepted an SSH password login"
+              description: "sshd accepted a password login for root, although it is configured for keys only. Check the sshd configuration and who logged in."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#ssh-logins
+      - eval_time: 3m
+        alertname: AIHUBSSHAuthFailureBurst
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              job: aihub-production-node
+            exp_annotations:
+              summary: "A burst of failed SSH logins on the production host"
+              description: "60 failed SSH login attempts in 10 minutes. sshd penalizes each source on its own; check whether one key holder is locked out or a scan is running."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#ssh-logins
+      - eval_time: 14m
+        alertname: AIHUBSSHAuthFailureBurst
+        exp_alerts: []

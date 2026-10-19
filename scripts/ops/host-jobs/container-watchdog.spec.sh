@@ -2,8 +2,8 @@
 # Exercises scripts/ops/host-jobs/container-watchdog.sh with stubbed sudo,
 # docker, journalctl, and flock: an unhealthy app is restarted and vault-agent is not, the
 # restart limit, which Docker events become metrics, the next run's --since,
-# a failed events read, old event series being dropped, and the #825
-# secret-delivery signals.
+# a failed events read, old event series being dropped, the #825
+# secret-delivery signals, and the #570 SSH login signals.
 set -euo pipefail
 
 repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
@@ -60,6 +60,10 @@ esac
 STUB
 cat >"$bin_dir/journalctl" <<'STUB'
 #!/usr/bin/env bash
+if [[ " $* " == *" -u ssh "* ]]; then
+  cat "$FAKE_SSH" 2>/dev/null
+  exit 0
+fi
 [[ -z "${FAKE_KERNEL_FAIL:-}" ]] && cat "$FAKE_KERNEL"
 STUB
 chmod 755 "$bin_dir"/*
@@ -191,5 +195,33 @@ assert_contains "$prom" 'aihub_secret_delivery_healthy{reason="ok"} 1'
 assert_contains "$log" 'secret_delivery reason=ok'
 assert_contains "$prom" "aihub_runtime_secrets_restart_required{name=\"aihub-production-app-sandbox-1\",revision=\"$rev\"} 1"
 [[ "$(cat "$state/secret-delivery-healthy")" != "$healthy_at" ]] || { echo 'last healthy did not move on recovery' >&2; exit 1; }
+
+# SSH: keys seen in the last 30 days are learned without a report; then a
+# new key, a password login, and failed attempts are reported.
+export FAKE_SSH="$test_root/ssh"
+t=$(date +%s)
+cat >"$FAKE_SSH" <<SSH
+$t.1 host sshd-session[1]: Accepted publickey for ngoc_anh from 192.0.2.1 port 1 ssh2: ED25519 SHA256:knownKeyAAAAAAAAAAAAAAAAAA
+SSH
+rm -f "$state/ssh-known-keys" "$state/ssh-events" "$state/ssh-auth-failures"
+bash "$script" || true
+assert_contains "$state/ssh-known-keys" 'ngoc_anh knownKeyAAAAAAAA'
+assert_not_contains "$prom" 'aihub_ssh_unexpected_login'
+assert_contains "$prom" 'aihub_ssh_auth_failures_total 0'
+cat >>"$FAKE_SSH" <<SSH
+$t.2 host sshd-session[2]: Accepted publickey for kiet from 192.0.2.2 port 2 ssh2: RSA SHA256:brandNewKeyBBBBBBBBBBBBBBB
+$t.3 host sshd-session[3]: Accepted publickey for kiet from 192.0.2.3 port 3 ssh2: RSA SHA256:brandNewKeyBBBBBBBBBBBBBBB
+$t.4 host sshd-session[4]: Accepted password for root from 192.0.2.4 port 4 ssh2
+$t.5 host sshd-session[5]: Invalid user admin from 198.51.100.7 port 5
+$t.6 host sshd-session[6]: Connection closed by invalid user admin 198.51.100.7 port 5 [preauth]
+$t.7 host sshd-session[7]: Connection closed by authenticating user root 198.51.100.7 port 6 [preauth]
+SSH
+bash "$script" || true
+assert_contains "$prom" "aihub_ssh_unexpected_login_timestamp_seconds{user=\"kiet\",key=\"brandNewKeyBBBBB\",reason=\"new_key\"} $t"
+assert_contains "$prom" "aihub_ssh_unexpected_login_timestamp_seconds{user=\"root\",key=\"-\",reason=\"password\"} $t"
+assert_lines "$prom" 'aihub_ssh_unexpected_login' 2
+assert_contains "$prom" 'aihub_ssh_auth_failures_total 3'
+assert_lines "$log" 'ssh_login reason=new_key user=kiet' 1
+assert_not_contains "$prom" 'knownKeyAAAAAAAA'
 
 printf 'container-watchdog spec passed\n'

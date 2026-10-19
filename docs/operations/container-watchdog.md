@@ -51,16 +51,18 @@ counts, and the time of the last events read.
 The node-exporter textfile collector reads these from
 `$AIHUB_HOST_JOB_METRICS_DIR` (see `aihub-observability.md`):
 
-| Series                                                                        | Meaning                                                     |
-| ----------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `aihub_container_events_total{name,revision,event,exit_code}`                 | Events counted since the series first appeared              |
-| `aihub_container_last_event_timestamp_seconds{name,revision,event,exit_code}` | Time of the latest such event                               |
-| `aihub_container_unhealthy{name,revision}`                                    | 1 when unhealthy and not restarted in this run, otherwise 0 |
-| `aihub_host_job_last_success_timestamp_seconds{task="container-watchdog"}`    | Heartbeat, 5-minute window (`AIHUBScheduledJobMissed`)      |
-| `aihub_secret_delivery_last_healthy_timestamp_seconds`                        | Last run at which runtime secrets could be rendered         |
-| `aihub_secret_delivery_healthy{reason}`                                       | 1 with `reason="ok"`, otherwise 0 with the failure reason   |
-| `aihub_runtime_secrets_modified_timestamp_seconds`                            | When the rendered bundle's content last changed             |
-| `aihub_runtime_secrets_restart_required{name,revision}`                       | 1 when the app started before the bundle last changed       |
+| Series                                                                        | Meaning                                                             |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `aihub_container_events_total{name,revision,event,exit_code}`                 | Events counted since the series first appeared                      |
+| `aihub_container_last_event_timestamp_seconds{name,revision,event,exit_code}` | Time of the latest such event                                       |
+| `aihub_container_unhealthy{name,revision}`                                    | 1 when unhealthy and not restarted in this run, otherwise 0         |
+| `aihub_host_job_last_success_timestamp_seconds{task="container-watchdog"}`    | Heartbeat, 5-minute window (`AIHUBScheduledJobMissed`)              |
+| `aihub_secret_delivery_last_healthy_timestamp_seconds`                        | Last run at which runtime secrets could be rendered                 |
+| `aihub_secret_delivery_healthy{reason}`                                       | 1 with `reason="ok"`, otherwise 0 with the failure reason           |
+| `aihub_runtime_secrets_modified_timestamp_seconds`                            | When the rendered bundle's content last changed                     |
+| `aihub_runtime_secrets_restart_required{name,revision}`                       | 1 when the app started before the bundle last changed               |
+| `aihub_ssh_auth_failures_total`                                               | Failed SSH login attempts counted by the watchdog                   |
+| `aihub_ssh_unexpected_login_timestamp_seconds{user,key,reason}`               | Last password login, or first login with a new key, in the past day |
 
 `revision` is the image's `org.opencontainers.image.revision` label. A series
 is dropped 7 days after its last event, so the state does not grow with every
@@ -186,3 +188,31 @@ and one safe downstream request.
 After a host reboot, the Agent can rewrite an identical bundle after an app
 has started. That case also raises this alert, and one restart of the app
 clears it.
+
+## SSH logins
+
+sshd on the production host accepts keys only (#570, "SSH access" in
+`deploy-vps.md`). Each run reads the sshd journal since the previous run. The
+deploy user can read it through group `adm`. The run reports three things:
+
+- **`AIHUBSSHPasswordLogin` (critical).** sshd accepted a password, which the
+  configuration should make impossible. Check `sshd -T` and the drop-in file
+  first, then check who logged in.
+- **`AIHUBSSHNewKeyLogin` (warning).** A key logged in that has not logged in
+  before for that account. On its first run the watchdog learns the keys used
+  in the last 30 days without reporting them, in
+  `~/.aihub-container-watchdog/ssh-known-keys`. Confirm whose key it is. If it
+  is unknown, remove it from that account's `authorized_keys`.
+- **`AIHUBSSHAuthFailureBurst` (warning).** More than 50 failed attempts in 10
+  minutes. In the week before #570 the normal rate stayed far below that,
+  except for two scans of about 80 to 95 attempts. sshd already penalizes each
+  source on its own. The alert shows a scan, or a key holder who is locked
+  out.
+
+A login from a new source address is not reported. The maintainer's ISP hands
+out a new address almost daily: one key logged in from 22 addresses in a week.
+CI logs in from a new cloud address on every run: 101 addresses in the same
+week. An address alert would therefore fire several times a day. A stolen key
+is reported when it is first used from an account that has never used it.
+Otherwise it looks like its owner's key from a new address, which this check
+cannot tell apart.

@@ -143,7 +143,7 @@ fi
 # succeed: Vault answered unsealed and the Agent logged no error in the last
 # AGENT_ERROR_WINDOW_SECONDS. It also flags an app started before the bundle
 # last changed.
-secret_lines=
+extra_lines=
 if [[ -n "$agent" ]]; then
   reason=ok
   vault_code=0
@@ -167,22 +167,82 @@ if [[ -n "$agent" ]]; then
     log_line "secret_delivery reason=$reason"
   fi
   printf '%s\n' "$reason" >"$STATE_DIR/secret-delivery-reason"
-  secret_lines+="aihub_secret_delivery_last_healthy_timestamp_seconds $(cat "$healthy_file")"$'\n'
-  secret_lines+="aihub_secret_delivery_healthy{reason=\"$reason\"} $([[ "$reason" == ok ]] && echo 1 || echo 0)"$'\n'
+  extra_lines+="aihub_secret_delivery_last_healthy_timestamp_seconds $(cat "$healthy_file")"$'\n'
+  extra_lines+="aihub_secret_delivery_healthy{reason=\"$reason\"} $([[ "$reason" == ok ]] && echo 1 || echo 0)"$'\n'
 
   if modified=$("${docker[@]}" exec "$agent" sh -c 'stat -c %Y /run/secrets/aihub/*.json' | sort -n | tail -n 1) &&
     [[ "$modified" =~ ^[0-9]+$ ]]; then
-    secret_lines+="aihub_runtime_secrets_modified_timestamp_seconds $modified"$'\n'
+    extra_lines+="aihub_runtime_secrets_modified_timestamp_seconds $modified"$'\n'
     for app in "${apps[@]}"; do
       started=$("${docker[@]}" inspect -f '{{.State.StartedAt}}' "${app%%|*}") &&
         started=$(date -d "$started" +%s) || continue
-      secret_lines+="aihub_runtime_secrets_restart_required{name=\"${app%%|*}\",revision=\"${app#*|}\"} $((modified > started ? 1 : 0))"$'\n'
+      extra_lines+="aihub_runtime_secrets_restart_required{name=\"${app%%|*}\",revision=\"${app#*|}\"} $((modified > started ? 1 : 0))"$'\n'
     done
   else
     log_line 'failed reason=secret_bundle_stat'
     status=1
   fi
 fi
+
+# SSH logins (#570). sshd accepts keys only, so this reports a password login
+# that should be impossible, a key that has never logged in before, and a
+# count of failed attempts for the burst alert. A new source address is not
+# reported: the maintainer's ISP hands out a new address almost daily and CI
+# logs in from a new cloud address on every run, so it would fire several
+# times a day. The deploy user reads the sshd journal through group adm.
+ssh_known="$STATE_DIR/ssh-known-keys"
+ssh_events="$STATE_DIR/ssh-events"
+parse_ssh_logins() {
+  awk '/Accepted / {
+    key = "-"
+    for (i = 1; i <= NF; i++) {
+      if ($i == "Accepted") method = $(i + 1)
+      if ($i == "for") user = $(i + 1)
+      if ($i ~ /^SHA256:/) key = substr($i, 8, 16)
+    }
+    print int($1), user, method, key
+  }'
+}
+if [[ ! -f "$ssh_known" ]]; then
+  # First run: learn the keys of the last 30 days without reporting them.
+  journalctl -u ssh -q --no-pager -o short-unix --since -30d | parse_ssh_logins |
+    awk '$3 == "publickey" { print $2, $4 }' | sort -u >"$ssh_known"
+fi
+if ssh_log=$(journalctl -u ssh -q --no-pager -o short-unix --since "@$since" --until "@$now"); then
+  failures=$(grep -a -c -E 'Invalid user|Failed (password|publickey)|Connection closed by (authenticating|invalid) user' <<<"$ssh_log")
+  failures_total=$(($(cat "$STATE_DIR/ssh-auth-failures" 2>/dev/null || echo 0) + failures))
+  printf '%s\n' "$failures_total" >"$STATE_DIR/ssh-auth-failures"
+  extra_lines+="aihub_ssh_auth_failures_total $failures_total"$'\n'
+  while read -r time user method key; do
+    [[ -n "$user" ]] || continue
+    if [[ "$method" != publickey ]]; then
+      reason=password
+    elif ! grep -qxF "$user $key" "$ssh_known"; then
+      printf '%s %s\n' "$user" "$key" >>"$ssh_known"
+      reason=new_key
+    else
+      continue
+    fi
+    printf '%s %s %s %s\n' "$time" "$user" "$key" "$reason" >>"$ssh_events"
+    log_line "ssh_login reason=$reason user=$user key=$key"
+  done < <(parse_ssh_logins <<<"$ssh_log")
+else
+  log_line 'failed reason=ssh_log'
+  status=1
+fi
+# Keep a day of reported logins, one series per user, key, and reason.
+touch "$ssh_events"
+awk -v cutoff=$((now - 86400)) '$1 > cutoff' "$ssh_events" >"$ssh_events.next" &&
+  mv -f -- "$ssh_events.next" "$ssh_events"
+ssh_lines=$(awk '
+  { key = $2 " " $3 " " $4; if ($1 > last[key]) last[key] = $1 }
+  END {
+    for (key in last) {
+      split(key, k, " ")
+      printf "aihub_ssh_unexpected_login_timestamp_seconds{user=\"%s\",key=\"%s\",reason=\"%s\"} %d\n", k[1], k[2], k[3], last[key]
+    }
+  }' "$ssh_events")
+[[ -n "$ssh_lines" ]] && extra_lines+="$ssh_lines"$'\n'
 
 touch "$STATE_DIR/events"
 if ! GAUGES="$gauges" awk -F'|' -v watched="$WATCHED_SERVICES" -v now="$now" -v keep="$EVENT_RETENTION_SECONDS" \
@@ -229,7 +289,7 @@ if ! GAUGES="$gauges" awk -F'|' -v watched="$WATCHED_SERVICES" -v now="$now" -v 
 fi
 mv -f -- "$STATE_DIR/events.next" "$STATE_DIR/events"
 if ((events_read)); then printf '%s\n' "$now" >"$STATE_DIR/events-until"; fi
-printf '%s' "$secret_lines" >>"$METRICS_DIR/container-watchdog-containers.prom.tmp"
+printf '%s' "$extra_lines" >>"$METRICS_DIR/container-watchdog-containers.prom.tmp"
 chmod 644 "$METRICS_DIR/container-watchdog-containers.prom.tmp"
 mv -f -- "$METRICS_DIR/container-watchdog-containers.prom.tmp" "$METRICS_DIR/container-watchdog-containers.prom"
 

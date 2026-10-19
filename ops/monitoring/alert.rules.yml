@@ -242,3 +242,40 @@ groups:
           summary: "An AIHUB app runs on secrets older than the rendered bundle"
           description: "{{ $labels.name }} (revision {{ $labels.revision }}) started before the rendered secret bundle last changed. It reads secrets only at start, so it needs a restart to use them."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#restart-required
+
+  # SSH logins on the production host, written by container-watchdog.sh
+  # (#570). Each login alert stays active for an hour after the login.
+  - name: aihub-ssh-logins
+    rules:
+      - alert: AIHUBSSHPasswordLogin
+        expr: time() - aihub_ssh_unexpected_login_timestamp_seconds{reason="password"} < 3600
+        for: 0m
+        labels:
+          severity: critical
+          owner: aihub-operations
+        annotations:
+          summary: "The production host accepted an SSH password login"
+          description: "sshd accepted a password login for {{ $labels.user }}, although it is configured for keys only. Check the sshd configuration and who logged in."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#ssh-logins
+
+      - alert: AIHUBSSHNewKeyLogin
+        expr: time() - aihub_ssh_unexpected_login_timestamp_seconds{reason="new_key"} < 3600
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "A key that never logged in before was used on the production host"
+          description: "{{ $labels.user }} logged in with key SHA256:{{ $labels.key }}..., which has not logged in before. Confirm whose key it is."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#ssh-logins
+
+      - alert: AIHUBSSHAuthFailureBurst
+        expr: increase(aihub_ssh_auth_failures_total[10m]) > 50
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "A burst of failed SSH logins on the production host"
+          description: "{{ $value | humanize }} failed SSH login attempts in 10 minutes. sshd penalizes each source on its own; check whether one key holder is locked out or a scan is running."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#ssh-logins

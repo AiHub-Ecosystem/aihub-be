@@ -731,6 +731,51 @@ database during a maintenance window. Restore over a live database only after
 taking a fresh dump of it, and run `quota:reconcile` afterwards so Redis
 counters match the restored `usage_records`.
 
+## SSH access (#570)
+
+sshd on the production host accepts keys only.
+`/etc/ssh/sshd_config.d/10-aihub-hardening.conf` sets these three options:
+
+- `PasswordAuthentication no`
+- `KbdInteractiveAuthentication no`
+- `PermitRootLogin prohibit-password`
+
+sshd reads that directory in name order and keeps the first value it finds,
+so this file overrides `50-cloud-init.conf`, which turns passwords on.
+
+OpenSSH's built-in `PerSourcePenalties` throttles repeated failures. It is on
+by default from OpenSSH 9.8. It is part of sshd, so it survives a reboot
+without fail2ban.
+
+The deploy user's sudo rules do not cover sshd. Change the file through
+Docker, which is root-equivalent, then validate and reload:
+
+```bash
+sudo -n docker run -i --rm --privileged --pid=host alpine:3.20 \
+  nsenter -t 1 -m -u -n -i -p sh -c 'sshd -t && systemctl reload ssh'
+```
+
+Make any change to the sshd configuration in this order:
+
+1. Keep a second SSH session open until a new login has been tested.
+2. Arm a revert that runs unless you confirm the change. #570 used
+   `systemd-run --on-active=300` to remove the file and reload sshd. It
+   stopped that timer once the checks passed.
+3. Test a new login with a key.
+4. Confirm that
+   `ssh -o PreferredAuthentications=none -o PubkeyAuthentication=no <user>@<host>`
+   answers `Permission denied (publickey)`.
+5. Confirm that `sshd -T` shows the new values.
+
+**If no key works,** sshd cannot get you back in. Log in through the VPS
+provider's web console, which does not go through sshd. Remove the drop-in
+file there, then run `systemctl reload ssh`.
+
+To give someone access, add their public key to `~/.ssh/authorized_keys` of
+their account. A new account needs its key before its first login, because
+password logins are refused. The first login with a new key raises
+`AIHUBSSHNewKeyLogin`; see "SSH logins" in `container-watchdog.md`.
+
 ## Provision production Vault data
 
 Use the repository helper with the production operator workflow. It writes the
