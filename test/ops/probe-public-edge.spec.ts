@@ -102,6 +102,15 @@ describe('public edge health probe', () => {
     );
     expect(workflow).toContain('helper=./scripts/ops/blue-green-host.sh');
     expect(workflow).toContain('blue-green-host.path');
+    expect(
+      workflow.indexOf(
+        'mv -f -- "$helper_next" "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"',
+      ),
+    ).toBeLessThan(
+      workflow.indexOf(
+        'cmp -s "$APP_DIR/.aihub-host-jobs-sync-candidate/blue-green-host.sh"',
+      ),
+    );
     expect(workflow).toContain(
       '"$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh" suspend',
     );

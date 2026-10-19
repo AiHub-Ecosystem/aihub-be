@@ -356,14 +356,12 @@ jobs:
             "$target:$VPS_APP_DIR/ops/vault/templates/"
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -eu
-          chmod 755 "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"
           chmod 755 "$APP_DIR/scripts/ops/logs/request-log-lookup.sh"
           chmod 755 "$APP_DIR/scripts/ops/host-jobs/container-watchdog.sh"
           chmod 755 "$APP_DIR/scripts/ops/backups/backup-postgres.sh" \
             "$APP_DIR/scripts/ops/backups/restore-postgres-rehearsal.sh"
           test -s "$APP_DIR/docker-compose.production.yml"
           test -s "$APP_DIR/scripts/ops/backups/backup-postgres.sh"
-          test -s "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"
           test -s "$APP_DIR/scripts/ops/logs/request-log-lookup.sh"
           test -s "$APP_DIR/scripts/ops/host-jobs/container-watchdog.sh"
           test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/install-host-jobs.sh"
