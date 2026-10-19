@@ -4,8 +4,9 @@
 # restarts an AIHUB app container that Docker reports unhealthy, at most
 # RESTART_LIMIT times in RESTART_WINDOW_SECONDS, and then leaves it for the
 # still-unhealthy alert. It also writes, for the node-exporter textfile
-# collector, what Docker reported since the last run: unhealthy transitions,
-# OOM kills, exits nobody asked for, and its own restarts.
+# collector, what Docker and the kernel reported since the last run:
+# unhealthy transitions, OOM kills, exits nobody asked for, and its own
+# restarts.
 # Runbook: docs/operations/container-watchdog.md.
 set -uo pipefail
 umask 077
@@ -59,16 +60,19 @@ since=$(cat "$STATE_DIR/events-until" 2>/dev/null) || since=$((now - 120))
 [[ "$since" =~ ^[0-9]+$ ]] || since=$((now - 120))
 synthetic_events=
 
-if ! containers=$("${docker[@]}" ps --filter "label=com.docker.compose.project=$PROJECT" \
-  --format '{{.Names}}|{{.Label "com.docker.compose.service"}}|{{.Label "org.opencontainers.image.revision"}}|{{.Status}}'); then
+if ! containers=$("${docker[@]}" ps -a --no-trunc --filter "label=com.docker.compose.project=$PROJECT" \
+  --format '{{.ID}}|{{.Names}}|{{.Label "com.docker.compose.service"}}|{{.Label "org.opencontainers.image.revision"}}|{{.Status}}'); then
   log_line 'failed reason=docker_ps'
   record_job_result failure
   exit 1
 fi
 
 gauges=
-while IFS='|' read -r name service revision state; do
+declare -A by_id=()
+while IFS='|' read -r id name service revision state; do
   [[ -n "$name" && "$WATCHED_SERVICES" == *" $service "* ]] || continue
+  by_id[$id]="$name|$service||$revision"
+  [[ "$state" == Up* ]] || continue
   unhealthy=0
   if [[ "$state" == *'(unhealthy)'* ]]; then
     unhealthy=1
@@ -100,11 +104,25 @@ done <<<"$containers"
 events_read=1
 if ! events=$("${docker[@]}" events --since "$since" --until "$now" \
   --filter type=container --filter "label=com.docker.compose.project=$PROJECT" \
-  --filter event=die --filter event=oom --filter event=stop --filter event=health_status \
+  --filter event=die --filter event=stop --filter event=health_status \
   --format '{{.Action}}|{{.Actor.ID}}|{{index .Actor.Attributes "name"}}|{{index .Actor.Attributes "com.docker.compose.service"}}|{{index .Actor.Attributes "exitCode"}}|{{index .Actor.Attributes "org.opencontainers.image.revision"}}|{{.Time}}'); then
   log_line 'failed reason=docker_events'
   status=1
   events=
+  events_read=0
+fi
+
+# OOM kills come from the kernel log, not Docker's oom event: on this host's
+# cgroup v2 Docker reported one of three OOM kills in the #396 drill, and
+# cAdvisor none. The kernel names the container's cgroup by its full ID.
+if kernel_ooms=$(journalctl -k -q --no-pager -o short-unix --since "@$since" --until "@$now" |
+  sed -n 's/^\([0-9]*\)\..*oom-kill:.*task_memcg=[^,]*docker-\([0-9a-f]\{64\}\)\.scope.*/\1 \2/p'); then
+  while read -r time id; do
+    [[ -n "$id" && -n "${by_id[$id]:-}" ]] && synthetic_events+="kernel_oom|$id|${by_id[$id]}|$time"$'\n'
+  done <<<"$kernel_ooms"
+else
+  log_line 'failed reason=kernel_log'
+  status=1
   events_read=0
 fi
 
@@ -121,7 +139,7 @@ if ! GAUGES="$gauges" awk -F'|' -v watched="$WATCHED_SERVICES" -v now="$now" -v 
     for (i = 1; i <= n; i++) {
       split(lines[i], f, FS)
       code = ""
-      if (f[1] == "oom") event = "oom"
+      if (f[1] == "kernel_oom") event = "oom"
       else if (f[1] == "health_status: unhealthy") event = "unhealthy"
       else if (f[1] == "watchdog_restart") event = "watchdog_restart"
       else if (f[1] == "die" && !(f[2] in stopped)) { event = "exit"; code = clean(f[5]) }

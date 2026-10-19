@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Exercises scripts/ops/host-jobs/container-watchdog.sh with stubbed sudo,
-# docker, and flock: an unhealthy app is restarted and vault-agent is not, the
+# docker, journalctl, and flock: an unhealthy app is restarted and vault-agent is not, the
 # restart limit, which Docker events become metrics, the next run's --since,
 # a failed events read, and old event series being dropped.
 set -euo pipefail
@@ -48,19 +48,33 @@ case "$1" in
   *) exit 9 ;;
 esac
 STUB
+cat >"$bin_dir/journalctl" <<'STUB'
+#!/usr/bin/env bash
+[[ -z "${FAKE_KERNEL_FAIL:-}" ]] && cat "$FAKE_KERNEL"
+STUB
 chmod 755 "$bin_dir"/*
 
 export PATH="$bin_dir:$PATH" HOME="$home_dir"
 export FAKE_DOCKER_CALLS="$test_root/docker-calls" FAKE_PS="$test_root/ps" FAKE_EVENTS="$test_root/events"
+export FAKE_KERNEL="$test_root/kernel"
 rev=0123456789abcdef0123456789abcdef01234567
+sandbox_id=$(printf 'a%.0s' {1..64})
 
 cat >"$FAKE_PS" <<PS
-aihub-production-app-1|app|$rev|Up 3 hours (unhealthy)
-aihub-production-app-sandbox-1|app-sandbox|$rev|Up 3 hours (healthy)
-aihub-production-vault-agent-1|vault-agent|$rev|Up 3 days (unhealthy)
-aihub-production-app-slot-b-1|app-slot-b|$rev|Up 1 minute (health: starting)
+id-app|aihub-production-app-1|app|$rev|Up 3 hours (unhealthy)
+$sandbox_id|aihub-production-app-sandbox-1|app-sandbox|$rev|Up 3 hours (healthy)
+id-agent|aihub-production-vault-agent-1|vault-agent|$rev|Up 3 days (unhealthy)
+id-new|aihub-production-app-slot-b-1|app-slot-b|$rev|Up 1 minute (health: starting)
+id-migrate|aihub-production-migrate-1|migrate|$rev|Exited (0) 2 days ago
 PS
 now=$(date +%s)
+# The kernel reports the sandbox OOM kill and one in a container not watched.
+other_id=$(printf 'b%.0s' {1..64})
+cat >"$FAKE_KERNEL" <<KERNEL
+$((now - 40)).123456 host kernel: oom-kill:constraint=CONSTRAINT_MEMCG,nodemask=(null),cpuset=docker-$sandbox_id.scope,mems_allowed=0,oom_memcg=/system.slice/docker-$sandbox_id.scope,task_memcg=/system.slice/docker-$sandbox_id.scope,task=node,pid=7,uid=1000
+$((now - 35)).000001 host kernel: Memory cgroup out of memory: Killed process 7 (node)
+$((now - 30)).5 host kernel: oom-kill:constraint=CONSTRAINT_MEMCG,nodemask=(null),cpuset=docker-$other_id.scope,mems_allowed=0,oom_memcg=/system.slice/docker-$other_id.scope,task_memcg=/system.slice/docker-$other_id.scope,task=sh,pid=9,uid=0
+KERNEL
 cat >"$FAKE_EVENTS" <<EVENTS
 health_status: unhealthy|id-app|aihub-production-app-1|app||$rev|$((now - 50))
 oom|id-sandbox|aihub-production-app-sandbox-1|app-sandbox||$rev|$((now - 40))
@@ -85,10 +99,13 @@ assert_contains "$prom" "aihub_container_events_total{name=\"aihub-production-ap
 assert_contains "$prom" "aihub_container_events_total{name=\"aihub-production-app-sandbox-1\",revision=\"$rev\",event=\"oom\",exit_code=\"\"} 1"
 assert_contains "$prom" "aihub_container_events_total{name=\"aihub-production-app-sandbox-1\",revision=\"$rev\",event=\"exit\",exit_code=\"137\"} 1"
 assert_contains "$prom" "aihub_container_last_event_timestamp_seconds{name=\"aihub-production-app-sandbox-1\",revision=\"$rev\",event=\"oom\",exit_code=\"\"} $((now - 40))"
-# A die after a stop request, an unwatched service, and a healthy transition are not reported.
+# A die after a stop request, an unwatched service, a healthy transition, and
+# Docker's own oom event (the kernel log is the OOM source) are not reported.
 assert_not_contains "$prom" 'app-slot-b-1",revision'"=\"$rev\",event"
 assert_not_contains "$prom" 'migrate'
 assert_lines "$prom" 'event="unhealthy"' 2
+assert_lines "$prom" 'event="oom"' 2
+assert_not_contains "$prom" 'migrate-1",revision'
 assert_contains "$metrics/container-watchdog-success.prom" 'aihub_host_job_max_age_seconds{task="container-watchdog"} 300'
 until_first=$(cat "$state/events-until")
 if [[ "$(uname -s)" == Linux ]]; then
@@ -97,6 +114,7 @@ fi
 
 # Later runs read events from where the last one stopped and keep the counts.
 : >"$FAKE_EVENTS"
+: >"$FAKE_KERNEL"
 bash "$script"
 assert_contains "$FAKE_DOCKER_CALLS" "events --since $until_first "
 assert_contains "$prom" "aihub_container_events_total{name=\"aihub-production-app-1\",revision=\"$rev\",event=\"watchdog_restart\",exit_code=\"\"} 2"
@@ -119,6 +137,9 @@ FAKE_EVENTS_FAIL=1 bash "$script" && { echo 'expected a failed run' >&2; exit 1;
 assert_contains "$log" 'failed reason=docker_events'
 assert_contains "$metrics/container-watchdog-failure.prom" 'aihub_host_job_last_failure_timestamp_seconds{task="container-watchdog"}'
 [[ "$(cat "$state/events-until")" == "$before" ]] || { echo 'events-until moved after a failed read' >&2; exit 1; }
+FAKE_KERNEL_FAIL=1 bash "$script" && { echo 'expected a failed run' >&2; exit 1; }
+assert_contains "$log" 'failed reason=kernel_log'
+[[ "$(cat "$state/events-until")" == "$before" ]] || { echo 'events-until moved after a failed kernel read' >&2; exit 1; }
 
 # A failed restart fails the run; a series quiet for over seven days is dropped.
 rm -f "$state/restarts-aihub-production-app-1"

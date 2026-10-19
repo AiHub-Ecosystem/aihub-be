@@ -24,9 +24,14 @@ deploy user.
    `AIHUBContainerStillUnhealthy`.
 4. It never restarts `vault-agent`, because Agent restarts stay
    operator-managed (`deploy-vps.md`). An unhealthy Agent is only reported.
-5. It reads the Docker events since its last run and counts these:
+5. It reads the Docker events and the kernel log since its last run and
+   counts these:
    - `unhealthy`: a transition to unhealthy
-   - `oom`: an OOM kill
+   - `oom`: an OOM kill, taken from the kernel's `oom-kill:` line, which
+     names the container's cgroup. Docker's own `oom` event is not used: on
+     the production host's cgroup v2 it reported one of three OOM kills in
+     the #396 drill, and cAdvisor's counter reported none. The deploy user
+     reads the kernel log with `journalctl -k`, without `sudo`.
    - `exit`: a `die` with no stop request, with its exit code
    - `watchdog_restart`: a restart it made itself
 
