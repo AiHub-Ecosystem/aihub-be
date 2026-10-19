@@ -88,3 +88,68 @@ tests:
               summary: "An AIHUB scheduled job has not succeeded within its window"
               description: "report last succeeded 2h 21m 0s ago."
               runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs
+
+  # #396 container watchdog: an OOM kill at t=120 s, an exit at t=0, and an
+  # unhealthy vault-agent from t=0. An empty exit_code label is dropped.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_container_last_event_timestamp_seconds{job="aihub-production-node",name="aihub-production-app-1",revision="abc",event="oom",exit_code=""}'
+        values: "_ _ 120x28"
+      - series: 'aihub_container_last_event_timestamp_seconds{job="aihub-production-node",name="aihub-production-app-1",revision="abc",event="exit",exit_code="137"}'
+        values: "0x30"
+      - series: 'aihub_container_unhealthy{job="aihub-production-node",name="aihub-production-vault-agent-1",revision="abc"}'
+        values: "1x30"
+      - series: 'aihub_container_unhealthy{job="aihub-production-node",name="aihub-production-app-1",revision="abc"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: AIHUBContainerOOMKilled
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: AIHUBContainerOOMKilled
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: aihub-operations
+              job: aihub-production-node
+              name: aihub-production-app-1
+              revision: abc
+              event: oom
+            exp_annotations:
+              summary: "An AIHUB container was killed for running out of memory"
+              description: "aihub-production-app-1 (revision abc) was OOM-killed, which dropped every request in flight on it. Docker restarts it."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#oom-kill
+      - eval_time: 17m
+        alertname: AIHUBContainerOOMKilled
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: AIHUBContainerDisrupted
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              job: aihub-production-node
+              name: aihub-production-app-1
+              revision: abc
+              event: exit
+              exit_code: "137"
+            exp_annotations:
+              summary: "An AIHUB container exited, became unhealthy, or was restarted"
+              description: "aihub-production-app-1 (revision abc) exited with code 137 without a stop request."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#disruption
+      - eval_time: 2m
+        alertname: AIHUBContainerStillUnhealthy
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: AIHUBContainerStillUnhealthy
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: aihub-operations
+              job: aihub-production-node
+              name: aihub-production-vault-agent-1
+              revision: abc
+            exp_annotations:
+              summary: "An AIHUB container stays unhealthy and the watchdog is not restarting it"
+              description: "aihub-production-vault-agent-1 (revision abc) has been unhealthy for three minutes. The watchdog never restarts vault-agent, and stops restarting an app container after three restarts in an hour."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#still-unhealthy

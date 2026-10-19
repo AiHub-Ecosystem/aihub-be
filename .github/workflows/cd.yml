@@ -302,7 +302,7 @@ jobs:
           cp -p -- "$APP_DIR/docker-compose.production.yml" "$sync_backup/docker-compose.production.yml"
           : >"$sync_backup/ready"
           chmod 600 "$sync_backup/ready"
-          mkdir -p "$APP_DIR/scripts/ops" "$APP_DIR/scripts/ops/logs" "$APP_DIR/ops/nginx" \
+          mkdir -p "$APP_DIR/scripts/ops" "$APP_DIR/scripts/ops/logs" "$APP_DIR/scripts/ops/host-jobs" "$APP_DIR/ops/nginx" \
             "$APP_DIR/ops/vault/agent" "$APP_DIR/ops/vault/templates" \
             "$APP_DIR/ops/host-jobs" "$APP_DIR/.aihub-host-jobs-candidate"
           REMOTE
@@ -322,6 +322,9 @@ jobs:
             scripts/ops/backups/backup-postgres.sh \
             scripts/ops/backups/restore-postgres-rehearsal.sh \
             "$target:$VPS_APP_DIR/scripts/ops/"
+          scp "${scp_opts[@]}" \
+            scripts/ops/host-jobs/container-watchdog.sh \
+            "$target:$VPS_APP_DIR/scripts/ops/host-jobs/"
           scp "${scp_opts[@]}" \
             scripts/ops/host-jobs/host-scheduled-job.sh \
             ops/host-jobs/aihub.crontab \
@@ -344,12 +347,14 @@ jobs:
           set -eu
           chmod 755 "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"
           chmod 755 "$APP_DIR/scripts/ops/logs/request-log-lookup.sh"
+          chmod 755 "$APP_DIR/scripts/ops/host-jobs/container-watchdog.sh"
           chmod 755 "$APP_DIR/scripts/ops/backups/backup-postgres.sh" \
             "$APP_DIR/scripts/ops/backups/restore-postgres-rehearsal.sh"
           test -s "$APP_DIR/docker-compose.production.yml"
           test -s "$APP_DIR/scripts/ops/backups/backup-postgres.sh"
           test -s "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"
           test -s "$APP_DIR/scripts/ops/logs/request-log-lookup.sh"
+          test -s "$APP_DIR/scripts/ops/host-jobs/container-watchdog.sh"
           test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/install-host-jobs.sh"
           test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/docker-compose.production.yml"
           test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/blue-green-host.sh"

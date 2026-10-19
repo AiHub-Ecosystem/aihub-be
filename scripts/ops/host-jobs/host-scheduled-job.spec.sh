@@ -40,6 +40,8 @@ assert_no_shared_start_minute() {
       }
     }
     /^#/ || NF == 0 { next }
+    # The watchdog runs every minute and never takes the host lock.
+    /container-watchdog\.sh/ { next }
     {
       if ($3 != "*" || $4 != "*" || $5 != "*") {
         printf "unsupported day field in schedule: %s\n", $0 > "/dev/stderr"

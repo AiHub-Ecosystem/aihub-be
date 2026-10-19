@@ -24,14 +24,14 @@ groups:
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#host-memory
 
       - alert: AIHUBContainerOOM
-        expr: increase(container_oom_events_total{job=~"aihub-(production|monitoring)-containers",name=~"aihub.*"}[10m]) > 0
+        expr: increase(container_oom_events_total{job="aihub-monitoring-containers",name=~"aihub.*"}[10m]) > 0
         for: 0m
         labels:
           severity: critical
           owner: aihub-operations
         annotations:
           summary: "An AIHUB container reported an OOM event"
-          description: "cAdvisor reports an OOM event for {{ $labels.name }}. Stopped-container history is not covered."
+          description: "cAdvisor reports an OOM event for {{ $labels.name }} on the monitoring host. Production containers are covered by AIHUBContainerOOMKilled. Stopped-container history is not covered."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#containers
 
       - alert: AIHUBContainerRestartLoop
@@ -165,3 +165,40 @@ groups:
           summary: "An AIHUB scheduled job has not succeeded within its window"
           description: "{{ $labels.task }} last succeeded {{ $value | humanizeDuration }} ago."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs
+
+  # Written every minute by scripts/ops/host-jobs/container-watchdog.sh (#396).
+  # Each event alert stays active for 15 minutes after the event.
+  - name: aihub-container-watchdog
+    rules:
+      - alert: AIHUBContainerOOMKilled
+        expr: time() - aihub_container_last_event_timestamp_seconds{event="oom"} < 900
+        for: 0m
+        labels:
+          severity: critical
+          owner: aihub-operations
+        annotations:
+          summary: "An AIHUB container was killed for running out of memory"
+          description: "{{ $labels.name }} (revision {{ $labels.revision }}) was OOM-killed, which dropped every request in flight on it. Docker restarts it."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#oom-kill
+
+      - alert: AIHUBContainerDisrupted
+        expr: time() - aihub_container_last_event_timestamp_seconds{event=~"exit|unhealthy|watchdog_restart"} < 900
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "An AIHUB container exited, became unhealthy, or was restarted"
+          description: '{{ $labels.name }} (revision {{ $labels.revision }}) {{ if eq $labels.event "exit" }}exited with code {{ $labels.exit_code }} without a stop request{{ else if eq $labels.event "unhealthy" }}became unhealthy{{ else }}was restarted by the watchdog because it was unhealthy{{ end }}.'
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#disruption
+
+      - alert: AIHUBContainerStillUnhealthy
+        expr: aihub_container_unhealthy == 1
+        for: 3m
+        labels:
+          severity: critical
+          owner: aihub-operations
+        annotations:
+          summary: "An AIHUB container stays unhealthy and the watchdog is not restarting it"
+          description: "{{ $labels.name }} (revision {{ $labels.revision }}) has been unhealthy for three minutes. The watchdog never restarts vault-agent, and stops restarting an app container after three restarts in an hour."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#still-unhealthy

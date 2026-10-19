@@ -140,6 +140,9 @@ jobs:
       - name: Exercise scheduled host job wrappers with stubs
         run: bash scripts/ops/host-jobs/host-scheduled-job.spec.sh
 
+      - name: Exercise the container watchdog with stubs
+        run: bash scripts/ops/host-jobs/container-watchdog.spec.sh
+
       - name: Exercise the Postgres backup job with stubs
         run: bash scripts/ops/backups/backup-postgres.spec.sh
 

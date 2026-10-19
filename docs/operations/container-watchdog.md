@@ -1,0 +1,103 @@
+# Container watchdog
+
+Docker restarts a container whose process exits. It never restarts one whose
+healthcheck reports `unhealthy`, and Compose has no orchestrator that would.
+`scripts/ops/host-jobs/container-watchdog.sh` covers that gap on the
+production host (#396). The managed crontab (`ops/host-jobs/aihub.crontab`)
+runs it every minute. CD syncs it and suspends it with the other host jobs
+while it deploys.
+
+It needs no access beyond what CD already uses: `sudo -n docker` as the
+deploy user.
+
+## What it does each run
+
+1. It reads `docker ps` for the `aihub-production` Compose project and watches
+   `app`, `app-slot-b`, `app-sandbox`, `app-sandbox-slot-b`, and `vault-agent`.
+2. It restarts an app container that Docker reports `unhealthy`, with
+   `docker restart -t 30`. The app healthcheck fails 12 times, 10 s apart,
+   before Docker marks the container unhealthy. A container that stops
+   answering `/health` is therefore restarted about 2 to 3 minutes later.
+3. It allows at most 3 restarts per container in any hour. After that it logs
+   `restart_skipped ... reason=limit` and stops restarting that container.
+   The container then stays unhealthy, which raises
+   `AIHUBContainerStillUnhealthy`.
+4. It never restarts `vault-agent`, because Agent restarts stay
+   operator-managed (`deploy-vps.md`). An unhealthy Agent is only reported.
+5. It reads the Docker events since its last run and counts these:
+   - `unhealthy`: a transition to unhealthy
+   - `oom`: an OOM kill
+   - `exit`: a `die` with no stop request, with its exit code
+   - `watchdog_restart`: a restart it made itself
+
+   A `die` that follows a stop request is expected and is not counted. A
+   deploy, `docker restart`, or `compose down` makes that kind of stop
+   request.
+
+The log is `~/aihub-container-watchdog.log`. Its state is in
+`~/.aihub-container-watchdog/`: one restart history per container, the event
+counts, and the time of the last events read.
+
+## Metrics
+
+The node-exporter textfile collector reads these from
+`$AIHUB_HOST_JOB_METRICS_DIR` (see `aihub-observability.md`):
+
+| Series                                                                        | Meaning                                                     |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `aihub_container_events_total{name,revision,event,exit_code}`                 | Events counted since the series first appeared              |
+| `aihub_container_last_event_timestamp_seconds{name,revision,event,exit_code}` | Time of the latest such event                               |
+| `aihub_container_unhealthy{name,revision}`                                    | 1 when unhealthy and not restarted in this run, otherwise 0 |
+| `aihub_host_job_last_success_timestamp_seconds{task="container-watchdog"}`    | Heartbeat, 5-minute window (`AIHUBScheduledJobMissed`)      |
+
+`revision` is the image's `org.opencontainers.image.revision` label. A series
+is dropped 7 days after its last event, so the state does not grow with every
+deployed revision. To count OOM kills over a day:
+
+```promql
+sum by (name) (increase(aihub_container_events_total{event="oom"}[1d]))
+```
+
+Docker replays only its last 256 events. Healthcheck exec traffic fills that
+buffer in about two minutes, so the watchdog misses events from a longer gap,
+such as a deploy that holds the schedule.
+
+## OOM kill
+
+`AIHUBContainerOOMKilled` (critical) fires for 15 minutes after an OOM kill.
+Every request in flight on that container was dropped, and Docker has already
+restarted it. Check `docker inspect` for the memory limit (`mem_limit: 768m`
+for the app). Then check the Speaking upload size that #268 and #270 describe,
+and the request log around the event time.
+
+## Disruption
+
+`AIHUBContainerDisrupted` (warning) fires for 15 minutes after any of these
+events:
+
+- an exit with no stop request, with its exit code
+- a transition to unhealthy
+- a watchdog restart
+
+Read the container's logs from before the event:
+
+```bash
+sudo -n docker logs --since 30m <name>
+```
+
+An exit code of 137 with no matching OOM alert means something else killed
+the container with SIGKILL.
+
+## Still unhealthy
+
+`AIHUBContainerStillUnhealthy` (critical) fires when a watched container has
+been unhealthy for 3 minutes and the watchdog has not restarted it. There are
+three possible causes:
+
+- **`vault-agent`.** Follow the Vault Agent sections in `deploy-vps.md` before
+  any restart.
+- **The restart limit.** Restarting does not cure the fault, so find the cause
+  in the logs before you restart the container by hand. The limit resets an
+  hour after the first of the three restarts.
+- **`restart_failed` in the watchdog log.** The restart itself failed. The
+  same run also raises `AIHUBScheduledJobFailed` for `container-watchdog`.
