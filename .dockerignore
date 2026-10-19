@@ -22,6 +22,7 @@ scripts/cli/*
 !scripts/generate/
 scripts/generate/*
 !scripts/generate/generate-prisma-client.mjs
+!scripts/generate/compile-auth-email-template.mjs
 !scripts/runtime/
 scripts/runtime/*
 !scripts/runtime/runtime-entrypoint.mjs

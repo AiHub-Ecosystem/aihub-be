@@ -5,10 +5,15 @@ import {
   composeVerificationEmail,
   normalizeCustomerWebBaseUrl,
 } from './email-message.composer';
+import { AUTH_TRANSACTIONAL_EMAIL_TEMPLATE } from './templates/transactional-email.template.generated';
 
 describe('Auth email message composition', () => {
   const expiresAt = new Date('2026-09-20T00:00:00.000Z');
   const customerWebBaseUrl = 'https://customer.example.com';
+
+  it('keeps the compiled MJML URL placeholder in the button href', () => {
+    expect(AUTH_TRANSACTIONAL_EMAIL_TEMPLATE).toContain('href="{{url}}"');
+  });
 
   it('composes the existing Vietnamese verification message as a deep link', () => {
     const message = composeVerificationEmail(
@@ -27,8 +32,12 @@ describe('Auth email message composition', () => {
     expect(message.text).toContain(
       'Liên kết này chỉ dùng để kích hoạt tài khoản một lần.',
     );
-    expect(message.html).toContain('<html lang="vi">');
+    expect(message.html).toContain('<html lang="vi"');
     expect(message.html).toContain('Xác nhận email');
+    expect(message.html).toContain(
+      'href="https://customer.example.com/verify-email?token=opaque-token"',
+    );
+    expect(message.html).toContain('07:00 20 tháng 9, 2026');
   });
 
   it('keeps verification token-only when Customer Web is unset', () => {
@@ -81,7 +90,10 @@ describe('Auth email message composition', () => {
     expect(message.text).toContain('lúc 07:00 20 tháng 9, 2026 (giờ Việt Nam)');
     expect(message.text).not.toContain(rawToken);
     expect(message.html).toContain('Đặt lại mật khẩu');
-    expect(message.html).toContain('token=a%2Bb%2Fc%3Dd');
+    expect(message.html).toContain(
+      'href="https://customer.example.com/reset-password?token=a%2Bb%2Fc%3Dd"',
+    );
+    expect(message.html).toContain('07:00 20 tháng 9, 2026');
   });
 
   it('keeps password reset token-only when Customer Web is unset', () => {
@@ -127,7 +139,10 @@ describe('Auth email message composition', () => {
         'lúc 07:00 20 tháng 9, 2026 (giờ Việt Nam)',
       );
       expect(message.html).toContain(label);
-      expect(message.html).toContain('token=a%2Bb%2Fc%3Dd');
+      expect(message.html).toContain(
+        'href="https://customer.example.com/invite?token=a%2Bb%2Fc%3Dd"',
+      );
+      expect(message.html).toContain('07:00 20 tháng 9, 2026');
     },
   );
 

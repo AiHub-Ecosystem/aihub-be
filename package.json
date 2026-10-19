@@ -7,7 +7,7 @@
     "node": ">=22.22.3"
   },
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && nest build && node scripts/generate/generate-prisma-client.mjs --runtime",
+    "build": "node scripts/generate/compile-auth-email-template.mjs && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && nest build && node scripts/generate/generate-prisma-client.mjs --runtime",
     "generate:prisma-client": "node scripts/generate/generate-prisma-client.mjs",
     "generate:migration": "node scripts/generate/generate-migration.mjs",
     "dev": "node scripts/generate/generate-prisma-client.mjs --runtime && nest start --watch",
@@ -117,6 +117,7 @@
     "jest": "^29.7.0",
     "knip": "^6.41.0",
     "lint-staged": "^17.6.0",
+    "mjml": "^5.4.1",
     "openapi-to-postmanv2": "^6.4.0",
     "oxlint": "^1.87.0",
     "oxlint-tsgolint": "7.0.2004",

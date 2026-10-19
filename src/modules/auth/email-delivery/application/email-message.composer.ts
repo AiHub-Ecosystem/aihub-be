@@ -1,4 +1,5 @@
 import type { EmailMessage } from './email-sender.port';
+import { AUTH_TRANSACTIONAL_EMAIL_TEMPLATE } from './templates/transactional-email.template.generated';
 
 export interface VerificationEmailInput {
   readonly email: string;
@@ -102,33 +103,31 @@ interface LinkedEmailHtmlInput {
   readonly url: string;
   readonly expiryLabel: string;
   readonly expiresAt: string;
-  readonly additionalCopy?: readonly string[];
+  readonly notice?: string;
+  readonly closing?: string;
 }
 
 function linkedEmailHtml(input: LinkedEmailHtmlInput): string {
-  const paragraphs = (input.additionalCopy ?? [])
-    .map(
-      (copy) =>
-        `<p style="margin:0 0 12px;color:#475467;font-size:14px;line-height:1.6">${escapeHtml(copy)}</p>`,
-    )
-    .join('');
-
-  return [
-    '<!doctype html><html lang="vi"><body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#1d2838">',
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9"><tr><td align="center" style="padding:32px 16px">',
-    '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;border:1px solid #e4e7ec;border-radius:16px;background-color:#ffffff"><tr><td style="padding:36px">',
-    '<p style="margin:0 0 12px;color:#3a64fa;font-size:12px;font-weight:700;letter-spacing:2px">AIHUB CONSOLE</p>',
-    `<h1 style="margin:0 0 20px;color:#1d2838;font-size:28px;line-height:1.25">${escapeHtml(input.title)}</h1>`,
-    '<p style="margin:0 0 12px;font-size:16px;line-height:1.6">Chào bạn,</p>',
-    `<p style="margin:0 0 24px;color:#475467;font-size:16px;line-height:1.6">${escapeHtml(input.introduction)}</p>`,
-    `<p style="margin:0 0 24px"><a href="${escapeHtml(input.url)}" style="display:inline-block;padding:14px 24px;border-radius:8px;background-color:#3a64fa;color:#ffffff;font-size:16px;font-weight:700;line-height:1.4;text-align:center;text-decoration:none">${escapeHtml(input.buttonLabel)}</a></p>`,
-    `<p style="margin:0 0 16px;color:#475467;font-size:14px;line-height:1.6">${escapeHtml(input.expiryLabel)} <strong style="color:#1d2838">${escapeHtml(input.expiresAt)}</strong> (giờ Việt Nam).</p>`,
-    paragraphs,
-    '<hr style="height:1px;margin:28px 0 16px;border:0;background-color:#e4e7ec">',
-    '<p style="margin:0;color:#667084;font-size:12px">AIHUB Console</p>',
-    '</td></tr></table></td></tr></table>',
-    '</body></html>',
-  ].join('');
+  const values = {
+    title: input.title,
+    introduction: input.introduction,
+    buttonLabel: input.buttonLabel,
+    url: input.url,
+    expiryLabel: input.expiryLabel,
+    expiresAt: input.expiresAt,
+    notice: input.notice ?? '',
+    closing: input.closing ?? '',
+  };
+  return AUTH_TRANSACTIONAL_EMAIL_TEMPLATE.replace(
+    /\{\{(\w+)\}\}/g,
+    (_placeholder, name: string) => {
+      const value = values[name as keyof typeof values];
+      if (value === undefined) {
+        throw new Error(`Unknown transactional email placeholder: ${name}`);
+      }
+      return escapeHtml(value);
+    },
+  );
 }
 
 export function composeVerificationEmail(
@@ -174,10 +173,8 @@ export function composeVerificationEmail(
             url,
             expiryLabel: 'Liên kết có hiệu lực đến',
             expiresAt,
-            additionalCopy: [
-              repeatVerificationCopy,
-              'Nếu bạn không tạo tài khoản AIHUB, hãy bỏ qua email này.',
-            ],
+            notice: repeatVerificationCopy,
+            closing: 'Nếu bạn không tạo tài khoản AIHUB, hãy bỏ qua email này.',
           }),
         }),
   };
@@ -224,9 +221,7 @@ export function composePasswordResetEmail(
       url,
       expiryLabel: 'Liên kết có hiệu lực đến',
       expiresAt,
-      additionalCopy: [
-        'Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này.',
-      ],
+      notice: 'Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này.',
     }),
   };
 }
@@ -283,7 +278,7 @@ export function composeOrganizationInviteEmail(
       url,
       expiryLabel: 'Lời mời có hiệu lực đến',
       expiresAt,
-      additionalCopy: ['Nếu bạn không mong đợi lời mời này, hãy bỏ qua email.'],
+      notice: 'Nếu bạn không mong đợi lời mời này, hãy bỏ qua email.',
     }),
   };
 }

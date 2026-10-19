@@ -1,6 +1,6 @@
 # ADR-0025: Generic password-recovery boundary
 
-- Status: Accepted; email-delivery decision amended by [ADR-0074](0074-transactional-email-outbox.md)
+- Status: Accepted; email-delivery decision amended by [ADR-0074](0074-transactional-email-outbox.md); reset-link behavior amended by [ADR-0046](0046-customer-web-aihub-auth-identity-boundary.md)
 - Related issue: #67
 
 Password Recovery applies only to active local password Auth Identities. A
@@ -12,8 +12,11 @@ separate from Email Verification tokens, opaque, hash-only, one-hour,
 single-use credentials with one open token per account; a newer request
 invalidates the previous one. At the time of this decision, no reset URL,
 outbox, or provider-specific error was part of this boundary. ADR-0074 later
-amends only the outbox and asynchronous delivery decision; the generic
-response, token lifecycle, and no-reset-URL boundary remain in force.
+amends the outbox and asynchronous delivery decision. ADR-0046 amends the
+no-reset-URL boundary: when `CUSTOMER_WEB_BASE_URL` is configured, password
+reset emails include the Customer Web deep link; when it is unset, email
+delivery remains token-only. The generic response and token lifecycle remain
+in force.
 
 Reset consumption rechecks that the account is active and atomically consumes
 the token, replaces the Argon2id password hash, invalidates other open reset
