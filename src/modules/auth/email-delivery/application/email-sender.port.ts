@@ -5,29 +5,12 @@
  */
 export const EMAIL_ATTEMPT_TIMEOUT_MS = 5_000;
 
-export interface VerificationEmailInput {
-  readonly email: string;
-  readonly token: string;
-  readonly expiresAt: Date;
-}
-
-export interface PasswordResetEmailInput {
-  readonly email: string;
-  readonly token: string;
-  readonly expiresAt: Date;
-}
-
-export interface OrganizationInviteEmailInput {
-  readonly email: string;
-  readonly organizationName: string;
-  readonly role: 'owner' | 'admin' | 'member';
-  readonly token: string;
-  readonly expiresAt: Date;
-}
-
-export interface MfaSecurityNotificationInput {
-  readonly email: string;
-  readonly action: 'enabled' | 'removed';
+/** Finished provider-independent content composed by the Auth application. */
+export interface EmailMessage {
+  readonly recipient: string;
+  readonly subject: string;
+  readonly text: string;
+  readonly html?: string;
 }
 
 /**
@@ -40,22 +23,7 @@ export interface EmailDispatchOptions {
 }
 
 export interface EmailSenderPort {
-  sendVerificationEmail(
-    input: VerificationEmailInput,
-    options?: EmailDispatchOptions,
-  ): Promise<void>;
-  sendPasswordResetEmail(
-    input: PasswordResetEmailInput,
-    options?: EmailDispatchOptions,
-  ): Promise<void>;
-  sendOrganizationInviteEmail(
-    input: OrganizationInviteEmailInput,
-    options?: EmailDispatchOptions,
-  ): Promise<void>;
-  sendMfaSecurityNotification(
-    input: MfaSecurityNotificationInput,
-    options?: EmailDispatchOptions,
-  ): Promise<void>;
+  send(message: EmailMessage, options?: EmailDispatchOptions): Promise<void>;
 }
 
 export const EMAIL_SENDER = Symbol('EMAIL_SENDER');

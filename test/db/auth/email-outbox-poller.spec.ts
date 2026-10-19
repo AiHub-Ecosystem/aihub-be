@@ -17,6 +17,7 @@ import type {
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type {
   EmailDispatchOptions,
+  EmailMessage,
   EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { reportTerminalEmailDeliveryFailure } from '@/modules/auth/email-delivery/infrastructure/email-outbox-poller.scheduler';
@@ -268,42 +269,14 @@ function poller(
 }
 
 class RecordingSender implements EmailSenderPort {
-  sends: { kind: EmailDeliveryKind; idempotencyKey: string | undefined }[] = [];
+  sends: { message: EmailMessage; idempotencyKey: string | undefined }[] = [];
   failure: Error | undefined;
 
-  async sendVerificationEmail(
-    _input: unknown,
+  async send(
+    message: EmailMessage,
     options?: EmailDispatchOptions,
   ): Promise<void> {
-    await this.record('verification_email', options);
-  }
-
-  async sendPasswordResetEmail(
-    _input: unknown,
-    options?: EmailDispatchOptions,
-  ): Promise<void> {
-    await this.record('password_reset_email', options);
-  }
-
-  async sendOrganizationInviteEmail(
-    _input: unknown,
-    options?: EmailDispatchOptions,
-  ): Promise<void> {
-    await this.record('organization_invite_email', options);
-  }
-
-  async sendMfaSecurityNotification(
-    _input: unknown,
-    options?: EmailDispatchOptions,
-  ): Promise<void> {
-    await this.record('mfa_enabled_notification', options);
-  }
-
-  private async record(
-    kind: EmailDeliveryKind,
-    options: EmailDispatchOptions | undefined,
-  ): Promise<void> {
-    this.sends.push({ kind, idempotencyKey: options?.idempotencyKey });
+    this.sends.push({ message, idempotencyKey: options?.idempotencyKey });
     if (this.failure !== undefined) throw this.failure;
   }
 }
@@ -490,9 +463,11 @@ describe('email outbox dispatch poller', () => {
       ).runOnce();
 
       expect(afterExpiry.providerAccepted).toBe(1);
-      expect(sender.sends).toEqual([
-        { kind: 'verification_email', idempotencyKey: seeded.id },
-      ]);
+      expect(sender.sends).toHaveLength(1);
+      expect(sender.sends[0]?.message.subject).toBe(
+        'Xác minh địa chỉ email AIHUB',
+      );
+      expect(sender.sends[0]?.idempotencyKey).toBe(seeded.id);
       expect((await rowOf(seeded.id)).status).toBe('provider_accepted');
     });
   });
@@ -807,9 +782,9 @@ describe('email outbox dispatch poller', () => {
 
       await poller(OWNER_A, sender).runOnce();
 
-      expect(sender.sends).toEqual([
-        { kind: 'password_reset_email', idempotencyKey: seeded.id },
-      ]);
+      expect(sender.sends).toHaveLength(1);
+      expect(sender.sends[0]?.message.subject).toBe('Đặt lại mật khẩu AIHUB');
+      expect(sender.sends[0]?.idempotencyKey).toBe(seeded.id);
       expect((await rowOf(seeded.id)).status).toBe('provider_accepted');
     });
 
@@ -819,19 +794,10 @@ describe('email outbox dispatch poller', () => {
         organizationName: 'Resonance',
         role: 'owner',
       });
-      const delivered: unknown[] = [];
+      const delivered: EmailMessage[] = [];
       const sender: EmailSenderPort = {
-        async sendVerificationEmail() {
-          throw new Error('wrong kind dispatched');
-        },
-        async sendPasswordResetEmail() {
-          throw new Error('wrong kind dispatched');
-        },
-        async sendOrganizationInviteEmail(input) {
-          delivered.push(input);
-        },
-        async sendMfaSecurityNotification() {
-          throw new Error('wrong kind dispatched');
+        async send(message) {
+          delivered.push(message);
         },
       };
 
@@ -839,8 +805,8 @@ describe('email outbox dispatch poller', () => {
 
       expect(delivered).toEqual([
         expect.objectContaining({
-          organizationName: 'Resonance',
-          role: 'owner',
+          subject: 'Lời mời tham gia Resonance trên AIHUB',
+          text: expect.stringContaining('chủ sở hữu'),
         }),
       ]);
       expect((await rowOf(seeded.id)).status).toBe('provider_accepted');

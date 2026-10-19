@@ -10,10 +10,6 @@ import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/use
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
-  type MfaSecurityNotificationInput,
-  type OrganizationInviteEmailInput,
-  type PasswordResetEmailInput,
-  type VerificationEmailInput,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import {
   AUTH_RATE_LIMITER,
@@ -134,17 +130,10 @@ describe('Organization invitation HTTP flow', () => {
       ),
     };
     emailSender = {
-      sendVerificationEmail: jest.fn(
-        async (_input: VerificationEmailInput) => undefined,
-      ),
-      sendPasswordResetEmail: jest.fn(
-        async (_input: PasswordResetEmailInput) => undefined,
-      ),
-      sendOrganizationInviteEmail: jest.fn(
-        async (_input: OrganizationInviteEmailInput) => undefined,
-      ),
-      sendMfaSecurityNotification: jest.fn(
-        async (_input: MfaSecurityNotificationInput) => undefined,
+      send: jest.fn(
+        async (
+          _message: Parameters<EmailSenderPort['send']>[0],
+        ): Promise<void> => undefined,
       ),
     };
 
@@ -301,7 +290,7 @@ describe('Organization invitation HTTP flow', () => {
     });
     expect(response.body).not.toContain('invitee@example.com');
     expect(invitations.createInvitation.mock.calls).toHaveLength(0);
-    expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(0);
+    expect(emailSender.send.mock.calls).toHaveLength(0);
   });
 
   it('passes a canonical management scope and normalized payload to idempotency', async () => {
@@ -362,7 +351,7 @@ describe('Organization invitation HTTP flow', () => {
       meta: { request_id: REQUEST_ID },
     });
     expect(invitations.createInvitation.mock.calls).toHaveLength(0);
-    expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(0);
+    expect(emailSender.send.mock.calls).toHaveLength(0);
   });
 
   it('replays a record completed before the outbox, which stored no delivery status', async () => {
@@ -405,7 +394,7 @@ describe('Organization invitation HTTP flow', () => {
       meta: { request_id: REQUEST_ID },
     });
     expect(invitations.createInvitation.mock.calls).toHaveLength(0);
-    expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(0);
+    expect(emailSender.send.mock.calls).toHaveLength(0);
   });
 
   it('still refuses a stored record that carries a status it cannot report', async () => {
@@ -464,7 +453,7 @@ describe('Organization invitation HTTP flow', () => {
     expect(persisted.emailDelivery.id).toMatch(/^edr_[0-9A-HJKMNP-TV-Z]{26}$/);
     expect(persisted.emailDelivery.createdAt).toBe(persisted.now);
     // The provider is not called in the request path.
-    expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(0);
+    expect(emailSender.send.mock.calls).toHaveLength(0);
   });
 
   it('reports the request as queued on a fresh invitation', async () => {
@@ -732,9 +721,7 @@ describe('Organization invitation HTTP flow', () => {
         message: 'Organization admins can only invite members',
       });
       expect(invitations.createInvitation.mock.calls).toHaveLength(0);
-      expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(
-        0,
-      );
+      expect(emailSender.send.mock.calls).toHaveLength(0);
     },
   );
 
@@ -764,7 +751,7 @@ describe('Organization invitation HTTP flow', () => {
       },
     });
     expect(invitations.createInvitation.mock.calls).toHaveLength(0);
-    expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(0);
+    expect(emailSender.send.mock.calls).toHaveLength(0);
   });
 
   it('rejects a missing Bearer credential', async () => {
@@ -794,7 +781,7 @@ describe('Organization invitation HTTP flow', () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json().error.code).toBe('ORGANIZATION_MEMBER_EXISTS');
-    expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(0);
+    expect(emailSender.send.mock.calls).toHaveLength(0);
   });
 
   it('keeps the conflict outcome unreachable without invite authority', async () => {
@@ -828,9 +815,7 @@ describe('Organization invitation HTTP flow', () => {
       expect(response.statusCode).toBe(400);
       expect(response.json().error.code).toBe('INVALID_REQUEST');
       expect(invitations.createInvitation.mock.calls).toHaveLength(0);
-      expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(
-        0,
-      );
+      expect(emailSender.send.mock.calls).toHaveLength(0);
     },
   );
 
@@ -853,7 +838,7 @@ describe('Organization invitation HTTP flow', () => {
     expect(response.statusCode).toBe(500);
     expect(response.json().error.code).toBe('INTERNAL_ERROR');
     expect(response.payload).not.toContain('outbox store unavailable');
-    expect(emailSender.sendOrganizationInviteEmail.mock.calls).toHaveLength(0);
+    expect(emailSender.send.mock.calls).toHaveLength(0);
   });
 
   it('supersedes the open token when the caller retries', async () => {

@@ -6,7 +6,6 @@ import {
 import {
   FakeCredentials,
   FakeStore,
-  HOUR,
   NOW,
   ROW_ID,
   RecordingSender,
@@ -34,8 +33,11 @@ describe('EmailDeliveryPoller', () => {
     expect(credentials.checked).toEqual([]);
     expect(sender.sends).toEqual([
       {
-        kind: 'mfa_removed_notification',
-        input: { email: 'person@example.com', action: 'removed' },
+        message: {
+          recipient: 'person@example.com',
+          subject: 'AIHUB two-factor authentication removed',
+          text: 'The TOTP second factor was removed from your AIHUB account and all refresh and web sessions were ended. If you did not make this change, contact AIHUB support immediately.',
+        },
         idempotencyKey: ROW_ID,
       },
     ]);
@@ -47,17 +49,13 @@ describe('EmailDeliveryPoller', () => {
 
     const summary = await poller.runOnce();
 
-    expect(sender.sends).toEqual([
-      {
-        kind: 'verification_email',
-        input: {
-          email: 'person@example.com',
-          token: TOKEN,
-          expiresAt: new Date(NOW.getTime() + HOUR),
-        },
-        idempotencyKey: ROW_ID,
-      },
-    ]);
+    expect(sender.sends).toHaveLength(1);
+    expect(sender.sends[0]?.message).toMatchObject({
+      recipient: 'person@example.com',
+      subject: 'Xác minh địa chỉ email AIHUB',
+    });
+    expect(sender.sends[0]?.message.text).toContain(TOKEN);
+    expect(sender.sends[0]?.idempotencyKey).toBe(ROW_ID);
     expect(store.accepted).toEqual([ROW_ID]);
     expect(store.cancelled).toEqual([]);
     expect(summary).toEqual({
@@ -75,9 +73,7 @@ describe('EmailDeliveryPoller', () => {
 
     await poller.runOnce();
 
-    expect(sender.sends.map((send) => send.kind)).toEqual([
-      'password_reset_email',
-    ]);
+    expect(sender.sends[0]?.message.subject).toBe('Đặt lại mật khẩu AIHUB');
     expect(store.accepted).toEqual([ROW_ID]);
   });
 
@@ -95,13 +91,11 @@ describe('EmailDeliveryPoller', () => {
 
     await poller.runOnce();
 
-    expect(sender.sends[0]?.input).toEqual({
-      email: 'person@example.com',
-      organizationName: 'Resonance',
-      role: 'admin',
-      token: TOKEN,
-      expiresAt: new Date(NOW.getTime() + HOUR),
-    });
+    expect(sender.sends[0]?.message.subject).toBe(
+      'Lời mời tham gia Resonance trên AIHUB',
+    );
+    expect(sender.sends[0]?.message.text).toContain('quản trị viên');
+    expect(sender.sends[0]?.message.text).toContain(TOKEN);
     expect(sender.sends[0]?.idempotencyKey).toBe('edr_invite');
   });
 
@@ -273,18 +267,9 @@ describe('EmailDeliveryPoller', () => {
   it('keeps dispatching the rest of a batch when one request fails', async () => {
     let call = 0;
     const failingThenWorking = {
-      async sendVerificationEmail() {
+      async send() {
         call += 1;
         if (call === 1) throw new Error('Resend email delivery failed');
-      },
-      async sendPasswordResetEmail() {
-        call += 1;
-      },
-      async sendOrganizationInviteEmail() {
-        call += 1;
-      },
-      async sendMfaSecurityNotification() {
-        call += 1;
       },
     } as EmailSenderPort;
     const store = new FakeStore();

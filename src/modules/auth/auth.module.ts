@@ -13,6 +13,7 @@ import {
 } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/email-delivery-poller';
+import { normalizeCustomerWebBaseUrl } from '@/modules/auth/email-delivery/application/email-message.composer';
 import {
   PersistenceModule,
   type PrismaClientHolder,
@@ -313,17 +314,10 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
         configuration: ConfigType<typeof appConfig>,
       ): EmailSenderPort => {
         const snapshot = provider.getSnapshot();
-        const isProduction =
-          configuration.NODE_ENV === 'production' ||
-          configuration.NODE_ENV === 'staging';
         return new ResendEmailSender(
           snapshot.resend,
           configuration.RESEND_FROM ?? '',
           fetch,
-          configuration.CUSTOMER_WEB_BASE_URL,
-          isProduction,
-          isProduction &&
-            configuration.AIHUB_RUNTIME_DATABASE_SCOPE !== 'sandbox',
         );
       },
       inject: [RUNTIME_SECRET_PROVIDER, appConfig.KEY],
@@ -357,8 +351,18 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
         runtime: PrismaClientHolder,
         cipher: EmailPayloadCipherPort,
         sender: EmailSenderPort,
-      ): EmailDeliveryPoller =>
-        new EmailDeliveryPoller(
+        configuration: ConfigType<typeof appConfig>,
+      ): EmailDeliveryPoller => {
+        const isProduction =
+          configuration.NODE_ENV === 'production' ||
+          configuration.NODE_ENV === 'staging';
+        const customerWebBaseUrl = normalizeCustomerWebBaseUrl(
+          configuration.CUSTOMER_WEB_BASE_URL,
+          isProduction,
+          isProduction &&
+            configuration.AIHUB_RUNTIME_DATABASE_SCOPE !== 'sandbox',
+        );
+        return new EmailDeliveryPoller(
           new PostgresEmailDispatchStore(runtime.prisma),
           new PostgresEmailCredentialRepository(runtime.prisma),
           cipher,
@@ -367,10 +371,17 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
           { hash: hashOpaqueToken },
           {
             owner: emailOutboxLeaseOwner(),
+            ...(customerWebBaseUrl === undefined ? {} : { customerWebBaseUrl }),
             onTerminalFailure: reportTerminalEmailDeliveryFailure,
           },
-        ),
-      inject: [RUNTIME_PRISMA_CLIENT, EMAIL_PAYLOAD_CIPHER, EMAIL_SENDER],
+        );
+      },
+      inject: [
+        RUNTIME_PRISMA_CLIENT,
+        EMAIL_PAYLOAD_CIPHER,
+        EMAIL_SENDER,
+        appConfig.KEY,
+      ],
     },
     {
       provide: EmailOutboxPollerScheduler,

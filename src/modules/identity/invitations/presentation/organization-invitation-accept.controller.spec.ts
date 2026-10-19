@@ -9,9 +9,6 @@ import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/use
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
-  type OrganizationInviteEmailInput,
-  type PasswordResetEmailInput,
-  type VerificationEmailInput,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
@@ -56,14 +53,7 @@ describe('Organization invitation acceptance HTTP flow', () => {
       })),
     };
     const emailSender: EmailSenderPort = {
-      sendVerificationEmail: async (_input: VerificationEmailInput) =>
-        undefined,
-      sendPasswordResetEmail: async (_input: PasswordResetEmailInput) =>
-        undefined,
-      sendOrganizationInviteEmail: async (
-        _input: OrganizationInviteEmailInput,
-      ) => undefined,
-      sendMfaSecurityNotification: async () => undefined,
+      send: async () => undefined,
     };
     const verifier: UserAccessTokenVerifierPort = {
       verify: async (token: string) => {

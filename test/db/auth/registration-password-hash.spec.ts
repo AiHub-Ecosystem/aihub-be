@@ -43,13 +43,7 @@ import {
 const PASSWORD = 'correct horse battery staple';
 
 class DiscardingSender implements EmailSenderPort {
-  async sendVerificationEmail(): Promise<void> {}
-
-  async sendPasswordResetEmail(): Promise<void> {}
-
-  async sendOrganizationInviteEmail(): Promise<void> {}
-
-  async sendMfaSecurityNotification(): Promise<void> {}
+  async send(): Promise<void> {}
 }
 
 class RateLimiterFake implements AuthRateLimiterPort {

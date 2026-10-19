@@ -86,20 +86,8 @@ class SwitchableIdentityClient {
 class RecordingSender implements EmailSenderPort {
   calls: string[] = [];
 
-  async sendVerificationEmail(): Promise<void> {
-    this.calls.push('sendVerificationEmail');
-  }
-
-  async sendPasswordResetEmail(): Promise<void> {
-    this.calls.push('sendPasswordResetEmail');
-  }
-
-  async sendOrganizationInviteEmail(): Promise<void> {
-    this.calls.push('sendOrganizationInviteEmail');
-  }
-
-  async sendMfaSecurityNotification(): Promise<void> {
-    this.calls.push('sendMfaSecurityNotification');
+  async send(): Promise<void> {
+    this.calls.push('send');
   }
 }
 

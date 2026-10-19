@@ -13,6 +13,7 @@ import type {
 } from './email-delivery-request.port';
 import type {
   EmailDispatchOptions,
+  EmailMessage,
   EmailSenderPort,
 } from './email-sender.port';
 
@@ -141,8 +142,7 @@ export class FakeCredentials implements EmailCredentialActionabilityPort {
 }
 
 export interface RecordedSend {
-  readonly kind: EmailDeliveryKind;
-  readonly input: unknown;
+  readonly message: EmailMessage;
   readonly idempotencyKey: string | undefined;
 }
 
@@ -150,47 +150,11 @@ export class RecordingSender implements EmailSenderPort {
   sends: RecordedSend[] = [];
   failure: Error | undefined;
 
-  async sendVerificationEmail(
-    input: unknown,
+  async send(
+    message: EmailMessage,
     options?: EmailDispatchOptions,
   ): Promise<void> {
-    await this.record('verification_email', input, options);
-  }
-
-  async sendPasswordResetEmail(
-    input: unknown,
-    options?: EmailDispatchOptions,
-  ): Promise<void> {
-    await this.record('password_reset_email', input, options);
-  }
-
-  async sendOrganizationInviteEmail(
-    input: unknown,
-    options?: EmailDispatchOptions,
-  ): Promise<void> {
-    await this.record('organization_invite_email', input, options);
-  }
-
-  async sendMfaSecurityNotification(
-    input: unknown,
-    options?: EmailDispatchOptions,
-  ): Promise<void> {
-    const action = (input as { readonly action?: string }).action;
-    await this.record(
-      action === 'removed'
-        ? 'mfa_removed_notification'
-        : 'mfa_enabled_notification',
-      input,
-      options,
-    );
-  }
-
-  private async record(
-    kind: EmailDeliveryKind,
-    input: unknown,
-    options: EmailDispatchOptions | undefined,
-  ): Promise<void> {
-    this.sends.push({ kind, input, idempotencyKey: options?.idempotencyKey });
+    this.sends.push({ message, idempotencyKey: options?.idempotencyKey });
     if (this.failure !== undefined) throw this.failure;
   }
 }

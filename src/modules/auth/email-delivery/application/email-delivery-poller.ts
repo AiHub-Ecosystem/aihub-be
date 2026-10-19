@@ -14,6 +14,12 @@ import type {
 } from './email-delivery-request.port';
 import { EnvelopeCipherError } from './email-delivery-request.port';
 import type { EmailPayloadCipherPort } from './email-delivery-request.port';
+import {
+  composeMfaSecurityNotification,
+  composeOrganizationInviteEmail,
+  composePasswordResetEmail,
+  composeVerificationEmail,
+} from './email-message.composer';
 import { EMAIL_ATTEMPT_TIMEOUT_MS } from './email-sender.port';
 import type { EmailSenderPort } from './email-sender.port';
 
@@ -90,6 +96,8 @@ function isPayloadFor(
 export interface EmailDeliveryPollerOptions {
   /** Identifies this instance on the rows it leases. */
   readonly owner: string;
+  /** Validated by the Auth composition root; unset deployments use token-only copy. */
+  readonly customerWebBaseUrl?: string;
   readonly batchSize?: number;
   readonly leaseMs?: number;
   /**
@@ -437,12 +445,12 @@ export class EmailDeliveryPoller {
       request.kind === 'mfa_enabled_notification' ||
       request.kind === 'mfa_removed_notification'
     ) {
-      await this.sender.sendMfaSecurityNotification(
-        {
+      await this.sender.send(
+        composeMfaSecurityNotification({
           email: (payload as MfaSecurityNotificationPayload).email,
           action:
             request.kind === 'mfa_enabled_notification' ? 'enabled' : 'removed',
-        },
+        }),
         options,
       );
       return;
@@ -454,25 +462,39 @@ export class EmailDeliveryPoller {
 
     if (request.kind === 'organization_invite_email') {
       const invitation = payload as OrganizationInviteEmailDeliveryPayload;
-      await this.sender.sendOrganizationInviteEmail(
-        {
-          email: invitation.email,
-          organizationName: invitation.organizationName,
-          role: invitation.role,
-          token: invitation.token,
-          expiresAt,
-        },
+      await this.sender.send(
+        composeOrganizationInviteEmail(
+          {
+            email: invitation.email,
+            organizationName: invitation.organizationName,
+            role: invitation.role,
+            token: invitation.token,
+            expiresAt,
+          },
+          this.options.customerWebBaseUrl,
+        ),
         options,
       );
       return;
     }
 
-    const shared = { email: payload.email, token: payload.token, expiresAt };
     if (request.kind === 'verification_email') {
-      await this.sender.sendVerificationEmail(shared, options);
+      await this.sender.send(
+        composeVerificationEmail(
+          { email: payload.email, token: payload.token, expiresAt },
+          this.options.customerWebBaseUrl,
+        ),
+        options,
+      );
       return;
     }
-    await this.sender.sendPasswordResetEmail(shared, options);
+    await this.sender.send(
+      composePasswordResetEmail(
+        { email: payload.email, token: payload.token, expiresAt },
+        this.options.customerWebBaseUrl,
+      ),
+      options,
+    );
   }
 
   /**

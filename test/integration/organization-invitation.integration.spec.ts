@@ -9,7 +9,6 @@ import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/use
 import {
   EMAIL_SENDER,
   type EmailSenderPort,
-  type OrganizationInviteEmailInput,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import {
   AUTH_RATE_LIMITER,
@@ -58,9 +57,7 @@ describe('organization invitation HTTP/application integration', () => {
     Promise<CreateOrganizationInvitationResult>,
     [CreateOrganizationInvitationInput]
   >;
-  let emailSender: jest.Mocked<
-    Pick<EmailSenderPort, 'sendOrganizationInviteEmail'>
-  >;
+  let emailSender: jest.Mocked<Pick<EmailSenderPort, 'send'>>;
 
   beforeAll(async () => {
     rateLimiter = new RateLimiterFake();
@@ -72,8 +69,10 @@ describe('organization invitation HTTP/application integration', () => {
       }),
     );
     emailSender = {
-      sendOrganizationInviteEmail: jest.fn(
-        async (_input: OrganizationInviteEmailInput) => undefined,
+      send: jest.fn(
+        async (
+          _message: Parameters<EmailSenderPort['send']>[0],
+        ): Promise<void> => undefined,
       ),
     };
 
@@ -129,7 +128,7 @@ describe('organization invitation HTTP/application integration', () => {
   beforeEach(() => {
     rateLimiter.allowed = true;
     createInvitation.mockClear();
-    emailSender.sendOrganizationInviteEmail.mockClear();
+    emailSender.send.mockClear();
   });
 
   function invite() {
@@ -150,7 +149,7 @@ describe('organization invitation HTTP/application integration', () => {
     });
     expect(createInvitation).toHaveBeenCalledTimes(1);
     // The provider is not called in the request path; a worker claims the row.
-    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+    expect(emailSender.send).not.toHaveBeenCalled();
   });
 
   it('rejects a rate-limited invitation before the application port is called', async () => {
@@ -166,6 +165,6 @@ describe('organization invitation HTTP/application integration', () => {
       },
     });
     expect(createInvitation).not.toHaveBeenCalled();
-    expect(emailSender.sendOrganizationInviteEmail).not.toHaveBeenCalled();
+    expect(emailSender.send).not.toHaveBeenCalled();
   });
 });

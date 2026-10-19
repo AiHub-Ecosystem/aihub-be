@@ -1,4 +1,4 @@
-import type { OrganizationInviteEmailInput } from './email-sender.port';
+import type { OrganizationInviteEmailInput } from './email-message.composer';
 
 /**
  * Each vocabulary is declared as the runtime list the table's own checks
@@ -17,9 +17,9 @@ export const EMAIL_DELIVERY_KINDS = [
 export type EmailDeliveryKind = (typeof EMAIL_DELIVERY_KINDS)[number];
 
 /**
- * What a worker needs once it claims a request: the inputs the matching
- * `EmailSenderPort` call takes. It exists only inside the ciphertext, which is
- * why the expiry is an ISO string rather than a `Date`.
+ * What a worker needs once it claims a request: the inputs the matching Auth
+ * email composer needs. It exists only inside the ciphertext, which is why the
+ * expiry is an ISO string rather than a `Date`.
  *
  * The two shapes are one type because the row's `kind` column already says
  * which sender call the payload belongs to: only the organization invitation
@@ -34,7 +34,7 @@ export interface AuthEmailDeliveryPayload {
 export interface OrganizationInviteEmailDeliveryPayload
   extends AuthEmailDeliveryPayload {
   readonly organizationName: string;
-  /** The same three roles `EmailSenderPort` accepts for an invitation. */
+  /** The same three roles the invitation email composer accepts. */
   readonly role: OrganizationInviteEmailInput['role'];
 }
 
