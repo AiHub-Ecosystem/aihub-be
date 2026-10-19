@@ -300,6 +300,22 @@ function buildMonitoringCheckCommands(repositoryRoot) {
       ],
     },
     {
+      label: 'promtool test alert rules',
+      command: 'docker',
+      args: [
+        'run',
+        '--rm',
+        '--mount',
+        configMount,
+        '--entrypoint',
+        'promtool',
+        PROMETHEUS_IMAGE,
+        'test',
+        'rules',
+        '/etc/prometheus/alert.rules.test.yml',
+      ],
+    },
+    {
       label: 'blackbox_exporter check probe config',
       command: 'docker',
       args: [

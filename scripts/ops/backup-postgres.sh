@@ -26,6 +26,10 @@ readonly DATABASES=(aihub aihub_sandbox)
 readonly STEP_TIMEOUT_SECONDS=900
 readonly CONFIG_FILE=${AIHUB_BACKUP_CONFIG:-$HOME/.aihub-backup.env}
 readonly LOG_FILE=${AIHUB_BACKUP_LOG:-$HOME/aihub-postgres-backup.log}
+readonly METRICS_DIR=${AIHUB_HOST_JOB_METRICS_DIR:-$HOME/.aihub-host-job-metrics}
+# Two missed hours plus 20 minutes: a run skipped while CD holds the schedule
+# does not page, a second one does (#291).
+readonly MAX_AGE_SECONDS=8400
 readonly TOOLS_DIR=${AIHUB_BACKUP_TOOLS_DIR:-$HOME/.aihub-backup-tools}
 # Tests pin the clock; production uses the current time.
 readonly NOW=${AIHUB_BACKUP_NOW:-now}
@@ -44,8 +48,26 @@ log_line() {
   }
 }
 
+# The same textfile-collector format as host-scheduled-job.sh, under the task
+# name postgres-backup; alert.rules.yml alerts on a failed or missed run.
+record_job_result() {
+  local outcome=$1 file="$METRICS_DIR/postgres-backup-$1.prom" tmp
+  tmp="$file.tmp"
+  if mkdir -p -- "$METRICS_DIR" && chmod 755 "$METRICS_DIR" && {
+    printf 'aihub_host_job_last_%s_timestamp_seconds{task="postgres-backup"} %s\n' "$outcome" "$(date +%s)"
+    if [[ "$outcome" == success ]]; then
+      printf 'aihub_host_job_max_age_seconds{task="postgres-backup"} %s\n' "$MAX_AGE_SECONDS"
+    fi
+  } >"$tmp" && chmod 644 "$tmp" && mv -f -- "$tmp" "$file"; then
+    return 0
+  fi
+  rm -f -- "$tmp"
+  log_line "backup metrics_write_failed outcome=$outcome"
+}
+
 fail() {
   log_line "backup failed reason=$1"
+  record_job_result failure
   exit 1
 }
 
@@ -153,4 +175,9 @@ for db in "${DATABASES[@]}"; do
   log_line "backup $db exit=0 bytes=$bytes seconds=$((SECONDS - started)) prefixes=$(IFS=,; printf '%s' "${prefixes[*]}") object=$name"
 done
 
+if [[ "$status" == 0 ]]; then
+  record_job_result success
+else
+  record_job_result failure
+fi
 exit "$status"

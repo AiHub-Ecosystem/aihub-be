@@ -20,6 +20,7 @@ else
 fi
 readonly JOB=${1:-}
 readonly LOG_FILE=${AIHUB_HOST_JOB_LOG:-$default_log}
+readonly METRICS_DIR=${AIHUB_HOST_JOB_METRICS_DIR:-$HOME/.aihub-host-job-metrics}
 from=
 to=
 quota_month=
@@ -46,16 +47,25 @@ elif (( $# != 1 )); then
   printf 'usage: %s quota [--month YYYY-MM]|prune|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]|chart-upload-sweep [--dry-run true]|speaking-upload-sweep [--dry-run true]\n' "$0" >&2
   exit 2
 fi
+# max_age_seconds is how long after a success Prometheus waits for the next
+# one before it alerts (#291): one cadence plus an hour for daily jobs, and two
+# cadences plus 20 minutes for faster ones, so a run skipped while CD holds the
+# schedule does not page.
 case "$JOB" in
-  quota) commands=(quota:reconcile); timeout_seconds=900 ;;
-  prune) commands=(usage:prune); timeout_seconds=1800 ;;
-  report) commands=(usage:report); timeout_seconds=180 ;;
-  ttl-audit) commands=(redis:ttl-audit); timeout_seconds=900 ;;
-  avatar-sweep) commands=(avatar:sweep); timeout_seconds=1800 ;;
-  chart-upload-sweep) commands=(writing:chart-upload-sweep); timeout_seconds=1800 ;;
-  speaking-upload-sweep) commands=(speaking:audio-upload-sweep); timeout_seconds=1800 ;;
+  quota) commands=(quota:reconcile); timeout_seconds=900; max_age_seconds=90000 ;;
+  prune) commands=(usage:prune); timeout_seconds=1800; max_age_seconds=90000 ;;
+  report) commands=(usage:report); timeout_seconds=180; max_age_seconds=8400 ;;
+  ttl-audit) commands=(redis:ttl-audit); timeout_seconds=900; max_age_seconds=90000 ;;
+  avatar-sweep) commands=(avatar:sweep); timeout_seconds=1800; max_age_seconds=90000 ;;
+  chart-upload-sweep) commands=(writing:chart-upload-sweep); timeout_seconds=1800; max_age_seconds=3000 ;;
+  speaking-upload-sweep) commands=(speaking:audio-upload-sweep); timeout_seconds=1800; max_age_seconds=90000 ;;
   *) printf 'usage: %s quota [--month YYYY-MM]|prune|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]|chart-upload-sweep [--dry-run true]|speaking-upload-sweep [--dry-run true]\n' "$0" >&2; exit 2 ;;
 esac
+
+# Only the bare scheduled form reports to Prometheus; a manual rerun of an
+# older window or a dry run says nothing about the schedule.
+scheduled=false
+(( $# == 1 )) && scheduled=true
 
 if ! cd "$APP_DIR"; then
   printf 'cannot enter AIHUB deployment directory: %s\n' "$APP_DIR" >&2
@@ -71,6 +81,27 @@ log_line() {
     printf 'cannot append scheduled-job log: %s\n' "$LOG_FILE" >&2
     exit 1
   }
+}
+
+# Writes the last success or failure time for the node-exporter textfile
+# collector, which alert.rules.yml reads for a failed or missed run.
+# backup-postgres.sh writes the same format. A write that fails is logged; the
+# missing success then alerts as a missed run.
+record_job_result() {
+  local outcome=$1 file tmp
+  [[ "$scheduled" == true ]] || return 0
+  file="$METRICS_DIR/$JOB-$outcome.prom"
+  tmp="$file.tmp"
+  if mkdir -p -- "$METRICS_DIR" && chmod 755 "$METRICS_DIR" && {
+    printf 'aihub_host_job_last_%s_timestamp_seconds{task="%s"} %s\n' "$outcome" "$JOB" "$(date +%s)"
+    if [[ "$outcome" == success ]]; then
+      printf 'aihub_host_job_max_age_seconds{task="%s"} %s\n' "$JOB" "$max_age_seconds"
+    fi
+  } >"$tmp" && chmod 644 "$tmp" && mv -f -- "$tmp" "$file"; then
+    return 0
+  fi
+  rm -f -- "$tmp"
+  log_line "$(date -u +%FT%TZ) $JOB metrics_write_failed outcome=$outcome"
 }
 
 if ! command -v flock >/dev/null 2>&1; then
@@ -143,6 +174,7 @@ else
       "$STATUS_TIMEOUT_SECONDS" >"$tmp_dir/status.err"
   fi
   log_stderr_tail "$(date -u +%FT%TZ)" deployment unresolved "$code" "$tmp_dir/status.err"
+  record_job_result failure
   exit 1
 fi
 
@@ -236,4 +268,9 @@ for tier in production sandbox; do
   done
 done
 
+if [[ "$status" == 0 ]]; then
+  record_job_result success
+else
+  record_job_result failure
+fi
 exit "$status"

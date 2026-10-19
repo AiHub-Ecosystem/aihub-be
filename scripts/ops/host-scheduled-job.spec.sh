@@ -196,6 +196,9 @@ assert_contains "$AIHUB_HOST_JOB_LOG" 'diagnostic-60'
 assert_not_contains "$AIHUB_HOST_JOB_LOG" 'diagnostic-10'
 assert_not_contains "$AIHUB_HOST_JOB_LOG" 'partial stdout must not be the failure detail'
 assert_not_contains "$AIHUB_HOST_JOB_LOG" 'intermediate output'
+assert_contains "$home_dir/.aihub-host-job-metrics/quota-failure.prom" \
+  'aihub_host_job_last_failure_timestamp_seconds{task="quota"} '
+[[ ! -e "$home_dir/.aihub-host-job-metrics/quota-success.prom" ]]
 assert_contains "$AIHUB_HOST_JOB_LOG" 'quota sandbox service=app-sandbox exit=0 summary service=app-sandbox'
 
 : >"$FAKE_DOCKER_CALLS"
@@ -214,12 +217,15 @@ assert_contains "$AIHUB_HOST_JOB_LOG" \
   'scheduled command exceeded its 900s deadline or Docker exec grace'
 assert_contains "$AIHUB_HOST_JOB_LOG" 'quota sandbox service=app-sandbox exit=0 summary service=app-sandbox'
 
+# A manual rerun of an older window says nothing about the schedule.
+rm -f "$home_dir/.aihub-host-job-metrics"/report-*.prom
 : >"$FAKE_DOCKER_CALLS"
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" report \
   --from 2026-09-20T12:00:00.000Z --to 2026-09-20T13:00:00.000Z \
   >"$test_root/report.out" 2>&1
 assert_contains "$FAKE_DOCKER_CALLS" \
   'usage:report --from 2026-09-20T12:00:00.000Z --to 2026-09-20T13:00:00.000Z'
+[[ ! -e "$home_dir/.aihub-host-job-metrics/report-success.prom" ]]
 
 : >"$FAKE_DOCKER_CALLS"
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" quota \
@@ -246,6 +252,8 @@ set -e
 [[ "$run_status" == 1 ]]
 [[ ! -s "$FAKE_DOCKER_CALLS" ]]
 assert_contains "$AIHUB_HOST_JOB_LOG" 'prune deferred reason=host_job_active'
+# A deferral is a missed run, not a failure.
+[[ ! -e "$home_dir/.aihub-host-job-metrics/prune-failure.prom" ]]
 
 if [[ -n "$REAL_FLOCK" ]]; then
   : >"$FAKE_DOCKER_CALLS"
@@ -282,14 +290,19 @@ if [[ -n "$REAL_FLOCK" ]]; then
   wait "$first_pid"
 fi
 
-for job_and_timeout in 'quota 900' 'prune 1800' 'report 180' 'ttl-audit 900' 'avatar-sweep 1800' 'chart-upload-sweep 1800' 'speaking-upload-sweep 1800'; do
-  read -r job expected_timeout <<<"$job_and_timeout"
+for job_and_limits in 'quota 900 90000' 'prune 1800 90000' 'report 180 8400' 'ttl-audit 900 90000' 'avatar-sweep 1800 90000' 'chart-upload-sweep 1800 3000' 'speaking-upload-sweep 1800 90000'; do
+  read -r job expected_timeout expected_max_age <<<"$job_and_limits"
   : >"$FAKE_DOCKER_CALLS"
   APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" "$job" \
     >"$test_root/$job.out" 2>&1
   assert_contains "$FAKE_DOCKER_CALLS" "app-slot-b timeout=$expected_timeout"
   assert_contains "$FAKE_DOCKER_CALLS" "app-sandbox timeout=$expected_timeout"
+  success_file="$home_dir/.aihub-host-job-metrics/$job-success.prom"
+  assert_contains "$success_file" "aihub_host_job_last_success_timestamp_seconds{task=\"$job\"} "
+  assert_contains "$success_file" "aihub_host_job_max_age_seconds{task=\"$job\"} $expected_max_age"
+  [[ "$(stat -c %a "$success_file")" == 644 ]]
 done
+[[ "$(stat -c %a "$home_dir/.aihub-host-job-metrics")" == 755 ]]
 : >"$FAKE_DOCKER_CALLS"
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" avatar-sweep \
   --dry-run true >"$test_root/avatar-dry-run.out" 2>&1
@@ -303,7 +316,7 @@ APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-scheduled-job.sh" speaking-up
   --dry-run true >"$test_root/speaking-upload-dry-run.out" 2>&1
 assert_contains "$FAKE_DOCKER_CALLS" 'speaking:audio-upload-sweep --dry-run true'
 
-printf 'host wrapper test passed: timeouts, same-job overlap skip, bounded stderr, and continued Sandbox run\n'
+printf 'host wrapper test passed: timeouts, same-job overlap skip, bounded stderr, continued Sandbox run, and job metrics\n'
 
 cat >"$app_dir/scripts/ops/host-scheduled-job.sh" <<'STUB'
 #!/usr/bin/env bash

@@ -1,0 +1,90 @@
+# promtool test rules: the #291 edge and scheduled-job alerts.
+rule_files:
+  - alert.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="aihub-edge-health",instance="https://api.aihubproduction.com/health"}'
+        values: "1 0 0 0 0"
+      # report succeeded at t=0 with an 8400 s window; never again.
+      - series: 'aihub_host_job_last_success_timestamp_seconds{job="aihub-production-node",task="report"}'
+        values: "0x200"
+      - series: 'aihub_host_job_max_age_seconds{job="aihub-production-node",task="report"}'
+        values: "8400x200"
+      # quota succeeded at t=0, then failed at t=300 s.
+      - series: 'aihub_host_job_last_success_timestamp_seconds{job="aihub-production-node",task="quota"}'
+        values: "0x200"
+      - series: 'aihub_host_job_max_age_seconds{job="aihub-production-node",task="quota"}'
+        values: "90000x200"
+      - series: 'aihub_host_job_last_failure_timestamp_seconds{job="aihub-production-node",task="quota"}'
+        values: "_ _ _ _ _ 300x195"
+      # prune has only ever failed.
+      - series: 'aihub_host_job_last_failure_timestamp_seconds{job="aihub-production-node",task="prune"}'
+        values: "60x200"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: AIHUBEdgeProbeFailed
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: AIHUBEdgeProbeFailed
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: aihub-operations
+              job: aihub-edge-health
+              instance: https://api.aihubproduction.com/health
+            exp_annotations:
+              summary: "An AIHUB public hostname is failing through the edge"
+              description: "https://api.aihubproduction.com/health has not answered 2xx through the public edge for two minutes."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#edge-probe
+      - eval_time: 4m
+        alertname: AIHUBScheduledJobFailed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              job: aihub-production-node
+              task: prune
+            exp_annotations:
+              summary: "An AIHUB scheduled job failed"
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs
+              description: "The last prune run failed; the alert clears on its next success."
+      - eval_time: 6m
+        alertname: AIHUBScheduledJobFailed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              job: aihub-production-node
+              task: prune
+            exp_annotations:
+              summary: "An AIHUB scheduled job failed"
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs
+              description: "The last prune run failed; the alert clears on its next success."
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              job: aihub-production-node
+              task: quota
+            exp_annotations:
+              summary: "An AIHUB scheduled job failed"
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs
+              description: "The last quota run failed; the alert clears on its next success."
+      - eval_time: 140m
+        alertname: AIHUBScheduledJobMissed
+        exp_alerts: []
+      - eval_time: 141m
+        alertname: AIHUBScheduledJobMissed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              job: aihub-production-node
+              task: report
+            exp_annotations:
+              summary: "An AIHUB scheduled job has not succeeded within its window"
+              description: "report last succeeded 2h 21m 0s ago."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs

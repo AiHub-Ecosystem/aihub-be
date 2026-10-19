@@ -58,7 +58,7 @@ Redis uses a dedicated ACL user with only `PING`, aggregate `INFO`, `CLIENT SETN
 
 Keep the Compose file, Prometheus config/rules, blackbox config, PostgreSQL aggregate query/function, and statement installer/report under `~/aihub-monitoring` of the operator account on each host. Keep `.env` and secret files outside that directory's tracked source if it is a checkout; set directory/file permissions before starting containers.
 
-On Production, set `AIHUB_METRICS_BIND_IP=127.0.0.1`, `AIHUB_POSTGRES_EXPORTER_URI=127.0.0.1:5433/aihub?sslmode=disable`, and the secret-file path. Enable `production` and `container-metrics` profiles. On the monitoring host, set `AIHUB_METRICS_BIND_IP=172.27.0.1`, the observed Redis address `redis://redis:6379`, the restricted SSH identity, and its pinned host key; enable the `monitoring` profile. The `.env` file on each host must satisfy Compose interpolation for the complete file, including fields for inactive profiles.
+On Production, set `AIHUB_METRICS_BIND_IP=127.0.0.1`, `AIHUB_POSTGRES_EXPORTER_URI=127.0.0.1:5433/aihub?sslmode=disable`, the secret-file path, and `AIHUB_HOST_JOB_METRICS_DIR` to the operator's `~/.aihub-host-job-metrics` (absolute path). On the monitoring host, point `AIHUB_HOST_JOB_METRICS_DIR` at an empty directory. Enable `production` and `container-metrics` profiles. On the monitoring host, set `AIHUB_METRICS_BIND_IP=172.27.0.1`, the observed Redis address `redis://redis:6379`, the restricted SSH identity, and its pinned host key; enable the `monitoring` profile. The `.env` file on each host must satisfy Compose interpolation for the complete file, including fields for inactive profiles.
 
 Start Production exporters and monitoring-host node/Redis/blackbox exporters first. Verify their loopback or private-network `/metrics` endpoints. Start the restricted SSH tunnel and check its three forwarded endpoints. Start `prometheus-aihub` last so the initial target set is available before alert evaluation.
 
@@ -80,6 +80,8 @@ aihub_postgres_snapshot_value{job="aihub-postgres",metric="connections_total"}
 redis_memory_used_bytes{job="aihub-redis"}
 redis_commands_duration_seconds_total{job="aihub-redis"}
 probe_ssl_earliest_cert_expiry{job="aihub-certificate-expiry"}
+probe_success{job="aihub-edge-health"}
+aihub_host_job_last_success_timestamp_seconds{job="aihub-production-node"}
 ```
 
 Also confirm the Postgres scrape exposes only the custom aggregate families and the Redis exporter has no key/config access. cAdvisor's read-only Docker and containerd sockets still give it root-equivalent runtime API access; its metric relabel filter keeps only container names beginning `aihub`.
@@ -137,6 +139,35 @@ Inspect `/api/v1/targets` through the loopback Prometheus tunnel and check the a
 ### Certificates
 
 Inspect the `probe_success` and `probe_ssl_earliest_cert_expiry` series for the named hostname. The probe runs hourly; a failed probe is distinct from an expiry threshold alert.
+
+### Edge probe
+
+The `aihub-edge-health` job (#291) asks the monitoring host's blackbox exporter to fetch, every 30 seconds through the public edge:
+
+| Target                                       | When it fails                                                                         |
+| -------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `https://api.aihubproduction.com/health`     | Production is unreachable for customers: DNS, TLS, nginx, or the active app slot.     |
+| `https://sandbox.aihubproduction.com/health` | The same for the Sandbox tier.                                                        |
+| `https://aihubproduction.com/`               | The Customer Web is down. Replace with its health route once AiHub-Frontend#94 lands. |
+
+`AIHUBEdgeProbeFailed` fires after two minutes without a 2xx. `/health` is liveness only, so a process that answers but cannot reach Postgres or Redis still passes; an authenticated Sandbox probe for that case is still open on #291. Read `probe_http_status_code` and `probe_duration_seconds` for the instance, then check the host with `ops/status.sh` ([deploy-vps.md](deploy-vps.md#checking-deployed-state)). The probe runs on the monitoring host, so that host being down silences it; the watchdog for that is #412's.
+
+### Scheduled jobs
+
+Every scheduled run of `scripts/ops/host-scheduled-job.sh` and `scripts/ops/backup-postgres.sh` writes its result to `~/.aihub-host-job-metrics/<task>-success.prom` or `<task>-failure.prom` on Production (#291). Production's node exporter reads that directory with its textfile collector, so Prometheus on the monitoring host sees:
+
+- `aihub_host_job_last_success_timestamp_seconds{task}` and `aihub_host_job_max_age_seconds{task}`, written on success;
+- `aihub_host_job_last_failure_timestamp_seconds{task}`, written on failure.
+
+| Task                                                                   | Window before `AIHUBScheduledJobMissed` |
+| ---------------------------------------------------------------------- | --------------------------------------- |
+| `quota`, `prune`, `ttl-audit`, `avatar-sweep`, `speaking-upload-sweep` | 25 hours                                |
+| `report`, `postgres-backup`                                            | 2 hours 20 minutes                      |
+| `chart-upload-sweep`                                                   | 50 minutes                              |
+
+`AIHUBScheduledJobFailed` fires as soon as a run's failure is newer than its last success, and clears on the next success. `AIHUBScheduledJobMissed` fires when no success arrived inside the window, which covers a stopped cron, a schedule CD left suspended, a deferred run (`deferred reason=host_job_active` is not a failure), and a host that is down. Faster jobs get two cadences so one run skipped during a deploy does not page.
+
+Manual reruns with `--from`/`--to`, `--month`, or `--dry-run` write nothing. For either alert, read the newest lines of the job's log ([deploy-vps.md](deploy-vps.md#scheduled-operator-jobs)); the failure detail is there, never in the metric. A task that has never succeeded has no series and cannot alert as missed; after adding a job, check that its success series appears.
 
 ## Deployment evidence
 

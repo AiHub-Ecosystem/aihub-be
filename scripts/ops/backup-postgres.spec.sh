@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Exercises scripts/ops/backup-postgres.sh with stubbed sudo, docker, age, and
 # flock: prefixes by UTC hour and day, one log line per database, a failed
-# dump that fails the run, a missing configuration, and no secret in the log.
+# dump that fails the run, a missing configuration, no secret in the log, and
+# the success and failure files Prometheus reads.
 set -euo pipefail
 
 repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
@@ -95,6 +96,11 @@ assert_contains "$test_root/rclone.calls" '/data/aihub-20261018T134700Z.dump.age
 assert_contains "$test_root/rclone.calls" 'hourly/aihub_sandbox/aihub_sandbox-20261018T134700Z.dump.age'
 assert_not_contains "$test_root/rclone.calls" 'daily/'
 [[ "$(wc -l <"$test_root/rclone.calls")" == 2 ]]
+metrics="$home_dir/.aihub-host-job-metrics"
+assert_contains "$metrics/postgres-backup-success.prom" 'aihub_host_job_last_success_timestamp_seconds{task="postgres-backup"} '
+assert_contains "$metrics/postgres-backup-success.prom" 'aihub_host_job_max_age_seconds{task="postgres-backup"} 8400'
+[[ "$(stat -c %a "$metrics/postgres-backup-success.prom")" == 644 ]]
+[[ ! -e "$metrics/postgres-backup-failure.prom" ]]
 
 # 00 UTC on the first day of a month: also copied to daily and monthly.
 : >"$test_root/rclone.calls"
@@ -114,6 +120,7 @@ assert_contains "$test_root/backup.log" 'backup aihub_sandbox failed step=dump d
 assert_contains "$test_root/backup.log" 'error=pg_dump:_database_"aihub_sandbox"_is_broken'
 assert_contains "$test_root/rclone.calls" 'hourly/aihub/aihub-20261018T144700Z.dump.age'
 assert_not_contains "$test_root/rclone.calls" 'aihub_sandbox-20261018T144700Z'
+assert_contains "$metrics/postgres-backup-failure.prom" 'aihub_host_job_last_failure_timestamp_seconds{task="postgres-backup"} '
 
 # No credential ever reaches the log.
 assert_not_contains "$test_root/backup.log" 'super-secret-value'
@@ -127,5 +134,8 @@ code=$?
 set -e
 [[ "$code" == 1 ]]
 assert_contains "$test_root/backup.log" 'backup failed reason=config_missing'
+rm "$metrics/postgres-backup-failure.prom"
+run_backup env AIHUB_BACKUP_NOW=2026-10-18T15:47:00Z || true
+assert_contains "$metrics/postgres-backup-failure.prom" 'aihub_host_job_last_failure_timestamp_seconds{task="postgres-backup"} '
 
-printf 'postgres backup test passed: prefixes, per-database logging, dump failure, config checks\n'
+printf 'postgres backup test passed: prefixes, per-database logging, dump failure, config checks, job metrics\n'

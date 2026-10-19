@@ -40,10 +40,14 @@ services:
       - --path.sysfs=/host/sys
       - --path.rootfs=/host/root
       - --web.listen-address=${AIHUB_METRICS_BIND_IP:-127.0.0.1}:9100
+      - --collector.textfile.directory=/host-job-metrics
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/host/root:ro,rslave
+      # Scheduled-job results (#291). A bind mount, because the exporter has no
+      # capabilities and cannot traverse the operator's home directory.
+      - ${AIHUB_HOST_JOB_METRICS_DIR:?set the scheduled-job metrics directory}:/host-job-metrics:ro
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]

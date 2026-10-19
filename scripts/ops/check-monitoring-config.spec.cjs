@@ -97,7 +97,7 @@ void test('validates the exporter Compose file and Prometheus config and rules',
   const mount = `type=bind,source=${directory},target=/etc/prometheus,readonly`;
   const commands = buildMonitoringCheckCommands(root);
 
-  assert.equal(commands.length, 4);
+  assert.equal(commands.length, 5);
   assert.deepEqual(commands[0], {
     label: 'docker compose monitoring exporters config',
     command: 'docker',
@@ -147,6 +147,22 @@ void test('validates the exporter Compose file and Prometheus config and rules',
     ],
   });
   assert.deepEqual(commands[3], {
+    label: 'promtool test alert rules',
+    command: 'docker',
+    args: [
+      'run',
+      '--rm',
+      '--mount',
+      mount,
+      '--entrypoint',
+      'promtool',
+      'prom/prometheus:v3.13.4',
+      'test',
+      'rules',
+      '/etc/prometheus/alert.rules.test.yml',
+    ],
+  });
+  assert.deepEqual(commands[4], {
     label: 'blackbox_exporter check probe config',
     command: 'docker',
     args: [
@@ -358,5 +374,5 @@ void test('runs all config checks when each succeeds', () => {
         executed.length === 1 ? JSON.stringify(validExporterCompose()) : '',
     };
   }, 'D:/repo');
-  assert.equal(executed.length, 4);
+  assert.equal(executed.length, 5);
 });

@@ -467,7 +467,14 @@ To check that a job's last run succeeded, read its newest lines in its log. A
 successful run logs one line per enabled deployment with `exit=0` followed by
 the command's summary. A `skipped` or `deferred` line (which names no
 deployment), a deployment line without `exit=0`, or no line since the
+deployment, or no line since the
 scheduled time means it did not run to completion.
+
+Prometheus watches the same outcome without anyone reading the log: each
+scheduled run records its success or failure for the node exporter, and
+`AIHUBScheduledJobFailed` and `AIHUBScheduledJobMissed` alert on a failed run
+and on a run that did not succeed in time
+([Scheduled jobs](aihub-observability.md#scheduled-jobs), #291).
 
 | Job                                     | Log file                                 |
 | --------------------------------------- | ---------------------------------------- |
@@ -570,7 +577,10 @@ of every hour (#281, spec 10 §N.4). For `aihub` and `aihub_sandbox` it runs
 public key, and copies it to the Cloudflare R2 bucket with a pinned `rclone`
 image. It writes one line per database to `~/aihub-postgres-backup.log` and
 exits non-zero when any database fails. It takes its own lock, not the
-host-wide job lock, so a long sweep cannot make it skip an hour.
+host-wide job lock, so a long sweep cannot make it skip an hour. It reports to
+Prometheus as task `postgres-backup`: a failed run alerts at once, and two
+hours and 20 minutes without a success alert as missed
+([Scheduled jobs](aihub-observability.md#scheduled-jobs)).
 
 | Bucket prefix   | Written by               | Kept (R2 lifecycle rule) |
 | --------------- | ------------------------ | ------------------------ |

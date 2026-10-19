@@ -65,3 +65,23 @@ scrape_configs:
         target_label: instance
       - target_label: __address__
         replacement: aihub-blackbox-exporter:9115
+
+  # #291: liveness through the real public edge, from outside the Production
+  # host. The Customer Web root stands in until it has a health route
+  # (AiHub-Frontend#94).
+  - job_name: aihub-edge-health
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - https://api.aihubproduction.com/health
+          - https://sandbox.aihubproduction.com/health
+          - https://aihubproduction.com/
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: aihub-blackbox-exporter:9115

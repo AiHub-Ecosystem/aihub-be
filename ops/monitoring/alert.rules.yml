@@ -125,3 +125,43 @@ groups:
           summary: "An AIHUB or asset TLS certificate expires within 14 days"
           description: "Certificate expiry probe target {{ $labels.instance }} is within 14 days."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#certificates
+
+  # #291: black-box edge probe and dead-man's switch for host scheduled jobs.
+  # The job metrics come from files the jobs write for node-exporter's textfile
+  # collector on Production; Prometheus, not cron, notices a missed run.
+  - name: aihub-edge-and-scheduled-jobs
+    rules:
+      - alert: AIHUBEdgeProbeFailed
+        expr: probe_success{job="aihub-edge-health"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          owner: aihub-operations
+        annotations:
+          summary: "An AIHUB public hostname is failing through the edge"
+          description: "{{ $labels.instance }} has not answered 2xx through the public edge for two minutes."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#edge-probe
+
+      - alert: AIHUBScheduledJobFailed
+        expr: aihub_host_job_last_failure_timestamp_seconds > aihub_host_job_last_success_timestamp_seconds or (aihub_host_job_last_failure_timestamp_seconds unless aihub_host_job_last_success_timestamp_seconds)
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "An AIHUB scheduled job failed"
+          description: "The last {{ $labels.task }} run failed; the alert clears on its next success."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs
+
+      # ponytail: a task that has never succeeded has no series and never fires
+      # here; list expected tasks with absent() if a job is ever added unseen.
+      - alert: AIHUBScheduledJobMissed
+        expr: time() - aihub_host_job_last_success_timestamp_seconds > aihub_host_job_max_age_seconds
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "An AIHUB scheduled job has not succeeded within its window"
+          description: "{{ $labels.task }} last succeeded {{ $value | humanizeDuration }} ago."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs
