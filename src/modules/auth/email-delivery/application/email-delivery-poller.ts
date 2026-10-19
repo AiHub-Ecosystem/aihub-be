@@ -6,20 +6,13 @@ import type {
   EmailDeliveryCancelReason,
   EmailDeliveryErrorCode,
   EmailDeliveryKind,
-  EmailDeliveryPayload,
   EmailDeliveryRequestRecord,
   EmailDispatchStorePort,
-  MfaSecurityNotificationPayload,
-  OrganizationInviteEmailDeliveryPayload,
 } from './email-delivery-request.port';
 import { EnvelopeCipherError } from './email-delivery-request.port';
 import type { EmailPayloadCipherPort } from './email-delivery-request.port';
-import {
-  composeMfaSecurityNotification,
-  composeOrganizationInviteEmail,
-  composePasswordResetEmail,
-  composeVerificationEmail,
-} from './email-message.composer';
+import { EMAIL_KIND_HANDLERS } from './email-kind-handler.registry';
+import type { ValidatedEmailDelivery } from './email-kind-handler.registry';
 import { EMAIL_ATTEMPT_TIMEOUT_MS } from './email-sender.port';
 import type { EmailSenderPort } from './email-sender.port';
 
@@ -56,41 +49,6 @@ export interface EmailDispatchSummary {
   readonly failed: number;
   /** Requests handed back because this instance cannot open their payload. */
   readonly deferred: number;
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0;
-}
-
-const INVITE_ROLES: readonly string[] = ['owner', 'admin', 'member'];
-
-/**
- * The decrypted payload is data this process wrote, but it crosses a storage
- * boundary and a deploy can change its shape, so it is checked rather than
- * cast. A payload that does not match its kind is one no instance will ever be
- * able to send.
- */
-function isPayloadFor(
-  kind: EmailDeliveryKind,
-  value: unknown,
-): value is EmailDeliveryPayload {
-  if (typeof value !== 'object' || value === null) return false;
-  const payload = value as Record<string, unknown>;
-  if (!isNonEmptyString(payload.email)) return false;
-  if (
-    kind === 'mfa_enabled_notification' ||
-    kind === 'mfa_removed_notification'
-  ) {
-    return Object.keys(payload).length === 1;
-  }
-  if (!isNonEmptyString(payload.token) || !isNonEmptyString(payload.expiresAt))
-    return false;
-  if (kind !== 'organization_invite_email') return true;
-  return (
-    isNonEmptyString(payload.organizationName) &&
-    isNonEmptyString(payload.role) &&
-    INVITE_ROLES.includes(payload.role)
-  );
 }
 
 export interface EmailDeliveryPollerOptions {
@@ -341,33 +299,28 @@ export class EmailDeliveryPoller {
     'provider_accepted' | 'cancelled' | 'failed' | 'retried' | 'deferred'
   > {
     const now = this.now();
-    let payload: EmailDeliveryPayload | undefined;
+    let delivery: ValidatedEmailDelivery | undefined;
     try {
-      payload = this.readPayload(request);
+      delivery = this.readPayload(request);
     } catch {
       return this.defer(request, now);
     }
-    if (payload === undefined) {
+    if (delivery === undefined) {
       // A payload this instance cannot open will never open, so waiting would
       // claim the row forever without ever making it deliverable.
       return this.cancel(request, 'not_actionable', now);
     }
 
-    if (
-      request.kind !== 'mfa_enabled_notification' &&
-      request.kind !== 'mfa_removed_notification'
-    ) {
-      if (!('token' in payload) || !('expiresAt' in payload)) {
-        return this.cancel(request, 'not_actionable', now);
-      }
-      const expiry = Date.parse(payload.expiresAt);
+    const credential = delivery.handler.credential(delivery.payload);
+    if (credential !== undefined) {
+      const expiry = Date.parse(credential.expiresAt);
       if (!Number.isFinite(expiry) || expiry <= now.getTime()) {
         return this.cancel(request, 'credential_expired', now);
       }
 
       const state = await this.credentials.check({
         kind: request.kind,
-        tokenHash: this.tokens.hash(payload.token),
+        tokenHash: this.tokens.hash(credential.token),
         now,
       });
       if (state !== 'actionable') {
@@ -385,7 +338,7 @@ export class EmailDeliveryPoller {
     });
 
     try {
-      await this.deliver(request, payload);
+      await this.deliver(request, delivery);
     } catch (error) {
       return this.recordFailure(request, errorCodeOf(error), now);
     }
@@ -407,7 +360,7 @@ export class EmailDeliveryPoller {
    */
   private readPayload(
     request: EmailDeliveryRequestRecord,
-  ): EmailDeliveryPayload | undefined {
+  ): ValidatedEmailDelivery | undefined {
     const ciphertext = request.payloadCiphertext;
     if (ciphertext === null) return undefined;
     let parsed: unknown;
@@ -418,7 +371,10 @@ export class EmailDeliveryPoller {
         throw error;
       return undefined;
     }
-    return isPayloadFor(request.kind, parsed) ? parsed : undefined;
+    const handler = EMAIL_KIND_HANDLERS[request.kind];
+    return handler !== undefined && handler.isPayload(parsed)
+      ? { handler, payload: parsed }
+      : undefined;
   }
 
   private async defer(
@@ -435,65 +391,17 @@ export class EmailDeliveryPoller {
 
   private async deliver(
     request: EmailDeliveryRequestRecord,
-    payload: EmailDeliveryPayload,
+    delivery: ValidatedEmailDelivery,
   ): Promise<void> {
     // The row's own id is the provider idempotency key: it is already unique,
     // already durable, and already what every attempt of this request has
     // used, so an uncertain handoff can be retried without a second email.
-    const options = { idempotencyKey: request.id };
-    if (
-      request.kind === 'mfa_enabled_notification' ||
-      request.kind === 'mfa_removed_notification'
-    ) {
-      await this.sender.send(
-        composeMfaSecurityNotification({
-          email: (payload as MfaSecurityNotificationPayload).email,
-          action:
-            request.kind === 'mfa_enabled_notification' ? 'enabled' : 'removed',
-        }),
-        options,
-      );
-      return;
-    }
-    if (!('token' in payload) || !('expiresAt' in payload)) {
-      throw new Error('email delivery payload is invalid');
-    }
-    const expiresAt = new Date(Date.parse(payload.expiresAt));
-
-    if (request.kind === 'organization_invite_email') {
-      const invitation = payload as OrganizationInviteEmailDeliveryPayload;
-      await this.sender.send(
-        composeOrganizationInviteEmail(
-          {
-            email: invitation.email,
-            organizationName: invitation.organizationName,
-            role: invitation.role,
-            token: invitation.token,
-            expiresAt,
-          },
-          this.options.customerWebBaseUrl,
-        ),
-        options,
-      );
-      return;
-    }
-
-    if (request.kind === 'verification_email') {
-      await this.sender.send(
-        composeVerificationEmail(
-          { email: payload.email, token: payload.token, expiresAt },
-          this.options.customerWebBaseUrl,
-        ),
-        options,
-      );
-      return;
-    }
     await this.sender.send(
-      composePasswordResetEmail(
-        { email: payload.email, token: payload.token, expiresAt },
+      delivery.handler.render(
+        delivery.payload,
         this.options.customerWebBaseUrl,
       ),
-      options,
+      { idempotencyKey: request.id },
     );
   }
 

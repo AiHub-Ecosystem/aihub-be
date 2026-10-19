@@ -43,6 +43,22 @@ describe('EmailDeliveryPoller', () => {
     ]);
   });
 
+  it('renders MFA enabled notices through their own handler', async () => {
+    const { poller, store, sender, credentials } = harness({
+      payload: { email: 'person@example.com' },
+    });
+    store.claimResult = [claimed({ kind: 'mfa_enabled_notification' })];
+
+    await poller.runOnce();
+
+    expect(sender.sends[0]?.message).toEqual({
+      recipient: 'person@example.com',
+      subject: 'AIHUB two-factor authentication enabled',
+      text: 'A TOTP second factor was enabled on your AIHUB account. If you did not make this change, contact AIHUB support immediately.',
+    });
+    expect(credentials.checked).toEqual([]);
+  });
+
   it('hands an actionable verification request to the provider and records acceptance', async () => {
     const { poller, store, sender } = harness();
     store.claimResult = [claimed()];
