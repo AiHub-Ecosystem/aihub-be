@@ -7,6 +7,9 @@ production host (#396). The managed crontab (`ops/host-jobs/aihub.crontab`)
 runs it every minute. CD syncs it and suspends it with the other host jobs
 while it deploys.
 
+The same run checks that runtime secrets can still be rendered (#825); see
+[Secret delivery](#secret-delivery).
+
 It needs no access beyond what CD already uses: `sudo -n docker` as the
 deploy user.
 
@@ -54,6 +57,10 @@ The node-exporter textfile collector reads these from
 | `aihub_container_last_event_timestamp_seconds{name,revision,event,exit_code}` | Time of the latest such event                               |
 | `aihub_container_unhealthy{name,revision}`                                    | 1 when unhealthy and not restarted in this run, otherwise 0 |
 | `aihub_host_job_last_success_timestamp_seconds{task="container-watchdog"}`    | Heartbeat, 5-minute window (`AIHUBScheduledJobMissed`)      |
+| `aihub_secret_delivery_last_healthy_timestamp_seconds`                        | Last run at which runtime secrets could be rendered         |
+| `aihub_secret_delivery_healthy{reason}`                                       | 1 with `reason="ok"`, otherwise 0 with the failure reason   |
+| `aihub_runtime_secrets_modified_timestamp_seconds`                            | When the rendered bundle's content last changed             |
+| `aihub_runtime_secrets_restart_required{name,revision}`                       | 1 when the app started before the bundle last changed       |
 
 `revision` is the image's `org.opencontainers.image.revision` label. A series
 is dropped 7 days after its last event, so the state does not grow with every
@@ -106,3 +113,74 @@ three possible causes:
   hour after the first of the three restarts.
 - **`restart_failed` in the watchdog log.** The restart itself failed. The
   same run also raises `AIHUBScheduledJobFailed` for `container-watchdog`.
+
+## Secret delivery
+
+Vault Agent renders the runtime secret bundle into
+`$AIHUB_RUNTIME_SECRETS_HOST_DIR`, and both app tiers read it once at start.
+The Agent re-reads its static KV secrets every 5 minutes but rewrites a file
+only when the content changes. As a result, neither the file age nor the
+Agent's health check shows whether rendering still works. The Agent's own
+metrics are no help either, because it keeps them for one minute. When
+delivery stops (#203 and #794), the app keeps running on what it loaded at
+start, until a rotation or a restart needs a fresh render.
+
+Each run of the watchdog checks two conditions inside the `vault-agent`
+container:
+
+- `vault status` reports Vault unsealed.
+- The Agent logged no `[ERROR]` line since the previous run.
+
+When both hold, the run counts as healthy and moves
+`aihub_secret_delivery_last_healthy_timestamp_seconds` forward. Otherwise the
+run records one of these reasons:
+
+- `vault_sealed`
+- `vault_unreachable`: Vault did not answer, or the Agent container could not
+  be queried.
+- `agent_error`
+- `agent_unavailable`: the Agent's log could not be read.
+
+Every change of reason is written to the watchdog log as
+`secret_delivery reason=...`.
+
+`AIHUBSecretDeliveryStalled` (warning) fires 15 minutes after the last healthy
+run: the 5-minute render interval plus 10 minutes of margin.
+`AIHUBSecretDeliveryStalledLong` (critical) fires after an hour. No secret in
+the bundle has an expiry that Vault manages, because they are all static KV v2
+versions, so there is no expiry point to page on. The hour bounds how long a
+rotation or a fresh render can fail without anyone being paged.
+
+Handle it in this order:
+
+1. Read the reason in the alert, then confirm it:
+
+   ```bash
+   sudo -n docker logs --since 30m <vault-agent container>
+   ```
+
+2. `vault_sealed`: Vault must be unsealed by the key holders. The procedure is
+   kept outside this repository. Do not restart the Agent or the apps while
+   Vault is sealed. The apps keep their loaded snapshot, but a restarted app
+   has only the files on disk, and a restarted Agent cannot render.
+3. `agent_error` or `vault_unreachable` with Vault unsealed: fix the cause the
+   Agent logs, such as a policy refusal (`403`), a network failure, or an
+   authentication failure. Agent restarts stay operator-managed (see "Start
+   the Vault-backed stack" in `deploy-vps.md`). Restart the Agent only after
+   its cause is fixed, and confirm it is healthy and that the files are
+   present.
+4. Once delivery is healthy again, check `AIHUBRuntimeSecretsRestartRequired`.
+   The apps pick up a changed bundle only when they restart.
+
+## Restart required
+
+`AIHUBRuntimeSecretsRestartRequired` (warning) fires when an app container
+started before the rendered bundle last changed and has kept running for 5
+minutes. The app reads secrets only at start, so a credential written since
+then is not in use. Follow "Rotation and rollback" in
+`vault-runtime-secrets.md`: restart the instances gradually, then check health
+and one safe downstream request.
+
+After a host reboot, the Agent can rewrite an identical bundle after an app
+has started. That case also raises this alert, and one restart of the app
+clears it.

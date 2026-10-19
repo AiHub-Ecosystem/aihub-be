@@ -202,3 +202,43 @@ groups:
           summary: "An AIHUB container stays unhealthy and the watchdog is not restarting it"
           description: "{{ $labels.name }} (revision {{ $labels.revision }}) has been unhealthy for three minutes. The watchdog never restarts vault-agent, and stops restarting an app container after three restarts in an hour."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#still-unhealthy
+
+  # Also written by container-watchdog.sh (#825). Vault Agent re-reads the
+  # bundle's static KV secrets every 5 minutes; 10 minutes of margin gives the
+  # warning at 15. Nothing in the bundle has a Vault-managed expiry, so the
+  # critical alert marks the point where a rotation or a restart that needs a
+  # fresh render has had an hour to fail unnoticed.
+  - name: aihub-secret-delivery
+    rules:
+      - alert: AIHUBSecretDeliveryStalled
+        expr: time() - aihub_secret_delivery_last_healthy_timestamp_seconds > 900
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "AIHUB runtime secrets have not been renderable for 15 minutes"
+          description: 'Secret delivery has not been healthy for {{ $value | humanizeDuration }} (latest reason: {{ with query "aihub_secret_delivery_healthy == 0" }}{{ . | first | label "reason" }}{{ end }}). The application keeps running on the secrets it loaded at start.'
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#secret-delivery
+
+      - alert: AIHUBSecretDeliveryStalledLong
+        expr: time() - aihub_secret_delivery_last_healthy_timestamp_seconds > 3600
+        for: 0m
+        labels:
+          severity: critical
+          owner: aihub-operations
+        annotations:
+          summary: "AIHUB runtime secrets have not been renderable for an hour"
+          description: 'Secret delivery has not been healthy for {{ $value | humanizeDuration }} (latest reason: {{ with query "aihub_secret_delivery_healthy == 0" }}{{ . | first | label "reason" }}{{ end }}). A secret rotation will not reach AIHUB until this is fixed.'
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#secret-delivery
+
+      - alert: AIHUBRuntimeSecretsRestartRequired
+        expr: aihub_runtime_secrets_restart_required == 1
+        for: 5m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "An AIHUB app runs on secrets older than the rendered bundle"
+          description: "{{ $labels.name }} (revision {{ $labels.revision }}) started before the rendered secret bundle last changed. It reads secrets only at start, so it needs a restart to use them."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#restart-required

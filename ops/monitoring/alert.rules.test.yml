@@ -153,3 +153,59 @@ tests:
               summary: "An AIHUB container stays unhealthy and the watchdog is not restarting it"
               description: "aihub-production-vault-agent-1 (revision abc) has been unhealthy for three minutes. The watchdog never restarts vault-agent, and stops restarting an app container after three restarts in an hour."
               runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#still-unhealthy
+
+  # #825 secret delivery: last healthy at t=0, sealed from t=1m; one app
+  # started before the bundle changed.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_secret_delivery_last_healthy_timestamp_seconds{job="aihub-production-node"}'
+        values: "0x70"
+      - series: 'aihub_secret_delivery_healthy{job="aihub-production-node",reason="vault_sealed"}'
+        values: "_ 0x69"
+      - series: 'aihub_runtime_secrets_restart_required{job="aihub-production-node",name="aihub-production-app-1",revision="abc"}'
+        values: "1x10"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: AIHUBSecretDeliveryStalled
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: AIHUBSecretDeliveryStalled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              job: aihub-production-node
+            exp_annotations:
+              summary: "AIHUB runtime secrets have not been renderable for 15 minutes"
+              description: "Secret delivery has not been healthy for 16m 0s (latest reason: vault_sealed). The application keeps running on the secrets it loaded at start."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#secret-delivery
+      - eval_time: 60m
+        alertname: AIHUBSecretDeliveryStalledLong
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: AIHUBSecretDeliveryStalledLong
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: aihub-operations
+              job: aihub-production-node
+            exp_annotations:
+              summary: "AIHUB runtime secrets have not been renderable for an hour"
+              description: "Secret delivery has not been healthy for 1h 1m 0s (latest reason: vault_sealed). A secret rotation will not reach AIHUB until this is fixed."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#secret-delivery
+      - eval_time: 4m
+        alertname: AIHUBRuntimeSecretsRestartRequired
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: AIHUBRuntimeSecretsRestartRequired
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              job: aihub-production-node
+              name: aihub-production-app-1
+              revision: abc
+            exp_annotations:
+              summary: "An AIHUB app runs on secrets older than the rendered bundle"
+              description: "aihub-production-app-1 (revision abc) started before the rendered secret bundle last changed. It reads secrets only at start, so it needs a restart to use them."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#restart-required

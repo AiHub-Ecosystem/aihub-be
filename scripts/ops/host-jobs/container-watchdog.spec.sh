@@ -2,7 +2,8 @@
 # Exercises scripts/ops/host-jobs/container-watchdog.sh with stubbed sudo,
 # docker, journalctl, and flock: an unhealthy app is restarted and vault-agent is not, the
 # restart limit, which Docker events become metrics, the next run's --since,
-# a failed events read, and old event series being dropped.
+# a failed events read, old event series being dropped, and the #825
+# secret-delivery signals.
 set -euo pipefail
 
 repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
@@ -45,6 +46,15 @@ case "$1" in
   ps) cat "$FAKE_PS" ;;
   restart) [[ "${*: -1}" != "${FAKE_RESTART_FAIL:-none}" ]] ;;
   events) [[ -z "${FAKE_EVENTS_FAIL:-}" ]] && cat "$FAKE_EVENTS" ;;
+  exec)
+    case "$3" in
+      vault) exit "${FAKE_VAULT_STATUS:-0}" ;;
+      sh) printf '%s\n' 900 "${FAKE_BUNDLE_MTIME:-1000}" ;;
+      *) exit 9 ;;
+    esac
+    ;;
+  logs) cat "$FAKE_AGENT_LOG" 2>/dev/null; true ;;
+  inspect) printf '2026-10-19T07:03:16.163648952Z\n' ;;
   *) exit 9 ;;
 esac
 STUB
@@ -148,5 +158,35 @@ FAKE_RESTART_FAIL=aihub-production-app-1 bash "$script" && { echo 'expected a fa
 assert_contains "$log" "restart_failed name=aihub-production-app-1 revision=$rev"
 assert_not_contains "$prom" 'old-container'
 assert_not_contains "$state/events" 'old-container'
+
+# Secret delivery: healthy by default, then a sealed Vault, an Agent error,
+# and a bundle that changed after the apps started.
+export FAKE_AGENT_LOG="$test_root/agent-log"
+: >"$FAKE_EVENTS"
+: >"$FAKE_KERNEL"
+bash "$script" || true
+assert_contains "$prom" 'aihub_secret_delivery_healthy{reason="ok"} 1'
+assert_contains "$prom" 'aihub_runtime_secrets_modified_timestamp_seconds 1000'
+assert_contains "$prom" "aihub_runtime_secrets_restart_required{name=\"aihub-production-app-sandbox-1\",revision=\"$rev\"} 0"
+assert_not_contains "$prom" 'restart_required{name="aihub-production-vault-agent-1"'
+healthy_at=$(cat "$state/secret-delivery-healthy")
+assert_contains "$prom" "aihub_secret_delivery_last_healthy_timestamp_seconds $healthy_at"
+sleep 1
+FAKE_VAULT_STATUS=2 bash "$script" || true
+FAKE_VAULT_STATUS=2 bash "$script" || true
+assert_contains "$prom" 'aihub_secret_delivery_healthy{reason="vault_sealed"} 0'
+assert_contains "$prom" "aihub_secret_delivery_last_healthy_timestamp_seconds $healthy_at"
+assert_lines "$log" 'secret_delivery reason=vault_sealed' 1
+FAKE_VAULT_STATUS=1 bash "$script" || true
+assert_contains "$prom" 'aihub_secret_delivery_healthy{reason="vault_unreachable"} 0'
+printf '%s\n' '2026-10-19T03:30:39.413Z [ERROR] agent: (runner) sending server error back to caller' >"$FAKE_AGENT_LOG"
+bash "$script" || true
+assert_contains "$prom" 'aihub_secret_delivery_healthy{reason="agent_error"} 0'
+: >"$FAKE_AGENT_LOG"
+FAKE_BUNDLE_MTIME=$(date -d 2026-10-19T08:00:00Z +%s) bash "$script" || true
+assert_contains "$prom" 'aihub_secret_delivery_healthy{reason="ok"} 1'
+assert_contains "$log" 'secret_delivery reason=ok'
+assert_contains "$prom" "aihub_runtime_secrets_restart_required{name=\"aihub-production-app-sandbox-1\",revision=\"$rev\"} 1"
+[[ "$(cat "$state/secret-delivery-healthy")" != "$healthy_at" ]] || { echo 'last healthy did not move on recovery' >&2; exit 1; }
 
 printf 'container-watchdog spec passed\n'

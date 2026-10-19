@@ -68,11 +68,18 @@ if ! containers=$("${docker[@]}" ps -a --no-trunc --filter "label=com.docker.com
 fi
 
 gauges=
+agent=
+apps=()
 declare -A by_id=()
 while IFS='|' read -r id name service revision state; do
   [[ -n "$name" && "$WATCHED_SERVICES" == *" $service "* ]] || continue
   by_id[$id]="$name|$service||$revision"
   [[ "$state" == Up* ]] || continue
+  if [[ "$service" == vault-agent ]]; then
+    agent=$name
+  else
+    apps+=("$name|${revision:-unknown}")
+  fi
   unhealthy=0
   if [[ "$state" == *'(unhealthy)'* ]]; then
     unhealthy=1
@@ -126,6 +133,53 @@ else
   events_read=0
 fi
 
+# Secret delivery (#825). The app reads the rendered bundle once at start, and
+# Vault Agent rewrites a file only when its content changes, so a file's age
+# does not show whether rendering still works, and the Agent's own metrics are
+# kept for one minute. This records the last run at which rendering could
+# succeed: Vault answered unsealed and the Agent logged no error since the
+# previous run. It also flags an app started before the bundle last changed.
+secret_lines=
+if [[ -n "$agent" ]]; then
+  reason=ok
+  vault_code=0
+  "${docker[@]}" exec "$agent" vault status >/dev/null 2>&1 || vault_code=$?
+  case "$vault_code" in
+    0) ;;
+    2) reason=vault_sealed ;;
+    *) reason=vault_unreachable ;;
+  esac
+  if ! agent_log=$("${docker[@]}" logs --since "$since" --until "$now" "$agent" 2>&1); then
+    reason=agent_unavailable
+  elif [[ "$reason" == ok ]] && grep -q '\[ERROR\]' <<<"$agent_log"; then
+    reason=agent_error
+  fi
+  healthy_file="$STATE_DIR/secret-delivery-healthy"
+  if [[ "$reason" == ok || ! -s "$healthy_file" ]]; then
+    printf '%s\n' "$now" >"$healthy_file"
+  fi
+  previous_reason=$(cat "$STATE_DIR/secret-delivery-reason" 2>/dev/null)
+  if [[ "$reason" != "${previous_reason:-ok}" ]]; then
+    log_line "secret_delivery reason=$reason"
+  fi
+  printf '%s\n' "$reason" >"$STATE_DIR/secret-delivery-reason"
+  secret_lines+="aihub_secret_delivery_last_healthy_timestamp_seconds $(cat "$healthy_file")"$'\n'
+  secret_lines+="aihub_secret_delivery_healthy{reason=\"$reason\"} $([[ "$reason" == ok ]] && echo 1 || echo 0)"$'\n'
+
+  if modified=$("${docker[@]}" exec "$agent" sh -c 'stat -c %Y /run/secrets/aihub/*.json' | sort -n | tail -n 1) &&
+    [[ "$modified" =~ ^[0-9]+$ ]]; then
+    secret_lines+="aihub_runtime_secrets_modified_timestamp_seconds $modified"$'\n'
+    for app in "${apps[@]}"; do
+      started=$("${docker[@]}" inspect -f '{{.State.StartedAt}}' "${app%%|*}") &&
+        started=$(date -d "$started" +%s) || continue
+      secret_lines+="aihub_runtime_secrets_restart_required{name=\"${app%%|*}\",revision=\"${app#*|}\"} $((modified > started ? 1 : 0))"$'\n'
+    done
+  else
+    log_line 'failed reason=secret_bundle_stat'
+    status=1
+  fi
+fi
+
 touch "$STATE_DIR/events"
 if ! GAUGES="$gauges" awk -F'|' -v watched="$WATCHED_SERVICES" -v now="$now" -v keep="$EVENT_RETENTION_SECONDS" \
   -v state_out="$STATE_DIR/events.next" '
@@ -171,6 +225,7 @@ if ! GAUGES="$gauges" awk -F'|' -v watched="$WATCHED_SERVICES" -v now="$now" -v 
 fi
 mv -f -- "$STATE_DIR/events.next" "$STATE_DIR/events"
 if ((events_read)); then printf '%s\n' "$now" >"$STATE_DIR/events-until"; fi
+printf '%s' "$secret_lines" >>"$METRICS_DIR/container-watchdog-containers.prom.tmp"
 chmod 644 "$METRICS_DIR/container-watchdog-containers.prom.tmp"
 mv -f -- "$METRICS_DIR/container-watchdog-containers.prom.tmp" "$METRICS_DIR/container-watchdog-containers.prom"
 
