@@ -98,6 +98,11 @@ describe('public edge health probe', () => {
     expect(workflow).toContain('deadline=$((SECONDS + 10))');
     expect(workflow).toContain('$VPS_APP_DIR/.aihub-host-jobs-candidate/');
     expect(workflow).toContain(
+      'helper=./scripts/ops/blue-green/blue-green-host.sh',
+    );
+    expect(workflow).toContain('helper=./scripts/ops/blue-green-host.sh');
+    expect(workflow).toContain('blue-green-host.path');
+    expect(workflow).toContain(
       '"$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh" suspend',
     );
     expect(workflow).toContain(

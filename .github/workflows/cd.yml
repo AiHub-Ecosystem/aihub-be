@@ -215,7 +215,11 @@ jobs:
           state="$(ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/blue-green/blue-green-host.sh status
+          helper=./scripts/ops/blue-green/blue-green-host.sh
+          if [[ ! -x "$helper" ]]; then
+            helper=./scripts/ops/blue-green-host.sh
+          fi
+          "$helper" status
           REMOTE
           )"
           printf 'Host revisions before deployment:\n%s\n' "$state"
@@ -292,17 +296,24 @@ jobs:
           test -d "$APP_DIR/.aihub-host-jobs-state"
           sync_candidate="$APP_DIR/.aihub-host-jobs-sync-candidate"
           sync_backup="$APP_DIR/.aihub-host-jobs-state/sync-backup"
+          helper_path=scripts/ops/blue-green/blue-green-host.sh
+          if [[ ! -x "$APP_DIR/$helper_path" ]]; then
+            helper_path=scripts/ops/blue-green-host.sh
+          fi
+          test -f "$APP_DIR/$helper_path"
           mkdir -p "$sync_candidate" "$sync_backup"
           rm -f -- "$sync_candidate/blue-green-host.sh" \
             "$sync_candidate/docker-compose.production.yml" \
             "$sync_backup/blue-green-host.sh" \
+            "$sync_backup/blue-green-host.path" \
             "$sync_backup/docker-compose.production.yml" \
             "$sync_backup/ready"
-          cp -p -- "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh" "$sync_backup/blue-green-host.sh"
+          cp -p -- "$APP_DIR/$helper_path" "$sync_backup/blue-green-host.sh"
+          printf '%s\n' "$helper_path" >"$sync_backup/blue-green-host.path"
           cp -p -- "$APP_DIR/docker-compose.production.yml" "$sync_backup/docker-compose.production.yml"
           : >"$sync_backup/ready"
           chmod 600 "$sync_backup/ready"
-          mkdir -p "$APP_DIR/scripts/ops" "$APP_DIR/scripts/ops/logs" "$APP_DIR/scripts/ops/backups" "$APP_DIR/scripts/ops/host-jobs" "$APP_DIR/ops/nginx" \
+          mkdir -p "$APP_DIR/scripts/ops" "$APP_DIR/scripts/ops/blue-green" "$APP_DIR/scripts/ops/logs" "$APP_DIR/scripts/ops/backups" "$APP_DIR/scripts/ops/host-jobs" "$APP_DIR/ops/nginx" \
             "$APP_DIR/ops/vault/agent" "$APP_DIR/ops/vault/templates" \
             "$APP_DIR/ops/host-jobs" "$APP_DIR/.aihub-host-jobs-candidate"
           REMOTE
@@ -382,6 +393,7 @@ jobs:
             "$APP_DIR/docker-compose.production.yml"
           cmp -s "$APP_DIR/.aihub-host-jobs-sync-candidate/blue-green-host.sh" \
             "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"
+          rm -f -- "$APP_DIR/scripts/ops/blue-green-host.sh"
           REMOTE
 
       - name: Restore host files and schedule after sync failure
@@ -396,14 +408,27 @@ jobs:
           set -euo pipefail
           backup="$APP_DIR/.aihub-host-jobs-state/sync-backup"
           if [[ -f "$backup/ready" ]]; then
+            case "$(cat "$backup/blue-green-host.path")" in
+              scripts/ops/blue-green/blue-green-host.sh|scripts/ops/blue-green-host.sh)
+                helper_path="$(cat "$backup/blue-green-host.path")"
+                ;;
+              *)
+                printf 'sync backup has an invalid blue-green helper path\n' >&2
+                exit 1
+                ;;
+            esac
             compose_next="$(mktemp "$APP_DIR/.aihub-compose-restore.XXXXXX")"
             helper_next="$(mktemp "$APP_DIR/scripts/ops/.blue-green-restore.XXXXXX")"
             install -m 644 "$backup/docker-compose.production.yml" "$compose_next"
             install -m 755 "$backup/blue-green-host.sh" "$helper_next"
             mv -f -- "$compose_next" "$APP_DIR/docker-compose.production.yml"
-            mv -f -- "$helper_next" "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"
+            mv -f -- "$helper_next" "$APP_DIR/$helper_path"
             cmp -s "$backup/docker-compose.production.yml" "$APP_DIR/docker-compose.production.yml"
-            cmp -s "$backup/blue-green-host.sh" "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"
+            cmp -s "$backup/blue-green-host.sh" "$APP_DIR/$helper_path"
+            if [[ "$helper_path" == scripts/ops/blue-green-host.sh ]]; then
+              rm -f -- "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"
+              rmdir "$APP_DIR/scripts/ops/blue-green" 2>/dev/null || true
+            fi
           fi
           rm -f -- "$APP_DIR/.aihub-host-jobs-sync-candidate/blue-green-host.sh" \
             "$APP_DIR/.aihub-host-jobs-sync-candidate/docker-compose.production.yml" \

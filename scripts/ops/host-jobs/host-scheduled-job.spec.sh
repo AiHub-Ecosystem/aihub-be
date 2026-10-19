@@ -444,7 +444,7 @@ assert_contains "$FAKE_PGREP_PATTERN_FILE" '(^|/)aihub-ops-job\.sh'
 assert_contains "$FAKE_PGREP_PATTERN_FILE" '(^|/)aihub-avatar-sweep\.sh'
 assert_contains "$FAKE_PGREP_PATTERN_FILE" \
   '/scripts/ops/host-jobs/host-scheduled-job\.sh'
-assert_not_contains "$FAKE_PGREP_PATTERN_FILE" \
+assert_contains "$FAKE_PGREP_PATTERN_FILE" \
   '/scripts/ops/host-scheduled-job\.sh'
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" suspend \
   >"$test_root/suspend-retry.out"
