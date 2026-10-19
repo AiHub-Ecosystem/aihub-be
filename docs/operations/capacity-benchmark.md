@@ -75,7 +75,7 @@ At the highest mixed-grading rate that met all four p99 deadlines and delivered
 its full offered load, the harness runs quota reconciliation and usage
 reporting concurrently in the disposable stack while grading continues. This
 exercises the highest-risk job pair. The Production host wrapper serializes different
-scheduled jobs under its host-wide lock; `scripts/ops/host-scheduled-job.spec.sh`
+scheduled jobs under its host-wide lock; `scripts/ops/host-jobs/host-scheduled-job.spec.sh`
 checks that a competing job is logged as deferred while the lock is held. The
 report records route-specific latency, errors, queue/resource peaks, restart
 count, job outcomes, and the recovery stage after offered load drops. The runner

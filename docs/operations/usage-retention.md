@@ -16,7 +16,7 @@ through the same wrapper to retain the 30-minute per-deployment deadline,
 same-job lock, and result logging:
 
 ```sh
-./scripts/ops/host-scheduled-job.sh prune
+./scripts/ops/host-jobs/host-scheduled-job.sh prune
 ```
 
 The wrapper holds a nonblocking `prune` lock and the shared host-wide lock
@@ -61,7 +61,7 @@ Before the first production run:
    WHERE created_at < :retention_cutoff;
    ```
 
-3. Run `./scripts/ops/host-scheduled-job.sh prune` and retain its per-deployment
+3. Run `./scripts/ops/host-jobs/host-scheduled-job.sh prune` and retain its per-deployment
    log output before enabling the nightly schedule.
 
 The command has no dry-run, confirmation flag, or backup side effect. It

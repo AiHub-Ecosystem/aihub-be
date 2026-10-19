@@ -154,7 +154,7 @@ The `aihub-edge-health` job (#291) asks the monitoring host's blackbox exporter 
 
 ### Scheduled jobs
 
-Every scheduled run of `scripts/ops/host-scheduled-job.sh` and `scripts/ops/backup-postgres.sh` writes its result to `~/.aihub-host-job-metrics/<task>-success.prom` or `<task>-failure.prom` on Production (#291). Production's node exporter reads that directory with its textfile collector, so Prometheus on the monitoring host sees:
+Every scheduled run of `scripts/ops/host-jobs/host-scheduled-job.sh` and `scripts/ops/backups/backup-postgres.sh` writes its result to `~/.aihub-host-job-metrics/<task>-success.prom` or `<task>-failure.prom` on Production (#291). Production's node exporter reads that directory with its textfile collector, so Prometheus on the monitoring host sees:
 
 - `aihub_host_job_last_success_timestamp_seconds{task}` and `aihub_host_job_max_age_seconds{task}`, written on success;
 - `aihub_host_job_last_failure_timestamp_seconds{task}`, written on failure.
@@ -172,7 +172,7 @@ Manual reruns with `--from`/`--to`, `--month`, or `--dry-run` write nothing. For
 
 ### Authenticated Sandbox probe
 
-`scripts/ops/probe-sandbox-mint.sh` runs every minute from the monitoring host's crontab, between the `AIHUB SANDBOX PROBE` markers, and mints a Sandbox assertion through the public edge (#291). The mint looks up the API key (Redis cache or Postgres), takes a Redis rate-limit slot, and reads the Organization's identity configuration from Postgres, so it fails when the process answers `/health` but its dependencies are gone. It calls no AI service, consumes no quota, and writes only the key's throttled `last_used_at`.
+`scripts/ops/monitoring/probe-sandbox-mint.sh` runs every minute from the monitoring host's crontab, between the `AIHUB SANDBOX PROBE` markers, and mints a Sandbox assertion through the public edge (#291). The mint looks up the API key (Redis cache or Postgres), takes a Redis rate-limit slot, and reads the Organization's identity configuration from Postgres, so it fails when the process answers `/health` but its dependencies are gone. It calls no AI service, consumes no quota, and writes only the key's throttled `last_used_at`.
 
 It reports as task `sandbox-mint-probe` in the scheduled-job format to the monitoring host's node exporter (`AIHUB_HOST_JOB_METRICS_DIR` there), so `AIHUBScheduledJobFailed` fires on a failed mint after one retry and `AIHUBScheduledJobMissed` after five minutes without a success. A failure is logged to `~/aihub-sandbox-probe.log` with the HTTP status and the API error code only.
 

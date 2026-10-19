@@ -17,7 +17,7 @@ logs `deferred reason=host_job_active`, and exits non-zero. Run a previous-hour
 report manually through the wrapper:
 
 ```sh
-./scripts/ops/host-scheduled-job.sh report
+./scripts/ops/host-jobs/host-scheduled-job.sh report
 ```
 
 For an explicit window, pass both timestamps to the wrapper so the run remains
@@ -25,7 +25,7 @@ locked and logged in each deployment. Use the original scheduled hour when
 rerunning a deferred report:
 
 ```sh
-./scripts/ops/host-scheduled-job.sh report \
+./scripts/ops/host-jobs/host-scheduled-job.sh report \
   --from 2026-09-20T12:00:00.000Z --to 2026-09-20T13:00:00.000Z
 ```
 

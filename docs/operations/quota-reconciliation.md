@@ -16,7 +16,7 @@ wrapper so it gets the 15-minute per-deployment deadline, same-job lock, and
 result logging:
 
 ```sh
-./scripts/ops/host-scheduled-job.sh quota
+./scripts/ops/host-jobs/host-scheduled-job.sh quota
 ```
 
 The wrapper uses a nonblocking same-job lock and a host-wide lock shared by all
@@ -63,7 +63,7 @@ retained month through the host wrapper, preserving the per-deployment deadline,
 same-job lock, and result log:
 
 ```sh
-./scripts/ops/host-scheduled-job.sh quota --month 2026-09
+./scripts/ops/host-jobs/host-scheduled-job.sh quota --month 2026-09
 ```
 
 `--month` must be strict `YYYY-MM`, cannot name a future month, and is limited

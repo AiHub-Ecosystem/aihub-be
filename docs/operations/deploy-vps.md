@@ -351,7 +351,7 @@ line per deployment to `~/aihub-speaking-upload-sweep.log`. To see what a run
 would remove without removing anything, run the wrapper's dry run:
 
 ```sh
-./scripts/ops/host-scheduled-job.sh speaking-upload-sweep --dry-run true
+./scripts/ops/host-jobs/host-scheduled-job.sh speaking-upload-sweep --dry-run true
 ```
 
 Each invocation uses that deployment's database and environment-specific
@@ -378,7 +378,7 @@ setting exists. **Run it with `--dry-run true` first** and check the summary
 before the CD-managed daily schedule runs it:
 
 ```sh
-./scripts/ops/host-scheduled-job.sh avatar-sweep --dry-run true
+./scripts/ops/host-jobs/host-scheduled-job.sh avatar-sweep --dry-run true
 ```
 
 The wrapper resolves both active services and uses
@@ -393,7 +393,7 @@ blue-green services for every run, logs one summary line per command and
 deployment, and exits non-zero if any command fails. The installation
 preserves unrelated crontab entries; do not edit the AIHUB managed block by
 hand. After reviewing the dry-run summaries, run the actual sweep through
-`./scripts/ops/host-scheduled-job.sh avatar-sweep`; it enforces a 30-minute
+`./scripts/ops/host-jobs/host-scheduled-job.sh avatar-sweep`; it enforces a 30-minute
 deadline per deployment and the nonblocking same-job lock.
 
 It prints one JSON line of counts (`scanned`, `unrecognised`, `orphaned`,
@@ -407,7 +407,7 @@ non-zero exit and on a missed run for either container.
 Before enabling the managed schedule, inspect eligible records with a dry run:
 
 ```sh
-./scripts/ops/host-scheduled-job.sh chart-upload-sweep --dry-run true
+./scripts/ops/host-jobs/host-scheduled-job.sh chart-upload-sweep --dry-run true
 ```
 
 The managed job runs every 15 minutes for each enabled deployment. Published
@@ -546,7 +546,7 @@ record is preserved and continues to block later deployments; CD can resume
 jobs only when the staged wrapper passes against every active tier. The saved
 crontab stays in `.aihub-host-jobs-state/`; after following the #289 recovery
 procedure, restore it with
-`APP_DIR=<deployment-dir> ./scripts/ops/install-host-jobs.sh restore`.
+`APP_DIR=<deployment-dir> ./scripts/ops/host-jobs/install-host-jobs.sh restore`.
 Promotion or crontab verification failures restore the pre-promotion wrapper
 and template while keeping the schedule suspended.
 
@@ -648,7 +648,7 @@ key has no TTL. It prints aggregate counts only, never Redis key names. The
 persistent `aihub:v1:jwks-generation:*` invalidation fences are counted
 separately because they must not expire and make a purged JWKS cache entry
 current again. To run the scheduled TTL audit manually, use
-`./scripts/ops/host-scheduled-job.sh ttl-audit`; it has a 15-minute limit and
+`./scripts/ops/host-jobs/host-scheduled-job.sh ttl-audit`; it has a 15-minute limit and
 shares the same-job lock. `report` computes `--from` and `--to` as the start of
 the previous and current UTC hours, so `to` is never in the future.
 
@@ -674,7 +674,7 @@ production logical database, while Postgres remains the durable boundary.
 
 ### Postgres backups
 
-`scripts/ops/backup-postgres.sh` runs from the CD-managed crontab at minute 47
+`scripts/ops/backups/backup-postgres.sh` runs from the CD-managed crontab at minute 47
 of every hour (#281, spec 10 §N.4). For `aihub` and `aihub_sandbox` it runs
 `pg_dump -Fc` inside `aihub-db`, encrypts the dump on the host with `age` to a
 public key, and copies it to the Cloudflare R2 bucket with a pinned `rclone`
@@ -715,7 +715,7 @@ container with no network and compares per-table row counts with the live
 database. The private key travels on stdin and is held only in memory:
 
 ```sh
-ssh <user>@<host> '~/aihub-be/scripts/ops/restore-postgres-rehearsal.sh aihub' \
+ssh <user>@<host> '~/aihub-be/scripts/ops/backups/restore-postgres-rehearsal.sh aihub' \
   < AIHUB-BACKUP-AGE-KEY.txt
 ```
 
@@ -825,7 +825,7 @@ token. Validate the policy before starting the application:
 AIHUB_VAULT_SMOKE_ALLOW=true \
 AIHUB_VAULT_SMOKE_AUTH_METHOD=approle \
 AIHUB_VAULT_ENVIRONMENT=production \
-  node scripts/ops/vault-smoke.mjs
+  node scripts/ops/vault/vault-smoke.mjs
 ```
 
 Run the smoke command from a Vault CLI session authenticated as the generated
@@ -897,14 +897,14 @@ starting:
    ```sh
    docker compose --env-file .env.production -f docker-compose.production.yml \
      --profile sandbox up -d vault-agent-sandbox
-   APP_DIR="$PWD" ./scripts/ops/blue-green-host.sh check-vault-agent sandbox
+   APP_DIR="$PWD" ./scripts/ops/blue-green/blue-green-host.sh check-vault-agent sandbox
    ```
 
    Run the Sandbox `vault:smoke` check from a Vault CLI session authenticated
    as the Sandbox AppRole before starting the app.
 
 4. Deploy the verified image to Sandbox with
-   `AIHUB_IMAGE=ghcr.io/aihub-ecosystem/aihub-be:<commit-sha> ./scripts/ops/blue-green-host.sh deploy sandbox`,
+   `AIHUB_IMAGE=ghcr.io/aihub-ecosystem/aihub-be:<commit-sha> ./scripts/ops/blue-green/blue-green-host.sh deploy sandbox`,
    then run `finalize`. With no Sandbox route, the helper bootstraps one app
    against the isolated directory and adds the managed route only after its
    health and dependency checks pass.
@@ -1495,7 +1495,7 @@ The Production handoff matrix is split by safety boundary:
 - The blue-green helper probes `/health` through every enabled public hostname
   from the VPS once per second while the candidate starts, after cutover, and
   during drain. It does not follow redirects or read response bodies. The helper
-  then runs `scripts/ops/probe-runtime-dependencies.cjs` inside the candidate:
+  then runs `scripts/ops/monitoring/probe-runtime-dependencies.cjs` inside the candidate:
   private `/ready` must report runtime and configured control-plane Postgres
   up; Redis is reported but a Redis-only failure is advisory because gateway
   requests fail open. The container must also complete a TCP connection or
@@ -1511,7 +1511,7 @@ The Production handoff matrix is split by safety boundary:
 
 ## Rollback
 
-CD deploys with `scripts/ops/blue-green-host.sh`. Each successful blue-green
+CD deploys with `scripts/ops/blue-green/blue-green-host.sh`. Each successful blue-green
 deployment records per-tier history in
 `$APP_DIR/.aihub-deploy-state/releases.tsv`. Legacy direct Compose releases
 record their history in `$APP_DIR/.aihub-deploy-state/direct-releases.tsv`
@@ -1570,19 +1570,19 @@ deployment directory:
 
 ```bash
 cd "$APP_DIR"
-APP_DIR="$PWD" ./scripts/ops/blue-green-host.sh status
+APP_DIR="$PWD" ./scripts/ops/blue-green/blue-green-host.sh status
 ```
 
 Then run exactly one command for the affected tier. For Production:
 
 ```bash
-APP_DIR="$PWD" ./scripts/ops/blue-green-host.sh rollback production
+APP_DIR="$PWD" ./scripts/ops/blue-green/blue-green-host.sh rollback production
 ```
 
 For Sandbox:
 
 ```bash
-APP_DIR="$PWD" ./scripts/ops/blue-green-host.sh rollback sandbox
+APP_DIR="$PWD" ./scripts/ops/blue-green/blue-green-host.sh rollback sandbox
 ```
 
 ### Legacy direct Compose rollback
@@ -1647,7 +1647,7 @@ for service in "${services[@]}"; do
   test "$health" = healthy
   revision="$(sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$container_id")"
   test "$revision" = "$rollback_sha"
-  sudo -n docker exec "$container_id" node scripts/ops/probe-runtime-dependencies.cjs
+  sudo -n docker exec "$container_id" node scripts/ops/monitoring/probe-runtime-dependencies.cjs
 done
 
 AIHUB_PRODUCTION_HOST="$(sed -n 's/^AIHUB_PRODUCTION_HOST=//p' .env.production | tail -n 1)"
@@ -1786,7 +1786,7 @@ done
 test "$health" = healthy
 sandbox_sha="$(sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$sandbox_id")"
 test "$sandbox_sha" = "$rollback_sha"
-sudo -n docker exec "$sandbox_id" node scripts/ops/probe-runtime-dependencies.cjs
+sudo -n docker exec "$sandbox_id" node scripts/ops/monitoring/probe-runtime-dependencies.cjs
 production_id_after="$("${production_compose[@]}" ps -q app)"
 test "$production_id_after" = "$production_id_before"
 production_sha_after="$(sudo -n docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$production_id_after")"
@@ -1834,7 +1834,7 @@ Follow the CD run through the public probes and the release-history summary.
 
 Start rollback when any release gate fails after deployment: a service does
 not report a healthy container health check within the helper's 120 attempts
-(`wait_service_ready` in `scripts/ops/blue-green-host.sh`, one second apart),
+(`wait_service_ready` in `scripts/ops/blue-green/blue-green-host.sh`, one second apart),
 an enabled hostname has a failed
 `/health` probe during the CD probe window, `/ready` reports Postgres or Redis
 down, a deployed container OOMs or its restart count increases, or the
@@ -1953,8 +1953,8 @@ the Sandbox rehearsal from the deployment directory:
 ```bash
 cd "$APP_DIR"
 APP_DIR="$PWD" AIHUB_IMAGE=ghcr.io/aihub-ecosystem/aihub-be:REPLACE_WITH_40_CHAR_CI_SHA \
-  ./scripts/ops/blue-green-host.sh rehearse sandbox
-APP_DIR="$PWD" ./scripts/ops/blue-green-host.sh status
+  ./scripts/ops/blue-green/blue-green-host.sh rehearse sandbox
+APP_DIR="$PWD" ./scripts/ops/blue-green/blue-green-host.sh status
 ```
 
 Only use `rollback <tier>` after that tier has a successful blue-green deploy
