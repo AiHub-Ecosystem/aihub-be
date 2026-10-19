@@ -25,5 +25,15 @@ module.exports = {
     '/node_modules/(?!\\.pnpm/@nestjs\\+|\\.pnpm/@fastify\\+|\\.pnpm/jose|@nestjs/|@fastify/|jose/|.pnpm/cookie|cookie/)',
   ],
   collectCoverageFrom: ['<rootDir>/src/**/*.ts'],
+  // Freeze today's measured coverage as the floor so a regression in the unit
+  // lane fails instead of silently shipping (issue #812). Thresholds sit
+  // marginally below the measured lines/branches to absorb tooling noise;
+  // ratchet upward in follow-ups.
+  coverageThreshold: {
+    global: {
+      lines: 83,
+      branches: 72,
+    },
+  },
   clearMocks: true,
 };
