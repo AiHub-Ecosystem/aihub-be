@@ -420,11 +420,14 @@ storage deletion remains retryable.
 
 ### Responding to reported Writing Task 1 charts
 
-This procedure becomes executable when #816 is deployed. Until then, operator
-revocation and public-edge behavior are not verified, so the public chart
-rollout gate remains open.
+The revocation path was verified against Production and Sandbox on 2026-10-19 under revision
+`acec82358f38168b08f0740aa45425c7e1549341`. Production and Sandbox currently run revision
+`92f5d9d5d1e42b921a4c15f51d8d24ef9973ec7e`, which contains the path and passed health/readiness checks.
+Public chart rollout remains subject to the separate provider URL-fetch
+security gate in #376.
 
-1. Receive reports through the published AIHUB-controlled contact. Triage and
+1. Receive reports through the published AIHUB-controlled contact at
+   [lengocanhpyne363@gmail.com](mailto:lengocanhpyne363@gmail.com). Triage and
    respond to the reporter within one business day. Keep the raw report in its
    controlled intake channel; do not copy it or chart bytes into an operator
    command or audit record.
@@ -452,20 +455,61 @@ rollout gate remains open.
    the CLI says the outcome is unconfirmed, the request event remains; after
    database recovery, rerun the same URL and actor because deletion is
    idempotent. Events are immutable during the
-   24-month retention period and removed only by the existing managed
-   `usage:prune` job at 02:30 UTC after #816 extends it to prune expired
-   revocation records.
+   24-month retention period and removed only by the managed per-environment
+   `usage:prune` job at 02:30 UTC when expired.
 
-Before closing #816 or enabling public rollout, create one synthetic,
-non-sensitive chart object in each public bucket. From outside the host, use
-the normal public GET path, record the real 200 response headers, delete each
-object through the operator path, and observe when each public GET stops
-serving it. Document the measured stale window and escalation threshold. The
-source `Cache-Control` setting, a HEAD response, and a 404 for a nonexistent
-object do not establish this behavior. If the measured window is not bounded or
-a deleted object remains public past it, keep the rollout gate open and
-escalate to the storage/edge owner. This test must not read or retain a
-customer chart.
+#### Public-edge verification record (#816, 2026-10-19)
+
+Each bucket was tested with a synthetic 67-byte PNG. Full public GETs from a
+host outside the app VPS returned 200 OK; both responses had Content-Type:
+image/png, Content-Length: 67, Connection: keep-alive, Accept-Ranges: bytes,
+Cache-Control: public, max-age=300, must-revalidate, and Content-Disposition:
+inline. Neither response had Age or Via.
+
+Production at 07:18:45 UTC returned these headers:
+
+    Server: nginx/1.28.3 (Ubuntu)
+    Date: Mon, 19 Oct 2026 07:18:45 GMT
+    Content-Type: image/png
+    Content-Length: 67
+    Connection: keep-alive
+    Accept-Ranges: bytes
+    Cache-Control: public, max-age=300, must-revalidate
+    Content-Disposition: inline
+    Etag: "17b3e19593efeb4c09a755092de9d245"
+    Last-Modified: Mon, 19 Oct 2026 07:18:20 GMT
+    Seaweed-X-Amz-ETag: 17b3e19593efeb4c09a755092de9d245
+    Seaweed-X-Amz-Owner: wispace
+    Vary: Origin
+    X-Amz-Request-Id: 18DFDD24836410533F61F59D
+
+Sandbox at 07:04:58 UTC returned these headers:
+
+    Server: nginx/1.28.3 (Ubuntu)
+    Date: Mon, 19 Oct 2026 07:04:58 GMT
+    Content-Type: image/png
+    Content-Length: 67
+    Connection: keep-alive
+    Accept-Ranges: bytes
+    Cache-Control: public, max-age=300, must-revalidate
+    Content-Disposition: inline
+    Etag: "da5e4f2edeb4158738826d6c56be2cf9"
+    Last-Modified: Mon, 19 Oct 2026 07:04:36 GMT
+    Seaweed-X-Amz-ETag: da5e4f2edeb4158738826d6c56be2cf9
+    Seaweed-X-Amz-Owner: wispace
+    Vary: Origin
+
+The environment-specific CLI deleted each object and recorded origin=deleted,
+edge=not_serving, and status=404 in its internal audit. Independent public
+GETs returned 404 by 07:06:43 UTC for Sandbox (12 seconds after completion)
+and 07:19:24 UTC for Production (22 seconds after completion). The Production
+URL then remained 404 for 30 checks at 10-second intervals from 07:20:01 to
+07:25:08 UTC. The Sandbox URL remained 404 for 29 checks over five minutes
+from 07:09:41 to 07:14:45 UTC. No stale 2xx response was observed; the longest
+measured time to an independent 404 was 22 seconds after CLI completion.
+Escalate if a deleted object still returns 2xx five minutes after origin
+deletion. These are observed results for the tested paths, not a guarantee
+about copies outside AIHUB's control.
 
 ### Scheduled operator jobs
 
