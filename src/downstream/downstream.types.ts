@@ -1,5 +1,7 @@
 import type { Blob } from 'node:buffer';
 
+import type { ErrorCode } from '@/common/errors/error-code';
+
 export type DownstreamId = 'ai-writing' | 'ai-speaking';
 
 export interface DownstreamMultipartBody {
@@ -26,7 +28,13 @@ export interface InternalAIServiceResponse<TBody> {
   readonly body: TBody;
 }
 
+/**
+ * A provider failure an adapter can name. The code is a public error code, so
+ * an adapter cannot put an unregistered code into the error envelope, and the
+ * message is AIHUB's own: never the provider's text.
+ */
 export interface DownstreamErrorHint {
-  readonly code: string;
+  readonly code: ErrorCode;
+  readonly message: string;
   readonly retryable: boolean;
 }

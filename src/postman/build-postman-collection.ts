@@ -255,7 +255,7 @@ const D1_SCENARIOS: readonly Scenario[] = [
   {
     name: '10. Downstream 4xx/5xx maps to a unified error',
     description:
-      'Point {{baseUrl}} at a stub returning an unexpected downstream 4xx/5xx to confirm it surfaces as AI_SERVICE_ERROR (or AI_SERVICE_CONTRACT_VIOLATION for a malformed 200 body), never passed through raw.',
+      'Point {{baseUrl}} at a stub returning an unexpected downstream 4xx/5xx to confirm it surfaces as AI_SERVICE_ERROR (or AI_SERVICE_CONTRACT_VIOLATION for a malformed 200 body), never passed through raw. The one named exception: a Speaking multipart grading whose audio AI Speaking cannot decode answers 422 AUDIO_UNREADABLE, retryable false.',
     path: TASK1_GRADE_PATH,
     headers: [
       JSON_HEADER,

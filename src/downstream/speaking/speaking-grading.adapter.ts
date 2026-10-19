@@ -7,6 +7,7 @@ import type {
 } from '@/contracts/speaking/grading';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type {
+  DownstreamErrorHint,
   DownstreamMultipartBody,
   DownstreamRequest,
 } from '@/downstream/downstream.types';
@@ -18,6 +19,37 @@ export function requiredSpeakingUserId(context: RequestContext): string {
     throw userIdentityRequired();
   }
   return userId;
+}
+
+/**
+ * The provider answers audio it cannot decode with a 500 whose FastAPI
+ * `detail` carries this marker (captured in
+ * test/fixtures/ai-speaking/grading-convert-audio.500.json, #247). That is the
+ * caller's file, not a provider outage, so retrying cannot help. No other
+ * marker is mapped until it has been captured the same way.
+ */
+const UNREADABLE_AUDIO_MARKER = '[error_convert_audio]';
+
+export function parseSpeakingGradingError(
+  status: number,
+  body: unknown,
+): DownstreamErrorHint | undefined {
+  if (
+    status >= 500 &&
+    typeof body === 'object' &&
+    body !== null &&
+    'detail' in body &&
+    typeof body.detail === 'string' &&
+    body.detail.includes(UNREADABLE_AUDIO_MARKER)
+  ) {
+    return {
+      code: 'AUDIO_UNREADABLE',
+      message:
+        'The audio could not be read; upload a valid recording in a supported format',
+      retryable: false,
+    };
+  }
+  return undefined;
 }
 
 function appendOptional(
@@ -72,4 +104,6 @@ export const speakingGradingAdapter: DownstreamAdapter<
   parseResponse(response): SpeakingGradeResponse {
     return parseSpeakingGradeResponse(response.body);
   },
+
+  parseError: parseSpeakingGradingError,
 };

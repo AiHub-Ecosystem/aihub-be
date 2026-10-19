@@ -110,9 +110,13 @@ function routeErrorResponsesOf(
       );
     }
     return Object.fromEntries(
-      [...groupedErrors.keys()]
-        .filter((status) => status !== 409)
-        .map((status) => [
+      [...groupedErrors]
+        .filter(
+          ([status, codes]) =>
+            status !== 409 &&
+            !codes.every((code) => NAMED_DOWNSTREAM_ERRORS.has(code)),
+        )
+        .map(([status]) => [
           String(status),
           { $ref: `#/components/responses/Error${status}` },
         ]),
@@ -193,6 +197,12 @@ function errorsByStatus(): ReadonlyMap<HttpStatus, readonly ErrorCode[]> {
     [...grouped.entries()].sort(([left], [right]) => left - right),
   );
 }
+
+const NAMED_DOWNSTREAM_ERRORS: ReadonlySet<ErrorCode> = new Set(
+  Object.values(OPERATION_CATALOG).flatMap(
+    (operation: OperationDef) => operation.namedDownstreamErrors ?? [],
+  ),
+);
 
 const OPENAPI_VERSION = '3.1.0';
 
@@ -339,8 +349,19 @@ function operationToPathItem(
     },
   };
 
-  for (const status of groupedErrors.keys()) {
+  for (const [status, codes] of groupedErrors) {
     if (status === 409 && operation.idempotency === 'none') {
+      continue;
+    }
+    // A status reached only through another operation's named provider
+    // failure is not this operation's to publish.
+    if (
+      codes.every(
+        (code) =>
+          NAMED_DOWNSTREAM_ERRORS.has(code) &&
+          !(operation.namedDownstreamErrors ?? []).includes(code),
+      )
+    ) {
       continue;
     }
     responses[String(status)] = {

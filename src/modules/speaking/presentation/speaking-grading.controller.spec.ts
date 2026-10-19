@@ -1022,4 +1022,70 @@ describe('Speaking grading HTTP flow', () => {
       body: fixture('grading.response.json'),
     };
   });
+
+  it('answers audio the provider cannot read with a non-retryable 422, not a retryable 502', async () => {
+    providerResponse = {
+      statusCode: 500,
+      body: fixture('grading-convert-audio.500.json'),
+    };
+    const request = multipartPayload(
+      { part: '1', question_id: 'p1_hometown' },
+      Buffer.alloc(200, 1),
+    );
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/speaking/grading',
+        headers: { 'content-type': request.contentType },
+        payload: request.payload,
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(response.json().error).toMatchObject({
+        code: 'AUDIO_UNREADABLE',
+        retryable: false,
+      });
+      expect(response.payload).not.toContain('error_convert_audio');
+      expect(response.payload).not.toContain('Grading pipeline');
+    } finally {
+      providerResponse = {
+        statusCode: 200,
+        body: fixture('grading.response.json'),
+      };
+    }
+  });
+
+  it('keeps a provider 500 without a known marker as a retryable AI service error', async () => {
+    providerResponse = {
+      statusCode: 500,
+      body: {
+        detail: 'Grading pipeline failed: [error_database] write failed',
+      },
+    };
+    const request = multipartPayload(
+      { part: '1', question_id: 'p1_hometown' },
+      Buffer.alloc(200, 1),
+    );
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/speaking/grading',
+        headers: { 'content-type': request.contentType },
+        payload: request.payload,
+      });
+
+      expect(response.statusCode).toBe(502);
+      expect(response.json().error).toMatchObject({
+        code: 'AI_SERVICE_ERROR',
+        retryable: true,
+      });
+    } finally {
+      providerResponse = {
+        statusCode: 200,
+        body: fixture('grading.response.json'),
+      };
+    }
+  });
 });

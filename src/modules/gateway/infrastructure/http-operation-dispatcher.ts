@@ -193,7 +193,18 @@ export class HttpOperationTransport implements OperationTransportPort {
           // here means a returned response is never classified as unknown.
           call.onResponseReceived(response.status);
           if (response.status < 200 || response.status >= 300) {
-            throw mapDownstreamStatus(response.status);
+            // A failure body is not a grading, so the adapter reads it before
+            // any contract validation; a failure it cannot name keeps the
+            // status mapping.
+            const hint = adapter.parseError?.(response.status, response.body);
+            throw hint === undefined
+              ? mapDownstreamStatus(response.status)
+              : new AppError({
+                  code: hint.code,
+                  message: hint.message,
+                  retryable: hint.retryable,
+                  downstreamStatus: response.status,
+                });
           }
 
           const telemetry = extractDownstreamTelemetry(response.body);

@@ -1,5 +1,7 @@
 import type { TSchema } from '@sinclair/typebox';
 
+import type { ErrorCode } from '@/common/errors/error-code';
+
 import {
   SpeakingGradeJsonRequestSchema,
   SpeakingGradeRequestSchema,
@@ -48,6 +50,12 @@ export interface OperationDef {
   readonly downstreamPath: string;
   readonly requestSchema: TSchema;
   readonly responseContract: ResponseContract;
+  /**
+   * Public codes this operation's adapter names from a provider failure body
+   * (`parseError`). Only these operations publish the codes, so a code one
+   * provider can raise is not advertised on every graded route.
+   */
+  readonly namedDownstreamErrors?: readonly ErrorCode[];
 }
 
 export const OPERATION_CATALOG = {
@@ -106,6 +114,7 @@ export const OPERATION_CATALOG = {
     downstreamPath: '/api/v1/speaking/grading',
     requestSchema: SpeakingGradeRequestSchema,
     responseContract: SpeakingGradeResponseSchema,
+    namedDownstreamErrors: ['AUDIO_UNREADABLE'],
   },
   'speaking.grading-json': {
     method: 'POST',

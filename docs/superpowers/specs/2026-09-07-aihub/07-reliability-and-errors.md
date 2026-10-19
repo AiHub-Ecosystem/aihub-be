@@ -191,6 +191,7 @@ than merely warn.
 |         404 | `NOT_FOUND`                     | Endpoint or resource does not exist             | No                        |
 |         409 | `IDEMPOTENCY_CONFLICT`          | Reused key with divergent payload or in-flight  | No                        |
 |         413 | `PAYLOAD_TOO_LARGE`             | Exceeds operation `maxBodyBytes`                | No                        |
+|         422 | `AUDIO_UNREADABLE`              | AI Speaking could not decode the audio (#248)   | No                        |
 |         429 | `RATE_LIMITED`                  | Breached AIHUB per-minute rate limit            | Yes                       |
 |         429 | `CONCURRENCY_LIMIT`             | Too many simultaneous in-flight requests        | Yes (immediate)           |
 |         429 | `QUOTA_EXCEEDED`                | Monthly allocated quota depleted                | Next month                |

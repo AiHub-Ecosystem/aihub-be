@@ -7,6 +7,7 @@ export type HttpStatus =
   | 404
   | 409
   | 413
+  | 422
   | 429
   | 500
   | 502
@@ -16,6 +17,7 @@ export type HttpStatus =
 export const ERROR_STATUS_BY_CODE = {
   INVALID_REQUEST: 400,
   PAYLOAD_TOO_LARGE: 413,
+  AUDIO_UNREADABLE: 422,
   NOT_FOUND: 404,
   UNAUTHORIZED: 401,
   USER_IDENTITY_REQUIRED: 401,

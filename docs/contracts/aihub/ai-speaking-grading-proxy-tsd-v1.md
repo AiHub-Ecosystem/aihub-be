@@ -233,14 +233,15 @@ of the AI Speaking service under this contract.
 
 ## 7. Detailed AI Speaking service errors
 
-| Service status | Meaning                                          | AIHUB behavior                                                   |
-| -------------- | ------------------------------------------------ | ---------------------------------------------------------------- |
-| 400            | Invalid or missing metadata/audio                | Map to shared service error; do not expose detail                |
-| 401            | Missing or invalid downstream credentials        | Map to shared service error; investigate server configuration    |
-| 413            | AI Speaking service audio/request limit exceeded | Map to shared service error; AIHUB boundary 413 remains distinct |
-| 422            | Downstream parameter/schema validation failure   | Map to shared service error; do not expose detail                |
-| 429            | Downstream throttling                            | Map to AI_SERVICE_THROTTLED                                      |
-| 5xx            | Downstream or pipeline failure                   | Map to retryable AI_SERVICE_ERROR                                |
+| Service status                               | Meaning                                          | AIHUB behavior                                                                                                   |
+| -------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| 400                                          | Invalid or missing metadata/audio                | Map to shared service error; do not expose detail                                                                |
+| 401                                          | Missing or invalid downstream credentials        | Map to shared service error; investigate server configuration                                                    |
+| 413                                          | AI Speaking service audio/request limit exceeded | Map to shared service error; AIHUB boundary 413 remains distinct                                                 |
+| 422                                          | Downstream parameter/schema validation failure   | Map to shared service error; do not expose detail                                                                |
+| 429                                          | Downstream throttling                            | Map to AI_SERVICE_THROTTLED                                                                                      |
+| 5xx                                          | Downstream or pipeline failure                   | Map to retryable AI_SERVICE_ERROR, except the named marker below                                                 |
+| 500 with `[error_convert_audio]` in `detail` | The audio could not be decoded                   | Map to AUDIO_UNREADABLE (422, not retryable); fixture `test/fixtures/ai-speaking/grading-convert-audio.500.json` |
 
 The AI Speaking service may return machine-readable diagnostic detail, but it is
 never returned to clients or logged raw. Internal telemetry may retain only
@@ -288,6 +289,7 @@ that a retry is safe. Speaking has no idempotent replay.
 | Duplicate/in-flight idempotency key                          |  409 | IDEMPOTENCY_CONFLICT          | Not emitted by Speaking v1 |
 | AI Speaking service 4xx, including 400/401/413               |  502 | AI_SERVICE_ERROR              | No                         |
 | AI Speaking service 5xx                                      |  502 | AI_SERVICE_ERROR              | Yes                        |
+| AI Speaking service 500 with `[error_convert_audio]` (#248)  |  422 | AUDIO_UNREADABLE              | No                         |
 | AI Speaking service 2xx fails normalized contract            |  502 | AI_SERVICE_CONTRACT_VIOLATION | No                         |
 | AI Speaking service throttling (429)                         |  503 | AI_SERVICE_THROTTLED          | Yes                        |
 | AI Speaking service unreachable                              |  503 | AI_SERVICE_UNAVAILABLE        | Yes                        |

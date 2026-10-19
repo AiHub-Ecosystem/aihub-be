@@ -4037,7 +4037,7 @@
               "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}"
             },
             "url": "{{baseUrl}}/v1/ielts/writing/task1/grade",
-            "description": "Point {{baseUrl}} at a stub returning an unexpected downstream 4xx/5xx to confirm it surfaces as AI_SERVICE_ERROR (or AI_SERVICE_CONTRACT_VIOLATION for a malformed 200 body), never passed through raw."
+            "description": "Point {{baseUrl}} at a stub returning an unexpected downstream 4xx/5xx to confirm it surfaces as AI_SERVICE_ERROR (or AI_SERVICE_CONTRACT_VIOLATION for a malformed 200 body), never passed through raw. The one named exception: a Speaking multipart grading whose audio AI Speaking cannot decode answers 422 AUDIO_UNREADABLE, retryable false."
           },
           "event": [
             {

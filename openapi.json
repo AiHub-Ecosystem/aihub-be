@@ -422,6 +422,49 @@
           }
         }
       },
+      "Error422": {
+        "description": "AUDIO_UNREADABLE",
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": ["error"],
+              "properties": {
+                "error": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["code", "message", "request_id", "retryable"],
+                  "properties": {
+                    "code": {
+                      "const": "AUDIO_UNREADABLE",
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    },
+                    "retry_after_ms": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "details": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "properties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "Error429": {
         "description": "RATE_LIMITED | CONCURRENCY_LIMIT | QUOTA_EXCEEDED",
         "content": {
@@ -2102,6 +2145,9 @@
           },
           "413": {
             "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
           },
           "429": {
             "$ref": "#/components/responses/Error429"
