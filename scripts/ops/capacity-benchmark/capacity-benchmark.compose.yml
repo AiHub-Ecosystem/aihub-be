@@ -71,6 +71,7 @@ services:
       LOG_LEVEL: info
       AIHUB_RUNTIME_SECRET_SOURCE: env
       AIHUB_RUNTIME_DATABASE_SCOPE: production
+      AIHUB_TRUSTED_PROXY_IP: 127.0.0.1
       AIHUB_ALLOW_UNAUTHENTICATED_DEV: "false"
       AIHUB_USER_ACCESS_ISSUER: https://api.benchmark.test
       AIHUB_PRODUCTION_HOST: api.benchmark.test
