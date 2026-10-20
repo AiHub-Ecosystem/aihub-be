@@ -42,6 +42,10 @@ import {
   PASSWORD_MIN_CODE_POINTS,
 } from '@/modules/auth/domain/local-auth';
 import { REFRESH_COOKIE_NAME } from '@/modules/auth/presentation/refresh-cookie';
+import {
+  buildErrorResponses,
+  errorResponseSchema,
+} from './openapi-error-responses';
 import { toOpenApiPath } from './openapi-path';
 
 /**
@@ -205,27 +209,6 @@ const NAMED_DOWNSTREAM_ERRORS: ReadonlySet<ErrorCode> = new Set(
 );
 
 const OPENAPI_VERSION = '3.1.0';
-
-function errorResponseSchema(codes: readonly ErrorCode[]): TSchema {
-  return Type.Object(
-    {
-      error: Type.Object(
-        {
-          code: Type.Union(codes.map((code) => Type.Literal(code))),
-          message: Type.String(),
-          request_id: Type.String(),
-          retryable: Type.Boolean(),
-          retry_after_ms: Type.Optional(Type.Integer({ minimum: 0 })),
-          details: Type.Optional(
-            Type.Object({}, { additionalProperties: true }),
-          ),
-        },
-        { additionalProperties: false },
-      ),
-    },
-    { additionalProperties: false },
-  );
-}
 
 /**
  * Mirrors the public success envelope built by
@@ -2275,42 +2258,7 @@ export function buildOpenApiDocument(version: string): unknown {
   Object.assign(paths, webSessionPathItems());
   addHeadOperations(paths);
 
-  const errorResponses: Record<string, unknown> = {};
-  for (const [status, codes] of groupedErrors) {
-    errorResponses[`Error${status}`] = {
-      description: codes.join(' | '),
-      ...(status === 503
-        ? {
-            headers: {
-              'Retry-After': {
-                description:
-                  'Whole seconds to wait before retrying when the error includes retry_after_ms.',
-                schema: { type: 'string', pattern: '^[0-9]+$' },
-              },
-            },
-          }
-        : {}),
-      content: {
-        'application/json': { schema: errorResponseSchema(codes) },
-      },
-    };
-  }
-  errorResponses.AuthRateLimited = {
-    description:
-      'An authentication rate budget is exhausted. The refusal is the same one on every authentication route, so the response always carries the wait in `retry_after_ms` and, whenever a wait is known, in the `Retry-After` header.',
-    headers: {
-      'Retry-After': {
-        description:
-          'Whole seconds to wait before retrying, rounded up from the longest exhausted window.',
-        schema: { type: 'string', pattern: '^[0-9]+$' },
-      },
-    },
-    content: {
-      'application/json': {
-        schema: errorResponseSchema(['RATE_LIMITED']),
-      },
-    },
-  };
+  const errorResponses = buildErrorResponses(groupedErrors);
 
   for (const route of Object.values(PUBLIC_ROUTES) as PublicRouteDef[]) {
     if (route.sunset === undefined) continue;

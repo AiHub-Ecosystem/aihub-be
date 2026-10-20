@@ -236,6 +236,8 @@ try {
   const idleArgon2Probe = await controlArgon2Probe(appContainerId, '/burst');
   /** @type {number | undefined} */
   let argon2BurstStartedAt;
+  /** @type {number | undefined} */
+  let argon2BurstFinishedAt;
   /** @type {ReturnType<typeof controlArgon2Probe> | undefined} */
   let chartProbeStart;
   const argon2Burst = await runK6({
@@ -245,6 +247,9 @@ try {
     routeNames: ['login'],
     runDuration: stageDuration('login', argon2BurstRateRps),
     label: `Argon2 login burst at ${argon2BurstRateRps} requests/s`,
+    onLoadFinished: (finishedAt) => {
+      argon2BurstFinishedAt = finishedAt;
+    },
     onLoadStarted: (startedAt) => {
       argon2BurstStartedAt = startedAt;
       chartProbeStart = controlArgon2Probe(appContainerId, '/chart').catch(
@@ -255,7 +260,6 @@ try {
       );
     },
   });
-  const argon2BurstFinishedAt = Date.now();
   if (chartProbeStart === undefined) {
     throw new Error('Argon2 contention run did not start its chart probe');
   }
@@ -278,6 +282,7 @@ try {
   );
   const chartVerificationOverlappedBurst =
     argon2BurstStartedAt !== undefined &&
+    argon2BurstFinishedAt !== undefined &&
     chartStartedAt <= argon2BurstFinishedAt &&
     chartCompletedAt >= argon2BurstStartedAt;
   const argon2ProcessRssPeakBytes = Math.max(
@@ -794,6 +799,7 @@ async function runK6({
   routeNames,
   runDuration,
   label,
+  onLoadFinished,
   onLoadStarted,
   isOverload = false,
   isRecovery = false,
@@ -854,6 +860,7 @@ async function runK6({
     },
   );
   const endMs = Date.now();
+  onLoadFinished?.(endMs);
   const output = `${result.stdout}\n${result.stderr}`;
   const summary = jsonAfterPrefix(output, 'BENCHMARK_SUMMARY_JSON ');
   const stub = jsonAfterPrefix(output, 'BENCHMARK_STUB_STATS ');
