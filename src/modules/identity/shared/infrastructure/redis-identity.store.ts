@@ -19,6 +19,7 @@ import type {
   JwksCacheSnapshot,
   JwksRefreshLock,
 } from '@/modules/identity/user-assertions/application/jwks-cache.port';
+import { putBounded, shortenedTtl } from './local-cache-policy';
 
 export interface RedisIdentityClient {
   get(key: string): Promise<string | null>;
@@ -137,25 +138,6 @@ interface LocalApiKeyEntry {
 interface LocalJwksEntry {
   readonly generation: string;
   readonly entry: JwksCacheEntry;
-}
-
-function shortenedTtl(maxSeconds: number): number {
-  const random = Math.min(0.999_999_999, Math.max(0, Math.random()));
-  return Math.floor(maxSeconds * (0.5 + random * 0.5));
-}
-
-function putBounded<K, V>(
-  entries: Map<K, V>,
-  key: K,
-  value: V,
-  limit: number,
-): void {
-  entries.delete(key);
-  entries.set(key, value);
-  if (entries.size > limit) {
-    const oldest = entries.keys().next().value;
-    if (oldest !== undefined) entries.delete(oldest);
-  }
 }
 
 function localJwksKey(organizationId: string, configVersion: string): string {

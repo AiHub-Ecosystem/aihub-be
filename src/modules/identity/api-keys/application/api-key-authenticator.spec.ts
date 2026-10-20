@@ -292,6 +292,61 @@ describe('ApiKeyAuthenticator', () => {
     expect(repository.calls).toBe(1);
   });
 
+  it('bounds concurrent lookup flights and coalesces misses after capacity opens', async () => {
+    const { authenticator, repository, cache } = createAuthenticator();
+    const maxFlights = 1_024;
+    const pendingLookups: Array<(record: ApiKeyRecord | null) => void> = [];
+    let markCapacityReached: (() => void) | undefined;
+    let markOverflowLookupStarted: (() => void) | undefined;
+    const capacityReached = new Promise<void>((resolve) => {
+      markCapacityReached = resolve;
+    });
+    const overflowLookupStarted = new Promise<void>((resolve) => {
+      markOverflowLookupStarted = resolve;
+    });
+    repository.findByHash = () => {
+      repository.calls += 1;
+      return new Promise((resolve) => {
+        pendingLookups.push(resolve);
+        if (pendingLookups.length === maxFlights) markCapacityReached?.();
+        if (pendingLookups.length === maxFlights + 1) {
+          markOverflowLookupStarted?.();
+        }
+      });
+    };
+    cache.get = () => Promise.resolve(undefined);
+    cache.set = () => Promise.resolve();
+    cache.setMiss = () => Promise.resolve();
+
+    const authenticateKey = (index: number) =>
+      authenticator.authenticate({
+        value: `aihub_sk_${index.toString(36).padStart(43, 'A')}`,
+        environment: 'production',
+        clientIp: '203.0.113.10',
+      });
+    const requests = Array.from({ length: maxFlights }, (_, index) =>
+      authenticateKey(index),
+    );
+    await capacityReached;
+
+    const overflow = authenticateKey(maxFlights);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(repository.calls).toBe(maxFlights);
+
+    pendingLookups[0]?.(activeRecord);
+    await overflowLookupStarted;
+    const sameOverflow = authenticateKey(maxFlights);
+    pendingLookups[maxFlights]?.(activeRecord);
+    pendingLookups
+      .slice(1, maxFlights)
+      .forEach((resolve) => resolve(activeRecord));
+
+    await expect(
+      Promise.all([...requests, overflow, sameOverflow]),
+    ).resolves.toHaveLength(maxFlights + 2);
+    expect(repository.calls).toBe(maxFlights + 1);
+  });
+
   it('does not coalesce concurrent forceFresh Postgres lookups', async () => {
     const { authenticator, repository } = createAuthenticator();
     const credentials = {

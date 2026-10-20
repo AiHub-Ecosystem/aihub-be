@@ -19,6 +19,7 @@ import type {
 export { isApiKeyFormat } from '@/modules/identity/domain/api-key';
 
 export const AUTH_FAILURE_LIMIT = 20;
+const MAX_API_KEY_LOOKUP_FLIGHTS = 1_024;
 const AUTH_FAILURE_WINDOW_MS = 5 * 60 * 1_000;
 
 export function effectiveScopes(record: ApiKeyRecord): readonly string[] {
@@ -157,11 +158,27 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     }
   }
 
-  private findAndCache(hashHex: string): Promise<ApiKeyRecord | null> {
-    const existing = this.lookupFlights.get(hashHex);
-    if (existing !== undefined) {
-      recordIdentityCacheCoalescedWait('api_key');
-      return existing;
+  private async findAndCache(hashHex: string): Promise<ApiKeyRecord | null> {
+    while (true) {
+      const existing = this.lookupFlights.get(hashHex);
+      if (existing !== undefined) {
+        recordIdentityCacheCoalescedWait('api_key');
+        return existing;
+      }
+      if (this.lookupFlights.size < MAX_API_KEY_LOOKUP_FLIGHTS) {
+        break;
+      }
+
+      await Promise.race(
+        [...this.lookupFlights.values()].map((flight) =>
+          flight.then(
+            () => undefined,
+            () => undefined,
+          ),
+        ),
+      );
+      const cached = await this.getCachedRecord(hashHex);
+      if (cached !== undefined) return cached;
     }
 
     let flight: Promise<ApiKeyRecord | null>;

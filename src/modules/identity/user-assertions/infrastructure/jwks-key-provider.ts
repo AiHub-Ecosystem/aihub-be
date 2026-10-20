@@ -14,6 +14,10 @@ import type {
   OrganizationIdentityConfig,
   PublicJsonWebKeySet,
 } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
+import {
+  putBounded,
+  shortenedTtl,
+} from '@/modules/identity/shared/infrastructure/local-cache-policy';
 import type {
   JwksCacheEntry,
   JwksCachePort,
@@ -32,11 +36,6 @@ export const JWKS_MAX_RESPONSE_BYTES = 64 * 1024;
 export const JWKS_MAX_CONCURRENT_ORGANIZATIONS = 8;
 const MAX_LOCAL_JWKS_COOLDOWNS = 256;
 const JWKS_DISPATCHER = Symbol('JWKS_DISPATCHER');
-
-function shortenedTtl(maxMs: number): number {
-  const random = Math.min(0.999_999_999, Math.max(0, Math.random()));
-  return Math.floor(maxMs * (0.5 + random * 0.5));
-}
 
 function remainingCooldown(
   cooldowns: Map<string, number>,
@@ -57,12 +56,7 @@ function setCooldown(
   key: string,
   retryAt: number,
 ): void {
-  cooldowns.delete(key);
-  cooldowns.set(key, retryAt);
-  if (cooldowns.size > MAX_LOCAL_JWKS_COOLDOWNS) {
-    const oldest = cooldowns.keys().next().value;
-    if (oldest !== undefined) cooldowns.delete(oldest);
-  }
+  putBounded(cooldowns, key, retryAt, MAX_LOCAL_JWKS_COOLDOWNS);
 }
 
 class JwksCapacityError extends AppError {
