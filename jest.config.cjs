@@ -1,7 +1,21 @@
+const {
+  DEFAULT_MAX_WORKERS,
+  REQUEST_VARIABLE,
+  resolveUnitLaneWorkers,
+} = require('./scripts/checks/jest-worker-cap.cjs');
+
+const unitLane = resolveUnitLaneWorkers({});
+if (unitLane.capped) {
+  // A slower lane on a tight machine must not read as a hung test run.
+  console.warn(
+    `jest: unit lane capped to ${unitLane.maxWorkers} worker (normally ${DEFAULT_MAX_WORKERS}) because free memory is below its budget. Pin a count with ${REQUEST_VARIABLE} to silence this.`,
+  );
+}
+
 /** @type {import('jest').Config} */
 module.exports = {
   testEnvironment: 'node',
-  maxWorkers: 2,
+  maxWorkers: unitLane.maxWorkers,
   rootDir: '.',
   setupFiles: [
     '<rootDir>/test/runtime-secret-env.ts',
