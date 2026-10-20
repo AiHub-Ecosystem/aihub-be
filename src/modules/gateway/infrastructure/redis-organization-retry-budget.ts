@@ -16,6 +16,23 @@ import {
 const WINDOW_MS = 60_000;
 const RETRY_HINT_JITTER_MS = 1_000;
 
+/**
+ * How many distinct Idempotency-Keys one Organization's retry budget remembers.
+ *
+ * A safety bound, not a capacity promise: without it the ledger tracks the
+ * Organization's first-attempt volume for a rolling day, so one busy tenant
+ * could grow the shared Redis by hundreds of megabytes. The gateway's quota
+ * counter, rate limit, and concurrency leases share that instance and AIHUB
+ * requires `noeviction` (#371), so an unbounded ledger would turn every Redis
+ * write into an error, not only this one.
+ *
+ * At the ceiling the oldest remembered keys are dropped, so a dropped key's
+ * next request counts as a first attempt. That direction is deliberate: the
+ * budget may become more permissive for an old key, but it never refuses a
+ * first attempt it could not classify.
+ */
+export const ORGANIZATION_RETRY_SEEN_CAP = 10_000;
+
 export const ORGANIZATION_RETRY_BUDGET_SCRIPT = `
 local clock = redis.call('TIME')
 local now = tonumber(clock[1]) * 1000 + math.floor(tonumber(clock[2]) / 1000)
@@ -26,6 +43,10 @@ redis.call('ZREMRANGEBYSCORE', KEYS[3], '-inf', now)
 local seen = redis.call('ZSCORE', KEYS[3], ARGV[1])
 if not seen then
   redis.call('ZADD', KEYS[3], now + 86400000, ARGV[1])
+  local cap = tonumber(ARGV[3])
+  if cap and cap > 0 then
+    redis.call('ZREMRANGEBYRANK', KEYS[3], 0, -(cap + 1))
+  end
   redis.call('ZADD', KEYS[1], now, ARGV[2])
   redis.call('EXPIRE', KEYS[1], 120)
   redis.call('EXPIRE', KEYS[2], 120)
@@ -101,6 +122,7 @@ export class RedisOrganizationRetryBudget
         `${prefix}:seen`,
         requestHash,
         request.requestId,
+        String(ORGANIZATION_RETRY_SEEN_CAP),
       );
       if (result !== 0 && result !== 1) {
         throw new Error('Redis retry budget result is invalid');
