@@ -37,7 +37,7 @@ services:
       BENCHMARK_STUB_ERROR_RATE: ${BENCHMARK_STUB_ERROR_RATE:-0}
     volumes:
       - ./capacity-benchmark-support.mjs:/work/capacity-benchmark-support.mjs:ro
-      - ../../test/fixtures:/fixtures:ro
+      - ../../../test/fixtures:/fixtures:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -143,7 +143,7 @@ services:
     volumes:
       - ${BENCHMARK_K6_SCRIPT_PATH:-./capacity-benchmark-k6.js}:/scripts/capacity-benchmark-k6.js:ro
       - ${BENCHMARK_UTILS_SCRIPT_PATH:-./capacity-benchmark-utils.mjs}:/scripts/capacity-benchmark-utils.mjs:ro
-      - ../../test/fixtures:/fixtures:ro
+      - ../../../test/fixtures:/fixtures:ro
       - benchmark-data:/data:ro
     networks: [benchmark]
 
