@@ -26,6 +26,16 @@ When the allowance is spent, refuse the repeat with `429` and `Retry-After`. Thi
 
 The one-repeat floor deliberately permits a 2x request factor for an Organization with one first attempt in the window. At higher volume, the 10% ratio bounds edge request amplification to 1.1x. A client that retries with a fresh key is outside this retry classifier and remains subject to the existing request admission controls.
 
+### Remembered-key ledger
+
+Classification needs memory: the gateway remembers each (Organization, operation, Idempotency-Key) for 24 hours so a later request with
+the same key is a repeat. That ledger is one Redis sorted set per Organization and is capped at 10,000 remembered keys per Organization
+(#850). At the ceiling the oldest keys are dropped, so a dropped key's next request counts as a first attempt: the budget becomes more
+permissive for an old key, and it never refuses a first attempt it could not classify. The cap is a memory safety bound, not a capacity
+promise. Redis is not an evictable cache here, and the quota counter, rate limit, and concurrency leases share the instance; an unbounded
+ledger would fail their writes too, not only this budget's. The per-member cost measurement that governs any change to the cap belongs to
+#850.
+
 ### AIHUB retries to an AI Service
 
 Keep #332's per-operation retry budget and add one token bucket shared by all operations targeting each downstream service. The operation budget is 10% of first attempts over a rolling 60 seconds. It limits retries for one operation; the service bucket also limits aggregate retries when several operations share that service.

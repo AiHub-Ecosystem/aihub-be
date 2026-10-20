@@ -10,17 +10,22 @@
 
 Prefix `aihub:v1:` — evolving the cache schema later only requires bumping to `v2`, avoiding manual cleanup of stale keys.
 
-| Key                           | Type    | TTL           | Source of Truth        | When Redis Dies                          |
-| ----------------------------- | ------- | ------------- | ---------------------- | ---------------------------------------- |
-| `v1:key:<sha256hex>`          | JSON    | 60s           | Postgres               | Falls through directly to Postgres       |
-| `v1:key:miss:<sha256hex>`     | `1`     | 30s           | Postgres               | Same as above                            |
-| `v1:jwks:<org_id>`            | JSON    | 15m           | Customer JWKS endpoint | Fetches directly (with SSRF guards)      |
-| `v1:authfail:<ip>`            | counter | 300s          | —                      | **Fail open** + emit alert               |
-| `v1:rl:<key_id>:<minute>`     | counter | 120s          | —                      | **Fail open** + local in-memory backstop |
-| `v1:inflight:<org_id>`        | zset    | self-cleaning | —                      | **Fail open** + local in-memory backstop |
-| `v1:quota:<org_id>:<YYYY-MM>` | counter | 40 days       | `usage_records`        | **Fail open** + mark unverified          |
+| Key                             | Type    | TTL            | Source of Truth        | When Redis Dies                            |
+| ------------------------------- | ------- | -------------- | ---------------------- | ------------------------------------------ |
+| `v1:key:<sha256hex>`            | JSON    | 60s            | Postgres               | Falls through directly to Postgres         |
+| `v1:key:miss:<sha256hex>`       | `1`     | 30s            | Postgres               | Same as above                              |
+| `v1:jwks:<org_id>`              | JSON    | 15m            | Customer JWKS endpoint | Fetches directly (with SSRF guards)        |
+| `v1:authfail:<ip>`              | counter | 300s           | —                      | **Fail open** + emit alert                 |
+| `v1:rl:<key_id>:<minute>`       | counter | 120s           | —                      | **Fail open** + local in-memory backstop   |
+| `v1:inflight:<org_id>`          | zset    | self-cleaning  | —                      | **Fail open** + local in-memory backstop   |
+| `v1:quota:<org_id>:<YYYY-MM>`   | counter | 40 days        | `usage_records`        | **Fail open** + mark unverified            |
+| `v1:org-retry:{org_id}:first`   | zset    | 120s           | —                      | **Fail closed** (refuse) until it recovers |
+| `v1:org-retry:{org_id}:repeats` | zset    | 120s           | —                      | **Fail closed** (refuse) until it recovers |
+| `v1:org-retry:{org_id}:seen`    | zset    | 24h, refreshed | —                      | **Fail closed** (refuse) until it recovers |
 
 **Zero keys dedicated to idempotency.** The brief suggested "Redis + durable fallback"; this design eliminates Redis from that path entirely. Postgres's `ON CONFLICT` handles race conditions natively ([03 §E.4](03-database.md#e4-handling-idempotency-race-conditions-without-distributed-locks)), and introducing Redis would create dual sources of truth for the one mechanism that must never desynchronize.
+
+The retry-budget ledger is the one structure here whose size follows traffic. `seen` remembers each Organization, operation, and Idempotency-Key for 24 hours so a repeat can be classified, and is capped at 10,000 remembered keys per Organization ([ADR-0113](../../../adr/0113-organization-and-service-retry-budgets.md)). At the ceiling the oldest members are dropped, so a dropped key's next request counts as a first attempt: the budget becomes more permissive for an old key but never refuses a first attempt it could not classify. The cap is a memory safety bound, not a capacity promise — with `maxmemory-policy noeviction` (§F.6) an unbounded ledger would fail every Redis write on the instance, not only this one.
 
 <a id="f2-rate-limit-fixed-window-không-lua"></a>
 <a id="f2-rate-limit-fixed-window-without-lua"></a>
