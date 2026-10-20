@@ -203,6 +203,7 @@ class ScriptedUsageRepository {
 }
 
 let idempotencyDelayMs = 0;
+let retryBudgetUnavailable = false;
 
 const idempotency = {
   async execute<T>(
@@ -288,7 +289,19 @@ describe('request completion log over the HTTP boundary', () => {
       .overrideProvider(API_KEY_AUTHENTICATOR)
       .useValue(testApiKeyAuthenticator)
       .overrideProvider(ORGANIZATION_RETRY_BUDGET)
-      .useValue({ consume: async () => ({ allowed: true }) })
+      .useValue({
+        consume: async () => {
+          if (retryBudgetUnavailable) {
+            throw new AppError({
+              code: 'RETRY_BUDGET_UNAVAILABLE',
+              message: 'Organization retry budget is unavailable',
+              retryable: true,
+              retryAfterMs: 1_000,
+            });
+          }
+          return { allowed: true };
+        },
+      })
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -318,6 +331,7 @@ describe('request completion log over the HTTP boundary', () => {
     dispatcher.succeed();
     usageRepository.succeed();
     idempotencyDelayMs = 0;
+    retryBudgetUnavailable = false;
     usageRepository.records.length = 0;
     log.reset();
     exporter.reset();
@@ -587,6 +601,42 @@ describe('request completion log over the HTTP boundary', () => {
         outcome: 'internal_error',
         error_code: 'INTERNAL_ERROR',
       }),
+    );
+  });
+
+  it('counts a retry-budget outage by operation and public response outcome', async () => {
+    const metricsBefore = await metricValue(app, 'aihub_requests_total');
+    retryBudgetUnavailable = true;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: GRADE_URL,
+      headers: { 'idempotency-key': 'completion-budget-outage' },
+      payload: VALID_BODY,
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'RETRY_BUDGET_UNAVAILABLE',
+        retryable: true,
+        retry_after_ms: 1_000,
+      },
+    });
+    expect(log.only()).toEqual(
+      expect.objectContaining({
+        operation: 'writing.task1.grade',
+        http_status: 503,
+        outcome: 'internal_error',
+        error_code: 'RETRY_BUDGET_UNAVAILABLE',
+      }),
+    );
+    expect(await metricValue(app, 'aihub_requests_total')).toBe(
+      metricsBefore + 1,
+    );
+    const metrics = (await app.inject({ method: 'GET', url: '/metrics' })).body;
+    expect(metrics).toContain(
+      'aihub_requests_total{operation="writing.task1.grade",status="503",outcome="internal_error"} 1',
     );
   });
 

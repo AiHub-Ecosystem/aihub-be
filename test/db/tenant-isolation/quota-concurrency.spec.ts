@@ -2,6 +2,10 @@ import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-hos
 
 import { RedisConcurrencyLimiter } from '@/modules/gateway/infrastructure/redis-concurrency-limiter';
 import {
+  RedisOrganizationRetryBudget,
+  type RedisOrganizationRetryBudgetClient,
+} from '@/modules/gateway/infrastructure/redis-organization-retry-budget';
+import {
   RedisQuotaCounter,
   quotaKeyForMonth,
 } from '@/modules/gateway/infrastructure/redis-quota-counter';
@@ -156,5 +160,108 @@ describe('tenant isolation for Redis counters', () => {
     await expect(
       redisClients.raw.zcard(`aihub:v1:inflight:${ORGANIZATION_B}`),
     ).resolves.toBe(1);
+  });
+
+  it('bounds a five-times same-key retry storm across two Redis clients', async () => {
+    const secondRedis = redisClients.raw.duplicate();
+    await new Promise<void>((resolve, reject) => {
+      secondRedis.once('ready', resolve);
+      secondRedis.once('error', reject);
+    });
+    const secondClient: RedisOrganizationRetryBudgetClient = {
+      eval: async (script, numberOfKeys, ...args) => {
+        const result = await secondRedis.eval(
+          script,
+          numberOfKeys,
+          ...args.map(String),
+        );
+        if (typeof result !== 'number') {
+          throw new Error('Redis eval result is invalid');
+        }
+        return result;
+      },
+      quit: () => secondRedis.quit(),
+    };
+    const firstInstance = new RedisOrganizationRetryBudget(
+      '',
+      redisClients.gateway,
+      () => 0,
+      NOOP_LOGGER,
+    );
+    const secondInstance = new RedisOrganizationRetryBudget(
+      '',
+      secondClient,
+      () => 0,
+      NOOP_LOGGER,
+    );
+    let requestNumber = 0;
+    const consume = (
+      budget: RedisOrganizationRetryBudget,
+      organizationId: string,
+      idempotencyKey: string,
+      operation: 'writing.task1.grade' | 'writing.task2.grade',
+    ) =>
+      budget.consume({
+        organizationId,
+        idempotencyKey,
+        operation,
+        requestId: `req_retry_storm_${requestNumber++}`,
+      });
+
+    try {
+      const firstAttempts = await Promise.all(
+        Array.from({ length: 10 }, (_, index) =>
+          consume(
+            firstInstance,
+            ORGANIZATION_A,
+            `storm-${index}`,
+            index % 2 === 0 ? 'writing.task1.grade' : 'writing.task2.grade',
+          ),
+        ),
+      );
+      expect(firstAttempts.every(({ allowed }) => allowed)).toBe(true);
+
+      const retries = await Promise.all(
+        Array.from({ length: 40 }, (_, index) => {
+          const firstAttempt = index % 10;
+          return consume(
+            index % 2 === 0 ? firstInstance : secondInstance,
+            ORGANIZATION_A,
+            `storm-${firstAttempt}`,
+            firstAttempt % 2 === 0
+              ? 'writing.task1.grade'
+              : 'writing.task2.grade',
+          );
+        }),
+      );
+      const admittedIngress =
+        firstAttempts.filter(({ allowed }) => allowed).length +
+        retries.filter(({ allowed }) => allowed).length;
+
+      expect(retries.filter(({ allowed }) => allowed)).toHaveLength(1);
+      expect(admittedIngress).toBeLessThanOrEqual(10 * 1.1);
+
+      const lowVolumeFirst = await consume(
+        firstInstance,
+        ORGANIZATION_B,
+        'single-first-attempt',
+        'writing.task1.grade',
+      );
+      const lowVolumeRetries = await Promise.all(
+        Array.from({ length: 4 }, (_, index) =>
+          consume(
+            index % 2 === 0 ? firstInstance : secondInstance,
+            ORGANIZATION_B,
+            'single-first-attempt',
+            'writing.task1.grade',
+          ),
+        ),
+      );
+
+      expect(lowVolumeFirst.allowed).toBe(true);
+      expect(lowVolumeRetries.filter(({ allowed }) => allowed)).toHaveLength(1);
+    } finally {
+      await secondRedis.quit();
+    }
   });
 });

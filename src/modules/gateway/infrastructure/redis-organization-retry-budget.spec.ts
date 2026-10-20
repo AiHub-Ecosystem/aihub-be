@@ -176,6 +176,36 @@ describe('RedisOrganizationRetryBudget', () => {
     expect(logger.warn).toHaveBeenCalledTimes(1);
   });
 
+  it('reports recovery after Redis accepts a budget command again', async () => {
+    let unavailable = true;
+    const recovering: RedisOrganizationRetryBudgetClient = {
+      eval: async () => {
+        if (unavailable) throw new Error('redis timeout');
+        return 1;
+      },
+      quit: async () => 'OK',
+    };
+    const logger = { warn: jest.fn(), log: jest.fn() };
+    const budget = new RedisOrganizationRetryBudget(
+      '',
+      recovering,
+      () => 0,
+      logger,
+    );
+
+    await expect(budget.consume(request('recovering'))).rejects.toMatchObject({
+      code: 'RETRY_BUDGET_UNAVAILABLE',
+      retryAfterMs: 1_000,
+    });
+    unavailable = false;
+    await expect(budget.consume(request('recovering'))).resolves.toEqual({
+      allowed: true,
+    });
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.log).toHaveBeenCalledTimes(1);
+  });
+
   it('fails closed when Redis is not configured', async () => {
     const budget = new RedisOrganizationRetryBudget('');
 
