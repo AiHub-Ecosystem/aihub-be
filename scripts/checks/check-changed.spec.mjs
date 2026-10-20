@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { test } from 'node:test';
 
+import { BATCHED_GATES } from './check-batch.cjs';
 import {
   GATE_COMMANDS,
   isEntryPoint,
@@ -193,8 +194,14 @@ await test('all gates in pnpm verify have commands and a tested path mapping', (
   const invoked = [
     ...packageJson.scripts.verify.matchAll(/\bpnpm\s+([\w:-]+)/g),
   ].map((match) => match[1]);
+  // `check:batch` is one step that runs several gates. The guarantee is about
+  // the gates, so expand the step into its declared members rather than letting
+  // a single step name stand in for the coverage of eleven.
+  const expanded = invoked.flatMap((gate) =>
+    gate === 'check:batch' ? BATCHED_GATES : [gate],
+  );
   const mapped = new Set(pathCases.flatMap(({ gates }) => gates));
-  for (const gate of invoked) {
+  for (const gate of expanded) {
     assert.ok(
       Object.hasOwn(GATE_COMMANDS, gate),
       `missing command for verify gate ${gate}`,
@@ -204,6 +211,10 @@ await test('all gates in pnpm verify have commands and a tested path mapping', (
       `verify gate ${gate} has no tested path mapping`,
     );
   }
+  // The batch is a verify-chain step only. The subset gate keeps selecting
+  // individual gates, because narrowing to fewer checks is its whole purpose.
+  assert.ok(!Object.hasOwn(GATE_COMMANDS, 'check:batch'));
+  assert.ok(invoked.includes('check:batch'));
 });
 
 await test('check:changed stays out of verify and CI', () => {
