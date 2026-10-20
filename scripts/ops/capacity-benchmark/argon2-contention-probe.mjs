@@ -1,7 +1,9 @@
 import { createPublicKey } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { createServer } from 'node:http';
+import { createRequire } from 'node:module';
 import { performance } from 'node:perf_hooks';
+import { pathToFileURL } from 'node:url';
 
 const PROBE_PORT = 39117;
 const PROBE_INTERVAL_MS = 100;
@@ -12,6 +14,9 @@ let chartVerification;
 let chartVerificationRequested = false;
 let verifyChart;
 let queueWaitBaseline = 0;
+const requireFromApp = createRequire('/app/package.json');
+const importFromApp = (specifier) =>
+  import(pathToFileURL(requireFromApp.resolve(specifier)));
 
 export function percentile(samples, fraction) {
   if (samples.length === 0) return null;
@@ -80,7 +85,8 @@ async function startProbeServer() {
     throw new Error('capacity probe requires the benchmark JWT key');
   }
 
-  const { SignJWT, importPKCS8, importSPKI, jwtVerify } = await import('jose');
+  const { SignJWT, importPKCS8, importSPKI, jwtVerify } =
+    await importFromApp('jose');
   const privateKeyPem = Buffer.from(encodedKey, 'base64').toString('utf8');
   const signingKey = await importPKCS8(privateKeyPem, 'RS256');
   const publicKeyPem = createPublicKey(privateKeyPem)
@@ -98,7 +104,7 @@ async function startProbeServer() {
     { sanitizeWritingChartImage },
     { serializeWritingChartImageProcessing },
   ] = await Promise.all([
-    import('sharp'),
+    importFromApp('sharp'),
     import(
       '/app/dist/modules/writing/application/writing-chart-image-verifier.js'
     ),
