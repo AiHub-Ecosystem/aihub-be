@@ -33,8 +33,11 @@ the same key is a repeat. That ledger is one Redis sorted set per Organization a
 (#850). At the ceiling the oldest keys are dropped, so a dropped key's next request counts as a first attempt: the budget becomes more
 permissive for an old key, and it never refuses a first attempt it could not classify. The cap is a memory safety bound, not a capacity
 promise. Redis is not an evictable cache here, and the quota counter, rate limit, and concurrency leases share the instance; an unbounded
-ledger would fail their writes too, not only this budget's. The per-member cost measurement that governs any change to the cap belongs to
-#850.
+ledger would fail their writes too, not only this budget's. A measurement on Redis 7.4.10 of a sorted set holding 10,000 64-character
+hex members with millisecond scores reports 1,695,520 bytes through `MEMORY USAGE <key> SAMPLES 0`; a second set of the same size
+reported 1,697,120 bytes, and the marginal cost between 10,000 and 20,000 members was 169.4 bytes per member. One Organization's
+ledger therefore stays near 1.7 MB at the ceiling, which bounds a deployment holding N Organizations at about 1.7 MB × N — roughly
+17 MB at ten Organizations and 170 MB at one hundred. Re-measure and record the result before raising the cap.
 
 ### AIHUB retries to an AI Service
 
