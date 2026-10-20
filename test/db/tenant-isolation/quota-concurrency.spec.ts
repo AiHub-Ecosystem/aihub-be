@@ -30,6 +30,7 @@ const NOOP_LOGGER = {
 function quotaContext(organizationId: string): ExecutionContextHost {
   return new ExecutionContextHost([
     {
+      headers: {},
       aihubAuth: {
         organizationId,
         monthlyRequestQuota: 1,
