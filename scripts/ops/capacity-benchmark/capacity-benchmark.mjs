@@ -21,7 +21,7 @@ import {
 } from './capacity-benchmark-utils.mjs';
 
 const scriptPath = fileURLToPath(import.meta.url);
-const repositoryRoot = path.resolve(path.dirname(scriptPath), '../..');
+const repositoryRoot = path.resolve(path.dirname(scriptPath), '../../..');
 const composeFile = path.join(
   repositoryRoot,
   'scripts/ops/capacity-benchmark/capacity-benchmark.compose.yml',
