@@ -7,7 +7,7 @@ import argon2 from 'argon2';
 import { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import apiKeyModule from '../../dist/modules/identity/domain/api-key.js';
+import apiKeyModule from '../../../dist/modules/identity/api-keys/application/organization-api-key-generator.js';
 
 const { generateApiKey } = apiKeyModule;
 
