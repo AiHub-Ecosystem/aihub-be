@@ -5,13 +5,12 @@ import { Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 import type { OperationId } from '@/catalog/operation-id';
 
 /**
- * Shared metric registry. The protection-state metrics
- * (`aihub_rejected_total`, `aihub_redis_unavailable_total`) belong to #200 and
- * the breaker gauge to #199, so they are absent here until those land.
+ * Shared metric registry. The rejection and Redis-unavailable counters
+ * (`aihub_rejected_total`, `aihub_redis_unavailable_total`) belong to #200.
  */
 export const METRICS_ROUTE_PATH = '/metrics';
 
-const registry = new Registry();
+export const registry = new Registry();
 
 let objectStorageQueueSource: (() => number) | undefined;
 

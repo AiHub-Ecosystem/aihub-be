@@ -8,6 +8,7 @@ import type { OperationDispatcherPort } from '@/modules/gateway/application/oper
 import { SandboxAdmission } from '@/modules/gateway/application/sandbox-admission';
 import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import type { DispatchAttemptRecordPort } from '@/modules/metering/public/dispatch-attempts';
+import { DownstreamCircuitBreakers } from './downstream-circuit-breakers';
 import type { DownstreamHttpClient } from './downstream-http.client';
 import {
   DISPATCHER_LOG_CONTEXT,
@@ -27,6 +28,7 @@ export function createHttpOperationDispatcher(
   sandboxBudget?: SandboxDispatchBudgetPort,
   retryBudget?: DownstreamRetryBudgetPort,
   random: () => number = Math.random,
+  circuitBreakers = new DownstreamCircuitBreakers(),
 ): OperationDispatcherPort {
   const logger = new Logger(DISPATCHER_LOG_CONTEXT);
   const warn = (message: string): void => logger.warn(message);
@@ -35,6 +37,7 @@ export function createHttpOperationDispatcher(
       httpClient,
       tokenIssuer,
       adapters,
+      circuitBreakers,
       retryBudget,
       random,
     ),

@@ -61,6 +61,7 @@ import {
   type SandboxDispatchBudgetPort,
 } from './application/sandbox-dispatch-budget.port';
 import { ConfiguredTokenIssuer } from './infrastructure/configured-token-issuer';
+import { DownstreamCircuitBreakers } from './infrastructure/downstream-circuit-breakers';
 import { DownstreamHttpClient } from './infrastructure/downstream-http.client';
 import {
   DISPATCHER_LOG_CONTEXT,
@@ -159,7 +160,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     {
       provide: DOWNSTREAM_RETRY_BUDGET,
       useFactory: (client: RedisGatewayClient | undefined) => {
-        // Keep retries off until #199 is wired and #273/#327 ground each service bucket.
+        // Keep retries off until #273/#327 ground each service bucket.
         return new RedisDownstreamRetryBudget(client);
       },
       inject: [REDIS_GATEWAY_CLIENT],
@@ -183,6 +184,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       useFactory: (runtime: PrismaClientHolder): SandboxDispatchBudgetPort =>
         new PostgresSandboxDispatchBudget(runtime.prisma),
     },
+    DownstreamCircuitBreakers,
     {
       provide: OPERATION_DISPATCHER,
       useFactory: (
@@ -191,6 +193,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
         dispatchAttempts: DispatchAttemptRecordPort,
         sandboxBudget: SandboxDispatchBudgetPort,
         retryBudget: DownstreamRetryBudgetPort,
+        circuitBreakers: DownstreamCircuitBreakers,
       ): OperationDispatcherPort => {
         const logger = new Logger(DISPATCHER_LOG_CONTEXT);
         const warn = (message: string): void => logger.warn(message);
@@ -204,7 +207,9 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
               speakingGradingAdapter,
               speakingGradingJsonAdapter,
             ],
+            circuitBreakers,
             retryBudget,
+            Math.random,
           ),
           dispatchAttempts,
           new SandboxAdmission(sandboxBudget, warn),
@@ -218,6 +223,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
         DISPATCH_ATTEMPT_RECORD,
         SANDBOX_DISPATCH_BUDGET,
         DOWNSTREAM_RETRY_BUDGET,
+        DownstreamCircuitBreakers,
       ],
     },
     {

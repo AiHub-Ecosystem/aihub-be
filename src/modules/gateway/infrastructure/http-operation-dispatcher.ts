@@ -20,6 +20,7 @@ import type {
   TransportCall,
 } from '@/modules/gateway/application/operation-transport.port';
 import { extractDownstreamTelemetry } from '@/modules/metering/public/telemetry';
+import { DownstreamCircuitBreakers } from './downstream-circuit-breakers';
 import {
   type DownstreamHttpClient,
   isDefinitelyNotDispatched,
@@ -258,6 +259,7 @@ export class HttpOperationTransport implements OperationTransportPort {
     private readonly httpClient: DownstreamHttpClient,
     private readonly tokenIssuer: InternalTokenIssuerPort,
     adapters: readonly DownstreamAdapter<unknown, unknown>[],
+    private readonly circuitBreakers: DownstreamCircuitBreakers,
     private readonly retryBudget?: DownstreamRetryBudgetPort,
     private readonly random: () => number = Math.random,
   ) {
@@ -310,22 +312,36 @@ export class HttpOperationTransport implements OperationTransportPort {
                 .catch(() => false);
             }
             try {
-              response = await this.httpClient.request(downstreamRequest, {
-                ...(authorization === undefined ? {} : { authorization }),
-                downstream: adapter.downstream,
-                requestId: context.requestId,
-                deadlineMs: Math.max(
-                  1,
-                  Math.floor(call.deadlineMs - (performance.now() - startedAt)),
-                ),
-                signal: call.signal,
-                onResponseReceived: (statusCode) => {
-                  responseStatus = statusCode;
-                  call.onResponseReceived(statusCode);
+              response = await this.circuitBreakers.execute(
+                operation,
+                async () => {
+                  const received = await this.httpClient.request(
+                    downstreamRequest,
+                    {
+                      ...(authorization === undefined ? {} : { authorization }),
+                      downstream: adapter.downstream,
+                      requestId: context.requestId,
+                      deadlineMs: Math.max(
+                        1,
+                        Math.floor(
+                          call.deadlineMs - (performance.now() - startedAt),
+                        ),
+                      ),
+                      signal: call.signal,
+                      onResponseReceived: (statusCode) => {
+                        responseStatus = statusCode;
+                        call.onResponseReceived(statusCode);
+                      },
+                    },
+                  );
+                  const responseError = downstreamResponseError(
+                    adapter,
+                    received,
+                  );
+                  if (responseError !== undefined) throw responseError;
+                  return received;
                 },
-              });
-              const responseError = downstreamResponseError(adapter, response);
-              if (responseError !== undefined) throw responseError;
+              );
               break;
             } catch (error) {
               if (
