@@ -292,26 +292,19 @@ describe('ApiKeyAuthenticator', () => {
     expect(repository.calls).toBe(1);
   });
 
-  it('bounds concurrent lookup flights and coalesces misses after capacity opens', async () => {
+  it('rejects a new hash at flight capacity while coalescing an existing hash', async () => {
     const { authenticator, repository, cache } = createAuthenticator();
     const maxFlights = 1_024;
     const pendingLookups: Array<(record: ApiKeyRecord | null) => void> = [];
     let markCapacityReached: (() => void) | undefined;
-    let markOverflowLookupStarted: (() => void) | undefined;
     const capacityReached = new Promise<void>((resolve) => {
       markCapacityReached = resolve;
-    });
-    const overflowLookupStarted = new Promise<void>((resolve) => {
-      markOverflowLookupStarted = resolve;
     });
     repository.findByHash = () => {
       repository.calls += 1;
       return new Promise((resolve) => {
         pendingLookups.push(resolve);
         if (pendingLookups.length === maxFlights) markCapacityReached?.();
-        if (pendingLookups.length === maxFlights + 1) {
-          markOverflowLookupStarted?.();
-        }
       });
     };
     cache.get = () => Promise.resolve(undefined);
@@ -330,21 +323,23 @@ describe('ApiKeyAuthenticator', () => {
     await capacityReached;
 
     const overflow = authenticateKey(maxFlights);
+    await expect(overflow).rejects.toMatchObject({
+      code: 'DATABASE_UNAVAILABLE',
+      httpStatus: 503,
+      retryable: true,
+      retryAfterMs: 1_000,
+      retryAfterHeader: true,
+    });
+    const sameHash = authenticateKey(0);
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(repository.calls).toBe(maxFlights);
 
-    pendingLookups[0]?.(activeRecord);
-    await overflowLookupStarted;
-    const sameOverflow = authenticateKey(maxFlights);
-    pendingLookups[maxFlights]?.(activeRecord);
-    pendingLookups
-      .slice(1, maxFlights)
-      .forEach((resolve) => resolve(activeRecord));
+    pendingLookups.forEach((resolve) => resolve(activeRecord));
 
-    await expect(
-      Promise.all([...requests, overflow, sameOverflow]),
-    ).resolves.toHaveLength(maxFlights + 2);
-    expect(repository.calls).toBe(maxFlights + 1);
+    await expect(Promise.all([...requests, sameHash])).resolves.toHaveLength(
+      maxFlights + 1,
+    );
+    expect(repository.calls).toBe(maxFlights);
   });
 
   it('does not coalesce concurrent forceFresh Postgres lookups', async () => {

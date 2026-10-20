@@ -64,6 +64,16 @@ function rateLimited(): AppError {
   });
 }
 
+function apiKeyLookupCapacityExceeded(): AppError {
+  return new AppError({
+    code: 'DATABASE_UNAVAILABLE',
+    message: 'API-key lookup capacity is temporarily unavailable',
+    retryable: true,
+    retryAfterMs: 1_000,
+    retryAfterHeader: true,
+  });
+}
+
 export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
   private readonly lookupFlights = new Map<
     string,
@@ -158,27 +168,14 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     }
   }
 
-  private async findAndCache(hashHex: string): Promise<ApiKeyRecord | null> {
-    while (true) {
-      const existing = this.lookupFlights.get(hashHex);
-      if (existing !== undefined) {
-        recordIdentityCacheCoalescedWait('api_key');
-        return existing;
-      }
-      if (this.lookupFlights.size < MAX_API_KEY_LOOKUP_FLIGHTS) {
-        break;
-      }
-
-      await Promise.race(
-        [...this.lookupFlights.values()].map((flight) =>
-          flight.then(
-            () => undefined,
-            () => undefined,
-          ),
-        ),
-      );
-      const cached = await this.getCachedRecord(hashHex);
-      if (cached !== undefined) return cached;
+  private findAndCache(hashHex: string): Promise<ApiKeyRecord | null> {
+    const existing = this.lookupFlights.get(hashHex);
+    if (existing !== undefined) {
+      recordIdentityCacheCoalescedWait('api_key');
+      return existing;
+    }
+    if (this.lookupFlights.size >= MAX_API_KEY_LOOKUP_FLIGHTS) {
+      throw apiKeyLookupCapacityExceeded();
     }
 
     let flight: Promise<ApiKeyRecord | null>;
