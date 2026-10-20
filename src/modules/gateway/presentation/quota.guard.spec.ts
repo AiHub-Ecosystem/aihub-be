@@ -176,53 +176,71 @@ describe('QuotaGuard', () => {
     });
   });
 
-  it('allows an exact completed Writing replay at exhausted quota without consuming another quota unit', async () => {
-    const counter = new FakeQuotaCounter();
-    counter.current = 5;
-    const request = requestFor();
-    Object.assign(request, {
-      id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
-      headers: { 'idempotency-key': 'completed-writing' },
-      body: {
-        question: 'Describe the chart.',
-        chart_type: 'Bar Chart',
-        essay: 'The chart shows a clear trend.',
-        image_url: 'https://example.com/chart.png',
-      },
-      aihubIdentity: {
-        userId: 'user_acme',
+  it.each([
+    {
+      scenario: 'exhausted monthly quota',
+      counterUnavailable: false,
+      hardStopOnQuota: false,
+    },
+    {
+      scenario: 'hard-stop quota counter outage',
+      counterUnavailable: true,
+      hardStopOnQuota: true,
+    },
+  ])(
+    'allows an exact completed Writing replay during $scenario without consuming another quota unit',
+    async ({ counterUnavailable, hardStopOnQuota }) => {
+      const counter = new FakeQuotaCounter();
+      counter.current = 5;
+      counter.shouldFail = counterUnavailable;
+      const request = requestFor({ ...baseAuthenticated, hardStopOnQuota });
+      Object.assign(request, {
+        id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+        headers: { 'idempotency-key': 'completed-writing' },
+        body: {
+          question: 'Describe the chart.',
+          chart_type: 'Bar Chart',
+          essay: 'The chart shows a clear trend.',
+          image_url: 'https://example.com/chart.png',
+        },
+        aihubIdentity: {
+          userId: 'user_acme',
+          organizationId: 'org_acme',
+          scopes: [],
+        },
+      });
+      const findCompletedReplay = jest.fn().mockResolvedValue({
+        responseStatus: 200,
+        responseBody: { operation: 'writing.task1.grade', data: {} },
+      });
+      const idempotency = {
+        findCompletedReplay,
+      } as unknown as IdempotencyServicePort;
+      const guard = new QuotaGuard(counter, now, idempotency);
+
+      await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
+
+      expect(counter.reads).toEqual(['org_acme']);
+      expect(findCompletedReplay).toHaveBeenCalledWith({
         organizationId: 'org_acme',
-        scopes: [],
-      },
-    });
-    const findCompletedReplay = jest.fn().mockResolvedValue({
-      responseStatus: 200,
-      responseBody: { operation: 'writing.task1.grade', data: {} },
-    });
-    const idempotency = {
-      findCompletedReplay,
-    } as unknown as IdempotencyServicePort;
-    const guard = new QuotaGuard(counter, now, idempotency);
-
-    await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
-
-    expect(counter.reads).toEqual(['org_acme']);
-    expect(findCompletedReplay).toHaveBeenCalledWith({
-      organizationId: 'org_acme',
-      operation: 'writing.task1.grade',
-      actorId: 'user_acme',
-      idempotencyKey: 'completed-writing',
-      requestBody: {
-        question: 'Describe the chart.',
-        chart_type: 'Bar Chart',
-        essay: 'The chart shows a clear trend.',
-        image_url: 'https://example.com/chart.png',
-      },
-    });
-    expect(getMeteringEvidence(request)).toEqual(
-      expect.objectContaining({ quotaTracked: true }),
-    );
-  });
+        operation: 'writing.task1.grade',
+        actorId: 'user_acme',
+        idempotencyKey: 'completed-writing',
+        requestBody: {
+          question: 'Describe the chart.',
+          chart_type: 'Bar Chart',
+          essay: 'The chart shows a clear trend.',
+          image_url: 'https://example.com/chart.png',
+        },
+      });
+      expect(getMeteringEvidence(request)).toEqual(
+        expect.objectContaining({ quotaTracked: true }),
+      );
+      expect(getMeteringEvidence(request)).not.toHaveProperty(
+        'quotaUnverified',
+      );
+    },
+  );
 
   it('keeps a new key, body mismatch, or unavailable replay lookup behind exhausted quota', async () => {
     const counter = new FakeQuotaCounter();

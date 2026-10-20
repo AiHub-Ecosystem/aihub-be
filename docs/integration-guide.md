@@ -841,8 +841,17 @@ product can accept another grading run.
   free to the customer but use the Sandbox dispatch allowance.
 - Keys are scoped to your organization and the operation. Records are kept for
   24 hours.
+- Same-key retries share an Organization-wide rolling 60-second budget: at most
+  10% of first attempts, with a minimum of one retry. If the budget is spent,
+  AIHUB returns `429 RATE_LIMITED` with `Retry-After`; wait before repeating.
 - A replayed response carries the header `Idempotent-Replay: true` and
   `timing.downstream_ms: 0`.
+
+At exhausted Production monthly quota, an admitted retry with the same key and
+body still returns a completed Writing result without grading, billing, or
+consuming another quota unit. The retry budget refusal takes precedence. New
+keys, in-flight requests, and a reused key with a different body do not bypass
+the exhausted quota.
 
 Reusing a key with a **different** body returns `409 IDEMPOTENCY_CONFLICT`.
 That is deliberate: silently returning the earlier result for a different
@@ -932,9 +941,11 @@ weeks). Other errors, `AI_SERVICE_TIMEOUT` included, do not carry it; use your
 own backoff. A quota refusal is `retryable`, but only after that wait, so do not
 spend retry attempts on it.
 
-`retry_after_ms` is in the response body. AI grading rate limits in this guide
-do not add a `Retry-After` header. Auth login lockouts also send that header in
-whole seconds, rounded up from the longer exhausted login window.
+`retry_after_ms` is in the response body. Organization same-key retry-budget
+refusals also include `Retry-After`, aligned with the body hint. Other AI
+grading rate limits in this guide do not add that header. Auth login lockouts
+also send it in whole seconds, rounded up from the longer exhausted login
+window.
 
 The table below covers the customer-facing AI grading operations. It does not
 try to list every error from account, Organization, or other control-plane
@@ -953,7 +964,7 @@ separate table below.
 |  409 | `IDEMPOTENCY_CONFLICT`          | Writing reused a key with a different body, or an identical Writing request is still running | Different body: use a new key; in-flight request: wait, then retry the same key and body                           |
 |  413 | `PAYLOAD_TOO_LARGE`             | Request body exceeded the operation's limit                                                  | Reduce the essay or audio size to fit the route limit                                                              |
 |  422 | `AUDIO_UNREADABLE`              | The Speaking audio could not be decoded (`retryable: false`)                                 | Check the file is a real recording in a supported format, then send a new one; resending the same file fails again |
-|  429 | `RATE_LIMITED`                  | Too many requests per minute                                                                 | Back off for `retry_after_ms`, then retry                                                                          |
+|  429 | `RATE_LIMITED`                  | Request rate or Organization same-key retry budget exceeded                                  | Back off for `retry_after_ms`; also observe `Retry-After` when present                                             |
 |  429 | `CONCURRENCY_LIMIT`             | Too many requests in flight at once                                                          | Reduce parallelism; retry in ~500ms                                                                                |
 |  429 | `QUOTA_EXCEEDED`                | Monthly quota exhausted                                                                      | Wait for the reset or contact AIHUB about your quota                                                               |
 |  502 | `AI_SERVICE_ERROR`              | AI service returned an error                                                                 | Retry later if `retryable` is true                                                                                 |
