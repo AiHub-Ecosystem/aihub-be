@@ -577,7 +577,16 @@ async function waitForHealthyApp() {
     ).catch(() => ({ stdout: '' }));
     if (health.stdout.trim() === 'healthy') return containerId;
     if (health.stdout.trim() === 'unhealthy') {
-      throw new Error('AIHUB benchmark container became unhealthy');
+      const logs = await dockerCompose([
+        'logs',
+        '--no-color',
+        '--tail',
+        '30',
+        'aihub',
+      ]).catch((error) => ({ stdout: '', stderr: error.message }));
+      throw new Error(
+        `AIHUB benchmark container became unhealthy:\n${lastLines(`${logs.stdout}${logs.stderr}`, 30)}`,
+      );
     }
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
