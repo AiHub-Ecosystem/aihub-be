@@ -1,8 +1,14 @@
-export function highestPassingRate(runs, routeNames, deadlineMs) {
+export function highestPassingRate(
+  runs,
+  routeNames,
+  deadlineMs,
+  minimumSamples = 1,
+) {
   return runs
     .filter(
       (run) =>
         hasCompleteLoadDelivery(run) &&
+        hasMinimumRouteSamples(run, routeNames, minimumSamples) &&
         routeNames.every((name) => {
           const route = run.routes[name];
           return (
@@ -18,6 +24,203 @@ export function highestPassingRate(runs, routeNames, deadlineMs) {
         }),
     )
     .reduce((highest, run) => Math.max(highest, run.offeredRateRps), 0);
+}
+
+const gradingRoutes = [
+  'writing_task1',
+  'writing_task2',
+  'speaking_multipart',
+  'speaking_json',
+];
+
+export function hasMinimumRouteSamples(run, routeNames, minimumSamples) {
+  return (
+    Number.isSafeInteger(minimumSamples) &&
+    minimumSamples > 0 &&
+    routeNames.every(
+      (name) =>
+        Number.isSafeInteger(run.routes[name]?.count) &&
+        run.routes[name].count >= minimumSamples,
+    )
+  );
+}
+
+export function minimumGradingHoldSeconds(
+  workload,
+  offeredRateRps,
+  minimumSamples,
+  minimumHoldSeconds,
+) {
+  if (
+    !Number.isSafeInteger(offeredRateRps) ||
+    offeredRateRps < 1 ||
+    !Number.isSafeInteger(minimumSamples) ||
+    minimumSamples < 1 ||
+    !Number.isSafeInteger(minimumHoldSeconds) ||
+    minimumHoldSeconds < 1
+  ) {
+    throw new Error('invalid benchmark sample-duration settings');
+  }
+
+  let lowestRouteShare;
+  if (gradingRoutes.includes(workload)) {
+    lowestRouteShare = 1;
+  } else if (workload === 'mixed_grading') {
+    lowestRouteShare = 1 / gradingRoutes.length;
+  } else if (workload === 'auth_and_grading') {
+    const shares = gradingRoutes.map(
+      (route) =>
+        authAndGradingWorkload.filter((item) => item === route).length /
+        authAndGradingWorkload.length,
+    );
+    lowestRouteShare = Math.min(...shares);
+  } else {
+    return minimumHoldSeconds;
+  }
+
+  return Math.max(
+    minimumHoldSeconds,
+    Math.ceil(minimumSamples / (offeredRateRps * lowestRouteShare)),
+  );
+}
+
+export function summarizeRepetitions(reports, expectedRepetitions) {
+  if (
+    !Array.isArray(reports) ||
+    !Number.isSafeInteger(expectedRepetitions) ||
+    expectedRepetitions < 1 ||
+    reports.length !== expectedRepetitions
+  ) {
+    throw new Error('benchmark repetitions are incomplete');
+  }
+  const sortedReports = [...reports].sort(
+    (left, right) => left.benchmark.repetition - right.benchmark.repetition,
+  );
+  const repetitions = sortedReports.map(
+    (report) => report.benchmark.repetition,
+  );
+  const firstReport = sortedReports[0];
+  if (
+    new Set(repetitions).size !== expectedRepetitions ||
+    repetitions.some((repetition, index) => repetition !== index + 1) ||
+    sortedReports.some(
+      (report) =>
+        report.benchmark.runtimeCommit !==
+          firstReport.benchmark.runtimeCommit ||
+        report.benchmark.runnerDescription !==
+          firstReport.benchmark.runnerDescription ||
+        report.benchmark.host.logicalCpuCount !==
+          firstReport.benchmark.host.logicalCpuCount ||
+        report.benchmark.host.totalMemoryBytes !==
+          firstReport.benchmark.host.totalMemoryBytes ||
+        JSON.stringify(report.benchmark.configuration.stageRatesRps) !==
+          JSON.stringify(firstReport.benchmark.configuration.stageRatesRps) ||
+        report.benchmark.configuration.minimumGradingSamples !==
+          firstReport.benchmark.configuration.minimumGradingSamples ||
+        report.benchmark.redis.configuredRoundTripLatencyMs !==
+          firstReport.benchmark.redis.configuredRoundTripLatencyMs ||
+        report.benchmark.downstreamStub.latencyMs !==
+          firstReport.benchmark.downstreamStub.latencyMs ||
+        report.benchmark.downstreamStub.errorRate !==
+          firstReport.benchmark.downstreamStub.errorRate,
+    )
+  ) {
+    throw new Error('benchmark repetitions must be complete and comparable');
+  }
+
+  const stages = new Map();
+  for (const report of sortedReports) {
+    for (const run of report.runs) {
+      const stage = stages.get(run.label) ?? [];
+      stage.push({ repetition: report.benchmark.repetition, run });
+      stages.set(run.label, stage);
+    }
+  }
+
+  return {
+    runtimeCommit: firstReport.benchmark.runtimeCommit,
+    repetitionCount: expectedRepetitions,
+    runnerDescription: firstReport.benchmark.runnerDescription,
+    host: firstReport.benchmark.host,
+    stageRatesRps: firstReport.benchmark.configuration.stageRatesRps,
+    minimumGradingSamples:
+      firstReport.benchmark.configuration.minimumGradingSamples,
+    stages: [...stages.entries()].map(([label, samples]) => {
+      const routeNames = [
+        ...new Set(samples.flatMap(({ run }) => Object.keys(run.routes))),
+      ];
+      const routes = Object.fromEntries(
+        routeNames.map((name) => {
+          const routeSamples = samples
+            .filter(({ run }) => run.routes[name] !== undefined)
+            .map(({ repetition, run }) => ({
+              repetition,
+              route: run.routes[name],
+              adequacy: run.sampleAdequacy?.routes?.[name],
+            }));
+          const adequacy = routeSamples.map(
+            ({ adequacy: value }) => value?.status,
+          );
+          const sampleVerdict = adequacy.every(
+            (status) => status === 'not_applicable',
+          )
+            ? 'not_applicable'
+            : routeSamples.length === expectedRepetitions &&
+                adequacy.every((status) => status === 'sufficient')
+              ? 'sufficient'
+              : 'inconclusive';
+          return [
+            name,
+            {
+              samples: routeSamples.map(({ repetition, route }) => ({
+                repetition,
+                count: route.count,
+              })),
+              p50Ms: numericSpread(
+                routeSamples.map(({ route }) => route.p50Ms),
+              ),
+              p95Ms: numericSpread(
+                routeSamples.map(({ route }) => route.p95Ms),
+              ),
+              p99Ms: numericSpread(
+                routeSamples.map(({ route }) => route.p99Ms),
+              ),
+              sampleVerdict,
+            },
+          ];
+        }),
+      );
+      const complete = samples.length === expectedRepetitions;
+      const sampleAdequate = Object.values(routes).every(
+        ({ sampleVerdict }) =>
+          sampleVerdict === 'sufficient' || sampleVerdict === 'not_applicable',
+      );
+      return {
+        label,
+        workload: samples[0].run.workload,
+        offeredRateRps: samples[0].run.offeredRateRps,
+        repetitionCount: samples.length,
+        verdict: complete && sampleAdequate ? 'sufficient' : 'inconclusive',
+        routes,
+      };
+    }),
+  };
+}
+
+function numericSpread(values) {
+  const sorted = values
+    .filter((value) => typeof value === 'number' && Number.isFinite(value))
+    .sort((left, right) => left - right);
+  if (sorted.length === 0) return null;
+  const middle = Math.floor(sorted.length / 2);
+  return {
+    min: sorted[0],
+    median:
+      sorted.length % 2 === 0
+        ? (sorted[middle - 1] + sorted[middle]) / 2
+        : sorted[middle],
+    max: sorted.at(-1),
+  };
 }
 
 export function task1PayloadFromFixture(fixture) {

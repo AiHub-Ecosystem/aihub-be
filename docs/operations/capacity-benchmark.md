@@ -41,21 +41,38 @@ routes with grading in an interleaved 75:25 target schedule. The report records
 each route's share of returned API responses for every stage, including a stage
 that ends partway through the 16-request cycle. Within each full cycle, login
 is 50% of auth requests, refresh 25%, and Web Session exchange 25%.
-Each rate stage holds for 15 seconds at 4, 8, 16, and 32 requests per second.
+The default rate stages are 4, 8, 16, and 32 requests per second. The base
+hold duration is 15 seconds, but grading stages are lengthened to collect at
+least 1,000 responses for every grading route in that stage. The report marks
+any route below that minimum as inconclusive and excludes the stage from its
+highest passing rate. Mixed grading gives each route one quarter of the offered
+rate. The auth-and-grading schedule gives each grading route 3/16 of the
+offered rate. Auth-only stages keep the configured base duration.
 The auth-and-grading schedule places one auth request in every four-request
 block. k6 allows each load iteration up to 65 seconds after the arrival window
 to finish, matching the longest 60-second operation deadline plus a five-second
 margin.
-After those measurements, the runner selects one mixed grading overload stage above the
-highest stage where all four grading p99 values met their operation deadlines.
-It then holds the mixed profile for 30 seconds at the selected passing rate to
+After those measurements, the runner selects one mixed grading overload stage
+above the highest configured rate. It then holds the mixed profile at the
+highest measured passing rate long enough to collect the minimum samples and
 confirm recovery after offered load drops. If no mixed stage passes, recovery
 and scheduled-job contention are skipped and marked unavailable in the report.
-The stage rates and hold duration can be changed with
-`BENCHMARK_STAGE_RATES_RPS` and `BENCHMARK_DURATION`; Redis RTT, stub latency,
-stub error rate, and maximum VUs use `BENCHMARK_REDIS_RTT_MS`,
+The stage rates and base hold duration can be changed with
+`BENCHMARK_STAGE_RATES_RPS` and `BENCHMARK_DURATION`. The per-route sample
+minimum uses `BENCHMARK_MINIMUM_GRADING_SAMPLES`. Redis RTT, stub latency, stub
+error rate, and maximum VUs use `BENCHMARK_REDIS_RTT_MS`,
 `BENCHMARK_STUB_LATENCY_MS`, `BENCHMARK_STUB_ERROR_RATE`, and
 `BENCHMARK_MAX_VUS`.
+
+The `Capacity benchmark` GitHub Actions workflow runs only through
+`workflow_dispatch`. It runs three repetitions at 8, 16, 32, and 64 offered
+requests per second on a fresh `ubuntu-24.04` GitHub-hosted VM, with the same 1,000
+sample minimum, 60 ms Redis RTT, and 2,000 ms stub latency. It is not a pull
+request gate. The workflow records the runner hardware and Docker engine,
+uploads each raw JSON result, and includes the p99 min/median/max spread across
+repetitions in the Actions summary and artifact. Its runner is 4-vCPU; record
+that shape when comparing the measured 1.5-CPU AIHUB container with the shared
+2-vCPU Production host. The result is not an exact Production capacity claim.
 
 During each stage, k6 scrapes `/metrics` once per second. The report includes
 offered and completed rates (completed rate uses the configured hold interval),
@@ -81,14 +98,17 @@ report records route-specific latency, errors, queue/resource peaks, restart
 count, job outcomes, and the recovery stage after offered load drops. The runner
 starts the jobs after k6 reports its first load iteration and fails the
 contention check if either takes longer than 27 seconds, leaving a three-second
-margin before the 30-second arrival window ends. The seed provides at least one
+margin within the 30-second job-completion budget. Grading continues until the
+sample minimum is reached. The seed provides at least one
 refresh-token user per configured
 maximum load VU plus the metrics scenario VU. The runner rejects settings above
 512 load VUs, and k6 checks the full credential pool before sending requests.
 
-The JSON result is written to the ignored
-`artifacts/capacity-benchmark/<run-id>/results.json`. Keep the environment,
-commit, rate schedule, workload mix, and host details with any baseline shared
-with issues #268, #273, #328, #398, or #114. A local result describes only this
-workload and Docker host; it is not an exact capacity claim for the shared
+Each JSON result is written to the ignored
+`artifacts/capacity-benchmark/<run-id>/results.json`. The GitHub workflow also
+writes `repetitions-summary.json` and `repetitions-summary.md` beside those run
+directories. Keep the environment, commit, rate schedule, workload mix, and
+host details with any baseline shared with issues #268, #273, #328, #398, or
+#224 (#114 is closed and superseded). A result describes only this workload
+and its recorded runner; it is not an exact capacity claim for the shared
 2-vCPU Production host.

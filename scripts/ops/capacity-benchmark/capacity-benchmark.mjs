@@ -10,9 +10,11 @@ import {
   appendStreamingMarkerChunk,
   contentionJobsFitLoadWindow,
   hasCompleteLoadDelivery,
+  hasMinimumRouteSamples,
   highestPassingRate,
   jsonAfterPrefix,
   metricValue,
+  minimumGradingHoldSeconds,
   overloadRate,
   parseDockerImageIdentity,
   parseDockerStats,
@@ -28,6 +30,11 @@ const stageRates = positiveIntegerList(
   process.env.BENCHMARK_STAGE_RATES_RPS ?? '4,8,16,32',
 );
 const duration = process.env.BENCHMARK_DURATION ?? '15s';
+const minimumGradingSamples = positiveInteger(
+  process.env.BENCHMARK_MINIMUM_GRADING_SAMPLES ?? '1000',
+);
+const repetition = positiveInteger(process.env.BENCHMARK_REPETITION ?? '1');
+const runnerDescription = process.env.BENCHMARK_RUNNER_DESCRIPTION ?? null;
 const redisRttMs = positiveInteger(process.env.BENCHMARK_REDIS_RTT_MS ?? '60');
 const stubLatencyMs = positiveInteger(
   process.env.BENCHMARK_STUB_LATENCY_MS ?? '2000',
@@ -41,6 +48,12 @@ const jobContentionDurationMs = 30_000;
 const jobContentionMarginMs = 3000;
 const appCpuLimit = 1.5;
 const appMemoryLimitBytes = 768 * 1024 * 1024;
+const gradingRouteNames = [
+  'writing_task1',
+  'writing_task2',
+  'speaking_multipart',
+  'speaking_json',
+];
 const runId = `${process.pid}-${Date.now()}`;
 const projectName = `aihub-capacity-${runId}`;
 const artifactDirectory = path.join(
@@ -51,7 +64,7 @@ const artifactDirectory = path.join(
 
 if (process.argv.includes('--help')) {
   process.stdout.write(
-    'Run the isolated local capacity benchmark. Configure BENCHMARK_STAGE_RATES_RPS, BENCHMARK_DURATION, BENCHMARK_REDIS_RTT_MS, BENCHMARK_STUB_LATENCY_MS, BENCHMARK_STUB_ERROR_RATE, and BENCHMARK_MAX_VUS.\n',
+    'Run the isolated capacity benchmark. Configure BENCHMARK_STAGE_RATES_RPS, BENCHMARK_DURATION, BENCHMARK_MINIMUM_GRADING_SAMPLES, BENCHMARK_REPETITION, BENCHMARK_REDIS_RTT_MS, BENCHMARK_STUB_LATENCY_MS, BENCHMARK_STUB_ERROR_RATE, and BENCHMARK_MAX_VUS.\n',
   );
   process.exit(0);
 }
@@ -168,12 +181,7 @@ try {
   statsWatcher = watchDockerStats(appContainerId);
   hostWatcher = watchHostResources();
 
-  const gradingRoutes = [
-    'writing_task1',
-    'writing_task2',
-    'speaking_multipart',
-    'speaking_json',
-  ];
+  const gradingRoutes = gradingRouteNames;
   const authRoutes = ['login', 'refresh', 'web_session_exchange'];
   const routeNames = [...gradingRoutes, ...authRoutes];
   const scenarios = [
@@ -186,6 +194,7 @@ try {
   for (const scenario of scenarios) {
     for (const rate of stageRates) {
       const label = `${scenario.workload} at ${rate} offered requests/s`;
+      const runDuration = stageDuration(scenario.workload, rate);
       process.stdout.write(`Running ${label}...\n`);
       runs.push(
         await runK6({
@@ -193,7 +202,7 @@ try {
           workload: scenario.workload,
           rate,
           routeNames: scenario.routeNames,
-          runDuration: duration,
+          runDuration,
           label,
         }),
       );
@@ -207,7 +216,12 @@ try {
     speaking_json: 30_000,
   };
   const mixedRuns = runs.filter((run) => run.workload === 'mixed_grading');
-  const mixedSafeRate = highestPassingRate(mixedRuns, gradingRoutes, deadlines);
+  const mixedSafeRate = highestPassingRate(
+    mixedRuns,
+    gradingRoutes,
+    deadlines,
+    minimumGradingSamples,
+  );
   const capacityByRoute = Object.fromEntries(
     gradingRoutes.map((name) => [
       name,
@@ -217,6 +231,7 @@ try {
           runs.filter((run) => run.workload === name),
           [name],
           deadlines[name],
+          minimumGradingSamples,
         ),
       },
     ]),
@@ -224,6 +239,7 @@ try {
   const firstMixedCeiling = mixedRuns.find(
     (run) =>
       !hasCompleteLoadDelivery(run) ||
+      !hasMinimumRouteSamples(run, gradingRoutes, minimumGradingSamples) ||
       gradingRoutes.some((name) => {
         const route = run.routes[name];
         return (
@@ -235,7 +251,7 @@ try {
         );
       }),
   );
-  const nextOverloadRate = overloadRate(stageRates, mixedSafeRate);
+  const nextOverloadRate = overloadRate(stageRates, stageRates.at(-1));
   process.stdout.write(
     `Running one controlled overload stage at ${nextOverloadRate} offered requests/s...\n`,
   );
@@ -245,7 +261,7 @@ try {
       workload: 'mixed_grading',
       rate: nextOverloadRate,
       routeNames: gradingRoutes,
-      runDuration: duration,
+      runDuration: stageDuration('mixed_grading', nextOverloadRate),
       label: `mixed_grading overload at ${nextOverloadRate} offered requests/s`,
       isOverload: true,
     }),
@@ -260,7 +276,7 @@ try {
       workload: 'mixed_grading',
       rate: mixedSafeRate,
       routeNames: gradingRoutes,
-      runDuration: '30s',
+      runDuration: stageDuration('mixed_grading', mixedSafeRate),
       label: `post-overload recovery at ${mixedSafeRate} requests/s`,
       isRecovery: true,
     });
@@ -273,6 +289,7 @@ try {
       appContainerId,
       rate: mixedSafeRate,
       routeNames: gradingRoutes,
+      runDuration: stageDuration('mixed_grading', mixedSafeRate),
     });
     runs.push(contention.load);
   } else {
@@ -290,10 +307,13 @@ try {
     benchmark: {
       startedAt: startedAt.toISOString(),
       completedAt: new Date().toISOString(),
+      repetition,
       runtimeCommit: benchmarkRevision,
+      runnerDescription,
       host: {
         operatingSystem: `${os.type()} ${os.release()}`,
         architecture: os.arch(),
+        cpuModel: os.cpus()[0]?.model ?? null,
         logicalCpuCount: os.cpus().length,
         totalMemoryBytes: os.totalmem(),
         dockerEngineCpuCount: dockerInfo.NCPU,
@@ -332,7 +352,8 @@ try {
       },
       configuration: {
         stageRatesRps: stageRates,
-        holdDuration: duration,
+        minimumHoldDuration: duration,
+        minimumGradingSamples,
         gradingRouteDeadlinesMs: deadlines,
         highestPassingRateByGradingRoute: capacityByRoute,
         mixedGradingWeights: {
@@ -363,11 +384,21 @@ try {
           ? {
               reached: false,
               details:
-                'No mixed stage exceeded a grading deadline, returned an API error, or failed to deliver its offered load.',
+                'No mixed stage exceeded a grading deadline, returned an API error, failed to deliver its offered load, or fell below the grading-route sample minimum.',
             }
           : {
               reached: true,
               offeredRateRps: firstMixedCeiling.offeredRateRps,
+              failureReason: !hasMinimumRouteSamples(
+                firstMixedCeiling,
+                gradingRoutes,
+                minimumGradingSamples,
+              )
+                ? 'insufficient_route_samples'
+                : !hasCompleteLoadDelivery(firstMixedCeiling)
+                  ? 'incomplete_load_delivery'
+                  : 'deadline_or_route_error',
+              sampleAdequacy: firstMixedCeiling.sampleAdequacy,
               routeResults: firstMixedCeiling.routes,
             },
       recovery:
@@ -400,7 +431,7 @@ try {
       appContainerPeak: peak(statsWatcher.samples),
       hostPeak: peak(hostWatcher.samples),
     },
-    note: 'Local isolated workload only. It is not an exact capacity claim for the shared 2-vCPU Production host.',
+    note: 'Isolated workload only. It is not an exact capacity claim for the shared 2-vCPU Production host.',
   };
   const resultPath = path.join(artifactDirectory, 'results.json');
   await writeFile(resultPath, `${JSON.stringify(report, null, 2)}\n`);
@@ -438,6 +469,16 @@ function positiveIntegerList(value) {
     throw new Error('benchmark rate stages must be unique');
   }
   return items;
+}
+
+function stageDuration(workload, rate) {
+  const seconds = minimumGradingHoldSeconds(
+    workload,
+    rate,
+    minimumGradingSamples,
+    Number.parseInt(duration, 10),
+  );
+  return `${seconds}s`;
 }
 
 function gitRevision() {
@@ -700,6 +741,32 @@ async function runK6({
     droppedIterations:
       metricValue(summary.metrics, 'dropped_iterations', 'count') ?? 0,
     routes: routeResults,
+    sampleAdequacy: {
+      minimumSamples: minimumGradingSamples,
+      status: routeNames.some((name) => gradingRouteNames.includes(name))
+        ? hasMinimumRouteSamples(
+            { routes: routeResults },
+            routeNames.filter((name) => gradingRouteNames.includes(name)),
+            minimumGradingSamples,
+          )
+          ? 'sufficient'
+          : 'inconclusive'
+        : 'not_applicable',
+      routes: Object.fromEntries(
+        routeNames.map((name) => [
+          name,
+          gradingRouteNames.includes(name)
+            ? {
+                count: routeResults[name].count,
+                status:
+                  routeResults[name].count >= minimumGradingSamples
+                    ? 'sufficient'
+                    : 'inconclusive',
+              }
+            : { count: routeResults[name].count, status: 'not_applicable' },
+        ]),
+      ),
+    },
     appResourceSampleCount: appSamples.length,
     hostResourceSampleCount: hostSamples.length,
     injectedStubErrors: stub.errors,
@@ -958,8 +1025,12 @@ function samplesInWindow(samples, startMs, endMs) {
   });
 }
 
-async function runJobContention({ appContainerId, rate, routeNames }) {
-  const duration = `${jobContentionDurationMs / 1000}s`;
+async function runJobContention({
+  appContainerId,
+  rate,
+  routeNames,
+  runDuration,
+}) {
   let signalLoadStarted;
   const loadStarted = new Promise((resolve) => {
     signalLoadStarted = resolve;
@@ -969,7 +1040,7 @@ async function runJobContention({ appContainerId, rate, routeNames }) {
     workload: 'mixed_grading',
     rate,
     routeNames,
-    runDuration: duration,
+    runDuration,
     label: `scheduled-job contention at ${rate} requests/s`,
     onLoadStarted: signalLoadStarted,
   });

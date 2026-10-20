@@ -7,13 +7,16 @@ import {
   authAndGradingWorkload,
   contentionJobsFitLoadWindow,
   hasCompleteLoadDelivery,
+  hasMinimumRouteSamples,
   hasOneUserPerVu,
   highestPassingRate,
   jsonAfterPrefix,
   metricValue,
+  minimumGradingHoldSeconds,
   overloadRate,
   parseDockerImageIdentity,
   parseDockerStats,
+  summarizeRepetitions,
   taggedMetricValues,
   task1PayloadFromFixture,
 } from './capacity-benchmark-utils.mjs';
@@ -69,6 +72,108 @@ await test('chooses the highest offered rate meeting the deadline without errors
     hasCompleteLoadDelivery({ ...runs[0], holdDuration: '10 seconds' }),
     false,
   );
+});
+
+await test('requires enough completed route samples before a stage can pass', () => {
+  const stage = {
+    offeredRateRps: 32,
+    holdDuration: '32s',
+    completedRequests: 1024,
+    droppedIterations: 0,
+    routes: {
+      writing_task1: { count: 1024, p99Ms: 900, errorCount: 0 },
+    },
+  };
+
+  assert.equal(hasMinimumRouteSamples(stage, ['writing_task1'], 1000), true);
+  assert.equal(
+    hasMinimumRouteSamples(
+      { ...stage, routes: { writing_task1: { count: 999 } } },
+      ['writing_task1'],
+      1000,
+    ),
+    false,
+  );
+  assert.equal(
+    highestPassingRate([stage], ['writing_task1'], 60_000, 1000),
+    32,
+  );
+  assert.equal(
+    highestPassingRate(
+      [
+        {
+          ...stage,
+          routes: { writing_task1: { count: 999, p99Ms: 900, errorCount: 0 } },
+        },
+      ],
+      ['writing_task1'],
+      60_000,
+      1000,
+    ),
+    0,
+  );
+});
+
+await test('holds grading stages long enough to reach the route sample minimum', () => {
+  assert.equal(minimumGradingHoldSeconds('writing_task1', 32, 1000, 15), 32);
+  assert.equal(minimumGradingHoldSeconds('mixed_grading', 32, 1000, 15), 125);
+  assert.equal(
+    minimumGradingHoldSeconds('auth_and_grading', 32, 1000, 15),
+    167,
+  );
+  assert.equal(minimumGradingHoldSeconds('login', 32, 1000, 15), 15);
+});
+
+await test('summarizes p99 spread and marks missing or under-sampled repetitions inconclusive', () => {
+  const report = (repetition, p99Ms, status) => ({
+    benchmark: {
+      repetition,
+      runtimeCommit: 'commit-a',
+      runnerDescription: 'test runner',
+      host: { logicalCpuCount: 4 },
+      redis: { configuredRoundTripLatencyMs: 60 },
+      downstreamStub: { latencyMs: 2000, errorRate: 0 },
+      configuration: {
+        stageRatesRps: [32, 64],
+        minimumGradingSamples: 1000,
+      },
+    },
+    runs: [
+      {
+        label: 'mixed_grading at 32 offered requests/s',
+        workload: 'mixed_grading',
+        offeredRateRps: 32,
+        routes: {
+          writing_task1: {
+            count: status === 'sufficient' ? 1000 : 999,
+            p50Ms: 10,
+            p95Ms: 15,
+            p99Ms,
+          },
+        },
+        sampleAdequacy: {
+          routes: { writing_task1: { status } },
+        },
+      },
+    ],
+  });
+  const summary = summarizeRepetitions(
+    [report(2, 20, 'sufficient'), report(1, 10, 'sufficient')],
+    2,
+  );
+
+  assert.equal(summary.stages[0].routes.writing_task1.p99Ms.min, 10);
+  assert.equal(summary.stages[0].routes.writing_task1.p99Ms.median, 15);
+  assert.equal(summary.stages[0].routes.writing_task1.p99Ms.max, 20);
+  assert.equal(summary.stages[0].verdict, 'sufficient');
+  assert.equal(
+    summarizeRepetitions(
+      [report(1, 10, 'sufficient'), report(2, 20, 'inconclusive')],
+      2,
+    ).stages[0].verdict,
+    'inconclusive',
+  );
+  assert.throws(() => summarizeRepetitions([report(1, 10, 'sufficient')], 2));
 });
 
 await test('places the controlled overload stage above the highest passing stage', () => {
