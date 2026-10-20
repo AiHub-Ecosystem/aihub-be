@@ -10,6 +10,7 @@ import type {
   IdempotencyRepositoryPort,
 } from './idempotency-repository.port';
 import type {
+  CompletedReplayLookupInput,
   IdempotencyExecution,
   IdempotencyExecutionInput,
   IdempotencyReplayDecoder,
@@ -104,6 +105,32 @@ export class IdempotencyService implements IdempotencyServicePort {
     private readonly repository: IdempotencyRepositoryPort,
     private readonly now: () => number = Date.now,
   ) {}
+
+  async findCompletedReplay(input: CompletedReplayLookupInput) {
+    if (
+      this.repository.findCompletedMatch === undefined ||
+      idempotencyMode(input.operation) === 'none'
+    ) {
+      return undefined;
+    }
+
+    try {
+      return await this.repository.findCompletedMatch({
+        organizationId: input.organizationId,
+        operation: input.operation,
+        actorScope: actorScope(input.scope, input.actorId),
+        idempotencyKey: input.idempotencyKey,
+        fingerprintHex: createIdempotencyFingerprint({
+          organizationId: input.organizationId,
+          operation: input.operation,
+          actorId: input.actorId,
+          requestBody: input.requestBody,
+        }),
+      });
+    } catch (error) {
+      throw storageError(error);
+    }
+  }
 
   async execute<T>(
     input: IdempotencyExecutionInput,

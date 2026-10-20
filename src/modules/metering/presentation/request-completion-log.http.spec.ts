@@ -25,6 +25,7 @@ import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
 import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
 import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
+import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
 import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
 import { QuotaGuard } from '@/modules/gateway/presentation/quota.guard';
 import type {
@@ -286,6 +287,8 @@ describe('request completion log over the HTTP boundary', () => {
       .useValue(idempotency)
       .overrideProvider(API_KEY_AUTHENTICATOR)
       .useValue(testApiKeyAuthenticator)
+      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
+      .useValue({ consume: async () => ({ allowed: true }) })
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(

@@ -18,6 +18,7 @@ import {
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
 } from '@/modules/gateway/application/operation-dispatcher.port';
+import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
 import {
   RATE_LIMITER,
   type RateLimiterPort,
@@ -210,6 +211,8 @@ describe('Writing concurrency HTTP flow', () => {
       .useValue(authenticator)
       .overrideProvider(RATE_LIMITER)
       .useValue(rateLimiter)
+      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
+      .useValue({ consume: async () => ({ allowed: true }) })
       .overrideProvider(CONCURRENCY_LIMITER)
       .useValue(limiter)
       .overrideProvider(IDEMPOTENCY_SERVICE)

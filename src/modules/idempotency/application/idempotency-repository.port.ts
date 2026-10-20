@@ -40,7 +40,23 @@ export interface IdempotencyAttemptInput {
   readonly requestId: string;
 }
 
+export interface HasCompletedIdempotencyMatchInput {
+  readonly organizationId: string | null;
+  readonly operation: IdempotencyOperation;
+  readonly actorScope?: string;
+  readonly idempotencyKey: string;
+  readonly fingerprintHex: string;
+}
+
+export interface CompletedIdempotencyReplay {
+  readonly responseStatus: number;
+  readonly responseBody: unknown;
+}
+
 export interface IdempotencyRepositoryPort {
+  findCompletedMatch?(
+    input: HasCompletedIdempotencyMatchInput,
+  ): Promise<CompletedIdempotencyReplay | undefined>;
   reserve(input: ReserveIdempotencyInput): Promise<IdempotencyReservation>;
   complete(input: CompleteIdempotencyInput): Promise<void>;
   markFailed(input: IdempotencyAttemptInput): Promise<void>;

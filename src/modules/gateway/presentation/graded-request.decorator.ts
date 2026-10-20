@@ -5,6 +5,7 @@ import { ApiKeyGuard } from '@/modules/identity/api-keys/presentation/api-key.gu
 import { UserIdentityGuard } from '@/modules/identity/shared/presentation/user-identity.guard';
 import { SuccessEnvelopeInterceptor } from '@/modules/metering/presentation/success-envelope.interceptor';
 import { ConcurrencyPermitInterceptor } from './concurrency-permit.interceptor';
+import { OrganizationRetryBudgetGuard } from './organization-retry-budget.guard';
 import { QuotaGuard } from './quota.guard';
 import { RateLimitGuard } from './rate-limit.guard';
 
@@ -26,16 +27,16 @@ export const GRADED_REQUEST_OPERATIONS = [
 
 /**
  * The order in which a graded request authenticates, resolves the End-User
- * ID, applies rate limits, checks quota, and takes a concurrency slot
- * (ADR-0018, ADR-0057). Authentication must come first because every later
- * step reads the identity it attaches; rate limit runs before quota so a
- * rate-limited caller is refused before quota is consulted; and both run
- * before a concurrency slot is taken so a refused request never holds a slot.
+ * ID, applies request and retry budgets, checks quota, and takes a concurrency
+ * slot (ADR-0018, ADR-0057). The retry budget runs before quota so an exhausted
+ * retry is refused before replay or quota handling; all refusal guards run
+ * before a concurrency slot is taken.
  */
 export const GRADED_REQUEST_GUARDS = [
   ApiKeyGuard,
   UserIdentityGuard,
   RateLimitGuard,
+  OrganizationRetryBudgetGuard,
   QuotaGuard,
 ] as const;
 

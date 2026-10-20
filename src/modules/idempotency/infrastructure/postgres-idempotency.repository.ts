@@ -1,6 +1,8 @@
 import { AppError } from '@/common/errors/app-error';
 import type {
   CompleteIdempotencyInput,
+  CompletedIdempotencyReplay,
+  HasCompletedIdempotencyMatchInput,
   IdempotencyAttemptInput,
   IdempotencyRepositoryPort,
   IdempotencyReservation,
@@ -80,6 +82,19 @@ const SELECT_SQL = `
     AND operation = $2
     AND actor_scope = $3
     AND idempotency_key = $4
+  LIMIT 1
+`;
+
+const HAS_COMPLETED_MATCH_SQL = `
+  SELECT request_id, state, response_status, response_body
+  FROM idempotency_records
+  WHERE ${ORGANIZATION_MATCHES}
+    AND operation = $2
+    AND actor_scope = $3
+    AND idempotency_key = $4
+    AND request_fingerprint = decode($5, 'hex')
+    AND state = 'completed'
+    AND expires_at > now()
   LIMIT 1
 `;
 
@@ -271,6 +286,28 @@ export class PostgresIdempotencyRepository
       return { kind: 'conflict', reason: 'fingerprint' };
     }
     return reservationFromRow(existingRow);
+  }
+
+  async findCompletedMatch(
+    input: HasCompletedIdempotencyMatchInput,
+  ): Promise<CompletedIdempotencyReplay | undefined> {
+    const rows = await this.query(HAS_COMPLETED_MATCH_SQL, [
+      input.organizationId,
+      input.operation,
+      input.actorScope ?? '',
+      input.idempotencyKey,
+      input.fingerprintHex,
+    ]);
+    const row = rows[0];
+    if (row === undefined) return undefined;
+    const reservation = reservationFromRow(row);
+    if (reservation.kind !== 'replay') {
+      throw repositoryError('Completed idempotency record is malformed');
+    }
+    return {
+      responseStatus: reservation.responseStatus,
+      responseBody: reservation.responseBody,
+    };
   }
 
   async complete(input: CompleteIdempotencyInput): Promise<void> {

@@ -1,6 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import type {
   CompleteIdempotencyInput,
+  HasCompletedIdempotencyMatchInput,
   IdempotencyAttemptInput,
   IdempotencyRepositoryPort,
   IdempotencyReservation,
@@ -17,6 +18,8 @@ class FakeRepository implements IdempotencyRepositoryPort {
   completed: CompleteIdempotencyInput[] = [];
   failed: IdempotencyAttemptInput[] = [];
   deleted: IdempotencyAttemptInput[] = [];
+  completedMatch: { responseStatus: number; responseBody: unknown } | undefined;
+  completedMatchInputs: HasCompletedIdempotencyMatchInput[] = [];
 
   reserve(input: ReserveIdempotencyInput): Promise<IdempotencyReservation> {
     this.reserved.push(input);
@@ -45,6 +48,13 @@ class FakeRepository implements IdempotencyRepositoryPort {
 
   cleanupExpired(): Promise<number> {
     return Promise.resolve(0);
+  }
+
+  findCompletedMatch(
+    input: HasCompletedIdempotencyMatchInput,
+  ): Promise<{ responseStatus: number; responseBody: unknown } | undefined> {
+    this.completedMatchInputs.push(input);
+    return Promise.resolve(this.completedMatch);
   }
 }
 
@@ -95,6 +105,38 @@ function input(requestId = 'req_1', timeoutMs = 50) {
 }
 
 describe('IdempotencyService', () => {
+  it('checks for an exact completed gateway replay without reserving or changing the record', async () => {
+    const repository = new FakeRepository();
+    repository.completedMatch = {
+      responseStatus: 200,
+      responseBody: { result: 'stored' },
+    };
+    const service = new IdempotencyService(repository, () => 1_000);
+
+    await expect(
+      service.findCompletedReplay({
+        organizationId: 'org_acme',
+        operation: 'writing.task1.grade',
+        actorId: 'user_1',
+        idempotencyKey: 'grade-1',
+        requestBody: { answer: 'hello' },
+      }),
+    ).resolves.toEqual({
+      responseStatus: 200,
+      responseBody: { result: 'stored' },
+    });
+
+    expect(repository.completedMatchInputs).toHaveLength(1);
+    expect(repository.completedMatchInputs[0]).toMatchObject({
+      organizationId: 'org_acme',
+      operation: 'writing.task1.grade',
+      actorScope: '',
+      idempotencyKey: 'grade-1',
+      fingerprintHex: expect.any(String),
+    });
+    expect(repository.reserved).toEqual([]);
+  });
+
   it('completes a first attempt and replays the stored result without running work again', async () => {
     const repository = new FakeRepository();
     const service = new IdempotencyService(repository, () => 1_000);

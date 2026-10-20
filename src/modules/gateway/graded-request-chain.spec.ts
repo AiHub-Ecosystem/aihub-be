@@ -16,6 +16,7 @@ import { AppModule } from '@/app.module';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { WEB_SESSION_CLIENT_SECRET } from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
+import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
 import { IDEMPOTENCY_REPOSITORY } from '@/modules/idempotency/application/idempotency-repository.port';
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
 import { REQUIRED_OPERATION_METADATA } from '@/modules/identity/shared/presentation/require-operation.decorator';
@@ -69,14 +70,16 @@ const task1Request = fixture('grade-task1.request.json') as {
  * declarations. This is deliberate: if the executing chain were compared against
  * the (mutable) declaration, reordering the declaration would still match
  * itself and pass, so "moving a step fails verification" would be false.
- * ADR-0018 requires quota to be read before concurrency admission; ADR-0058
- * moved the concurrency step from a guard to a permit interceptor, so it is
- * recorded across the guard/interceptor boundary as one sequence.
+ * ADR-0018 requires quota to be read before concurrency admission; the retry
+ * budget also precedes quota so its refusal takes priority over a replay. ADR-0058
+ * moved concurrency admission to a permit interceptor, so it is recorded across
+ * the guard/interceptor boundary as one sequence.
  */
 const EXPECTED_ORDER = [
   'ApiKeyGuard',
   'UserIdentityGuard',
   'RateLimitGuard',
+  'OrganizationRetryBudgetGuard',
   'QuotaGuard',
   'ConcurrencyPermitInterceptor',
 ] as const;
@@ -153,6 +156,8 @@ describe('graded request chain', () => {
       .useValue(noOpDispatchAttemptRecord)
       .overrideProvider(WEB_SESSION_CLIENT_SECRET)
       .useValue({ resolve: () => 'test-bff-client-secret' })
+      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
+      .useValue({ consume: async () => ({ allowed: true }) })
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -222,6 +227,7 @@ describe('graded request chain', () => {
       'ApiKeyGuard',
       'UserIdentityGuard',
       'RateLimitGuard',
+      'OrganizationRetryBudgetGuard',
       'QuotaGuard',
     ]);
     expect(GRADED_REQUEST_INTERCEPTORS.map((i) => i.name)).toEqual([

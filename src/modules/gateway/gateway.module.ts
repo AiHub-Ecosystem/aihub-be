@@ -45,6 +45,7 @@ import {
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
 } from './application/operation-dispatcher.port';
+import { ORGANIZATION_RETRY_BUDGET } from './application/organization-retry-budget.port';
 import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
@@ -69,9 +70,11 @@ import {
   type RedisGatewayClient,
   createRedisGatewayClient,
 } from './infrastructure/redis-gateway.client';
+import { RedisOrganizationRetryBudget } from './infrastructure/redis-organization-retry-budget';
 import { RedisQuotaCounter } from './infrastructure/redis-quota-counter';
 import { RedisRateLimiter } from './infrastructure/redis-rate-limiter';
 import { ConcurrencyPermitInterceptor } from './presentation/concurrency-permit.interceptor';
+import { OrganizationRetryBudgetGuard } from './presentation/organization-retry-budget.guard';
 import { QuotaGuard } from './presentation/quota.guard';
 import { RateLimitGuard } from './presentation/rate-limit.guard';
 
@@ -143,6 +146,12 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       inject: [REDIS_GATEWAY_CLIENT],
     },
     {
+      provide: ORGANIZATION_RETRY_BUDGET,
+      useFactory: (client: RedisGatewayClient | undefined) =>
+        new RedisOrganizationRetryBudget('', client),
+      inject: [REDIS_GATEWAY_CLIENT],
+    },
+    {
       provide: CONCURRENCY_LIMITER,
       useFactory: (
         client: RedisGatewayClient | undefined,
@@ -201,6 +210,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       inject: [OPERATION_DISPATCHER, IDEMPOTENCY_SERVICE],
     },
     RateLimitGuard,
+    OrganizationRetryBudgetGuard,
     QuotaGuard,
     ConcurrencyPermitInterceptor,
   ],
@@ -212,6 +222,8 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     DownstreamHttpClient,
     RATE_LIMITER,
     RateLimitGuard,
+    ORGANIZATION_RETRY_BUDGET,
+    OrganizationRetryBudgetGuard,
     QUOTA_COUNTER,
     QuotaGuard,
     CONCURRENCY_LIMITER,

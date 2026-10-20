@@ -9,6 +9,7 @@ import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
 import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
+import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
 import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,
@@ -76,6 +77,8 @@ describe('authenticated metering HTTP boundary', () => {
       .useValue(dispatcher)
       .overrideProvider(IDEMPOTENCY_SERVICE)
       .useValue(idempotency)
+      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
+      .useValue({ consume: async () => ({ allowed: true }) })
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(

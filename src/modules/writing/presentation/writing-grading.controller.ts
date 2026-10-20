@@ -22,6 +22,7 @@ import {
 import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
 import { getConcurrencyBackgroundLifecycle } from '@/modules/gateway/presentation/concurrency-permit';
 import { GradedRequest } from '@/modules/gateway/presentation/graded-request.decorator';
+import { takeCompletedReplay } from '@/modules/gateway/public/completed-idempotency-replay';
 import { resolveIdempotencyKey } from '@/modules/idempotency/public/idempotency-key';
 import {
   type AuthenticatedRequest,
@@ -129,6 +130,11 @@ export class WritingGradingController {
       TASK1_OPERATION,
       request.headers['idempotency-key'],
     );
+    const completedReplay = takeCompletedReplay(
+      request,
+      TASK1_OPERATION,
+      idempotencyKey,
+    );
     const lifecycle = requestLifecycle(request);
     const backgroundLifecycle = backgroundLifecycleFor(
       request,
@@ -142,6 +148,7 @@ export class WritingGradingController {
         input,
         ...requestMetadata(request, lifecycle),
         ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
+        ...(completedReplay === undefined ? {} : { completedReplay }),
         ...(backgroundLifecycle === undefined ? {} : { backgroundLifecycle }),
       });
     } finally {
@@ -161,6 +168,11 @@ export class WritingGradingController {
       TASK2_OPERATION,
       request.headers['idempotency-key'],
     );
+    const completedReplay = takeCompletedReplay(
+      request,
+      TASK2_OPERATION,
+      idempotencyKey,
+    );
     const lifecycle = requestLifecycle(request);
     const backgroundLifecycle = backgroundLifecycleFor(
       request,
@@ -174,6 +186,7 @@ export class WritingGradingController {
         input,
         ...requestMetadata(request, lifecycle),
         ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
+        ...(completedReplay === undefined ? {} : { completedReplay }),
         ...(backgroundLifecycle === undefined ? {} : { backgroundLifecycle }),
       });
     } finally {

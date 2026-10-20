@@ -1,5 +1,7 @@
 import type {
   CompleteIdempotencyInput,
+  CompletedIdempotencyReplay,
+  HasCompletedIdempotencyMatchInput,
   IdempotencyAttemptInput,
   IdempotencyRepositoryPort,
   IdempotencyReservation,
@@ -66,6 +68,24 @@ export class InMemoryIdempotencyRepository
       responseStatus: existing.responseStatus ?? 200,
       responseBody: existing.responseBody,
     });
+  }
+
+  findCompletedMatch(
+    input: HasCompletedIdempotencyMatchInput,
+  ): Promise<CompletedIdempotencyReplay | undefined> {
+    const key = `${input.organizationId}:${input.operation}:${input.idempotencyKey}`;
+    const existing = this.records.get(key);
+    return Promise.resolve(
+      existing !== undefined &&
+        existing.expiresAt.getTime() > Date.now() &&
+        existing.state === 'completed' &&
+        existing.fingerprintHex === input.fingerprintHex
+        ? {
+            responseStatus: existing.responseStatus ?? 200,
+            responseBody: existing.responseBody,
+          }
+        : undefined,
+    );
   }
 
   complete(input: CompleteIdempotencyInput): Promise<void> {

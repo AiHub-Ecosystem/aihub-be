@@ -4,6 +4,7 @@ import type {
   GradeTask2Request,
 } from '@/contracts/writing/grading';
 import type { IdempotencyBackgroundLifecycle } from '@/modules/idempotency/application/idempotency-service.port';
+import type { CompletedIdempotencyReplay } from '@/modules/idempotency/public/idempotency-operation';
 import {
   type DispatchResult,
   type RequestFor,
@@ -26,6 +27,7 @@ export interface GradingRequestMetadata {
 interface WritingCommand extends GradingRequestMetadata {
   readonly idempotencyKey?: string;
   readonly backgroundLifecycle?: IdempotencyBackgroundLifecycle;
+  readonly completedReplay?: CompletedIdempotencyReplay;
 }
 
 export interface GradeTask1Command extends WritingCommand {

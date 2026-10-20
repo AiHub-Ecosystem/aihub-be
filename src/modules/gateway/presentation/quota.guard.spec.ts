@@ -5,6 +5,7 @@ import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
 } from '@/modules/gateway/application/quota-counter.port';
+import type { IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
 import type { AuthenticatedApiKey } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import {
   type MeteringEvidence,
@@ -52,12 +53,14 @@ function contextFor(request: Record<string, unknown>): ExecutionContext {
 
 function requestFor(authenticated: AuthenticatedApiKey = baseAuthenticated): {
   aihubAuth: AuthenticatedApiKey;
+  headers: Record<string, string>;
   aihubMetering?: MeteringEvidence;
 } {
   const request: {
     aihubAuth: AuthenticatedApiKey;
+    headers: Record<string, string>;
     aihubMetering?: MeteringEvidence;
-  } = { aihubAuth: authenticated };
+  } = { aihubAuth: authenticated, headers: {} };
   // The authenticating guard opens the evidence before QuotaGuard runs; this
   // mirrors that order so the guard's writes land on real evidence.
   openMeteringEvidence(request, {
@@ -170,6 +173,83 @@ describe('QuotaGuard', () => {
       code: 'QUOTA_EXCEEDED',
       httpStatus: 429,
       retryAfterMs: 1_252_800_000,
+    });
+  });
+
+  it('allows an exact completed Writing replay at exhausted quota without consuming another quota unit', async () => {
+    const counter = new FakeQuotaCounter();
+    counter.current = 5;
+    const request = requestFor();
+    Object.assign(request, {
+      id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+      headers: { 'idempotency-key': 'completed-writing' },
+      body: {
+        question: 'Describe the chart.',
+        chart_type: 'Bar Chart',
+        essay: 'The chart shows a clear trend.',
+        image_url: 'https://example.com/chart.png',
+      },
+      aihubIdentity: {
+        userId: 'user_acme',
+        organizationId: 'org_acme',
+        scopes: [],
+      },
+    });
+    const findCompletedReplay = jest.fn().mockResolvedValue({
+      responseStatus: 200,
+      responseBody: { operation: 'writing.task1.grade', data: {} },
+    });
+    const idempotency = {
+      findCompletedReplay,
+    } as unknown as IdempotencyServicePort;
+    const guard = new QuotaGuard(counter, now, idempotency);
+
+    await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
+
+    expect(counter.reads).toEqual(['org_acme']);
+    expect(findCompletedReplay).toHaveBeenCalledWith({
+      organizationId: 'org_acme',
+      operation: 'writing.task1.grade',
+      actorId: 'user_acme',
+      idempotencyKey: 'completed-writing',
+      requestBody: {
+        question: 'Describe the chart.',
+        chart_type: 'Bar Chart',
+        essay: 'The chart shows a clear trend.',
+        image_url: 'https://example.com/chart.png',
+      },
+    });
+    expect(getMeteringEvidence(request)).toEqual(
+      expect.objectContaining({ quotaTracked: true }),
+    );
+  });
+
+  it('keeps a new key, body mismatch, or unavailable replay lookup behind exhausted quota', async () => {
+    const counter = new FakeQuotaCounter();
+    counter.current = 5;
+    const request = requestFor();
+    Object.assign(request, {
+      headers: { 'idempotency-key': 'not-a-completed-replay' },
+      body: {
+        question: 'Describe the chart.',
+        chart_type: 'Bar Chart',
+        essay: 'The chart shows a clear trend.',
+        image_url: 'https://example.com/chart.png',
+      },
+      aihubIdentity: {
+        userId: 'user_acme',
+        organizationId: 'org_acme',
+        scopes: [],
+      },
+    });
+    const idempotency = {
+      findCompletedReplay: jest.fn().mockResolvedValue(undefined),
+    } as unknown as IdempotencyServicePort;
+    const guard = new QuotaGuard(counter, now, idempotency);
+
+    await expect(guard.canActivate(contextFor(request))).rejects.toMatchObject({
+      code: 'QUOTA_EXCEEDED',
+      httpStatus: 429,
     });
   });
 

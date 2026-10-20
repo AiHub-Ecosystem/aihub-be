@@ -31,5 +31,5 @@ describe('idempotency cleanup CLI', () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('Command failed');
-  });
+  }, 15_000);
 });

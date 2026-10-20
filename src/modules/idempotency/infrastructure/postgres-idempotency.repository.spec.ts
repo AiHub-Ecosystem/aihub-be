@@ -41,6 +41,42 @@ const attemptInput = {
 };
 
 describe('PostgresIdempotencyRepository', () => {
+  it('looks up only an unexpired completed row with the exact fingerprint', async () => {
+    const client = new QueueClient([
+      [
+        {
+          request_id: 'req_old',
+          state: 'completed',
+          response_status: 200,
+          response_body: { stored: true },
+        },
+      ],
+    ]);
+    const repository = new PostgresIdempotencyRepository(client);
+
+    await expect(
+      repository.findCompletedMatch({
+        organizationId: baseInput.organizationId,
+        operation: baseInput.operation,
+        actorScope: '',
+        idempotencyKey: baseInput.idempotencyKey,
+        fingerprintHex: baseInput.fingerprintHex,
+      }),
+    ).resolves.toEqual({
+      responseStatus: 200,
+      responseBody: { stored: true },
+    });
+
+    expect(client.queries).toHaveLength(1);
+    expect(client.queries[0]?.values).toEqual([
+      baseInput.organizationId,
+      baseInput.operation,
+      '',
+      baseInput.idempotencyKey,
+      baseInput.fingerprintHex,
+    ]);
+  });
+
   it('claims a new row from the insert and does not issue a second query', async () => {
     const client = new QueueClient([[{ request_id: 'req_1' }]]);
     const repository = new PostgresIdempotencyRepository(client);

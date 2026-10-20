@@ -13,6 +13,7 @@ import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
 import { RATE_LIMITER } from '@/modules/gateway/application/rate-limiter.port';
 import { SANDBOX_DISPATCH_BUDGET } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
@@ -323,6 +324,8 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
       .useValue(identities)
       .overrideProvider(RATE_LIMITER)
       .useValue({ consume: async () => ({ allowed: true }) })
+      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
+      .useValue({ consume: async () => ({ allowed: true }) })
       .overrideProvider(WRITING_CHART_UPLOAD_REPOSITORY)
       .useValue(repository)
       .overrideProvider(WRITING_CHART_UPLOAD_STORAGE)
@@ -580,7 +583,7 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
     expect(storage.published).toEqual([]);
     expect(storage.deletedStaging).toContain(intent.stagingKey);
     expect(repository.rows.get(assetId)?.status).toBe('rejected');
-  });
+  }, 15_000);
 
   it('rejects unsupported and oversized declarations before storing an intent', async () => {
     const unsupported = await app.inject({

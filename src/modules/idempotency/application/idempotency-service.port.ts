@@ -1,4 +1,5 @@
 import type { IdempotencyOperation } from './idempotency-operation';
+import type { CompletedIdempotencyReplay } from './idempotency-repository.port';
 
 export type IdempotencyScope = 'gateway' | 'management';
 
@@ -18,6 +19,16 @@ export interface IdempotencyExecutionInput {
   readonly deadlineAt: Date;
   readonly backgroundLifecycle?: IdempotencyBackgroundLifecycle;
 }
+
+export type CompletedReplayLookupInput = Pick<
+  IdempotencyExecutionInput,
+  | 'organizationId'
+  | 'operation'
+  | 'actorId'
+  | 'scope'
+  | 'idempotencyKey'
+  | 'requestBody'
+> & { readonly idempotencyKey: string };
 
 export interface IdempotencyBackgroundLifecycle {
   started(): void;
@@ -47,6 +58,9 @@ export type IdempotencyWork<T> = (
 export type IdempotencyReplayDecoder<T> = (value: unknown) => T;
 
 export interface IdempotencyServicePort {
+  findCompletedReplay?(
+    input: CompletedReplayLookupInput,
+  ): Promise<CompletedIdempotencyReplay | undefined>;
   execute<T>(
     input: IdempotencyExecutionInput,
     work: IdempotencyWork<T>,

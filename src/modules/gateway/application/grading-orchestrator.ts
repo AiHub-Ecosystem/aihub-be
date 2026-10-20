@@ -15,6 +15,7 @@ import type {
   IdempotencyServicePort,
   IdempotencyWorkContext,
 } from '@/modules/idempotency/application/idempotency-service.port';
+import type { CompletedIdempotencyReplay } from '@/modules/idempotency/public/idempotency-operation';
 import {
   readDispatchTelemetry,
   withDispatchTelemetry,
@@ -177,6 +178,29 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
           : { ...context, signal: work.signal, deadlineAt: work.deadlineAt },
       ) as Promise<DispatchResult<ResponseForCommand<C>>>;
     };
+
+    const preloadedReplay = (
+      command as BaseGradingCommand & {
+        readonly completedReplay?: CompletedIdempotencyReplay;
+      }
+    ).completedReplay;
+    if (preloadedReplay !== undefined) {
+      if (
+        preloadedReplay.responseStatus < 200 ||
+        preloadedReplay.responseStatus >= 300
+      ) {
+        throw new Error('stored idempotency response status is not successful');
+      }
+      return {
+        ...decodeStoredResult(
+          preloadedReplay.responseBody,
+          command.operation,
+          def,
+        ),
+        downstreamMs: 0,
+        idempotentReplay: true,
+      } as DispatchResult<ResponseForCommand<C>>;
+    }
 
     if (def.idempotency === 'none') {
       return dispatch();

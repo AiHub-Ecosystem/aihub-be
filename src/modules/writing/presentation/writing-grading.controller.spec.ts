@@ -11,9 +11,16 @@ import { MockAgent } from 'undici';
 import { AppModule } from '@/app.module';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
+import {
+  QUOTA_COUNTER,
+  type QuotaCounterPort,
+} from '@/modules/gateway/application/quota-counter.port';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
 import { IDEMPOTENCY_REPOSITORY } from '@/modules/idempotency/application/idempotency-repository.port';
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
+import { API_KEY_AUTHENTICATOR } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import { USER_IDENTITY_RESOLVER } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 
 const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-writing');
@@ -46,6 +53,8 @@ describe('Writing grading HTTP flow', () => {
   let task1DownstreamCalls = 0;
   let task2DownstreamCalls = 0;
   let dispatchAttemptCalls = 0;
+  let quotaCount = 0;
+  const seenRetryKeys = new Set<string>();
   const originalEnv = {
     allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
     nodeEnv: process.env.NODE_ENV,
@@ -110,6 +119,53 @@ describe('Writing grading HTTP flow', () => {
           return `test-dispatch-attempt-${dispatchAttemptCalls}`;
         },
         recordOutcome: async () => undefined,
+      })
+      .overrideProvider(API_KEY_AUTHENTICATOR)
+      .useValue({
+        async authenticate({ environment }: { environment: string }) {
+          return {
+            organizationId: 'org_quota_replay',
+            apiKeyId: 'ak_quota_replay',
+            environment,
+            scopes: ['writing.grade'],
+            rateLimitRpm: 600,
+            maxConcurrent: 20,
+            monthlyRequestQuota: 1,
+            hardStopOnQuota: true,
+            allowedEnvironments: [environment],
+          };
+        },
+      })
+      .overrideProvider(USER_IDENTITY_RESOLVER)
+      .useValue({
+        async resolve({ organizationId }: { organizationId: string }) {
+          return {
+            userId: 'user_quota_replay',
+            organizationId,
+            scopes: [],
+          };
+        },
+      })
+      .overrideProvider(QUOTA_COUNTER)
+      .useValue({
+        async read() {
+          return quotaCount;
+        },
+        async increment() {
+          quotaCount += 1;
+        },
+      } satisfies QuotaCounterPort)
+      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
+      .useValue({
+        async consume({ idempotencyKey }: { idempotencyKey: string }) {
+          if (idempotencyKey === 'storm-task2-key') {
+            if (seenRetryKeys.has(idempotencyKey)) {
+              return { allowed: false, retryAfterMs: 60_250 };
+            }
+            seenRetryKeys.add(idempotencyKey);
+          }
+          return { allowed: true };
+        },
       })
       .compile();
 
@@ -272,6 +328,44 @@ describe('Writing grading HTTP flow', () => {
     );
   });
 
+  it('serves a completed replay at exhausted monthly quota without another bill or dispatch', async () => {
+    const headers = {
+      'x-api-key': 'quota-replay-key',
+      'x-user-identity': 'quota-replay-user',
+      'idempotency-key': 'quota-replay-completed',
+    };
+    const payload = {
+      question: task1Request.question,
+      chart_type: task1Request.topic,
+      essay: task1Request.essay,
+      image_url: task1Request.url,
+    };
+    const beforeDispatchAttempts = dispatchAttemptCalls;
+    const beforeDownstreamCalls = task1DownstreamCalls;
+    quotaCount = 0;
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/grade',
+      headers,
+      payload,
+    });
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/grade',
+      headers,
+      payload,
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.headers['idempotent-replay']).toBe('true');
+    expect(replay.json().data).toEqual(first.json().data);
+    expect(quotaCount).toBe(1);
+    expect(dispatchAttemptCalls).toBe(beforeDispatchAttempts + 1);
+    expect(task1DownstreamCalls).toBe(beforeDownstreamCalls + 1);
+  });
+
   it('rejects a valid Task 1 request without Idempotency-Key before downstream dispatch', async () => {
     const response = await app.inject({
       method: 'POST',
@@ -360,6 +454,28 @@ describe('Writing grading HTTP flow', () => {
     expect(replay.headers['idempotent-replay']).toBe('true');
     expect(replay.json().data).toEqual(first.json().data);
     expect(replay.json().meta.timing.downstream_ms).toBe(0);
+  });
+
+  it('refuses an over-budget same-key retry before replay or another dispatch', async () => {
+    const before = task2DownstreamCalls;
+    const request = {
+      method: 'POST' as const,
+      url: '/v1/ielts/writing/task2/grade',
+      headers: { 'idempotency-key': 'storm-task2-key' },
+      payload: task2Request,
+    };
+
+    const first = await app.inject(request);
+    const retry = await app.inject(request);
+
+    expect(first.statusCode).toBe(200);
+    expect(retry.statusCode).toBe(429);
+    expect(retry.json().error).toMatchObject({
+      code: 'RATE_LIMITED',
+      retry_after_ms: 60_250,
+    });
+    expect(retry.headers['retry-after']).toBe('61');
+    expect(task2DownstreamCalls - before).toBe(1);
   });
 
   it('rejects a Task 2 grading request without Idempotency-Key', async () => {

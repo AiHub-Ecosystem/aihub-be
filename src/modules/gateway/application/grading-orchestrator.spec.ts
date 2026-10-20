@@ -133,6 +133,37 @@ function fixture() {
 }
 
 describe('GradingOrchestratorPort', () => {
+  it('returns a quota-approved completed replay without rechecking idempotency or dispatching', async () => {
+    const { port, calls, executions } = fixture();
+    const result = await port.execute({
+      ...metadata(new AbortController().signal),
+      operation: 'writing.task1.grade',
+      input: {
+        question: 'Describe the chart.',
+        chart_type: 'Bar Chart',
+        essay: 'A clear essay.',
+        image_url: 'https://example.com/chart.png',
+      },
+      idempotencyKey: 'grade-1',
+      completedReplay: {
+        responseStatus: 200,
+        responseBody: {
+          operation: 'writing.task1.grade',
+          data: writingData,
+          downstreamMs: 23,
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      data: writingData,
+      downstreamMs: 0,
+      idempotentReplay: true,
+    });
+    expect(calls).toEqual([]);
+    expect(executions).toEqual([]);
+  });
+
   it('uses the ingress deadline and detached Writing work context for both tasks and their replays', async () => {
     const { port, calls, executions, workSignal, workDeadline } = fixture();
     const lifecycle = new AbortController();

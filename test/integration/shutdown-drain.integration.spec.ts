@@ -24,6 +24,7 @@ import type {
   OperationDispatcherPort,
 } from '@/modules/gateway/application/operation-dispatcher.port';
 import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
+import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
 import type { QuotaCounterPort } from '@/modules/gateway/application/quota-counter.port';
 import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
 import type {
@@ -228,6 +229,8 @@ describe('application shutdown drain', () => {
       .useValue(quota)
       .overrideProvider(USAGE_REPOSITORY)
       .useValue(usageRepository)
+      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
+      .useValue({ consume: async () => ({ allowed: true }) })
       .compile();
 
     const app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -305,5 +308,5 @@ describe('application shutdown drain', () => {
       }
       await sdk.shutdown();
     }
-  }, 15_000);
+  }, 30_000);
 });

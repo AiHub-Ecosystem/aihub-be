@@ -15,6 +15,7 @@ import type {
   OperationDispatcherPort,
 } from '@/modules/gateway/application/operation-dispatcher.port';
 import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
+import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
 import type { RateLimiterPort } from '@/modules/gateway/application/rate-limiter.port';
 import { RATE_LIMITER } from '@/modules/gateway/application/rate-limiter.port';
 import type {
@@ -156,6 +157,8 @@ describe('Writing user identity HTTP flow', () => {
       .useValue(dispatcher)
       .overrideProvider(IDEMPOTENCY_SERVICE)
       .useValue(idempotencyService)
+      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
+      .useValue({ consume: async () => ({ allowed: true }) })
       .overrideProvider(ORGANIZATION_IDENTITY_CONFIG_REPOSITORY)
       .useValue(configRepository)
       .overrideProvider(JWKS_KEY_PROVIDER)
