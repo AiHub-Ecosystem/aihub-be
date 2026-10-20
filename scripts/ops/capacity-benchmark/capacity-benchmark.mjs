@@ -444,12 +444,13 @@ try {
 } finally {
   statsWatcher?.stop();
   hostWatcher?.stop();
-  await dockerCompose(['down', '--volumes', '--remove-orphans']).catch(
-    (error) => {
-      process.stderr.write(`Benchmark cleanup failed: ${error.message}\n`);
-      process.exitCode = 1;
-    },
-  );
+  process.stdout.write('Cleaning up benchmark Compose project...\n');
+  await dockerCompose(['down', '--volumes', '--remove-orphans'], {
+    timeout: 60_000,
+  }).catch((error) => {
+    process.stderr.write(`Benchmark cleanup failed: ${error.message}\n`);
+    process.exitCode = 1;
+  });
 }
 
 function positiveInteger(value, fallback) {
@@ -520,6 +521,7 @@ function runProcess(command, args, options = {}) {
       cwd: repositoryRoot,
       env: options.env ?? process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: options.timeout,
     });
     let stdout = '';
     let stderr = '';
@@ -534,11 +536,13 @@ function runProcess(command, args, options = {}) {
       options.onStderr?.(chunk);
     });
     child.once('error', reject);
-    child.once('close', (code) => {
+    child.once('close', (code, signal) => {
       if (code !== 0 && !options.allowNonZeroExit) {
         reject(
           new Error(
-            `${command} exited ${code}: ${lastLines(stderr || stdout, 30)}`,
+            `${command} ${
+              code === null ? `was terminated by ${signal}` : `exited ${code}`
+            }: ${lastLines(stderr || stdout, 30)}`,
           ),
         );
         return;
