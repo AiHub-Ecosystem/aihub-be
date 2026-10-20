@@ -58,7 +58,7 @@ services:
 
   aihub:
     build:
-      context: ../..
+      context: ../../..
       dockerfile: Dockerfile
       args:
         VCS_REF: ${BENCHMARK_VCS_REF:-local}
@@ -117,7 +117,7 @@ services:
 
   seed:
     build:
-      context: ../..
+      context: ../../..
       dockerfile: Dockerfile
       target: build
     command:
