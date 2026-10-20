@@ -262,6 +262,54 @@ describe('ApiKeyAuthenticator', () => {
     expect(cache.missCalls).toBe(1);
   });
 
+  it('shares an ordinary Postgres lookup between concurrent misses for one key', async () => {
+    const { authenticator, repository } = createAuthenticator();
+    let releaseLookup: ((record: ApiKeyRecord | null) => void) | undefined;
+    let markLookupStarted: (() => void) | undefined;
+    const lookupStarted = new Promise<void>((resolve) => {
+      markLookupStarted = resolve;
+    });
+    const lookup = new Promise<ApiKeyRecord | null>((resolve) => {
+      releaseLookup = resolve;
+    });
+    repository.findByHash = () => {
+      repository.calls += 1;
+      markLookupStarted?.();
+      return lookup;
+    };
+    const credentials = {
+      value: VALID_KEY,
+      environment: 'production',
+      clientIp: '203.0.113.10',
+    };
+
+    const first = authenticator.authenticate(credentials);
+    await lookupStarted;
+    const second = authenticator.authenticate(credentials);
+    releaseLookup?.(activeRecord);
+
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+    expect(repository.calls).toBe(1);
+  });
+
+  it('does not coalesce concurrent forceFresh Postgres lookups', async () => {
+    const { authenticator, repository } = createAuthenticator();
+    const credentials = {
+      value: VALID_KEY,
+      environment: 'production',
+      clientIp: '203.0.113.10',
+      forceFresh: true,
+    };
+
+    await expect(
+      Promise.all([
+        authenticator.authenticate(credentials),
+        authenticator.authenticate(credentials),
+      ]),
+    ).resolves.toHaveLength(2);
+    expect(repository.calls).toBe(2);
+  });
+
   it('returns 429 after the brute-force threshold is reached', async () => {
     const { authenticator, failures } = createAuthenticator(null);
     failures.failures = 19;

@@ -22,6 +22,7 @@ import type {
 
 export interface RedisIdentityClient {
   get(key: string): Promise<string | null>;
+  pttl(key: string): Promise<number>;
   set(
     key: string,
     value: string,
@@ -45,6 +46,10 @@ class IoredisIdentityClient implements RedisIdentityClient {
 
   get(key: string): Promise<string | null> {
     return this.client.get(key);
+  }
+
+  pttl(key: string): Promise<number> {
+    return this.client.pttl(key);
   }
 
   set(
@@ -119,6 +124,44 @@ function jwksRefreshKey(organizationId: string): string {
   return `aihub:v1:jwks-refresh:${organizationId}`;
 }
 
+const API_KEY_CACHE_POSITIVE_TTL_SECONDS = 60;
+const API_KEY_CACHE_NEGATIVE_TTL_SECONDS = 30;
+const MAX_LOCAL_API_KEY_ENTRIES = 1_024;
+const MAX_LOCAL_JWKS_ENTRIES = 128;
+
+interface LocalApiKeyEntry {
+  readonly value: ApiKeyRecord | null;
+  readonly expiresAt: number;
+}
+
+interface LocalJwksEntry {
+  readonly generation: string;
+  readonly entry: JwksCacheEntry;
+}
+
+function shortenedTtl(maxSeconds: number): number {
+  const random = Math.min(0.999_999_999, Math.max(0, Math.random()));
+  return Math.floor(maxSeconds * (0.5 + random * 0.5));
+}
+
+function putBounded<K, V>(
+  entries: Map<K, V>,
+  key: K,
+  value: V,
+  limit: number,
+): void {
+  entries.delete(key);
+  entries.set(key, value);
+  if (entries.size > limit) {
+    const oldest = entries.keys().next().value;
+    if (oldest !== undefined) entries.delete(oldest);
+  }
+}
+
+function localJwksKey(organizationId: string, configVersion: string): string {
+  return JSON.stringify([organizationId, configVersion]);
+}
+
 function parseJwksCacheEntry(serialized: string): JwksCacheEntry | undefined {
   let value: unknown;
   try {
@@ -151,12 +194,20 @@ function parseJwksCacheEntry(serialized: string): JwksCacheEntry | undefined {
 
 export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
   private readonly client: RedisIdentityClient | undefined;
+  private readonly localApiKeys = new Map<string, LocalApiKeyEntry>();
+  private readonly localJwks = new Map<string, LocalJwksEntry>();
 
   constructor(url: string, client?: RedisIdentityClient) {
     this.client = client ?? connect(url);
   }
 
   async get(hashHex: string): Promise<ApiKeyRecord | null | undefined> {
+    const local = this.localApiKeys.get(hashHex);
+    if (local !== undefined) {
+      if (local.expiresAt > performance.now()) return local.value;
+      this.localApiKeys.delete(hashHex);
+    }
+
     if (this.client === undefined) {
       return undefined;
     }
@@ -173,6 +224,13 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
         const record =
           parsed === undefined ? undefined : apiKeyRecordFromRow(parsed);
         if (record !== undefined) {
+          const lookupStartedAt = performance.now();
+          const remainingMs = await this.client.pttl(apiKeyCacheKey(hashHex));
+          if (remainingMs <= 0) {
+            await this.client.del(apiKeyCacheKey(hashHex));
+            return undefined;
+          }
+          this.rememberApiKey(hashHex, record, lookupStartedAt + remainingMs);
           return record;
         }
         await this.client.del(apiKeyCacheKey(hashHex));
@@ -180,40 +238,51 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
       }
 
       const miss = await this.client.get(apiKeyCacheMissKey(hashHex));
-      return miss === '1' ? null : undefined;
+      if (miss !== '1') return undefined;
+      const lookupStartedAt = performance.now();
+      const remainingMs = await this.client.pttl(apiKeyCacheMissKey(hashHex));
+      if (remainingMs <= 0) {
+        await this.client.del(apiKeyCacheMissKey(hashHex));
+        return undefined;
+      }
+      this.rememberApiKey(hashHex, null, lookupStartedAt + remainingMs);
+      return null;
     } catch {
       return undefined;
     }
   }
 
   async set(hashHex: string, record: ApiKeyRecord): Promise<void> {
-    if (this.client === undefined) {
-      return;
-    }
+    const ttlSeconds = shortenedTtl(API_KEY_CACHE_POSITIVE_TTL_SECONDS);
+    this.rememberApiKey(
+      hashHex,
+      record,
+      performance.now() + ttlSeconds * 1_000,
+    );
+    if (this.client === undefined) return;
 
     const serialized = JSON.stringify({
       ...record,
       expiresAt: record.expiresAt?.toISOString() ?? null,
     });
     await this.client
-      .set(apiKeyCacheKey(hashHex), serialized, 'EX', 60)
+      .set(apiKeyCacheKey(hashHex), serialized, 'EX', ttlSeconds)
       .catch(() => undefined);
   }
 
   async setMiss(hashHex: string): Promise<void> {
-    if (this.client === undefined) {
-      return;
-    }
+    const ttlSeconds = shortenedTtl(API_KEY_CACHE_NEGATIVE_TTL_SECONDS);
+    this.rememberApiKey(hashHex, null, performance.now() + ttlSeconds * 1_000);
+    if (this.client === undefined) return;
 
     await this.client
-      .set(apiKeyCacheMissKey(hashHex), '1', 'EX', 30)
+      .set(apiKeyCacheMissKey(hashHex), '1', 'EX', ttlSeconds)
       .catch(() => undefined);
   }
 
   async delete(hashHex: string): Promise<void> {
-    if (this.client === undefined) {
-      return;
-    }
+    this.localApiKeys.delete(hashHex);
+    if (this.client === undefined) return;
 
     await this.client
       .del(apiKeyCacheKey(hashHex), apiKeyCacheMissKey(hashHex))
@@ -225,7 +294,11 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
     configVersion: string,
   ): Promise<JwksCacheSnapshot> {
     if (this.client === undefined) {
-      return { generation: '0' };
+      return (
+        this.readLocalJwks(organizationId, configVersion) ?? {
+          generation: '0',
+        }
+      );
     }
 
     try {
@@ -237,7 +310,11 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
         jwksKey(organizationId, configVersion, generation),
       );
       if (serialized === null) {
-        return { generation };
+        return (
+          this.readLocalJwks(organizationId, configVersion, generation) ?? {
+            generation,
+          }
+        );
       }
 
       const entry = parseJwksCacheEntry(serialized);
@@ -246,9 +323,21 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
           jwksKey(organizationId, configVersion, generation),
         );
       }
-      return entry === undefined ? { generation } : { generation, entry };
+      if (entry === undefined) {
+        return (
+          this.readLocalJwks(organizationId, configVersion, generation) ?? {
+            generation,
+          }
+        );
+      }
+      this.rememberJwks(organizationId, configVersion, generation, entry);
+      return { generation, entry };
     } catch {
-      return { generation: '0' };
+      return (
+        this.readLocalJwks(organizationId, configVersion) ?? {
+          generation: '0',
+        }
+      );
     }
   }
 
@@ -258,9 +347,8 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
     generation: string,
     entry: JwksCacheEntry,
   ): Promise<void> {
-    if (this.client === undefined) {
-      return;
-    }
+    this.rememberJwks(organizationId, configVersion, generation, entry);
+    if (this.client === undefined) return;
 
     const ttlSeconds = Math.max(
       1,
@@ -280,6 +368,7 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
     organizationId: string,
     configVersion: string,
   ): Promise<void> {
+    this.localJwks.delete(localJwksKey(organizationId, configVersion));
     if (this.client === undefined) {
       throw new Error('Redis is unavailable');
     }
@@ -311,6 +400,53 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
 
   async onModuleDestroy(): Promise<void> {
     await this.client?.quit().catch(() => undefined);
+  }
+
+  private rememberApiKey(
+    hashHex: string,
+    value: ApiKeyRecord | null,
+    expiresAt: number,
+  ): void {
+    if (expiresAt <= performance.now()) return;
+    putBounded(
+      this.localApiKeys,
+      hashHex,
+      { value, expiresAt },
+      MAX_LOCAL_API_KEY_ENTRIES,
+    );
+  }
+
+  private rememberJwks(
+    organizationId: string,
+    configVersion: string,
+    generation: string,
+    entry: JwksCacheEntry,
+  ): void {
+    if (entry.staleUntil <= Date.now()) return;
+    putBounded(
+      this.localJwks,
+      localJwksKey(organizationId, configVersion),
+      { generation, entry },
+      MAX_LOCAL_JWKS_ENTRIES,
+    );
+  }
+
+  private readLocalJwks(
+    organizationId: string,
+    configVersion: string,
+    generation?: string,
+  ): JwksCacheSnapshot | undefined {
+    const key = localJwksKey(organizationId, configVersion);
+    const cached = this.localJwks.get(key);
+    if (cached === undefined) return undefined;
+    if (cached.entry.staleUntil <= Date.now()) {
+      this.localJwks.delete(key);
+      return undefined;
+    }
+    if (generation !== undefined && cached.generation !== generation) {
+      return undefined;
+    }
+    return { generation: cached.generation, entry: cached.entry };
   }
 }
 

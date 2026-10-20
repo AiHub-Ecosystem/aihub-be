@@ -153,6 +153,31 @@ const meteringIncompleteTotal = new Counter({
   registers: [registry],
 });
 
+const jwksRefreshFailuresTotal = new Counter({
+  name: 'aihub_jwks_refresh_failures_total',
+  help: 'Organization JWKS refresh attempts that failed.',
+  registers: [registry],
+});
+
+const identityCacheCoalescedWaitsTotal = new Counter({
+  name: 'aihub_identity_cache_coalesced_waits_total',
+  help: 'Identity cache requests that joined in-flight work by cache kind.',
+  labelNames: ['kind'],
+  registers: [registry],
+});
+
+export type IdentityCacheKind = 'api_key' | 'jwks';
+
+export function recordJwksRefreshFailure(): void {
+  jwksRefreshFailuresTotal.inc();
+}
+
+export function recordIdentityCacheCoalescedWait(
+  kind: IdentityCacheKind,
+): void {
+  identityCacheCoalescedWaitsTotal.inc({ kind });
+}
+
 /**
  * The bounded email kinds are the whole label domain, so this counter cannot grow
  * a series per recipient. A cancellation is deliberately absent: ADR-0074 calls

@@ -6,8 +6,10 @@ import type {
   JwksRefreshLock,
 } from '@/modules/identity/user-assertions/application/jwks-cache.port';
 import {
+  JWKS_FRESH_TTL_MS,
   JWKS_MAX_RESPONSE_BYTES,
   JWKS_REFRESH_COOLDOWN_MS,
+  JWKS_STALE_TTL_MS,
   JwksKeyProvider,
 } from './jwks-key-provider';
 
@@ -275,7 +277,7 @@ describe('JwksKeyProvider', () => {
     expect(fetches).toBe(1);
   });
 
-  it('joins a matching local flight when another process owns the refresh lock', async () => {
+  it('serves stale keys when another process owns the forced refresh lock', async () => {
     const cache = new FakeCache();
     const staleJwks = { keys: [] };
     cache.entry = { jwks: staleJwks, freshUntil: 1_000, staleUntil: 3_000 };
@@ -292,19 +294,10 @@ describe('JwksKeyProvider', () => {
       return lock;
     };
 
-    let finishFetch: ((response: Response) => void) | undefined;
-    let markFetchStarted: (() => void) | undefined;
-    const fetchStarted = new Promise<void>((resolve) => {
-      markFetchStarted = resolve;
-    });
+    const fetcher = jest.fn(async () => new Response(JSON.stringify(jwks)));
     const provider = new JwksKeyProvider(
       cache,
-      async () => {
-        markFetchStarted?.();
-        return new Promise<Response>((resolve) => {
-          finishFetch = resolve;
-        });
-      },
+      fetcher,
       publicLookup(),
       () => 2_000,
     );
@@ -319,12 +312,12 @@ describe('JwksKeyProvider', () => {
       organizationId: 'org_acme',
       config: remoteConfig,
     });
-    await fetchStarted;
+    await expect(regular).resolves.toEqual(staleJwks);
 
     releaseLock?.({ acquired: false, available: true });
-    finishFetch?.(new Response(JSON.stringify(jwks)));
 
-    await expect(Promise.all([forced, regular])).resolves.toEqual([jwks, jwks]);
+    await expect(forced).resolves.toEqual(staleJwks);
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it('reserves process capacity while a forced refresh waits for its lock', async () => {
@@ -810,6 +803,158 @@ describe('JwksKeyProvider', () => {
     await expect(
       provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
     ).resolves.toEqual(jwks);
+  });
+
+  it('returns stale keys before the background refresh finishes and backs off after failure', async () => {
+    const cache = new FakeCache();
+    const stale = { keys: [{ ...jwks.keys[0], kid: 'old' }] };
+    cache.entry = {
+      jwks: stale,
+      freshUntil: 1_000,
+      staleUntil: JWKS_REFRESH_COOLDOWN_MS + 100_000,
+    };
+    let clock = 2_000;
+    let rejectFetch: ((reason: Error) => void) | undefined;
+    let markFetchStarted: (() => void) | undefined;
+    const fetchStarted = new Promise<void>((resolve) => {
+      markFetchStarted = resolve;
+    });
+    const fetcher = jest
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((_resolve, reject) => {
+            rejectFetch = reject;
+            markFetchStarted?.();
+          }),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify(jwks)));
+    const provider = new JwksKeyProvider(
+      cache,
+      fetcher,
+      publicLookup(),
+      () => clock,
+    );
+
+    const resolution = provider.resolve({
+      organizationId: 'org_acme',
+      config: remoteConfig,
+    });
+    await fetchStarted;
+    await expect(
+      provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
+    ).resolves.toEqual(stale);
+    const returnedBeforeFetchFinished = await Promise.race([
+      resolution.then(() => true),
+      new Promise<boolean>((resolve) => setImmediate(() => resolve(false))),
+    ]);
+    rejectFetch?.(new Error('provider down'));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await expect(resolution).resolves.toEqual(stale);
+
+    await expect(
+      provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
+    ).resolves.toEqual(stale);
+    await expect(
+      provider.resolve({
+        organizationId: 'org_acme',
+        config: remoteConfig,
+        forceRefresh: true,
+      }),
+    ).resolves.toEqual(stale);
+    expect(returnedBeforeFetchFinished).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    clock += JWKS_REFRESH_COOLDOWN_MS + 1;
+    await expect(
+      provider.resolve({
+        organizationId: 'org_acme',
+        config: remoteConfig,
+        forceRefresh: true,
+      }),
+    ).resolves.toEqual(jwks);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('negatively caches a cold JWKS failure for 30 seconds with a retry hint', async () => {
+    const cache = new FakeCache();
+    let clock = 10_000;
+    const fetcher = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('provider down'))
+      .mockResolvedValueOnce(new Response(JSON.stringify(jwks)));
+    const provider = new JwksKeyProvider(
+      cache,
+      fetcher,
+      publicLookup(),
+      () => clock,
+    );
+
+    await expect(
+      provider.resolve({ organizationId: 'org_cold', config: remoteConfig }),
+    ).rejects.toMatchObject({ httpStatus: 503 });
+    await expect(
+      provider.resolve({ organizationId: 'org_cold', config: remoteConfig }),
+    ).rejects.toMatchObject({
+      code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+      retryable: true,
+      retryAfterMs: 30_000,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    clock += 30_001;
+    await expect(
+      provider.resolve({ organizationId: 'org_cold', config: remoteConfig }),
+    ).resolves.toEqual(jwks);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not let one configuration version negative-cache another', async () => {
+    const fetcher = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('provider down'))
+      .mockResolvedValueOnce(new Response(JSON.stringify(jwks)));
+    const provider = new JwksKeyProvider(
+      new FakeCache(),
+      fetcher,
+      publicLookup(),
+      () => 10_000,
+    );
+
+    await expect(
+      provider.resolve({
+        organizationId: 'org_cold',
+        config: { ...remoteConfig, jwksCacheVersion: '1' },
+      }),
+    ).rejects.toMatchObject({ httpStatus: 503 });
+    await expect(
+      provider.resolve({
+        organizationId: 'org_cold',
+        config: { ...remoteConfig, jwksCacheVersion: '2' },
+      }),
+    ).resolves.toEqual(jwks);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('shortens JWKS fresh and stale TTLs with downward-only jitter', async () => {
+    const cache = new FakeCache();
+    const now = 10_000;
+    const random = jest.spyOn(Math, 'random').mockReturnValue(0);
+    const provider = new JwksKeyProvider(
+      cache,
+      async () => new Response(JSON.stringify(jwks)),
+      publicLookup(),
+      () => now,
+    );
+
+    await provider.resolve({
+      organizationId: 'org_acme',
+      config: remoteConfig,
+    });
+    random.mockRestore();
+
+    expect(cache.entry?.freshUntil).toBe(now + JWKS_FRESH_TTL_MS / 2);
+    expect(cache.entry?.staleUntil).toBe(now + JWKS_STALE_TTL_MS / 2);
   });
 
   it('returns the contracted unavailable error when there is no usable cache', async () => {

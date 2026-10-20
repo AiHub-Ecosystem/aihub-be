@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { recordIdentityCacheCoalescedWait } from '@/common/observability/metrics';
 import { isApiKeyFormat } from '@/modules/identity/domain/api-key';
 import { hashApiKey } from './organization-api-key-generator';
 
@@ -63,6 +64,11 @@ function rateLimited(): AppError {
 }
 
 export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
+  private readonly lookupFlights = new Map<
+    string,
+    Promise<ApiKeyRecord | null>
+  >();
+
   constructor(
     private readonly repository: ApiKeyRepositoryPort,
     private readonly cache: ApiKeyCachePort,
@@ -100,14 +106,9 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
         throw rateLimited();
       }
 
-      record = await this.repository.findByHash(hashHex);
-      if (!forceFresh) {
-        if (record === null) {
-          await this.cache.setMiss(hashHex).catch(() => undefined);
-        } else {
-          await this.cache.set(hashHex, record).catch(() => undefined);
-        }
-      }
+      record = forceFresh
+        ? await this.repository.findByHash(hashHex)
+        : await this.findAndCache(hashHex);
     }
 
     if (record === null || record.status !== 'active') {
@@ -154,6 +155,34 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     } catch {
       return undefined;
     }
+  }
+
+  private findAndCache(hashHex: string): Promise<ApiKeyRecord | null> {
+    const existing = this.lookupFlights.get(hashHex);
+    if (existing !== undefined) {
+      recordIdentityCacheCoalescedWait('api_key');
+      return existing;
+    }
+
+    let flight: Promise<ApiKeyRecord | null>;
+    flight = this.repository
+      .findByHash(hashHex)
+      .then(async (record) => {
+        if (record === null) {
+          await this.cache.setMiss(hashHex).catch(() => undefined);
+        } else {
+          await this.cache.set(hashHex, record).catch(() => undefined);
+        }
+        return record;
+      })
+      .finally(() => {
+        if (this.lookupFlights.get(hashHex) === flight) {
+          this.lookupFlights.delete(hashHex);
+        }
+      });
+
+    this.lookupFlights.set(hashHex, flight);
+    return flight;
   }
 
   private async getFailureCount(ip: string): Promise<number> {

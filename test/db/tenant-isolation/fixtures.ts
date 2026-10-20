@@ -139,6 +139,7 @@ export function createTenantIsolationRedisClients(): TenantIsolationRedisClients
   };
   const identity: RedisIdentityClient = {
     get: (key) => raw.get(key),
+    pttl: (key) => raw.pttl(key),
     set: (key, value, mode, seconds, condition) =>
       condition === undefined
         ? raw.set(key, value, mode, seconds)

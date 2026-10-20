@@ -4,6 +4,8 @@ import {
   recordCompletedRequest,
   recordDispatchCancelledByDeadline,
   recordEmailDeliveryFailed,
+  recordIdentityCacheCoalescedWait,
+  recordJwksRefreshFailure,
   setDispatchAttemptUnresolvedSource,
   setDownstreamPoolQueuedSource,
   setEmailOutboxBacklogSource,
@@ -21,9 +23,11 @@ async function sample(
   name: string,
   labels: Record<string, string> = {},
 ): Promise<string | undefined> {
-  const selector = `${name}{${Object.entries(labels)
+  const labelSelector = Object.entries(labels)
     .map(([key, value]) => `${key}="${value}"`)
-    .join(',')}}`;
+    .join(',');
+  const selector =
+    labelSelector.length === 0 ? name : `${name}{${labelSelector}}`;
 
   const line = (await getMetrics())
     .split('\n')
@@ -193,6 +197,44 @@ describe('email delivery failure metric', () => {
 
     expect(await getMetrics()).not.toContain(
       'aihub_email_delivery_failed_total{kind="cancelled"}',
+    );
+  });
+});
+
+describe('identity cache metrics', () => {
+  it('counts JWKS refresh failures and coalesced waits with bounded labels', async () => {
+    const beforeFailure = Number(
+      await sample('aihub_jwks_refresh_failures_total'),
+    );
+    const beforeWait = Number(
+      (await sample('aihub_identity_cache_coalesced_waits_total', {
+        kind: 'jwks',
+      })) ?? 0,
+    );
+
+    recordJwksRefreshFailure();
+    recordIdentityCacheCoalescedWait('jwks');
+    recordIdentityCacheCoalescedWait('api_key');
+
+    expect(Number(await sample('aihub_jwks_refresh_failures_total'))).toBe(
+      beforeFailure + 1,
+    );
+    expect(
+      Number(
+        await sample('aihub_identity_cache_coalesced_waits_total', {
+          kind: 'jwks',
+        }),
+      ),
+    ).toBe(beforeWait + 1);
+    expect(
+      Number(
+        await sample('aihub_identity_cache_coalesced_waits_total', {
+          kind: 'api_key',
+        }),
+      ),
+    ).toBeGreaterThanOrEqual(1);
+    expect(await getMetrics()).not.toMatch(
+      /aihub_(?:jwks_refresh_failures|identity_cache_coalesced_waits)[^\n]*\b(?:org|key|user)_id=/,
     );
   });
 });

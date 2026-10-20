@@ -34,11 +34,17 @@ export function invalidSignedUserAssertion(cause?: unknown): AppError {
 }
 
 /** An identity-configuration store or JWKS outage; retryable, never a fallback. */
-export function identityProviderUnavailable(cause?: unknown): AppError {
+export function identityProviderUnavailable(
+  cause?: unknown,
+  retryAfterMs?: number,
+): AppError {
   return new AppError({
     code: 'IDENTITY_PROVIDER_UNAVAILABLE',
     message: 'Identity provider is unavailable',
     retryable: true,
+    ...(retryAfterMs === undefined
+      ? {}
+      : { retryAfterMs, retryAfterHeader: true }),
     ...(cause === undefined ? {} : { cause }),
   });
 }

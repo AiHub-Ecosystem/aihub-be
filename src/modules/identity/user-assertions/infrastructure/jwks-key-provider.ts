@@ -5,6 +5,10 @@ import { isIP } from 'node:net';
 import { Agent, type Dispatcher, fetch as undiciFetch } from 'undici';
 
 import { AppError } from '@/common/errors/app-error';
+import {
+  recordIdentityCacheCoalescedWait,
+  recordJwksRefreshFailure,
+} from '@/common/observability/metrics';
 import { parsePublicJsonWebKeySet } from '@/modules/identity/domain/organization-identity-config';
 import type {
   OrganizationIdentityConfig,
@@ -21,11 +25,55 @@ import { identityProviderUnavailable } from '@/modules/identity/user-assertions/
 export const JWKS_FRESH_TTL_MS = 15 * 60 * 1_000;
 export const JWKS_STALE_TTL_MS = 24 * 60 * 60 * 1_000;
 export const JWKS_REFRESH_COOLDOWN_MS = 5 * 60 * 1_000;
+export const JWKS_COLD_FAILURE_TTL_MS = 30 * 1_000;
 export const JWKS_DNS_TIMEOUT_MS = 1_000;
 export const JWKS_FETCH_TIMEOUT_MS = 3_000;
 export const JWKS_MAX_RESPONSE_BYTES = 64 * 1024;
 export const JWKS_MAX_CONCURRENT_ORGANIZATIONS = 8;
+const MAX_LOCAL_JWKS_COOLDOWNS = 256;
 const JWKS_DISPATCHER = Symbol('JWKS_DISPATCHER');
+
+function shortenedTtl(maxMs: number): number {
+  const random = Math.min(0.999_999_999, Math.max(0, Math.random()));
+  return Math.floor(maxMs * (0.5 + random * 0.5));
+}
+
+function remainingCooldown(
+  cooldowns: Map<string, number>,
+  key: string,
+  now: number,
+): number {
+  const retryAt = cooldowns.get(key);
+  if (retryAt === undefined) return 0;
+  if (retryAt <= now) {
+    cooldowns.delete(key);
+    return 0;
+  }
+  return Math.ceil(retryAt - now);
+}
+
+function setCooldown(
+  cooldowns: Map<string, number>,
+  key: string,
+  retryAt: number,
+): void {
+  cooldowns.delete(key);
+  cooldowns.set(key, retryAt);
+  if (cooldowns.size > MAX_LOCAL_JWKS_COOLDOWNS) {
+    const oldest = cooldowns.keys().next().value;
+    if (oldest !== undefined) cooldowns.delete(oldest);
+  }
+}
+
+class JwksCapacityError extends AppError {
+  constructor() {
+    super({
+      code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+      message: 'JWKS source is unavailable',
+      retryable: true,
+    });
+  }
+}
 
 interface DnsAddress {
   readonly address: string;
@@ -441,6 +489,8 @@ async function readLimitedBody(response: FetchResponse): Promise<string> {
 
 export class JwksKeyProvider implements JwksKeyProviderPort {
   private readonly localRefreshCooldown = new Map<string, number>();
+  private readonly refreshFailureCooldown = new Map<string, number>();
+  private readonly coldFailureCooldown = new Map<string, number>();
   private readonly refreshLockFlights = new Map<
     string,
     Promise<JwksRefreshLock>
@@ -469,7 +519,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     await this.fetchRemoteForOrganization(
       input.organizationId,
       input.url,
-      JSON.stringify([snapshot.generation, input.url]),
+      JSON.stringify(['1', snapshot.generation, input.url]),
     );
   }
 
@@ -493,6 +543,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     const cacheGeneration = snapshot.generation;
     const cached = snapshot.entry;
     const now = this.now();
+    const cooldownKey = JSON.stringify([input.organizationId, configVersion]);
 
     if (
       !input.forceRefresh &&
@@ -502,8 +553,50 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       return cached.jwks;
     }
 
-    const flightKey = JSON.stringify([cacheGeneration, input.config.jwksUrl]);
+    const flightKey = JSON.stringify([
+      configVersion,
+      cacheGeneration,
+      input.config.jwksUrl,
+    ]);
     const activeFlight = this.flights.get(input.organizationId);
+
+    if (
+      cached !== undefined &&
+      cached.staleUntil > now &&
+      !input.forceRefresh
+    ) {
+      if (
+        remainingCooldown(this.refreshFailureCooldown, cooldownKey, now) === 0
+      ) {
+        this.startBackgroundRefresh(
+          input.organizationId,
+          configVersion,
+          input.config.jwksUrl,
+          cacheGeneration,
+          cooldownKey,
+        );
+      }
+      return cached.jwks;
+    }
+
+    const retryAfterMs = Math.max(
+      remainingCooldown(this.refreshFailureCooldown, cooldownKey, now),
+      remainingCooldown(this.coldFailureCooldown, cooldownKey, now),
+    );
+    if (retryAfterMs > 0) {
+      if (cached !== undefined && cached.staleUntil > now) return cached.jwks;
+      throw identityProviderUnavailable(undefined, retryAfterMs);
+    }
+
+    if (
+      activeFlight === undefined &&
+      !this.refreshReservations.has(input.organizationId) &&
+      new Set([...this.flights.keys(), ...this.refreshReservations.keys()])
+        .size >= JWKS_MAX_CONCURRENT_ORGANIZATIONS
+    ) {
+      if (cached !== undefined && cached.staleUntil > now) return cached.jwks;
+      throw new JwksCapacityError();
+    }
 
     if (
       input.forceRefresh &&
@@ -514,13 +607,17 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
         const lock = await this.acquireRefreshLock(input.organizationId);
         if (!lock.available) {
           if (!this.flights.has(input.organizationId)) {
-            const cooldownUntil = this.localRefreshCooldown.get(
-              input.organizationId,
-            );
-            if (cooldownUntil !== undefined && cooldownUntil > now) {
+            if (
+              remainingCooldown(
+                this.localRefreshCooldown,
+                input.organizationId,
+                now,
+              ) > 0
+            ) {
               return cached?.jwks ?? { keys: [] };
             }
-            this.localRefreshCooldown.set(
+            setCooldown(
+              this.localRefreshCooldown,
               input.organizationId,
               now + JWKS_REFRESH_COOLDOWN_MS,
             );
@@ -549,16 +646,32 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
         input.config.jwksUrl,
         flightKey,
       );
+      const refreshedAt = this.now();
       const entry: JwksCacheEntry = {
         jwks,
-        freshUntil: now + JWKS_FRESH_TTL_MS,
-        staleUntil: now + JWKS_STALE_TTL_MS,
+        freshUntil: refreshedAt + shortenedTtl(JWKS_FRESH_TTL_MS),
+        staleUntil: refreshedAt + shortenedTtl(JWKS_STALE_TTL_MS),
       };
       await this.cache
         .setJwks(input.organizationId, configVersion, cacheGeneration, entry)
         .catch(() => undefined);
+      this.refreshFailureCooldown.delete(cooldownKey);
+      this.coldFailureCooldown.delete(cooldownKey);
       return jwks;
     } catch (error) {
+      if (!(error instanceof JwksCapacityError)) {
+        const hasUsableStale = cached !== undefined && cached.staleUntil > now;
+        setCooldown(
+          hasUsableStale
+            ? this.refreshFailureCooldown
+            : this.coldFailureCooldown,
+          cooldownKey,
+          now +
+            (hasUsableStale
+              ? JWKS_REFRESH_COOLDOWN_MS
+              : JWKS_COLD_FAILURE_TTL_MS),
+        );
+      }
       if (cached !== undefined && cached.staleUntil > now) {
         return cached.jwks;
       }
@@ -574,8 +687,58 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       ) {
         throw error;
       }
-      throw identityProviderUnavailable(error);
+      throw identityProviderUnavailable(
+        error,
+        error instanceof JwksCapacityError
+          ? undefined
+          : JWKS_COLD_FAILURE_TTL_MS,
+      );
     }
+  }
+
+  private startBackgroundRefresh(
+    organizationId: string,
+    configVersion: string,
+    url: string,
+    generation: string,
+    cooldownKey: string,
+  ): void {
+    const key = JSON.stringify([configVersion, generation, url]);
+    if (
+      this.flights.has(organizationId) ||
+      this.refreshReservations.has(organizationId) ||
+      !this.reserveRefreshSlot(organizationId, key)
+    ) {
+      return;
+    }
+
+    let refresh: Promise<PublicJsonWebKeySet>;
+    try {
+      refresh = this.fetchRemoteForOrganization(organizationId, url, key);
+    } finally {
+      this.releaseRefreshSlot(organizationId, key);
+    }
+
+    void refresh
+      .then(async (jwks) => {
+        const refreshedAt = this.now();
+        await this.cache.setJwks(organizationId, configVersion, generation, {
+          jwks,
+          freshUntil: refreshedAt + shortenedTtl(JWKS_FRESH_TTL_MS),
+          staleUntil: refreshedAt + shortenedTtl(JWKS_STALE_TTL_MS),
+        });
+        this.refreshFailureCooldown.delete(cooldownKey);
+        this.coldFailureCooldown.delete(cooldownKey);
+        return undefined;
+      })
+      .catch(() => {
+        setCooldown(
+          this.refreshFailureCooldown,
+          cooldownKey,
+          this.now() + JWKS_REFRESH_COOLDOWN_MS,
+        );
+        return undefined;
+      });
   }
 
   private acquireRefreshLock(organizationId: string): Promise<JwksRefreshLock> {
@@ -626,13 +789,13 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
   ): Promise<PublicJsonWebKeySet> {
     const existing = this.flights.get(organizationId);
     if (existing !== undefined) {
-      return existing.key === key
-        ? existing.promise
-        : Promise.reject(sourceUnavailable(true));
+      if (existing.key !== key) return Promise.reject(new JwksCapacityError());
+      recordIdentityCacheCoalescedWait('jwks');
+      return existing.promise;
     }
     const reservation = this.refreshReservations.get(organizationId);
     if (reservation !== undefined && reservation !== key) {
-      return Promise.reject(sourceUnavailable(true));
+      return Promise.reject(new JwksCapacityError());
     }
     const occupied = new Set([
       ...this.flights.keys(),
@@ -642,7 +805,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       !occupied.has(organizationId) &&
       occupied.size >= JWKS_MAX_CONCURRENT_ORGANIZATIONS
     ) {
-      return Promise.reject(sourceUnavailable(true));
+      return Promise.reject(new JwksCapacityError());
     }
 
     let flight: {
@@ -651,6 +814,10 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     };
     const promise = Promise.resolve()
       .then(() => this.fetchRemote(url))
+      .catch((error: unknown) => {
+        recordJwksRefreshFailure();
+        throw error;
+      })
       .finally(() => {
         if (this.flights.get(organizationId) === flight) {
           this.flights.delete(organizationId);
