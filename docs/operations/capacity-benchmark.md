@@ -18,13 +18,14 @@ no published ports. It does not call Production, Sandbox, AI Writing, AI
 Speaking, Resend, or SeaweedFS. `docker compose down --volumes` removes only the
 temporary project and its benchmark data volume after the run.
 
-The AIHUB target is limited to 1.5 CPU and 768 MiB. The seed creates four
-synthetic Organizations with `max_concurrent=20`, 512 pre-verified
-MFA-disabled users, and synthetic usage rows for the operator jobs. Passwords
-use the current Argon2id profile (`m=65536,t=3,p=1`). No registration, email,
-MFA, or outbound provider call is part of the run. API keys, session tokens,
-and passwords are created inside the temporary Docker volume and are removed
-when Compose tears the project down.
+The AIHUB target is limited to 1.5 CPU and 768 MiB. The seed creates eight
+synthetic Organizations with `max_concurrent=20`, 100,000 synthetic usage rows,
+and one pre-verified MFA-disabled user per configured load VU plus one metrics
+VU (257 users at the default 256 load VUs). Passwords use the current Argon2id
+profile (`m=65536,t=3,p=1`). No registration, email, MFA, or outbound provider
+call is part of the run. API keys, session tokens, and passwords are created
+inside the temporary Docker volume and are removed when Compose tears the
+project down.
 
 The stub returns the checked-in AI Writing Task 1 and Task 2 response fixtures
 and the checked-in AI Speaking response fixture for both Speaking transports.

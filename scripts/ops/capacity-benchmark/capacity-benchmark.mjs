@@ -362,7 +362,7 @@ try {
           speakingMultipart: 0.25,
           speakingJson: 0.25,
         },
-        syntheticOrganizations: 4,
+        syntheticOrganizations: 8,
         maxConcurrentPerOrganization: 20,
         syntheticPreverifiedMfaDisabledUsers: seededUserCount,
         syntheticUsageRows: 100000,
