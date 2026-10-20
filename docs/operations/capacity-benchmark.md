@@ -105,6 +105,21 @@ refresh-token user per configured
 maximum load VU plus the metrics scenario VU. The runner rejects settings above
 512 load VUs, and k6 checks the full credential pool before sending requests.
 
+The final stage runs a login burst intended to saturate the per-process Argon2
+cap (defaults: 16 requests/s with a cap of two and `UV_THREADPOOL_SIZE=4`); it
+fails unless the burst records an actual queue wait. An in-process
+probe measures `dns.lookup('benchmark-support')` and RS256 `jose.jwtVerify`
+every 100 ms during a five-second idle window and the burst. When the probe
+observes Argon2 queue work, it runs one image through the production Writing
+chart sanitizer and its serialized processing queue, tying the chart
+verification to actual hash contention. The report records login
+p50/p95/p99 and errors, probe p95s, the chart verification result, and peak
+process RSS; the run fails if a probe sample is missing, chart verification
+does not complete, or RSS exceeds ADR-0080's 614 MiB gate. The report includes
+the probe source and a snapshot of its script. Override the Argon2 settings
+with `BENCHMARK_ARGON2_MAX_CONCURRENCY`,
+`BENCHMARK_ARGON2_THREADPOOL_SIZE`, and `BENCHMARK_ARGON2_BURST_RATE_RPS`.
+
 Each JSON result is written to the ignored
 `artifacts/capacity-benchmark/<run-id>/results.json`. The GitHub workflow also
 writes `repetitions-summary.json` and `repetitions-summary.md` beside those run

@@ -5,10 +5,9 @@ import { Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 import type { OperationId } from '@/catalog/operation-id';
 
 /**
- * The metric names spec section L.2 fixes. Issue #198 owns five of the
- * eight; the protection-state metrics (`aihub_rejected_total`,
- * `aihub_redis_unavailable_total`) belong to #200 and the breaker gauge to
- * #199, so they are absent here until those land rather than pre-empted.
+ * Shared metric registry. The protection-state metrics
+ * (`aihub_rejected_total`, `aihub_redis_unavailable_total`) belong to #200 and
+ * the breaker gauge to #199, so they are absent here until those land.
  */
 export const METRICS_ROUTE_PATH = '/metrics';
 
@@ -35,6 +34,26 @@ export function recordObjectStorageFailure(
   reason: ObjectStorageFailureReason,
 ): void {
   objectStorageFailures.inc({ reason });
+}
+
+const argon2QueueWaitsTotal = new Counter({
+  name: 'aihub_argon2_queue_waits_total',
+  help: 'Argon2 operations that waited for a per-process worker slot.',
+  registers: [registry],
+});
+
+const argon2QueueRefusalsTotal = new Counter({
+  name: 'aihub_argon2_queue_refusals_total',
+  help: 'Argon2 operations refused after the bounded queue filled or timed out.',
+  registers: [registry],
+});
+
+export function recordArgon2QueueWait(): void {
+  argon2QueueWaitsTotal.inc();
+}
+
+export function recordArgon2QueueRefusal(): void {
+  argon2QueueRefusalsTotal.inc();
 }
 
 new Gauge({

@@ -2279,6 +2279,17 @@ export function buildOpenApiDocument(version: string): unknown {
   for (const [status, codes] of groupedErrors) {
     errorResponses[`Error${status}`] = {
       description: codes.join(' | '),
+      ...(status === 503
+        ? {
+            headers: {
+              'Retry-After': {
+                description:
+                  'Whole seconds to wait before retrying when the error includes retry_after_ms.',
+                schema: { type: 'string', pattern: '^[0-9]+$' },
+              },
+            },
+          }
+        : {}),
       content: {
         'application/json': { schema: errorResponseSchema(codes) },
       },

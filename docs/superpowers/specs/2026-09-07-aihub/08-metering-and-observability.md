@@ -169,6 +169,8 @@ aihub_admission_duration_seconds{operation}       histogram
 aihub_downstream_duration_seconds{operation}       histogram
 aihub_tokens_total{operation}                       counter
 aihub_rejected_total{reason}                       rate_limit|quota|concurrency|auth
+aihub_argon2_queue_waits_total                      counter
+aihub_argon2_queue_refusals_total                   counter
 aihub_breaker_state{operation}                     0 closed / 1 open / 2 half-open
 aihub_metering_incomplete_total{operation}
 aihub_redis_unavailable_total
@@ -180,6 +182,10 @@ aihub_postgres_pool_idle{pool}
 aihub_postgres_pool_waiting{pool}
 aihub_downstream_pool_queued{origin}
 ```
+
+The Argon2 counters record process-wide queue waits and refusals without
+request or tenant labels. Refusals use their own counter; `aihub_rejected_total`
+remains owned by #200.
 
 The operation label comes from the bounded operation catalog. `gateway_overhead`
 **requires no dedicated metric** — it is derived directly from total and

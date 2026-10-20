@@ -23,9 +23,34 @@ describe('runtime configuration', () => {
 
     expect(config.PORT).toBe(4312);
     expect(config.AIHUB_ALLOW_UNAUTHENTICATED_DEV).toBe(true);
+    expect(config.UV_THREADPOOL_SIZE).toBe(4);
+    expect(config.AIHUB_AUTH_ARGON2_MAX_CONCURRENCY).toBe(2);
     expect(config.LOG_LEVEL).toBe('info');
     expect(config.SEAWEEDFS_ENDPOINT_URL).toBe('https://s3.wispace.app');
     expect(config.SEAWEEDFS_REGION).toBe('us-east-1');
+  });
+
+  it('requires the Argon2 cap to leave one libuv worker available', () => {
+    let caught: unknown;
+    try {
+      loadRuntimeConfiguration({
+        NODE_ENV: 'test',
+        AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
+        AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
+        AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
+        AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+        AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
+        UV_THREADPOOL_SIZE: '2',
+        AIHUB_AUTH_ARGON2_MAX_CONCURRENCY: '2',
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(RuntimeConfigurationError);
+    expect((caught as RuntimeConfigurationError).variableNames).toContain(
+      'AIHUB_AUTH_ARGON2_MAX_CONCURRENCY',
+    );
   });
 
   it('requires an explicit trusted-proxy IP literal in every runtime mode', () => {

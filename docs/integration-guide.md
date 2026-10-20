@@ -47,6 +47,11 @@ failed proofs from one caller IP in five minutes, AIHUB returns
 response includes `Retry-After` in whole seconds and `error.retry_after_ms` in
 milliseconds; wait for the longer exhausted window before trying again.
 
+Password verification and hashing use a bounded process-wide queue. If that
+queue is full or your request waits too long, AIHUB returns retryable
+`503 AUTH_ARGON2_CAPACITY` with `Retry-After` and `error.retry_after_ms`; wait
+for that interval before retrying the password operation.
+
 ## 1. How the pieces fit
 
 AIHUB sits between your backend and the private AI services. Your end users

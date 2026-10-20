@@ -281,7 +281,16 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
         AUTH_MFA_SERVICE,
       ],
     },
-    { provide: PASSWORD_HASHER, useClass: Argon2PasswordHasher },
+    {
+      provide: PASSWORD_HASHER,
+      inject: [appConfig.KEY],
+      useFactory: (
+        configuration: ConfigType<typeof appConfig>,
+      ): Argon2PasswordHasher =>
+        new Argon2PasswordHasher(
+          configuration.AIHUB_AUTH_ARGON2_MAX_CONCURRENCY,
+        ),
+    },
     {
       provide: PASSWORD_RESET_TOKEN,
       useFactory: (): PasswordResetTokenPort =>

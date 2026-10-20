@@ -44,6 +44,29 @@ OWASP lists `m=19456 KiB, t=2, p=1` as a minimum recommended Argon2id profile. [
 
 If the lower profile still exceeds the RSS threshold, record that result and revisit the wider container budget under #268; do not keep lowering password-hash cost in this issue. The confirmation run repeated the current profile after the decision; no profile migration or login rehash is needed while the RSS gate passes.
 
+## Bounded Argon2 admission (issue #700, 2026-10-20)
+
+Keep `UV_THREADPOOL_SIZE=4` and cap concurrent Argon2 hash and verify
+operations at two per process. The runtime validates that the configured cap
+is below the configured pool size. Queue at most eight additional operations
+for up to one second; when either bound is exceeded, return retryable
+`503 AUTH_ARGON2_CAPACITY` with a one-second `Retry-After`. This limits Argon2
+to about 128 MiB of concurrent working memory at the current 64 MiB profile.
+
+The two unoccupied pool slots are shared by WebCrypto, DNS, async file and
+zlib work. Writing chart verification remains serialized to one Sharp
+operation, so it can use one of those slots while leaving one for other work;
+this is not a reservation. Do not increase the pool size as part of this
+change.
+
+The `pnpm capacity:benchmark` harness now measures in-process DNS lookup and
+RS256 `jwtVerify` p95 while idle and during an over-cap login burst, with one
+production Writing chart image verification in flight. It records login
+p95 and peak process RSS and fails above the existing 614 MiB gate. The
+measurement has not been run in this environment because the Docker Engine is
+unavailable; the harness results must be appended here after a run. No new
+latency or RSS result is inferred from the earlier measurements above.
+
 ## Verification (2026-10-07)
 
 `pnpm verify` passed on the pinned Node 22.23.2 Linux environment: 197 test suites passed, with 1,896 tests passing and one skipped.

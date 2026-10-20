@@ -100,7 +100,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
     );
     if (
       exception instanceof AppError &&
-      exception.code === 'RATE_LIMITED' &&
       exception.retryAfterHeader === true &&
       exception.retryAfterMs !== undefined
     ) {

@@ -3,6 +3,11 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
+  parseArgon2QueueMetrics,
+  percentile,
+  summarizeProbeSamples,
+} from './argon2-contention-probe.mjs';
+import {
   appendStreamingMarkerChunk,
   authAndGradingWorkload,
   contentionJobsFitLoadWindow,
@@ -20,6 +25,38 @@ import {
   taggedMetricValues,
   task1PayloadFromFixture,
 } from './capacity-benchmark-utils.mjs';
+
+await test('reads Argon2 queue counters from Prometheus exposition', () => {
+  assert.deepEqual(
+    parseArgon2QueueMetrics(
+      '# HELP aihub_argon2_queue_waits_total queue waits\n' +
+        'aihub_argon2_queue_waits_total 7\n' +
+        'aihub_argon2_queue_refusals_total 2\n',
+    ),
+    { waits: 7, refusals: 2 },
+  );
+  assert.deepEqual(parseArgon2QueueMetrics(''), { waits: 0, refusals: 0 });
+});
+
+await test('reports nearest-rank p95 for in-process contention probes', () => {
+  assert.equal(percentile([7, 1, 5, 3], 0.5), 3);
+  assert.deepEqual(
+    summarizeProbeSamples({
+      dnsLookupMs: [1, 2, 3, 4],
+      jwtVerifyMs: [5, 6, 7, 8],
+      failures: 1,
+      processRssPeakBytes: 4096,
+    }),
+    {
+      dnsLookupSampleCount: 4,
+      dnsLookupP95Ms: 4,
+      jwtVerifySampleCount: 4,
+      jwtVerifyP95Ms: 8,
+      probeFailures: 1,
+      processRssPeakBytes: 4096,
+    },
+  );
+});
 
 await test('chooses the highest offered rate meeting the deadline without errors', () => {
   const runs = [

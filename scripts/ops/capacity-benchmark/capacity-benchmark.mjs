@@ -41,6 +41,15 @@ const stubLatencyMs = positiveInteger(
 );
 const stubErrorRate = Number(process.env.BENCHMARK_STUB_ERROR_RATE ?? '0');
 const maxVUs = positiveInteger(process.env.BENCHMARK_MAX_VUS ?? '256');
+const argon2MaxConcurrency = positiveInteger(
+  process.env.BENCHMARK_ARGON2_MAX_CONCURRENCY ?? '2',
+);
+const argon2ThreadpoolSize = positiveInteger(
+  process.env.BENCHMARK_ARGON2_THREADPOOL_SIZE ?? '4',
+);
+const argon2BurstRateRps = positiveInteger(
+  process.env.BENCHMARK_ARGON2_BURST_RATE_RPS ?? '16',
+);
 const metricsScenarioVUs = 1;
 const maxLoadVUs = 512;
 const seededUserCount = maxVUs + metricsScenarioVUs;
@@ -64,7 +73,7 @@ const artifactDirectory = path.join(
 
 if (process.argv.includes('--help')) {
   process.stdout.write(
-    'Run the isolated capacity benchmark. Configure BENCHMARK_STAGE_RATES_RPS, BENCHMARK_DURATION, BENCHMARK_MINIMUM_GRADING_SAMPLES, BENCHMARK_REPETITION, BENCHMARK_REDIS_RTT_MS, BENCHMARK_STUB_LATENCY_MS, BENCHMARK_STUB_ERROR_RATE, and BENCHMARK_MAX_VUS.\n',
+    'Run the isolated capacity benchmark. Configure BENCHMARK_STAGE_RATES_RPS, BENCHMARK_DURATION, BENCHMARK_MINIMUM_GRADING_SAMPLES, BENCHMARK_REPETITION, BENCHMARK_REDIS_RTT_MS, BENCHMARK_STUB_LATENCY_MS, BENCHMARK_STUB_ERROR_RATE, BENCHMARK_MAX_VUS, BENCHMARK_ARGON2_MAX_CONCURRENCY, BENCHMARK_ARGON2_THREADPOOL_SIZE, and BENCHMARK_ARGON2_BURST_RATE_RPS.\n',
   );
   process.exit(0);
 }
@@ -78,7 +87,8 @@ if (
   redisRttMs % 2 !== 0 ||
   !Number.isFinite(stubErrorRate) ||
   stubErrorRate < 0 ||
-  stubErrorRate > 1
+  stubErrorRate > 1 ||
+  argon2MaxConcurrency >= argon2ThreadpoolSize
 ) {
   throw new Error('invalid capacity benchmark settings');
 }
@@ -100,6 +110,10 @@ const utilsScriptSnapshot = path.join(
   harnessSnapshotDirectory,
   'capacity-benchmark-utils.mjs',
 );
+const argon2ProbeScriptSnapshot = path.join(
+  harnessSnapshotDirectory,
+  'argon2-contention-probe.mjs',
+);
 await Promise.all([
   copyFile(
     path.join(
@@ -114,6 +128,13 @@ await Promise.all([
       'scripts/ops/capacity-benchmark/capacity-benchmark-utils.mjs',
     ),
     utilsScriptSnapshot,
+  ),
+  copyFile(
+    path.join(
+      repositoryRoot,
+      'scripts/ops/capacity-benchmark/argon2-contention-probe.mjs',
+    ),
+    argon2ProbeScriptSnapshot,
   ),
 ]);
 if (gitRevision() !== benchmarkRevision) {
@@ -154,6 +175,7 @@ let statsWatcher;
 let hostWatcher;
 let recovery;
 let contention;
+let argon2Contention;
 
 try {
   process.stdout.write('Building the isolated benchmark images...\n');
@@ -208,6 +230,110 @@ try {
       );
     }
   }
+
+  await controlArgon2Probe(appContainerId, '/reset');
+  await new Promise((resolve) => setTimeout(resolve, 5000));
+  const idleArgon2Probe = await controlArgon2Probe(appContainerId, '/burst');
+  /** @type {number | undefined} */
+  let argon2BurstStartedAt;
+  /** @type {ReturnType<typeof controlArgon2Probe> | undefined} */
+  let chartProbeStart;
+  const argon2Burst = await runK6({
+    appContainerId,
+    workload: 'login',
+    rate: argon2BurstRateRps,
+    routeNames: ['login'],
+    runDuration: stageDuration('login', argon2BurstRateRps),
+    label: `Argon2 login burst at ${argon2BurstRateRps} requests/s`,
+    onLoadStarted: (startedAt) => {
+      argon2BurstStartedAt = startedAt;
+      chartProbeStart = controlArgon2Probe(appContainerId, '/chart').catch(
+        (error) => ({
+          accepted: false,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    },
+  });
+  const argon2BurstFinishedAt = Date.now();
+  if (chartProbeStart === undefined) {
+    throw new Error('Argon2 contention run did not start its chart probe');
+  }
+  const chartProbeAccepted = await chartProbeStart;
+  const argon2Probe = await controlArgon2Probe(appContainerId, '/stop');
+  const login = argon2Burst.routes.login;
+  const argon2QueueWaitCount = Math.max(
+    0,
+    argon2Probe.queueMetrics.waits - idleArgon2Probe.queueMetrics.waits,
+  );
+  const argon2QueueRefusalCount = Math.max(
+    0,
+    argon2Probe.queueMetrics.refusals - idleArgon2Probe.queueMetrics.refusals,
+  );
+  const chartStartedAt = Date.parse(
+    argon2Probe.chartVerification?.startedAt ?? '',
+  );
+  const chartCompletedAt = Date.parse(
+    argon2Probe.chartVerification?.completedAt ?? '',
+  );
+  const chartVerificationOverlappedBurst =
+    argon2BurstStartedAt !== undefined &&
+    chartStartedAt <= argon2BurstFinishedAt &&
+    chartCompletedAt >= argon2BurstStartedAt;
+  const argon2ProcessRssPeakBytes = Math.max(
+    argon2Probe.burst.processRssPeakBytes,
+    argon2Burst.processRssPeakBytes ?? 0,
+  );
+  const argon2RssGateBytes = 614 * 1024 * 1024;
+  const argon2Checks = {
+    loginSamplesRecorded: login.count > 0 && login.p95Ms !== null,
+    idleProbesRecorded:
+      idleArgon2Probe.dnsLookupSampleCount >= 10 &&
+      idleArgon2Probe.jwtVerifySampleCount >= 10,
+    burstProbesRecorded:
+      argon2Probe.burst.dnsLookupSampleCount >= 10 &&
+      argon2Probe.burst.jwtVerifySampleCount >= 10,
+    argon2QueueWaitObserved: argon2QueueWaitCount > 0,
+    probesSucceeded:
+      idleArgon2Probe.probeFailures === 0 &&
+      argon2Probe.burst.probeFailures === 0,
+    chartVerificationCompleted:
+      chartProbeAccepted.accepted === true &&
+      argon2Probe.chartVerification?.result === 'sanitized',
+    chartStartedAfterQueueWait:
+      chartProbeAccepted.queueWaitCount > idleArgon2Probe.queueMetrics.waits,
+    chartVerificationOverlappedBurst,
+    peakRssWithinAdr0080Gate: argon2ProcessRssPeakBytes <= argon2RssGateBytes,
+  };
+  argon2Contention = {
+    offeredRateRps: argon2BurstRateRps,
+    maxConcurrency: argon2MaxConcurrency,
+    threadpoolSize: argon2ThreadpoolSize,
+    queueMaxLength: 8,
+    queueMaxWaitMs: 1000,
+    queueWaitCount: argon2QueueWaitCount,
+    queueRefusalCount: argon2QueueRefusalCount,
+    login: {
+      count: login.count,
+      p50Ms: login.p50Ms,
+      p95Ms: login.p95Ms,
+      p99Ms: login.p99Ms,
+      errorCount: login.errorCount,
+    },
+    probes: {
+      source:
+        'The AIHUB app process measures dns.lookup(benchmark-support) and RS256 jose.jwtVerify every 100ms; p95 uses nearest-rank samples.',
+      idle: idleArgon2Probe,
+      duringBurst: argon2Probe.burst,
+    },
+    chartVerification: argon2Probe.chartVerification,
+    chartProbeError: chartProbeAccepted.error ?? null,
+    peakProcessRssBytes: argon2ProcessRssPeakBytes,
+    adr0080RssGateBytes: argon2RssGateBytes,
+    checks: argon2Checks,
+    allChecksPassed: Object.values(argon2Checks).every(Boolean),
+  };
+  runs.push(argon2Burst);
 
   const deadlines = {
     writing_task1: 60_000,
@@ -346,9 +472,11 @@ try {
         placement:
           'separate Docker container on the isolated benchmark network',
         maxVUs,
-        harnessSnapshots: [k6ScriptSnapshot, utilsScriptSnapshot].map(
-          (filePath) => path.relative(repositoryRoot, filePath),
-        ),
+        harnessSnapshots: [
+          k6ScriptSnapshot,
+          utilsScriptSnapshot,
+          argon2ProbeScriptSnapshot,
+        ].map((filePath) => path.relative(repositoryRoot, filePath)),
       },
       configuration: {
         stageRatesRps: stageRates,
@@ -367,6 +495,9 @@ try {
         syntheticPreverifiedMfaDisabledUsers: seededUserCount,
         syntheticUsageRows: 100000,
         passwordHash: 'Argon2id m=65536,t=3,p=1',
+        argon2MaxConcurrency,
+        argon2ThreadpoolSize,
+        argon2BurstRateRps,
       },
       thresholds: {
         gradingP99Ms: deadlines,
@@ -424,6 +555,7 @@ try {
                 contention.hostWideLockDefersCompetingJobs,
             },
     },
+    argon2Contention,
     runs,
     sampledResources: {
       appContainer: statsWatcher.samples,
@@ -436,6 +568,10 @@ try {
   const resultPath = path.join(artifactDirectory, 'results.json');
   await writeFile(resultPath, `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(`Benchmark report written to ${resultPath}\n`);
+  if (!argon2Contention.allChecksPassed) {
+    process.stderr.write('Argon2 contention acceptance checks did not pass.\n');
+    process.exitCode = 1;
+  }
 } catch (error) {
   process.stderr.write(
     `Capacity benchmark failed: ${error instanceof Error ? error.message : String(error)}\n`,
@@ -513,6 +649,17 @@ function dockerCompose(args, options = {}) {
     ...options,
     env: benchmarkEnvironment,
   });
+}
+
+async function controlArgon2Probe(containerId, pathName) {
+  const url = `http://127.0.0.1:39117${pathName}`;
+  const script = `fetch(${JSON.stringify(url)}, { method: 'POST' }).then(async (response) => { const body = await response.text(); if (!response.ok) throw new Error(body); process.stdout.write(body); }).catch((error) => { process.stderr.write(error.message); process.exitCode = 1; });`;
+  const result = await runProcess(
+    'docker',
+    ['exec', '-e', 'NODE_OPTIONS=', containerId, 'node', '-e', script],
+    { env: benchmarkEnvironment },
+  );
+  return JSON.parse(result.stdout);
 }
 
 function runProcess(command, args, options = {}) {

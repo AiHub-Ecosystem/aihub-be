@@ -854,6 +854,27 @@ describe('buildOpenApiDocument', () => {
     });
   });
 
+  it('documents Argon2 capacity refusals on every password hashing route', () => {
+    const doc = build();
+    const routes = [
+      doc.paths['/v1/auth/register']?.post,
+      doc.paths['/v1/auth/login']?.post,
+      doc.paths['/v1/auth/web-sessions']?.post,
+      doc.paths['/v1/auth/mfa/enrollment']?.post,
+      doc.paths['/v1/auth/mfa']?.delete,
+      doc.paths['/v1/auth/reset-password']?.post,
+    ];
+
+    expect(routes.every((route) => route?.responses['503'] !== undefined)).toBe(
+      true,
+    );
+    const serviceUnavailable = JSON.stringify(
+      doc.components.responses.Error503,
+    );
+    expect(serviceUnavailable).toContain('AUTH_ARGON2_CAPACITY');
+    expect(serviceUnavailable).toContain('Retry-After');
+  });
+
   // The identity module's own rate limit is a different refusal and carries no
   // header, so a 429 outside authentication keeps the plain response.
   it('leaves a non-authentication lockout without the retry header', () => {
@@ -1145,18 +1166,17 @@ describe('buildOpenApiDocument', () => {
     );
   });
 
-  // The outbox took provider delivery out of the request (ADR-0074), so the
-  // code those four flows used to raise has no producer left and the two routes
-  // that advertised it have no 503 to answer with.
-  it('publishes no error code the outbox left without a producer', () => {
+  // Registration has a 503 for bounded Argon2 admission, but email delivery is
+  // still outside the request after the outbox change (ADR-0074).
+  it('publishes Argon2 capacity without reviving request-time email failures', () => {
     const doc = build();
 
     expect(JSON.stringify(doc)).not.toContain(
       'AUTH_EMAIL_DELIVERY_UNAVAILABLE',
     );
     expect(
-      doc.paths['/v1/auth/register']?.post?.responses['503'],
-    ).toBeUndefined();
+      JSON.stringify(doc.paths['/v1/auth/register']?.post?.responses['503']),
+    ).toContain('Error503');
     expect(
       doc.paths[ORGANIZATION_INVITATION_PATH]?.post?.responses['503'],
     ).toBeUndefined();

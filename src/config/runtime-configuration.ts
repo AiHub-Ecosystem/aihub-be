@@ -45,6 +45,12 @@ export const PUBLIC_API_SERVERS = [
 const fields = {
   NODE_ENV: { kind: 'enum', values: MODES, defaultValue: 'production' },
   PORT: { kind: 'number', defaultValue: 3000, minValue: 0, maxValue: 65535 },
+  UV_THREADPOOL_SIZE: { kind: 'number', defaultValue: 4, minValue: 1 },
+  AIHUB_AUTH_ARGON2_MAX_CONCURRENCY: {
+    kind: 'number',
+    defaultValue: 2,
+    minValue: 1,
+  },
   LOG_LEVEL: {
     kind: 'enum',
     values: ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'],
@@ -315,6 +321,19 @@ export class RuntimeConfigurationError extends Error {
   }
 }
 
+function addArgon2ConcurrencyProblem(
+  values: Readonly<Record<string, string | number | boolean | undefined>>,
+  problems: string[],
+): void {
+  if (
+    typeof values.AIHUB_AUTH_ARGON2_MAX_CONCURRENCY === 'number' &&
+    typeof values.UV_THREADPOOL_SIZE === 'number' &&
+    values.AIHUB_AUTH_ARGON2_MAX_CONCURRENCY >= values.UV_THREADPOOL_SIZE
+  ) {
+    problems.push('AIHUB_AUTH_ARGON2_MAX_CONCURRENCY');
+  }
+}
+
 export function loadRuntimeConfiguration(
   raw: Readonly<Record<string, string | undefined>>,
 ): RuntimeConfiguration {
@@ -390,6 +409,8 @@ export function loadRuntimeConfiguration(
     }
     values[name] = value;
   }
+
+  addArgon2ConcurrencyProblem(values, problems);
 
   if (!MODES.includes(modeValue as RuntimeMode)) problems.push('NODE_ENV');
   if (

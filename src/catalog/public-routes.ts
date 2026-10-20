@@ -425,7 +425,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: RegisterRequestSchema,
     responseSchema: RegisterResponseSchema,
-    errorStatuses: [400, 409, 429, 500],
+    errorStatuses: [400, 409, 429, 500, 503],
   },
   'auth.login': {
     method: 'POST',
@@ -438,7 +438,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: LoginRequestSchema,
     responseSchema: LoginResultResponseSchema,
-    errorStatuses: [400, 401, 429, 500],
+    errorStatuses: [400, 401, 429, 500, 503],
   },
   'auth.mfa.enrollment': {
     method: 'POST',
@@ -450,7 +450,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: BeginMfaEnrollmentRequestSchema,
     responseSchema: BeginMfaEnrollmentResponseSchema,
-    errorStatuses: [400, 401, 409, 429, 500],
+    errorStatuses: [400, 401, 409, 429, 500, 503],
   },
   'auth.mfa.enrollment.confirm': {
     method: 'POST',
@@ -474,7 +474,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: RemoveMfaFactorRequestSchema,
     responseSchema: null,
-    errorStatuses: [400, 401, 429, 500],
+    errorStatuses: [400, 401, 429, 500, 503],
   },
   'auth.verify_email': {
     method: 'POST',
@@ -522,7 +522,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: ResetPasswordRequestSchema,
     responseSchema: null,
-    errorStatuses: [400, 429, 500],
+    errorStatuses: [400, 429, 500, 503],
   },
   'auth.refresh': {
     method: 'POST',

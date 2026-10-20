@@ -1,6 +1,8 @@
 import { METRICS_ROUTE_PATH, getMetrics } from './metrics';
 import {
   observeDispatchDeadlineMsRemaining,
+  recordArgon2QueueRefusal,
+  recordArgon2QueueWait,
   recordCompletedRequest,
   recordDispatchCancelledByDeadline,
   recordEmailDeliveryFailed,
@@ -235,6 +237,27 @@ describe('identity cache metrics', () => {
     ).toBeGreaterThanOrEqual(1);
     expect(await getMetrics()).not.toMatch(
       /aihub_(?:jwks_refresh_failures|identity_cache_coalesced_waits)[^\n]*\b(?:org|key|user)_id=/,
+    );
+  });
+});
+
+describe('Argon2 queue metrics', () => {
+  it('counts queued waits and capacity refusals separately', async () => {
+    const beforeWaits = Number(
+      (await sample('aihub_argon2_queue_waits_total')) ?? 0,
+    );
+    const beforeRefusals = Number(
+      (await sample('aihub_argon2_queue_refusals_total')) ?? 0,
+    );
+
+    recordArgon2QueueWait();
+    recordArgon2QueueRefusal();
+
+    expect(Number(await sample('aihub_argon2_queue_waits_total'))).toBe(
+      beforeWaits + 1,
+    );
+    expect(Number(await sample('aihub_argon2_queue_refusals_total'))).toBe(
+      beforeRefusals + 1,
     );
   });
 });

@@ -1,5 +1,6 @@
 import argon2 from 'argon2';
 
+import { AppError } from '@/common/errors/app-error';
 import {
   ARGON2ID_DUMMY_HASH,
   ARGON2ID_ENCODED_PREFIX,
@@ -8,6 +9,11 @@ import {
 import { Argon2PasswordHasher } from './argon2-password.hasher';
 
 describe('Argon2PasswordHasher', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
+
   const hasher = new Argon2PasswordHasher();
 
   it('writes hashes at the owned factor and verifies them through the production path', async () => {
@@ -30,5 +36,68 @@ describe('Argon2PasswordHasher', () => {
     await expect(
       hasher.verify('correct horse battery staple', ARGON2ID_DUMMY_HASH),
     ).resolves.toBe(false);
+  });
+
+  it('limits hash and verify operations together', async () => {
+    let active = 0;
+    let peak = 0;
+    const work = async <T>(result: T) => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise<void>((resolve) => setTimeout(resolve, 1));
+      active -= 1;
+      return result;
+    };
+    jest.spyOn(argon2, 'hash').mockImplementation(() => work('hash'));
+    jest.spyOn(argon2, 'verify').mockImplementation(() => work(true));
+
+    const cappedHasher = new Argon2PasswordHasher();
+    const operations = [
+      cappedHasher.hash('one'),
+      cappedHasher.verify('password', 'encoded'),
+      cappedHasher.hash('three'),
+      cappedHasher.verify('password', 'encoded'),
+    ];
+
+    await Promise.all(operations);
+
+    expect(peak).toBe(2);
+  });
+
+  it('bounds queued work and refuses excess work with retry guidance', async () => {
+    jest.useFakeTimers();
+    const releases: Array<() => void> = [];
+    const work = <T>(result: T) =>
+      new Promise<T>((resolve) => releases.push(() => resolve(result)));
+    jest.spyOn(argon2, 'hash').mockImplementation(() => work('hash'));
+    jest.spyOn(argon2, 'verify').mockImplementation(() => work(true));
+
+    const cappedHasher = new Argon2PasswordHasher();
+    const active = [cappedHasher.hash('one'), cappedHasher.hash('two')];
+    const queued = Array.from({ length: 8 }, (_, index) =>
+      cappedHasher.verify('password', `encoded-${index}`).then(
+        () => undefined,
+        (error: unknown) => error,
+      ),
+    );
+    await Promise.resolve();
+    expect(releases).toHaveLength(2);
+
+    await expect(
+      cappedHasher.verify('password', 'overflow'),
+    ).rejects.toMatchObject({
+      code: 'AUTH_ARGON2_CAPACITY',
+      httpStatus: 503,
+      retryable: true,
+      retryAfterMs: 1000,
+    });
+    await jest.advanceTimersByTimeAsync(1001);
+    expect(
+      (await Promise.all(queued)).every((error) => error instanceof AppError),
+    ).toBe(true);
+
+    for (const release of releases) release();
+    await Promise.all(active);
+    jest.useRealTimers();
   });
 });

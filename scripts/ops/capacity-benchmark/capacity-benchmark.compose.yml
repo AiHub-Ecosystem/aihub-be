@@ -62,12 +62,21 @@ services:
       dockerfile: Dockerfile
       args:
         VCS_REF: ${BENCHMARK_VCS_REF:-local}
-    entrypoint: ["node", "/benchmark/start-app.mjs"]
+    entrypoint:
+      [
+        "node",
+        "--import=/benchmark/argon2-contention-probe.mjs",
+        "/benchmark/start-app.mjs",
+      ]
     volumes:
       - ./capacity-benchmark-start-app.mjs:/benchmark/start-app.mjs:ro
+      - ./argon2-contention-probe.mjs:/benchmark/argon2-contention-probe.mjs:ro
     environment:
       NODE_ENV: test
       PORT: 3000
+      UV_THREADPOOL_SIZE: ${BENCHMARK_ARGON2_THREADPOOL_SIZE:-4}
+      AIHUB_AUTH_ARGON2_MAX_CONCURRENCY: ${BENCHMARK_ARGON2_MAX_CONCURRENCY:-2}
+      AIHUB_ARGON2_PROBE: "1"
       LOG_LEVEL: info
       AIHUB_RUNTIME_SECRET_SOURCE: env
       AIHUB_RUNTIME_DATABASE_SCOPE: production
