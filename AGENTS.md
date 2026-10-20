@@ -8,6 +8,10 @@ Issues and specs live in GitHub Issues; use the `gh` CLI. See `docs/agents/issue
 
 All content pushed to GitHub — commit messages, issue/PR titles and bodies, comments, reviews — must be written in English. Local chat may stay in the user's language.
 
+### Commit messages
+
+Every commit header is Conventional Commits: `type(scope): subject`, where type is one of `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, `test`. The scope is optional and lowercase; a breaking change adds `!` before the colon; the header is at most 100 characters. `.husky/commit-msg` enforces the header, and merge, revert, and `fixup!`/`squash!` commits are exempt.
+
 ### Triage labels
 
 Use the five canonical labels documented in `docs/agents/triage-labels.md`.

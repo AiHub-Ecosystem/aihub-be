@@ -9,5 +9,6 @@
 # default rather than a list that has to be extended for each new extension.
 * text=auto eol=lf
 
-# The hook is executed by sh; CRLF would break the shebang line.
+# The hooks are executed by sh; CRLF would break the shebang line.
 .husky/pre-commit text eol=lf
+.husky/commit-msg text eol=lf

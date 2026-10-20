@@ -63,6 +63,9 @@
     "scripts/checks/verify-summary.d.cts",
     // Hand-written types for scripts/checks/merged-coverage.cjs — same reason.
     "scripts/checks/merged-coverage.d.cts",
+    // Invoked by .husky/commit-msg, a shell hook knip does not parse, so no
+    // import or test edge reaches it from the JavaScript graph.
+    "scripts/checks/commit-message.mjs",
     // Child Jest config for the Postgres crash-durability worker process.
     "jest.config.db-worker.cjs"
   ],
