@@ -82,6 +82,7 @@ export function createRedisGatewayClient(
   const client = new Redis(url, {
     commandTimeout: 100,
     maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
   });
   client.on('error', () => undefined);
   return new IoredisGatewayClient(client);
