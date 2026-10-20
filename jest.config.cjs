@@ -16,6 +16,16 @@ if (unitLane.capped) {
 module.exports = {
   testEnvironment: 'node',
   maxWorkers: unitLane.maxWorkers,
+  // The cap above decides how many workers may start; this decides how far one
+  // of them may grow before Jest recycles it between suites. The 2026-10-20 lane
+  // death was heap accumulated across suites inside long-lived workers, not one
+  // suite's own footprint, so recycling is the matching remedy. One gibibyte
+  // keeps a permitted worker inside the two-gigabyte start budget the cap uses.
+  // Measured 2026-10-21 on this repository, two workers: no cost — 26 suites
+  // 8,1 s against 8,2 s without it, and one focused suite 4,7 s against 5,6 s.
+  // It has no effect when the cap leaves one worker, because Jest then runs the
+  // lane in the main process.
+  workerIdleMemoryLimit: 1024 ** 3,
   rootDir: '.',
   setupFiles: [
     '<rootDir>/test/runtime-secret-env.ts',
