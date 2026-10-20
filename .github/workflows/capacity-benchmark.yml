@@ -2,6 +2,16 @@ name: Capacity benchmark
 
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: >-
+          Quick: 32/64 RPS once. Full: 8/16/32/64 RPS three times.
+        required: true
+        type: choice
+        options:
+          - quick
+          - full
+        default: quick
 
 permissions:
   contents: read
@@ -43,10 +53,11 @@ jobs:
             docker info
           } > artifacts/capacity-benchmark/runner-info.txt
 
-      - name: Run three repeatable staged baselines
+      - name: Run selected staged baseline profile
         env:
-          BENCHMARK_STAGE_RATES_RPS: 8,16,32,64
+          BENCHMARK_STAGE_RATES_RPS: ${{ inputs.profile == 'full' && '8,16,32,64' || '32,64' }}
           BENCHMARK_MINIMUM_GRADING_SAMPLES: 1000
+          BENCHMARK_REPETITIONS: ${{ inputs.profile == 'full' && '3' || '1' }}
           BENCHMARK_RUNNER_DESCRIPTION: GitHub-hosted ubuntu-24.04
           BENCHMARK_REDIS_RTT_MS: 60
           BENCHMARK_STUB_LATENCY_MS: 2000
@@ -54,10 +65,10 @@ jobs:
           BENCHMARK_MAX_VUS: 256
         run: |
           set -euo pipefail
-          for repetition in 1 2 3; do
+          for (( repetition=1; repetition<=BENCHMARK_REPETITIONS; repetition++ )); do
             BENCHMARK_REPETITION="$repetition" pnpm capacity:benchmark
           done
-          node scripts/ops/capacity-benchmark/summarize-repetitions.mjs 3 artifacts/capacity-benchmark
+          node scripts/ops/capacity-benchmark/summarize-repetitions.mjs "$BENCHMARK_REPETITIONS" artifacts/capacity-benchmark
           cat artifacts/capacity-benchmark/repetitions-summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload raw runs and repetition summary
