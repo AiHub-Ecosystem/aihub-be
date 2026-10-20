@@ -9,6 +9,7 @@ import { Test } from '@nestjs/testing';
 import { MockAgent } from 'undici';
 
 import { AppModule } from '@/app.module';
+import { AppError } from '@/common/errors/app-error';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
@@ -54,6 +55,7 @@ describe('Writing grading HTTP flow', () => {
   let task2DownstreamCalls = 0;
   let dispatchAttemptCalls = 0;
   let quotaCount = 0;
+  let retryBudgetUnavailableCalls = 0;
   const seenRetryKeys = new Set<string>();
   const originalEnv = {
     allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
@@ -158,6 +160,15 @@ describe('Writing grading HTTP flow', () => {
       .overrideProvider(ORGANIZATION_RETRY_BUDGET)
       .useValue({
         async consume({ idempotencyKey }: { idempotencyKey: string }) {
+          if (idempotencyKey === 'redis-outage-task2-key') {
+            retryBudgetUnavailableCalls += 1;
+            throw new AppError({
+              code: 'RETRY_BUDGET_UNAVAILABLE',
+              message: 'Organization retry budget is unavailable',
+              retryable: true,
+              retryAfterMs: 1_000,
+            });
+          }
           if (idempotencyKey === 'storm-task2-key') {
             if (seenRetryKeys.has(idempotencyKey)) {
               return { allowed: false, retryAfterMs: 60_250 };
@@ -476,6 +487,35 @@ describe('Writing grading HTTP flow', () => {
     });
     expect(retry.headers['retry-after']).toBe('61');
     expect(task2DownstreamCalls - before).toBe(1);
+  });
+
+  it('returns a retryable 503 when retry-budget Redis is unavailable on first and repeated attempts', async () => {
+    const beforeBudgetCalls = retryBudgetUnavailableCalls;
+    const beforeQuota = quotaCount;
+    const beforeDispatchAttempts = dispatchAttemptCalls;
+    const beforeDownstreamCalls = task2DownstreamCalls;
+    const request = {
+      method: 'POST' as const,
+      url: '/v1/ielts/writing/task2/grade',
+      headers: { 'idempotency-key': 'redis-outage-task2-key' },
+      payload: task2Request,
+    };
+
+    const first = await app.inject(request);
+    const repeat = await app.inject(request);
+
+    for (const response of [first, repeat]) {
+      expect(response.statusCode).toBe(503);
+      expect(response.json().error).toMatchObject({
+        code: 'RETRY_BUDGET_UNAVAILABLE',
+        retryable: true,
+        retry_after_ms: 1_000,
+      });
+    }
+    expect(retryBudgetUnavailableCalls).toBe(beforeBudgetCalls + 2);
+    expect(quotaCount).toBe(beforeQuota);
+    expect(dispatchAttemptCalls).toBe(beforeDispatchAttempts);
+    expect(task2DownstreamCalls).toBe(beforeDownstreamCalls);
   });
 
   it('rejects a Task 2 grading request without Idempotency-Key', async () => {

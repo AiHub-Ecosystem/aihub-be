@@ -200,6 +200,7 @@ than merely warn.
 |         503 | `AI_SERVICE_UNAVAILABLE`        | Downstream unreachable or circuit breaker open  | Yes                       |
 |         503 | `AI_SERVICE_THROTTLED`          | Downstream or underlying LLM provider throttled | Yes                       |
 |         503 | `IDENTITY_PROVIDER_UNAVAILABLE` | Unable to fetch customer's JWKS keys            | Yes                       |
+|         503 | `RETRY_BUDGET_UNAVAILABLE`      | Redis retry budget unavailable                  | Yes                       |
 |         504 | `AI_SERVICE_TIMEOUT`            | Operation exceeded deadline budget              | Only with Idempotency-Key |
 
 ### Six Error Codes Added Beyond Initial D1 Specs

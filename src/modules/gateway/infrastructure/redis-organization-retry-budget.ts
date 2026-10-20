@@ -159,9 +159,10 @@ export class RedisOrganizationRetryBudget
 
   private unavailableError(cause?: unknown): AppError {
     return new AppError({
-      code: 'INTERNAL_ERROR',
+      code: 'RETRY_BUDGET_UNAVAILABLE',
       message: 'Organization retry budget is unavailable',
       retryable: true,
+      retryAfterMs: 1_000,
       diagnostic: 'organization-retry-budget-redis-unavailable',
       ...(cause === undefined ? {} : { cause }),
     });

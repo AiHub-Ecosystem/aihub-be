@@ -164,12 +164,14 @@ describe('RedisOrganizationRetryBudget', () => {
     );
 
     await expect(budget.consume(request('unavailable'))).rejects.toMatchObject({
-      code: 'INTERNAL_ERROR',
+      code: 'RETRY_BUDGET_UNAVAILABLE',
       retryable: true,
+      retryAfterMs: 1_000,
       message: 'Organization retry budget is unavailable',
     });
     await expect(budget.consume(request('unavailable'))).rejects.toMatchObject({
-      code: 'INTERNAL_ERROR',
+      code: 'RETRY_BUDGET_UNAVAILABLE',
+      retryAfterMs: 1_000,
     });
     expect(logger.warn).toHaveBeenCalledTimes(1);
   });
@@ -179,8 +181,9 @@ describe('RedisOrganizationRetryBudget', () => {
 
     await expect(budget.consume(request('unconfigured'))).rejects.toMatchObject(
       {
-        code: 'INTERNAL_ERROR',
+        code: 'RETRY_BUDGET_UNAVAILABLE',
         retryable: true,
+        retryAfterMs: 1_000,
       },
     );
   });

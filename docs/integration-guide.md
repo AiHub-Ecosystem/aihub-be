@@ -937,9 +937,11 @@ so you do not have to infer it from the status.
 `retry_after_ms` is present only when AIHUB knows how long to wait:
 `RATE_LIMITED` (until the minute window frees a request), `CONCURRENCY_LIMIT`
 (500 ms), and `QUOTA_EXCEEDED` (until the next UTC month starts, which can be
-weeks). Other errors, `AI_SERVICE_TIMEOUT` included, do not carry it; use your
-own backoff. A quota refusal is `retryable`, but only after that wait, so do not
-spend retry attempts on it.
+weeks). A Redis outage during Organization retry-budget admission returns
+`RETRY_BUDGET_UNAVAILABLE` with a short 1000 ms hint. Other errors,
+`AI_SERVICE_TIMEOUT` included, do not carry it; use your own backoff. A quota
+refusal is `retryable`, but only after that wait, so do not spend retry attempts
+on it.
 
 `retry_after_ms` is in the response body. Organization same-key retry-budget
 refusals also include `Retry-After`, aligned with the body hint. Other AI
@@ -972,6 +974,7 @@ separate table below.
 |  503 | `AI_SERVICE_THROTTLED`          | AI service is throttling                                                                     | Back off and retry                                                                                                 |
 |  503 | `AI_SERVICE_UNAVAILABLE`        | AI service unreachable                                                                       | Retry with backoff                                                                                                 |
 |  503 | `IDENTITY_PROVIDER_UNAVAILABLE` | AIHUB could not read identity configuration, or could not load public keys in signed mode    | Retry; if using signed mode, check the configured JWKS source. The API key is fine                                 |
+|  503 | `RETRY_BUDGET_UNAVAILABLE`      | AIHUB cannot check the Organization retry budget because Redis is unavailable                | Retry after `retry_after_ms`                                                                                       |
 |  504 | `AI_SERVICE_TIMEOUT`            | Grading exceeded the budget                                                                  | Writing: retry with the **same** `Idempotency-Key`; Speaking: retry only if another run is acceptable              |
 |  500 | `INTERNAL_ERROR`                | Fault on our side                                                                            | Retry later; report with the `request_id`                                                                          |
 
