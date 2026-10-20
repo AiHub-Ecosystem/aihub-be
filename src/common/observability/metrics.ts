@@ -145,6 +145,13 @@ const dispatchCancelledByDeadlineTotal = new Counter({
   registers: [registry],
 });
 
+const downstreamRetryEventsTotal = new Counter({
+  name: 'aihub_downstream_retry_events_total',
+  help: 'Safe downstream retries and bounded-budget refusals by operation and reason.',
+  labelNames: ['operation', 'reason'],
+  registers: [registry],
+});
+
 const admissionDuration = new Histogram({
   name: 'aihub_admission_duration_seconds',
   help: 'Time from request receipt to gateway dispatch admission, in seconds.',
@@ -401,6 +408,17 @@ export function recordDispatchCancelledByDeadline(
   operation: OperationId,
 ): void {
   dispatchCancelledByDeadlineTotal.inc({ operation });
+}
+
+export function recordDownstreamRetryEvent(
+  operation: OperationId,
+  reason:
+    | 'connection'
+    | 'retry_after'
+    | 'budget_exhausted'
+    | 'budget_unavailable',
+): void {
+  downstreamRetryEventsTotal.inc({ operation, reason });
 }
 
 const EMAIL_DELIVERY_KIND_LABELS: readonly EmailDeliveryKindLabel[] = [

@@ -3,9 +3,11 @@ import { Logger } from '@nestjs/common';
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
 import type { ErrorCode } from '@/common/errors/error-code';
+import { recordDownstreamRetryEvent } from '@/common/observability/metrics';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { InternalAIServiceResponse } from '@/downstream/downstream.types';
+import type { DownstreamRetryBudgetPort } from '@/modules/gateway/application/downstream-retry-budget.port';
 import type { InternalTokenIssuerPort } from '@/modules/gateway/application/internal-token-issuer.port';
 import type {
   DispatchResult,
@@ -15,6 +17,7 @@ import type {
 import type {
   OperationTransportPort,
   PreparedDispatch,
+  TransportCall,
 } from '@/modules/gateway/application/operation-transport.port';
 import { extractDownstreamTelemetry } from '@/modules/metering/public/telemetry';
 import {
@@ -22,7 +25,7 @@ import {
   isDefinitelyNotDispatched,
 } from './downstream-http.client';
 
-function mapDownstreamStatus(status: number): AppError {
+function mapDownstreamStatus(status: number, retryAfterMs?: number): AppError {
   if (status === 429) {
     return new AppError({
       code: 'AI_SERVICE_THROTTLED',
@@ -36,7 +39,86 @@ function mapDownstreamStatus(status: number): AppError {
     message: 'AI service returned an error',
     retryable: status >= 500,
     downstreamStatus: status,
+    ...(status === 503 && retryAfterMs !== undefined
+      ? { retryAfterMs, retryAfterHeader: true }
+      : {}),
     cause: new Error(`downstream status ${status}`),
+  });
+}
+
+function retryAfterMs(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    return Number.isSafeInteger(seconds) &&
+      seconds * 1000 <= Number.MAX_SAFE_INTEGER
+      ? seconds * 1000
+      : undefined;
+  }
+
+  const weekdayForms = [
+    /^(?<weekday>Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/,
+    /^(?<weekday>Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), \d{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{2} \d{2}:\d{2}:\d{2} GMT$/,
+    /^(?<weekday>Mon|Tue|Wed|Thu|Fri|Sat|Sun) (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s{1,2}\d{1,2} \d{2}:\d{2}:\d{2} \d{4}$/,
+  ];
+  const match = weekdayForms
+    .map((pattern) => pattern.exec(trimmed))
+    .find((candidate) => candidate !== null);
+  if (match?.groups?.weekday === undefined) return undefined;
+  const asctime = match[0]?.endsWith(' GMT') !== true;
+  const timestamp = Date.parse(asctime ? `${trimmed} GMT` : trimmed);
+  const weekday = new Date(timestamp).getUTCDay();
+  const shortWeekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const longWeekdays = [
+    'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+  ];
+  if (
+    !Number.isFinite(timestamp) ||
+    (match.groups.weekday.length === 3
+      ? shortWeekdays[weekday] !== match.groups.weekday
+      : longWeekdays[weekday] !== match.groups.weekday)
+  ) {
+    return undefined;
+  }
+  return Math.max(0, timestamp - Date.now());
+}
+
+function retryDelayMs(
+  reason: 'connection' | 'retry_after',
+  retryNumber: number,
+  random: () => number,
+  error: unknown,
+): number {
+  if (
+    reason === 'retry_after' &&
+    error instanceof AppError &&
+    error.retryAfterMs !== undefined
+  ) {
+    return error.retryAfterMs;
+  }
+  return random() * Math.min(2_000, 200 * 2 ** (retryNumber - 1));
+}
+
+function waitForRetry(delayMs: number, signal: AbortSignal): Promise<boolean> {
+  if (signal.aborted) return Promise.resolve(false);
+  if (delayMs <= 0) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    const finish = (completed: boolean): void => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', abort);
+      resolve(completed);
+    };
+    const abort = (): void => finish(false);
+    const timer = setTimeout(() => finish(true), delayMs);
+    signal.addEventListener('abort', abort, { once: true });
   });
 }
 
@@ -123,6 +205,36 @@ interface DownstreamFailure {
   readonly elapsedMs: number;
 }
 
+interface RetryState {
+  totalRetries: number;
+  connectionRetries: number;
+  retriedAfter: boolean;
+  firstAttemptCounted: boolean;
+}
+
+function downstreamResponseError(
+  adapter: DownstreamAdapter<unknown, unknown>,
+  response: InternalAIServiceResponse<unknown>,
+): AppError | undefined {
+  if (response.status >= 200 && response.status < 300) return undefined;
+  const hint = adapter.parseError?.(response.status, response.body);
+  const retryDelay =
+    response.status === 503
+      ? retryAfterMs(response.headers['retry-after'])
+      : undefined;
+  return hint === undefined
+    ? mapDownstreamStatus(response.status, retryDelay)
+    : new AppError({
+        code: hint.code,
+        message: hint.message,
+        retryable: hint.retryable,
+        downstreamStatus: response.status,
+        ...(response.status === 503 && retryDelay !== undefined
+          ? { retryAfterMs: retryDelay, retryAfterHeader: true }
+          : {}),
+      });
+}
+
 /**
  * Transport only: adapter lookup, the internal-token header, the HTTP call,
  * the status mapping, and the `downstream_failed` log line. Admission, attempt
@@ -146,6 +258,8 @@ export class HttpOperationTransport implements OperationTransportPort {
     private readonly httpClient: DownstreamHttpClient,
     private readonly tokenIssuer: InternalTokenIssuerPort,
     adapters: readonly DownstreamAdapter<unknown, unknown>[],
+    private readonly retryBudget?: DownstreamRetryBudgetPort,
+    private readonly random: () => number = Math.random,
   ) {
     this.adapters = new Map(
       adapters.map((adapter) => [adapter.operation, adapter]),
@@ -177,35 +291,61 @@ export class HttpOperationTransport implements OperationTransportPort {
         const startedAt = performance.now();
         let response: InternalAIServiceResponse<unknown> | undefined;
         let responseStatus: number | undefined;
+        const retryState: RetryState = {
+          totalRetries: 0,
+          connectionRetries: 0,
+          retriedAfter: false,
+          firstAttemptCounted: false,
+        };
+        const retryEnabled = this.retryBudget?.isEnabled(operation) ?? false;
         try {
-          response = await this.httpClient.request(downstreamRequest, {
-            ...(authorization === undefined ? {} : { authorization }),
-            downstream: adapter.downstream,
-            requestId: context.requestId,
-            deadlineMs: call.deadlineMs,
-            signal: call.signal,
-            onResponseReceived: (statusCode) => {
-              responseStatus = statusCode;
-              call.onResponseReceived(statusCode);
-            },
-          });
+          while (true) {
+            if (
+              retryEnabled &&
+              this.retryBudget !== undefined &&
+              !retryState.firstAttemptCounted
+            ) {
+              retryState.firstAttemptCounted = await this.retryBudget
+                .recordFirstAttempt(operation, context.requestId)
+                .catch(() => false);
+            }
+            try {
+              response = await this.httpClient.request(downstreamRequest, {
+                ...(authorization === undefined ? {} : { authorization }),
+                downstream: adapter.downstream,
+                requestId: context.requestId,
+                deadlineMs: Math.max(
+                  1,
+                  Math.floor(call.deadlineMs - (performance.now() - startedAt)),
+                ),
+                signal: call.signal,
+                onResponseReceived: (statusCode) => {
+                  responseStatus = statusCode;
+                  call.onResponseReceived(statusCode);
+                },
+              });
+              const responseError = downstreamResponseError(adapter, response);
+              if (responseError !== undefined) throw responseError;
+              break;
+            } catch (error) {
+              if (
+                !(await this.scheduleRetry(
+                  error,
+                  operation,
+                  context.requestId,
+                  call,
+                  startedAt,
+                  retryEnabled,
+                  retryState,
+                ))
+              ) {
+                throw error;
+              }
+            }
+          }
           // The client reports a response through the callback; repeating it
           // here means a returned response is never classified as unknown.
           call.onResponseReceived(response.status);
-          if (response.status < 200 || response.status >= 300) {
-            // A failure body is not a grading, so the adapter reads it before
-            // any contract validation; a failure it cannot name keeps the
-            // status mapping.
-            const hint = adapter.parseError?.(response.status, response.body);
-            throw hint === undefined
-              ? mapDownstreamStatus(response.status)
-              : new AppError({
-                  code: hint.code,
-                  message: hint.message,
-                  retryable: hint.retryable,
-                  downstreamStatus: response.status,
-                });
-          }
 
           const telemetry = extractDownstreamTelemetry(response.body);
           // The one place the dispatch table's type erasure surfaces as a
@@ -238,6 +378,77 @@ export class HttpOperationTransport implements OperationTransportPort {
         }
       },
     };
+  }
+
+  private async scheduleRetry(
+    error: unknown,
+    operation: OperationId,
+    requestId: string,
+    call: TransportCall,
+    startedAt: number,
+    retryEnabled: boolean,
+    state: RetryState,
+  ): Promise<boolean> {
+    const budget = this.retryBudget;
+    const connectionFailure =
+      this.isUndelivered(error) && state.connectionRetries < 2;
+    const retryAfterFailure =
+      !state.retriedAfter &&
+      error instanceof AppError &&
+      error.downstreamStatus === 503 &&
+      error.retryAfterMs !== undefined;
+    if (
+      !retryEnabled ||
+      budget === undefined ||
+      (!connectionFailure && !retryAfterFailure)
+    ) {
+      return false;
+    }
+    if (!state.firstAttemptCounted) {
+      recordDownstreamRetryEvent(operation, 'budget_unavailable');
+      return false;
+    }
+
+    const reason = connectionFailure ? 'connection' : 'retry_after';
+    const retryNumber = state.totalRetries + 1;
+    const delayMs = retryDelayMs(reason, retryNumber, this.random, error);
+    const expectedAttemptMs = budget.expectedAttemptMs(operation);
+    if (
+      expectedAttemptMs === undefined ||
+      delayMs + expectedAttemptMs >=
+        call.deadlineMs - (performance.now() - startedAt) ||
+      call.signal.aborted
+    ) {
+      return false;
+    }
+
+    const decision = await budget
+      .reserveRetry(operation, requestId, retryNumber)
+      .catch(() => 'unavailable' as const);
+    if (decision !== 'admitted') {
+      if (decision === 'exhausted') {
+        recordDownstreamRetryEvent(operation, 'budget_exhausted');
+      } else {
+        recordDownstreamRetryEvent(operation, 'budget_unavailable');
+      }
+      return false;
+    }
+    if (
+      delayMs + expectedAttemptMs >=
+        call.deadlineMs - (performance.now() - startedAt) ||
+      call.signal.aborted ||
+      !(await waitForRetry(delayMs, call.signal)) ||
+      call.signal.aborted ||
+      expectedAttemptMs >= call.deadlineMs - (performance.now() - startedAt)
+    ) {
+      return false;
+    }
+
+    state.totalRetries += 1;
+    if (connectionFailure) state.connectionRetries += 1;
+    else state.retriedAfter = true;
+    recordDownstreamRetryEvent(operation, reason);
+    return true;
   }
 
   private logDownstreamFailure(

@@ -37,6 +37,10 @@ import {
   CONCURRENCY_LIMITER,
   type ConcurrencyLimiterPort,
 } from './application/concurrency-limiter.port';
+import {
+  DOWNSTREAM_RETRY_BUDGET,
+  type DownstreamRetryBudgetPort,
+} from './application/downstream-retry-budget.port';
 import { GradingOrchestrator } from './application/grading-orchestrator';
 import { GRADING_ORCHESTRATOR } from './application/grading-orchestrator.port';
 import { GuardedOperationDispatcher } from './application/guarded-operation-dispatcher';
@@ -65,6 +69,7 @@ import {
 import { metricsDispatchObserver } from './infrastructure/metrics-dispatch-observer';
 import { PostgresSandboxDispatchBudget } from './infrastructure/postgres-sandbox-dispatch-budget';
 import { RedisConcurrencyLimiter } from './infrastructure/redis-concurrency-limiter';
+import { RedisDownstreamRetryBudget } from './infrastructure/redis-downstream-retry-budget';
 import {
   REDIS_GATEWAY_CLIENT,
   type RedisGatewayClient,
@@ -152,6 +157,14 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       inject: [REDIS_GATEWAY_CLIENT],
     },
     {
+      provide: DOWNSTREAM_RETRY_BUDGET,
+      useFactory: (client: RedisGatewayClient | undefined) => {
+        // Keep retries off until #199 is wired and #273/#327 ground each service bucket.
+        return new RedisDownstreamRetryBudget(client);
+      },
+      inject: [REDIS_GATEWAY_CLIENT],
+    },
+    {
       provide: CONCURRENCY_LIMITER,
       useFactory: (
         client: RedisGatewayClient | undefined,
@@ -177,16 +190,22 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
         tokenIssuer: ConfiguredTokenIssuer,
         dispatchAttempts: DispatchAttemptRecordPort,
         sandboxBudget: SandboxDispatchBudgetPort,
+        retryBudget: DownstreamRetryBudgetPort,
       ): OperationDispatcherPort => {
         const logger = new Logger(DISPATCHER_LOG_CONTEXT);
         const warn = (message: string): void => logger.warn(message);
         return new GuardedOperationDispatcher(
-          new HttpOperationTransport(httpClient, tokenIssuer, [
-            task1GradeAdapter,
-            task2GradeAdapter,
-            speakingGradingAdapter,
-            speakingGradingJsonAdapter,
-          ]),
+          new HttpOperationTransport(
+            httpClient,
+            tokenIssuer,
+            [
+              task1GradeAdapter,
+              task2GradeAdapter,
+              speakingGradingAdapter,
+              speakingGradingJsonAdapter,
+            ],
+            retryBudget,
+          ),
           dispatchAttempts,
           new SandboxAdmission(sandboxBudget, warn),
           metricsDispatchObserver,
@@ -198,6 +217,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
         INTERNAL_TOKEN_ISSUER,
         DISPATCH_ATTEMPT_RECORD,
         SANDBOX_DISPATCH_BUDGET,
+        DOWNSTREAM_RETRY_BUDGET,
       ],
     },
     {
@@ -217,6 +237,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
   exports: [
     GATEWAY_REDIS_READINESS,
     SANDBOX_DISPATCH_BUDGET,
+    DOWNSTREAM_RETRY_BUDGET,
     OPERATION_DISPATCHER,
     GRADING_ORCHESTRATOR,
     DownstreamHttpClient,
