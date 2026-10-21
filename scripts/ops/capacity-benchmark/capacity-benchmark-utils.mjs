@@ -39,6 +39,23 @@ const gradingRoutes = [
   'speaking_json',
 ];
 
+const gradedPathPairs = {
+  writing_task1: [
+    'declared_id:keyed_writing',
+    'declared_id:none',
+    'signed_assertion:keyed_writing',
+    'signed_assertion:none',
+  ],
+  writing_task2: [
+    'declared_id:keyed_writing',
+    'declared_id:none',
+    'signed_assertion:keyed_writing',
+    'signed_assertion:none',
+  ],
+  speaking_multipart: ['declared_id:none', 'signed_assertion:none'],
+  speaking_json: ['declared_id:none', 'signed_assertion:none'],
+};
+
 export function hasMinimumRouteSamples(run, routeNames, minimumSamples) {
   return (
     Number.isSafeInteger(minimumSamples) &&
@@ -73,6 +90,21 @@ export function summarizeGradedPathTimings(paths) {
         completionMs: summarize(timing.completionMs),
       },
     ]),
+  );
+}
+
+export function gradedPathSampleAdequacy(route, timings, minimumSamples) {
+  return Object.fromEntries(
+    gradedPathPairs[route].map((path) => {
+      const count = timings[path]?.completionMs?.count ?? 0;
+      return [
+        path,
+        {
+          count,
+          status: count >= minimumSamples ? 'sufficient' : 'inconclusive',
+        },
+      ];
+    }),
   );
 }
 
@@ -221,11 +253,71 @@ export function summarizeRepetitions(reports, expectedRepetitions) {
           ];
         }),
       );
-      const complete = samples.length === expectedRepetitions;
-      const sampleAdequate = Object.values(routes).every(
-        ({ sampleVerdict }) =>
-          sampleVerdict === 'sufficient' || sampleVerdict === 'not_applicable',
+      const paths = Object.fromEntries(
+        routeNames
+          .filter((name) => gradedPathPairs[name] !== undefined)
+          .map((name) => [
+            name,
+            Object.fromEntries(
+              gradedPathPairs[name].map((path) => {
+                const pathSamples = samples.map(({ repetition, run }) => {
+                  const adequacy = run.sampleAdequacy?.paths?.[name]?.[path];
+                  const timing = run.routes[name]?.timingsByPath?.[path];
+                  return {
+                    repetition,
+                    count: adequacy?.count ?? 0,
+                    status: adequacy?.status ?? 'inconclusive',
+                    admissionP50Ms: timing?.admissionMs?.p50 ?? null,
+                    admissionP99Ms: timing?.admissionMs?.p99 ?? null,
+                    completionP50Ms: timing?.completionMs?.p50 ?? null,
+                    completionP99Ms: timing?.completionMs?.p99 ?? null,
+                  };
+                });
+                return [
+                  path,
+                  {
+                    samples: pathSamples,
+                    admissionP50Ms: numericSpread(
+                      pathSamples.map((sample) => sample.admissionP50Ms),
+                    ),
+                    admissionP99Ms: numericSpread(
+                      pathSamples.map((sample) => sample.admissionP99Ms),
+                    ),
+                    completionP50Ms: numericSpread(
+                      pathSamples.map((sample) => sample.completionP50Ms),
+                    ),
+                    completionP99Ms: numericSpread(
+                      pathSamples.map((sample) => sample.completionP99Ms),
+                    ),
+                    sampleVerdict:
+                      pathSamples.length === expectedRepetitions &&
+                      pathSamples.every(
+                        (sample) =>
+                          sample.status === 'sufficient' &&
+                          sample.count >=
+                            firstReport.benchmark.configuration
+                              .minimumGradingSamples,
+                      )
+                        ? 'sufficient'
+                        : 'inconclusive',
+                  },
+                ];
+              }),
+            ),
+          ]),
       );
+      const complete = samples.length === expectedRepetitions;
+      const sampleAdequate =
+        Object.values(routes).every(
+          ({ sampleVerdict }) =>
+            sampleVerdict === 'sufficient' ||
+            sampleVerdict === 'not_applicable',
+        ) &&
+        Object.values(paths).every((routePaths) =>
+          Object.values(routePaths).every(
+            ({ sampleVerdict }) => sampleVerdict === 'sufficient',
+          ),
+        );
       return {
         label,
         workload: samples[0].run.workload,
@@ -233,6 +325,7 @@ export function summarizeRepetitions(reports, expectedRepetitions) {
         repetitionCount: samples.length,
         verdict: complete && sampleAdequate ? 'sufficient' : 'inconclusive',
         routes,
+        paths,
       };
     }),
   };

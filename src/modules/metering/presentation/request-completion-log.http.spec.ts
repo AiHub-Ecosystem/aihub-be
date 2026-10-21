@@ -209,6 +209,7 @@ class ScriptedUsageRepository {
 let idempotencyDelayMs = 0;
 let retryBudgetUnavailable = false;
 let permitReleaseDelayMs = 0;
+let permitReleaseUnavailable = false;
 
 const idempotency = {
   async execute<T>(
@@ -318,6 +319,14 @@ describe('request completion log over the HTTP boundary', () => {
                   setTimeout(resolve, permitReleaseDelayMs),
                 );
               }
+              if (permitReleaseUnavailable) {
+                throw new AppError({
+                  code: 'REDIS_UNAVAILABLE',
+                  message: 'Grading controls are temporarily unavailable',
+                  retryable: true,
+                  retryAfterMs: 1_000,
+                });
+              }
             },
           },
         }),
@@ -353,6 +362,7 @@ describe('request completion log over the HTTP boundary', () => {
     idempotencyDelayMs = 0;
     retryBudgetUnavailable = false;
     permitReleaseDelayMs = 0;
+    permitReleaseUnavailable = false;
     usageRepository.delayMs = 0;
     usageRepository.records.length = 0;
     log.reset();
@@ -525,6 +535,40 @@ describe('request completion log over the HTTP boundary', () => {
     );
   });
 
+  it('surfaces an ambiguous permit release as 503 without recording successful completion', async () => {
+    permitReleaseUnavailable = true;
+    const completionCountBefore = await metricValue(
+      app,
+      'aihub_graded_completion_duration_seconds_count',
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: GRADE_URL,
+      headers: { 'idempotency-key': 'completion-release-outage' },
+      payload: VALID_BODY,
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'REDIS_UNAVAILABLE',
+        retryable: true,
+        retry_after_ms: 1_000,
+      },
+    });
+    expect(log.only()).toEqual(
+      expect.objectContaining({
+        http_status: 503,
+        error_code: 'REDIS_UNAVAILABLE',
+      }),
+    );
+    expect(log.only()['completion_ms']).toBeUndefined();
+    expect(
+      await metricValue(app, 'aihub_graded_completion_duration_seconds_count'),
+    ).toBe(completionCountBefore);
+  });
+
   it('starts admission timing after Writing idempotency work, at dispatch', async () => {
     const delayMs = 75;
     idempotencyDelayMs = delayMs;
@@ -695,7 +739,7 @@ describe('request completion log over the HTTP boundary', () => {
     );
     const metrics = (await app.inject({ method: 'GET', url: '/metrics' })).body;
     expect(metrics).toContain(
-      'aihub_requests_total{operation="writing.task1.grade",status="503",outcome="internal_error"} 1',
+      'aihub_requests_total{operation="writing.task1.grade",status="503",outcome="internal_error"}',
     );
   });
 

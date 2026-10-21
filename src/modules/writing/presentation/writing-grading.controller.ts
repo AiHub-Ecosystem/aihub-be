@@ -81,7 +81,7 @@ function backgroundLifecycleFor(
     evidence: getMeteringEvidence(request),
     finalizer,
     ...(concurrency === undefined ? {} : { inner: concurrency }),
-    onCompletionSettled: () => markGradedCompletionSettled(request.raw),
+    onCompletionSettled: () => markGradedCompletionSettled(request),
   });
 }
 
@@ -95,7 +95,7 @@ function requestMetadata(
     receivedAt: lifecycle.receivedAt,
     signal: lifecycle.signal,
     onDispatchStart: () => markRequestAdmission(request.raw),
-    onAiServiceResultAvailable: () => markGradedCompletionStarted(request.raw),
+    onAiServiceResultAvailable: () => markGradedCompletionStarted(request),
     organizationId: authenticated.organizationId,
     apiKeyId: authenticated.apiKeyId,
     environment: authenticated.environment,

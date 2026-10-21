@@ -102,7 +102,7 @@ export class RateLimitGuard implements CanActivate {
         evidence.operation,
       );
 
-      setGradedRequestDimensions(request.raw, {
+      setGradedRequestDimensions(request, {
         operation: evidence.operation,
         identityMode: request.aihubIdentity?.mode ?? 'unknown',
         retryBudget: idempotencyKey === undefined ? 'none' : 'keyed_writing',

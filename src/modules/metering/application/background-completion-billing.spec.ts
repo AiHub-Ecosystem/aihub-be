@@ -96,6 +96,26 @@ describe('billBackgroundCompletion', () => {
     expect(onCompletionSettled).toHaveBeenCalledTimes(1);
   });
 
+  it('does not record completion when background permit settlement fails', async () => {
+    const onCompletionSettled = jest.fn();
+    const lifecycle = billBackgroundCompletion({
+      requestId: 'req_late',
+      receivedAt: new Date(1_000),
+      evidence: evidence(),
+      finalizer: { finalize: async () => undefined },
+      inner: {
+        started: () => undefined,
+        settled: async () => {
+          throw new Error('redis timeout');
+        },
+      },
+      onCompletionSettled,
+    });
+
+    await expect(lifecycle?.settled()).rejects.toThrow('redis timeout');
+    expect(onCompletionSettled).not.toHaveBeenCalled();
+  });
+
   it('leaves the lifecycle untouched for a request with no Metering evidence', () => {
     const { inner, lifecycle } = setup(false);
 

@@ -72,7 +72,10 @@ async function handleWithPermit(
   try {
     return await lastValueFrom(next.handle());
   } finally {
-    await permit.requestFinished().catch(() => undefined);
-    if (permit.isReleased()) markGradedCompletionSettled(request.raw);
+    try {
+      await permit.requestFinished();
+    } finally {
+      if (permit.isReleased()) markGradedCompletionSettled(request);
+    }
   }
 }

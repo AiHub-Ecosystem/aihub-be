@@ -5,6 +5,13 @@ import type {
   MeteringUsage,
 } from './metering-finalizer.port';
 
+export interface GradedRequestTiming {
+  readonly identityMode: 'declared_id' | 'signed_assertion' | 'unknown';
+  readonly retryBudget: 'keyed_writing' | 'none';
+  completionStartedAt?: number;
+  completionMs?: number;
+}
+
 /**
  * What one authenticated request has gathered so far on its way to becoming a
  * Metering record (ADR-0061). The first four fields are the record's required
@@ -44,6 +51,7 @@ export interface MeteringEvidence {
   modelCalled?: boolean;
   quotaTracked?: boolean;
   quotaUnverified?: boolean;
+  gradedRequestTiming?: GradedRequestTiming;
   settled: boolean;
 }
 

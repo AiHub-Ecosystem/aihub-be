@@ -29,19 +29,22 @@ export function createConcurrencyPermit(
   let backgroundStarted = false;
   let backgroundSettled = false;
   let requestSettled = false;
+  let releaseAttempt: Promise<void> | undefined;
   let released = false;
 
-  const releaseIfSettled = async (): Promise<void> => {
-    if (
-      released ||
-      !requestSettled ||
-      (backgroundStarted && !backgroundSettled)
-    ) {
-      return;
+  const releaseIfSettled = (): Promise<void> => {
+    if (releaseAttempt !== undefined) return releaseAttempt;
+    if (!requestSettled || (backgroundStarted && !backgroundSettled)) {
+      return Promise.resolve();
     }
 
-    released = true;
-    await lease.release();
+    releaseAttempt = Promise.resolve()
+      .then(() => lease.release())
+      .then(() => {
+        released = true;
+        return undefined;
+      });
+    return releaseAttempt;
   };
 
   return {
@@ -53,14 +56,12 @@ export function createConcurrencyPermit(
       backgroundWorkStarted();
     },
     responseFinished: releaseIfSettled,
-    requestFinished: async () => {
+    requestFinished: () => {
       requestSettled = true;
-      await releaseIfSettled();
+      return releaseIfSettled();
     },
     backgroundFinished: async () => {
-      if (backgroundSettled) {
-        return;
-      }
+      if (backgroundSettled) return releaseAttempt ?? Promise.resolve();
       backgroundSettled = true;
       try {
         await releaseIfSettled();
@@ -90,8 +91,6 @@ export function getConcurrencyBackgroundLifecycle(
 
   return {
     started: () => permit.holdForBackground(),
-    settled: async () => {
-      await permit.backgroundFinished().catch(() => undefined);
-    },
+    settled: () => permit.backgroundFinished(),
   };
 }

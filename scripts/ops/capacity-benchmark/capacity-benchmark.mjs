@@ -10,6 +10,7 @@ import { lastLines, runProcess } from './capacity-benchmark-process.mjs';
 import {
   appendStreamingMarkerChunk,
   contentionJobsFitLoadWindow,
+  gradedPathSampleAdequacy,
   hasCompleteLoadDelivery,
   hasMinimumRouteSamples,
   highestPassingRate,
@@ -869,26 +870,15 @@ async function runK6({
       .filter((name) => gradingRouteNames.includes(name))
       .map((name) => [
         name,
-        Object.fromEntries(
-          Object.entries(routeResults[name].timingsByPath).map(
-            ([path, timing]) => [
-              path,
-              {
-                count: timing.completionMs.count,
-                status:
-                  timing.completionMs.count >= minimumGradingSamples
-                    ? 'sufficient'
-                    : 'inconclusive',
-              },
-            ],
-          ),
+        gradedPathSampleAdequacy(
+          name,
+          routeResults[name].timingsByPath,
+          minimumGradingSamples,
         ),
       ]),
   );
-  const pathSamplesAdequate = Object.values(pathSamples).every(
-    (paths) =>
-      Object.keys(paths).length > 0 &&
-      Object.values(paths).every(({ status }) => status === 'sufficient'),
+  const pathSamplesAdequate = Object.values(pathSamples).every((paths) =>
+    Object.values(paths).every(({ status }) => status === 'sufficient'),
   );
 
   return {

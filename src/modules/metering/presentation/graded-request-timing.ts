@@ -1,19 +1,10 @@
 import type { OperationId } from '@/catalog/operation-id';
 import { registry } from '@/common/observability/metrics';
+import {
+  type GradedRequestTiming,
+  getMeteringEvidence,
+} from '@/modules/metering/application/metering-evidence';
 import { Histogram } from '@prometheus-io/client';
-
-type IdentityMode = 'declared_id' | 'signed_assertion' | 'unknown';
-type RetryBudget = 'keyed_writing' | 'none';
-
-interface GradedRequestTiming {
-  readonly operation: OperationId;
-  readonly identityMode: IdentityMode;
-  readonly retryBudget: RetryBudget;
-  completionStartedAt?: number;
-  completionMs?: number;
-}
-
-const timingByRequest = new WeakMap<object, GradedRequestTiming>();
 
 const admissionDuration = new Histogram({
   name: 'aihub_admission_duration_seconds',
@@ -31,20 +22,20 @@ const completionDuration = new Histogram({
   registers: [registry],
 });
 
-function isObject(value: unknown): value is object {
-  return typeof value === 'object' && value !== null;
-}
-
 export function setGradedRequestDimensions(
-  rawRequest: unknown,
+  request: unknown,
   dimensions: {
     readonly operation: OperationId;
-    readonly identityMode: IdentityMode;
-    readonly retryBudget: RetryBudget;
+    readonly identityMode: GradedRequestTiming['identityMode'];
+    readonly retryBudget: GradedRequestTiming['retryBudget'];
   },
 ): void {
-  if (!isObject(rawRequest)) return;
-  timingByRequest.set(rawRequest, { ...dimensions });
+  const evidence = getMeteringEvidence(request);
+  if (evidence === undefined) return;
+  evidence.gradedRequestTiming = {
+    identityMode: dimensions.identityMode,
+    retryBudget: dimensions.retryBudget,
+  };
 }
 
 export function recordGradedAdmission(
@@ -52,8 +43,8 @@ export function recordGradedAdmission(
   admissionMs: number | undefined,
   dimensions:
     | {
-        readonly identityMode: IdentityMode;
-        readonly retryBudget: RetryBudget;
+        readonly identityMode: GradedRequestTiming['identityMode'];
+        readonly retryBudget: GradedRequestTiming['retryBudget'];
       }
     | undefined,
 ): void {
@@ -74,21 +65,20 @@ export function recordGradedAdmission(
   );
 }
 
-export function markGradedCompletionStarted(rawRequest: unknown): void {
-  const timing = isObject(rawRequest)
-    ? timingByRequest.get(rawRequest)
-    : undefined;
+export function markGradedCompletionStarted(request: unknown): void {
+  const timing = getMeteringEvidence(request)?.gradedRequestTiming;
   if (timing !== undefined && timing.completionStartedAt === undefined) {
     timing.completionStartedAt = performance.now();
   }
 }
 
-export function markGradedCompletionSettled(rawRequest: unknown): void {
-  const timing = isObject(rawRequest)
-    ? timingByRequest.get(rawRequest)
-    : undefined;
+export function markGradedCompletionSettled(request: unknown): void {
+  const evidence = getMeteringEvidence(request);
+  const timing = evidence?.gradedRequestTiming;
   if (
-    timing?.completionStartedAt === undefined ||
+    evidence === undefined ||
+    timing === undefined ||
+    timing.completionStartedAt === undefined ||
     timing.completionMs !== undefined
   ) {
     return;
@@ -99,7 +89,7 @@ export function markGradedCompletionSettled(rawRequest: unknown): void {
   );
   completionDuration.observe(
     {
-      operation: timing.operation,
+      operation: evidence.operation,
       identity_mode: timing.identityMode,
       retry_budget: timing.retryBudget,
     },
@@ -107,15 +97,13 @@ export function markGradedCompletionSettled(rawRequest: unknown): void {
   );
 }
 
-export function requestGradedDimensions(rawRequest: unknown):
+export function requestGradedDimensions(request: unknown):
   | {
-      readonly identityMode: IdentityMode;
-      readonly retryBudget: RetryBudget;
+      readonly identityMode: GradedRequestTiming['identityMode'];
+      readonly retryBudget: GradedRequestTiming['retryBudget'];
     }
   | undefined {
-  const timing = isObject(rawRequest)
-    ? timingByRequest.get(rawRequest)
-    : undefined;
+  const timing = getMeteringEvidence(request)?.gradedRequestTiming;
   if (timing === undefined) return undefined;
   return {
     identityMode: timing.identityMode,
@@ -124,10 +112,7 @@ export function requestGradedDimensions(rawRequest: unknown):
 }
 
 export function requestGradedCompletionMs(
-  rawRequest: unknown,
+  request: unknown,
 ): number | undefined {
-  const timing = isObject(rawRequest)
-    ? timingByRequest.get(rawRequest)
-    : undefined;
-  return timing?.completionMs;
+  return getMeteringEvidence(request)?.gradedRequestTiming?.completionMs;
 }

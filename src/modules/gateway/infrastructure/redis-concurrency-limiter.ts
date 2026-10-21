@@ -133,19 +133,20 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
     keys: readonly string[],
     requestId: string,
   ): ConcurrencyLease {
-    let released = false;
+    let releaseAttempt: Promise<void> | undefined;
     return {
-      release: async () => {
-        if (released) {
-          return;
-        }
-        released = true;
-        try {
-          await Promise.all(keys.map((key) => client.zrem(key, requestId)));
-          this.reportRecovered();
-        } catch (error) {
-          this.reportDegraded(error);
-        }
+      release: () => {
+        releaseAttempt ??= Promise.resolve().then(async () => {
+          try {
+            await Promise.all(keys.map((key) => client.zrem(key, requestId)));
+            this.reportRecovered();
+            return undefined;
+          } catch (error) {
+            this.reportDegraded(error);
+            throw this.unavailableError(error);
+          }
+        });
+        return releaseAttempt;
       },
     };
   }

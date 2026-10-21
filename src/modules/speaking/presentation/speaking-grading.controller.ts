@@ -98,7 +98,7 @@ function requestMetadata(
     receivedAt: lifecycle.receivedAt,
     signal: lifecycle.signal,
     onDispatchStart: () => markRequestAdmission(request.raw),
-    onAiServiceResultAvailable: () => markGradedCompletionStarted(request.raw),
+    onAiServiceResultAvailable: () => markGradedCompletionStarted(request),
     organizationId: authenticated.organizationId,
     apiKeyId: authenticated.apiKeyId,
     environment: authenticated.environment,

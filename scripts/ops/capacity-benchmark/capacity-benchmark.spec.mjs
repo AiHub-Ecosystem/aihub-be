@@ -13,6 +13,7 @@ import {
   appendStreamingMarkerChunk,
   authAndGradingWorkload,
   contentionJobsFitLoadWindow,
+  gradedPathSampleAdequacy,
   hasCompleteLoadDelivery,
   hasMinimumRouteSamples,
   hasOneUserPerVu,
@@ -172,6 +173,26 @@ await test('summarizes admission and completion by the bounded identity and retr
   );
 });
 
+await test('marks every missing graded identity and retry path inconclusive', () => {
+  const adequacy = gradedPathSampleAdequacy(
+    'writing_task1',
+    {
+      'declared_id:keyed_writing': {
+        admissionMs: { count: 1000 },
+        completionMs: { count: 1000 },
+      },
+    },
+    1000,
+  );
+
+  assert.deepEqual(adequacy, {
+    'declared_id:keyed_writing': { count: 1000, status: 'sufficient' },
+    'declared_id:none': { count: 0, status: 'inconclusive' },
+    'signed_assertion:keyed_writing': { count: 0, status: 'inconclusive' },
+    'signed_assertion:none': { count: 0, status: 'inconclusive' },
+  });
+});
+
 await test('holds grading stages long enough to reach the route sample minimum', () => {
   assert.equal(minimumGradingHoldSeconds('writing_task1', 32, 1000, 15), 32);
   assert.equal(minimumGradingHoldSeconds('mixed_grading', 32, 1000, 15), 125);
@@ -207,10 +228,32 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
             p50Ms: 10,
             p95Ms: 15,
             p99Ms,
+            timingsByPath: {
+              'declared_id:keyed_writing': {
+                admissionMs: { p50: 5, p99: 9 },
+                completionMs: { p50: 20, p99: 30 },
+              },
+            },
           },
         },
         sampleAdequacy: {
           routes: { writing_task1: { status } },
+          paths: {
+            writing_task1: Object.fromEntries(
+              [
+                'declared_id:keyed_writing',
+                'declared_id:none',
+                'signed_assertion:keyed_writing',
+                'signed_assertion:none',
+              ].map((path) => [
+                path,
+                {
+                  count: status === 'sufficient' ? 1000 : 999,
+                  status,
+                },
+              ]),
+            ),
+          },
         },
       },
     ],
@@ -225,6 +268,11 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
   assert.equal(summary.stages[0].routes.writing_task1.p99Ms.max, 20);
   assert.equal(summary.stages[0].verdict, 'sufficient');
   assert.equal(
+    summary.stages[0].paths.writing_task1['declared_id:keyed_writing']
+      .completionP99Ms.median,
+    30,
+  );
+  assert.equal(
     summarizeRepetitions(
       [report(1, 10, 'sufficient'), report(2, 20, 'inconclusive')],
       2,
@@ -232,6 +280,22 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
     'inconclusive',
   );
   assert.throws(() => summarizeRepetitions([report(1, 10, 'sufficient')], 2));
+
+  const missingSignedPath = report(1, 10, 'sufficient');
+  delete missingSignedPath.runs[0].sampleAdequacy.paths.writing_task1[
+    'signed_assertion:keyed_writing'
+  ];
+  const missingPathSummary = summarizeRepetitions(
+    [missingSignedPath, report(2, 20, 'sufficient')],
+    2,
+  );
+  assert.equal(missingPathSummary.stages[0].verdict, 'inconclusive');
+  assert.equal(
+    missingPathSummary.stages[0].paths.writing_task1[
+      'signed_assertion:keyed_writing'
+    ].samples[0].status,
+    'inconclusive',
+  );
 });
 
 await test('places the controlled overload stage above the highest passing stage', () => {

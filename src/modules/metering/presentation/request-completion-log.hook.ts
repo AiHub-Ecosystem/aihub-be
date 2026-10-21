@@ -72,8 +72,8 @@ function completionEvent(
   const traceId = request.aihubTraceId;
   const statusCode = reply.statusCode;
   const admissionMs = requestAdmissionMs(request.raw);
-  const completionMs = requestGradedCompletionMs(request.raw);
-  const dimensions = requestGradedDimensions(request.raw);
+  const completionMs = requestGradedCompletionMs(request);
+  const dimensions = requestGradedDimensions(request);
 
   return {
     event: COMPLETION_EVENT,
@@ -136,7 +136,7 @@ function recordRequestMetrics(
   const outcome = requestOutcome(reply.statusCode, request.aihubFailureCode);
   const tokens = evidence === undefined ? undefined : tokensOf(evidence);
   const admissionMs = requestAdmissionMs(request.raw);
-  const dimensions = requestGradedDimensions(request.raw);
+  const dimensions = requestGradedDimensions(request);
 
   recordCompletedRequest({
     operation,

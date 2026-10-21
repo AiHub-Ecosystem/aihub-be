@@ -162,6 +162,32 @@ describe('RedisConcurrencyLimiter', () => {
     } satisfies Partial<AppError>);
   });
 
+  it('returns retryable unavailable when releasing a permit has an ambiguous result', async () => {
+    const redis = new FakeRedis();
+    const zrem = jest.fn(() => Promise.reject(new Error('redis timeout')));
+    redis.zrem = zrem;
+    const limiter = new RedisConcurrencyLimiter(redis);
+    const decision = await limiter.acquire({
+      organizationId: 'org_acme',
+      maxConcurrent: 1,
+      requestId: 'req_release_timeout',
+    });
+
+    expect(decision.allowed).toBe(true);
+    if (!decision.allowed) throw new Error('expected a concurrency lease');
+
+    await expect(decision.lease.release()).rejects.toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+      httpStatus: 503,
+      retryable: true,
+      retryAfterMs: 1_000,
+    } satisfies Partial<AppError>);
+    await expect(decision.lease.release()).rejects.toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+    });
+    expect(zrem).toHaveBeenCalledTimes(1);
+  });
+
   it('logs one outage and one recovery without exposing request identifiers', async () => {
     const logger = new FakeLogger();
     const failing = new FailingRedis();

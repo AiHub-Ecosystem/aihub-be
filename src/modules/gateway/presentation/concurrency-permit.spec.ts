@@ -14,6 +14,21 @@ describe('createConcurrencyPermit', () => {
     expect(release).toHaveBeenCalledTimes(1);
   });
 
+  it('does not report a failed release as released or retry an ambiguous attempt', async () => {
+    const release = jest.fn<ReturnType<ConcurrencyLease['release']>, []>(
+      async () => {
+        throw new Error('redis timeout');
+      },
+    );
+    const permit = createConcurrencyPermit({ release });
+
+    await expect(permit.requestFinished()).rejects.toThrow('redis timeout');
+    await expect(permit.requestFinished()).rejects.toThrow('redis timeout');
+
+    expect(permit.isReleased()).toBe(false);
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
   it('waits for handler settlement after an early response close', async () => {
     const release = jest.fn<ReturnType<ConcurrencyLease['release']>, []>(
       async () => undefined,
