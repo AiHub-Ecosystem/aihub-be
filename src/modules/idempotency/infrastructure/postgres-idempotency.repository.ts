@@ -33,7 +33,7 @@ interface IdempotencyClient {
 const ORGANIZATION_MATCHES =
   '(organization_id = $1 OR ($1::text IS NULL AND organization_id IS NULL))';
 
-const INSERT_SQL = `
+export const IDEMPOTENCY_INSERT_SQL = `
   INSERT INTO idempotency_records (
     organization_id,
     operation,
@@ -70,7 +70,7 @@ const CLAIM_SQL = `
   RETURNING request_id
 `;
 
-const SELECT_SQL = `
+export const IDEMPOTENCY_RESERVATION_READ_SQL = `
   SELECT
     encode(request_fingerprint, 'hex') AS request_fingerprint,
     state,
@@ -85,7 +85,7 @@ const SELECT_SQL = `
   LIMIT 1
 `;
 
-const HAS_COMPLETED_MATCH_SQL = `
+export const IDEMPOTENCY_COMPLETED_REPLAY_SQL = `
   SELECT request_id, state, response_status, response_body
   FROM idempotency_records
   WHERE ${ORGANIZATION_MATCHES}
@@ -139,7 +139,7 @@ const DELETE_SQL = `
   RETURNING request_id
 `;
 
-const CLEANUP_SQL = `
+export const IDEMPOTENCY_RETENTION_CLEANUP_SQL = `
   DELETE FROM idempotency_records
   WHERE expires_at <= now()
   RETURNING request_id
@@ -236,7 +236,7 @@ export class PostgresIdempotencyRepository
   async reserve(
     input: ReserveIdempotencyInput,
   ): Promise<IdempotencyReservation> {
-    const inserted = await this.query(INSERT_SQL, [
+    const inserted = await this.query(IDEMPOTENCY_INSERT_SQL, [
       input.organizationId,
       input.operation,
       input.actorScope ?? '',
@@ -264,7 +264,7 @@ export class PostgresIdempotencyRepository
       return { kind: 'claimed', requestId: requestIdFrom(claimedRow) };
     }
 
-    const existing = await this.query(SELECT_SQL, [
+    const existing = await this.query(IDEMPOTENCY_RESERVATION_READ_SQL, [
       input.organizationId,
       input.operation,
       input.actorScope ?? '',
@@ -291,7 +291,7 @@ export class PostgresIdempotencyRepository
   async findCompletedMatch(
     input: HasCompletedIdempotencyMatchInput,
   ): Promise<CompletedIdempotencyReplay | undefined> {
-    const rows = await this.query(HAS_COMPLETED_MATCH_SQL, [
+    const rows = await this.query(IDEMPOTENCY_COMPLETED_REPLAY_SQL, [
       input.organizationId,
       input.operation,
       input.actorScope ?? '',
@@ -346,7 +346,7 @@ export class PostgresIdempotencyRepository
   }
 
   async cleanupExpired(): Promise<number> {
-    const rows = await this.query(CLEANUP_SQL, []);
+    const rows = await this.query(IDEMPOTENCY_RETENTION_CLEANUP_SQL, []);
     return rows.length;
   }
 }

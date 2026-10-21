@@ -59,7 +59,7 @@ import {
 
 type IdentitySqlClient = Parameters<typeof identityRows>[0];
 
-const RESOLVE_MEMBERSHIP_SQL = `
+export const RESOLVE_MEMBERSHIP_SQL = `
   SELECT
     membership.organization_id,
     membership.user_account_id,
@@ -74,7 +74,7 @@ const RESOLVE_MEMBERSHIP_SQL = `
   LIMIT 1
 `;
 
-const LIST_ROSTER_SQL = `
+export const LIST_ROSTER_SQL = `
   SELECT
     caller.organization_id,
     organization.name AS organization_name,
@@ -123,7 +123,7 @@ const MEMBERSHIP_LIST_ADMISSION = ORGANIZATION_READ_ADMISSION.membership_list;
 // Authorization stays inside this query because ADR-0051 requires it and the
 // rows to come from one point-in-time snapshot. The policy it enforces is read
 // from the shared table rather than repeated here.
-const LIST_ORGANIZATION_MEMBERS_SQL = `
+export const LIST_ORGANIZATION_MEMBERS_SQL = `
   SELECT
     authority.allowed AS authorized,
     member_account.username AS member_username,
