@@ -1100,7 +1100,15 @@ function watchDockerStats(containerId) {
       }
     }
   });
-  return { samples, stop: () => child.kill() };
+  return {
+    samples,
+    stop: () => {
+      // The stats CLI can outlive Compose teardown and keep Node's pipe open.
+      child.kill('SIGKILL');
+      child.stdout.destroy();
+      child.unref();
+    },
+  };
 }
 
 function watchHostResources() {
