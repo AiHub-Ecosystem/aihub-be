@@ -29,7 +29,10 @@ project down.
 
 The stub returns the checked-in AI Writing Task 1 and Task 2 response fixtures
 and the checked-in AI Speaking response fixture for both Speaking transports.
-Its fixed delay and deterministic error rate are configurable. A local TCP
+Its fixed delay and deterministic error rate are configurable. It serves AI
+Writing on port 8080 and AI Speaking on port 8081, because Production reaches
+the two services at separate origins and the gateway keeps one 10-connection
+pool per origin; one shared stub origin would halve that ceiling. A local TCP
 proxy adds 30 ms in each direction to Redis by default, for a configured 60 ms
 round trip. The report records the configured RTT; it is not a one-way delay.
 
@@ -78,7 +81,11 @@ that shape when comparing the measured 1.5-CPU AIHUB container with the shared
 During each stage, k6 scrapes `/metrics` once per second. The report includes
 offered and completed rates (completed rate uses the configured hold interval),
 route p50/p95/p99, response shares, and per-route error counts,
-injected stub failures, process RSS and heap, event-loop lag, Postgres pool
+error counts by HTTP status and AIHUB error code (`errorsByCode`, read from the
+gateway's request completion log), transport errors that never reached the
+gateway, p50/p95/p99 for accepted (2xx) responses alone so a fast refusal
+cannot improve a percentile, injected stub failures, process RSS and heap,
+event-loop lag, Postgres pool
 waiting clients, downstream queue counts, and the corrected grading
 `total_ms`, `admission_ms`, and `downstream_ms`. It also records Docker CPU and
 memory samples for AIHUB and host CPU and memory observations. The p99 targets

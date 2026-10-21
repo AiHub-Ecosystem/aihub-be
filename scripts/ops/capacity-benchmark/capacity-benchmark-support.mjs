@@ -44,7 +44,7 @@ const fixtures = new Map([
 
 const requests = new Map();
 const errors = new Map();
-const httpServer = createHttpServer((request, response) => {
+function handleStubRequest(request, response) {
   if (request.method === 'GET' && request.url === '/__health') {
     response.writeHead(200, { 'content-type': 'text/plain' }).end('ok\n');
     return;
@@ -98,9 +98,14 @@ const httpServer = createHttpServer((request, response) => {
     }, stubLatencyMs);
   });
   request.resume();
-});
+}
 
-httpServer.listen(8080, '0.0.0.0');
+// Production reaches AI Writing and AI Speaking at separate origins, and the
+// gateway keeps one connection pool per origin, so each service gets a port.
+const writingServer = createHttpServer(handleStubRequest);
+const speakingServer = createHttpServer(handleStubRequest);
+writingServer.listen(8080, '0.0.0.0');
+speakingServer.listen(8081, '0.0.0.0');
 
 function forwardDelayed(source, destination) {
   source.on('data', (chunk) => {
@@ -130,7 +135,8 @@ redisServer.listen(6379, '0.0.0.0');
 
 async function close() {
   await Promise.all([
-    new Promise((resolve) => httpServer.close(resolve)),
+    new Promise((resolve) => writingServer.close(resolve)),
+    new Promise((resolve) => speakingServer.close(resolve)),
     new Promise((resolve) => redisServer.close(resolve)),
   ]);
 }

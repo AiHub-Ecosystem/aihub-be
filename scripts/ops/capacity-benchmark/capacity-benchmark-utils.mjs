@@ -238,7 +238,11 @@ export function summarizeRepetitions(reports, expectedRepetitions) {
               samples: routeSamples.map(({ repetition, route }) => ({
                 repetition,
                 count: route.count,
+                errorCount: route.errorCount,
               })),
+              acceptedP99Ms: numericSpread(
+                routeSamples.map(({ route }) => route.acceptedLatencyMs?.p99),
+              ),
               p50Ms: numericSpread(
                 routeSamples.map(({ route }) => route.p50Ms),
               ),
@@ -469,7 +473,11 @@ export function taggedMetricValues(metrics, prefix) {
 }
 
 export function parseDockerStats(line) {
-  const stats = JSON.parse(line);
+  // Streaming `docker stats` redraws the terminal with ANSI escapes around each
+  // JSON row even when stdout is a pipe.
+  const stats = JSON.parse(
+    line.slice(line.indexOf('{'), line.lastIndexOf('}') + 1),
+  );
   return {
     cpuPercent: parseFloat(stats.CPUPerc),
     memoryBytes: parseBytes(stats.MemUsage?.split('/')[0]?.trim() ?? ''),
