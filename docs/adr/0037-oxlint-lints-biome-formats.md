@@ -33,3 +33,17 @@ workflow edit — was and remains true, because `pnpm lint` is one of those step
 only the route was wrong. What the correction changes for a later reader is the
 assumption underneath it: `verify` is the local aggregate, not the thing CI runs,
 so a new gate has to be added to both.
+
+## Update (2026-10-21): the type-aware rules are on
+
+The sequencing above played out as planned. [#110](https://github.com/AiHub-Ecosystem/aihub-be/issues/110)
+enabled `options.typeAware` in `.oxlintrc.json`, with `no-floating-promises`,
+`no-misused-promises`, `await-thenable` and five further type-aware rules at
+`error`, and the five `no-unsafe-*` rules off with their backlog recorded in the
+config. `pnpm lint` therefore runs the type-aware rules. The statement that
+`oxlint-tsgolint` and a TypeScript 7 compiler are not available is no longer
+true: the repository pins `oxlint` `^1.87.0` and `oxlint-tsgolint` `7.0.2004`,
+and since [ADR-0115](0115-typescript-7-gates-ci.md) the type-check itself runs
+TypeScript 7. The `^1.83.0` pin described above was the version at adoption and
+has since moved. The decision itself, that oxlint lints and Biome formats, is
+unchanged.

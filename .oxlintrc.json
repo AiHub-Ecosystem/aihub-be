@@ -16,9 +16,8 @@
   // `typescript`, `unicorn` and `oxc` are on by default. The other four are the
   // reason for adopting oxlint at all: Biome's `recommended` set has no import,
   // promise, Node or Jest rules. `jest` accounts for 18 of the 23 findings;
-  // `import`, `promise` and `node` contribute nothing at `correctness` today and
-  // are enabled for #110, which turns on the type-aware rules once the repo is
-  // on a TypeScript 7 compiler.
+  // `import`, `promise` and `node` contribute nothing at `correctness` today;
+  // they were enabled ahead of #110, whose type-aware rules are now on below.
   "plugins": [
     "typescript",
     "unicorn",
@@ -75,7 +74,6 @@
     "typescript/no-unsafe-return": "off",
     "typescript/no-unsafe-argument": "off",
     "typescript/unbound-method": "error",
-    // — not gateway promise defects; disabled with reason, keep `correctness` syntax-only set clean.
     "typescript/no-base-to-string": "error",
     "typescript/restrict-template-expressions": "error",
     "typescript/no-misused-spread": "error",
