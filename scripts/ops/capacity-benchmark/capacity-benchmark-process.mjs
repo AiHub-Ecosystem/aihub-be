@@ -12,27 +12,30 @@ export function runProcess(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const killProcessGroup =
       options.killProcessGroup === true && process.platform !== 'win32';
+    const captureOutput = options.stdio !== 'ignore';
     const child = spawn(command, args, {
       cwd: repositoryRoot,
       detached: killProcessGroup,
       env: options.env ?? process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'],
       timeout: killProcessGroup ? undefined : options.timeout,
       killSignal: options.killSignal,
     });
     let timeoutId;
     let stdout = '';
     let stderr = '';
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => {
-      stdout = appendLimited(stdout, chunk);
-      options.onStdout?.(chunk);
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr = appendLimited(stderr, chunk);
-      options.onStderr?.(chunk);
-    });
+    if (captureOutput) {
+      child.stdout.setEncoding('utf8');
+      child.stderr.setEncoding('utf8');
+      child.stdout.on('data', (chunk) => {
+        stdout = appendLimited(stdout, chunk);
+        options.onStdout?.(chunk);
+      });
+      child.stderr.on('data', (chunk) => {
+        stderr = appendLimited(stderr, chunk);
+        options.onStderr?.(chunk);
+      });
+    }
     child.once('spawn', () => {
       if (!killProcessGroup || options.timeout === undefined) return;
       timeoutId = setTimeout(() => {
@@ -46,8 +49,8 @@ export function runProcess(command, args, options = {}) {
             if (error.code !== 'ESRCH') child.kill(signal);
           }
         }
-        child.stdout.destroy();
-        child.stderr.destroy();
+        child.stdout?.destroy();
+        child.stderr?.destroy();
         child.unref();
         reject(new Error(`${command} timed out after ${options.timeout}ms`));
       }, options.timeout);

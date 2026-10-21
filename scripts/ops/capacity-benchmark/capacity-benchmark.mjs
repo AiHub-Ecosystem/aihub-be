@@ -591,6 +591,7 @@ try {
     timeout: 60_000,
     killSignal: 'SIGKILL',
     killProcessGroup: true,
+    stdio: 'ignore',
   }).catch((error) => {
     process.stderr.write(`Benchmark cleanup warning: ${error.message}\n`);
     // GitHub discards its hosted runner after the already-written report uploads.
