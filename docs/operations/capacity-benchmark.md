@@ -184,11 +184,12 @@ Invalidation triggers:
   `connection_limit`, or a pooler.
 
 Whoever lands the change that fires a trigger dispatches the run. They compare
-its `repetitions-summary.md` with the baseline record in this document before
-the triggering issue closes. Do not compare it with memory or an expired
-artifact; the workflow keeps artifacts for 30 days. A new baseline replaces the
-record here in the same change, together with the commit and the triggers that
-were true at that commit.
+its `repetitions-summary.md` with the baseline record in
+[`capacity-baseline.md`](capacity-baseline.md) before the triggering issue
+closes. Do not compare it with memory or an expired artifact; the workflow
+keeps artifacts for 30 days. A new baseline replaces that record in the same
+change, together with the commit and the triggers that were true at that
+commit.
 
 A rerun is a regression, and opens a follow-up issue, when any of these is
 true:
