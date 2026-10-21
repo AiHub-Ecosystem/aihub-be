@@ -308,6 +308,23 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
   );
   assert.throws(() => summarizeRepetitions([report(1, 10, 'sufficient')], 2));
 
+  const onSeparateVm = (repetition, totalMemoryBytes) => {
+    const result = report(repetition, 10, 'sufficient');
+    result.benchmark.host.totalMemoryBytes = totalMemoryBytes;
+    return result;
+  };
+  const gib = 1024 ** 3;
+  summarizeRepetitions(
+    [onSeparateVm(1, 16 * gib), onSeparateVm(2, 16 * gib - 3 * 1024 ** 2)],
+    2,
+  );
+  assert.throws(() =>
+    summarizeRepetitions(
+      [onSeparateVm(1, 16 * gib), onSeparateVm(2, 8 * gib)],
+      2,
+    ),
+  );
+
   const missingSignedPath = report(1, 10, 'sufficient');
   delete missingSignedPath.runs[0].sampleAdequacy.paths.writing_task1[
     'signed_assertion:keyed_writing'
