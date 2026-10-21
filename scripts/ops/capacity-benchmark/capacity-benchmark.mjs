@@ -573,7 +573,15 @@ try {
     },
     note: 'Isolated workload only. It is not an exact capacity claim for the shared 2-vCPU Production host.',
   };
-  const resultPath = path.join(artifactDirectory, 'results.json');
+  // A run whose acceptance checks failed is not a repetition, so it never
+  // takes the results.json name the repetitions summary reads.
+  if (!argon2Contention.allChecksPassed) {
+    report.benchmark.error = 'Argon2 contention acceptance checks did not pass';
+  }
+  const resultPath = path.join(
+    artifactDirectory,
+    argon2Contention.allChecksPassed ? 'results.json' : 'partial-results.json',
+  );
   await writeFile(resultPath, `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(`Benchmark report written to ${resultPath}\n`);
   if (!argon2Contention.allChecksPassed) {

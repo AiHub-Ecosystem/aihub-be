@@ -139,9 +139,10 @@ with `BENCHMARK_ARGON2_MAX_CONCURRENCY`,
 `BENCHMARK_ARGON2_THREADPOOL_SIZE`, and `BENCHMARK_ARGON2_BURST_RATE_RPS`.
 
 Each JSON result is written to the ignored
-`artifacts/capacity-benchmark/<run-id>/results.json`. A run that fails writes
-the stages it completed and the error to `partial-results.json` instead, so a
-late failure still leaves evidence; it never counts as a repetition. The GitHub workflow also
+`artifacts/capacity-benchmark/<run-id>/results.json`. A run that fails, or
+whose Argon2 contention checks do not all pass, writes its completed stages and
+the error to `partial-results.json` instead, so a late failure still leaves
+evidence; it never counts as a repetition. The GitHub workflow also
 writes `repetitions-summary.json` and `repetitions-summary.md` beside those run
 directories. Keep the environment, commit, rate schedule, workload mix, and
 host details with any baseline shared with issues #268, #273, #328, #398, or
